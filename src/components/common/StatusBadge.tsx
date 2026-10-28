@@ -36,10 +36,12 @@ type Props = StatusRef & {
   className?: string;
   /** Bez ikony (jen text). */
   plain?: boolean;
+  /** Počet položek v tomto stavu (zobrazí se za popiskem). */
+  count?: number;
 };
 
 /** Štítek stavu – barva i popisek vždy ze `src/lib/status.ts`. */
-export function StatusBadge({ className, plain, ...ref }: Props) {
+export function StatusBadge({ className, plain, count, ...ref }: Props) {
   const style = getStatusStyle(ref as StatusRef);
   const Icon = style.icon;
   return (
@@ -53,6 +55,7 @@ export function StatusBadge({ className, plain, ...ref }: Props) {
     >
       {plain ? null : <Icon className="size-3.5" aria-hidden />}
       {style.label}
+      {count === undefined ? null : <span className="font-mono font-semibold tabular-nums">{count}</span>}
     </span>
   );
 }
