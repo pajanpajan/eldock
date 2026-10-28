@@ -93,6 +93,28 @@ function boxesOf(designation: string): Box[] {
   }
 }
 
+/** Prvky, které schéma kreslí (a umí kolem nich nakreslit revizní obláček). */
+export const SCHEMATIC_DESIGNATIONS = ["Q1", "F1", "F2", "F3", "F4", "F5", "F6", "K1", "K2", "K3", "K4", "T1", "A1", "X1", "X2"] as const;
+
+/**
+ * Prvek schématu nejblíž bodu (normalizované souřadnice 0–1), např. středu zákresu technika.
+ * Vzdálenost se měří k nejbližšímu obdélníku prvku (0 = bod leží uvnitř).
+ */
+export function nearestSchematicElement(x: number, y: number): string {
+  const px = x * SCHEMATIC_WIDTH;
+  const py = y * SCHEMATIC_HEIGHT;
+  let best: { designation: string; distance: number } | null = null;
+  for (const designation of SCHEMATIC_DESIGNATIONS) {
+    for (const box of boxesOf(designation)) {
+      const dx = Math.max(box.x - px, 0, px - (box.x + box.w));
+      const dy = Math.max(box.y - py, 0, py - (box.y + box.h));
+      const distance = Math.hypot(dx, dy);
+      if (!best || distance < best.distance) best = { designation, distance };
+    }
+  }
+  return best!.designation;
+}
+
 /** Střed prvku ve schématu v normalizovaných souřadnicích 0–1 (pro seedové zákresy). */
 export function schematicElementCenter(designation: string): [number, number] {
   const box = boxesOf(designation).at(-1);

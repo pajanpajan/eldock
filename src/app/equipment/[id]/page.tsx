@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Inbox } from "lucide-react";
 
 import { LocationBreadcrumb } from "@/components/common/LocationBreadcrumb";
 import { PageHeader } from "@/components/common/PageHeader";
@@ -14,8 +16,9 @@ import { RevisionTimeline } from "@/components/equipment/RevisionTimeline";
 import { SafetyBanner } from "@/components/equipment/SafetyBanner";
 import { SchematicViewer } from "@/components/equipment/SchematicViewer";
 import { PageTransition } from "@/components/layout/PageTransition";
+import { Button } from "@/components/ui/button";
 import { EQUIPMENT_TYPE_LABELS } from "@/lib/format";
-import { buildingHref, equipmentHref, floorHref, plantHref } from "@/lib/routes";
+import { buildingHref, caeTicketHref, equipmentHref, floorHref, plantHref } from "@/lib/routes";
 import { getEquipmentDetail } from "@/server/queries/equipment";
 import { getCurrentRole } from "@/server/session";
 
@@ -104,6 +107,13 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
               <QrDialog url={qrUrl} tag={equipment.tag} name={equipment.name} location={location} />
               {role === "MAINTENANCE" ? (
                 <ChangeRequestCta href={`${basePath}/change-request`} openNumber={openChange?.number ?? null} />
+              ) : openChange ? (
+                <Button asChild size="lg" className="touch-target gap-2">
+                  <Link href={caeTicketHref(openChange.id)}>
+                    <Inbox className="size-4" />
+                    Otevřít ticket {openChange.number}
+                  </Link>
+                </Button>
               ) : null}
             </>
           }

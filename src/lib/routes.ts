@@ -15,3 +15,7 @@ export function buildingEntryHref(plantId: string, buildingId: string, floorIds:
     ? floorHref(plantId, buildingId, floorIds[0])
     : buildingHref(plantId, buildingId);
 }
+
+export const caeTicketHref = (changeRequestId: string) => `/cae/tickets/${changeRequestId}`;
+
+export const caeRevisionHref = (changeRequestId: string) => `${caeTicketHref(changeRequestId)}/revision`;

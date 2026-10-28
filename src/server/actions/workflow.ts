@@ -5,7 +5,9 @@ import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
 import { WorkflowError } from "@/lib/workflow/state-machine";
+import { generateRevisionSchematic } from "@/server/services/schematic";
 import * as workflow from "@/server/services/workflow";
+import { saveUpload } from "@/server/storage";
 import { getCurrentRole, getCurrentUser } from "@/server/session";
 
 // Tenké Server Actions: role z cookie → validace zod → služba → revalidace.
@@ -62,10 +64,18 @@ const uploadSchema = z.object({
   bom: z.array(bomItem).max(500).optional(),
 });
 
+const generateSchema = z.object({
+  changeRequestId: id,
+  bump: z.enum(["minor", "major"]).optional(),
+  summary: text(4000),
+  bom: z.array(bomItem).max(500).optional(),
+});
+
 async function run<S extends z.ZodType, T>(
   schema: S,
   raw: unknown,
   service: (actor: workflow.Actor, input: z.infer<S>) => Promise<T>,
+  revalidate = true,
 ): Promise<ActionResult<T>> {
   const parsed = schema.safeParse(raw);
   if (!parsed.success) return { ok: false, error: "Neplatná data formuláře. Zkontrolujte vyplněné údaje." };
@@ -73,7 +83,7 @@ async function run<S extends z.ZodType, T>(
     const [role, user] = await Promise.all([getCurrentRole(), getCurrentUser()]);
     const data = await service({ id: user.id, role }, parsed.data);
     // Mění se barvy pinů, počty v areálu, detail i CAE dashboard → celý layout.
-    revalidatePath("/", "layout");
+    if (revalidate) revalidatePath("/", "layout");
     return { ok: true, data };
   } catch (error) {
     if (error instanceof WorkflowError) return { ok: false, error: error.message };
@@ -129,4 +139,18 @@ export async function rejectRevisionAction(input: z.input<typeof rejectSchema>) 
     const revision = await workflow.rejectRevision(prisma, actor, data);
     return { id: revision.id, version: revision.version };
   });
+}
+
+/** Demo: vygeneruje upravené schéma další revize a uloží ho do úložiště (bez změny stavu). */
+export async function generateSchematicAction(input: z.input<typeof generateSchema>) {
+  return run(
+    generateSchema,
+    input,
+    async (actor, data) => {
+      const { svg, version, changed } = await generateRevisionSchematic(prisma, actor, data);
+      const { url } = await saveUpload("revisions", ".svg", svg);
+      return { url, version, changed, fileName: `schema-${version}.svg`, sizeBytes: Buffer.byteLength(svg) };
+    },
+    false,
+  );
 }

@@ -8,6 +8,11 @@ import {
   FileClock,
   Hourglass,
   Inbox,
+  MessageSquare,
+  Timer,
+  TimerOff,
+  Upload,
+  UserCheck,
   OctagonAlert,
   TriangleAlert,
   Wrench,
@@ -15,6 +20,7 @@ import {
 } from "lucide-react";
 
 import type {
+  ChangeRequestEventType,
   ChangeRequestPriority,
   ChangeRequestStatus,
   EquipmentStatus,
@@ -190,6 +196,26 @@ export const CHANGE_REQUEST_PRIORITY: Record<ChangeRequestPriority, StatusStyle>
     description: "Bezpečnostně relevantní změna.",
     icon: OctagonAlert,
   },
+};
+
+/** Stáří otevřeného ticketu vůči SLA podle priority (CAE dashboard). */
+export type SlaLevel = "OK" | "WARNING" | "OVERDUE";
+
+export const SLA_LEVEL: Record<SlaLevel, StatusStyle> = {
+  OK: { ...EMERALD, label: "V termínu", description: "Ticket je v rámci lhůty pro svou prioritu.", icon: Timer },
+  WARNING: { ...AMBER, label: "Blíží se termín", description: "Ticket čeká déle, než je u jeho priority obvyklé.", icon: Timer },
+  OVERDUE: { ...RED, label: "Po termínu", description: "Ticket překročil lhůtu pro svou prioritu.", icon: TimerOff },
+};
+
+/** Události v timeline ticketu. */
+export const CHANGE_REQUEST_EVENT: Record<ChangeRequestEventType, StatusStyle> = {
+  SUBMITTED: { ...ORANGE, label: "Změna nahlášena", description: "Technik odeslal požadavek na změnu.", icon: Inbox },
+  ASSIGNED: { ...AMBER, label: "Převzato", description: "Projektant požadavek převzal.", icon: UserCheck },
+  REVISION_UPLOADED: { ...SKY, label: "Nahrána nová revize", description: "Projektant nahrál revizi ke schválení.", icon: Upload },
+  APPROVED: { ...EMERALD, label: "Schváleno a propsáno", description: "Údržba potvrdila novou revizi.", icon: CircleCheck },
+  REJECTED: { ...RED, label: "Vráceno k přepracování", description: "Údržba revizi vrátila.", icon: CircleX },
+  COMMENT: { ...ZINC, label: "Komentář", description: "Komentář nebo doplněné fotky.", icon: MessageSquare },
+  CANCELLED: { ...ZINC, label: "Stornováno", description: "Požadavek byl stornován.", icon: CircleSlash },
 };
 
 /** Pořadí „horší = vyšší“ pro souhrnný stav budovy nebo patra. */

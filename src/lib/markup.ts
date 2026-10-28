@@ -29,3 +29,11 @@ export function parseMarkup(json: string | null | undefined): MarkupData | null 
     return null;
   }
 }
+
+/** Těžiště všech bodů zákresu (0–1), `null` bez tahů. */
+export function markupCenter(markup: MarkupData | null): [number, number] | null {
+  const points = markup?.strokes.flatMap((stroke) => stroke.points) ?? [];
+  if (!points.length) return null;
+  const [sx, sy] = points.reduce(([ax, ay], [x, y]) => [ax + x, ay + y], [0, 0]);
+  return [sx / points.length, sy / points.length];
+}

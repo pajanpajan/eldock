@@ -7,7 +7,7 @@ import { LocationBreadcrumb } from "@/components/common/LocationBreadcrumb";
 import { PageHeader } from "@/components/common/PageHeader";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { ChangeRequestWizard } from "@/components/change-request/ChangeRequestWizard";
-import { SwitchToMaintenance } from "@/components/change-request/SwitchToMaintenance";
+import { SwitchRoleButton } from "@/components/common/SwitchRoleButton";
 import { equipmentHref, floorHref, plantHref } from "@/lib/routes";
 import { getEquipmentDetail } from "@/server/queries/equipment";
 import { getCurrentRole } from "@/server/session";
@@ -57,7 +57,7 @@ export default async function ChangeRequestPage({ params }: Props) {
           icon={HardHat}
           title="Změny zadává údržba v hale"
           description="Průvodce je určený pro pohled Údržba. Po přepnutí zůstanete na této stránce."
-          action={<SwitchToMaintenance />}
+          action={<SwitchRoleButton role="MAINTENANCE" />}
         />
       </>
     );

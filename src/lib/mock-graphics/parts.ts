@@ -108,3 +108,27 @@ export function buildParts(
   ];
   return base.map((part) => ({ ...part, ...overrides[part.designation] }));
 }
+
+/**
+ * Odvodí `PartOverrides` z kusovníku revize (rozdíly proti výchozím dílům), aby šlo
+ * vykreslit schéma odpovídající libovolnému kusovníku – např. upravenému projektantem.
+ */
+export function overridesFromBom(
+  ratedCurrent: string | null | undefined,
+  bom: readonly { designation: string; description: string; manufacturer?: string | null; partNumber?: string | null; quantity: number; unit?: string; note?: string | null }[],
+): PartOverrides {
+  const defaults = new Map(buildParts(ratedCurrent).map((part) => [part.designation, part]));
+  const overrides: PartOverrides = {};
+  for (const item of bom) {
+    const base = defaults.get(item.designation);
+    if (!base) continue;
+    const diff: Partial<Omit<Part, "designation">> = {};
+    if (item.description !== base.description) diff.description = item.description;
+    if ((item.manufacturer ?? "") !== base.manufacturer) diff.manufacturer = item.manufacturer ?? "";
+    if ((item.partNumber ?? "") !== base.partNumber) diff.partNumber = item.partNumber ?? "";
+    if (item.quantity !== base.quantity) diff.quantity = item.quantity;
+    if ((item.note ?? undefined) !== base.note) diff.note = item.note ?? undefined;
+    if (Object.keys(diff).length) overrides[item.designation] = diff;
+  }
+  return overrides;
+}
