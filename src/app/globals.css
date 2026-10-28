@@ -110,3 +110,20 @@
     @apply font-sans;
   }
 }
+/* Tisk QR štítku zařízení: vytiskne se jen `.print-area` (otevřený dialog). */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-area,
+  .print-area * {
+    visibility: visible;
+  }
+  .print-area {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 70mm;
+    border: 1px solid #000;
+  }
+}

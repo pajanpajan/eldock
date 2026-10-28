@@ -1,52 +1,155 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
-import { FileText } from "lucide-react";
 
-import { EmptyState } from "@/components/common/EmptyState";
 import { LocationBreadcrumb } from "@/components/common/LocationBreadcrumb";
 import { PageHeader } from "@/components/common/PageHeader";
 import { StatusBadge } from "@/components/common/StatusBadge";
+import { BomTable } from "@/components/equipment/BomTable";
+import { Cabinet3D } from "@/components/equipment/Cabinet3D";
+import { ChangeRequestCta } from "@/components/equipment/ChangeRequestCta";
+import { DocumentationTabs } from "@/components/equipment/DocumentationTabs";
+import { QrDialog } from "@/components/equipment/QrDialog";
+import { RevisionTimeline } from "@/components/equipment/RevisionTimeline";
+import { SafetyBanner } from "@/components/equipment/SafetyBanner";
+import { SchematicViewer } from "@/components/equipment/SchematicViewer";
 import { PageTransition } from "@/components/layout/PageTransition";
-import { buildingHref, floorHref, plantHref } from "@/lib/routes";
-import { getEquipmentHeader } from "@/server/queries/equipment";
+import { EQUIPMENT_TYPE_LABELS } from "@/lib/format";
+import { buildingHref, equipmentHref, floorHref, plantHref } from "@/lib/routes";
+import { getEquipmentDetail } from "@/server/queries/equipment";
+import { getCurrentRole } from "@/server/session";
 
-export async function generateMetadata({ params }: PageProps<"/equipment/[id]">): Promise<Metadata> {
+type Props = PageProps<"/equipment/[id]">;
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
-  const equipment = await getEquipmentHeader(id);
+  const equipment = await getEquipmentDetail(id);
   return { title: equipment?.name ?? "Zařízení" };
 }
 
-// Dočasný detail – dokumentaci, bezpečnostní banner a historii doplní fáze 6.
-export default async function EquipmentPage({ params }: PageProps<"/equipment/[id]">) {
+/** Absolutní URL pro QR kód podle hlaviček požadavku (funguje i přes IP v síti haly). */
+async function absoluteUrl(pathname: string) {
+  const list = await headers();
+  const host = list.get("x-forwarded-host") ?? list.get("host") ?? "localhost:3000";
+  const proto = list.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
+  return `${proto}://${host}${pathname}`;
+}
+
+// Detail zařízení – Documentation Hub (dostupný i přes QR kód).
+export default async function EquipmentPage({ params, searchParams }: Props) {
   const { id } = await params;
-  const equipment = await getEquipmentHeader(id);
+  const { rev } = await searchParams;
+  const [equipment, role] = await Promise.all([getEquipmentDetail(id), getCurrentRole()]);
   if (!equipment) notFound();
 
   const { floor } = equipment;
   const { building } = floor;
+  const plantId = building.plant.id;
+  const basePath = equipmentHref(equipment.id);
+  const openChange = equipment.changeRequests[0] ?? null;
+  const active = equipment.revisions.find((revision) => revision.status === "ACTIVE") ?? equipment.revisions[0] ?? null;
+  const pending = equipment.revisions.find((revision) => revision.status === "PENDING_APPROVAL") ?? null;
+  const selected = equipment.revisions.find((revision) => revision.id === rev) ?? active;
+  const location = `${building.plant.name} › ${building.name} › ${floor.name}`;
+  const qrUrl = await absoluteUrl(basePath);
+  // Pevné „teď“ pro relativní časy (server i klient vykreslí totéž).
+  const now = new Date();
 
   return (
     <PageTransition>
-      <PageHeader
-        breadcrumb={
-          <LocationBreadcrumb
-            items={[
-              { label: building.plant.name, href: plantHref(building.plant.id) },
-              { label: building.name, href: buildingHref(building.plant.id, building.id) },
-              { label: floor.name, href: floorHref(building.plant.id, building.id, floor.id) },
-              { label: equipment.tag },
-            ]}
+      <div className="space-y-6 pb-20 sm:pb-0">
+        <PageHeader
+          className="pb-0"
+          breadcrumb={
+            <LocationBreadcrumb
+              items={[
+                { label: building.plant.name, href: plantHref(plantId) },
+                {
+                  label: building.name,
+                  href: building._count.floors > 1 ? buildingHref(plantId, building.id) : plantHref(plantId),
+                },
+                { label: floor.name, href: floorHref(plantId, building.id, floor.id) },
+                { label: equipment.tag },
+              ]}
+            />
+          }
+          title={equipment.name}
+          badges={<StatusBadge kind="equipment" status={equipment.status} className="text-sm" />}
+          description={
+            <span className="flex flex-wrap gap-x-4 gap-y-1">
+              <span>{EQUIPMENT_TYPE_LABELS[equipment.type]}</span>
+              <span>
+                Tag <span className="font-mono text-foreground">{equipment.tag}</span>
+              </span>
+              <span>
+                ID <span className="font-mono">{equipment.id}</span>
+              </span>
+              {equipment.manufacturer ? (
+                <span>
+                  {equipment.manufacturer} {equipment.model}
+                </span>
+              ) : null}
+              {equipment.ratedVoltage ? <span>{equipment.ratedVoltage}</span> : null}
+              {equipment.ratedCurrent ? <span>{equipment.ratedCurrent}</span> : null}
+              {equipment.ipRating ? <span>{equipment.ipRating}</span> : null}
+              {active ? (
+                <span>
+                  Platná revize <span className="font-mono text-foreground">{active.version}</span>
+                </span>
+              ) : null}
+            </span>
+          }
+          actions={
+            <>
+              <QrDialog url={qrUrl} tag={equipment.tag} name={equipment.name} location={location} />
+              {role === "MAINTENANCE" ? (
+                <ChangeRequestCta href={`${basePath}/change-request`} openNumber={openChange?.number ?? null} />
+              ) : null}
+            </>
+          }
+        />
+
+        {openChange ? (
+          <SafetyBanner
+            change={openChange}
+            pendingRevision={pending}
+            // Porovnání a schválení doplní fáze 10 (/approve); do té doby náhled nové revize.
+            reviewHref={pending ? `${basePath}?rev=${pending.id}&tab=schema` : basePath}
+            now={now}
           />
-        }
-        title={equipment.name}
-        description={equipment.description}
-        badges={<StatusBadge kind="equipment" status={equipment.status} />}
-      />
-      <EmptyState
-        icon={FileText}
-        title="Dokumentaci zařízení připravujeme"
-        description="Schéma, kusovník a historie změn se objeví v další etapě vývoje."
-      />
+        ) : null}
+
+        <DocumentationTabs
+          panels={{
+            schema: (
+              <SchematicViewer
+                basePath={basePath}
+                selectedId={selected?.id ?? ""}
+                revisions={equipment.revisions.map(({ id: revisionId, version, status, title, schematicUrl, schematicFormat, sheetCount, createdAt }) => ({
+                  id: revisionId,
+                  version,
+                  status,
+                  title,
+                  schematicUrl,
+                  schematicFormat,
+                  sheetCount,
+                  createdAt,
+                }))}
+              />
+            ),
+            bom: selected ? (
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">
+                  Kusovník revize <span className="font-mono text-foreground">{selected.version}</span>
+                </p>
+                <BomTable rows={selected.bomItems} fileName={`kusovnik-${equipment.tag}-${selected.version}.csv`} />
+              </div>
+            ) : null,
+            "3d": selected ? <Cabinet3D bom={selected.bomItems} tag={equipment.tag} /> : null,
+            history: <RevisionTimeline revisions={equipment.revisions} basePath={basePath} selectedId={selected?.id ?? null} />,
+          }}
+        />
+      </div>
     </PageTransition>
   );
 }
