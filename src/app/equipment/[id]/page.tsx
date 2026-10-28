@@ -18,13 +18,17 @@ import { SchematicViewer } from "@/components/equipment/SchematicViewer";
 import { CompliancePassport } from "@/components/inspections/CompliancePassport";
 import { InspectionLogbook } from "@/components/inspections/InspectionLogbook";
 import { InspectionStatusBadge } from "@/components/inspections/InspectionStatusBadge";
+import { LotoCard } from "@/components/inspections/LotoCard";
+import { TemporaryModArchive } from "@/components/temporary-mods/TemporaryModArchive";
+import { TemporaryModBanner } from "@/components/temporary-mods/TemporaryModBanner";
+import { TemporaryModDialog } from "@/components/temporary-mods/TemporaryModDialog";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { Button } from "@/components/ui/button";
 import { EQUIPMENT_TYPE_LABELS } from "@/lib/format";
 import { pragueToday, summarizeInspections } from "@/lib/inspection";
 import { USAGE_GROUP_LABELS, inspectionRuleFor, isLightCard, type UsageGroup } from "@/lib/inspection-rules";
 import { buildingHref, caeTicketHref, equipmentHref, floorHref, plantHref } from "@/lib/routes";
-import { getEquipmentDetail } from "@/server/queries/equipment";
+import { getEquipmentDetail, getPowerNodes } from "@/server/queries/equipment";
 import { getCurrentRole } from "@/server/session";
 
 type Props = PageProps<"/equipment/[id]">;
@@ -49,6 +53,7 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
   const { rev } = await searchParams;
   const [equipment, role] = await Promise.all([getEquipmentDetail(id), getCurrentRole()]);
   if (!equipment) notFound();
+  const powerNodes = await getPowerNodes(equipment.floor.building.plant.id);
 
   const { floor } = equipment;
   const { building } = floor;
@@ -66,6 +71,7 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
   const today = pragueToday(now);
   // Spotřebiče, nářadí a bezpečnostní zařízení: lehká karta jen s revizemi a měřením.
   const light = isLightCard(equipment.type);
+  const activeMods = equipment.temporaryMods.filter((mod) => mod.status === "ACTIVE");
   const rule = inspectionRuleFor({ ...equipment, externalInfluences: equipment.externalInfluences });
   const inspectionsPanel = (
     <InspectionLogbook
@@ -151,6 +157,7 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
           actions={
             <>
               <QrDialog url={qrUrl} tag={equipment.tag} name={equipment.name} location={location} />
+              {!light && role === "MAINTENANCE" ? <TemporaryModDialog equipmentId={equipment.id} tag={equipment.tag} version={active?.version ?? null} /> : null}
               {light ? null : role === "MAINTENANCE" ? (
                 <ChangeRequestCta href={`${basePath}/change-request`} openNumber={openChange?.number ?? null} />
               ) : openChange ? (
@@ -174,6 +181,10 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
             now={now}
           />
         ) : null}
+
+        {activeMods.map((mod) => (
+          <TemporaryModBanner key={mod.id} mod={mod} version={active?.version ?? null} now={now} />
+        ))}
 
         {light ? (
           <DocumentationTabs
@@ -209,8 +220,18 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
               </div>
             ) : null,
             "3d": selected ? <Cabinet3D bom={selected.bomItems} tag={equipment.tag} /> : null,
-            history: <RevisionTimeline revisions={equipment.revisions} basePath={basePath} selectedId={selected?.id ?? null} />,
-            passport: <CompliancePassport equipment={equipment} />,
+            history: (
+              <div className="space-y-8">
+                <RevisionTimeline revisions={equipment.revisions} basePath={basePath} selectedId={selected?.id ?? null} />
+                <TemporaryModArchive mods={equipment.temporaryMods} canOpenTicket={role === "CAE_ENGINEER"} />
+              </div>
+            ),
+            passport: (
+              <div className="space-y-8">
+                <LotoCard equipment={equipment} nodes={powerNodes} />
+                <CompliancePassport equipment={equipment} />
+              </div>
+            ),
             inspections: inspectionsPanel,
           }}
         />

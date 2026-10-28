@@ -142,6 +142,25 @@ enum InspectionResult {
   INCAPABLE            // Neschopno bezpečného provozu
 }
 
+/// Dočasné provizorium v zařízení (nemění oficiální dokumentaci).
+enum TemporaryModStatus {
+  ACTIVE          // aktivní provizorium – varuje obsluhu
+  RESTORED_1_TO_1 // odstraněno, vráceno do stavu 1:1 dle schématu
+  CONVERTED_TO_CR // odstraněno, finální stav se liší → požadavek na změnu dokumentace
+}
+
+/// Závažnost revizní závady (lhůta odstranění).
+enum DefectSeverity {
+  MINOR    // drobná – do 90 dnů
+  MAJOR    // závažná – do 30 dnů
+  CRITICAL // kritická – ihned, zařízení mimo provoz
+}
+
+enum DefectStatus {
+  OPEN
+  RESOLVED
+}
+
 // -----------------------------------------------------------------------------
 //  UŽIVATELÉ
 // -----------------------------------------------------------------------------
@@ -295,6 +314,8 @@ model Equipment {
   changeRequests      ChangeRequest[]
   complianceDocuments ComplianceDocument[]
   inspections         InspectionRecord[]
+  defects             InspectionDefect[]
+  temporaryMods       TemporaryModification[]
 
   @@unique([floorId, tag])
   @@index([floorId])
@@ -339,6 +360,12 @@ model InspectionRecord {
   measuringInstrument           String? // "Metrel MI 3309 BT"
   protectiveConductorResistance Float?  // R_PE [Ω]
   insulationResistance          Float?  // R_iso [MΩ]
+
+  // Termovize
+  maxTempC   Float? // nejvyšší naměřená teplota [°C]
+  deltaTempC Float? // ΔT vůči okolí [K]
+
+  defects InspectionDefect[]
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 
@@ -459,6 +486,7 @@ model ChangeRequest {
   resolvingRevisions DocumentRevision[]   @relation("ResolvingRevisions")
   attachments        Attachment[]
   events             ChangeRequestEvent[]
+  temporaryMods      TemporaryModification[]
 
   @@index([equipmentId, status])
   @@index([status])
@@ -501,4 +529,55 @@ model ChangeRequestEvent {
   revision      DocumentRevision? @relation(fields: [revisionId], references: [id], onDelete: SetNull)
 
   @@index([changeRequestId, createdAt])
+}
+
+/// Závada z revizní zprávy – sleduje se až do odstranění.
+model InspectionDefect {
+  id                 String         @id @default(cuid())
+  inspectionId       String
+  equipmentId        String
+  description        String
+  severity           DefectSeverity @default(MAJOR)
+  deadline           DateTime
+  status             DefectStatus   @default(OPEN)
+  resolvedAt         DateTime?
+  resolvedBy         String?
+  resolutionNote     String?
+  resolutionPhotoUrl String?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  inspection InspectionRecord @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  equipment  Equipment        @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+
+  @@index([equipmentId, status])
+  @@index([inspectionId])
+}
+
+/// Dočasné provizorní zapojení (např. náhrada dílu čekající na dodávku) – do 7–14 dnů odstranit.
+model TemporaryModification {
+  id             String             @id @default(cuid())
+  equipmentId    String
+  number         String             @unique // "PROV-2026-0001"
+  title          String
+  description    String
+  createdByName  String
+  createdByRole  String             // "Revizní technik" / "Údržba"
+  createdAt      DateTime           @default(now())
+  expiresAt      DateTime           // povinný termín odstranění
+  photoUrl       String?
+  markupJson     String?
+  status         TemporaryModStatus @default(ACTIVE)
+  resolvedAt     DateTime?
+  resolvedByName String?
+  resolutionNote String?
+  updatedAt      DateTime           @updatedAt
+
+  spawnedChangeRequestId String?
+
+  equipment            Equipment      @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  spawnedChangeRequest ChangeRequest? @relation(fields: [spawnedChangeRequestId], references: [id], onDelete: SetNull)
+
+  @@index([equipmentId, status])
+  @@index([status, expiresAt])
 }

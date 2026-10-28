@@ -1,5 +1,6 @@
 import "server-only";
 
+import type { PowerNode } from "@/lib/power-tree";
 import { prisma } from "@/lib/prisma";
 
 const OPEN_STATUSES = ["SUBMITTED", "IN_PROGRESS", "WAITING_APPROVAL"] as const;
@@ -26,7 +27,14 @@ export async function getEquipmentDetail(equipmentId: string) {
       fedFrom: { select: { id: true, tag: true, name: true } },
       feeds: { orderBy: [{ fedFromCircuit: "asc" }, { tag: "asc" }], select: { id: true, tag: true, name: true, type: true, fedFromCircuit: true } },
       complianceDocuments: { orderBy: { issuedAt: "desc" } },
-      inspections: { orderBy: [{ inspectionDate: "desc" }, { createdAt: "desc" }] },
+      inspections: {
+        orderBy: [{ inspectionDate: "desc" }, { createdAt: "desc" }],
+        include: { defects: { orderBy: [{ status: "asc" }, { deadline: "asc" }] } },
+      },
+      temporaryMods: {
+        orderBy: { createdAt: "desc" },
+        include: { spawnedChangeRequest: { select: { id: true, number: true } } },
+      },
       revisions: {
         orderBy: [{ major: "desc" }, { minor: "desc" }],
         include: {
@@ -56,6 +64,16 @@ export type EquipmentRevision = EquipmentDetail["revisions"][number];
 export type OpenChangeRequest = EquipmentDetail["changeRequests"][number];
 export type EquipmentComplianceDocument = EquipmentDetail["complianceDocuments"][number];
 export type EquipmentInspection = EquipmentDetail["inspections"][number];
+export type EquipmentDefect = EquipmentInspection["defects"][number];
+export type EquipmentTemporaryMod = EquipmentDetail["temporaryMods"][number];
+
+/** Uzly stromu napájení závodu (LOTO karta: kde vypnout a co zůstane bez proudu). */
+export async function getPowerNodes(plantId: string): Promise<PowerNode[]> {
+  return prisma.equipment.findMany({
+    where: { floor: { building: { plantId } } },
+    select: { id: true, tag: true, name: true, type: true, fedFromEquipmentId: true, fedFromCircuit: true },
+  });
+}
 
 const revisionForCompare = {
   select: {

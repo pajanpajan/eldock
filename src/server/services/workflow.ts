@@ -29,7 +29,7 @@ export interface Actor {
   role: UserRole;
 }
 
-type Tx = Prisma.TransactionClient;
+export type Tx = Prisma.TransactionClient;
 
 export interface AttachmentInput {
   url: string;
@@ -132,6 +132,11 @@ export interface SubmitChangeRequestInput {
 }
 
 export async function submitChangeRequest(prisma: PrismaClient, actor: Actor, input: SubmitChangeRequestInput) {
+  return prisma.$transaction((tx) => submitChangeRequestInTx(tx, actor, input));
+}
+
+/** Zadání změny uvnitř cizí transakce (např. převod provizoria na požadavek na změnu). */
+export async function submitChangeRequestInTx(tx: Tx, actor: Actor, input: SubmitChangeRequestInput) {
   const markup = input.markupData ? parseMarkup(input.markupData) : null;
   if (input.markupData && !markup) throw new WorkflowError("VALIDATION", "Zákres má neplatný formát.");
   const hasMarkup = !!markup && markup.strokes.length > 0;
@@ -141,79 +146,82 @@ export async function submitChangeRequest(prisma: PrismaClient, actor: Actor, in
     throw new WorkflowError("VALIDATION", "Přidejte alespoň zákres, fotku nebo poznámku.");
   }
 
-  return prisma.$transaction(async (tx) => {
-    const equipment = await tx.equipment.findUnique({ where: { id: input.equipmentId }, select: { id: true } });
-    if (!equipment) throw new WorkflowError("NOT_FOUND", "Zařízení nebylo nalezeno.");
+  const equipment = await tx.equipment.findUnique({ where: { id: input.equipmentId }, select: { id: true } });
+  if (!equipment) throw new WorkflowError("NOT_FOUND", "Zařízení nebylo nalezeno.");
 
-    const open = await tx.changeRequest.findFirst({
-      where: { equipmentId: equipment.id, status: { in: [...OPEN_STATUSES] } },
-      select: { number: true, status: true },
-    });
-    if (open) {
-      throw new WorkflowError("CONFLICT", `Zařízení už má otevřený požadavek ${open.number}. Doplňte ho komentářem.`);
-    }
-    const to = assertCanPerform("submit", actor.role, null)!;
-
-    const now = new Date();
-    const year = now.getFullYear();
-    const numbers = await tx.changeRequest.findMany({ where: { number: { startsWith: `ZM-${year}-` } }, select: { number: true } });
-    const number = formatTicketNumber(year, nextTicketSequence(numbers.map((item) => item.number), year));
-    const baseRevision = await tx.documentRevision.findFirst({
-      where: { equipmentId: equipment.id, status: "ACTIVE" },
-      select: { id: true },
-    });
-
-    const changeRequest = await tx.changeRequest.create({
-      data: {
-        number,
-        equipmentId: equipment.id,
-        status: to,
-        priority: input.priority ?? "NORMAL",
-        baseRevisionId: baseRevision?.id ?? null,
-        markupSheet: markup?.sheet ?? input.markupSheet ?? 1,
-        markupData: hasMarkup ? JSON.stringify(markup) : null,
-        markupImageUrl: clean(input.markupImageUrl),
-        voiceTranscript,
-        note,
-        reporterId: actor.id,
-        submittedAt: now,
-        attachments: { create: attachmentRows(input.attachments, actor.id) },
-      },
-    });
-    await addEvent(tx, { changeRequestId: changeRequest.id, type: "SUBMITTED", actorId: actor.id, from: null, to, at: now });
-    await syncEquipment(tx, equipment.id);
-    return changeRequest;
+  const open = await tx.changeRequest.findFirst({
+    where: { equipmentId: equipment.id, status: { in: [...OPEN_STATUSES] } },
+    select: { number: true, status: true },
   });
+  if (open) {
+    throw new WorkflowError("CONFLICT", `Zařízení už má otevřený požadavek ${open.number}. Doplňte ho komentářem.`);
+  }
+  const to = assertCanPerform("submit", actor.role, null)!;
+
+  const now = new Date();
+  const year = now.getFullYear();
+  const numbers = await tx.changeRequest.findMany({ where: { number: { startsWith: `ZM-${year}-` } }, select: { number: true } });
+  const number = formatTicketNumber(year, nextTicketSequence(numbers.map((item) => item.number), year));
+  const baseRevision = await tx.documentRevision.findFirst({
+    where: { equipmentId: equipment.id, status: "ACTIVE" },
+    select: { id: true },
+  });
+
+  const changeRequest = await tx.changeRequest.create({
+    data: {
+      number,
+      equipmentId: equipment.id,
+      status: to,
+      priority: input.priority ?? "NORMAL",
+      baseRevisionId: baseRevision?.id ?? null,
+      markupSheet: markup?.sheet ?? input.markupSheet ?? 1,
+      markupData: hasMarkup ? JSON.stringify(markup) : null,
+      markupImageUrl: clean(input.markupImageUrl),
+      voiceTranscript,
+      note,
+      reporterId: actor.id,
+      submittedAt: now,
+      attachments: { create: attachmentRows(input.attachments, actor.id) },
+    },
+  });
+  await addEvent(tx, { changeRequestId: changeRequest.id, type: "SUBMITTED", actorId: actor.id, from: null, to, at: now });
+  await syncEquipment(tx, equipment.id);
+  return changeRequest;
 }
 
 /** Komentář (a případně fotky) k otevřenému požadavku – obě role. */
-export async function addComment(
-  prisma: PrismaClient,
-  actor: Actor,
-  input: { changeRequestId: string; comment?: string | null; attachments?: AttachmentInput[] },
-) {
+export interface AddCommentInput {
+  changeRequestId: string;
+  comment?: string | null;
+  attachments?: AttachmentInput[];
+}
+
+export async function addComment(prisma: PrismaClient, actor: Actor, input: AddCommentInput) {
+  return prisma.$transaction((tx) => addCommentInTx(tx, actor, input));
+}
+
+/** Komentář uvnitř cizí transakce. */
+export async function addCommentInTx(tx: Tx, actor: Actor, input: AddCommentInput) {
   const comment = clean(input.comment);
   if (!comment && !input.attachments?.length) throw new WorkflowError("VALIDATION", "Napište komentář nebo přidejte fotku.");
 
-  return prisma.$transaction(async (tx) => {
-    const changeRequest = await loadChangeRequest(tx, input.changeRequestId);
-    assertCanPerform("comment", actor.role, changeRequest.status);
-    if (input.attachments?.length) {
-      await tx.attachment.createMany({
-        data: attachmentRows(input.attachments, actor.id).map((row) => ({ ...row, changeRequestId: changeRequest.id })),
-      });
-    }
-    const photos = input.attachments?.length ?? 0;
-    await addEvent(tx, {
-      changeRequestId: changeRequest.id,
-      type: "COMMENT",
-      actorId: actor.id,
-      comment:
-        comment ??
-        (photos === 1 ? "Doplněna 1 fotka." : photos < 5 ? `Doplněny ${photos} fotky.` : `Doplněno ${photos} fotek.`),
+  const changeRequest = await loadChangeRequest(tx, input.changeRequestId);
+  assertCanPerform("comment", actor.role, changeRequest.status);
+  if (input.attachments?.length) {
+    await tx.attachment.createMany({
+      data: attachmentRows(input.attachments, actor.id).map((row) => ({ ...row, changeRequestId: changeRequest.id })),
     });
-    return changeRequest;
+  }
+  const photos = input.attachments?.length ?? 0;
+  await addEvent(tx, {
+    changeRequestId: changeRequest.id,
+    type: "COMMENT",
+    actorId: actor.id,
+    comment:
+      comment ??
+      (photos === 1 ? "Doplněna 1 fotka." : photos < 5 ? `Doplněny ${photos} fotky.` : `Doplněno ${photos} fotek.`),
   });
+  return changeRequest;
 }
 
 // ---------------------------------------------------------------------------

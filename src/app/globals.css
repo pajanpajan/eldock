@@ -124,15 +124,18 @@
     height: auto !important;
   }
   body > header,
-  body > main,
   [data-sonner-toaster],
   [data-slot="dialog-overlay"] {
     display: none !important;
   }
-  body * {
+  /* Samostatný tiskový obsah (QR štítek, pochůzkový list) – stránka se nevytiskne. */
+  body:has(.print-area, .print-route) > main {
+    display: none !important;
+  }
+  body:has(.print-area, .print-route) * {
     visibility: hidden;
   }
-  [data-slot="dialog-content"] {
+  body:has(.print-area) [data-slot="dialog-content"] {
     position: absolute !important;
     top: 0 !important;
     left: 0 !important;
@@ -152,7 +155,7 @@
   }
   .print-area,
   .print-area * {
-    visibility: visible;
+    visibility: visible !important;
   }
   .print-area {
     position: absolute;
@@ -182,7 +185,7 @@
   }
   .print-route,
   .print-route * {
-    visibility: visible;
+    visibility: visible !important;
   }
   .print-route h1 {
     font-size: 15pt;
@@ -216,5 +219,25 @@
   }
   .print-route .route-sign {
     margin-top: 14pt;
+  }
+}
+
+/* Auditní report / Kniha revizí: tiskne se celá stránka černě na bílém papíře. */
+@media print {
+  .print-report,
+  .print-report * {
+    color: #000 !important;
+    background: transparent !important;
+    border-color: #999 !important;
+    box-shadow: none !important;
+  }
+  .print-report section {
+    break-inside: avoid-page;
+  }
+  .print-report tr {
+    break-inside: avoid;
+  }
+  .print-report a {
+    text-decoration: none !important;
   }
 }

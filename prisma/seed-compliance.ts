@@ -1,7 +1,7 @@
 // Demo data fáze 13: hierarchie napájení, pasport rozváděčů (ČSN EN 61439) a lhůtník
 // revizí (ČSN 33 1500). Čistá data bez I/O; data revizí jsou relativní k okamžiku seedu,
 // aby stavy 🟢 / 🟡 / 🔴 vycházely vždy stejně.
-import type { ComplianceCategory, InspectionResult, InspectionType } from "../src/generated/prisma/enums";
+import type { ComplianceCategory, DefectSeverity, InspectionResult, InspectionType } from "../src/generated/prisma/enums";
 import { addMonths, pragueToday } from "../src/lib/inspection";
 import { inspectionRuleFor, isPortable, measurementLimits } from "../src/lib/inspection-rules";
 
@@ -88,6 +88,20 @@ export interface InspectionSeed {
   measuringInstrument: string | null;
   protectiveConductorResistance: number | null;
   insulationResistance: number | null;
+  /** Termovize. */
+  maxTempC?: number | null;
+  deltaTempC?: number | null;
+  /** Závady revize; bez nich se odvodí ze `defectsSummary`. */
+  defectItems?: DefectSeed[];
+  /** Závady ze starších zpráv byly odstraněny. */
+  defectsResolved: boolean;
+}
+
+export interface DefectSeed {
+  description: string;
+  severity: DefectSeverity;
+  /** Odstraněno N dní po revizi (jinak otevřená). */
+  resolved?: { afterDays: number; by: string; note: string };
 }
 
 export const MEASURING_INSTRUMENT = "Metrel MI 3309 BT";
@@ -101,6 +115,12 @@ function daysToMonthEnd(): number {
 const thisMonth = () => daysAgo(-Math.floor(daysToMonthEnd() / 2));
 /** 5. den příštího měsíce – do 45 dnů po konci měsíce (tip „přiberte při jedné cestě“). */
 const nextMonth = () => daysAgo(-(daysToMonthEnd() + 5));
+
+/** Závady R-ML-01: neodstraněné z poslední (propadlé) revize. */
+const R_ML_01_DEFECTS: DefectSeed[] = [
+  { description: "Chybí krytí živých částí IP2X u stykače K2", severity: "MAJOR" },
+  { description: "Chybí štítek jističe F3", severity: "MINOR" },
+];
 
 /** Konec platnosti poslední revize pro řízené případy z plánu (🟢 RM1, 🟡 R-CNC-04, 🔴 R-ML-01). */
 const SPECIAL: Record<string, { validUntil: () => Date; result?: InspectionResult; defects?: string }> = {
@@ -135,6 +155,7 @@ const reportNumber = (prefix: "RZ" | "TV", date: Date, plant: string) =>
 export function inspectionsFor(eq: EquipmentSeed, index: number, plantCode: string): InspectionSeed[] {
   const interval = intervalFor(eq);
   const special = SPECIAL[eq.tag];
+  const lastDefectItems = eq.tag === "R-ML-01" ? R_ML_01_DEFECTS : undefined;
   // Rezerva vždy kratší než lhůta, aby poslední revize neležela v budoucnu.
   const reserve = 4 + ((index * 7) % Math.max(1, Math.min(27, interval - 5)));
   const lastValidUntil = special ? special.validUntil() : addMonths(daysAgo(0), reserve);
@@ -172,6 +193,7 @@ export function inspectionsFor(eq: EquipmentSeed, index: number, plantCode: stri
       inspector: "horak",
       result: "CAPABLE",
       defectsSummary: null,
+      defectsResolved: true,
       ...measured(0),
     });
   }
@@ -187,6 +209,8 @@ export function inspectionsFor(eq: EquipmentSeed, index: number, plantCode: stri
       inspector: inspector(i),
       result: last && special?.result ? special.result : olderDefect ? "CAPABLE_WITH_DEFECTS" : "CAPABLE",
       defectsSummary: last ? (special?.defects ?? null) : olderDefect,
+      defectsResolved: !last,
+      defectItems: last ? lastDefectItems : undefined,
       ...measured(i + 1),
     });
   });
@@ -206,6 +230,9 @@ export function inspectionsFor(eq: EquipmentSeed, index: number, plantCode: stri
         inspector: "sykora",
         result: "CAPABLE_WITH_DEFECTS",
         defectsSummary: "Zvýšená teplota svorky L2 vývodu QF4 (Δθ 41 K) – dotaženo, ověřeno opakovaným měřením.",
+        defectsResolved: true,
+        maxTempC: 68.4,
+        deltaTempC: 41.2,
         ...measured(0),
       });
     }
@@ -217,6 +244,29 @@ export function inspectionsFor(eq: EquipmentSeed, index: number, plantCode: stri
       inspector: "sykora",
       result: "CAPABLE",
       defectsSummary: null,
+      defectsResolved: true,
+      maxTempC: eq.tag === "RM1" ? 38.6 : 44.1,
+      deltaTempC: eq.tag === "RM1" ? 9.8 : 16.5,
+      ...measured(0),
+    });
+  }
+
+  // Mimořádná revize R-CNC-04 po výměně stykače K4 (neposouvá lhůtu pravidelné revize)
+  if (eq.tag === "R-CNC-04") {
+    const date = daysAgo(25);
+    records.push({
+      type: "EXTRAORDINARY",
+      inspectionDate: date,
+      validUntil: addMonths(date, interval),
+      reportNumber: reportNumber("RZ", date, plantCode),
+      inspector: "horak",
+      result: "CAPABLE_WITH_DEFECTS",
+      defectsSummary: "Uvolněná svorka PE na X1:PE. Chybí aktualizovaná výstražná tabulka na dveřích rozváděče.",
+      defectsResolved: false,
+      defectItems: [
+        { description: "Uvolněná svorka PE na X1:PE", severity: "MAJOR", resolved: { afterDays: 3, by: "Petr Novák", note: "Svorka dotažena momentem 2,5 Nm, ověřena spojitost PE." } },
+        { description: "Chybí aktualizovaná výstražná tabulka na dveřích rozváděče", severity: "MINOR" },
+      ],
       ...measured(0),
     });
   }

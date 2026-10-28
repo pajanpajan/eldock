@@ -41,6 +41,9 @@ const recordSchema = z.object({
   result,
   defectsSummary: defects,
   ...measurements,
+  maxTempC: z.number().min(-50).max(500).optional().nullable(),
+  deltaTempC: z.number().min(0).max(300).optional().nullable(),
+  defectSeverity: z.enum(["MINOR", "MAJOR", "CRITICAL"]).optional().nullable(),
   /** Nahraná zpráva (POST /api/uploads, druh `document`); bez ní se zpráva vygeneruje. */
   reportUrl: z
     .string()

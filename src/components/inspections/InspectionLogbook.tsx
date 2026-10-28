@@ -5,10 +5,12 @@ import type { EquipmentType } from "@/generated/prisma/enums";
 import { formatCount, formatDateShort, INSPECTION_TYPE_LABELS, plural } from "@/lib/format";
 import { isLightCard, isPortable, type InspectionRule } from "@/lib/inspection-rules";
 import { governingInspection, inspectionStateFor, latestOfType, type InspectionState, type InspectionSummary } from "@/lib/inspection";
-import { INSPECTION_RESULT, INSPECTION_STATE } from "@/lib/status";
+import { defectState, thermalLevel } from "@/lib/defects";
+import { DEFECT_STATE, INSPECTION_RESULT, INSPECTION_STATE, THERMAL_LEVEL } from "@/lib/status";
 import { cn } from "@/lib/utils";
 import type { EquipmentInspection } from "@/server/queries/equipment";
 
+import { DefectList } from "./DefectList";
 import { DocumentPreviewButton } from "./DocumentPreviewButton";
 import { InspectionStatusBadge } from "./InspectionStatusBadge";
 import { RecordInspectionDialog, type KnownInspector } from "./RecordInspectionDialog";
@@ -50,6 +52,8 @@ interface Props {
 /** Záložka „Revize & Lhůtník“: semafor, odpočet, historie revizních zpráv a termovizí, zápis nové revize. */
 export function InspectionLogbook({ equipmentId, tag, type, protectionClass, intervalMonths, rule, inspections, summary, today, now }: Props) {
   const measurable = isPortable(type);
+  const openDefects = inspections.flatMap((record) => record.defects).filter((defect) => defect.status === "OPEN");
+  const overdueDefects = openDefects.filter((defect) => defectState(defect, now).state === "OVERDUE").length;
   const style = INSPECTION_STATE[summary.state];
   const governing = governingInspection(inspections);
   const thermo = latestOfType(inspections, "THERMOVISION");
@@ -135,11 +139,15 @@ export function InspectionLogbook({ equipmentId, tag, type, protectionClass, int
         </div>
       </section>
 
-      {governing?.defectsSummary && summary.state !== "VALID" ? (
-        <p className="flex items-start gap-2 rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-200">
-          <TriangleAlert className="mt-0.5 size-4 shrink-0 text-red-400" aria-hidden />
+      {openDefects.length ? (
+        <p className={cn("flex items-start gap-2 rounded-xl border p-4 text-sm", overdueDefects ? DEFECT_STATE.OVERDUE.soft : DEFECT_STATE.OPEN.soft)}>
+          <TriangleAlert className={cn("mt-0.5 size-4 shrink-0", overdueDefects ? DEFECT_STATE.OVERDUE.text : DEFECT_STATE.OPEN.text)} aria-hidden />
           <span>
-            <span className="font-semibold">Neodstraněné závady z poslední revize:</span> {governing.defectsSummary}
+            <span className="font-semibold">
+              Neodstraněné závady z revizí: {openDefects.length}
+              {overdueDefects ? ` (z toho ${overdueDefects} po lhůtě)` : ""}
+            </span>{" "}
+            – {openDefects.map((defect) => defect.description).join(" · ")}
           </span>
         </p>
       ) : null}
@@ -209,7 +217,22 @@ export function InspectionLogbook({ equipmentId, tag, type, protectionClass, int
                         <span className="text-muted-foreground">{record.measuringInstrument}</span>
                       </p>
                     ) : null}
-                    {record.defectsSummary ? (
+                    {record.maxTempC !== null || record.deltaTempC !== null ? (
+                      <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                        <Thermometer className="size-4 text-muted-foreground" aria-hidden />
+                        <span>
+                          Max. <span className="font-mono">{record.maxTempC === null ? "–" : `${String(record.maxTempC).replace(".", ",")} °C`}</span>
+                        </span>
+                        {record.deltaTempC !== null ? (
+                          <span className={cn("rounded-full border px-2.5 py-0.5 text-xs font-medium", THERMAL_LEVEL[thermalLevel(record.deltaTempC)].badge)}>
+                            ΔT {String(record.deltaTempC).replace(".", ",")} K · {THERMAL_LEVEL[thermalLevel(record.deltaTempC)].label}
+                          </span>
+                        ) : null}
+                      </p>
+                    ) : null}
+                    {record.defects.length ? (
+                      <DefectList defects={record.defects} now={now} />
+                    ) : record.defectsSummary ? (
                       <p className={cn("rounded-lg border p-2.5 text-sm", result.soft)}>
                         <span className="font-medium">Závady: </span>
                         {record.defectsSummary}

@@ -8,6 +8,9 @@ import {
   CircleDashed,
   CircleSlash,
   CircleX,
+  Construction,
+  FilePen,
+  Thermometer,
   Clock,
   FileClock,
   Hourglass,
@@ -29,6 +32,8 @@ import {
 
 import type {
   ChangeRequestEventType,
+  DefectSeverity,
+  TemporaryModStatus,
   ChangeRequestPriority,
   ChangeRequestStatus,
   EquipmentStatus,
@@ -37,6 +42,7 @@ import type {
 } from "@/generated/prisma/enums";
 import { formatCount, formatDateShort, plural } from "@/lib/format";
 import { INSPECTION_WARNING_DAYS, type InspectionState } from "@/lib/inspection";
+import type { DefectState, ThermalLevel } from "@/lib/defects";
 import type { PlanBucket } from "@/lib/inspection-planner";
 
 // Jediný zdroj pravdy pro barvy a popisky stavů. Třídy Tailwindu jsou zapsané
@@ -299,4 +305,42 @@ export const PLAN_BUCKET: Record<PlanBucket, StatusStyle> = {
   THIS_MONTH: { ...ORANGE, label: "Tento měsíc", description: "Platnost revize končí do konce kalendářního měsíce.", icon: CalendarClock },
   NEXT_MONTH: { ...AMBER, label: "Příští měsíc", description: "Platnost revize končí příští kalendářní měsíc.", icon: CalendarRange },
   LATER: { ...EMERALD, label: "Další 3–6 měsíců", description: "Platnost končí v horizontu půl roku.", icon: CalendarCheck },
+};
+
+const VIOLET = {
+  hex: "#8b5cf6",
+  badge: "border-violet-500/40 bg-violet-500/15 text-violet-300",
+  dot: "bg-violet-500",
+  text: "text-violet-400",
+  soft: "border-violet-500/50 bg-violet-500/10",
+};
+
+/** Dočasná provizoria. */
+export const TEMP_MOD_STATUS: Record<TemporaryModStatus, StatusStyle> = {
+  ACTIVE: { ...VIOLET, label: "Aktivní provizorium", description: "V zařízení je dočasné provizorní zapojení – oficiální dokumentace platí.", icon: Construction },
+  RESTORED_1_TO_1: { ...EMERALD, label: "Odstraněno – vráceno 1:1", description: "Provizorium odstraněno, zapojení odpovídá platnému schématu.", icon: CircleCheck },
+  CONVERTED_TO_CR: { ...SKY, label: "Odstraněno – převedeno na změnu", description: "Finální stav se liší od schématu – předáno CAE k zakreslení.", icon: FilePen },
+};
+
+/** Provizorium po termínu odstranění. */
+export const TEMP_MOD_OVERDUE: StatusStyle = { ...RED, label: "PROVIZORIUM PO TERMÍNU!", description: "Provizorium mělo být odstraněno.", icon: OctagonAlert };
+
+export const DEFECT_SEVERITY: Record<DefectSeverity, StatusStyle> = {
+  MINOR: { ...ZINC, label: "Drobná", description: "Odstranit do 90 dnů.", icon: CircleDashed },
+  MAJOR: { ...ORANGE, label: "Závažná", description: "Odstranit do 30 dnů.", icon: TriangleAlert },
+  CRITICAL: { ...RED, label: "Kritická", description: "Odstranit ihned – zařízení mimo provoz.", icon: OctagonAlert },
+};
+
+export const DEFECT_STATE: Record<DefectState, StatusStyle> = {
+  OPEN: { ...AMBER, label: "Otevřená", description: "Závada čeká na odstranění.", icon: Wrench },
+  OVERDUE: { ...RED, label: "Po lhůtě", description: "Lhůta pro odstranění závady uplynula.", icon: TimerOff },
+  RESOLVED: { ...EMERALD, label: "Odstraněná", description: "Odstranění závady bylo potvrzeno.", icon: CircleCheck },
+};
+
+/** Termovize – ΔT vůči okolí. */
+export const THERMAL_LEVEL: Record<ThermalLevel, StatusStyle> = {
+  OK: { ...EMERALD, label: "V normě", description: "ΔT do 10 K.", icon: Thermometer },
+  WATCH: { ...AMBER, label: "Sledovat", description: "ΔT 10–20 K – zkontrolovat při příští termovizi.", icon: Thermometer },
+  PLAN: { ...ORANGE, label: "Naplánovat opravu", description: "ΔT 20–40 K – dotáhnout / vyměnit při nejbližší odstávce.", icon: Thermometer },
+  CRITICAL: { ...RED, label: "Kritické – opravit ihned", description: "ΔT nad 40 K – hrozí poškození, opravit ihned.", icon: Thermometer },
 };

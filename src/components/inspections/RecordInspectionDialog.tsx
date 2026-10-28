@@ -20,11 +20,12 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import type { InspectionResult, InspectionType } from "@/generated/prisma/enums";
+import type { DefectSeverity, InspectionResult, InspectionType } from "@/generated/prisma/enums";
 import { INSPECTION_TYPE_LABELS, formatDateShort } from "@/lib/format";
 import { computeValidUntil, defaultValidityMonths } from "@/lib/inspection";
 import { evaluateMeasurements, measurementLimits } from "@/lib/inspection-rules";
-import { INSPECTION_RESULT } from "@/lib/status";
+import { DEFECT_DEADLINE_DAYS, severityForResult, thermalLevel } from "@/lib/defects";
+import { DEFECT_SEVERITY, INSPECTION_RESULT, THERMAL_LEVEL } from "@/lib/status";
 import { uploadFile, type UploadedFile } from "@/lib/upload-client";
 import { cn } from "@/lib/utils";
 import { recordInspectionAction } from "@/server/actions/inspection";
@@ -57,6 +58,9 @@ export function RecordInspectionDialog({ equipmentId, tag, intervalMonths, today
   const [instrument, setInstrument] = useState("Metrel MI 3309 BT");
   const [rpe, setRpe] = useState(limits.typical.rpe === null ? "" : String(limits.typical.rpe));
   const [riso, setRiso] = useState(String(limits.typical.riso));
+  const [maxTemp, setMaxTemp] = useState("");
+  const [deltaTemp, setDeltaTemp] = useState("");
+  const [severity, setSeverity] = useState<DefectSeverity | null>(null);
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -120,6 +124,8 @@ export function RecordInspectionDialog({ equipmentId, tag, intervalMonths, today
         result,
         defectsSummary: needsDefects ? defects : defects.trim() || null,
         reportUrl: file?.url ?? null,
+        ...(type === "THERMOVISION" ? { maxTempC: toNumber(maxTemp), deltaTempC: toNumber(deltaTemp) } : {}),
+        defectSeverity: needsDefects ? (severity ?? severityForResult(result)) : null,
         ...(measurable
           ? { measuringInstrument: instrument || null, protectiveConductorResistance: toNumber(rpe), insulationResistance: toNumber(riso) }
           : {}),
@@ -235,6 +241,28 @@ export function RecordInspectionDialog({ equipmentId, tag, intervalMonths, today
               </div>
             </div>
 
+            {type === "THERMOVISION" ? (
+              <div className="grid gap-4 rounded-lg border border-border bg-muted/20 p-3 sm:grid-cols-3">
+                <div className="space-y-2">
+                  <Label htmlFor="inspection-max-temp">Max. teplota [°C]</Label>
+                  <Input id="inspection-max-temp" inputMode="decimal" value={maxTemp} onChange={(event) => setMaxTemp(event.target.value)} className="h-11 font-mono" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="inspection-delta-temp">ΔT vůči okolí [K]</Label>
+                  <Input id="inspection-delta-temp" inputMode="decimal" value={deltaTemp} onChange={(event) => setDeltaTemp(event.target.value)} className="h-11 font-mono" />
+                </div>
+                <div className="flex items-end">
+                  {toNumber(deltaTemp) !== null && !Number.isNaN(toNumber(deltaTemp)) ? (
+                    <span className={cn("rounded-full border px-3 py-1.5 text-sm font-medium", THERMAL_LEVEL[thermalLevel(toNumber(deltaTemp)!)].badge)}>
+                      {THERMAL_LEVEL[thermalLevel(toNumber(deltaTemp)!)].label}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">ΔT do 10 K v normě, nad 40 K kritické.</span>
+                  )}
+                </div>
+              </div>
+            ) : null}
+
             {measurable ? (
               <div className="grid gap-4 rounded-lg border border-border bg-muted/20 p-3 sm:grid-cols-3">
                 <div className="space-y-2">
@@ -306,6 +334,26 @@ export function RecordInspectionDialog({ equipmentId, tag, intervalMonths, today
                 placeholder="Např. Chybí krytí živých částí IP2X u stykače K2."
                 aria-invalid={needsDefects && defects.length > 0 && defects.trim().length < 3 ? true : undefined}
               />
+              {needsDefects ? (
+                <div className="flex flex-wrap items-center gap-2" role="radiogroup" aria-label="Závažnost závad">
+                  <span className="text-sm text-muted-foreground">Závažnost (lhůta odstranění):</span>
+                  {(["MINOR", "MAJOR", "CRITICAL"] as const).map((value) => {
+                    const active = (severity ?? severityForResult(result)) === value;
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        onClick={() => setSeverity(value)}
+                        className={cn("h-9 rounded-full border px-3 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50", active ? DEFECT_SEVERITY[value].badge : "border-border bg-card")}
+                      >
+                        {DEFECT_SEVERITY[value].label} · {DEFECT_DEADLINE_DAYS[value] ? `${DEFECT_DEADLINE_DAYS[value]} dní` : "ihned"}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
             </div>
 
             <div className="space-y-2">

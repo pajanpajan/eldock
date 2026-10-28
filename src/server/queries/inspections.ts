@@ -184,3 +184,54 @@ export async function getPlannerItems(plantId?: string, now: Date = new Date()):
     };
   });
 }
+
+/** Auditní report / Kniha revizí: všechna zařízení s poslední revizí, otevřené závady a aktivní provizoria. */
+export async function getAuditReport(plantId?: string, now: Date = new Date()) {
+  const scope = plantId ? { floor: { building: { plantId } } } : {};
+  const [equipment, defects, mods] = await Promise.all([
+    prisma.equipment.findMany({
+      where: scope,
+      orderBy: { tag: "asc" },
+      select: {
+        id: true,
+        tag: true,
+        name: true,
+        type: true,
+        usageGroup: true,
+        protectionClass: true,
+        externalInfluences: true,
+        inspectionIntervalMonths: true,
+        floor: { select: { name: true, building: { select: { name: true, plant: { select: { name: true } } } } } },
+        inspections: {
+          where: { type: { in: [...DEADLINE_TYPES] } },
+          orderBy: { inspectionDate: "desc" },
+          select: { type: true, inspectionDate: true, validUntil: true, result: true, reportNumber: true, inspectorName: true },
+        },
+      },
+    }),
+    prisma.inspectionDefect.findMany({
+      where: { status: "OPEN", equipment: scope },
+      orderBy: { deadline: "asc" },
+      include: { equipment: { select: { id: true, tag: true, name: true } }, inspection: { select: { reportNumber: true, inspectionDate: true } } },
+    }),
+    prisma.temporaryModification.findMany({
+      where: { status: "ACTIVE", equipment: scope },
+      orderBy: { expiresAt: "asc" },
+      include: { equipment: { select: { id: true, tag: true, name: true, floor: { select: { name: true, building: { select: { name: true } } } } } } },
+    }),
+  ]);
+
+  const rows = equipment.map(({ floor, inspections, ...item }) => {
+    const summary = summarizeInspections(inspections, now);
+    const last = inspections[0] ?? null;
+    return {
+      ...item,
+      location: `${plantId ? "" : `${floor.building.plant.name} › `}${floor.building.name} › ${floor.name}`,
+      summary,
+      last: last ? { inspectionDate: last.inspectionDate, reportNumber: last.reportNumber, inspectorName: last.inspectorName, result: last.result } : null,
+    };
+  });
+  return { rows, defects, mods };
+}
+
+export type AuditReport = Awaited<ReturnType<typeof getAuditReport>>;

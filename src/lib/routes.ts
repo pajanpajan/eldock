@@ -25,3 +25,5 @@ export const inspectionsHref = "/inspections";
 export const rapidInspectionHref = "/inspections/rapid";
 
 export const plannerHref = "/inspections/planner";
+
+export const auditReportHref = "/inspections/audit-report";

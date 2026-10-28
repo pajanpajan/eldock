@@ -1,9 +1,9 @@
 import Link from "next/link";
-import { CalendarCheck, CalendarRange, ScanLine } from "lucide-react";
+import { CalendarCheck, CalendarRange, FileCheck2, ScanLine } from "lucide-react";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { initials } from "@/lib/format";
-import { inspectionsHref, plannerHref, rapidInspectionHref } from "@/lib/routes";
+import { auditReportHref, inspectionsHref, plannerHref, rapidInspectionHref } from "@/lib/routes";
 import { getPlants } from "@/server/queries/plant";
 import { getCurrentRole, getCurrentUser, getRememberedPlantId } from "@/server/session";
 
@@ -57,6 +57,14 @@ export async function AppHeader() {
             <ScanLine className="size-4" aria-hidden />
             <span className="hidden lg:inline">Rychlá revize</span>
             <span className="sr-only lg:hidden">Rychlá revize</span>
+          </Link>
+          <Link
+            href={auditReportHref}
+            className="touch-target flex items-center gap-2 rounded-md px-2.5 text-sm text-muted-foreground transition-colors outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+          >
+            <FileCheck2 className="size-4" aria-hidden />
+            <span className="hidden xl:inline">Audit</span>
+            <span className="sr-only xl:hidden">Auditní report</span>
           </Link>
         </nav>
 

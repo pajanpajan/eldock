@@ -19,6 +19,7 @@ import {
   BUILDINGS,
   CHANGE_REQUESTS,
   day,
+  daysAgo,
   EQUIPMENT,
   FLOORS,
   PLANTS,
@@ -27,8 +28,10 @@ import {
   revisionsFor,
   type UserKey,
 } from "./seed-data";
+import { defectDeadline, severityForResult, splitDefects } from "../src/lib/defects";
 import { LIGHT_EQUIPMENT } from "./seed-appliances";
-import { FEEDS, INSPECTORS, complianceFor, externalInfluencesFor, inspectionsFor, intervalFor } from "./seed-compliance";
+import { TEMPORARY_MODS } from "./seed-temporary-mods";
+import { FEEDS, INSPECTORS, type DefectSeed, complianceFor, externalInfluencesFor, inspectionsFor, intervalFor } from "./seed-compliance";
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error("Chybí DATABASE_URL (viz .env.example).");
@@ -64,6 +67,8 @@ function circleMarkup(designation: string): string {
 
 async function wipe() {
   // Pořadí podle cizích klíčů (děti před rodiči).
+  await prisma.temporaryModification.deleteMany();
+  await prisma.inspectionDefect.deleteMany();
   await prisma.changeRequestEvent.deleteMany();
   await prisma.attachment.deleteMany();
   await prisma.bomItem.deleteMany();
@@ -317,7 +322,32 @@ async function main() {
           measuringInstrument: record.measuringInstrument,
           protectiveConductorResistance: record.protectiveConductorResistance,
           insulationResistance: record.insulationResistance,
+          maxTempC: record.maxTempC ?? null,
+          deltaTempC: record.deltaTempC ?? null,
           createdAt: record.inspectionDate,
+          defects: {
+            create: (record.defectItems ?? (record.result === "CAPABLE" ? [] : splitDefects(record.defectsSummary).map((description) => ({ description, severity: severityForResult(record.result) })))).map(
+              (defect: DefectSeed) => {
+                const resolved = defect.resolved
+                    ? defect.resolved
+                    : record.defectsResolved
+                      ? { afterDays: 12, by: "Petr Novák", note: "Závada odstraněna, ověřeno při kontrole údržby." }
+                      : null;
+                const resolvedAt = resolved ? new Date(record.inspectionDate.getTime() + resolved.afterDays * 24 * 3600 * 1000) : null;
+                return {
+                  equipmentId: id,
+                  description: defect.description,
+                  severity: defect.severity,
+                  deadline: defectDeadline(record.inspectionDate, defect.severity),
+                  status: resolved ? "RESOLVED" : "OPEN",
+                  resolvedAt,
+                  resolvedBy: resolved?.by ?? null,
+                  resolutionNote: resolved?.note ?? null,
+                  createdAt: record.inspectionDate,
+                } as const;
+              },
+            ),
+          },
         },
       });
     }
@@ -386,8 +416,18 @@ async function main() {
     }
   }
 
+  // Dočasná provizoria (fáze 16): aktivní na R-LIS-01, historické 1:1 a převedené na požadavek
+  await writeFile(
+    path.join(UPLOADS, "photos", "seed", "R-LIS-01-provizorium.svg"),
+    renderPhotoSvg({ kind: "wiring", tag: "R-LIS-01", seed: "R-LIS-01-provizorium", stamp: daysAgo(8).toISOString().slice(0, 10) }),
+  );
+  const spawned = await prisma.changeRequest.findUniqueOrThrow({ where: { number: "ZM-2025-0007" }, select: { id: true, submittedAt: true } });
+  for (const mod of TEMPORARY_MODS(spawned)) {
+    await prisma.temporaryModification.create({ data: { ...mod, equipmentId: equipmentId.get(mod.equipmentId)! } });
+  }
+
   // Souhrn
-  const [plants, buildings, floors, equipment, revisions, bom, openCr, closedCr, events, documents, inspections] = await Promise.all([
+  const [plants, buildings, floors, equipment, revisions, bom, openCr, closedCr, events, documents, inspections, defects, mods] = await Promise.all([
     prisma.plant.count(),
     prisma.building.count(),
     prisma.floor.count(),
@@ -399,6 +439,8 @@ async function main() {
     prisma.changeRequestEvent.count(),
     prisma.complianceDocument.count(),
     prisma.inspectionRecord.count(),
+    prisma.inspectionDefect.count(),
+    prisma.temporaryModification.count(),
   ]);
   console.log(
     [
@@ -406,7 +448,7 @@ async function main() {
       `  závody ${plants} · budovy ${buildings} · patra ${floors} · zařízení ${equipment}`,
       `  revize ${revisions} · položky kusovníku ${bom}`,
       `  požadavky otevřené ${openCr} · uzavřené ${closedCr} · události ${events}`,
-      `  dokumenty pasportu ${documents} · revizní zprávy ${inspections}`,
+      `  dokumenty pasportu ${documents} · revizní zprávy ${inspections} · závady ${defects} · provizoria ${mods}`,
       `  uživatelé ${USERS.length}`,
     ].join("\n"),
   );

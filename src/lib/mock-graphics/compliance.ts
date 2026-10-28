@@ -1,4 +1,5 @@
 import type { ComplianceCategory, InspectionResult, InspectionType } from "@/generated/prisma/enums";
+import { thermalLevel, type ThermalLevel } from "@/lib/defects";
 import { buildInterfaceRows, parseAmps, type InterfaceSource } from "@/lib/switchboard-interface";
 
 import { renderDocumentSvg, renderSingleLineSvg, type DocumentTone, type SingleLineFeeder } from "./document";
@@ -198,6 +199,8 @@ export interface InspectionReportContext {
   standard?: string;
   /** Naměřené hodnoty revize spotřebiče. */
   measurements?: ReportMeasurements | null;
+  /** Termovize: nejvyšší teplota a ΔT vůči okolí. */
+  thermal?: { maxTempC: number | null; deltaTempC: number | null } | null;
 }
 
 export interface ReportMeasurements {
@@ -207,6 +210,13 @@ export interface ReportMeasurements {
 }
 
 const num = (value: number) => String(value).replace(".", ",");
+
+const THERMAL_VERDICT: Record<ThermalLevel, string> = {
+  OK: "v normě",
+  WATCH: "sledovat",
+  PLAN: "naplánovat opravu",
+  CRITICAL: "KRITICKÉ – opravit ihned",
+};
 
 function measurementRows(m: ReportMeasurements): string[][] {
   return [
@@ -256,7 +266,14 @@ export function renderInspectionReportSvg(ctx: InspectionReportContext): string 
             heading: "Naměřené hodnoty",
             table: [
               ["Místo měření", "Max. teplota", "Δθ vůči okolí", "Hodnocení"],
-              ["Přípojnice L1/L2/L3", "48,2 °C", "22 K", "v pořádku"],
+              ctx.thermal
+                ? [
+                    "Nejteplejší místo",
+                    ctx.thermal.maxTempC === null ? "–" : `${num(ctx.thermal.maxTempC)} °C`,
+                    ctx.thermal.deltaTempC === null ? "–" : `${num(ctx.thermal.deltaTempC)} K`,
+                    ctx.thermal.deltaTempC === null ? "–" : THERMAL_VERDICT[thermalLevel(ctx.thermal.deltaTempC)],
+                  ]
+                : ["Přípojnice L1/L2/L3", "48,2 °C", "22 K", "v pořádku"],
               ["Hlavní vypínač – svorky", "52,7 °C", "27 K", "v pořádku"],
               ["Vývodové jističe", "44,1 °C", "18 K", "v pořádku"],
             ],

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ScanLine } from "lucide-react";
+import { FileCheck2, ScanLine } from "lucide-react";
 
 import { PageHeader } from "@/components/common/PageHeader";
 import { InspectionOverviewTable } from "@/components/inspections/InspectionOverviewTable";
@@ -8,7 +8,7 @@ import { InspectionWatcher } from "@/components/inspections/InspectionWatcher";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { Button } from "@/components/ui/button";
 import { pragueToday } from "@/lib/inspection";
-import { rapidInspectionHref } from "@/lib/routes";
+import { auditReportHref, rapidInspectionHref } from "@/lib/routes";
 import { getInspectionOverview, getInspectionWatch } from "@/server/queries/inspections";
 import { getPlants } from "@/server/queries/plant";
 import { getCurrentRole, getRememberedPlantId } from "@/server/session";
@@ -29,12 +29,20 @@ export default async function InspectionsPage() {
         title="Přehled revizí"
         description={`${plant ? plant.name : "Všechny závody"} · rozváděče a VTZ (ČSN 33 1500), stroje (NV 378/2001 Sb.), spotřebiče a nářadí (ČSN 33 1600 ed. 2), hromosvody a nouzové osvětlení.`}
         actions={
-          <Button asChild size="lg" className="touch-target gap-2">
-            <Link href={rapidInspectionHref}>
-              <ScanLine className="size-4" aria-hidden />
-              Rychlá revize
-            </Link>
-          </Button>
+          <>
+            <Button asChild size="lg" variant="outline" className="touch-target gap-2">
+              <Link href={auditReportHref}>
+                <FileCheck2 className="size-4" aria-hidden />
+                Auditní report
+              </Link>
+            </Button>
+            <Button asChild size="lg" className="touch-target gap-2">
+              <Link href={rapidInspectionHref}>
+                <ScanLine className="size-4" aria-hidden />
+                Rychlá revize
+              </Link>
+            </Button>
+          </>
         }
       />
       <div className="space-y-6">

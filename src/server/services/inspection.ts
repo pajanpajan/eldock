@@ -2,13 +2,16 @@
 // a rychlá revize spotřebiče s měřením. Služby dostávají `prisma` jako parametr (testovatelné
 // bez cookies). Platnost se počítá z lhůty zařízení (`inspection-rules`). Záměrně bez `server-only`.
 
-import type { EquipmentType, InspectionResult, InspectionType } from "@/generated/prisma/enums";
+import type { DefectSeverity, EquipmentType, InspectionResult, InspectionType } from "@/generated/prisma/enums";
 import type { PrismaClient } from "@/generated/prisma/client";
+import { defectDeadline, severityForResult, splitDefects } from "@/lib/defects";
 import { formatDateShort } from "@/lib/format";
 import { computeValidUntil, daysUntil, defaultValidityMonths, pragueToday } from "@/lib/inspection";
 import { evaluateMeasurements, inspectionRuleFor, isPortable } from "@/lib/inspection-rules";
 import { renderBatchProtocolSvg, renderInspectionReportSvg } from "@/lib/mock-graphics/compliance";
 import { WorkflowError } from "@/lib/workflow/state-machine";
+
+import type { Actor } from "./workflow";
 
 export interface MeasurementFields {
   measuringInstrument?: string | null;
@@ -18,7 +21,14 @@ export interface MeasurementFields {
   insulationResistance?: number | null;
 }
 
-export interface RecordInspectionInput extends MeasurementFields {
+export interface ThermalFields {
+  /** Nejvyšší naměřená teplota [°C] (termovize). */
+  maxTempC?: number | null;
+  /** ΔT vůči okolí [K]. */
+  deltaTempC?: number | null;
+}
+
+export interface RecordInspectionInput extends MeasurementFields, ThermalFields {
   equipmentId: string;
   type: InspectionType;
   /** Den provedení revize `YYYY-MM-DD`. */
@@ -30,6 +40,8 @@ export interface RecordInspectionInput extends MeasurementFields {
   inspectorLicense: string;
   result: InspectionResult;
   defectsSummary?: string | null;
+  /** Závažnost zjištěných závad; výchozí podle posudku. */
+  defectSeverity?: DefectSeverity | null;
 }
 
 /** `YYYY-MM-DD` → okamžik v poledne (stejně jako seed), ať datum nepřeskočí přes časová pásma. */
@@ -97,6 +109,35 @@ function parsePastDate(value: string, now: Date) {
   return date;
 }
 
+function cleanThermal(input: ThermalFields) {
+  const value = (n: number | null | undefined) => (typeof n === "number" && Number.isFinite(n) ? n : null);
+  const maxTempC = value(input.maxTempC);
+  const deltaTempC = value(input.deltaTempC);
+  if ((maxTempC !== null && (maxTempC < -50 || maxTempC > 500)) || (deltaTempC !== null && (deltaTempC < 0 || deltaTempC > 300))) {
+    throw new WorkflowError("VALIDATION", "Naměřené teploty jsou mimo rozsah termokamery.");
+  }
+  return { maxTempC, deltaTempC };
+}
+
+/** Řádky `InspectionDefect` ze soupisu závad: lhůta odstranění podle závažnosti od data revize. */
+export function defectRows(
+  equipmentId: string,
+  inspectionDate: Date,
+  result: InspectionResult,
+  defects: string | null,
+  severity?: DefectSeverity | null,
+) {
+  if (!defects || result === "CAPABLE") return [];
+  const level = severity ?? severityForResult(result);
+  const items = splitDefects(defects);
+  return (items.length ? items : [defects]).map((description) => ({
+    equipmentId,
+    description,
+    severity: level,
+    deadline: defectDeadline(inspectionDate, level),
+  }));
+}
+
 /** Platnost: neschopné zařízení nemá platnou revizi (platí jen do dne revize), jinak datum + lhůta. */
 const validUntilFor = (date: Date, months: number, result: InspectionResult) => (result === "INCAPABLE" ? date : computeValidUntil(date, months));
 
@@ -117,6 +158,7 @@ function prepare(input: RecordInspectionInput, intervalMonths: number, now: Date
     reportNumber,
     ...requireInspector(input),
     ...cleanMeasurements(input),
+    ...cleanThermal(input),
   };
 }
 
@@ -136,6 +178,7 @@ function reportSvg(equipment: LoadedEquipment, input: { type: InspectionType; re
     result: input.result,
     defectsSummary: data.defects,
     standard: standardOf(equipment),
+    thermal: data.deltaTempC !== null || data.maxTempC !== null ? { maxTempC: data.maxTempC, deltaTempC: data.deltaTempC } : null,
     measurements: data.measuringInstrument
       ? { instrument: data.measuringInstrument, rpe: data.protectiveConductorResistance, riso: data.insulationResistance }
       : null,
@@ -167,6 +210,9 @@ export async function recordInspection(prisma: PrismaClient, input: RecordInspec
       measuringInstrument: data.measuringInstrument,
       protectiveConductorResistance: data.protectiveConductorResistance,
       insulationResistance: data.insulationResistance,
+      maxTempC: data.maxTempC,
+      deltaTempC: data.deltaTempC,
+      defects: { create: defectRows(equipment.id, data.inspectionDate, input.result, data.defects, input.defectSeverity) },
     },
   });
 }
@@ -247,6 +293,7 @@ export async function recordBatchInspection(
           defectsSummary: batch.defects,
           reportUrl: input.reportUrl,
           measuringInstrument: batch.instrument,
+          defects: { create: defectRows(equipment.id, batch.inspectionDate, input.result, batch.defects) },
         },
       }),
     ),
@@ -313,6 +360,32 @@ export async function recordQuickInspection(prisma: PrismaClient, input: QuickIn
       measuringInstrument: data.measuringInstrument,
       protectiveConductorResistance: data.protectiveConductorResistance,
       insulationResistance: data.insulationResistance,
+      defects: { create: defectRows(equipment.id, data.inspectionDate, record.result, data.defects) },
     },
+  });
+}
+
+// ---------------------------------------------------------------------------
+//  Revizní závady
+// ---------------------------------------------------------------------------
+
+export interface ResolveDefectInput {
+  defectId: string;
+  /** Popis provedené opravy (povinný). */
+  note: string;
+  photoUrl?: string | null;
+}
+
+/** Potvrzení odstranění závady (údržba i revizní technik). */
+export async function resolveDefect(prisma: PrismaClient, actor: Actor, input: ResolveDefectInput, now: Date = new Date()) {
+  const note = input.note.trim();
+  if (note.length < 3) throw new WorkflowError("VALIDATION", "Popište, jak byla závada odstraněna.");
+  const defect = await prisma.inspectionDefect.findUnique({ where: { id: input.defectId } });
+  if (!defect) throw new WorkflowError("NOT_FOUND", "Závada nebyla nalezena.");
+  if (defect.status === "RESOLVED") throw new WorkflowError("INVALID_STATE", "Závada už je odstraněná.");
+  const user = await prisma.user.findUnique({ where: { id: actor.id }, select: { name: true } });
+  return prisma.inspectionDefect.update({
+    where: { id: defect.id },
+    data: { status: "RESOLVED", resolvedAt: now, resolvedBy: user?.name ?? "Neznámý uživatel", resolutionNote: note, resolutionPhotoUrl: input.photoUrl?.trim() || null },
   });
 }
