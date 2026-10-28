@@ -23,6 +23,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { InspectionResult, InspectionType } from "@/generated/prisma/enums";
 import { INSPECTION_TYPE_LABELS, formatDateShort } from "@/lib/format";
 import { computeValidUntil, defaultValidityMonths } from "@/lib/inspection";
+import { evaluateMeasurements, measurementLimits } from "@/lib/inspection-rules";
 import { INSPECTION_RESULT } from "@/lib/status";
 import { uploadFile, type UploadedFile } from "@/lib/upload-client";
 import { cn } from "@/lib/utils";
@@ -45,10 +46,17 @@ interface Props {
   today: string;
   suggestedReportNumber: string;
   inspectors: KnownInspector[];
+  /** Přenosný spotřebič / nářadí – zobrazí pole měření R_PE a R_iso. */
+  measurable?: boolean;
+  protectionClass?: string | null;
 }
 
 /** Dialog „Zapsat novou revizi“: druh, datum, platnost, technik s osvědčením TIČR, posudek, závady a zpráva. */
-export function RecordInspectionDialog({ equipmentId, tag, intervalMonths, today, suggestedReportNumber, inspectors }: Props) {
+export function RecordInspectionDialog({ equipmentId, tag, intervalMonths, today, suggestedReportNumber, inspectors, measurable = false, protectionClass = null }: Props) {
+  const limits = measurementLimits(protectionClass);
+  const [instrument, setInstrument] = useState("Metrel MI 3309 BT");
+  const [rpe, setRpe] = useState(limits.typical.rpe === null ? "" : String(limits.typical.rpe));
+  const [riso, setRiso] = useState(String(limits.typical.riso));
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -72,6 +80,8 @@ export function RecordInspectionDialog({ equipmentId, tag, intervalMonths, today
     validUntil = null;
   }
   const needsDefects = result !== "CAPABLE";
+  const toNumber = (value: string) => (value.trim() === "" ? null : Number(value.replace(",", ".")));
+  const measurement = measurable ? evaluateMeasurements(protectionClass, { rpe: toNumber(rpe), riso: toNumber(riso) }) : null;
   const valid =
     !!date &&
     date <= today &&
@@ -110,6 +120,9 @@ export function RecordInspectionDialog({ equipmentId, tag, intervalMonths, today
         result,
         defectsSummary: needsDefects ? defects : defects.trim() || null,
         reportUrl: file?.url ?? null,
+        ...(measurable
+          ? { measuringInstrument: instrument || null, protectiveConductorResistance: toNumber(rpe), insulationResistance: toNumber(riso) }
+          : {}),
       });
       if (!response.ok) {
         toast.error(response.error);
@@ -221,6 +234,37 @@ export function RecordInspectionDialog({ equipmentId, tag, intervalMonths, today
                 ) : null}
               </div>
             </div>
+
+            {measurable ? (
+              <div className="grid gap-4 rounded-lg border border-border bg-muted/20 p-3 sm:grid-cols-3">
+                <div className="space-y-2">
+                  <Label htmlFor="inspection-rpe">
+                    R<sub>PE</sub> [Ω] {limits.rpeMax === null ? "" : `≤ ${String(limits.rpeMax).replace(".", ",")}`}
+                  </Label>
+                  <Input
+                    id="inspection-rpe"
+                    inputMode="decimal"
+                    value={limits.rpeMax === null ? "neměří se" : rpe}
+                    disabled={limits.rpeMax === null}
+                    onChange={(event) => setRpe(event.target.value)}
+                    className="h-11 font-mono"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="inspection-riso">
+                    R<sub>iso</sub> [MΩ] ≥ {String(limits.risoMin).replace(".", ",")}
+                  </Label>
+                  <Input id="inspection-riso" inputMode="decimal" value={riso} onChange={(event) => setRiso(event.target.value)} className="h-11 font-mono" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="inspection-instrument">Měřicí přístroj</Label>
+                  <Input id="inspection-instrument" value={instrument} onChange={(event) => setInstrument(event.target.value)} maxLength={120} className="h-11" />
+                </div>
+                {measurement && !measurement.ok ? (
+                  <p className="text-sm text-red-300 sm:col-span-3">{measurement.failures.join(" ")}</p>
+                ) : null}
+              </div>
+            ) : null}
 
             <div className="space-y-2">
               <Label id="inspection-result-label">Celkový posudek</Label>

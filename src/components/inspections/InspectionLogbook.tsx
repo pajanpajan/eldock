@@ -1,6 +1,9 @@
-import { CalendarClock, ClipboardList, Thermometer, TriangleAlert, UserRound } from "lucide-react";
+import { CalendarClock, ClipboardList, Gauge, Thermometer, TriangleAlert, UserRound } from "lucide-react";
+
+import type { EquipmentType } from "@/generated/prisma/enums";
 
 import { formatCount, formatDateShort, INSPECTION_TYPE_LABELS, plural } from "@/lib/format";
+import { isLightCard, isPortable, type InspectionRule } from "@/lib/inspection-rules";
 import { governingInspection, inspectionStateFor, latestOfType, type InspectionState, type InspectionSummary } from "@/lib/inspection";
 import { INSPECTION_RESULT, INSPECTION_STATE } from "@/lib/status";
 import { cn } from "@/lib/utils";
@@ -18,7 +21,7 @@ function TrafficLight({ state }: { state: InspectionState }) {
     <div className="flex shrink-0 flex-col gap-2 rounded-2xl border border-zinc-700 bg-zinc-950 p-2.5 shadow-inner" role="img" aria-label={`Semafor: ${INSPECTION_STATE[state].label}`}>
       {LAMPS.map((lamp) => {
         const style = INSPECTION_STATE[lamp];
-        const on = lamp === state;
+        const on = lamp === (state === "FAILED" ? "EXPIRED" : state);
         return (
           <span
             key={lamp}
@@ -34,7 +37,10 @@ function TrafficLight({ state }: { state: InspectionState }) {
 interface Props {
   equipmentId: string;
   tag: string;
+  type: EquipmentType;
+  protectionClass: string | null;
   intervalMonths: number;
+  rule: InspectionRule;
   inspections: EquipmentInspection[];
   summary: InspectionSummary;
   today: string;
@@ -42,7 +48,8 @@ interface Props {
 }
 
 /** Záložka „Revize & Lhůtník“: semafor, odpočet, historie revizních zpráv a termovizí, zápis nové revize. */
-export function InspectionLogbook({ equipmentId, tag, intervalMonths, inspections, summary, today, now }: Props) {
+export function InspectionLogbook({ equipmentId, tag, type, protectionClass, intervalMonths, rule, inspections, summary, today, now }: Props) {
+  const measurable = isPortable(type);
   const style = INSPECTION_STATE[summary.state];
   const governing = governingInspection(inspections);
   const thermo = latestOfType(inspections, "THERMOVISION");
@@ -83,11 +90,15 @@ export function InspectionLogbook({ equipmentId, tag, intervalMonths, inspection
         <dl className="grid flex-1 grid-cols-2 gap-x-6 gap-y-3 text-sm sm:border-l sm:border-border sm:pl-6">
           <div>
             <dt className="text-muted-foreground">{summary.state === "EXPIRED" ? "Revize měla proběhnout do" : "Příští pravidelná revize"}</dt>
-            <dd className="font-mono text-base font-semibold">{summary.validUntil ? formatDateShort(summary.validUntil) : "ihned"}</dd>
+            <dd className="font-mono text-base font-semibold">
+              {summary.state === "FAILED" ? "po opravě" : summary.validUntil ? formatDateShort(summary.validUntil) : "ihned"}
+            </dd>
           </div>
           <div>
-            <dt className="text-muted-foreground">Lhůta dle ČSN 33 1500</dt>
-            <dd className="font-medium">{formatCount(intervalMonths, ["měsíc", "měsíce", "měsíců"])}</dd>
+            <dt className="text-muted-foreground">Lhůta dle {rule.standard}</dt>
+            <dd className="font-medium" title={rule.basis}>
+              {formatCount(intervalMonths, ["měsíc", "měsíce", "měsíců"])}
+            </dd>
           </div>
           <div>
             <dt className="text-muted-foreground">Poslední revize</dt>
@@ -95,12 +106,19 @@ export function InspectionLogbook({ equipmentId, tag, intervalMonths, inspection
               {governing ? `${formatDateShort(governing.inspectionDate)} · ${governing.reportNumber}` : "–"}
             </dd>
           </div>
+          {isLightCard(type) ? (
+            <div>
+              <dt className="text-muted-foreground">Pravidlo</dt>
+              <dd className="text-xs text-muted-foreground">{rule.basis}</dd>
+            </div>
+          ) : (
           <div>
             <dt className="text-muted-foreground">Termovize</dt>
             <dd className={cn("font-medium", thermoState ? INSPECTION_STATE[thermoState].text : "text-muted-foreground")}>
               {thermo ? `${thermoState === "EXPIRED" ? "propadlá" : "platná"} do ${formatDateShort(thermo.validUntil)}` : "neprovádí se"}
             </dd>
           </div>
+          )}
         </dl>
 
         <div className="sm:self-start">
@@ -111,6 +129,8 @@ export function InspectionLogbook({ equipmentId, tag, intervalMonths, inspection
             today={today}
             suggestedReportNumber={suggestedReportNumber}
             inspectors={inspectors}
+            measurable={measurable}
+            protectionClass={protectionClass}
           />
         </div>
       </section>
@@ -127,7 +147,7 @@ export function InspectionLogbook({ equipmentId, tag, intervalMonths, inspection
       <section aria-labelledby="inspection-history" className="space-y-3">
         <h2 id="inspection-history" className="flex items-center gap-2 text-lg font-semibold">
           <ClipboardList className="size-5 text-primary" aria-hidden />
-          Historie revizních zpráv a termovizí
+          {isLightCard(type) ? "Historie revizí a měření" : "Historie revizních zpráv a termovizí"}
         </h2>
         {inspections.length === 0 ? (
           <p className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">Zatím nebyla zapsána žádná revize.</p>
@@ -173,6 +193,22 @@ export function InspectionLogbook({ equipmentId, tag, intervalMonths, inspection
                         <dd className="font-mono text-xs">{record.inspectorLicense}</dd>
                       </div>
                     </dl>
+                    {record.measuringInstrument ? (
+                      <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                        <Gauge className="size-4 text-muted-foreground" aria-hidden />
+                        <span>
+                          R<sub>PE</sub>{" "}
+                          <span className="font-mono">
+                            {record.protectiveConductorResistance === null ? "neměří se" : `${String(record.protectiveConductorResistance).replace(".", ",")} Ω`}
+                          </span>
+                        </span>
+                        <span>
+                          R<sub>iso</sub>{" "}
+                          <span className="font-mono">{record.insulationResistance === null ? "–" : `${String(record.insulationResistance).replace(".", ",")} MΩ`}</span>
+                        </span>
+                        <span className="text-muted-foreground">{record.measuringInstrument}</span>
+                      </p>
+                    ) : null}
                     {record.defectsSummary ? (
                       <p className={cn("rounded-lg border p-2.5 text-sm", result.soft)}>
                         <span className="font-medium">Závady: </span>

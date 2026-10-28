@@ -2,7 +2,8 @@
 // revizí (ČSN 33 1500). Čistá data bez I/O; data revizí jsou relativní k okamžiku seedu,
 // aby stavy 🟢 / 🟡 / 🔴 vycházely vždy stejně.
 import type { ComplianceCategory, InspectionResult, InspectionType } from "../src/generated/prisma/enums";
-import { DEFAULT_INSPECTION_INTERVAL_MONTHS, addMonths } from "../src/lib/inspection";
+import { addMonths } from "../src/lib/inspection";
+import { inspectionRuleFor, isPortable, measurementLimits } from "../src/lib/inspection-rules";
 
 import { day, daysAgo, type EquipmentSeed } from "./seed-data";
 
@@ -54,16 +55,15 @@ const INFLUENCES_BY_FLOOR: Record<string, string> = {
   "s-1np": "AA5, AB5, AD1, AE2, AG2, BA4, BE2 – nabíjení akumulátorů VZV",
   "k-1np": "AA5, AB5, AD1, AE1, BA1 – prostory normální",
   "k-2np": "AA5, AB5, AD1, AE1, BA1 – prostory normální",
-  "lbc-1np": "AA5, AB5, AD1, AE2, BE3 – prostor s nebezpečím požáru (hořlavé barvy)",
+  "lbc-1np": "AA5, AB5, AD1, AE2, BE3 – prostor s nebezpečím výbuchu (lakovna, hořlavé barvy)",
 };
 
 export const externalInfluencesFor = (eq: EquipmentSeed) =>
   eq.type === "SWITCHBOARD" ? (INFLUENCES_BY_FLOOR[eq.floor] ?? null) : null;
 
-/** Kratší lhůty pro prostory se zvýšeným rizikem (ČSN 33 1500, tab. 1). */
-const INTERVALS: Record<string, number> = { "R-SKL": 24, "R-LAK-01": 12, "LAK-01": 12, "VZT-LAK": 12 };
-
-export const intervalFor = (tag: string) => INTERVALS[tag] ?? DEFAULT_INSPECTION_INTERVAL_MONTHS;
+/** Lhůta podle `inspection-rules` (ČSN 33 1500 dle vnějších vlivů, NV 378/2001 Sb., ČSN 33 1600 ed. 2 …). */
+export const intervalFor = (eq: EquipmentSeed) =>
+  inspectionRuleFor({ type: eq.type, usageGroup: eq.usageGroup, protectionClass: eq.protectionClass, externalInfluences: externalInfluencesFor(eq) }).months;
 
 // ---------------------------------------------------------------------------
 //  Revizní technici
@@ -85,7 +85,12 @@ export interface InspectionSeed {
   inspector: InspectorKey;
   result: InspectionResult;
   defectsSummary: string | null;
+  measuringInstrument: string | null;
+  protectiveConductorResistance: number | null;
+  insulationResistance: number | null;
 }
+
+export const MEASURING_INSTRUMENT = "Metrel MI 3309 BT";
 
 /** Konec platnosti poslední revize pro řízené případy z plánu (🟢 RM1, 🟡 R-CNC-04, 🔴 R-ML-01). */
 const SPECIAL: Record<string, { validUntil: () => Date; result?: InspectionResult; defects?: string }> = {
@@ -96,6 +101,10 @@ const SPECIAL: Record<string, { validUntil: () => Date; result?: InspectionResul
     result: "CAPABLE_WITH_DEFECTS",
     defects: "Chybí krytí živých částí IP2X u stykače K2 a chybí štítek jističe F3",
   },
+  // Spotřebiče a nářadí (fáze 14)
+  "SP-0201": { validUntil: () => daysAgo(5) },
+  "NR-0112": { validUntil: () => daysAgo(-9) },
+  "PP-0031": { validUntil: () => daysAgo(21), result: "CAPABLE_WITH_DEFECTS", defects: "Poškozená izolace kabelu u vidlice – nutná výměna přívodu" },
 };
 
 let reportSequence = 100;
@@ -107,7 +116,7 @@ const reportNumber = (prefix: "RZ" | "TV", date: Date, plant: string) =>
  * Poslední revize platí podle `SPECIAL`, ostatní zařízení mají 4–30 měsíců rezervy.
  */
 export function inspectionsFor(eq: EquipmentSeed, index: number, plantCode: string): InspectionSeed[] {
-  const interval = intervalFor(eq.tag);
+  const interval = intervalFor(eq);
   const special = SPECIAL[eq.tag];
   // Rezerva vždy kratší než lhůta, aby poslední revize neležela v budoucnu.
   const reserve = 4 + ((index * 7) % Math.max(1, Math.min(27, interval - 5)));
@@ -124,7 +133,17 @@ export function inspectionsFor(eq: EquipmentSeed, index: number, plantCode: stri
   const lapse = addMonths(periodic[0], -interval);
   const installed = commissioned.getTime() < lapse.getTime() ? lapse : commissioned;
   const hasInitial = installed.getTime() < addMonths(periodic[0], -3).getTime();
-  const inspector = (i: number): InspectorKey => ((index + i) % 2 ? "benes" : "horak");
+  const inspector = (i: number): InspectorKey => (isPortable(eq.type) ? "benes" : (index + i) % 2 ? "benes" : "horak");
+  // Měření přenosných spotřebičů (ČSN 33 1600 ed. 2) – deterministicky podle pořadí
+  const measured = (i: number) => {
+    if (!isPortable(eq.type)) return { measuringInstrument: null, protectiveConductorResistance: null, insulationResistance: null };
+    const limits = measurementLimits(eq.protectionClass);
+    return {
+      measuringInstrument: MEASURING_INSTRUMENT,
+      protectiveConductorResistance: limits.rpeMax === null ? null : Math.round((0.06 + ((index + i) % 7) * 0.025) * 100) / 100,
+      insulationResistance: 120 + ((index * 37 + i * 53) % 380),
+    };
+  };
 
   const records: InspectionSeed[] = [];
   if (hasInitial) {
@@ -136,6 +155,7 @@ export function inspectionsFor(eq: EquipmentSeed, index: number, plantCode: stri
       inspector: "horak",
       result: "CAPABLE",
       defectsSummary: null,
+      ...measured(0),
     });
   }
   periodic.forEach((date, i) => {
@@ -150,6 +170,7 @@ export function inspectionsFor(eq: EquipmentSeed, index: number, plantCode: stri
       inspector: inspector(i),
       result: last && special?.result ? special.result : olderDefect ? "CAPABLE_WITH_DEFECTS" : "CAPABLE",
       defectsSummary: last ? (special?.defects ?? null) : olderDefect,
+      ...measured(i + 1),
     });
   });
 
@@ -168,6 +189,7 @@ export function inspectionsFor(eq: EquipmentSeed, index: number, plantCode: stri
         inspector: "sykora",
         result: "CAPABLE_WITH_DEFECTS",
         defectsSummary: "Zvýšená teplota svorky L2 vývodu QF4 (Δθ 41 K) – dotaženo, ověřeno opakovaným měřením.",
+        ...measured(0),
       });
     }
     records.push({
@@ -178,6 +200,7 @@ export function inspectionsFor(eq: EquipmentSeed, index: number, plantCode: stri
       inspector: "sykora",
       result: "CAPABLE",
       defectsSummary: null,
+      ...measured(0),
     });
   }
   return records;

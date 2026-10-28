@@ -21,7 +21,8 @@ import { InspectionStatusBadge } from "@/components/inspections/InspectionStatus
 import { PageTransition } from "@/components/layout/PageTransition";
 import { Button } from "@/components/ui/button";
 import { EQUIPMENT_TYPE_LABELS } from "@/lib/format";
-import { summarizeInspections } from "@/lib/inspection";
+import { pragueToday, summarizeInspections } from "@/lib/inspection";
+import { USAGE_GROUP_LABELS, inspectionRuleFor, isLightCard, type UsageGroup } from "@/lib/inspection-rules";
 import { buildingHref, caeTicketHref, equipmentHref, floorHref, plantHref } from "@/lib/routes";
 import { getEquipmentDetail } from "@/server/queries/equipment";
 import { getCurrentRole } from "@/server/session";
@@ -62,7 +63,24 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
   // Pevné „teď“ pro relativní časy (server i klient vykreslí totéž).
   const now = new Date();
   const inspection = summarizeInspections(equipment.inspections, now);
-  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Prague" }).format(now);
+  const today = pragueToday(now);
+  // Spotřebiče, nářadí a bezpečnostní zařízení: lehká karta jen s revizemi a měřením.
+  const light = isLightCard(equipment.type);
+  const rule = inspectionRuleFor({ ...equipment, externalInfluences: equipment.externalInfluences });
+  const inspectionsPanel = (
+    <InspectionLogbook
+      equipmentId={equipment.id}
+      tag={equipment.tag}
+      type={equipment.type}
+      protectionClass={equipment.protectionClass}
+      intervalMonths={equipment.inspectionIntervalMonths}
+      rule={rule}
+      inspections={equipment.inspections}
+      summary={inspection}
+      today={today}
+      now={now}
+    />
+  );
 
   return (
     <PageTransition>
@@ -85,7 +103,7 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
           title={equipment.name}
           badges={
             <>
-              <StatusBadge kind="equipment" status={equipment.status} className="text-sm" />
+              {light ? null : <StatusBadge kind="equipment" status={equipment.status} className="text-sm" />}
               <Link href={`${basePath}?tab=inspections`} className="rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
                 <InspectionStatusBadge summary={inspection} className="text-sm" />
               </Link>
@@ -108,6 +126,14 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
               {equipment.ratedVoltage ? <span>{equipment.ratedVoltage}</span> : null}
               {equipment.ratedCurrent ? <span>{equipment.ratedCurrent}</span> : null}
               {equipment.ipRating ? <span>{equipment.ipRating}</span> : null}
+              {equipment.inventoryNumber ? (
+                <span>
+                  Inv. č. <span className="font-mono text-foreground">{equipment.inventoryNumber}</span>
+                </span>
+              ) : null}
+              {equipment.usageGroup ? <span>{USAGE_GROUP_LABELS[equipment.usageGroup as UsageGroup] ?? `Skupina ${equipment.usageGroup}`}</span> : null}
+              {equipment.protectionClass ? <span>Třída ochrany {equipment.protectionClass}</span> : null}
+              {equipment.assignedZone ? <span>{equipment.assignedZone}</span> : null}
               {equipment.fedFrom ? (
                 <Link href={equipmentHref(equipment.fedFrom.id)} className="inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline">
                   <Cable className="size-3.5" aria-hidden />
@@ -125,7 +151,7 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
           actions={
             <>
               <QrDialog url={qrUrl} tag={equipment.tag} name={equipment.name} location={location} />
-              {role === "MAINTENANCE" ? (
+              {light ? null : role === "MAINTENANCE" ? (
                 <ChangeRequestCta href={`${basePath}/change-request`} openNumber={openChange?.number ?? null} />
               ) : openChange ? (
                 <Button asChild size="lg" className="touch-target gap-2">
@@ -149,6 +175,13 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
           />
         ) : null}
 
+        {light ? (
+          <DocumentationTabs
+            panels={{ inspections: inspectionsPanel }}
+            defaultTab="inspections"
+            labels={{ inspections: `Revize & Měření (${rule.standard})` }}
+          />
+        ) : (
         <DocumentationTabs
           panels={{
             schema: (
@@ -178,19 +211,10 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
             "3d": selected ? <Cabinet3D bom={selected.bomItems} tag={equipment.tag} /> : null,
             history: <RevisionTimeline revisions={equipment.revisions} basePath={basePath} selectedId={selected?.id ?? null} />,
             passport: <CompliancePassport equipment={equipment} />,
-            inspections: (
-              <InspectionLogbook
-                equipmentId={equipment.id}
-                tag={equipment.tag}
-                intervalMonths={equipment.inspectionIntervalMonths}
-                inspections={equipment.inspections}
-                summary={inspection}
-                today={today}
-                now={now}
-              />
-            ),
+            inspections: inspectionsPanel,
           }}
         />
+        )}
       </div>
     </PageTransition>
   );

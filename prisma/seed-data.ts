@@ -139,7 +139,7 @@ export const FLOORS: FloorSeed[] = [
     description: "Lisovací linky, obrábění a robotická pracoviště.",
     rooms: [
       room("Lisovací linka 1", 90, 100, 520, 330, "zone"), room("Obrábění - CNC", 640, 100, 460, 330, "zone"),
-      room("Robotická buňka odebírání", 90, 460, 470, 280, "zone"), room("Expedice výlisků", 590, 460, 390, 280),
+      room("Robotická buňka odebírání", 90, 460, 470, 280, "zone"), room("Expedice výlisků", 590, 460, 200, 280), room("Dílna údržby", 810, 460, 170, 280),
       room("Schodiště", 1000, 460, 100, 200, "stairs"),
     ],
     gates: [{ x: 300, y: 760, length: 120, orient: "h", label: "Vrata - zásobování" }, { x: 1120, y: 300, length: 120, orient: "v", label: "Vrata - expedice" }],
@@ -222,6 +222,11 @@ export interface EquipmentSeed {
   ratedCurrent: string;
   ipRating: string;
   status: EquipmentStatus;
+  // Spotřebiče a nářadí (ČSN 33 1600 ed. 2)
+  usageGroup?: string;
+  protectionClass?: string;
+  inventoryNumber?: string;
+  assignedZone?: string;
 }
 
 type EquipmentInput = Omit<EquipmentSeed, "pinX" | "pinY" | "status"> & { at: [number, number] };

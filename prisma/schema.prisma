@@ -42,13 +42,22 @@ enum EquipmentStatus {
 }
 
 enum EquipmentType {
+  // Pevná infrastruktura (schéma, kusovník, 3D)
   SWITCHBOARD      // Rozváděč
-  CNC_MACHINE      // CNC stroj
+  TRANSFORMER      // Transformátor / trafostanice
   PRODUCTION_LINE  // Výrobní linka
+  MACHINE          // Pevný stroj
+  CNC_MACHINE      // CNC stroj
   ROBOT_CELL       // Robotické pracoviště
   HVAC_UNIT        // Vzduchotechnika
   COMPRESSOR       // Kompresor
-  TRANSFORMER      // Transformátor
+  // Spotřebiče a revizní zařízení (lehká karta bez schématu a 3D)
+  POWER_TOOL         // Ruční elektrické nářadí
+  APPLIANCE          // Spotřebič (konvice, mikrovlnka, PC)
+  EXTENSION_CORD     // Prodlužovací přívod
+  WELDER             // Svářečka
+  LIGHTNING_ROD      // Hromosvod / LPS
+  EMERGENCY_LIGHTING // Nouzové osvětlení
   OTHER
 }
 
@@ -270,6 +279,12 @@ model Equipment {
   inspectionIntervalMonths Int     @default(36) // lhůta pravidelné revize dle ČSN 33 1500
   externalInfluences       String? // "AA5, AB4, BA4 – normální průmyslové"
 
+  // Spotřebiče a nářadí (ČSN 33 1600 ed. 2)
+  usageGroup      String? // skupina A–E (C = průmysl, E = administrativa)
+  protectionClass String? // třída ochrany "I" / "II" / "III"
+  inventoryNumber String?
+  assignedZone    String? // "Kuchyňka – Energetika 1. NP", "Dílna údržby"
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -319,6 +334,11 @@ model InspectionRecord {
   result           InspectionResult
   defectsSummary   String?
   reportUrl        String
+
+  // Měření (revize spotřebičů a nářadí)
+  measuringInstrument           String? // "Metrel MI 3309 BT"
+  protectiveConductorResistance Float?  // R_PE [Ω]
+  insulationResistance          Float?  // R_iso [MΩ]
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 

@@ -1,7 +1,7 @@
 import { readdirSync, rmSync, statSync } from "node:fs";
 import path from "node:path";
 
-const UPLOAD_DIRS = ["photos", "revisions", "markups", "voice"].map((dir) => path.join("storage", "uploads", dir));
+const UPLOAD_DIRS = ["photos", "revisions", "markups", "voice", "documents"].map((dir) => path.join("storage", "uploads", dir));
 
 /**
  * Databázi připravuje už příkaz webServeru (`e2e/prepare-db.ts`), tady si jen zapamatujeme čas

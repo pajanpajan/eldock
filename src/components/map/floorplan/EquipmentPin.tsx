@@ -2,6 +2,8 @@
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { EQUIPMENT_TYPE_ICONS } from "@/lib/equipment-icons";
+import { needsAttention } from "@/lib/inspection";
+import { isLightCard } from "@/lib/inspection-rules";
 import { EQUIPMENT_STATUS, INSPECTION_STATE, inspectionBadgeLabel } from "@/lib/status";
 import { cn } from "@/lib/utils";
 import type { FloorEquipment } from "@/server/queries/floor";
@@ -23,11 +25,13 @@ interface Props {
  * `--pin-scale` ho zmenší na úzkých displejích.
  */
 export function EquipmentPin({ equipment, selected, onSelect }: Props) {
-  const style = EQUIPMENT_STATUS[equipment.status];
+  // Spotřebiče a nářadí nemají výkresovou dokumentaci – barva pinu = stav revize.
+  const light = isLightCard(equipment.type);
+  const style = light ? INSPECTION_STATE[equipment.inspection.state] : EQUIPMENT_STATUS[equipment.status];
   const Icon = EQUIPMENT_TYPE_ICONS[equipment.type];
-  const pulse = equipment.status === "PENDING_UPDATE";
+  const pulse = !light && equipment.status === "PENDING_UPDATE";
   const { inspection } = equipment;
-  const expired = inspection.state === "EXPIRED";
+  const expired = inspection.state === "EXPIRED" || inspection.state === "FAILED";
   const inspectionText = inspectionBadgeLabel(inspection.state, inspection.validUntil, inspection.daysLeft);
 
   return (
@@ -79,7 +83,7 @@ export function EquipmentPin({ equipment, selected, onSelect }: Props) {
           <TooltipContent side="top" sideOffset={6}>
             <div className="font-medium">{equipment.name}</div>
             <div className="opacity-80">{style.label}</div>
-            {inspection.state === "EXPIRED" || inspection.state === "EXPIRING" ? (
+            {needsAttention(inspection.state) ? (
               <div className={cn("font-medium", INSPECTION_STATE[inspection.state].text)}>{inspectionText}</div>
             ) : null}
           </TooltipContent>

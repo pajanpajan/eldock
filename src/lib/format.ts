@@ -64,12 +64,19 @@ export const formatCount = (count: number, forms: readonly [string, string, stri
 
 export const EQUIPMENT_TYPE_LABELS: Record<EquipmentType, string> = {
   SWITCHBOARD: "Rozváděč",
-  CNC_MACHINE: "CNC stroj",
+  TRANSFORMER: "Transformátor",
   PRODUCTION_LINE: "Výrobní linka",
+  MACHINE: "Pevný stroj",
+  CNC_MACHINE: "CNC stroj",
   ROBOT_CELL: "Robotické pracoviště",
   HVAC_UNIT: "Vzduchotechnika",
   COMPRESSOR: "Kompresor",
-  TRANSFORMER: "Transformátor",
+  POWER_TOOL: "Ruční elektrické nářadí",
+  APPLIANCE: "Spotřebič",
+  EXTENSION_CORD: "Prodlužovací přívod",
+  WELDER: "Svářečka",
+  LIGHTNING_ROD: "Hromosvod (LPS)",
+  EMERGENCY_LIGHTING: "Nouzové osvětlení",
   OTHER: "Ostatní",
 };
 

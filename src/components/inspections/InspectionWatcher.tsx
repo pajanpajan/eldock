@@ -23,13 +23,13 @@ export function InspectionWatcher({ watch, showPlant = false }: { watch: Inspect
         </h2>
         <div className="flex flex-wrap gap-2 text-xs font-medium">
           <span className={cn("rounded-full border px-2.5 py-1", INSPECTION_STATE.EXPIRED.badge)}>
-            Propadlé <span className="font-mono font-semibold tabular-nums">{watch.expired}</span>
+            Propadlé / vyřazené <span className="font-mono font-semibold tabular-nums">{watch.expired}</span>
           </span>
           <span className={cn("rounded-full border px-2.5 py-1", INSPECTION_STATE.EXPIRING.badge)}>
             Končí do {INSPECTION_WARNING_DAYS} dnů <span className="font-mono font-semibold tabular-nums">{watch.expiring}</span>
           </span>
         </div>
-        <p className="text-xs text-muted-foreground sm:ml-auto">ČSN 33 1500 · sledováno {watch.total} zařízení</p>
+        <p className="text-xs text-muted-foreground sm:ml-auto">ČSN 33 1500 · ČSN 33 1600 · sledováno {watch.total} zařízení</p>
       </div>
 
       {watch.items.length ? (
@@ -49,7 +49,7 @@ export function InspectionWatcher({ watch, showPlant = false }: { watch: Inspect
                   <span className="block truncate text-xs text-muted-foreground">
                     {showPlant ? `${item.plantName} › ` : ""}
                     {item.location}
-                    {item.summary.state === "EXPIRED" && item.defectsSummary ? ` · závady: ${item.defectsSummary}` : ""}
+                    {(item.summary.state === "EXPIRED" || item.summary.state === "FAILED") && item.defectsSummary ? ` · závady: ${item.defectsSummary}` : ""}
                   </span>
                 </span>
                 <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" aria-hidden />

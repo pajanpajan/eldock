@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 
 import { PrismaClient } from "../src/generated/prisma/client";
+import { inspectionRuleFor } from "../src/lib/inspection-rules";
 import { renderComplianceDocumentSvg, renderInspectionReportSvg } from "../src/lib/mock-graphics/compliance";
 import { renderFloorplanSvg } from "../src/lib/mock-graphics/floorplan";
 import { buildParts, type PartOverrides } from "../src/lib/mock-graphics/parts";
@@ -26,6 +27,7 @@ import {
   revisionsFor,
   type UserKey,
 } from "./seed-data";
+import { LIGHT_EQUIPMENT } from "./seed-appliances";
 import { FEEDS, INSPECTORS, complianceFor, externalInfluencesFor, inspectionsFor, intervalFor } from "./seed-compliance";
 
 const url = process.env.DATABASE_URL;
@@ -134,7 +136,7 @@ async function main() {
         ipRating: eq.ipRating,
         pinX: eq.pinX,
         pinY: eq.pinY,
-        inspectionIntervalMonths: intervalFor(eq.tag),
+        inspectionIntervalMonths: intervalFor(eq),
         externalInfluences: externalInfluencesFor(eq),
         serialNumber: `SN-${eq.yearInstalled}-${String(index + 1).padStart(4, "0")}` },
     });
@@ -192,6 +194,38 @@ async function main() {
     }
   }
 
+  // Spotřebiče, nářadí a bezpečnostní zařízení – lehká karta bez revizí dokumentace
+  for (const [index, eq] of LIGHT_EQUIPMENT.entries()) {
+    const floor = FLOORS.find((f) => f.key === eq.floor)!;
+    const id = `eq-${eq.tag.toLowerCase()}`;
+    equipmentId.set(eq.tag, id);
+    await prisma.equipment.create({
+      data: {
+        id,
+        floorId: floor.id,
+        tag: eq.tag,
+        name: eq.name,
+        type: eq.type,
+        status: eq.status,
+        description: eq.description,
+        manufacturer: eq.manufacturer,
+        model: eq.model,
+        yearInstalled: eq.yearInstalled,
+        ratedVoltage: eq.ratedVoltage,
+        ratedCurrent: eq.ratedCurrent,
+        ipRating: eq.ipRating,
+        pinX: eq.pinX,
+        pinY: eq.pinY,
+        serialNumber: `SN-${eq.yearInstalled}-${String(EQUIPMENT.length + index + 1).padStart(4, "0")}`,
+        inspectionIntervalMonths: intervalFor(eq),
+        usageGroup: eq.usageGroup ?? null,
+        protectionClass: eq.protectionClass ?? null,
+        inventoryNumber: eq.inventoryNumber ?? null,
+        assignedZone: eq.assignedZone ?? null,
+      },
+    });
+  }
+
   // Hierarchie napájení (až po vytvoření všech zařízení)
   for (const [tag, feed] of Object.entries(FEEDS)) {
     await prisma.equipment.update({
@@ -202,7 +236,7 @@ async function main() {
 
   // Pasport rozváděčů (ČSN EN 61439) a revizní zprávy (ČSN 33 1500)
   const documentsDir = path.join(UPLOADS, "documents", "seed");
-  for (const [index, eq] of EQUIPMENT.entries()) {
+  for (const [index, eq] of [...EQUIPMENT, ...LIGHT_EQUIPMENT].entries()) {
     const id = equipmentId.get(eq.tag)!;
     const floor = FLOORS.find((f) => f.key === eq.floor)!;
     const building = BUILDINGS.find((b) => b.id === floor.buildingId)!;
@@ -262,6 +296,10 @@ async function main() {
           inspectorLicense: inspector.license,
           result: record.result,
           defectsSummary: record.defectsSummary,
+          standard: inspectionRuleFor(eq).standard,
+          measurements: record.measuringInstrument
+            ? { instrument: record.measuringInstrument, rpe: record.protectiveConductorResistance, riso: record.insulationResistance }
+            : null,
         }),
       );
       await prisma.inspectionRecord.create({
@@ -276,6 +314,9 @@ async function main() {
           result: record.result,
           defectsSummary: record.defectsSummary,
           reportUrl: `/api/files/documents/seed/${fileName}`,
+          measuringInstrument: record.measuringInstrument,
+          protectiveConductorResistance: record.protectiveConductorResistance,
+          insulationResistance: record.insulationResistance,
           createdAt: record.inspectionDate,
         },
       });

@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { CalendarCheck, ScanLine } from "lucide-react";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { initials } from "@/lib/format";
+import { inspectionsHref, rapidInspectionHref } from "@/lib/routes";
 import { getPlants } from "@/server/queries/plant";
 import { getCurrentRole, getCurrentUser, getRememberedPlantId } from "@/server/session";
 
@@ -30,6 +32,25 @@ export async function AppHeader() {
         ) : (
           <span className="hidden text-sm text-muted-foreground md:inline">Všechny závody</span>
         )}
+
+        <nav aria-label="Revize" className="flex items-center gap-1">
+          <Link
+            href={inspectionsHref}
+            className="touch-target flex items-center gap-2 rounded-md px-2.5 text-sm text-muted-foreground transition-colors outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+          >
+            <CalendarCheck className="size-4" aria-hidden />
+            <span className="hidden lg:inline">Revize</span>
+            <span className="sr-only lg:hidden">Přehled revizí</span>
+          </Link>
+          <Link
+            href={rapidInspectionHref}
+            className="touch-target flex items-center gap-2 rounded-md px-2.5 text-sm text-muted-foreground transition-colors outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+          >
+            <ScanLine className="size-4" aria-hidden />
+            <span className="hidden lg:inline">Rychlá revize</span>
+            <span className="sr-only lg:hidden">Rychlá revize</span>
+          </Link>
+        </nav>
 
         <div className="ml-auto flex items-center gap-3">
           <RoleSwitcher role={role} />

@@ -19,3 +19,7 @@ export function buildingEntryHref(plantId: string, buildingId: string, floorIds:
 export const caeTicketHref = (changeRequestId: string) => `/cae/tickets/${changeRequestId}`;
 
 export const caeRevisionHref = (changeRequestId: string) => `${caeTicketHref(changeRequestId)}/revision`;
+
+export const inspectionsHref = "/inspections";
+
+export const rapidInspectionHref = "/inspections/rapid";

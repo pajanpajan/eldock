@@ -16,7 +16,12 @@ export const THERMOVISION_INTERVAL_MONTHS = 12;
 /** Lhůtu pravidelné revize určuje výchozí nebo pravidelná revize; mimořádná a termovize ji neposouvají. */
 export const DEADLINE_TYPES: readonly InspectionType[] = ["INITIAL", "PERIODIC"];
 
-export type InspectionState = "VALID" | "EXPIRING" | "EXPIRED" | "MISSING";
+/** FAILED = poslední revize „Neschopno bezpečného provozu“ (vyřazeno z provozu) bez ohledu na datum. */
+export type InspectionState = "VALID" | "EXPIRING" | "EXPIRED" | "FAILED" | "MISSING";
+
+/** Stavy, na které upozorňuje hlídač, pin a filtr „⚠️“. */
+export const ATTENTION_STATES: readonly InspectionState[] = ["FAILED", "EXPIRED", "EXPIRING"];
+export const needsAttention = (state: InspectionState) => ATTENTION_STATES.includes(state);
 
 const DAY_MS = 24 * 3600 * 1000;
 
@@ -49,6 +54,9 @@ export function computeValidUntil(inspectionDate: Date | string | number, interv
   if (!Number.isInteger(intervalMonths) || intervalMonths <= 0) throw new RangeError("Lhůta revize musí být kladný počet měsíců.");
   return addMonths(inspectionDate, intervalMonths);
 }
+
+/** Dnešní den v Praze jako `YYYY-MM-DD` (výchozí hodnota pro datum revize). */
+export const pragueToday = (now: Date | number = new Date()) => pragueDate.format(new Date(now));
 
 /** Počet kalendářních dnů od `now` do `target` (záporný = už uplynulo). */
 export function daysUntil(target: Date | string | number, now: Date | string | number = new Date()): number {
@@ -103,7 +111,7 @@ export function summarizeInspections(records: readonly InspectionLike[], now: Da
   const governing = governingInspection(records);
   if (!governing) return { state: "MISSING", validUntil: null, daysLeft: null, result: null };
   return {
-    state: inspectionStateFor(governing.validUntil, now, warningDays),
+    state: governing.result === "INCAPABLE" ? "FAILED" : inspectionStateFor(governing.validUntil, now, warningDays),
     validUntil: governing.validUntil,
     daysLeft: daysUntil(governing.validUntil, now),
     result: governing.result ?? null,
@@ -112,7 +120,7 @@ export function summarizeInspections(records: readonly InspectionLike[], now: Da
 
 /** Pořadí naléhavosti pro hlídač termínů (propadlé nahoře, pak nejdřív končící). */
 export function compareByUrgency(a: InspectionSummary, b: InspectionSummary): number {
-  const rank: Record<InspectionState, number> = { EXPIRED: 0, EXPIRING: 1, VALID: 2, MISSING: 3 };
+  const rank: Record<InspectionState, number> = { FAILED: 0, EXPIRED: 1, EXPIRING: 2, VALID: 3, MISSING: 4 };
   return rank[a.state] - rank[b.state] || (a.daysLeft ?? Infinity) - (b.daysLeft ?? Infinity);
 }
 

@@ -15,14 +15,22 @@ const TABS = [
   { value: "inspections", label: "Revize & Lhůtník", icon: CalendarClock },
 ] as const;
 
-type TabValue = (typeof TABS)[number]["value"];
+export type TabValue = (typeof TABS)[number]["value"];
+
+interface Props {
+  /** Obsah záložek; záložka bez panelu se nezobrazí (lehká karta spotřebiče). */
+  panels: Partial<Record<TabValue, ReactNode>>;
+  defaultTab?: TabValue;
+  labels?: Partial<Record<TabValue, string>>;
+}
 
 /** Záložky dokumentace; aktivní záložka je v URL (`?tab=`), aby přežila reload a šla sdílet. */
-export function DocumentationTabs({ panels }: { panels: Record<TabValue, ReactNode> }) {
+export function DocumentationTabs({ panels, defaultTab = "schema", labels }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const current = TABS.find((tab) => tab.value === searchParams.get("tab"))?.value ?? "schema";
+  const tabs = TABS.filter((tab) => tab.value in panels);
+  const current = tabs.find((tab) => tab.value === searchParams.get("tab"))?.value ?? defaultTab;
 
   function onChange(value: string) {
     const params = new URLSearchParams(searchParams);
@@ -33,14 +41,14 @@ export function DocumentationTabs({ panels }: { panels: Record<TabValue, ReactNo
   return (
     <Tabs value={current} onValueChange={onChange} className="gap-4">
       <TabsList className="h-auto! w-full flex-wrap justify-start gap-1 bg-card p-1 sm:w-fit">
-        {TABS.map(({ value, label, icon: Icon }) => (
+        {tabs.map(({ value, label, icon: Icon }) => (
           <TabsTrigger key={value} value={value} className="touch-target flex-none gap-2 px-4 data-active:bg-primary data-active:text-primary-foreground">
             <Icon className="size-4" aria-hidden />
-            {label}
+            {labels?.[value] ?? label}
           </TabsTrigger>
         ))}
       </TabsList>
-      {TABS.map(({ value }) => (
+      {tabs.map(({ value }) => (
         <TabsContent key={value} value={value}>
           {panels[value]}
         </TabsContent>

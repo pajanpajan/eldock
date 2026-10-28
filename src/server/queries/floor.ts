@@ -1,6 +1,6 @@
 import "server-only";
 
-import { DEADLINE_TYPES, summarizeInspections } from "@/lib/inspection";
+import { DEADLINE_TYPES, pragueToday, summarizeInspections } from "@/lib/inspection";
 import { prisma } from "@/lib/prisma";
 
 const OPEN_STATUSES = ["SUBMITTED", "IN_PROGRESS", "WAITING_APPROVAL"] as const;
@@ -33,6 +33,11 @@ export async function getFloorView(plantId: string, buildingId: string, floorId:
           ratedCurrent: true,
           pinX: true,
           pinY: true,
+          inspectionIntervalMonths: true,
+          usageGroup: true,
+          protectionClass: true,
+          inventoryNumber: true,
+          assignedZone: true,
           revisions: {
             where: { status: "ACTIVE" },
             take: 1,
@@ -69,6 +74,7 @@ export async function getFloorView(plantId: string, buildingId: string, floorId:
     description: floor.description,
     floorplanSvg: floor.floorplanSvg ?? "",
     viewBox: { width: floor.viewBoxW, height: floor.viewBoxH },
+    today: pragueToday(now),
     building: floor.building,
     equipment: floor.equipment.map(({ revisions, changeRequests, inspections, ...equipment }) => ({
       ...equipment,

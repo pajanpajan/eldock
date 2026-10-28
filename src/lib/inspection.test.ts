@@ -153,3 +153,13 @@ describe("inspectionBadgeLabel", () => {
     expect(inspectionBadgeLabel("MISSING", null, null)).toBe("Bez záznamu o revizi");
   });
 });
+
+describe("posudek Neschopno provozu", () => {
+  it("poslední revize INCAPABLE = FAILED bez ohledu na datum a řadí se první", () => {
+    const failed = summarizeInspections([{ ...record("PERIODIC", "2026-10-20", "2026-10-20"), result: "INCAPABLE" }], NOW);
+    expect(failed.state).toBe("FAILED");
+    expect(inspectionBadgeLabel(failed.state, failed.validUntil, failed.daysLeft)).toBe("VYŘAZENO Z PROVOZU – neschopno");
+    const expired = summarizeInspections([record("PERIODIC", "2023-10-14", "2026-10-14")], NOW);
+    expect([expired, failed].sort(compareByUrgency)[0].state).toBe("FAILED");
+  });
+});

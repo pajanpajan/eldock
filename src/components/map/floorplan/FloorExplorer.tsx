@@ -5,12 +5,14 @@ import { Search, X } from "lucide-react";
 import type { ReactZoomPanPinchRef } from "react-zoom-pan-pinch";
 
 import { StatusLegend } from "@/components/common/StatusLegend";
+import { BatchInspectionBar } from "@/components/inspections/BatchInspectionBar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { EquipmentStatus, EquipmentType } from "@/generated/prisma/enums";
 import { matchesFilter, searchEquipment } from "@/lib/equipment-filter";
 import { EQUIPMENT_TYPE_ICONS } from "@/lib/equipment-icons";
 import { EQUIPMENT_TYPE_LABELS } from "@/lib/format";
+import { DEFAULT_LAYERS, layerCounts, layerOf, matchesLayers, type LayerKey } from "@/lib/map-layers";
 import { EQUIPMENT_STATUS } from "@/lib/status";
 import { cn } from "@/lib/utils";
 import type { FloorView } from "@/server/queries/floor";
@@ -19,6 +21,7 @@ import { pinElementId } from "./EquipmentPin";
 import { EquipmentQuickView } from "./EquipmentQuickView";
 import { FloorEquipmentTable } from "./FloorEquipmentTable";
 import { FloorplanViewer } from "./FloorplanViewer";
+import { MapLayersPanel } from "./MapLayersPanel";
 
 const STATUSES: EquipmentStatus[] = ["ACTIVE", "PENDING_UPDATE", "WAITING_APPROVAL"];
 
@@ -29,7 +32,7 @@ function toggle<T>(set: ReadonlySet<T>, value: T): Set<T> {
   return next;
 }
 
-/** Půdorys patra: filtry, hledání tagu, zoomovatelný viewer, tabulka a rychlý náhled. */
+/** Půdorys patra: vrstvy, filtry, hledání tagu, zoomovatelný viewer, tabulka s hromadnou revizí a rychlý náhled. */
 export function FloorExplorer({ floor }: { floor: FloorView }) {
   const apiRef = useRef<ReactZoomPanPinchRef>(null);
   const [statuses, setStatuses] = useState<ReadonlySet<EquipmentStatus>>(new Set());
@@ -37,12 +40,19 @@ export function FloorExplorer({ floor }: { floor: FloorView }) {
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [layers, setLayers] = useState<ReadonlySet<LayerKey>>(DEFAULT_LAYERS);
+  const [attentionOnly, setAttentionOnly] = useState(false);
+  const [checked, setChecked] = useState<ReadonlySet<string>>(new Set());
 
-  const presentTypes = useMemo(() => [...new Set(floor.equipment.map((item) => item.type))], [floor.equipment]);
-  const visible = floor.equipment.filter((item) => matchesFilter(item, { statuses, types }));
+  const layerFilter = { layers, attentionOnly };
+  const inLayers = floor.equipment.filter((item) => matchesLayers(item, layerFilter));
+  const presentTypes = [...new Set(inLayers.map((item) => item.type))];
+  const visible = inLayers.filter((item) => matchesFilter(item, { statuses, types }));
+  const counts = useMemo(() => layerCounts(floor.equipment), [floor.equipment]);
   const matches = searchEquipment(floor.equipment, query).slice(0, 6);
   const selected = floor.equipment.find((item) => item.id === selectedId) ?? null;
   const filtered = statuses.size > 0 || types.size > 0;
+  const batchItems = floor.equipment.filter((item) => checked.has(item.id));
 
   function select(id: string) {
     setSelectedId(id);
@@ -56,6 +66,10 @@ export function FloorExplorer({ floor }: { floor: FloorView }) {
     if (!matchesFilter(item, { statuses, types })) {
       setStatuses(new Set());
       setTypes(new Set());
+    }
+    if (!matchesLayers(item, layerFilter)) {
+      setAttentionOnly(false);
+      setLayers((current) => new Set([...current, layerOf(item.type)]));
     }
     setSelectedId(id);
     setQuery("");
@@ -164,6 +178,14 @@ export function FloorExplorer({ floor }: { floor: FloorView }) {
         </div>
       </div>
 
+      <MapLayersPanel
+        layers={layers}
+        counts={counts}
+        attentionOnly={attentionOnly}
+        onToggleLayer={(key) => setLayers((current) => toggle(current, key))}
+        onToggleAttention={() => setAttentionOnly((value) => !value)}
+      />
+
       <FloorplanViewer
         svg={floor.floorplanSvg}
         viewBox={floor.viewBox}
@@ -181,11 +203,19 @@ export function FloorExplorer({ floor }: { floor: FloorView }) {
           Zařízení na patře{" "}
           <span className="font-mono text-sm text-muted-foreground">
             {visible.length}
-            {filtered ? ` / ${floor.equipment.length}` : ""}
+            {visible.length !== floor.equipment.length ? ` / ${floor.equipment.length}` : ""}
           </span>
         </h2>
-        <FloorEquipmentTable equipment={visible} selectedId={selectedId} onSelect={select} />
+        <FloorEquipmentTable
+          equipment={visible}
+          selectedId={selectedId}
+          onSelect={select}
+          checked={checked}
+          onCheckedChange={setChecked}
+        />
       </section>
+
+      <BatchInspectionBar items={batchItems} today={floor.today} onClear={() => setChecked(new Set())} />
 
       <EquipmentQuickView equipment={sheetOpen ? selected : null} onOpenChange={setSheetOpen} />
     </div>

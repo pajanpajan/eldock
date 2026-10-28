@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowRight, FileText, TriangleAlert } from "lucide-react";
 
 import { StatusBadge } from "@/components/common/StatusBadge";
+import { InspectionStatusBadge } from "@/components/inspections/InspectionStatusBadge";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -14,6 +15,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { EQUIPMENT_TYPE_LABELS, formatDate, formatDateTime } from "@/lib/format";
+import { isLightCard } from "@/lib/inspection-rules";
 import { equipmentHref } from "@/lib/routes";
 import { CHANGE_REQUEST_STATUS } from "@/lib/status";
 import { cn } from "@/lib/utils";
@@ -35,7 +37,8 @@ export function EquipmentQuickView({
             <SheetHeader>
               <div className="flex flex-wrap items-center gap-2">
                 <span className="rounded bg-secondary px-2 py-0.5 font-mono text-sm font-bold text-primary">{equipment.tag}</span>
-                <StatusBadge kind="equipment" status={equipment.status} />
+                {isLightCard(equipment.type) ? null : <StatusBadge kind="equipment" status={equipment.status} />}
+                <InspectionStatusBadge summary={equipment.inspection} />
               </div>
               <SheetTitle className="text-lg">{equipment.name}</SheetTitle>
               <SheetDescription>
@@ -67,6 +70,18 @@ export function EquipmentQuickView({
               ) : null}
 
               <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+                {equipment.assignedZone ? (
+                  <>
+                    <dt className="text-muted-foreground">Umístění</dt>
+                    <dd>{equipment.assignedZone}</dd>
+                  </>
+                ) : null}
+                {equipment.inventoryNumber ? (
+                  <>
+                    <dt className="text-muted-foreground">Inventární č.</dt>
+                    <dd className="font-mono">{equipment.inventoryNumber}</dd>
+                  </>
+                ) : null}
                 <dt className="text-muted-foreground">Platná revize</dt>
                 <dd className="flex items-center gap-1.5">
                   <FileText className="size-4 text-muted-foreground" aria-hidden />

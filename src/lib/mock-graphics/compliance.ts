@@ -194,6 +194,27 @@ export interface InspectionReportContext {
   inspectorLicense: string;
   result: InspectionResult;
   defectsSummary: string | null;
+  /** Norma revize („ČSN 33 1600 ed. 2“); výchozí ČSN 33 1500. */
+  standard?: string;
+  /** Naměřené hodnoty revize spotřebiče. */
+  measurements?: ReportMeasurements | null;
+}
+
+export interface ReportMeasurements {
+  instrument: string;
+  rpe: number | null;
+  riso: number | null;
+}
+
+const num = (value: number) => String(value).replace(".", ",");
+
+function measurementRows(m: ReportMeasurements): string[][] {
+  return [
+    ["Měření", "Naměřeno", "Požadavek", "Vyhovuje"],
+    ["Odpor ochranného vodiče R_PE", m.rpe === null ? "neměří se (tř. II/III)" : `${num(m.rpe)} Ω`, "≤ 0,3 Ω", m.rpe === null || m.rpe <= 0.3 ? "ano" : "NE"],
+    ["Izolační odpor R_iso (500 V DC)", m.riso === null ? "–" : `${num(m.riso)} MΩ`, "≥ 1 MΩ (tř. I) / 2 MΩ (tř. II)", m.riso !== null && m.riso >= 1 ? "ano" : "NE"],
+    ["Měřicí přístroj", m.instrument, "kalibrace platná", "ano"],
+  ];
 }
 
 const REPORT_TITLES: Record<InspectionType, string> = {
@@ -217,7 +238,9 @@ export function renderInspectionReportSvg(ctx: InspectionReportContext): string 
     title: REPORT_TITLES[ctx.type],
     subtitle: thermo
       ? "Bezkontaktní měření teplotních polí přípojnic, spojů a přístrojů za provozu (zatížení min. 40 % In)."
-      : "Revize elektrického zařízení dle ČSN 33 1500, ČSN 33 2000-6 ed. 2 a ČSN EN 61439. Revizní technik dle NV 190/2022 Sb.",
+      : ctx.standard && ctx.standard !== "ČSN 33 1500"
+        ? `Revize elektrického zařízení dle ${ctx.standard}. Revizní technik dle NV 190/2022 Sb.`
+        : "Revize elektrického zařízení dle ČSN 33 1500, ČSN 33 2000-6 ed. 2 a ČSN EN 61439. Revizní technik dle NV 190/2022 Sb.",
     documentNumber: ctx.reportNumber,
     meta: [
       ["Zařízení", ctx.tag],
@@ -243,7 +266,7 @@ export function renderInspectionReportSvg(ctx: InspectionReportContext): string 
       : [
           {
             heading: "Měření",
-            table: [
+            table: ctx.measurements ? measurementRows(ctx.measurements) : [
               ["Měření", "Naměřeno", "Požadavek", "Vyhovuje"],
               ["Izolační odpor (500 V DC)", "> 200 MΩ", "≥ 1 MΩ", "ano"],
               ["Spojitost ochranných vodičů", "0,08 Ω", "≤ 0,2 Ω", "ano"],
@@ -265,6 +288,44 @@ export function renderInspectionReportSvg(ctx: InspectionReportContext): string 
       text: `${verdict.label}${ctx.result === "CAPABLE_WITH_DEFECTS" ? " Zjištěné závady odstranit v nejbližším možném termínu." : ""}`,
       tone: verdict.tone,
     },
+    signature: { name: ctx.inspectorName, role: ctx.inspectorLicense, date: ctx.inspectionDate },
+  });
+}
+
+export interface BatchProtocolContext {
+  protocolNumber: string;
+  inspectionDate: string;
+  inspectorName: string;
+  inspectorLicense: string;
+  instrument: string | null;
+  result: InspectionResult;
+  defectsSummary: string | null;
+  items: { tag: string; name: string; standard: string; validUntil: string }[];
+}
+
+/** Společný protokol hromadné revize (jeden technik, jedno datum, více zařízení). */
+export function renderBatchProtocolSvg(ctx: BatchProtocolContext): string {
+  const verdict = VERDICTS[ctx.result];
+  const rows = ctx.items.slice(0, 22).map((item) => [item.tag, item.name.replace(`${item.tag} - `, ""), item.standard, item.validUntil]);
+  if (ctx.items.length > 22) rows.push(["…", `a dalších ${ctx.items.length - 22} položek`, "", ""]);
+  return renderDocumentSvg({
+    issuer: `Revizní technik – ${ctx.inspectorName}`,
+    title: "Protokol hromadné revize",
+    subtitle: "Souhrnný záznam o revizi více elektrických zařízení provedené jedním revizním technikem v jednom termínu.",
+    documentNumber: ctx.protocolNumber,
+    meta: [
+      ["Datum provedení", ctx.inspectionDate],
+      ["Počet zařízení", String(ctx.items.length)],
+      ["Revizní technik", ctx.inspectorName],
+      ["Ev. č. osvědčení TIČR", ctx.inspectorLicense],
+      ["Měřicí přístroj", ctx.instrument ?? "–"],
+      ["Celkový posudek", verdict.label.replace("Elektrické zařízení ", "")],
+    ],
+    sections: [
+      { heading: "Revidovaná zařízení", table: [["Tag", "Zařízení", "Norma", "Platnost do"], ...rows] },
+      { heading: "Zjištěné závady", lines: [ctx.defectsSummary?.trim() ? ctx.defectsSummary : "Bez závad."] },
+    ],
+    verdict: { label: "Celkový posudek", text: verdict.label, tone: verdict.tone },
     signature: { name: ctx.inspectorName, role: ctx.inspectorLicense, date: ctx.inspectionDate },
   });
 }

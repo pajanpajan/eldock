@@ -1,5 +1,6 @@
 import {
   Archive,
+  Ban,
   CircleCheck,
   CircleDashed,
   CircleSlash,
@@ -255,11 +256,18 @@ export const INSPECTION_STATE: Record<InspectionState, StatusStyle> = {
     description: "Platnost revize uplynula – zařízení nemá platnou revizní zprávu.",
     icon: ShieldX,
   },
+  FAILED: {
+    ...RED,
+    label: "Vyřazeno z provozu",
+    description: "Poslední revize: neschopno bezpečného provozu – zařízení nesmí být používáno.",
+    icon: Ban,
+  },
   MISSING: { ...ZINC, label: "Bez revize", description: "K zařízení není zapsaná výchozí ani pravidelná revize.", icon: ShieldQuestion },
 };
 
 /** Text odznaku: „Revize platná do 28.12.2027“ / „Revize končí za 18 dní“ / „REVIZE PROPADLÁ před 14 dny“. */
 export function inspectionBadgeLabel(state: InspectionState, validUntil: Date | null, daysLeft: number | null): string {
+  if (state === "FAILED") return "VYŘAZENO Z PROVOZU – neschopno";
   if (state === "MISSING" || !validUntil || daysLeft === null) return "Bez záznamu o revizi";
   if (state === "VALID") return `Revize platná do ${formatDateShort(validUntil)}`;
   if (state === "EXPIRING") {
