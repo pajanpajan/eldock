@@ -6,6 +6,7 @@ import { Plus, RotateCcw, Trash2, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { changedFields, removedRows, rowChange, type BomDraftRow, type BomField } from "@/lib/bom-edit";
+import { formatCount } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 const COLUMNS: { field: BomField; label: string; className: string }[] = [
@@ -50,7 +51,7 @@ export function BomEditor({
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <span className="text-muted-foreground">
-          {rows.length} položek · <span className="text-amber-300">{stats.changed} změněno</span> ·{" "}
+          {formatCount(rows.length, ["položka", "položky", "položek"])} · <span className="text-amber-300">{stats.changed} změněno</span> ·{" "}
           <span className="text-emerald-300">{stats.new} přidáno</span> · <span className="text-red-300">{removed.length} odebráno</span>
         </span>
         <Button type="button" variant="ghost" className="touch-target ml-auto gap-1.5" onClick={onReset} disabled={!stats.changed && !stats.new && !removed.length}>
@@ -59,7 +60,7 @@ export function BomEditor({
         </Button>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-border">
+      <div className="relative overflow-x-auto rounded-xl border border-border">
         <table className="w-full min-w-[60rem] text-sm">
           <thead className="bg-muted/40 text-left text-xs text-muted-foreground">
             <tr>

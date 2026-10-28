@@ -13,23 +13,37 @@ import { addCommentAction } from "@/server/actions/workflow";
 export function CommentForm({ changeRequestId }: { changeRequestId: string }) {
   const router = useRouter();
   const [comment, setComment] = useState("");
+  // Optimistické UI: odesílaný komentář je vidět hned, než server obnoví timeline.
+  const [sending, setSending] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   function submit(event: React.FormEvent) {
     event.preventDefault();
     if (!comment.trim()) return;
+    const text = comment;
+    setSending(text);
+    setComment("");
     startTransition(async () => {
-      const result = await addCommentAction({ changeRequestId, comment });
+      const result = await addCommentAction({ changeRequestId, comment: text });
+      setSending(null);
       if (result.ok) {
-        setComment("");
         toast.success("Komentář přidán.");
         router.refresh();
-      } else toast.error(result.error);
+      } else {
+        setComment(text);
+        toast.error(result.error);
+      }
     });
   }
 
   return (
     <form onSubmit={submit} className="space-y-2">
+      {pending && sending ? (
+        <p className="flex items-start gap-2 rounded-lg border border-dashed border-border bg-muted/30 p-2.5 text-sm text-muted-foreground" aria-live="polite">
+          <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin" aria-hidden />
+          <span className="whitespace-pre-line">{sending}</span>
+        </p>
+      ) : null}
       <Textarea
         value={comment}
         onChange={(event) => setComment(event.target.value)}

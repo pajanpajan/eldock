@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toCsv } from "@/lib/csv";
 import { normalizeSearch } from "@/lib/equipment-filter";
+import { formatCount } from "@/lib/format";
 
 export interface BomRow {
   id: string;
@@ -90,7 +91,7 @@ export function BomTable({ rows, fileName }: { rows: BomRow[]; fileName: string 
           />
         </div>
         <span className="text-sm text-muted-foreground">
-          {visible.length} / {rows.length} položek
+          {visible.length} / {formatCount(rows.length, ["položka", "položky", "položek"])}
         </span>
         <Button variant="outline" className="touch-target ml-auto gap-2" onClick={exportCsv}>
           <FileSpreadsheet className="size-4" />

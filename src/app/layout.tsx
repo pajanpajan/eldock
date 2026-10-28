@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
 import { AppHeader } from "@/components/layout/AppHeader";
@@ -23,6 +23,17 @@ export const metadata: Metadata = {
     template: "%s · Digitry",
   },
   description: "Elektrodokumentace a údržba výrobních závodů",
+  applicationName: "Digitry",
+  appleWebApp: { capable: true, title: "Digitry", statusBarStyle: "black-translucent" },
+  formatDetection: { telephone: false },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#09090b",
+  colorScheme: "dark",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

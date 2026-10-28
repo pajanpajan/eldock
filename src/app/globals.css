@@ -110,20 +110,60 @@
     @apply font-sans;
   }
 }
-/* Tisk QR štítku zařízení: vytiskne se jen `.print-area` (otevřený dialog). */
+/* Spodní lišty na mobilu: odsazení nad domovskou lištou iOS / gesty (viewport-fit=cover). */
+@utility pb-safe {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+}
+
+/* Tisk QR štítku zařízení: vytiskne se jen `.print-area` (otevřený dialog) na bílý papír.
+   Obsah stránky se skryje úplně (jedna strana), dialog se zbaví centrovací transformace. */
 @media print {
+  html,
+  body {
+    background: #fff !important;
+    height: auto !important;
+  }
+  body > header,
+  body > main,
+  [data-sonner-toaster],
+  [data-slot="dialog-overlay"] {
+    display: none !important;
+  }
   body * {
     visibility: hidden;
+  }
+  [data-slot="dialog-content"] {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: auto !important;
+    max-width: none !important;
+    padding: 0 !important;
+    animation: none !important;
+    /* Ne `translate: none` – minifikátor ho slučuje do `transform` a vlastnost zahodí. */
+    --tw-translate-x: 0 !important;
+    --tw-translate-y: 0 !important;
+    --tw-scale-x: 1 !important;
+    --tw-scale-y: 1 !important;
+    transform: none !important;
+    box-shadow: none !important;
+    border: 0 !important;
+    background: transparent !important;
   }
   .print-area,
   .print-area * {
     visibility: visible;
   }
   .print-area {
-    position: fixed;
+    position: absolute;
     top: 0;
     left: 0;
-    width: 70mm;
+    width: 70mm !important;
+    max-width: none !important;
+    margin: 0 !important;
     border: 1px solid #000;
+    color: #000;
+    background: #fff;
+    print-color-adjust: exact;
   }
 }

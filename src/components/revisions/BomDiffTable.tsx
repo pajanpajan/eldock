@@ -47,12 +47,14 @@ export function BomDiffTable({ rows, showUnchanged = false }: { rows: BomDiffRow
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-28">Změna</TableHead>
+                <TableHead className="w-10 sm:w-28">
+                  <span className="sr-only sm:not-sr-only">Změna</span>
+                </TableHead>
                 <TableHead className="w-20">Označení</TableHead>
                 <TableHead>Popis</TableHead>
                 <TableHead className="hidden md:table-cell">Výrobce</TableHead>
                 <TableHead className="hidden sm:table-cell">Objednací číslo</TableHead>
-                <TableHead className="text-right">Množství</TableHead>
+                <TableHead className="hidden text-right sm:table-cell">Množství</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -62,13 +64,21 @@ export function BomDiffTable({ rows, showUnchanged = false }: { rows: BomDiffRow
                   <TableRow key={row.key} className={kind.row} data-diff={row.kind}>
                     <TableCell className={cn("py-2.5 align-top", kind.text)}>
                       <span className="flex items-center gap-1.5 text-xs font-medium">
-                        <kind.icon className="size-3.5" aria-hidden />
-                        {kind.label}
+                        <kind.icon className="size-3.5" aria-label={kind.label} />
+                        <span className="hidden sm:inline">{kind.label}</span>
                       </span>
                     </TableCell>
                     <TableCell className={cn("py-2.5 align-top font-mono font-semibold", row.kind === "removed" && "line-through")}>{row.designation}</TableCell>
                     <TableCell className="py-2.5 align-top whitespace-normal">
                       <Cell row={row} field="description" value={(item) => item.description} />
+                      {row.fields.includes("partNumber") || row.kind !== "changed" ? (
+                        <div className="font-mono text-xs text-muted-foreground sm:hidden">{(row.after ?? row.before)?.partNumber}</div>
+                      ) : null}
+                      {row.fields.includes("quantity") ? (
+                        <div className="text-xs sm:hidden">
+                          <Cell row={row} field="quantity" value={quantity} />
+                        </div>
+                      ) : null}
                       {row.after?.note && row.kind !== "removed" ? <div className="text-xs text-muted-foreground">{row.after.note}</div> : null}
                     </TableCell>
                     <TableCell className="hidden py-2.5 align-top md:table-cell">
@@ -77,7 +87,7 @@ export function BomDiffTable({ rows, showUnchanged = false }: { rows: BomDiffRow
                     <TableCell className="hidden py-2.5 align-top font-mono text-xs sm:table-cell">
                       <Cell row={row} field="partNumber" value={(item) => item.partNumber} />
                     </TableCell>
-                    <TableCell className="py-2.5 text-right align-top tabular-nums">
+                    <TableCell className="hidden py-2.5 text-right align-top tabular-nums sm:table-cell">
                       <Cell row={row} field="quantity" value={quantity} />
                     </TableCell>
                   </TableRow>

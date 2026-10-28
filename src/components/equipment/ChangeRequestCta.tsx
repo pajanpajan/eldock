@@ -13,7 +13,7 @@ export function ChangeRequestCta({ href, openNumber, className }: { href: string
   return (
     <div
       className={cn(
-        "fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 p-3 backdrop-blur sm:static sm:border-0 sm:bg-transparent sm:p-0",
+        "fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 p-3 pb-safe backdrop-blur sm:static sm:border-0 sm:bg-transparent sm:p-0",
         className,
       )}
     >

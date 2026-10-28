@@ -151,7 +151,46 @@ export function TicketDashboard({
       {rows.length === 0 ? (
         <EmptyState icon={Inbox} title="Žádné tickety" description="Filtru neodpovídá žádný požadavek na změnu." />
       ) : (
-        <div className="overflow-hidden rounded-xl border border-border bg-card">
+        <>
+          {/* Mobil: karty místo tabulky. */}
+          <ul className="space-y-2 md:hidden" aria-label="Tickety">
+            {rows.map((ticket) => {
+              const sla = slaLevel(ticket, now);
+              const slaStyle = sla ? SLA_LEVEL[sla] : null;
+              const text = ticket.voiceTranscript ?? ticket.note;
+              return (
+                <li key={ticket.id}>
+                  <Link
+                    href={caeTicketHref(ticket.id)}
+                    className={cn(
+                      "block space-y-2 rounded-xl border border-border bg-card p-3 outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+                      ticket.status === "SUBMITTED" && "bg-orange-500/5",
+                    )}
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-mono font-semibold text-primary">{ticket.number}</span>
+                      <span className="font-mono text-sm">{ticket.equipment.tag}</span>
+                      <span className="ml-auto flex items-center gap-1.5 text-xs">
+                        <span className={cn("size-2 rounded-full", slaStyle?.dot ?? "bg-transparent")} aria-hidden />
+                        <span className={slaStyle?.text ?? "text-muted-foreground"}>{formatRelative(ticket.submittedAt, now)}</span>
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      <StatusBadge kind="changeRequest" status={ticket.status} />
+                      <StatusBadge kind="priority" status={ticket.priority} />
+                      {slaStyle && sla !== "OK" ? <span className={cn("self-center text-xs", slaStyle.text)}>{slaStyle.label}</span> : null}
+                    </div>
+                    {text ? <p className="line-clamp-2 text-sm text-muted-foreground">„{text}“</p> : null}
+                    <p className="text-xs text-muted-foreground">
+                      {ticket.equipment.floor.building.plant.code} · {ticket.equipment.floor.building.name} · {ticket.reporter.name}
+                      {ticket.assignee ? ` · řeší ${ticket.assigneeId === userId ? "já" : ticket.assignee.name}` : ""}
+                    </p>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        <div className="hidden overflow-hidden rounded-xl border border-border bg-card md:block">
           <Table>
             <TableHeader>
               <TableRow>
@@ -238,6 +277,7 @@ export function TicketDashboard({
             </TableBody>
           </Table>
         </div>
+        </>
       )}
       <p className="text-xs text-muted-foreground">
         Barva stáří: {SLA_LEVEL.OK.label} · {SLA_LEVEL.WARNING.label} · {SLA_LEVEL.OVERDUE.label}. Lhůty podle priority:{" "}

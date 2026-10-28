@@ -88,7 +88,7 @@ export default async function RevisionUploadPage({ params }: Props) {
   return (
     <>
       {header}
-      <div className="mx-auto max-w-6xl space-y-4">
+      <div className="mx-auto w-full max-w-6xl space-y-4">
         {lastRejected?.rejectionComment ? (
           <p className={cn("flex items-start gap-2 rounded-xl border p-3 text-sm", REVISION_STATUS.REJECTED.soft)}>
             <MessageSquareWarning className={cn("mt-0.5 size-4 shrink-0", REVISION_STATUS.REJECTED.text)} aria-hidden />
