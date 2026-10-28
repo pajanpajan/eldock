@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Inbox } from "lucide-react";
+import { Cable, Inbox } from "lucide-react";
 
 import { LocationBreadcrumb } from "@/components/common/LocationBreadcrumb";
 import { PageHeader } from "@/components/common/PageHeader";
@@ -15,9 +15,13 @@ import { QrDialog } from "@/components/equipment/QrDialog";
 import { RevisionTimeline } from "@/components/equipment/RevisionTimeline";
 import { SafetyBanner } from "@/components/equipment/SafetyBanner";
 import { SchematicViewer } from "@/components/equipment/SchematicViewer";
+import { CompliancePassport } from "@/components/inspections/CompliancePassport";
+import { InspectionLogbook } from "@/components/inspections/InspectionLogbook";
+import { InspectionStatusBadge } from "@/components/inspections/InspectionStatusBadge";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { Button } from "@/components/ui/button";
 import { EQUIPMENT_TYPE_LABELS } from "@/lib/format";
+import { summarizeInspections } from "@/lib/inspection";
 import { buildingHref, caeTicketHref, equipmentHref, floorHref, plantHref } from "@/lib/routes";
 import { getEquipmentDetail } from "@/server/queries/equipment";
 import { getCurrentRole } from "@/server/session";
@@ -57,6 +61,8 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
   const qrUrl = await absoluteUrl(basePath);
   // Pevné „teď“ pro relativní časy (server i klient vykreslí totéž).
   const now = new Date();
+  const inspection = summarizeInspections(equipment.inspections, now);
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Prague" }).format(now);
 
   return (
     <PageTransition>
@@ -77,7 +83,14 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
             />
           }
           title={equipment.name}
-          badges={<StatusBadge kind="equipment" status={equipment.status} className="text-sm" />}
+          badges={
+            <>
+              <StatusBadge kind="equipment" status={equipment.status} className="text-sm" />
+              <Link href={`${basePath}?tab=inspections`} className="rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+                <InspectionStatusBadge summary={inspection} className="text-sm" />
+              </Link>
+            </>
+          }
           description={
             <span className="flex flex-wrap gap-x-4 gap-y-1">
               <span>{EQUIPMENT_TYPE_LABELS[equipment.type]}</span>
@@ -95,6 +108,13 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
               {equipment.ratedVoltage ? <span>{equipment.ratedVoltage}</span> : null}
               {equipment.ratedCurrent ? <span>{equipment.ratedCurrent}</span> : null}
               {equipment.ipRating ? <span>{equipment.ipRating}</span> : null}
+              {equipment.fedFrom ? (
+                <Link href={equipmentHref(equipment.fedFrom.id)} className="inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline">
+                  <Cable className="size-3.5" aria-hidden />
+                  Napájeno z: <span className="font-mono">{equipment.fedFrom.tag}</span>
+                  {equipment.fedFromCircuit ? ` (${equipment.fedFromCircuit})` : ""}
+                </Link>
+              ) : null}
               {active ? (
                 <span>
                   Platná revize <span className="font-mono text-foreground">{active.version}</span>
@@ -157,6 +177,18 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
             ) : null,
             "3d": selected ? <Cabinet3D bom={selected.bomItems} tag={equipment.tag} /> : null,
             history: <RevisionTimeline revisions={equipment.revisions} basePath={basePath} selectedId={selected?.id ?? null} />,
+            passport: <CompliancePassport equipment={equipment} />,
+            inspections: (
+              <InspectionLogbook
+                equipmentId={equipment.id}
+                tag={equipment.tag}
+                intervalMonths={equipment.inspectionIntervalMonths}
+                inspections={equipment.inspections}
+                summary={inspection}
+                today={today}
+                now={now}
+              />
+            ),
           }}
         />
       </div>

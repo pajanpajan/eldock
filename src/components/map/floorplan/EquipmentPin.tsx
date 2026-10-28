@@ -2,7 +2,7 @@
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { EQUIPMENT_TYPE_ICONS } from "@/lib/equipment-icons";
-import { EQUIPMENT_STATUS } from "@/lib/status";
+import { EQUIPMENT_STATUS, INSPECTION_STATE, inspectionBadgeLabel } from "@/lib/status";
 import { cn } from "@/lib/utils";
 import type { FloorEquipment } from "@/server/queries/floor";
 
@@ -26,6 +26,9 @@ export function EquipmentPin({ equipment, selected, onSelect }: Props) {
   const style = EQUIPMENT_STATUS[equipment.status];
   const Icon = EQUIPMENT_TYPE_ICONS[equipment.type];
   const pulse = equipment.status === "PENDING_UPDATE";
+  const { inspection } = equipment;
+  const expired = inspection.state === "EXPIRED";
+  const inspectionText = inspectionBadgeLabel(inspection.state, inspection.validUntil, inspection.daysLeft);
 
   return (
     <div className="absolute size-0" style={{ left: `${equipment.pinX}%`, top: `${equipment.pinY}%` }}>
@@ -36,7 +39,7 @@ export function EquipmentPin({ equipment, selected, onSelect }: Props) {
               id={pinElementId(equipment.id)}
               type="button"
               onClick={() => onSelect(equipment.id)}
-              aria-label={`${equipment.name} – ${style.label}`}
+              aria-label={`${equipment.name} – ${style.label}${expired ? ` – ${inspectionText}` : ""}`}
               className="pin-button group absolute top-0 left-0 flex flex-col items-center outline-none"
               style={{ transform: `translate(-50%, -${PIN_HEIGHT}px)` }}
             >
@@ -49,6 +52,18 @@ export function EquipmentPin({ equipment, selected, onSelect }: Props) {
               >
                 {pulse ? <span className={cn("absolute inset-0 animate-ping rounded-full opacity-60", style.dot)} /> : null}
                 <Icon className="relative size-[18px]" strokeWidth={2.4} aria-hidden />
+                {expired ? (
+                  <span
+                    data-testid="pin-inspection-warning"
+                    className={cn(
+                      "absolute -top-1.5 -right-2 flex size-[18px] items-center justify-center rounded-full border-2 border-zinc-950 text-[11px] leading-none font-black text-white",
+                      INSPECTION_STATE.EXPIRED.dot,
+                    )}
+                    aria-hidden
+                  >
+                    !
+                  </span>
+                ) : null}
               </span>
               <span className={cn("h-2.5 w-0.5", style.dot)} />
               <span
@@ -64,6 +79,9 @@ export function EquipmentPin({ equipment, selected, onSelect }: Props) {
           <TooltipContent side="top" sideOffset={6}>
             <div className="font-medium">{equipment.name}</div>
             <div className="opacity-80">{style.label}</div>
+            {inspection.state === "EXPIRED" || inspection.state === "EXPIRING" ? (
+              <div className={cn("font-medium", INSPECTION_STATE[inspection.state].text)}>{inspectionText}</div>
+            ) : null}
           </TooltipContent>
         </Tooltip>
       </div>

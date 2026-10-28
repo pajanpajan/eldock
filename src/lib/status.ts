@@ -14,6 +14,10 @@ import {
   Upload,
   UserCheck,
   OctagonAlert,
+  ShieldAlert,
+  ShieldCheck,
+  ShieldQuestion,
+  ShieldX,
   TriangleAlert,
   Wrench,
   type LucideIcon,
@@ -24,8 +28,11 @@ import type {
   ChangeRequestPriority,
   ChangeRequestStatus,
   EquipmentStatus,
+  InspectionResult,
   RevisionStatus,
 } from "@/generated/prisma/enums";
+import { formatCount, formatDateShort, plural } from "@/lib/format";
+import { INSPECTION_WARNING_DAYS, type InspectionState } from "@/lib/inspection";
 
 // Jediný zdroj pravdy pro barvy a popisky stavů. Třídy Tailwindu jsou zapsané
 // doslova, aby je kompilátor našel; `hex` slouží SVG vrstvám (piny, mapa).
@@ -232,3 +239,44 @@ export function worstEquipmentStatus(statuses: Iterable<EquipmentStatus>): Equip
   }
   return worst;
 }
+
+/** Stav elektrorevize (lhůtník ČSN 33 1500) – semafor, odznak v hlavičce a hlídač termínů. */
+export const INSPECTION_STATE: Record<InspectionState, StatusStyle> = {
+  VALID: { ...EMERALD, label: "Revize platná", description: "Pravidelná revize je v platnosti.", icon: ShieldCheck },
+  EXPIRING: {
+    ...AMBER,
+    label: "Blíží se konec platnosti revize!",
+    description: `Platnost revize končí do ${INSPECTION_WARNING_DAYS} dnů – objednejte revizního technika.`,
+    icon: ShieldAlert,
+  },
+  EXPIRED: {
+    ...RED,
+    label: "Revize propadlá",
+    description: "Platnost revize uplynula – zařízení nemá platnou revizní zprávu.",
+    icon: ShieldX,
+  },
+  MISSING: { ...ZINC, label: "Bez revize", description: "K zařízení není zapsaná výchozí ani pravidelná revize.", icon: ShieldQuestion },
+};
+
+/** Text odznaku: „Revize platná do 28.12.2027“ / „Revize končí za 18 dní“ / „REVIZE PROPADLÁ před 14 dny“. */
+export function inspectionBadgeLabel(state: InspectionState, validUntil: Date | null, daysLeft: number | null): string {
+  if (state === "MISSING" || !validUntil || daysLeft === null) return "Bez záznamu o revizi";
+  if (state === "VALID") return `Revize platná do ${formatDateShort(validUntil)}`;
+  if (state === "EXPIRING") {
+    return daysLeft === 0 ? "Revize končí dnes" : `Revize končí za ${formatCount(daysLeft, ["den", "dny", "dní"])}`;
+  }
+  const ago = -daysLeft;
+  return `REVIZE PROPADLÁ před ${ago} ${plural(ago, ["dnem", "dny", "dny"])}`;
+}
+
+/** Posudek revizní zprávy. */
+export const INSPECTION_RESULT: Record<InspectionResult, StatusStyle> = {
+  CAPABLE: { ...EMERALD, label: "Schopno bezpečného provozu", description: "Zařízení je schopné bezpečného provozu.", icon: CircleCheck },
+  CAPABLE_WITH_DEFECTS: {
+    ...AMBER,
+    label: "Schopno s výhradou",
+    description: "Schopno bezpečného provozu za podmínky odstranění zjištěných závad.",
+    icon: TriangleAlert,
+  },
+  INCAPABLE: { ...RED, label: "Neschopno provozu", description: "Zařízení není schopné bezpečného provozu.", icon: OctagonAlert },
+};

@@ -7,8 +7,10 @@ import { LocationBreadcrumb } from "@/components/common/LocationBreadcrumb";
 import { PageHeader } from "@/components/common/PageHeader";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { StatusLegend } from "@/components/common/StatusLegend";
+import { InspectionWatcher } from "@/components/inspections/InspectionWatcher";
 import { CampusExplorer } from "@/components/map/campus/CampusExplorer";
 import { EQUIPMENT_STATUS } from "@/lib/status";
+import { getInspectionWatch } from "@/server/queries/inspections";
 import { getPlantOverview } from "@/server/queries/plant";
 
 export async function generateMetadata({ params }: PageProps<"/plant/[plantId]">): Promise<Metadata> {
@@ -20,7 +22,7 @@ export async function generateMetadata({ params }: PageProps<"/plant/[plantId]">
 // Level 1 – Půdorys areálu.
 export default async function PlantPage({ params }: PageProps<"/plant/[plantId]">) {
   const { plantId } = await params;
-  const plant = await getPlantOverview(plantId);
+  const [plant, watch] = await Promise.all([getPlantOverview(plantId), getInspectionWatch(plantId)]);
   if (!plant) notFound();
 
   return (
@@ -49,6 +51,10 @@ export default async function PlantPage({ params }: PageProps<"/plant/[plantId]"
           accent={EQUIPMENT_STATUS.WAITING_APPROVAL.text}
         />
       </section>
+
+      <div className="mb-6">
+        <InspectionWatcher watch={watch} />
+      </div>
 
       <CampusExplorer
         plant={plant}

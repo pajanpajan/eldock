@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 
 const OPEN_STATUSES = ["SUBMITTED", "IN_PROGRESS", "WAITING_APPROVAL"] as const;
 
-/** Detail zařízení: lokace, všechny revize (autor, schvalovatel, BOM) a otevřený požadavek na změnu. */
+/** Detail zařízení: lokace, napájení, revize (autor, schvalovatel, BOM), otevřený požadavek, pasport a revizní zprávy. */
 export async function getEquipmentDetail(equipmentId: string) {
   return prisma.equipment.findUnique({
     where: { id: equipmentId },
@@ -23,6 +23,10 @@ export async function getEquipmentDetail(equipmentId: string) {
           },
         },
       },
+      fedFrom: { select: { id: true, tag: true, name: true } },
+      feeds: { orderBy: [{ fedFromCircuit: "asc" }, { tag: "asc" }], select: { id: true, tag: true, name: true, type: true, fedFromCircuit: true } },
+      complianceDocuments: { orderBy: { issuedAt: "desc" } },
+      inspections: { orderBy: [{ inspectionDate: "desc" }, { createdAt: "desc" }] },
       revisions: {
         orderBy: [{ major: "desc" }, { minor: "desc" }],
         include: {
@@ -50,6 +54,8 @@ export async function getEquipmentDetail(equipmentId: string) {
 export type EquipmentDetail = NonNullable<Awaited<ReturnType<typeof getEquipmentDetail>>>;
 export type EquipmentRevision = EquipmentDetail["revisions"][number];
 export type OpenChangeRequest = EquipmentDetail["changeRequests"][number];
+export type EquipmentComplianceDocument = EquipmentDetail["complianceDocuments"][number];
+export type EquipmentInspection = EquipmentDetail["inspections"][number];
 
 const revisionForCompare = {
   select: {

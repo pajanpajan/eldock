@@ -1,4 +1,4 @@
-import type { BuildingType, EquipmentType } from "@/generated/prisma/enums";
+import type { BuildingType, ComplianceCategory, EquipmentType, InspectionType } from "@/generated/prisma/enums";
 
 // Formátování pro české UI. Pevné časové pásmo, aby server i klient vykreslily totéž.
 
@@ -7,6 +7,12 @@ const TIME_ZONE = "Europe/Prague";
 const dateFormat = new Intl.DateTimeFormat("cs-CZ", {
   day: "numeric",
   month: "numeric",
+  year: "numeric",
+  timeZone: TIME_ZONE,
+});
+const shortDateFormat = new Intl.DateTimeFormat("cs-CZ", {
+  day: "2-digit",
+  month: "2-digit",
   year: "numeric",
   timeZone: TIME_ZONE,
 });
@@ -21,6 +27,8 @@ const dateTimeFormat = new Intl.DateTimeFormat("cs-CZ", {
 const relativeFormat = new Intl.RelativeTimeFormat("cs-CZ", { numeric: "auto" });
 
 export const formatDate = (date: Date | string | number) => dateFormat.format(new Date(date));
+/** „28.12.2027“ – pevný tvar DD.MM.RRRR (štítky, odznaky, dokumenty). */
+export const formatDateShort = (date: Date | string | number) => shortDateFormat.format(new Date(date)).replace(/\s/g, "");
 export const formatDateTime = (date: Date | string | number) => dateTimeFormat.format(new Date(date));
 
 const RELATIVE_UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
@@ -83,3 +91,27 @@ export function initials(name: string): string {
     .slice(0, 2)
     .join("");
 }
+
+export const INSPECTION_TYPE_LABELS: Record<InspectionType, string> = {
+  INITIAL: "Výchozí revize",
+  PERIODIC: "Pravidelná revize",
+  EXTRAORDINARY: "Mimořádná revize",
+  THERMOVISION: "Termovize",
+};
+
+export const COMPLIANCE_CATEGORY_LABELS: Record<ComplianceCategory, { label: string; hint: string }> = {
+  SINGLE_LINE_DIAGRAM: { label: "Liniové schéma", hint: "Jednopólové schéma rozvodu a vývodů" },
+  CONFORMITY_DECLARATION: { label: "EU prohlášení o shodě", hint: "ČSN EN 61439-1/-2, nařízení vlády 117/2016 Sb." },
+  ROUTINE_VERIFICATION: { label: "Kusová zkouška", hint: "Kusové ověření dle čl. 11 ČSN EN 61439-1" },
+  THERMAL_CALCULATION: { label: "Výpočet oteplení", hint: "Ověření oteplení výpočtem, čl. 10.10.4" },
+  EXTERNAL_INFLUENCES: { label: "Vnější vlivy", hint: "Protokol o určení vnějších vlivů (ČSN 33 2000-5-51)" },
+};
+
+/** Pořadí karet v záložce Pasport & Shoda. */
+export const COMPLIANCE_CATEGORY_ORDER: ComplianceCategory[] = [
+  "SINGLE_LINE_DIAGRAM",
+  "CONFORMITY_DECLARATION",
+  "ROUTINE_VERIFICATION",
+  "THERMAL_CALCULATION",
+  "EXTERNAL_INFLUENCES",
+];

@@ -4,7 +4,7 @@ import { saveUpload } from "@/server/storage";
 const error = (message: string, status = 400) => Response.json({ error: message }, { status });
 
 /**
- * Nahrání souboru (multipart: `kind` = photo | revision | markup | voice, `file`).
+ * Nahrání souboru (multipart: `kind` = photo | revision | markup | voice | document, `file`).
  * Route Handler místo Server Action kvůli limitu těla akce (1 MB). Vrací URL pro `/api/files`.
  */
 export async function POST(request: Request) {

@@ -109,6 +109,30 @@ enum ChangeRequestEventType {
   CANCELLED
 }
 
+/// Výrobní dokumentace rozváděče dle ČSN EN 61439 (Pasport & Shoda).
+enum ComplianceCategory {
+  SINGLE_LINE_DIAGRAM    // Liniové schéma
+  CONFORMITY_DECLARATION // EU prohlášení o shodě
+  ROUTINE_VERIFICATION   // Kusová zkouška (čl. 11)
+  THERMAL_CALCULATION    // Ověření oteplení výpočtem (čl. 10.10.4)
+  EXTERNAL_INFLUENCES    // Protokol o určení vnějších vlivů
+}
+
+/// Druh revize elektrického zařízení dle ČSN 33 1500.
+enum InspectionType {
+  INITIAL       // Výchozí revize
+  PERIODIC      // Pravidelná revize
+  EXTRAORDINARY // Mimořádná revize
+  THERMOVISION  // Termovizní měření (doplňkové, nepočítá se do lhůty)
+}
+
+/// Celkový posudek revizní zprávy.
+enum InspectionResult {
+  CAPABLE              // Schopno bezpečného provozu
+  CAPABLE_WITH_DEFECTS // Schopno bezpečného provozu s výhradou
+  INCAPABLE            // Neschopno bezpečného provozu
+}
+
 // -----------------------------------------------------------------------------
 //  UŽIVATELÉ
 // -----------------------------------------------------------------------------
@@ -238,16 +262,70 @@ model Equipment {
   pinX Float
   pinY Float
 
+  // Hierarchie napájení – ze kterého rozváděče a vývodu je zařízení napájeno
+  fedFromEquipmentId String?
+  fedFromCircuit     String? // "Pole 3 / Jistič QF4"
+
+  // Pasport a lhůtník revizí
+  inspectionIntervalMonths Int     @default(36) // lhůta pravidelné revize dle ČSN 33 1500
+  externalInfluences       String? // "AA5, AB4, BA4 – normální průmyslové"
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  floor          Floor              @relation(fields: [floorId], references: [id], onDelete: Cascade)
-  revisions      DocumentRevision[]
-  changeRequests ChangeRequest[]
+  floor               Floor                @relation(fields: [floorId], references: [id], onDelete: Cascade)
+  fedFrom             Equipment?           @relation("PowerFeed", fields: [fedFromEquipmentId], references: [id], onDelete: SetNull)
+  feeds               Equipment[]          @relation("PowerFeed")
+  revisions           DocumentRevision[]
+  changeRequests      ChangeRequest[]
+  complianceDocuments ComplianceDocument[]
+  inspections         InspectionRecord[]
 
   @@unique([floorId, tag])
   @@index([floorId])
   @@index([status])
+  @@index([fedFromEquipmentId])
+}
+
+/// Dokument výrobní dokumentace rozváděče (ČSN EN 61439) – záložka Pasport & Shoda.
+model ComplianceDocument {
+  id             String             @id @default(cuid())
+  equipmentId    String
+  category       ComplianceCategory
+  title          String
+  documentNumber String
+  fileUrl        String
+  issuedAt       DateTime
+  issuer         String   // výrobce rozváděče / projektant
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  equipment Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+
+  @@index([equipmentId, category])
+}
+
+/// Revizní zpráva nebo termovizní měření – záložka Revize & Lhůtník.
+model InspectionRecord {
+  id               String           @id @default(cuid())
+  equipmentId      String
+  type             InspectionType
+  inspectionDate   DateTime
+  validUntil       DateTime
+  reportNumber     String
+  inspectorName    String
+  inspectorLicense String           // ev. č. osvědčení TIČR dle NV 190/2022 Sb.
+  result           InspectionResult
+  defectsSummary   String?
+  reportUrl        String
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  equipment Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+
+  @@index([equipmentId, inspectionDate])
+  @@index([validUntil])
 }
 
 // -----------------------------------------------------------------------------

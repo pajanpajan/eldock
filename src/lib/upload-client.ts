@@ -31,7 +31,7 @@ export async function resizeImage(file: File, maxSize = 2000, quality = 0.85): P
 
 /** POST /api/uploads s průběhem 0–100. */
 export function uploadFile(
-  kind: "photo" | "revision" | "markup" | "voice",
+  kind: "photo" | "revision" | "markup" | "voice" | "document",
   file: File,
   onProgress?: (percent: number) => void,
 ): Promise<UploadedFile> {

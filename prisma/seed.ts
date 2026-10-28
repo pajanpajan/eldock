@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 
 import { PrismaClient } from "../src/generated/prisma/client";
+import { renderComplianceDocumentSvg, renderInspectionReportSvg } from "../src/lib/mock-graphics/compliance";
 import { renderFloorplanSvg } from "../src/lib/mock-graphics/floorplan";
 import { buildParts, type PartOverrides } from "../src/lib/mock-graphics/parts";
 import { renderPhotoSvg } from "../src/lib/mock-graphics/photo";
@@ -16,6 +17,7 @@ import { renderSchematicSvg, schematicElementCenter } from "../src/lib/mock-grap
 import {
   BUILDINGS,
   CHANGE_REQUESTS,
+  day,
   EQUIPMENT,
   FLOORS,
   PLANTS,
@@ -24,13 +26,14 @@ import {
   revisionsFor,
   type UserKey,
 } from "./seed-data";
+import { FEEDS, INSPECTORS, complianceFor, externalInfluencesFor, inspectionsFor, intervalFor } from "./seed-compliance";
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error("Chybí DATABASE_URL (viz .env.example).");
 const prisma = new PrismaClient({ adapter: new PrismaBetterSqlite3({ url }) });
 
 const UPLOADS = fileURLToPath(new URL("../storage/uploads", import.meta.url));
-const SEED_DIRS = ["photos", "revisions", "markups", "voice"].map((kind) => path.join(UPLOADS, kind, "seed"));
+const SEED_DIRS = ["photos", "revisions", "markups", "voice", "documents"].map((kind) => path.join(UPLOADS, kind, "seed"));
 const FLOOR_VIEWBOX = { w: 1200, h: 800 };
 
 const czDate = (d: Date) =>
@@ -64,6 +67,8 @@ async function wipe() {
   await prisma.bomItem.deleteMany();
   await prisma.documentRevision.deleteMany();
   await prisma.changeRequest.deleteMany();
+  await prisma.complianceDocument.deleteMany();
+  await prisma.inspectionRecord.deleteMany();
   await prisma.equipment.deleteMany();
   await prisma.floor.deleteMany();
   await prisma.building.deleteMany();
@@ -129,6 +134,8 @@ async function main() {
         ipRating: eq.ipRating,
         pinX: eq.pinX,
         pinY: eq.pinY,
+        inspectionIntervalMonths: intervalFor(eq.tag),
+        externalInfluences: externalInfluencesFor(eq),
         serialNumber: `SN-${eq.yearInstalled}-${String(index + 1).padStart(4, "0")}` },
     });
 
@@ -182,6 +189,96 @@ async function main() {
       });
       revisionId.set(`${eq.tag}@${rev.major}.${rev.minor}`, created.id);
       if (rev.crNumber) revisionsByCr.set(rev.crNumber, [...(revisionsByCr.get(rev.crNumber) ?? []), created.id]);
+    }
+  }
+
+  // Hierarchie napájení (až po vytvoření všech zařízení)
+  for (const [tag, feed] of Object.entries(FEEDS)) {
+    await prisma.equipment.update({
+      where: { id: equipmentId.get(tag)! },
+      data: { fedFromEquipmentId: equipmentId.get(feed.from)!, fedFromCircuit: feed.circuit },
+    });
+  }
+
+  // Pasport rozváděčů (ČSN EN 61439) a revizní zprávy (ČSN 33 1500)
+  const documentsDir = path.join(UPLOADS, "documents", "seed");
+  for (const [index, eq] of EQUIPMENT.entries()) {
+    const id = equipmentId.get(eq.tag)!;
+    const floor = FLOORS.find((f) => f.key === eq.floor)!;
+    const building = BUILDINGS.find((b) => b.id === floor.buildingId)!;
+    const plant = PLANTS.find((p) => p.id === building.plantId)!;
+    const feed = FEEDS[eq.tag];
+    const feeders = Object.entries(FEEDS)
+      .filter(([, f]) => f.from === eq.tag)
+      .map(([tag, f]) => ({ circuit: f.circuit, label: tag, rating: f.rating }));
+    const issuedAt = day(`${eq.yearInstalled}-02-2${index % 8}`);
+
+    for (const doc of complianceFor(eq)) {
+      const fileName = `${doc.documentNumber}.svg`;
+      await writeFile(
+        path.join(documentsDir, fileName),
+        renderComplianceDocumentSvg(doc.category, {
+          ...eq,
+          externalInfluences: externalInfluencesFor(eq),
+          fedFrom: feed ? { tag: feed.from } : null,
+          fedFromCircuit: feed?.circuit ?? null,
+          issuer: doc.issuer,
+          documentNumber: doc.documentNumber,
+          date: czDate(issuedAt),
+          author: doc.author,
+          feeders,
+        }),
+      );
+      await prisma.complianceDocument.create({
+        data: {
+          equipmentId: id,
+          category: doc.category,
+          title: doc.title,
+          documentNumber: doc.documentNumber,
+          fileUrl: `/api/files/documents/seed/${fileName}`,
+          issuedAt,
+          issuer: doc.issuer,
+          notes: doc.notes,
+        },
+      });
+    }
+
+    for (const record of inspectionsFor(eq, index, plant.code)) {
+      const inspector = INSPECTORS[record.inspector];
+      const fileName = `${record.reportNumber.replace(/[^w-]/g, "_")}.svg`;
+      await writeFile(
+        path.join(documentsDir, fileName),
+        renderInspectionReportSvg({
+          tag: eq.tag,
+          name: eq.name,
+          location: `${building.name} › ${floor.name}`,
+          ratedVoltage: eq.ratedVoltage,
+          ratedCurrent: eq.ratedCurrent,
+          type: record.type,
+          reportNumber: record.reportNumber,
+          inspectionDate: czDate(record.inspectionDate),
+          validUntil: czDate(record.validUntil),
+          inspectorName: inspector.name,
+          inspectorLicense: inspector.license,
+          result: record.result,
+          defectsSummary: record.defectsSummary,
+        }),
+      );
+      await prisma.inspectionRecord.create({
+        data: {
+          equipmentId: id,
+          type: record.type,
+          inspectionDate: record.inspectionDate,
+          validUntil: record.validUntil,
+          reportNumber: record.reportNumber,
+          inspectorName: inspector.name,
+          inspectorLicense: inspector.license,
+          result: record.result,
+          defectsSummary: record.defectsSummary,
+          reportUrl: `/api/files/documents/seed/${fileName}`,
+          createdAt: record.inspectionDate,
+        },
+      });
     }
   }
 
@@ -249,7 +346,7 @@ async function main() {
   }
 
   // Souhrn
-  const [plants, buildings, floors, equipment, revisions, bom, openCr, closedCr, events] = await Promise.all([
+  const [plants, buildings, floors, equipment, revisions, bom, openCr, closedCr, events, documents, inspections] = await Promise.all([
     prisma.plant.count(),
     prisma.building.count(),
     prisma.floor.count(),
@@ -259,6 +356,8 @@ async function main() {
     prisma.changeRequest.count({ where: { status: { in: ["SUBMITTED", "IN_PROGRESS", "WAITING_APPROVAL"] } } }),
     prisma.changeRequest.count({ where: { status: { in: ["APPROVED", "CANCELLED"] } } }),
     prisma.changeRequestEvent.count(),
+    prisma.complianceDocument.count(),
+    prisma.inspectionRecord.count(),
   ]);
   console.log(
     [
@@ -266,6 +365,7 @@ async function main() {
       `  závody ${plants} · budovy ${buildings} · patra ${floors} · zařízení ${equipment}`,
       `  revize ${revisions} · položky kusovníku ${bom}`,
       `  požadavky otevřené ${openCr} · uzavřené ${closedCr} · události ${events}`,
+      `  dokumenty pasportu ${documents} · revizní zprávy ${inspections}`,
       `  uživatelé ${USERS.length}`,
     ].join("\n"),
   );

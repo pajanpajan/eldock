@@ -2,7 +2,7 @@ import path from "node:path";
 
 // Soubory aplikace leží ve storage/uploads a servíruje je GET /api/files/[...path].
 
-export const UPLOAD_KINDS = ["photos", "revisions", "markups", "voice"] as const;
+export const UPLOAD_KINDS = ["photos", "revisions", "markups", "voice", "documents"] as const;
 export type UploadKind = (typeof UPLOAD_KINDS)[number];
 
 export const CONTENT_TYPES: Record<string, string> = {
@@ -54,6 +54,7 @@ export const UPLOAD_RULES = {
   revision: { dir: "revisions", maxBytes: 25 * MB, extensions: [".pdf", ".svg", ".png", ".jpg", ".jpeg"], label: "PDF, SVG, PNG nebo JPG" },
   markup: { dir: "markups", maxBytes: 10 * MB, extensions: [".png", ".json"], label: "PNG nebo JSON" },
   voice: { dir: "voice", maxBytes: 15 * MB, extensions: [".webm", ".ogg", ".mp3", ".m4a"], label: "WebM, OGG, MP3 nebo M4A" },
+  document: { dir: "documents", maxBytes: 25 * MB, extensions: [".pdf", ".svg", ".png", ".jpg", ".jpeg"], label: "PDF, SVG, PNG nebo JPG" },
 } as const satisfies Record<string, { dir: UploadKind; maxBytes: number; extensions: readonly string[]; label: string }>;
 
 export type UploadRequestKind = keyof typeof UPLOAD_RULES;

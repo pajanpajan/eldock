@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Box, FileText, History, ListTree } from "lucide-react";
+import { Box, CalendarClock, FileBadge, FileText, History, ListTree } from "lucide-react";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -11,6 +11,8 @@ const TABS = [
   { value: "bom", label: "Kusovník", icon: ListTree },
   { value: "3d", label: "3D rozváděč", icon: Box },
   { value: "history", label: "Historie změn", icon: History },
+  { value: "passport", label: "Pasport & Shoda (61439)", icon: FileBadge },
+  { value: "inspections", label: "Revize & Lhůtník", icon: CalendarClock },
 ] as const;
 
 type TabValue = (typeof TABS)[number]["value"];
