@@ -29,3 +29,12 @@ storage/uploads/**/*
 # misc
 .DS_Store
 *.log
+
+# ze scaffoldu create-next-app
+/.pnp
+.pnp.*
+/coverage
+/build
+*.pem
+.vercel
+npm-debug.log*

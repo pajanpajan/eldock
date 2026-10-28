@@ -1,0 +1,26 @@
+import "server-only";
+
+import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+
+import { PrismaClient } from "@/generated/prisma/client";
+
+// Jediná instance klienta pro celou aplikaci. V dev režimu ji držíme
+// v globalThis, aby HMR nevytvářel při každé změně nové připojení.
+const globalForPrisma = globalThis as unknown as {
+  prisma: PrismaClient | undefined;
+};
+
+function createPrismaClient() {
+  const url = process.env.DATABASE_URL;
+  if (!url) {
+    throw new Error("Chybí proměnná prostředí DATABASE_URL (viz .env.example).");
+  }
+  const adapter = new PrismaBetterSqlite3({ url });
+  return new PrismaClient({ adapter });
+}
+
+export const prisma = globalForPrisma.prisma ?? createPrismaClient();
+
+if (process.env.NODE_ENV !== "production") {
+  globalForPrisma.prisma = prisma;
+}

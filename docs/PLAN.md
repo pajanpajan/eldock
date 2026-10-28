@@ -16,7 +16,7 @@ Claude Code po každé fázi: odškrtne úkoly, nastaví stav v tabulce níže, 
 
 | # | Fáze | Stav |
 |---|------|------|
-| 0 | Scaffolding a nástroje | ⬜ |
+| 0 | Scaffolding a nástroje | ✅ |
 | 1 | Databáze, generátory grafiky a seed | ⬜ |
 | 2 | App shell, design systém, přepínač rolí | ⬜ |
 | 3 | Level 1 – Areál závodu | ⬜ |
@@ -143,26 +143,26 @@ Invarianty (hlídá služba a testují testy):
 ### Fáze 0 – Scaffolding a nástroje
 **Cíl:** běžící Next.js projekt se všemi závislostmi, Prisma klientem a skripty.
 
-- [ ] Ověřit `node -v` (≥ 22.12 nebo ≥ 24), `npm -v`, `git --version`. Pokud verze nevyhovuje, zastavit a říct uživateli, co nainstalovat.
-- [ ] Smazat prázdný testovací soubor `storage/uploads/photos/test.jpg`, pokud existuje.
-- [ ] Pokud chybí `.claude/skills/faze/SKILL.md`, zkopírovat `docs/claude/skills/*` do `.claude/skills/` a upozornit uživatele, že příkazy `/faze` a `/overit` budou dostupné po restartu `claude`.
-- [ ] Úvodní commit stávajícího stavu: `chore: specifikace, plán a kostra projektu`.
-- [ ] Scaffold do dočasné složky (adresář projektu není prázdný):
+- [x] Ověřit `node -v` (≥ 22.12 nebo ≥ 24), `npm -v`, `git --version`. Pokud verze nevyhovuje, zastavit a říct uživateli, co nainstalovat.
+- [x] Smazat prázdný testovací soubor `storage/uploads/photos/test.jpg`, pokud existuje.
+- [x] Pokud chybí `.claude/skills/faze/SKILL.md`, zkopírovat `docs/claude/skills/*` do `.claude/skills/` a upozornit uživatele, že příkazy `/faze` a `/overit` budou dostupné po restartu `claude`.
+- [x] Úvodní commit stávajícího stavu: `chore: specifikace, plán a kostra projektu`.
+- [x] Scaffold do dočasné složky (adresář projektu není prázdný):
   `npx create-next-app@16.4.3 scaffold-tmp --ts --tailwind --eslint --app --src-dir --import-alias "@/*" --use-npm --no-react-compiler --no-cache-components --agents-md --no-agent-feedback --disable-git --skip-install --yes`
-- [ ] Přesunout do kořene: `package.json`, `tsconfig.json`, `next.config.ts`, `postcss.config.mjs`, `eslint.config.mjs`, `AGENTS.md`, `src/app/layout.tsx`, `src/app/page.tsx`, `src/app/globals.css`, `src/app/favicon.ico`. Ukázková SVG z `public/` nepřebírat. Do `.gitignore` doplnit případná pravidla ze scaffoldu (naše zachovat). Smazat `scaffold-tmp`. V `package.json` nastavit `"name": "digitry"`.
-- [ ] Instalace (verze Prismy vždy `@7`):
+- [x] Přesunout do kořene: `package.json`, `tsconfig.json`, `next.config.ts`, `postcss.config.mjs`, `eslint.config.mjs`, `AGENTS.md`, `src/app/layout.tsx`, `src/app/page.tsx`, `src/app/globals.css`, `src/app/favicon.ico`. Ukázková SVG z `public/` nepřebírat. Do `.gitignore` doplnit případná pravidla ze scaffoldu (naše zachovat). Smazat `scaffold-tmp`. V `package.json` nastavit `"name": "digitry"`.
+- [x] Instalace (verze Prismy vždy `@7`):
   - `npm install`
   - `npm i @prisma/client@7 @prisma/adapter-better-sqlite3@7 dotenv server-only motion lucide-react react-zoom-pan-pinch qrcode.react sonner zod`
   - `npm i -D prisma@7 tsx vitest`
-- [ ] shadcn/ui: `npx shadcn@latest init` neinteraktivně (zjistit přepínače přes `--help`; základní barva neutral/zinc, CSS proměnné), pak
+- [x] shadcn/ui: `npx shadcn@latest init` neinteraktivně (zjistit přepínače přes `--help`; základní barva neutral/zinc, CSS proměnné), pak
   `npx shadcn@latest add button card badge dialog sheet tabs table tooltip separator scroll-area dropdown-menu input textarea label sonner skeleton alert avatar breadcrumb toggle-group progress`
-- [ ] `package.json`:
+- [x] `package.json`:
   - `"type": "module"` (doporučení Prismy 7 – ověřit, že `dev`, `build` i seed projdou; pokud ne, vrátit a zapsat do Deníku)
   - skripty: `dev`, `build`, `start`, `lint: eslint .`, `typecheck: tsc --noEmit`, `test: vitest run --passWithNoTests`, `postinstall: prisma generate`, `db:generate: prisma generate`, `db:migrate: prisma migrate dev`, `db:seed: prisma db seed`, `db:reset: prisma migrate reset --force && prisma generate && prisma db seed`, `db:studio: prisma studio`, `smoke: tsx scripts/smoke-workflow.ts`, `verify: npm run typecheck && npm run lint && npm run test && npm run build`
-- [ ] `.env` zkopírovat z `.env.example`.
-- [ ] `src/lib/prisma.ts` – singleton `PrismaClient` s `PrismaBetterSqlite3` adaptérem, cache v `globalThis` kvůli HMR, `import "server-only"`.
-- [ ] `eslint.config.mjs`: ignorovat `src/generated/**`. `vitest.config.ts`: prostředí node, alias `@` → `src`.
-- [ ] Dočasná `src/app/page.tsx` s textem „Digitry – připraveno“ (tmavé pozadí), aby šel ověřit běh.
+- [x] `.env` zkopírovat z `.env.example`.
+- [x] `src/lib/prisma.ts` – singleton `PrismaClient` s `PrismaBetterSqlite3` adaptérem, cache v `globalThis` kvůli HMR, `import "server-only"`.
+- [x] `eslint.config.mjs`: ignorovat `src/generated/**`. `vitest.config.ts`: prostředí node, alias `@` → `src`.
+- [x] Dočasná `src/app/page.tsx` s textem „Digitry – připraveno“ (tmavé pozadí), aby šel ověřit běh.
 
 **Hotovo když:** `npx prisma validate` OK · `npm run typecheck` a `npm run lint` OK · `npm run dev` běží na http://localhost:3000 a stránka vrací 200.
 **Commit:** `chore(faze0): Next.js 16, Tailwind, shadcn/ui a Prisma 7`
@@ -336,3 +336,4 @@ Autentizace a více klientů (multi-tenant) · skutečný serverový přepis hla
 | Fáze | Datum | Poznámky a odchylky od plánu |
 |---|---|---|
 | – | 2026-10-25 | Plán vytvořen. Schéma Prisma 7 validováno, kostra složek připravena. |
+| 0 | 2026-10-28 | Next 16.4.3, Prisma 7.10.1, shadcn 4.23.0 (base `radix`, preset `nova`, base color neutral). Odchylky: (1) scaffold už negeneruje `postcss.config.mjs` – Tailwind 4 jde přes loader `@tailwindcss/turbopack` v `next.config.ts`. (2) `@types/node` povýšen z `^20` na `^22` (peer dependency `vitest@5`). (3) npm 11 blokuje install skripty – schváleny v `package.json` → `allowScripts` (připnuté verze): better-sqlite3, prisma, @prisma/engines, esbuild, unrs-resolver; po upgradu těchto balíčků znovu `npm install-scripts approve <balíček>`. (4) shadcn 4 používá místo `clsx`+`tailwind-merge` balíček `cn` (z repozitáře shadcn-ui) a přidal `shadcn`, `radix-ui`, `tw-animate-css`, `next-themes`. (5) `typecheck` = `next typegen && tsc --noEmit` (globální typy `LayoutProps`/`PageProps` jinak na čistém checkoutu chybí). (6) Layout: font proměnná `--font-sans` (jak čeká shadcn `globals.css`), subset `latin-ext` kvůli češtině, `lang="cs"`, třída `dark`. (7) Lokální git identita repozitáře nastavena (chyběla). `"type": "module"` ověřen: dev, build i Prisma klient přes `tsx` běží. Na fázi 2: obalit app `TooltipProvider`; `ui/sonner.tsx` volá `useTheme` z next-themes – buď `ThemeProvider`, nebo pevně `theme="dark"`; `next/font/google` stahuje Geist při buildu (build potřebuje internet, za běhu se servíruje lokálně) – případně přejít na balíček `geist`. |
