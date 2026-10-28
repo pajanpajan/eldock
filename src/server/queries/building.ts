@@ -83,16 +83,3 @@ export async function getBuildingOverview(plantId: string, buildingId: string) {
 }
 
 export type BuildingDetail = NonNullable<Awaited<ReturnType<typeof getBuildingOverview>>>;
-
-/** Patro s budovou a závodem pro hlavičku a drobečkovou navigaci. */
-export async function getFloorHeader(plantId: string, buildingId: string, floorId: string) {
-  return prisma.floor.findFirst({
-    where: { id: floorId, buildingId, building: { plantId } },
-    include: {
-      building: {
-        select: { id: true, name: true, plant: { select: { id: true, name: true } }, _count: { select: { floors: true } } },
-      },
-      _count: { select: { equipment: true } },
-    },
-  });
-}
