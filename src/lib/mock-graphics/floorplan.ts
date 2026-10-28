@@ -140,3 +140,16 @@ export function renderFloorplanSvg(input: FloorplanInput): string {
     `</svg>`
   );
 }
+
+/**
+ * Zpětně vytáhne místnosti z vygenerovaného půdorysu (obdélníky s výplní, bez sloupů),
+ * aby šla dispozice naznačit i v izometrii. Souřadnice zůstávají ve viewBoxu patra.
+ */
+export function extractFloorplanRooms(svg: string): Pick<FloorplanRoom, "x" | "y" | "w" | "h">[] {
+  const rooms: Pick<FloorplanRoom, "x" | "y" | "w" | "h">[] = [];
+  for (const match of svg.matchAll(/<rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)" fill="(rgba[^"]+)"/g)) {
+    const [x, y, w, h] = match.slice(1, 5).map(Number);
+    if (w >= 40 && h >= 40) rooms.push({ x, y, w, h });
+  }
+  return rooms;
+}

@@ -5,6 +5,7 @@ import { Building2, Cpu, Hourglass, MousePointerClick, TriangleAlert } from "luc
 import { KpiTile } from "@/components/common/KpiTile";
 import { LocationBreadcrumb } from "@/components/common/LocationBreadcrumb";
 import { PageHeader } from "@/components/common/PageHeader";
+import { PageTransition } from "@/components/layout/PageTransition";
 import { StatusLegend } from "@/components/common/StatusLegend";
 import { CampusExplorer } from "@/components/map/campus/CampusExplorer";
 import { EQUIPMENT_STATUS } from "@/lib/status";
@@ -23,7 +24,7 @@ export default async function PlantPage({ params }: PageProps<"/plant/[plantId]"
   if (!plant) notFound();
 
   return (
-    <>
+    <PageTransition>
       <PageHeader
         breadcrumb={<LocationBreadcrumb items={[{ label: plant.name }]} />}
         title={plant.name}
@@ -62,6 +63,6 @@ export default async function PlantPage({ params }: PageProps<"/plant/[plantId]"
           />
         }
       />
-    </>
+    </PageTransition>
   );
 }

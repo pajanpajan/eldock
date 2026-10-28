@@ -1,31 +1,34 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronRight } from "lucide-react";
+import { MousePointerClick } from "lucide-react";
 
 import { LocationBreadcrumb } from "@/components/common/LocationBreadcrumb";
 import { PageHeader } from "@/components/common/PageHeader";
-import { StatusBadge } from "@/components/common/StatusBadge";
-import { floorHref, plantHref } from "@/lib/routes";
-import { worstEquipmentStatus } from "@/lib/status";
-import { getBuilding } from "@/server/queries/building";
+import { StatusLegend } from "@/components/common/StatusLegend";
+import { PageTransition } from "@/components/layout/PageTransition";
+import { BuildingExplorer } from "@/components/map/isometric/BuildingExplorer";
+import { BUILDING_TYPE_LABELS, formatCount } from "@/lib/format";
+import { plantHref } from "@/lib/routes";
+import { getBuildingOverview } from "@/server/queries/building";
 
 type Props = PageProps<"/plant/[plantId]/building/[buildingId]">;
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { plantId, buildingId } = await params;
-  const building = await getBuilding(plantId, buildingId);
+  const building = await getBuildingOverview(plantId, buildingId);
   return { title: building?.name ?? "Budova" };
 }
 
-// Dočasný výběr patra – izometrický pohled doplní fáze 4.
+// Level 2 – 45° izometrický pohled na budovu a výběr patra.
 export default async function BuildingPage({ params }: Props) {
   const { plantId, buildingId } = await params;
-  const building = await getBuilding(plantId, buildingId);
+  const building = await getBuildingOverview(plantId, buildingId);
   if (!building) notFound();
 
+  const equipment = building.floors.reduce((sum, floor) => sum + floor.counts.total, 0);
+
   return (
-    <>
+    <PageTransition>
       <PageHeader
         breadcrumb={
           <LocationBreadcrumb
@@ -33,27 +36,28 @@ export default async function BuildingPage({ params }: Props) {
           />
         }
         title={building.name}
-        description={building.description}
+        description={[
+          BUILDING_TYPE_LABELS[building.type],
+          formatCount(building.floors.length, ["podlaží", "podlaží", "podlaží"]),
+          `${equipment} zařízení`,
+          building.description,
+        ]
+          .filter(Boolean)
+          .join(" · ")}
       />
-      <ul className="grid max-w-2xl gap-2" aria-label="Patra budovy">
-        {building.floors.map((floor) => {
-          const status = worstEquipmentStatus(floor.equipment.map((equipment) => equipment.status));
-          return (
-            <li key={floor.id}>
-              <Link
-                href={floorHref(plantId, building.id, floor.id)}
-                className="flex min-h-11 items-center gap-3 rounded-xl border border-border bg-card p-3 outline-none hover:border-primary/70 focus-visible:ring-3 focus-visible:ring-ring/50"
-              >
-                <span className="w-12 font-mono text-sm text-primary">{floor.code}</span>
-                <span className="flex-1 font-medium">{floor.name}</span>
-                <span className="text-xs text-muted-foreground">{floor.equipment.length} zařízení</span>
-                {status === "ACTIVE" ? null : <StatusBadge kind="equipment" status={status} />}
-                <ChevronRight className="size-5 text-muted-foreground" aria-hidden />
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
-    </>
+      <BuildingExplorer
+        floors={building.floors}
+        legend={
+          <StatusLegend
+            extra={
+              <span className="flex items-center gap-2">
+                <MousePointerClick className="size-3.5" aria-hidden />
+                Vyberte patro – otevře se jeho půdorys
+              </span>
+            }
+          />
+        }
+      />
+    </PageTransition>
   );
 }

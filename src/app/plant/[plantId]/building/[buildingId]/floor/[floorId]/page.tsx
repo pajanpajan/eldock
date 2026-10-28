@@ -5,6 +5,7 @@ import { Map as MapIcon } from "lucide-react";
 import { EmptyState } from "@/components/common/EmptyState";
 import { LocationBreadcrumb, type LocationCrumb } from "@/components/common/LocationBreadcrumb";
 import { PageHeader } from "@/components/common/PageHeader";
+import { PageTransition } from "@/components/layout/PageTransition";
 import { buildingHref, plantHref } from "@/lib/routes";
 import { getFloorHeader } from "@/server/queries/building";
 
@@ -31,7 +32,7 @@ export default async function FloorPage({ params }: Props) {
   ];
 
   return (
-    <>
+    <PageTransition>
       <PageHeader
         breadcrumb={<LocationBreadcrumb items={crumbs} />}
         title={floor.name}
@@ -42,6 +43,6 @@ export default async function FloorPage({ params }: Props) {
         title="Půdorys patra připravujeme"
         description="Interaktivní půdorys s piny zařízení se objeví v další etapě vývoje."
       />
-    </>
+    </PageTransition>
   );
 }
