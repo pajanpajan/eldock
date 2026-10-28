@@ -1,0 +1,27 @@
+import { readdirSync, rmSync, statSync } from "node:fs";
+import path from "node:path";
+
+const UPLOAD_DIRS = ["photos", "revisions", "markups", "voice"].map((dir) => path.join("storage", "uploads", dir));
+
+/**
+ * Databázi připravuje už příkaz webServeru (`e2e/prepare-db.ts`), tady si jen zapamatujeme čas
+ * a po testech smažeme soubory, které testy nahrály (seedové složky `seed/` zůstanou).
+ */
+export default function globalSetup() {
+  const startedAt = Date.now();
+  return function globalTeardown() {
+    for (const dir of UPLOAD_DIRS) {
+      let names: string[] = [];
+      try {
+        names = readdirSync(dir);
+      } catch {
+        continue;
+      }
+      for (const name of names) {
+        const file = path.join(dir, name);
+        const stat = statSync(file);
+        if (stat.isFile() && stat.mtimeMs >= startedAt) rmSync(file, { force: true });
+      }
+    }
+  };
+}

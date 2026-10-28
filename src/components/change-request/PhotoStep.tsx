@@ -103,7 +103,7 @@ export function PhotoStep({ photos, dispatch }: { photos: WizardPhoto[]; dispatc
       {photos.length ? (
         <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {photos.map((photo) => (
-            <li key={photo.key} className="overflow-hidden rounded-xl border border-border bg-card">
+            <li key={photo.key} className="overflow-hidden rounded-xl border border-border bg-card" data-uploaded={photo.url ? "true" : "false"}>
               <div className="relative aspect-[4/3] bg-black">
                 {/* eslint-disable-next-line @next/next/no-img-element -- lokální náhled (blob:) nebo /api/files */}
                 <img src={photo.previewUrl} alt={photo.caption || photo.fileName} className="size-full object-cover" />

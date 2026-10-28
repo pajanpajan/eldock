@@ -38,3 +38,5 @@ storage/uploads/**/*
 *.pem
 .vercel
 npm-debug.log*
+/.next-e2e/
+/e2e.db*
