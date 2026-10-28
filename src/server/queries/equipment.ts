@@ -50,3 +50,72 @@ export async function getEquipmentDetail(equipmentId: string) {
 export type EquipmentDetail = NonNullable<Awaited<ReturnType<typeof getEquipmentDetail>>>;
 export type EquipmentRevision = EquipmentDetail["revisions"][number];
 export type OpenChangeRequest = EquipmentDetail["changeRequests"][number];
+
+const revisionForCompare = {
+  select: {
+    id: true,
+    version: true,
+    status: true,
+    title: true,
+    summary: true,
+    schematicUrl: true,
+    schematicFormat: true,
+    createdAt: true,
+    approvedAt: true,
+    author: { select: { name: true } },
+    approver: { select: { name: true } },
+    bomItems: { orderBy: { position: "asc" as const } },
+  },
+} as const;
+
+/** Podklady schválení: otevřený požadavek, revize ke schválení a dosavadní platná revize. */
+export async function getApprovalData(equipmentId: string) {
+  const equipment = await prisma.equipment.findUnique({
+    where: { id: equipmentId },
+    select: {
+      id: true,
+      tag: true,
+      name: true,
+      status: true,
+      floor: {
+        select: {
+          id: true,
+          name: true,
+          building: { select: { id: true, name: true, plant: { select: { id: true, name: true } }, _count: { select: { floors: true } } } },
+        },
+      },
+      changeRequests: {
+        where: { status: { in: [...OPEN_STATUSES] } },
+        take: 1,
+        select: {
+          id: true,
+          number: true,
+          status: true,
+          markupData: true,
+          voiceTranscript: true,
+          note: true,
+          submittedAt: true,
+          baseRevisionId: true,
+          reporter: { select: { name: true } },
+          assignee: { select: { name: true } },
+        },
+      },
+    },
+  });
+  if (!equipment) return null;
+  const change = equipment.changeRequests[0] ?? null;
+  const [pending, active] = await Promise.all([
+    change
+      ? prisma.documentRevision.findFirst({
+          where: { changeRequestId: change.id, status: "PENDING_APPROVAL" },
+          orderBy: [{ major: "desc" }, { minor: "desc" }],
+          ...revisionForCompare,
+        })
+      : null,
+    prisma.documentRevision.findFirst({ where: { equipmentId, status: "ACTIVE" }, ...revisionForCompare }),
+  ]);
+  return { equipment, change, pending, active };
+}
+
+export type ApprovalData = NonNullable<Awaited<ReturnType<typeof getApprovalData>>>;
+export type CompareRevision = NonNullable<ApprovalData["active"]>;

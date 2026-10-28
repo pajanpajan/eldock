@@ -20,11 +20,14 @@ export function SafetyBanner({
   change,
   pendingRevision,
   reviewHref,
+  canReview = true,
   now,
 }: {
   change: OpenChangeRequest;
   pendingRevision: EquipmentRevision | null;
   reviewHref: string;
+  /** Jen údržba schvaluje; CAE vidí banner bez výzvy k akci. */
+  canReview?: boolean;
   now: Date;
 }) {
   if (change.status === "WAITING_APPROVAL") {
@@ -37,7 +40,7 @@ export function SafetyBanner({
         <Hourglass className={cn("size-8 shrink-0", style.text)} aria-hidden />
         <div className="flex-1 space-y-1">
           <h2 className="text-lg font-semibold">
-            Nová revize {pendingRevision?.version ?? ""} čeká na vaše potvrzení
+            Nová revize {pendingRevision?.version ?? ""} čeká na {canReview ? "vaše potvrzení" : "potvrzení údržbou"}
           </h2>
           <p className="text-sm text-muted-foreground">
             {pendingRevision
@@ -46,12 +49,14 @@ export function SafetyBanner({
             {pendingRevision?.summary ? ` „${pendingRevision.summary}“` : ""}
           </p>
         </div>
-        <Button asChild size="lg" className="touch-target gap-2 bg-sky-500 text-sky-950 hover:bg-sky-400">
-          <Link href={reviewHref}>
-            Zkontrolovat novou revizi
-            <ArrowRight className="size-4" />
-          </Link>
-        </Button>
+        {canReview ? (
+          <Button asChild size="lg" className="touch-target gap-2 bg-sky-500 text-sky-950 hover:bg-sky-400">
+            <Link href={reviewHref}>
+              Zkontrolovat novou revizi
+              <ArrowRight className="size-4" />
+            </Link>
+          </Button>
+        ) : null}
       </section>
     );
   }

@@ -123,8 +123,8 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
           <SafetyBanner
             change={openChange}
             pendingRevision={pending}
-            // Porovnání a schválení doplní fáze 10 (/approve); do té doby náhled nové revize.
-            reviewHref={pending ? `${basePath}?rev=${pending.id}&tab=schema` : basePath}
+            reviewHref={`${basePath}/approve`}
+            canReview={role === "MAINTENANCE"}
             now={now}
           />
         ) : null}
