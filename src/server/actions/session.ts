@@ -17,9 +17,10 @@ const COOKIE_OPTIONS = {
 
 /**
  * Přepne pohled. Z aktuální cesty si zapamatuje závod (`/plant/<id>/…`),
- * aby se Údržba po návratu z CAE vrátila tam, kde byla.
+ * aby se Údržba po návratu z CAE vrátila tam, kde byla. `redirectTo` (interní cesta)
+ * nechá uživatele na místě, např. u průvodce „Zadat změnu“.
  */
-export async function setRole(role: string, pathname: string) {
+export async function setRole(role: string, pathname: string, redirectTo?: string) {
   const parsed = roleSchema.parse(role);
   const store = await cookies();
   store.set(ROLE_COOKIE, parsed, COOKIE_OPTIONS);
@@ -31,6 +32,7 @@ export async function setRole(role: string, pathname: string) {
 
   revalidatePath("/", "layout");
 
+  if (redirectTo?.startsWith("/") && !redirectTo.startsWith("//")) redirect(redirectTo);
   if (parsed === "CAE_ENGINEER") redirect("/cae");
   const plantId =
     fromPath ??

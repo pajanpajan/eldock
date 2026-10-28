@@ -1,32 +1,76 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { PencilLine } from "lucide-react";
+import { HardHat } from "lucide-react";
 
 import { EmptyState } from "@/components/common/EmptyState";
-import { Button } from "@/components/ui/button";
-import { equipmentHref } from "@/lib/routes";
+import { LocationBreadcrumb } from "@/components/common/LocationBreadcrumb";
+import { PageHeader } from "@/components/common/PageHeader";
+import { StatusBadge } from "@/components/common/StatusBadge";
+import { ChangeRequestWizard } from "@/components/change-request/ChangeRequestWizard";
+import { SwitchToMaintenance } from "@/components/change-request/SwitchToMaintenance";
+import { equipmentHref, floorHref, plantHref } from "@/lib/routes";
 import { getEquipmentDetail } from "@/server/queries/equipment";
+import { getCurrentRole } from "@/server/session";
 
-export const metadata: Metadata = { title: "Zadat změnu" };
+type Props = PageProps<"/equipment/[id]/change-request">;
 
-// Dočasná stránka – průvodce „Zadat změnu“ (zákres, fotky, poznámka) doplní fáze 8.
-export default async function ChangeRequestPage({ params }: PageProps<"/equipment/[id]/change-request">) {
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
   const equipment = await getEquipmentDetail(id);
+  return { title: equipment ? `Zadat změnu – ${equipment.tag}` : "Zadat změnu" };
+}
+
+// Průvodce „Zadat změnu“ (jen pohled Údržba).
+export default async function ChangeRequestPage({ params }: Props) {
+  const { id } = await params;
+  const [equipment, role] = await Promise.all([getEquipmentDetail(id), getCurrentRole()]);
   if (!equipment) notFound();
 
-  return (
-    <EmptyState
-      className="my-auto"
-      icon={PencilLine}
-      title={`Zadat změnu – ${equipment.tag}`}
-      description="Průvodce zadáním změny (zákres prstem, fotky, hlasová poznámka) se objeví v další etapě vývoje."
-      action={
-        <Button asChild className="touch-target">
-          <Link href={equipmentHref(equipment.id)}>Zpět na detail zařízení</Link>
-        </Button>
+  const { floor } = equipment;
+  const plantId = floor.building.plant.id;
+  const openChange = equipment.changeRequests[0] ?? null;
+  const active = equipment.revisions.find((revision) => revision.status === "ACTIVE") ?? null;
+
+  const header = (
+    <PageHeader
+      breadcrumb={
+        <LocationBreadcrumb
+          items={[
+            { label: floor.building.plant.name, href: plantHref(plantId) },
+            { label: floor.name, href: floorHref(plantId, floor.building.id, floor.id) },
+            { label: equipment.tag, href: equipmentHref(equipment.id) },
+            { label: openChange ? "Doplnit ke změně" : "Zadat změnu" },
+          ]}
+        />
       }
+      title={openChange ? `Doplnit k otevřené změně ${openChange.number}` : `Zadat změnu – ${equipment.tag}`}
+      description={equipment.name}
+      badges={<StatusBadge kind="equipment" status={equipment.status} />}
     />
+  );
+
+  if (role !== "MAINTENANCE") {
+    return (
+      <>
+        {header}
+        <EmptyState
+          icon={HardHat}
+          title="Změny zadává údržba v hale"
+          description="Průvodce je určený pro pohled Údržba. Po přepnutí zůstanete na této stránce."
+          action={<SwitchToMaintenance />}
+        />
+      </>
+    );
+  }
+
+  return (
+    <>
+      {header}
+      <ChangeRequestWizard
+        equipment={{ id: equipment.id, tag: equipment.tag, name: equipment.name }}
+        schematic={active ? { url: active.schematicUrl, version: active.version, sheetCount: active.sheetCount } : null}
+        openChange={openChange ? { id: openChange.id, number: openChange.number } : null}
+      />
+    </>
   );
 }
