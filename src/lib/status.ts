@@ -1,6 +1,9 @@
 import {
   Archive,
   Ban,
+  CalendarCheck,
+  CalendarClock,
+  CalendarRange,
   CircleCheck,
   CircleDashed,
   CircleSlash,
@@ -34,6 +37,7 @@ import type {
 } from "@/generated/prisma/enums";
 import { formatCount, formatDateShort, plural } from "@/lib/format";
 import { INSPECTION_WARNING_DAYS, type InspectionState } from "@/lib/inspection";
+import type { PlanBucket } from "@/lib/inspection-planner";
 
 // Jediný zdroj pravdy pro barvy a popisky stavů. Třídy Tailwindu jsou zapsané
 // doslova, aby je kompilátor našel; `hex` slouží SVG vrstvám (piny, mapa).
@@ -287,4 +291,12 @@ export const INSPECTION_RESULT: Record<InspectionResult, StatusStyle> = {
     icon: TriangleAlert,
   },
   INCAPABLE: { ...RED, label: "Neschopno provozu", description: "Zařízení není schopné bezpečného provozu.", icon: OctagonAlert },
+};
+
+/** Měsíční horizont plánovače revizí. */
+export const PLAN_BUCKET: Record<PlanBucket, StatusStyle> = {
+  OVERDUE: { ...RED, label: "Po termínu (ihned)", description: "Propadlé, vyřazené nebo bez revize – revidovat ihned.", icon: ShieldX },
+  THIS_MONTH: { ...ORANGE, label: "Tento měsíc", description: "Platnost revize končí do konce kalendářního měsíce.", icon: CalendarClock },
+  NEXT_MONTH: { ...AMBER, label: "Příští měsíc", description: "Platnost revize končí příští kalendářní měsíc.", icon: CalendarRange },
+  LATER: { ...EMERALD, label: "Další 3–6 měsíců", description: "Platnost končí v horizontu půl roku.", icon: CalendarCheck },
 };

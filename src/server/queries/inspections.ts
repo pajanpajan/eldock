@@ -1,6 +1,7 @@
 import "server-only";
 
 import { DEADLINE_TYPES, compareByUrgency, needsAttention, pragueToday, summarizeInspections, type InspectionSummary } from "@/lib/inspection";
+import type { PlannerItem } from "@/lib/inspection-planner";
 import { PORTABLE_TYPES } from "@/lib/inspection-rules";
 import { prisma } from "@/lib/prisma";
 
@@ -137,3 +138,49 @@ export async function getRapidQueue(plantId?: string, now: Date = new Date()) {
 }
 
 export type RapidItem = Awaited<ReturnType<typeof getRapidQueue>>[number];
+
+/** Plánovač revizí (`/inspections/planner`): všechna zařízení s místem pro řazení pochůzky. */
+export async function getPlannerItems(plantId?: string, now: Date = new Date()): Promise<PlannerItem[]> {
+  const equipment = await prisma.equipment.findMany({
+    where: plantId ? { floor: { building: { plantId } } } : undefined,
+    orderBy: { tag: "asc" },
+    select: {
+      id: true,
+      tag: true,
+      name: true,
+      type: true,
+      assignedZone: true,
+      floor: {
+        select: {
+          code: true,
+          level: true,
+          name: true,
+          building: { select: { name: true, sortOrder: true, plant: { select: { code: true } } } },
+        },
+      },
+      inspections: {
+        where: { type: { in: [...DEADLINE_TYPES] } },
+        select: { type: true, inspectionDate: true, validUntil: true, result: true },
+      },
+    },
+  });
+  return equipment.map(({ floor, inspections, ...item }) => {
+    const summary = summarizeInspections(inspections, now);
+    return {
+      id: item.id,
+      tag: item.tag,
+      name: item.name,
+      type: item.type,
+      // Bez filtru závodu (CAE) se budovy řadí i podle závodu.
+      buildingName: plantId ? floor.building.name : `${floor.building.plant.code} · ${floor.building.name}`,
+      buildingOrder: floor.building.sortOrder,
+      floorCode: floor.code,
+      floorLevel: floor.level,
+      floorName: floor.name,
+      zone: item.assignedZone,
+      state: summary.state,
+      daysLeft: summary.daysLeft,
+      validUntil: summary.validUntil,
+    };
+  });
+}

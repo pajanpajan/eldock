@@ -14,8 +14,11 @@ test("vrstvy půdorysu skrývají spotřebiče a přepínač ⚠️ ukáže jen 
   await expect(pin(page, "R-CNC-04")).toBeVisible();
   await expect(pin(page, "NR-0112")).toHaveCount(0);
 
-  await page.getByRole("checkbox", { name: /Ruční nářadí a svářečky/ }).check();
-  await expect(pin(page, "NR-0112")).toBeVisible();
+  // Zaškrtnutí až po hydrataci (studený dev server stránku při první kompilaci přenačte).
+  await expect(async () => {
+    await page.getByRole("checkbox", { name: /Ruční nářadí a svářečky/ }).check();
+    await expect(pin(page, "NR-0112")).toBeVisible({ timeout: 1_000 });
+  }).toPass({ timeout: 30_000 });
   await expect(pin(page, "SV-0004")).toBeVisible();
 
   await page.getByRole("button", { name: /Zobrazit vše s propadlou \/ končící revizí/ }).click();

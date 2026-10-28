@@ -167,3 +167,54 @@
     print-color-adjust: exact;
   }
 }
+
+/* Pochůzkový list plánovače revizí (portál do <body>): na obrazovce skrytý, v tisku jediný obsah. */
+.print-route {
+  display: none;
+}
+@media print {
+  .print-route {
+    display: block !important;
+    color: #000;
+    background: #fff;
+    font-size: 10pt;
+    print-color-adjust: exact;
+  }
+  .print-route,
+  .print-route * {
+    visibility: visible;
+  }
+  .print-route h1 {
+    font-size: 15pt;
+    font-weight: 700;
+  }
+  .print-route h2 {
+    margin-top: 10pt;
+    font-size: 12pt;
+    font-weight: 700;
+    border-bottom: 1.5pt solid #000;
+  }
+  .print-route table {
+    width: 100%;
+    margin-top: 6pt;
+    border-collapse: collapse;
+    page-break-inside: avoid;
+  }
+  .print-route caption {
+    text-align: left;
+    font-weight: 600;
+    padding: 2pt 0;
+  }
+  .print-route th,
+  .print-route td {
+    border: 0.75pt solid #555;
+    padding: 3pt 4pt;
+    text-align: left;
+  }
+  .print-route td:nth-child(n + 6) {
+    min-width: 18mm;
+  }
+  .print-route .route-sign {
+    margin-top: 14pt;
+  }
+}

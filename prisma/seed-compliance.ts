@@ -2,7 +2,7 @@
 // revizí (ČSN 33 1500). Čistá data bez I/O; data revizí jsou relativní k okamžiku seedu,
 // aby stavy 🟢 / 🟡 / 🔴 vycházely vždy stejně.
 import type { ComplianceCategory, InspectionResult, InspectionType } from "../src/generated/prisma/enums";
-import { addMonths } from "../src/lib/inspection";
+import { addMonths, pragueToday } from "../src/lib/inspection";
 import { inspectionRuleFor, isPortable, measurementLimits } from "../src/lib/inspection-rules";
 
 import { day, daysAgo, type EquipmentSeed } from "./seed-data";
@@ -92,6 +92,16 @@ export interface InspectionSeed {
 
 export const MEASURING_INSTRUMENT = "Metrel MI 3309 BT";
 
+/** Dny do konce aktuálního kalendářního měsíce (Europe/Prague) – plánovač potřebuje kusy „tento měsíc“. */
+function daysToMonthEnd(): number {
+  const [year, month, dayOfMonth] = pragueToday().split("-").map(Number);
+  return Math.round((Date.UTC(year, month, 0) - Date.UTC(year, month - 1, dayOfMonth)) / (24 * 3600 * 1000));
+}
+/** Konec platnosti uprostřed zbytku měsíce (poslední den měsíce = dnes). */
+const thisMonth = () => daysAgo(-Math.floor(daysToMonthEnd() / 2));
+/** 5. den příštího měsíce – do 45 dnů po konci měsíce (tip „přiberte při jedné cestě“). */
+const nextMonth = () => daysAgo(-(daysToMonthEnd() + 5));
+
 /** Konec platnosti poslední revize pro řízené případy z plánu (🟢 RM1, 🟡 R-CNC-04, 🔴 R-ML-01). */
 const SPECIAL: Record<string, { validUntil: () => Date; result?: InspectionResult; defects?: string }> = {
   RM1: { validUntil: () => addMonths(daysAgo(0), 14) },
@@ -103,6 +113,13 @@ const SPECIAL: Record<string, { validUntil: () => Date; result?: InspectionResul
   },
   // Spotřebiče a nářadí (fáze 14)
   "SP-0201": { validUntil: () => daysAgo(5) },
+  // Plánovač (fáze 15): kuchyňka – propadlé, tento měsíc a příští měsíc ve stejné místnosti
+  "SP-0204": { validUntil: thisMonth },
+  "SP-0203": { validUntil: nextMonth },
+  // Dílna údržby: svářečka končí krátce po okně „do 30 dnů“ (tip v plánovači), ale je ještě 🟢
+  "SV-0004": { validUntil: () => daysAgo(-38) },
+  "SP-0322": { validUntil: () => daysAgo(-100) },
+  "RP-ADM1": { validUntil: thisMonth },
   "NR-0112": { validUntil: () => daysAgo(-9) },
   "PP-0031": { validUntil: () => daysAgo(21), result: "CAPABLE_WITH_DEFECTS", defects: "Poškozená izolace kabelu u vidlice – nutná výměna přívodu" },
 };

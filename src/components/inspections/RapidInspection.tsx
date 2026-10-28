@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState, useTransition, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Ban, CircleCheck, Loader2, MapPin, Pencil, QrCode, ScanLine, Search, UserRound } from "lucide-react";
+import { Ban, CircleCheck, ListChecks, Loader2, MapPin, Pencil, QrCode, ScanLine, Search, UserRound } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -24,7 +24,7 @@ import { EQUIPMENT_TYPE_ICONS } from "@/lib/equipment-icons";
 import { EQUIPMENT_TYPE_LABELS, formatCount, formatDateShort } from "@/lib/format";
 import { compareByUrgency } from "@/lib/inspection";
 import { evaluateMeasurements, inspectionRuleFor, measurementLimits } from "@/lib/inspection-rules";
-import { equipmentHref } from "@/lib/routes";
+import { equipmentHref, rapidInspectionHref } from "@/lib/routes";
 import { INSPECTION_STATE } from "@/lib/status";
 import { cn } from "@/lib/utils";
 import { recordQuickInspectionAction } from "@/server/actions/inspection";
@@ -52,7 +52,7 @@ function sortQueue(items: RapidItem[]) {
 }
 
 /** Mobilní režim „Rychlá revize pípáním“ pro revizního technika v terénu. */
-export function RapidInspection({ items }: { items: RapidItem[] }) {
+export function RapidInspection({ items, planIds = [] }: { items: RapidItem[]; planIds?: string[] }) {
   const router = useRouter();
   const [profile, updateProfile] = useInspectorProfile();
   const [editingProfile, setEditingProfile] = useState(false);
@@ -63,13 +63,16 @@ export function RapidInspection({ items }: { items: RapidItem[] }) {
   const [code, setCode] = useState("");
   const scanInput = useRef<HTMLInputElement>(null);
 
-  const queue = sortQueue(items.filter((item) => item.zone === zone));
+  // Dávka z plánovače drží pořadí pochůzky; jinak fronta zvolené místnosti.
+  const planned = planIds.map((id) => items.find((item) => item.id === id)).filter((item): item is RapidItem => !!item);
+  const fromPlan = planned.length > 0;
+  const queue = fromPlan ? planned : sortQueue(items.filter((item) => item.zone === zone));
   const pendingQueue = queue.filter((item) => !item.inspectedToday);
   const current = items.find((item) => item.id === selectedId) ?? pendingQueue[0] ?? null;
   const done = queue.length - pendingQueue.length;
 
   function selectItem(item: RapidItem) {
-    setZone(item.zone);
+    if (!fromPlan || !planned.includes(item)) setZone(item.zone);
     setSelectedId(item.id);
   }
 
@@ -158,6 +161,17 @@ export function RapidInspection({ items }: { items: RapidItem[] }) {
       <div className="grid gap-4 lg:grid-cols-[22rem_minmax(0,1fr)]">
         {/* Fronta místnosti */}
         <section aria-labelledby="rapid-queue" className="space-y-2 lg:order-none">
+          {fromPlan ? (
+            <div className="flex items-center justify-between gap-2 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-sm" data-testid="plan-batch">
+              <span className="flex items-center gap-1.5 font-medium">
+                <ListChecks className="size-4 text-primary" aria-hidden />
+                Dávka z plánovače · {planned.length} ks
+              </span>
+              <Link href={rapidInspectionHref} className="text-primary underline-offset-4 hover:underline">
+                Zrušit dávku
+              </Link>
+            </div>
+          ) : (
           <div className="space-y-2">
             <Label htmlFor="rapid-zone" className="flex items-center gap-1.5">
               <MapPin className="size-4 text-primary" aria-hidden />
@@ -179,6 +193,7 @@ export function RapidInspection({ items }: { items: RapidItem[] }) {
               ))}
             </select>
           </div>
+          )}
           <h2 id="rapid-queue" className="flex items-center justify-between pt-1 text-sm font-semibold">
             Fronta k revizi
             <span className="font-mono text-xs text-muted-foreground">
@@ -227,8 +242,12 @@ export function RapidInspection({ items }: { items: RapidItem[] }) {
           ) : (
             <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-emerald-500/40 bg-emerald-500/5 p-10 text-center">
               <CircleCheck className="size-10 text-emerald-400" aria-hidden />
-              <p className="text-lg font-semibold">Místnost je hotová</p>
-              <p className="text-sm text-muted-foreground">Všechny kusy v místnosti „{zone}“ jsou dnes zrevidované. Vyberte další místnost nebo načtěte kód.</p>
+              <p className="text-lg font-semibold">{fromPlan ? "Dávka je hotová" : "Místnost je hotová"}</p>
+              <p className="text-sm text-muted-foreground">
+                {fromPlan
+                  ? "Všechny kusy z plánovače jsou dnes zrevidované."
+                  : `Všechny kusy v místnosti „${zone}“ jsou dnes zrevidované. Vyberte další místnost nebo načtěte kód.`}
+              </p>
               <Button variant="outline" className="touch-target gap-2" onClick={() => scanInput.current?.focus()}>
                 <ScanLine className="size-4" aria-hidden />
                 Načíst další kód

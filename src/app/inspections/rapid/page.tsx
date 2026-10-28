@@ -14,8 +14,10 @@ import { getCurrentRole, getRememberedPlantId } from "@/server/session";
 export const metadata: Metadata = { title: "Rychlá revize" };
 
 // Mobilní režim pro revizního technika: fronta spotřebičů v místnosti a zápis jedním klikem.
-export default async function RapidInspectionPage() {
-  const [role, plants, rememberedId] = await Promise.all([getCurrentRole(), getPlants(), getRememberedPlantId()]);
+export default async function RapidInspectionPage({ searchParams }: PageProps<"/inspections/rapid">) {
+  const [role, plants, rememberedId, params] = await Promise.all([getCurrentRole(), getPlants(), getRememberedPlantId(), searchParams]);
+  // Dávka z plánovače: `?ids=a,b,c` v pořadí pochůzky.
+  const planIds = typeof params.ids === "string" ? params.ids.split(",").filter(Boolean).slice(0, 500) : [];
   const plant = role === "MAINTENANCE" ? (plants.find((entry) => entry.id === rememberedId) ?? plants[0]) : undefined;
   const items = await getRapidQueue(plant?.id);
 
@@ -34,7 +36,7 @@ export default async function RapidInspectionPage() {
         }
       />
       {items.length ? (
-        <RapidInspection items={items} />
+        <RapidInspection items={items} planIds={planIds} />
       ) : (
         <EmptyState icon={PackageOpen} title="V závodě nejsou evidované spotřebiče ani nářadí" description="Rychlá revize pracuje s přenosnými spotřebiči, nářadím a svářečkami." />
       )}

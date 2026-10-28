@@ -23,3 +23,5 @@ export const caeRevisionHref = (changeRequestId: string) => `${caeTicketHref(cha
 export const inspectionsHref = "/inspections";
 
 export const rapidInspectionHref = "/inspections/rapid";
+
+export const plannerHref = "/inspections/planner";

@@ -1,9 +1,9 @@
 import Link from "next/link";
-import { CalendarCheck, ScanLine } from "lucide-react";
+import { CalendarCheck, CalendarRange, ScanLine } from "lucide-react";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { initials } from "@/lib/format";
-import { inspectionsHref, rapidInspectionHref } from "@/lib/routes";
+import { inspectionsHref, plannerHref, rapidInspectionHref } from "@/lib/routes";
 import { getPlants } from "@/server/queries/plant";
 import { getCurrentRole, getCurrentUser, getRememberedPlantId } from "@/server/session";
 
@@ -41,6 +41,14 @@ export async function AppHeader() {
             <CalendarCheck className="size-4" aria-hidden />
             <span className="hidden lg:inline">Revize</span>
             <span className="sr-only lg:hidden">Přehled revizí</span>
+          </Link>
+          <Link
+            href={plannerHref}
+            className="touch-target flex items-center gap-2 rounded-md px-2.5 text-sm text-muted-foreground transition-colors outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+          >
+            <CalendarRange className="size-4" aria-hidden />
+            <span className="hidden lg:inline">Plánovač</span>
+            <span className="sr-only lg:hidden">Plánovač revizí</span>
           </Link>
           <Link
             href={rapidInspectionHref}
