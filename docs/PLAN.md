@@ -17,7 +17,7 @@ Claude Code po každé fázi: odškrtne úkoly, nastaví stav v tabulce níže, 
 | # | Fáze | Stav |
 |---|------|------|
 | 0 | Scaffolding a nástroje | ✅ |
-| 1 | Databáze, generátory grafiky a seed | ⬜ |
+| 1 | Databáze, generátory grafiky a seed | ✅ |
 | 2 | App shell, design systém, přepínač rolí | ⬜ |
 | 3 | Level 1 – Areál závodu | ⬜ |
 | 4 | Level 2 – Izometrická budova | ⬜ |
@@ -170,14 +170,14 @@ Invarianty (hlídá služba a testují testy):
 ### Fáze 1 – Databáze, generátory grafiky a seed
 **Cíl:** migrovaná databáze s realistickými českými daty a vygenerovanými SVG podklady.
 
-- [ ] `npx prisma migrate dev --name init` a `npx prisma generate`.
-- [ ] Generátory grafiky jako čisté TS moduly (použije je seed i aplikace) v `src/lib/mock-graphics/`:
+- [x] `npx prisma migrate dev --name init` a `npx prisma generate`.
+- [x] Generátory grafiky jako čisté TS moduly (použije je seed i aplikace) v `src/lib/mock-graphics/`:
   - `schematic.ts` – `renderSchematicSvg({ equipment, revision, sheet, variant })`: rámeček A3, rohové razítko, přívod L1–L3/N/PE, Q1, F1–Fn, K1–K4 s cívkami a kontakty, T1, A1 PLC, svorkovnice X1/X2, popisky vodičů; prvky mají `data-designation`; `variant` umožní vyznačit změnu (např. jiný typ K4, přepojení A2).
   - `floorplan.ts` – `renderFloorplanSvg({ floor, rooms })`: obvodové zdi, rastr sloupů s osami (A–H / 1–12), vrata, schodiště, místnosti s popisky, technologické zóny; tmavý „blueprint“ styl.
   - `photo.ts` – stylizované SVG „fotky“ (zapojení v rozváděči, výrobní štítek přístroje).
-  - `cabinet.ts` (volitelně) – pomocné funkce pro rozložení modulů skříně podle BOM (využije fáze 6).
-- [ ] `prisma/seed-data.ts` (data podle sekce C) a `prisma/seed.ts` (vlastní `PrismaClient` s adaptérem – neimportovat `src/lib/prisma.ts` kvůli `server-only`; zápis souborů do `storage/uploads/*/seed/`; idempotence; souhrn počtů na konci).
-- [ ] Zákres v seedu = JSON tahů v normalizovaných souřadnicích 0–1 (formát viz fáze 8) kolem K4.
+  - `cabinet.ts` (volitelně, **odloženo do fáze 6**) – pomocné funkce pro rozložení modulů skříně podle BOM (využije fáze 6).
+- [x] `prisma/seed-data.ts` (data podle sekce C) a `prisma/seed.ts` (vlastní `PrismaClient` s adaptérem – neimportovat `src/lib/prisma.ts` kvůli `server-only`; zápis souborů do `storage/uploads/*/seed/`; idempotence; souhrn počtů na konci).
+- [x] Zákres v seedu = JSON tahů v normalizovaných souřadnicích 0–1 (formát viz fáze 8) kolem K4.
 
 **Hotovo když:** `npm run db:reset` doběhne a vypíše cca 2 závody, 6 budov, 9 pater, 23 zařízení, 30+ revizí, 2 otevřené a 5+ uzavřených CR · SVG schémata a fotky existují ve `storage/uploads/**/seed/` a jdou otevřít · `npm run typecheck` OK.
 **Commit:** `feat(faze1): migrace, generátory SVG a seed demo dat`
@@ -337,3 +337,4 @@ Autentizace a více klientů (multi-tenant) · skutečný serverový přepis hla
 |---|---|---|
 | – | 2026-10-25 | Plán vytvořen. Schéma Prisma 7 validováno, kostra složek připravena. |
 | 0 | 2026-10-28 | Next 16.4.3, Prisma 7.10.1, shadcn 4.23.0 (base `radix`, preset `nova`, base color neutral). Odchylky: (1) scaffold už negeneruje `postcss.config.mjs` – Tailwind 4 jde přes loader `@tailwindcss/turbopack` v `next.config.ts`. (2) `@types/node` povýšen z `^20` na `^22` (peer dependency `vitest@5`). (3) npm 11 blokuje install skripty – schváleny v `package.json` → `allowScripts` (připnuté verze): better-sqlite3, prisma, @prisma/engines, esbuild, unrs-resolver; po upgradu těchto balíčků znovu `npm install-scripts approve <balíček>`. (4) shadcn 4 používá místo `clsx`+`tailwind-merge` balíček `cn` (z repozitáře shadcn-ui) a přidal `shadcn`, `radix-ui`, `tw-animate-css`, `next-themes`. (5) `typecheck` = `next typegen && tsc --noEmit` (globální typy `LayoutProps`/`PageProps` jinak na čistém checkoutu chybí). (6) Layout: font proměnná `--font-sans` (jak čeká shadcn `globals.css`), subset `latin-ext` kvůli češtině, `lang="cs"`, třída `dark`. (7) Lokální git identita repozitáře nastavena (chyběla). `"type": "module"` ověřen: dev, build i Prisma klient přes `tsx` běží. Na fázi 2: obalit app `TooltipProvider`; `ui/sonner.tsx` volá `useTheme` z next-themes – buď `ThemeProvider`, nebo pevně `theme="dark"`; `next/font/google` stahuje Geist při buildu (build potřebuje internet, za běhu se servíruje lokálně) – případně přejít na balíček `geist`. |
+| 1 | 2026-10-28 | Migrace `init`, generátory v `src/lib/mock-graphics/` (`schematic`, `floorplan`, `photo`, + `parts` = sdílený katalog dílů pro schéma i BOM a `svg` = pomocné funkce), `prisma/seed-data.ts` + `prisma/seed.ts`. Seed: 2 závody, 6 budov, 9 pater, 23 zařízení, 31 revizí, 465 položek BOM, 2 otevřené + 5 uzavřených CR, 29 událostí; idempotentní, invarianty ze sekce B ověřeny skriptem. Odchylky: (1) **`npm run db:reset` jsem nespustil** – Prisma `migrate reset` odmítá běh z Claude Code bez výslovného souhlasu uživatele; ověřeno `prisma migrate dev` + `prisma db seed` (reset spusťte ručně: `npm run db:reset`). (2) `cabinet.ts` odloženo do fáze 6 (volitelné). (3) Revize RM1 v1.2 je datovaná 2025-03 (plán říká 2024, ale vzniká z ZM-2025-0033). (4) Deterministická ID pro uživatele, závody, budovy, patra a zařízení (`eq-rm1`, `eq-r-cnc-04`, …) kvůli stabilním QR URL a E2E; revize a CR mají cuid. (5) `mapPolygon`, `labelX/Y` a `pinX/Y` jsou v procentech (jak říká schéma); půdorysy mají viewBox 1200×800, areál 1000×700. (6) Schémata a půdorysy mají jednotný vzor (silový + řídicí obvod, K1–K4, T1, A1…) pro všechny typy zařízení; list je vždy 1/1. (7) Seedové zákresy jsou kroužek kolem prvku `data-designation` (helper `schematicElementCenter`); i uzavřené CR mají zákres. Známé nedostatky: revizní obláček u jističů F2–F5 překrývá jejich popisek; `storage/uploads/{markups,voice}/seed` jsou prázdné. |
