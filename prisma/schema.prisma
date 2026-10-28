@@ -1,0 +1,406 @@
+// =============================================================================
+//  Digitry – Industrial Electrical Documentation & Maintenance Twin (MVP)
+//  Prisma schema · SQLite (dev) → PostgreSQL (prod)
+//
+//  Cílová verze: Prisma ORM 7.x
+//  - Connection string (DATABASE_URL) je v /prisma.config.ts, ne ve schématu.
+//  - Runtime klient se připojuje přes driver adapter
+//    (@prisma/adapter-better-sqlite3 → později @prisma/adapter-pg).
+//  - Vygenerovaný klient: src/generated/prisma (import z "@/generated/prisma/client").
+//  - Strukturovaná data (redline tahy, SVG polygony) jsou uložena jako String
+//    se serializovaným JSON/SVG obsahem, aby schéma fungovalo shodně
+//    na SQLite i PostgreSQL. Při migraci na PostgreSQL lze přepnout na Json.
+//  - Souřadnice pinů a map jsou v procentech (0–100) vůči viewBoxu podkladu,
+//    takže nezávisí na rozlišení obrázku/SVG.
+// =============================================================================
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// -----------------------------------------------------------------------------
+//  ENUMY
+// -----------------------------------------------------------------------------
+
+/// Role uživatele – odpovídá přepínači pohledu v navbaru.
+enum UserRole {
+  MAINTENANCE   // Pohled: Údržba v hale
+  CAE_ENGINEER  // Pohled: CAE Projektant
+  ADMIN
+}
+
+/// Stav dokumentace zařízení = barva pinu na půdorysu.
+enum EquipmentStatus {
+  ACTIVE            // 🟢 dokumentace 100% aktuální
+  PENDING_UPDATE    // 🟠 nahlášena změna, CAE na ní pracuje
+  WAITING_APPROVAL  // 🔵 CAE nahrál novou revizi, čeká na potvrzení údržbou
+}
+
+enum EquipmentType {
+  SWITCHBOARD      // Rozváděč
+  CNC_MACHINE      // CNC stroj
+  PRODUCTION_LINE  // Výrobní linka
+  ROBOT_CELL       // Robotické pracoviště
+  HVAC_UNIT        // Vzduchotechnika
+  COMPRESSOR       // Kompresor
+  TRANSFORMER      // Transformátor
+  OTHER
+}
+
+enum BuildingType {
+  PRODUCTION  // Výrobní hala
+  ASSEMBLY    // Montáž
+  ENERGY      // Energetika
+  WAREHOUSE   // Sklad
+  OFFICE      // Administrativa
+  OTHER
+}
+
+/// Životní cyklus revize dokumentace.
+enum RevisionStatus {
+  PENDING_APPROVAL  // nahraná CAE, čeká na potvrzení údržbou
+  ACTIVE            // aktuálně platná (max. 1 na zařízení – hlídá aplikační logika)
+  ARCHIVED          // nahrazená novější revizí → Historie změn
+  REJECTED          // vrácena k přepracování
+}
+
+enum SchematicFormat {
+  PDF
+  SVG
+  IMAGE
+}
+
+/// Stavový automat požadavku na změnu (Zadat změnu).
+enum ChangeRequestStatus {
+  SUBMITTED         // technik odeslal, ticket v CAE back-office
+  IN_PROGRESS       // CAE projektant převzal / přepracovává
+  WAITING_APPROVAL  // nová revize nahrána, čeká na údržbu
+  APPROVED          // potvrzeno a propsáno do systému (uzavřeno)
+  CANCELLED         // stornováno
+}
+
+enum ChangeRequestPriority {
+  LOW
+  NORMAL
+  HIGH
+  CRITICAL  // bezpečnostně relevantní změna
+}
+
+enum AttachmentType {
+  PHOTO        // fotodokumentace z haly
+  VOICE_NOTE   // audio záznam (simulovaný)
+  MARKUP_IMAGE // export redline vrstvy jako PNG
+  OTHER
+}
+
+/// Auditní stopa změn ticketu (timeline v detailu ticketu).
+enum ChangeRequestEventType {
+  SUBMITTED
+  ASSIGNED
+  REVISION_UPLOADED
+  APPROVED
+  REJECTED
+  COMMENT
+  CANCELLED
+}
+
+// -----------------------------------------------------------------------------
+//  UŽIVATELÉ
+// -----------------------------------------------------------------------------
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  role      UserRole
+  company   String?  // např. "Závod Jablonec – Údržba" / "Digitry CAE"
+  phone     String?
+  avatarUrl String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  authoredRevisions      DocumentRevision[]   @relation("RevisionAuthor")
+  approvedRevisions      DocumentRevision[]   @relation("RevisionApprover")
+  reportedChangeRequests ChangeRequest[]      @relation("ChangeRequestReporter")
+  assignedChangeRequests ChangeRequest[]      @relation("ChangeRequestAssignee")
+  changeRequestEvents    ChangeRequestEvent[]
+  uploadedAttachments    Attachment[]
+
+  @@index([role])
+}
+
+// -----------------------------------------------------------------------------
+//  LOKALITY – 3úrovňová mapa (Areál → Budova/Patro → Půdorys)
+// -----------------------------------------------------------------------------
+
+/// Level 1 – Závod / areál klienta.
+model Plant {
+  id           String   @id @default(cuid())
+  code         String   @unique // např. "JBC"
+  name         String           // "Závod Jablonec"
+  customerName String           // název klientské firmy
+  address      String?
+  city         String?
+  country      String   @default("CZ")
+
+  // Podklad mapy areálu (SVG generované v aplikaci nebo nahraný obrázek)
+  campusMapUrl   String?
+  campusViewBoxW Int     @default(1000)
+  campusViewBoxH Int     @default(700)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  buildings Building[]
+}
+
+/// Budova v areálu – klikací oblast v Campus View.
+model Building {
+  id        String       @id @default(cuid())
+  plantId   String
+  code      String       // "A", "B", "E"
+  name      String       // "Hala A - Lisovna"
+  shortName String?      // "Lisovna"
+  type      BuildingType @default(PRODUCTION)
+  description String?
+
+  // Geometrie v Campus View (procenta vůči viewBoxu areálu)
+  mapPolygon String  // SVG points "x1,y1 x2,y2 ..." – obrys budovy
+  labelX     Float   // pozice štítku/badge
+  labelY     Float
+  color      String? // volitelný akcent (#hex)
+
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  plant  Plant   @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  floors Floor[]
+
+  @@unique([plantId, code])
+  @@index([plantId])
+}
+
+/// Level 2/3 – Patro budovy (izometrický výběr + 2D půdorys).
+model Floor {
+  id         String  @id @default(cuid())
+  buildingId String
+  level      Int     // -1 = 1. PP, 0 = 1. NP, 1 = 2. NP …
+  code       String  // "1PP", "1NP", "2NP"
+  name       String  // "1. PP - Rozvodny"
+  description String?
+
+  // Level 3 – podklad půdorysu (SVG generované v aplikaci nebo nahraný soubor)
+  floorplanUrl String?
+  floorplanSvg String? // inline SVG půdorysu (mock grafika bez externích assetů)
+  viewBoxW     Int     @default(1200)
+  viewBoxH     Int     @default(800)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  building  Building    @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  equipment Equipment[]
+
+  @@unique([buildingId, level])
+  @@unique([buildingId, code])
+  @@index([buildingId])
+}
+
+// -----------------------------------------------------------------------------
+//  ZAŘÍZENÍ (ASSET)
+// -----------------------------------------------------------------------------
+
+/// Elektrické zařízení – pin na půdorysu, cíl QR kódu /equipment/[id].
+model Equipment {
+  id          String          @id @default(cuid())
+  floorId     String
+  tag         String          // označení dle dokumentace: "RM1", "R-CNC-04"
+  name        String          // "RM1 - Hlavní rozváděč"
+  type        EquipmentType
+  status      EquipmentStatus @default(ACTIVE)
+  description String?
+
+  manufacturer    String?
+  model           String?
+  serialNumber    String?
+  yearInstalled   Int?
+  ratedVoltage    String? // "400 V AC / 50 Hz"
+  ratedCurrent    String? // "1600 A"
+  ipRating        String? // "IP54"
+
+  // Pozice pinu na půdorysu patra (procenta 0–100)
+  pinX Float
+  pinY Float
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  floor          Floor              @relation(fields: [floorId], references: [id], onDelete: Cascade)
+  revisions      DocumentRevision[]
+  changeRequests ChangeRequest[]
+
+  @@unique([floorId, tag])
+  @@index([floorId])
+  @@index([status])
+}
+
+// -----------------------------------------------------------------------------
+//  DOKUMENTACE – revize (aktivní + Historie změn)
+// -----------------------------------------------------------------------------
+
+/// Jedna revize elektrodokumentace zařízení (v1.0, v1.1, v2.0 …).
+model DocumentRevision {
+  id          String         @id @default(cuid())
+  equipmentId String
+  version     String         // zobrazované "v1.2"
+  major       Int            // 1
+  minor       Int            // 2
+  status      RevisionStatus @default(PENDING_APPROVAL)
+
+  title   String  // "Elektrické schéma rozváděče RM1"
+  summary String? // technické shrnutí změn od CAE projektanta
+
+  // Soubory
+  schematicUrl    String          // PDF/SVG/obrázek schématu
+  schematicFormat SchematicFormat @default(PDF)
+  sheetCount      Int             @default(1)
+  thumbnailUrl    String?
+  bomFileUrl      String?         // export kusovníku (XLSX/CSV)
+  layoutUrl       String?         // dispozice rozváděče
+  model3dUrl      String?         // 3D náhled skříně (GLB)
+
+  // Autor / schvalovatel
+  authorId   String
+  approverId String?
+  approvedAt DateTime?
+
+  // Odkud revize vznikla (null = výchozí digitalizace)
+  changeRequestId String?
+  rejectionComment String? // důvod vrácení k přepracování
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  equipment     Equipment      @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  author        User           @relation("RevisionAuthor", fields: [authorId], references: [id])
+  approver      User?          @relation("RevisionApprover", fields: [approverId], references: [id])
+  changeRequest ChangeRequest? @relation("ResolvingRevisions", fields: [changeRequestId], references: [id], onDelete: SetNull)
+
+  bomItems              BomItem[]
+  markedUpInRequests    ChangeRequest[]      @relation("BaseRevision")
+  changeRequestEvents   ChangeRequestEvent[]
+
+  @@unique([equipmentId, major, minor])
+  @@index([equipmentId, status])
+  @@index([changeRequestId])
+}
+
+/// Položka kusovníku (BOM) dané revize.
+model BomItem {
+  id          String  @id @default(cuid())
+  revisionId  String
+  position    Int     // pořadí v tabulce
+  designation String  // označení ve schématu: "K4", "Q1", "F12"
+  description String  // "Stykač 3P 25 A, cívka 24 V DC"
+  manufacturer String?
+  partNumber  String? // objednací číslo
+  quantity    Float   @default(1)
+  unit        String  @default("ks")
+  note        String?
+
+  revision DocumentRevision @relation(fields: [revisionId], references: [id], onDelete: Cascade)
+
+  @@index([revisionId])
+}
+
+// -----------------------------------------------------------------------------
+//  POŽADAVKY NA ZMĚNU (Zadat změnu → CAE → Schválení → Archiv)
+// -----------------------------------------------------------------------------
+
+/// Ticket "As-Built" změny nahlášený údržbou z haly.
+model ChangeRequest {
+  id          String                @id @default(cuid())
+  number      String                @unique // "ZM-2026-0012"
+  equipmentId String
+  status      ChangeRequestStatus   @default(SUBMITTED)
+  priority    ChangeRequestPriority @default(NORMAL)
+
+  // Krok 1 – Redlining nad aktuálním schématem
+  baseRevisionId  String? // revize, nad kterou technik kreslil
+  markupSheet     Int     @default(1) // číslo listu schématu
+  markupData      String? // JSON: tahy pera [{points:[[x,y]...], color, width}]
+  markupImageUrl  String? // PNG export (schéma + červená vrstva)
+
+  // Krok 3 – hlas / rychlá poznámka
+  voiceTranscript String? // přepis hlasové poznámky
+  note            String? // ručně psaná rychlá poznámka
+
+  // Účastníci
+  reporterId String
+  assigneeId String? // CAE projektant
+
+  // Odpověď CAE / výsledek
+  engineerSummary String?
+
+  submittedAt DateTime  @default(now())
+  assignedAt  DateTime?
+  resolvedAt  DateTime? // nahrání revize k potvrzení
+  closedAt    DateTime? // schváleno / stornováno
+  updatedAt   DateTime  @updatedAt
+
+  equipment          Equipment            @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  baseRevision       DocumentRevision?    @relation("BaseRevision", fields: [baseRevisionId], references: [id], onDelete: SetNull)
+  reporter           User                 @relation("ChangeRequestReporter", fields: [reporterId], references: [id])
+  assignee           User?                @relation("ChangeRequestAssignee", fields: [assigneeId], references: [id])
+  resolvingRevisions DocumentRevision[]   @relation("ResolvingRevisions")
+  attachments        Attachment[]
+  events             ChangeRequestEvent[]
+
+  @@index([equipmentId, status])
+  @@index([status])
+  @@index([assigneeId])
+}
+
+/// Přílohy ticketu – fotky z haly (Krok 2), hlasové poznámky, export markupu.
+model Attachment {
+  id              String         @id @default(cuid())
+  changeRequestId String
+  type            AttachmentType
+  url             String
+  fileName        String?
+  mimeType        String?
+  sizeBytes       Int?
+  caption         String?
+  uploadedById    String
+  createdAt       DateTime       @default(now())
+
+  changeRequest ChangeRequest @relation(fields: [changeRequestId], references: [id], onDelete: Cascade)
+  uploadedBy    User          @relation(fields: [uploadedById], references: [id])
+
+  @@index([changeRequestId])
+}
+
+/// Timeline událostí ticketu (stavový automat + komentáře).
+model ChangeRequestEvent {
+  id              String                 @id @default(cuid())
+  changeRequestId String
+  type            ChangeRequestEventType
+  actorId         String
+  revisionId      String?                // revize, které se událost týká
+  fromStatus      ChangeRequestStatus?
+  toStatus        ChangeRequestStatus?
+  comment         String?
+  createdAt       DateTime               @default(now())
+
+  changeRequest ChangeRequest     @relation(fields: [changeRequestId], references: [id], onDelete: Cascade)
+  actor         User              @relation(fields: [actorId], references: [id])
+  revision      DocumentRevision? @relation(fields: [revisionId], references: [id], onDelete: SetNull)
+
+  @@index([changeRequestId, createdAt])
+}

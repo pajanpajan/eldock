@@ -1,0 +1,31 @@
+# dependencies
+node_modules/
+
+# next.js
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+
+# env
+.env
+.env*.local
+
+# prisma
+/src/generated/
+*.db
+*.db-journal
+
+# uploads (soubory z haly, CAE revize, soubory generované seedem)
+storage/uploads/**/*
+!storage/uploads/*/
+!storage/uploads/*/.gitkeep
+
+# testy
+/smoke.db
+/playwright-report/
+/test-results/
+
+# misc
+.DS_Store
+*.log
