@@ -21,7 +21,7 @@ export interface FloorOverview {
 }
 
 /** Level 2 – budova s patry (od nejnižšího), dispozicí a piny zařízení. */
-export async function getBuildingOverview(plantId: string, buildingId: string) {
+export async function getBuildingOverview(plantId: string, buildingId: string, types: EquipmentType[] | null = null) {
   const building = await prisma.building.findFirst({
     where: { id: buildingId, plantId },
     include: {
@@ -30,6 +30,7 @@ export async function getBuildingOverview(plantId: string, buildingId: string) {
         orderBy: { level: "asc" },
         include: {
           equipment: {
+            where: types ? { type: { in: types } } : undefined,
             orderBy: { tag: "asc" },
             select: { id: true, tag: true, type: true, status: true, pinX: true, pinY: true },
           },

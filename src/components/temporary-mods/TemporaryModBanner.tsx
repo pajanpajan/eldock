@@ -12,7 +12,7 @@ import { ResolveTemporaryModDialog } from "./ResolveTemporaryModDialog";
 const DAYS = ["den", "dny", "dní"] as const;
 
 /** Výrazné varování o aktivním provizoriu (fialové; po termínu červené). */
-export function TemporaryModBanner({ mod, version, now }: { mod: EquipmentTemporaryMod; version: string | null; now: Date }) {
+export function TemporaryModBanner({ mod, version, now, canResolve = true }: { mod: EquipmentTemporaryMod; version: string | null; now: Date; canResolve?: boolean }) {
   const { daysLeft, overdue } = tempModCountdown(mod.expiresAt, now);
   const style = overdue ? TEMP_MOD_OVERDUE : TEMP_MOD_STATUS.ACTIVE;
   const Icon = overdue ? OctagonAlert : Construction;
@@ -45,7 +45,7 @@ export function TemporaryModBanner({ mod, version, now }: { mod: EquipmentTempor
       </p>
       <p className="text-sm whitespace-pre-line">{mod.description}</p>
       {mod.photoUrl ? <PhotoGallery photos={[{ id: mod.id, url: mod.photoUrl, caption: `Provizorium ${mod.number}` }]} /> : null}
-      <ResolveTemporaryModDialog id={mod.id} number={mod.number} version={version} />
+      {canResolve ? <ResolveTemporaryModDialog id={mod.id} number={mod.number} version={version} /> : null}
     </section>
   );
 }

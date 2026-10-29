@@ -10,12 +10,14 @@ interface Props {
   layers: ReadonlySet<LayerKey>;
   counts: ReturnType<typeof layerCounts>;
   attentionOnly: boolean;
+  /** Přepínač ⚠️ (lhůtník revizí; CAE ne). */
+  showAttention?: boolean;
   onToggleLayer: (key: LayerKey) => void;
   onToggleAttention: () => void;
 }
 
 /** Panel „Vrstvy zobrazení“: zaškrtávací skupiny zařízení s počty + rychlý přepínač ⚠️. */
-export function MapLayersPanel({ layers, counts, attentionOnly, onToggleLayer, onToggleAttention }: Props) {
+export function MapLayersPanel({ layers, counts, attentionOnly, showAttention = true, onToggleLayer, onToggleAttention }: Props) {
   const attentionTotal = Object.values(counts).reduce((sum, entry) => sum + entry.attention, 0);
 
   return (
@@ -25,25 +27,27 @@ export function MapLayersPanel({ layers, counts, attentionOnly, onToggleLayer, o
           <Layers className="size-4 text-primary" aria-hidden />
           Vrstvy zobrazení <span className="font-normal text-muted-foreground">(zaškrtávací filtry)</span>
         </h2>
-        <button
-          type="button"
-          aria-pressed={attentionOnly}
-          onClick={onToggleAttention}
-          className={cn(
-            "flex min-h-11 items-center gap-2 rounded-full border px-4 text-sm font-semibold transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-            attentionOnly
-              ? "border-amber-400 bg-amber-500 text-amber-950"
-              : "border-amber-500/50 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20",
-          )}
-        >
-          <TriangleAlert className="size-4" aria-hidden />
-          Zobrazit vše s propadlou / končící revizí
-          <span className="rounded-full bg-black/25 px-2 font-mono text-xs tabular-nums">{attentionTotal}</span>
-        </button>
+        {showAttention ? (
+          <button
+            type="button"
+            aria-pressed={attentionOnly}
+            onClick={onToggleAttention}
+            className={cn(
+              "flex min-h-11 items-center gap-2 rounded-full border px-4 text-sm font-semibold transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+              attentionOnly
+                ? "border-amber-400 bg-amber-500 text-amber-950"
+                : "border-amber-500/50 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20",
+            )}
+          >
+            <TriangleAlert className="size-4" aria-hidden />
+            Zobrazit vše s propadlou / končící revizí
+            <span className="rounded-full bg-black/25 px-2 font-mono text-xs tabular-nums">{attentionTotal}</span>
+          </button>
+        ) : null}
       </div>
       <fieldset className="mt-3 flex flex-wrap gap-2" disabled={attentionOnly}>
         <legend className="sr-only">Vrstvy</legend>
-        {MAP_LAYERS.map((layer) => {
+        {MAP_LAYERS.filter((layer) => counts[layer.key].total > 0 || layer.defaultOn).map((layer) => {
           const checked = attentionOnly || layers.has(layer.key);
           const count = counts[layer.key];
           return (
@@ -58,7 +62,7 @@ export function MapLayersPanel({ layers, counts, attentionOnly, onToggleLayer, o
               <input type="checkbox" className="size-4 accent-primary" checked={checked} onChange={() => onToggleLayer(layer.key)} />
               {layer.label}
               <span className="font-mono text-xs tabular-nums text-muted-foreground">{count.total}</span>
-              {count.attention ? (
+              {showAttention && count.attention ? (
                 <span className={cn("rounded-full border px-1.5 font-mono text-xs tabular-nums", INSPECTION_STATE.EXPIRED.badge)} title="S propadlou nebo končící revizí">
                   {count.attention}
                 </span>

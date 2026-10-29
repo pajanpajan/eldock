@@ -2,11 +2,13 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Cable, Inbox } from "lucide-react";
+import { Cable, EyeOff, Inbox } from "lucide-react";
 
+import { EmptyState } from "@/components/common/EmptyState";
 import { LocationBreadcrumb } from "@/components/common/LocationBreadcrumb";
 import { PageHeader } from "@/components/common/PageHeader";
 import { StatusBadge } from "@/components/common/StatusBadge";
+import { SwitchRoleButton } from "@/components/common/SwitchRoleButton";
 import { BomTable } from "@/components/equipment/BomTable";
 import { Cabinet3D } from "@/components/equipment/Cabinet3D";
 import { ChangeRequestCta } from "@/components/equipment/ChangeRequestCta";
@@ -29,7 +31,7 @@ import { pragueToday, summarizeInspections } from "@/lib/inspection";
 import { USAGE_GROUP_LABELS, inspectionRuleFor, isLightCard, type UsageGroup } from "@/lib/inspection-rules";
 import { buildingHref, caeTicketHref, equipmentHref, floorHref, plantHref } from "@/lib/routes";
 import { getEquipmentDetail, getPowerNodes } from "@/server/queries/equipment";
-import { getCurrentRole } from "@/server/session";
+import { getCurrentAccount } from "@/server/session";
 
 type Props = PageProps<"/equipment/[id]">;
 
@@ -51,8 +53,21 @@ async function absoluteUrl(pathname: string) {
 export default async function EquipmentPage({ params, searchParams }: Props) {
   const { id } = await params;
   const { rev } = await searchParams;
-  const [equipment, role] = await Promise.all([getEquipmentDetail(id), getCurrentRole()]);
+  const [equipment, account] = await Promise.all([getEquipmentDetail(id), getCurrentAccount()]);
   if (!equipment) notFound();
+  const role = account.definition.workflowRole;
+  // Mimo výřez účtu (např. konvice pro revizního technika VTZ) – jen informace, ne data.
+  if (!account.canSee(equipment.type)) {
+    return (
+      <EmptyState
+        icon={EyeOff}
+        title={`${equipment.tag} není ve výřezu vašeho účtu`}
+        description={`${account.definition.label}: ${account.definition.scopeDescription}`}
+        action={<SwitchRoleButton account="MAINTENANCE_LEAD" />}
+      />
+    );
+  }
+  const showInspections = account.definition.showInspections;
   const powerNodes = await getPowerNodes(equipment.floor.building.plant.id);
 
   const { floor } = equipment;
@@ -85,6 +100,8 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
       summary={inspection}
       today={today}
       now={now}
+      canRecord={account.can("recordInspection")}
+      canResolveDefects={account.can("resolveDefects")}
     />
   );
 
@@ -110,9 +127,11 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
           badges={
             <>
               {light ? null : <StatusBadge kind="equipment" status={equipment.status} className="text-sm" />}
-              <Link href={`${basePath}?tab=inspections`} className="rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
-                <InspectionStatusBadge summary={inspection} className="text-sm" />
-              </Link>
+              {showInspections ? (
+                <Link href={`${basePath}?tab=inspections`} className="rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+                  <InspectionStatusBadge summary={inspection} className="text-sm" />
+                </Link>
+              ) : null}
             </>
           }
           description={
@@ -157,10 +176,10 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
           actions={
             <>
               <QrDialog url={qrUrl} tag={equipment.tag} name={equipment.name} location={location} />
-              {!light && role === "MAINTENANCE" ? <TemporaryModDialog equipmentId={equipment.id} tag={equipment.tag} version={active?.version ?? null} /> : null}
-              {light ? null : role === "MAINTENANCE" ? (
+              {!light && account.can("temporaryMods") ? <TemporaryModDialog equipmentId={equipment.id} tag={equipment.tag} version={active?.version ?? null} /> : null}
+              {light ? null : account.can("submitChange") ? (
                 <ChangeRequestCta href={`${basePath}/change-request`} openNumber={openChange?.number ?? null} />
-              ) : openChange ? (
+              ) : openChange && role === "CAE_ENGINEER" ? (
                 <Button asChild size="lg" className="touch-target gap-2">
                   <Link href={caeTicketHref(openChange.id)}>
                     <Inbox className="size-4" />
@@ -177,13 +196,13 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
             change={openChange}
             pendingRevision={pending}
             reviewHref={`${basePath}/approve`}
-            canReview={role === "MAINTENANCE"}
+            canReview={account.can("approveRevision")}
             now={now}
           />
         ) : null}
 
         {activeMods.map((mod) => (
-          <TemporaryModBanner key={mod.id} mod={mod} version={active?.version ?? null} now={now} />
+          <TemporaryModBanner key={mod.id} mod={mod} version={active?.version ?? null} now={now} canResolve={account.can("temporaryMods")} />
         ))}
 
         {light ? (
@@ -193,48 +212,49 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
             labels={{ inspections: `Revize & Měření (${rule.standard})` }}
           />
         ) : (
-        <DocumentationTabs
-          panels={{
-            schema: (
-              <SchematicViewer
-                basePath={basePath}
-                selectedId={selected?.id ?? ""}
-                revisions={equipment.revisions.map(({ id: revisionId, version, status, title, schematicUrl, schematicFormat, sheetCount, createdAt }) => ({
-                  id: revisionId,
-                  version,
-                  status,
-                  title,
-                  schematicUrl,
-                  schematicFormat,
-                  sheetCount,
-                  createdAt,
-                }))}
-              />
-            ),
-            bom: selected ? (
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">
-                  Kusovník revize <span className="font-mono text-foreground">{selected.version}</span>
-                </p>
-                <BomTable rows={selected.bomItems} fileName={`kusovnik-${equipment.tag}-${selected.version}.csv`} />
-              </div>
-            ) : null,
-            "3d": selected ? <Cabinet3D bom={selected.bomItems} tag={equipment.tag} /> : null,
-            history: (
-              <div className="space-y-8">
-                <RevisionTimeline revisions={equipment.revisions} basePath={basePath} selectedId={selected?.id ?? null} />
-                <TemporaryModArchive mods={equipment.temporaryMods} canOpenTicket={role === "CAE_ENGINEER"} />
-              </div>
-            ),
-            passport: (
-              <div className="space-y-8">
-                <LotoCard equipment={equipment} nodes={powerNodes} />
-                <CompliancePassport equipment={equipment} />
-              </div>
-            ),
-            inspections: inspectionsPanel,
-          }}
-        />
+          <DocumentationTabs
+            panels={{
+              schema: (
+                <SchematicViewer
+                  basePath={basePath}
+                  selectedId={selected?.id ?? ""}
+                  revisions={equipment.revisions.map(({ id: revisionId, version, status, title, schematicUrl, schematicFormat, sheetCount, createdAt }) => ({
+                    id: revisionId,
+                    version,
+                    status,
+                    title,
+                    schematicUrl,
+                    schematicFormat,
+                    sheetCount,
+                    createdAt,
+                  }))}
+                />
+              ),
+              bom: selected ? (
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">
+                    Kusovník revize <span className="font-mono text-foreground">{selected.version}</span>
+                  </p>
+                  <BomTable rows={selected.bomItems} fileName={`kusovnik-${equipment.tag}-${selected.version}.csv`} />
+                </div>
+              ) : null,
+              "3d": selected ? <Cabinet3D bom={selected.bomItems} tag={equipment.tag} /> : null,
+              history: (
+                <div className="space-y-8">
+                  <RevisionTimeline revisions={equipment.revisions} basePath={basePath} selectedId={selected?.id ?? null} />
+                  <TemporaryModArchive mods={equipment.temporaryMods} canOpenTicket={role === "CAE_ENGINEER"} />
+                </div>
+              ),
+              passport: (
+                <div className="space-y-8">
+                  <LotoCard equipment={equipment} nodes={powerNodes} />
+                  <CompliancePassport equipment={equipment} />
+                </div>
+              ),
+              // CAE projektant lhůtník revizí nevidí.
+              ...(showInspections ? { inspections: inspectionsPanel } : {}),
+            }}
+          />
         )}
       </div>
     </PageTransition>

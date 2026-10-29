@@ -17,6 +17,7 @@ interface Props {
   equipment: FloorEquipment;
   selected: boolean;
   onSelect: (id: string) => void;
+  showInspections?: boolean;
 }
 
 /**
@@ -24,14 +25,14 @@ interface Props {
  * `--inv-scale` (nastavuje FloorplanViewer), takže pin má na obrazovce stálou velikost;
  * `--pin-scale` ho zmenší na úzkých displejích.
  */
-export function EquipmentPin({ equipment, selected, onSelect }: Props) {
+export function EquipmentPin({ equipment, selected, onSelect, showInspections = true }: Props) {
   // Spotřebiče a nářadí nemají výkresovou dokumentaci – barva pinu = stav revize.
   const light = isLightCard(equipment.type);
   const style = light ? INSPECTION_STATE[equipment.inspection.state] : EQUIPMENT_STATUS[equipment.status];
   const Icon = EQUIPMENT_TYPE_ICONS[equipment.type];
   const pulse = !light && equipment.status === "PENDING_UPDATE";
   const { inspection } = equipment;
-  const expired = inspection.state === "EXPIRED" || inspection.state === "FAILED";
+  const expired = showInspections && (inspection.state === "EXPIRED" || inspection.state === "FAILED");
   const inspectionText = inspectionBadgeLabel(inspection.state, inspection.validUntil, inspection.daysLeft);
 
   return (
@@ -83,7 +84,7 @@ export function EquipmentPin({ equipment, selected, onSelect }: Props) {
           <TooltipContent side="top" sideOffset={6}>
             <div className="font-medium">{equipment.name}</div>
             <div className="opacity-80">{style.label}</div>
-            {needsAttention(inspection.state) ? (
+            {showInspections && needsAttention(inspection.state) ? (
               <div className={cn("font-medium", INSPECTION_STATE[inspection.state].text)}>{inspectionText}</div>
             ) : null}
           </TooltipContent>

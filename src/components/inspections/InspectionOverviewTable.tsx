@@ -21,7 +21,18 @@ import { BatchInspectionBar } from "./BatchInspectionBar";
 import { InspectionStatusBadge } from "./InspectionStatusBadge";
 
 /** Přehled revizí: filtr skupiny, ⚠️ jen k řešení, hledání a výběr pro hromadnou revizi. */
-export function InspectionOverviewTable({ items, today, showPlant }: { items: InspectionOverviewItem[]; today: string; showPlant: boolean }) {
+export function InspectionOverviewTable({
+  items,
+  today,
+  showPlant,
+  canBatchInspect = true,
+}: {
+  items: InspectionOverviewItem[];
+  today: string;
+  showPlant: boolean;
+  /** Hromadná revize (checkboxy a lišta) – jen účty, které zapisují revize. */
+  canBatchInspect?: boolean;
+}) {
   const [layer, setLayer] = useState<LayerKey | "ALL">("ALL");
   const [attentionOnly, setAttentionOnly] = useState(false);
   const [query, setQuery] = useState("");
@@ -159,7 +170,7 @@ export function InspectionOverviewTable({ items, today, showPlant }: { items: In
         </Table>
       </div>
 
-      <BatchInspectionBar items={items.filter((item) => checked.has(item.id))} today={today} onClear={() => setChecked(new Set())} />
+      {canBatchInspect ? <BatchInspectionBar items={items.filter((item) => checked.has(item.id))} today={today} onClear={() => setChecked(new Set())} /> : null}
     </div>
   );
 }

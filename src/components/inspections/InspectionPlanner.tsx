@@ -54,7 +54,21 @@ const PIECES = ["kus", "kusy", "kusů"] as const;
 const noopSubscribe = () => () => {};
 
 /** Chytrý plánovač revizí: hlasový / textový dispečer, měsíční přehled, tip a pochůzka. */
-export function InspectionPlanner({ items, nowIso, plantName }: { items: PlannerItem[]; nowIso: string; plantName: string }) {
+export function InspectionPlanner({
+  items,
+  nowIso,
+  plantName,
+  scopeLabel = null,
+  canRapid = true,
+}: {
+  items: PlannerItem[];
+  nowIso: string;
+  plantName: string;
+  /** Výřez dat účtu („Revizní technik VTZ: …“); `null` = celý závod. */
+  scopeLabel?: string | null;
+  /** Spuštění rychlé revize dávky (technik spotřebičů, vedení údržby). */
+  canRapid?: boolean;
+}) {
   const now = useMemo(() => new Date(nowIso), [nowIso]);
   const [text, setText] = useState(SAMPLE_COMMANDS[0]);
   const [query, setQuery] = useState<InspectionPlanQuery>(() => parsePlanQuery(SAMPLE_COMMANDS[0], new Date(nowIso)));
@@ -103,6 +117,11 @@ export function InspectionPlanner({ items, nowIso, plantName }: { items: Planner
 
   return (
     <div className="space-y-6 print:hidden">
+      {scopeLabel ? (
+        <p className="rounded-lg border border-sky-500/40 bg-sky-500/10 px-3 py-2 text-sm text-sky-200" data-testid="account-scope">
+          Výřez účtu – {scopeLabel}
+        </p>
+      ) : null}
       {/* Hlasový dispečer */}
       <section aria-labelledby="dispatcher" className="space-y-3 rounded-2xl border border-primary/40 bg-card p-4 sm:p-5">
         <h2 id="dispatcher" className="flex items-center gap-2 font-semibold">
@@ -290,11 +309,13 @@ export function InspectionPlanner({ items, nowIso, plantName }: { items: Planner
 
       {/* Akce */}
       <div className="flex flex-wrap gap-2">
-        <Button asChild size="lg" className={cn("h-14 gap-2 text-base font-semibold", portableIds.length === 0 && "pointer-events-none opacity-50")} aria-disabled={portableIds.length === 0}>
-          <Link href={`${rapidInspectionHref}?ids=${portableIds.join(",")}`}>
-            🚀 Spustit rychlou revizi této dávky ({portableIds.length} ks)
-          </Link>
-        </Button>
+        {canRapid ? (
+          <Button asChild size="lg" className={cn("h-14 gap-2 text-base font-semibold", portableIds.length === 0 && "pointer-events-none opacity-50")} aria-disabled={portableIds.length === 0}>
+            <Link href={`${rapidInspectionHref}?ids=${portableIds.join(",")}`}>
+              🚀 Spustit rychlou revizi této dávky ({portableIds.length} ks)
+            </Link>
+          </Button>
+        ) : null}
         <Button size="lg" variant="outline" className="h-14 gap-2 text-base" onClick={() => window.print()} disabled={batch.length === 0}>
           🖨️ Vytisknout pochůzkový list
         </Button>

@@ -10,6 +10,7 @@ import { FloorExplorer } from "@/components/map/floorplan/FloorExplorer";
 import { buildingHref, floorHref, plantHref } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 import { getFloorView } from "@/server/queries/floor";
+import { getCurrentAccount } from "@/server/session";
 
 type Props = PageProps<"/plant/[plantId]/building/[buildingId]/floor/[floorId]">;
 
@@ -22,7 +23,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 // Level 3 – půdorys patra s piny zařízení.
 export default async function FloorPage({ params }: Props) {
   const { plantId, buildingId, floorId } = await params;
-  const floor = await getFloorView(plantId, buildingId, floorId);
+  const account = await getCurrentAccount();
+  const floor = await getFloorView(plantId, buildingId, floorId, account.types);
   if (!floor) notFound();
 
   const { building } = floor;
@@ -69,7 +71,12 @@ export default async function FloorPage({ params }: Props) {
           ) : null
         }
       />
-      <FloorExplorer floor={floor} />
+      <FloorExplorer
+        floor={floor}
+        showInspections={account.definition.showInspections}
+        canBatchInspect={account.can("recordInspection")}
+        scopeLabel={account.types ? `${account.definition.label}: ${account.definition.scopeDescription}` : null}
+      />
     </PageTransition>
   );
 }

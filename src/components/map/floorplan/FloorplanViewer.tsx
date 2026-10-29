@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import type { FloorEquipment } from "@/server/queries/floor";
 
 import { EquipmentPin } from "./EquipmentPin";
+import { PowerSpiderOverlay } from "./PowerSpiderOverlay";
 
 export const MAX_ZOOM = 8;
 
@@ -24,10 +25,14 @@ interface Props {
   selectedId: string | null;
   onSelect: (id: string) => void;
   apiRef: Ref<ReactZoomPanPinchRef>;
+  /** „⚡ Pavouk napájení“ – spojnice rozváděč → napájená zařízení. */
+  spider?: boolean;
+  /** Zobrazovat výstrahy revizí na pinech (CAE ne). */
+  showInspections?: boolean;
 }
 
 /** Level 3 – zoomovatelný a posouvatelný půdorys (inline SVG ze seedu) s vrstvou pinů. */
-export function FloorplanViewer({ svg, viewBox, equipment, selectedId, onSelect, apiRef }: Props) {
+export function FloorplanViewer({ svg, viewBox, equipment, selectedId, onSelect, apiRef, spider = false, showInspections = true }: Props) {
   const contentRef = useRef<HTMLDivElement>(null);
   const zoomLabelRef = useRef<HTMLSpanElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
@@ -57,8 +62,9 @@ export function FloorplanViewer({ svg, viewBox, equipment, selectedId, onSelect,
           <div ref={contentRef} className="relative size-full max-sm:[--pin-scale:0.6]">
             {/* Půdorys generuje seed (viz PLAN sekce A – bezpečnost SVG), proto inline. */}
             <div className="absolute inset-0 [&>svg]:size-full" dangerouslySetInnerHTML={{ __html: svg }} aria-hidden />
+            {spider ? <PowerSpiderOverlay items={equipment} viewBox={viewBox} /> : null}
             {equipment.map((item) => (
-              <EquipmentPin key={item.id} equipment={item} selected={item.id === selectedId} onSelect={onSelect} />
+              <EquipmentPin key={item.id} equipment={item} selected={item.id === selectedId} onSelect={onSelect} showInspections={showInspections} />
             ))}
           </div>
         </TransformComponent>

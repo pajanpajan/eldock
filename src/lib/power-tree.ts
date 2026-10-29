@@ -65,3 +65,35 @@ export function downstreamTree(id: string, nodes: readonly PowerNode[]): Downstr
   visit(id, 1);
   return out;
 }
+
+// ---------------------------------------------------------------------------
+//  Pavouk napájení na půdorysu patra
+// ---------------------------------------------------------------------------
+
+export interface SpiderItem {
+  id: string;
+  tag: string;
+  pinX: number;
+  pinY: number;
+  fedFromEquipmentId: string | null;
+  fedFromCircuit: string | null;
+  fedFrom: { id: string; tag: string } | null;
+}
+
+export type SpiderLink =
+  | { kind: "local"; from: SpiderItem; to: SpiderItem; circuit: string | null }
+  /** Napájení z rozváděče mimo zobrazená zařízení patra (jiné patro / skrytá vrstva). */
+  | { kind: "remote"; to: SpiderItem; sourceTag: string; circuit: string | null };
+
+/** Spojnice nadřazený rozváděč → napájené zařízení mezi zobrazenými piny patra. */
+export function spiderLinks(items: readonly SpiderItem[]): SpiderLink[] {
+  const byId = new Map(items.map((item) => [item.id, item]));
+  const links: SpiderLink[] = [];
+  for (const item of items) {
+    if (!item.fedFromEquipmentId) continue;
+    const parent = byId.get(item.fedFromEquipmentId);
+    if (parent) links.push({ kind: "local", from: parent, to: item, circuit: item.fedFromCircuit });
+    else links.push({ kind: "remote", to: item, sourceTag: item.fedFrom?.tag ?? "?", circuit: item.fedFromCircuit });
+  }
+  return links;
+}

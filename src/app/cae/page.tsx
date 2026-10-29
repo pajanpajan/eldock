@@ -6,12 +6,10 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { KpiTile } from "@/components/common/KpiTile";
 import { PageHeader } from "@/components/common/PageHeader";
 import { SwitchRoleButton } from "@/components/common/SwitchRoleButton";
-import { InspectionWatcher } from "@/components/inspections/InspectionWatcher";
 import { computeKpis, formatDuration, parseTicketFilter } from "@/lib/cae-tickets";
 import { formatCount } from "@/lib/format";
 import { CHANGE_REQUEST_PRIORITY, CHANGE_REQUEST_STATUS } from "@/lib/status";
 import { getCaeTickets } from "@/server/queries/cae";
-import { getInspectionWatch } from "@/server/queries/inspections";
 import { getPlants } from "@/server/queries/plant";
 import { getCurrentRole, getCurrentUser } from "@/server/session";
 
@@ -19,13 +17,12 @@ export const metadata: Metadata = { title: "CAE Back-Office" };
 
 // Pracoviště CAE projektanta: KPI a tickety napříč závody.
 export default async function CaeDashboardPage({ searchParams }: PageProps<"/cae">) {
-  const [role, user, tickets, plants, params, watch] = await Promise.all([
+  const [role, user, tickets, plants, params] = await Promise.all([
     getCurrentRole(),
     getCurrentUser(),
     getCaeTickets(),
     getPlants(),
     searchParams,
-    getInspectionWatch(),
   ]);
 
   if (role !== "CAE_ENGINEER") {
@@ -74,7 +71,6 @@ export default async function CaeDashboardPage({ searchParams }: PageProps<"/cae
             className="col-span-2 md:col-span-1"
           />
         </section>
-        <InspectionWatcher watch={watch} showPlant />
         <TicketDashboard tickets={tickets} plants={plants} userId={user.id} initialFilter={filter} now={now} />
       </div>
     </>

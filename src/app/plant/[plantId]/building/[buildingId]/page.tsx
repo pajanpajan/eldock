@@ -10,6 +10,7 @@ import { BuildingExplorer } from "@/components/map/isometric/BuildingExplorer";
 import { BUILDING_TYPE_LABELS, formatCount } from "@/lib/format";
 import { plantHref } from "@/lib/routes";
 import { getBuildingOverview } from "@/server/queries/building";
+import { getCurrentAccount } from "@/server/session";
 
 type Props = PageProps<"/plant/[plantId]/building/[buildingId]">;
 
@@ -22,7 +23,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 // Level 2 – 45° izometrický pohled na budovu a výběr patra.
 export default async function BuildingPage({ params }: Props) {
   const { plantId, buildingId } = await params;
-  const building = await getBuildingOverview(plantId, buildingId);
+  const building = await getBuildingOverview(plantId, buildingId, (await getCurrentAccount()).types);
   if (!building) notFound();
 
   const equipment = building.floors.reduce((sum, floor) => sum + floor.counts.total, 0);

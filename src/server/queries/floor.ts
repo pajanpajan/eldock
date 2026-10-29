@@ -1,12 +1,13 @@
 import "server-only";
 
 import { DEADLINE_TYPES, pragueToday, summarizeInspections } from "@/lib/inspection";
+import type { EquipmentType } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/prisma";
 
 const OPEN_STATUSES = ["SUBMITTED", "IN_PROGRESS", "WAITING_APPROVAL"] as const;
 
 /** Level 3 – patro s půdorysem a zařízeními (aktivní revize + otevřený požadavek na změnu). */
-export async function getFloorView(plantId: string, buildingId: string, floorId: string) {
+export async function getFloorView(plantId: string, buildingId: string, floorId: string, types: EquipmentType[] | null = null) {
   const floor = await prisma.floor.findFirst({
     where: { id: floorId, buildingId, building: { plantId } },
     include: {
@@ -19,6 +20,7 @@ export async function getFloorView(plantId: string, buildingId: string, floorId:
         },
       },
       equipment: {
+        where: types ? { type: { in: types } } : undefined,
         orderBy: { tag: "asc" },
         select: {
           id: true,
@@ -34,6 +36,9 @@ export async function getFloorView(plantId: string, buildingId: string, floorId:
           pinX: true,
           pinY: true,
           inspectionIntervalMonths: true,
+          fedFromEquipmentId: true,
+          fedFromCircuit: true,
+          fedFrom: { select: { id: true, tag: true, floorId: true } },
           usageGroup: true,
           protectionClass: true,
           inventoryNumber: true,

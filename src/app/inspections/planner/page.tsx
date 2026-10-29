@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ListChecks } from "lucide-react";
 
+import { NoAccess } from "@/components/common/NoAccess";
 import { PageHeader } from "@/components/common/PageHeader";
 import { InspectionPlanner } from "@/components/inspections/InspectionPlanner";
 import { PageTransition } from "@/components/layout/PageTransition";
@@ -9,17 +10,20 @@ import { Button } from "@/components/ui/button";
 import { inspectionsHref } from "@/lib/routes";
 import { getPlannerItems } from "@/server/queries/inspections";
 import { getPlants } from "@/server/queries/plant";
-import { getCurrentRole, getRememberedPlantId } from "@/server/session";
+import { getCurrentAccount, getRememberedPlantId } from "@/server/session";
 
 export const metadata: Metadata = { title: "Plánovač revizí" };
 
 // Chytrý plánovač revizí: hlasový dispečer, měsíční přehled, tip „přiberte“ a pochůzkový list.
 export default async function InspectionPlannerPage() {
-  const [role, plants, rememberedId] = await Promise.all([getCurrentRole(), getPlants(), getRememberedPlantId()]);
+  const [account, plants, rememberedId] = await Promise.all([getCurrentAccount(), getPlants(), getRememberedPlantId()]);
+  if (!account.can("planner")) return <NoAccess title="Plánovač revizí" current={account.accountType} suggest="INSPECTOR_VTZ" />;
+  const role = account.definition.workflowRole;
   // Údržba plánuje svůj závod, CAE všechny závody.
   const plant = role === "MAINTENANCE" ? (plants.find((entry) => entry.id === rememberedId) ?? plants[0]) : undefined;
   const now = new Date();
-  const items = await getPlannerItems(plant?.id, now);
+  // Revizní technik VTZ plánuje jen VTZ, technik spotřebičů jen spotřebiče.
+  const items = await getPlannerItems(plant?.id, now, account.types);
 
   return (
     <PageTransition>
@@ -35,7 +39,13 @@ export default async function InspectionPlannerPage() {
           </Button>
         }
       />
-      <InspectionPlanner items={items} nowIso={now.toISOString()} plantName={plant?.name ?? "Všechny závody"} />
+      <InspectionPlanner
+        items={items}
+        nowIso={now.toISOString()}
+        plantName={plant?.name ?? "Všechny závody"}
+        scopeLabel={account.types ? `${account.definition.label}: ${account.definition.scopeDescription}` : null}
+        canRapid={account.can("rapid")}
+      />
     </PageTransition>
   );
 }

@@ -34,6 +34,16 @@ enum UserRole {
   ADMIN
 }
 
+/// Typ účtu (výřez dat a oprávnění). Workflow role se z něj odvozuje (lib/accounts.ts).
+enum AccountType {
+  PLANT_ADMIN          // Technický ředitel – vše, KPI, audit, studio, správa účtů
+  MAINTENANCE_LEAD     // Vedoucí údržby – vše, schvaluje revize, LOTO, provizoria, závady
+  MAINTENANCE_TECH     // Směnový údržbář – pevná zařízení, zadává změny a provizoria
+  INSPECTOR_VTZ        // Revizní technik VTZ – jen vyhrazená technická zařízení
+  INSPECTOR_APPLIANCES // Technik revizí spotřebičů – jen spotřebiče a nářadí
+  CAE_ENGINEER         // CAE projektant – výkresová dokumentace a požadavky na změnu
+}
+
 /// Stav dokumentace zařízení = barva pinu na půdorysu.
 enum EquipmentStatus {
   ACTIVE            // 🟢 dokumentace 100% aktuální
@@ -173,6 +183,12 @@ model User {
   company   String?  // např. "Závod Jablonec – Údržba" / "Digitry CAE"
   phone     String?
   avatarUrl String?
+
+  // Účet v aplikaci (null = historický uživatel bez přihlášení, např. autor starých revizí)
+  accountType AccountType?
+  title       String?  // „Technický ředitel“
+  scopeLayers String?  // vlastní výřez kategorií (klíče vrstev mapy oddělené čárkou); null = výchozí pro typ účtu
+  sortOrder   Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

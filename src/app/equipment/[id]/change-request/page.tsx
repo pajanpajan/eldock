@@ -10,7 +10,7 @@ import { ChangeRequestWizard } from "@/components/change-request/ChangeRequestWi
 import { SwitchRoleButton } from "@/components/common/SwitchRoleButton";
 import { equipmentHref, floorHref, plantHref } from "@/lib/routes";
 import { getEquipmentDetail } from "@/server/queries/equipment";
-import { getCurrentRole } from "@/server/session";
+import { getCurrentAccount } from "@/server/session";
 
 type Props = PageProps<"/equipment/[id]/change-request">;
 
@@ -23,7 +23,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 // Průvodce „Zadat změnu“ (jen pohled Údržba).
 export default async function ChangeRequestPage({ params }: Props) {
   const { id } = await params;
-  const [equipment, role] = await Promise.all([getEquipmentDetail(id), getCurrentRole()]);
+  const [equipment, account] = await Promise.all([getEquipmentDetail(id), getCurrentAccount()]);
   if (!equipment) notFound();
 
   const { floor } = equipment;
@@ -49,15 +49,15 @@ export default async function ChangeRequestPage({ params }: Props) {
     />
   );
 
-  if (role !== "MAINTENANCE") {
+  if (!account.can("submitChange")) {
     return (
       <>
         {header}
         <EmptyState
           icon={HardHat}
           title="Změny zadává údržba v hale"
-          description="Průvodce je určený pro pohled Údržba. Po přepnutí zůstanete na této stránce."
-          action={<SwitchRoleButton role="MAINTENANCE" />}
+          description="Průvodce je určený pro údržbu (směnový údržbář, vedoucí údržby). Po přepnutí účtu zůstanete na této stránce."
+          action={<SwitchRoleButton account="MAINTENANCE_TECH" />}
         />
       </>
     );

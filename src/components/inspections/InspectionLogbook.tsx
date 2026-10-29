@@ -47,10 +47,13 @@ interface Props {
   summary: InspectionSummary;
   today: string;
   now: Date;
+  /** Zápis nové revize (revizní technik, vedení údržby). */
+  canRecord?: boolean;
+  canResolveDefects?: boolean;
 }
 
 /** Záložka „Revize & Lhůtník“: semafor, odpočet, historie revizních zpráv a termovizí, zápis nové revize. */
-export function InspectionLogbook({ equipmentId, tag, type, protectionClass, intervalMonths, rule, inspections, summary, today, now }: Props) {
+export function InspectionLogbook({ equipmentId, tag, type, protectionClass, intervalMonths, rule, inspections, summary, today, now, canRecord = true, canResolveDefects = true }: Props) {
   const measurable = isPortable(type);
   const openDefects = inspections.flatMap((record) => record.defects).filter((defect) => defect.status === "OPEN");
   const overdueDefects = openDefects.filter((defect) => defectState(defect, now).state === "OVERDUE").length;
@@ -126,16 +129,18 @@ export function InspectionLogbook({ equipmentId, tag, type, protectionClass, int
         </dl>
 
         <div className="sm:self-start">
-          <RecordInspectionDialog
-            equipmentId={equipmentId}
-            tag={tag}
-            intervalMonths={intervalMonths}
-            today={today}
-            suggestedReportNumber={suggestedReportNumber}
-            inspectors={inspectors}
-            measurable={measurable}
-            protectionClass={protectionClass}
-          />
+          {canRecord ? (
+            <RecordInspectionDialog
+              equipmentId={equipmentId}
+              tag={tag}
+              intervalMonths={intervalMonths}
+              today={today}
+              suggestedReportNumber={suggestedReportNumber}
+              inspectors={inspectors}
+              measurable={measurable}
+              protectionClass={protectionClass}
+            />
+          ) : null}
         </div>
       </section>
 
@@ -231,7 +236,7 @@ export function InspectionLogbook({ equipmentId, tag, type, protectionClass, int
                       </p>
                     ) : null}
                     {record.defects.length ? (
-                      <DefectList defects={record.defects} now={now} />
+                      <DefectList defects={record.defects} now={now} canResolve={canResolveDefects} />
                     ) : record.defectsSummary ? (
                       <p className={cn("rounded-lg border p-2.5 text-sm", result.soft)}>
                         <span className="font-medium">Závady: </span>

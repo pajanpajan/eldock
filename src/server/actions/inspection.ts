@@ -14,6 +14,7 @@ import {
   renderInspectionReport,
   renderQuickReport,
 } from "@/server/services/inspection";
+import { assertPermission } from "@/server/permissions";
 import { saveUpload } from "@/server/storage";
 
 import type { ActionResult } from "./workflow";
@@ -91,6 +92,7 @@ export async function recordInspectionAction(input: z.input<typeof recordSchema>
     recordSchema,
     input,
     async ({ reportUrl, ...data }) => {
+      await assertPermission("recordInspection");
       const url = reportUrl ?? (await saveReport(await renderInspectionReport(prisma, data)));
       const record = await recordInspection(prisma, { ...data, reportUrl: url });
       return { id: record.id, validUntil: record.validUntil, generated: !reportUrl };
@@ -105,6 +107,7 @@ export async function recordBatchInspectionAction(input: z.input<typeof batchSch
     batchSchema,
     input,
     async (data) => {
+      await assertPermission("recordInspection");
       const { svg, protocolNumber } = await renderBatchProtocol(prisma, data);
       return recordBatchInspection(prisma, { ...data, reportUrl: await saveReport(svg), protocolNumber });
     },
@@ -118,6 +121,7 @@ export async function recordQuickInspectionAction(input: z.input<typeof quickSch
     quickSchema,
     input,
     async (data) => {
+      await assertPermission("recordInspection");
       const reportUrl = await saveReport(await renderQuickReport(prisma, data));
       const record = await recordQuickInspection(prisma, { ...data, reportUrl });
       return { id: record.id, validUntil: record.validUntil, result: record.result };

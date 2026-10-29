@@ -18,7 +18,7 @@ import { formatDateTime, formatRelative } from "@/lib/format";
 import { parseMarkup } from "@/lib/markup";
 import { buildingHref, equipmentHref, floorHref, plantHref } from "@/lib/routes";
 import { getApprovalData } from "@/server/queries/equipment";
-import { getCurrentRole } from "@/server/session";
+import { getCurrentAccount } from "@/server/session";
 
 type Props = PageProps<"/equipment/[id]/approve">;
 
@@ -43,7 +43,7 @@ function Section({ title, icon: Icon, children }: { title: string; icon: typeof 
 // Schválení nové revize údržbou: porovnání, shrnutí CAE, rozdíl kusovníku a rozhodnutí.
 export default async function ApprovePage({ params }: Props) {
   const { id } = await params;
-  const [data, role] = await Promise.all([getApprovalData(id), getCurrentRole()]);
+  const [data, account] = await Promise.all([getApprovalData(id), getCurrentAccount()]);
   if (!data) notFound();
 
   const { equipment, change, pending, active } = data;
@@ -89,15 +89,15 @@ export default async function ApprovePage({ params }: Props) {
     );
   }
 
-  if (role !== "MAINTENANCE") {
+  if (!account.can("approveRevision")) {
     return (
       <>
         {header}
         <EmptyState
           icon={HardHat}
-          title="Revizi schvaluje údržba v hale"
-          description="Potvrzení provádí technik, který zná skutečné zapojení. Po přepnutí pohledu zůstanete na této stránce."
-          action={<SwitchRoleButton role="MAINTENANCE" />}
+          title="Revizi schvaluje vedoucí údržby"
+          description="Potvrzení provádí vedoucí údržby (nebo technický ředitel), který zodpovídá za skutečné zapojení. Po přepnutí účtu zůstanete na této stránce."
+          action={<SwitchRoleButton account="MAINTENANCE_LEAD" />}
         />
       </>
     );

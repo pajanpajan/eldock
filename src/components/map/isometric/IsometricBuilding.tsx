@@ -30,10 +30,12 @@ interface Props {
   floors: FloorOverview[];
   hoveredId: string | null;
   onHover: (id: string | null) => void;
+  /** Klik na patro místo navigace (náhled ve Studiu). */
+  onSelect?: (floorId: string) => void;
 }
 
 /** Level 2 – patra budovy jako naskládané izometrické desky; podzemí pod linií terénu. */
-export function IsometricBuilding({ floors, hoveredId, onHover }: Props) {
+export function IsometricBuilding({ floors, hoveredId, onHover, onSelect }: Props) {
   const router = useRouter();
 
   const model = useMemo(() => {
@@ -69,10 +71,15 @@ export function IsometricBuilding({ floors, hoveredId, onHover }: Props) {
     [...list].sort((a, b) => Number(a.floor.id === hoveredId) - Number(b.floor.id === hoveredId));
 
   const hovered = model.slabs.find(({ floor }) => floor.id === hoveredId);
-  function onKeyDown(event: KeyboardEvent, href: string) {
+  function open(floor: FloorOverview) {
+    if (onSelect) onSelect(floor.id);
+    else router.push(floor.href);
+  }
+
+  function onKeyDown(event: KeyboardEvent, floor: FloorOverview) {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      router.push(href);
+      open(floor);
     }
   }
 
@@ -92,11 +99,11 @@ export function IsometricBuilding({ floors, hoveredId, onHover }: Props) {
           opacity: dimmed ? 0.45 : 1,
           transition: "transform 220ms ease-out, opacity 220ms",
         }}
-        onClick={() => router.push(floor.href)}
-        onKeyDown={(event) => onKeyDown(event, floor.href)}
+        onClick={() => open(floor)}
+        onKeyDown={(event) => onKeyDown(event, floor)}
         onMouseEnter={() => {
           onHover(floor.id);
-          router.prefetch(floor.href);
+          if (!onSelect) router.prefetch(floor.href);
         }}
         onMouseLeave={() => onHover(null)}
         onFocus={() => onHover(floor.id)}

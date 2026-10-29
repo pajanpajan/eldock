@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { BuildingType, EquipmentStatus } from "@/generated/prisma/enums";
+import type { BuildingType, EquipmentStatus, EquipmentType } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/prisma";
 import { buildingEntryHref } from "@/lib/routes";
 import { worstEquipmentStatus } from "@/lib/status";
@@ -45,7 +45,7 @@ const countStatuses = (statuses: EquipmentStatus[]): StatusCounts => ({
 });
 
 /** Level 1 – areál: budovy s geometrií, patry a souhrnem stavů zařízení. */
-export async function getPlantOverview(plantId: string) {
+export async function getPlantOverview(plantId: string, types: EquipmentType[] | null = null) {
   const plant = await prisma.plant.findUnique({
     where: { id: plantId },
     include: {
@@ -54,7 +54,7 @@ export async function getPlantOverview(plantId: string) {
         include: {
           floors: {
             orderBy: { level: "asc" },
-            select: { id: true, code: true, name: true, level: true, equipment: { select: { status: true } } },
+            select: { id: true, code: true, name: true, level: true, equipment: { where: types ? { type: { in: types } } : undefined, select: { status: true } } },
           },
         },
       },

@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
 import { WorkflowError } from "@/lib/workflow/state-machine";
+import { assertPermission } from "@/server/permissions";
 import { resolveDefect } from "@/server/services/inspection";
 import { createTemporaryMod, resolveAndConvertToChangeRequest, resolveAsOneToOne } from "@/server/services/temporary-mod";
 import type { Actor } from "@/server/services/workflow";
@@ -52,6 +53,7 @@ async function run<S extends z.ZodType, T>(schema: S, raw: unknown, action: (act
 
 export async function createTemporaryModAction(input: z.input<typeof createSchema>) {
   return run(createSchema, input, async (actor, data) => {
+    await assertPermission("temporaryMods");
     const mod = await createTemporaryMod(prisma, actor, data);
     return { id: mod.id, number: mod.number, expiresAt: mod.expiresAt };
   });
@@ -59,6 +61,7 @@ export async function createTemporaryModAction(input: z.input<typeof createSchem
 
 export async function resolveTemporaryModOneToOneAction(input: z.input<typeof oneToOneSchema>) {
   return run(oneToOneSchema, input, async (actor, data) => {
+    await assertPermission("temporaryMods");
     const mod = await resolveAsOneToOne(prisma, actor, data);
     return { number: mod.number };
   });
@@ -66,6 +69,7 @@ export async function resolveTemporaryModOneToOneAction(input: z.input<typeof on
 
 export async function convertTemporaryModAction(input: z.input<typeof convertSchema>) {
   return run(convertSchema, input, async (actor, data) => {
+    await assertPermission("temporaryMods");
     const result = await resolveAndConvertToChangeRequest(prisma, actor, data);
     return { number: result.temporaryMod.number, changeRequestNumber: result.changeRequest.number, appended: result.appended };
   });
@@ -73,6 +77,7 @@ export async function convertTemporaryModAction(input: z.input<typeof convertSch
 
 export async function resolveDefectAction(input: z.input<typeof defectSchema>) {
   return run(defectSchema, input, async (actor, data) => {
+    await assertPermission("resolveDefects");
     const defect = await resolveDefect(prisma, actor, data);
     return { id: defect.id };
   });

@@ -31,6 +31,8 @@ export interface FloorplanInput {
   rows?: number;
   rooms: FloorplanRoom[];
   gates?: FloorplanGate[];
+  /** Měřítko výkresu a ryska 10 m (Studio); výchozí M 1:200 a 100 px. */
+  scale?: { label: string; pxPer10m: number; dimensions?: string };
 }
 
 const WALL = "#94a3b8";
@@ -65,6 +67,8 @@ export function renderFloorplanSvg(input: FloorplanInput): string {
   const o = input.outline ?? { x: 70, y: 70, w: W - 150, h: H - 110 };
   const cols = input.columns ?? 12;
   const rows = input.rows ?? 8;
+  const scale = input.scale ?? { label: "M 1:200", pxPer10m: 100 };
+  const bar = scale.pxPer10m;
   const out: string[] = [];
 
   out.push(`<rect width="${W}" height="${H}" fill="#0b1220"/>`);
@@ -129,8 +133,8 @@ export function renderFloorplanSvg(input: FloorplanInput): string {
   // Popisek a měřítko
   out.push(
     `<text x="${o.x}" y="${H - 18}" font-size="14" fill="${TEXT}" font-weight="700">${esc(floor.name)}</text>`,
-    `<text x="${o.x + 300}" y="${H - 18}" font-size="11" fill="${MUTED}">Půdorys · M 1:200 · rozměry v mm neuvedeny</text>`,
-    `<g transform="translate(${o.x + o.w - 150} ${H - 12})"><line x1="0" y1="0" x2="100" y2="0" stroke="${TEXT}" stroke-width="2"/><line x1="0" y1="-5" x2="0" y2="5" stroke="${TEXT}" stroke-width="2"/><line x1="50" y1="-4" x2="50" y2="4" stroke="${TEXT}"/><line x1="100" y1="-5" x2="100" y2="5" stroke="${TEXT}" stroke-width="2"/><text x="0" y="-9" font-size="10" fill="${MUTED}">0</text><text x="100" y="-9" font-size="10" fill="${MUTED}" text-anchor="end">10 m</text></g>`,
+    `<text x="${o.x + 300}" y="${H - 18}" font-size="11" fill="${MUTED}">Půdorys · ${esc(scale.label)} · ${esc(scale.dimensions ?? "rozměry v mm neuvedeny")}</text>`,
+    `<g transform="translate(${n(o.x + o.w - 50 - bar)} ${H - 12})"><line x1="0" y1="0" x2="${n(bar)}" y2="0" stroke="${TEXT}" stroke-width="2"/><line x1="0" y1="-5" x2="0" y2="5" stroke="${TEXT}" stroke-width="2"/><line x1="${n(bar / 2)}" y1="-4" x2="${n(bar / 2)}" y2="4" stroke="${TEXT}"/><line x1="${n(bar)}" y1="-5" x2="${n(bar)}" y2="5" stroke="${TEXT}" stroke-width="2"/><text x="0" y="-9" font-size="10" fill="${MUTED}">0</text><text x="${n(bar)}" y="-9" font-size="10" fill="${MUTED}" text-anchor="end">10 m</text></g>`,
   );
 
   return (

@@ -1,24 +1,30 @@
 import Link from "next/link";
-import { CalendarCheck, CalendarRange, FileCheck2, ScanLine } from "lucide-react";
+import { CalendarCheck, CalendarRange, FileCheck2, Inbox, PencilRuler, ScanLine, UsersRound, type LucideIcon } from "lucide-react";
 
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { initials } from "@/lib/format";
+import type { Permission } from "@/lib/accounts";
 import { auditReportHref, inspectionsHref, plannerHref, rapidInspectionHref } from "@/lib/routes";
+import { getAccountUsers } from "@/server/queries/accounts";
 import { getPlants } from "@/server/queries/plant";
-import { getCurrentRole, getCurrentUser, getRememberedPlantId } from "@/server/session";
+import { getCurrentAccount, getRememberedPlantId } from "@/server/session";
 
+import { AccountSwitcher } from "./AccountSwitcher";
 import { Logo } from "./Logo";
 import { PlantSwitcher } from "./PlantSwitcher";
-import { RoleSwitcher } from "./RoleSwitcher";
 
-/** Horní lišta: logo, přepínač závodu (jen v pohledu Údržba), přepínač pohledu a aktuální uživatel. */
+const NAV: { href: string; label: string; srLabel: string; icon: LucideIcon; permission: Permission }[] = [
+  { href: "/cae", label: "Back-Office", srLabel: "CAE Back-Office", icon: Inbox, permission: "caeOffice" },
+  { href: inspectionsHref, label: "Revize", srLabel: "Přehled revizí", icon: CalendarCheck, permission: "inspections" },
+  { href: plannerHref, label: "Plánovač", srLabel: "Plánovač revizí", icon: CalendarRange, permission: "planner" },
+  { href: rapidInspectionHref, label: "Rychlá revize", srLabel: "Rychlá revize", icon: ScanLine, permission: "rapid" },
+  { href: auditReportHref, label: "Audit", srLabel: "Auditní report", icon: FileCheck2, permission: "audit" },
+  { href: "/studio", label: "Studio", srLabel: "Studio výstavby závodu", icon: PencilRuler, permission: "studio" },
+  { href: "/admin/users", label: "Účty", srLabel: "Správa podúčtů", icon: UsersRound, permission: "manageUsers" },
+];
+
+/** Horní lišta: logo, přepínač závodu (údržba), navigace podle oprávnění účtu a přepínač účtu. */
 export async function AppHeader() {
-  const [role, user, plants, rememberedPlantId] = await Promise.all([
-    getCurrentRole(),
-    getCurrentUser(),
-    getPlants(),
-    getRememberedPlantId(),
-  ]);
+  const [account, accounts, plants, rememberedPlantId] = await Promise.all([getCurrentAccount(), getAccountUsers(), getPlants(), getRememberedPlantId()]);
+  const links = NAV.filter((item) => account.can(item.permission));
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur">
@@ -27,58 +33,33 @@ export async function AppHeader() {
           <Logo />
         </Link>
 
-        {role === "MAINTENANCE" ? (
+        {account.definition.workflowRole === "MAINTENANCE" ? (
           <PlantSwitcher plants={plants} fallbackId={rememberedPlantId ?? plants[0]?.id} />
         ) : (
           <span className="hidden text-sm text-muted-foreground md:inline">Všechny závody</span>
         )}
 
-        <nav aria-label="Revize" className="flex items-center gap-1">
-          <Link
-            href={inspectionsHref}
-            className="touch-target flex items-center gap-2 rounded-md px-2.5 text-sm text-muted-foreground transition-colors outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
-          >
-            <CalendarCheck className="size-4" aria-hidden />
-            <span className="hidden lg:inline">Revize</span>
-            <span className="sr-only lg:hidden">Přehled revizí</span>
-          </Link>
-          <Link
-            href={plannerHref}
-            className="touch-target flex items-center gap-2 rounded-md px-2.5 text-sm text-muted-foreground transition-colors outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
-          >
-            <CalendarRange className="size-4" aria-hidden />
-            <span className="hidden lg:inline">Plánovač</span>
-            <span className="sr-only lg:hidden">Plánovač revizí</span>
-          </Link>
-          <Link
-            href={rapidInspectionHref}
-            className="touch-target flex items-center gap-2 rounded-md px-2.5 text-sm text-muted-foreground transition-colors outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
-          >
-            <ScanLine className="size-4" aria-hidden />
-            <span className="hidden lg:inline">Rychlá revize</span>
-            <span className="sr-only lg:hidden">Rychlá revize</span>
-          </Link>
-          <Link
-            href={auditReportHref}
-            className="touch-target flex items-center gap-2 rounded-md px-2.5 text-sm text-muted-foreground transition-colors outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
-          >
-            <FileCheck2 className="size-4" aria-hidden />
-            <span className="hidden xl:inline">Audit</span>
-            <span className="sr-only xl:hidden">Auditní report</span>
-          </Link>
-        </nav>
+        {links.length ? (
+          <nav aria-label="Hlavní navigace" className="flex flex-wrap items-center gap-1">
+            {links.map(({ href, label, srLabel, icon: Icon }) => (
+              <Link
+                key={href}
+                href={href}
+                className="touch-target flex items-center gap-2 rounded-md px-2.5 text-sm text-muted-foreground transition-colors outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+              >
+                <Icon className="size-4" aria-hidden />
+                <span className="hidden xl:inline">{label}</span>
+                <span className="sr-only xl:hidden">{srLabel}</span>
+              </Link>
+            ))}
+          </nav>
+        ) : null}
 
         <div className="ml-auto flex items-center gap-3">
-          <RoleSwitcher role={role} />
-          <div className="hidden items-center gap-2 md:flex">
-            <Avatar className="size-9">
-              <AvatarFallback className="bg-secondary text-xs font-semibold">{initials(user.name)}</AvatarFallback>
-            </Avatar>
-            <div className="leading-tight">
-              <div className="text-sm font-medium">{user.name}</div>
-              <div className="text-xs text-muted-foreground">{user.company}</div>
-            </div>
-          </div>
+          <AccountSwitcher
+            accounts={accounts.flatMap(({ id, name, title, accountType }) => (accountType ? [{ id, name, title, accountType }] : []))}
+            currentId={account.user.id}
+          />
         </div>
       </div>
     </header>

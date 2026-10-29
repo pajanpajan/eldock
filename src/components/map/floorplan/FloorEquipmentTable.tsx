@@ -16,12 +16,17 @@ export function FloorEquipmentTable({
   onSelect,
   checked,
   onCheckedChange,
+  selectable = true,
+  showInspections = true,
 }: {
   equipment: FloorEquipment[];
   selectedId: string | null;
   onSelect: (id: string) => void;
   checked: ReadonlySet<string>;
   onCheckedChange: (next: ReadonlySet<string>) => void;
+  /** Checkboxy hromadné revize. */
+  selectable?: boolean;
+  showInspections?: boolean;
 }) {
   const allChecked = equipment.length > 0 && equipment.every((item) => checked.has(item.id));
   const toggleOne = (id: string) => {
@@ -44,21 +49,23 @@ export function FloorEquipmentTable({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-12">
-              <input
-                type="checkbox"
-                className="size-5 accent-primary align-middle"
-                checked={allChecked}
-                onChange={toggleAll}
-                aria-label="Vybrat vše pro hromadnou revizi"
-              />
-            </TableHead>
+            {selectable ? (
+              <TableHead className="w-12">
+                <input
+                  type="checkbox"
+                  className="size-5 accent-primary align-middle"
+                  checked={allChecked}
+                  onChange={toggleAll}
+                  aria-label="Vybrat vše pro hromadnou revizi"
+                />
+              </TableHead>
+            ) : null}
             <TableHead>Tag</TableHead>
             <TableHead>Název</TableHead>
             <TableHead className="hidden md:table-cell">Typ</TableHead>
             <TableHead>Stav</TableHead>
             <TableHead className="hidden lg:table-cell">Dokumentace</TableHead>
-            <TableHead>Elektrorevize</TableHead>
+            {showInspections ? <TableHead>Elektrorevize</TableHead> : null}
             <TableHead className="hidden sm:table-cell">Otevřená změna</TableHead>
           </TableRow>
         </TableHeader>
@@ -78,15 +85,17 @@ export function FloorEquipmentTable({
                   onClick={() => onSelect(item.id)}
                   className={cn("h-12 cursor-pointer", item.id === selectedId && "bg-primary/10", checked.has(item.id) && "bg-primary/5")}
                 >
-                  <TableCell onClick={(event) => event.stopPropagation()}>
-                    <input
-                      type="checkbox"
-                      className="size-5 accent-primary align-middle"
-                      checked={checked.has(item.id)}
-                      onChange={() => toggleOne(item.id)}
-                      aria-label={`Vybrat ${item.tag} pro hromadnou revizi`}
-                    />
-                  </TableCell>
+                  {selectable ? (
+                    <TableCell onClick={(event) => event.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        className="size-5 accent-primary align-middle"
+                        checked={checked.has(item.id)}
+                        onChange={() => toggleOne(item.id)}
+                        aria-label={`Vybrat ${item.tag} pro hromadnou revizi`}
+                      />
+                    </TableCell>
+                  ) : null}
                   <TableCell>
                     <button
                       type="button"
@@ -114,9 +123,11 @@ export function FloorEquipmentTable({
                     )}
                   </TableCell>
                   <TableCell className="hidden font-mono lg:table-cell">{item.activeRevision?.version ?? "—"}</TableCell>
-                  <TableCell>
-                    <InspectionStatusBadge summary={item.inspection} />
-                  </TableCell>
+                  {showInspections ? (
+                    <TableCell>
+                      <InspectionStatusBadge summary={item.inspection} />
+                    </TableCell>
+                  ) : null}
                   <TableCell className="hidden font-mono sm:table-cell">{item.openChange?.number ?? "—"}</TableCell>
                 </TableRow>
               );

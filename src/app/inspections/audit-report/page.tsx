@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Construction, ShieldCheck, ShieldX, Wrench } from "lucide-react";
 
 import { KpiTile } from "@/components/common/KpiTile";
+import { NoAccess } from "@/components/common/NoAccess";
 import { PageHeader } from "@/components/common/PageHeader";
 import { AuditReportActions } from "@/components/inspections/AuditReportActions";
 import { InspectionStatusBadge } from "@/components/inspections/InspectionStatusBadge";
@@ -18,16 +19,18 @@ import { tempModCountdown } from "@/lib/temporary-mod";
 import { cn } from "@/lib/utils";
 import { getAuditReport } from "@/server/queries/inspections";
 import { getPlants } from "@/server/queries/plant";
-import { getCurrentRole, getRememberedPlantId } from "@/server/session";
+import { getCurrentAccount, getRememberedPlantId } from "@/server/session";
 
 export const metadata: Metadata = { title: "Auditní report revizí" };
 
 // Kniha revizí závodu pro kontrolu TIČR / ISO: shoda, kategorie, závady, provizoria; tisk a CSV.
 export default async function AuditReportPage() {
-  const [role, plants, rememberedId] = await Promise.all([getCurrentRole(), getPlants(), getRememberedPlantId()]);
+  const [account, plants, rememberedId] = await Promise.all([getCurrentAccount(), getPlants(), getRememberedPlantId()]);
+  if (!account.can("audit")) return <NoAccess title="Auditní report" current={account.accountType} suggest="PLANT_ADMIN" />;
+  const role = account.definition.workflowRole;
   const plant = role === "MAINTENANCE" ? (plants.find((entry) => entry.id === rememberedId) ?? plants[0]) : undefined;
   const now = new Date();
-  const { rows, defects, mods } = await getAuditReport(plant?.id, now);
+  const { rows, defects, mods } = await getAuditReport(plant?.id, now, account.types);
   const { overall, byLayer } = summarizeAudit(rows.map((row) => ({ type: row.type, state: row.summary.state })));
   const overdueDefects = defects.filter((defect) => defectState(defect, now).state === "OVERDUE").length;
   const overdueMods = mods.filter((mod) => tempModCountdown(mod.expiresAt, now).overdue).length;

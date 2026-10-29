@@ -12,6 +12,7 @@ import { CampusExplorer } from "@/components/map/campus/CampusExplorer";
 import { EQUIPMENT_STATUS } from "@/lib/status";
 import { getInspectionWatch } from "@/server/queries/inspections";
 import { getPlantOverview } from "@/server/queries/plant";
+import { getCurrentAccount } from "@/server/session";
 
 export async function generateMetadata({ params }: PageProps<"/plant/[plantId]">): Promise<Metadata> {
   const { plantId } = await params;
@@ -22,7 +23,8 @@ export async function generateMetadata({ params }: PageProps<"/plant/[plantId]">
 // Level 1 – Půdorys areálu.
 export default async function PlantPage({ params }: PageProps<"/plant/[plantId]">) {
   const { plantId } = await params;
-  const [plant, watch] = await Promise.all([getPlantOverview(plantId), getInspectionWatch(plantId)]);
+  const account = await getCurrentAccount();
+  const [plant, watch] = await Promise.all([getPlantOverview(plantId, account.types), getInspectionWatch(plantId, new Date(), account.types)]);
   if (!plant) notFound();
 
   return (
@@ -52,9 +54,11 @@ export default async function PlantPage({ params }: PageProps<"/plant/[plantId]"
         />
       </section>
 
-      <div className="mb-6">
-        <InspectionWatcher watch={watch} />
-      </div>
+      {account.definition.showInspections ? (
+        <div className="mb-6">
+          <InspectionWatcher watch={watch} />
+        </div>
+      ) : null}
 
       <CampusExplorer
         plant={plant}

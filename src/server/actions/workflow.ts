@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 import { generateRevisionSchematic } from "@/server/services/schematic";
 import * as workflow from "@/server/services/workflow";
+import { assertPermission } from "@/server/permissions";
 import { saveUpload } from "@/server/storage";
 import { getCurrentRole, getCurrentUser } from "@/server/session";
 
@@ -94,6 +95,7 @@ async function run<S extends z.ZodType, T>(
 
 export async function submitChangeRequestAction(input: z.input<typeof submitSchema>) {
   return run(submitSchema, input, async (actor, data) => {
+    await assertPermission("submitChange");
     const changeRequest = await workflow.submitChangeRequest(prisma, actor, data);
     return { id: changeRequest.id, number: changeRequest.number, equipmentId: changeRequest.equipmentId };
   });
@@ -129,6 +131,7 @@ export async function cancelChangeRequestAction(input: z.input<typeof crSchema>)
 
 export async function approveRevisionAction(input: z.input<typeof crSchema>) {
   return run(crSchema, input, async (actor, data) => {
+    await assertPermission("approveRevision");
     const revision = await workflow.approveRevision(prisma, actor, data);
     return { id: revision.id, version: revision.version };
   });
@@ -136,6 +139,7 @@ export async function approveRevisionAction(input: z.input<typeof crSchema>) {
 
 export async function rejectRevisionAction(input: z.input<typeof rejectSchema>) {
   return run(rejectSchema, input, async (actor, data) => {
+    await assertPermission("approveRevision");
     const revision = await workflow.rejectRevision(prisma, actor, data);
     return { id: revision.id, version: revision.version };
   });

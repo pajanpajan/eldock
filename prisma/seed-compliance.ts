@@ -40,6 +40,21 @@ export const FEEDS: Record<string, FeedSeed> = {
   "ROB-07": { from: "R-ML-01", circuit: "Vývod Q4" },
   "LAK-01": { from: "R-LAK-01", circuit: "Vývod Q2" },
   "VZT-LAK": { from: "R-LAK-01", circuit: "Vývod Q3" },
+  // Spotřebiče, nářadí a bezpečnostní okruhy (fáze 17 – pavouk napájení)
+  "NR-0112": { from: "R-LIS-01", circuit: "Zásuvkový okruh ZS1" },
+  "NR-0087": { from: "R-LIS-01", circuit: "Zásuvkový okruh ZS1" },
+  "PP-0031": { from: "R-LIS-01", circuit: "Zásuvka 400 V / XS3" },
+  "SV-0004": { from: "R-LIS-01", circuit: "Zásuvka 400 V / XS3" },
+  "NO-A": { from: "R-LIS-01", circuit: "Okruh nouzového osvětlení FE1" },
+  "SV-0007": { from: "R-ML-01", circuit: "Zásuvkový okruh ZS2" },
+  "SP-0201": { from: "RM1", circuit: "Pole 5 / Zásuvkový okruh ZS-E1" },
+  "SP-0202": { from: "RM1", circuit: "Pole 5 / Zásuvkový okruh ZS-E1" },
+  "SP-0203": { from: "RM1", circuit: "Pole 5 / Zásuvkový okruh ZS-E1" },
+  "SP-0204": { from: "RM1", circuit: "Pole 5 / Zásuvkový okruh ZS-E1" },
+  "NO-E": { from: "RZ1", circuit: "Okruh nouzového osvětlení FE2" },
+  "SP-0310": { from: "RP-ADM1", circuit: "Zásuvkový okruh ZS3" },
+  "PP-0044": { from: "RP-ADM1", circuit: "Zásuvkový okruh ZS3" },
+  "SP-0322": { from: "RP-ADM2", circuit: "Zásuvkový okruh ZS1" },
 };
 
 // ---------------------------------------------------------------------------

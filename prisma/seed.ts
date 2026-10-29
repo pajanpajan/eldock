@@ -29,6 +29,7 @@ import {
   type UserKey,
 } from "./seed-data";
 import { defectDeadline, severityForResult, splitDefects } from "../src/lib/defects";
+import { ACCOUNTS } from "./seed-accounts";
 import { LIGHT_EQUIPMENT } from "./seed-appliances";
 import { TEMPORARY_MODS } from "./seed-temporary-mods";
 import { FEEDS, INSPECTORS, type DefectSeed, complianceFor, externalInfluencesFor, inspectionsFor, intervalFor } from "./seed-compliance";
@@ -91,6 +92,7 @@ async function main() {
   await prisma.user.createMany({
     data: USERS.map(({ id, name, email, role, company, phone }) => ({ id, name, email, role, company, phone })),
   });
+  await prisma.user.createMany({ data: ACCOUNTS.map((account, sortOrder) => ({ ...account, sortOrder })) });
   await prisma.plant.createMany({ data: PLANTS });
   await prisma.building.createMany({ data: BUILDINGS });
 
@@ -248,7 +250,8 @@ async function main() {
     const plant = PLANTS.find((p) => p.id === building.plantId)!;
     const feed = FEEDS[eq.tag];
     const feeders = Object.entries(FEEDS)
-      .filter(([, f]) => f.from === eq.tag)
+      // Liniové schéma kreslí jen pevné vývody (ne zásuvkové okruhy spotřebičů)
+      .filter(([tag, f]) => f.from === eq.tag && EQUIPMENT.some((item) => item.tag === tag))
       .map(([tag, f]) => ({ circuit: f.circuit, label: tag, rating: f.rating }));
     const issuedAt = day(`${eq.yearInstalled}-02-2${index % 8}`);
 
@@ -449,7 +452,7 @@ async function main() {
       `  revize ${revisions} · položky kusovníku ${bom}`,
       `  požadavky otevřené ${openCr} · uzavřené ${closedCr} · události ${events}`,
       `  dokumenty pasportu ${documents} · revizní zprávy ${inspections} · závady ${defects} · provizoria ${mods}`,
-      `  uživatelé ${USERS.length}`,
+      `  uživatelé ${USERS.length} · účty ${ACCOUNTS.length}`,
     ].join("\n"),
   );
 }

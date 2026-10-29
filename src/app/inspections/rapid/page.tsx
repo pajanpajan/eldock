@@ -3,23 +3,26 @@ import Link from "next/link";
 import { ListChecks, PackageOpen } from "lucide-react";
 
 import { EmptyState } from "@/components/common/EmptyState";
+import { NoAccess } from "@/components/common/NoAccess";
 import { PageHeader } from "@/components/common/PageHeader";
 import { RapidInspection } from "@/components/inspections/RapidInspection";
 import { Button } from "@/components/ui/button";
 import { inspectionsHref } from "@/lib/routes";
 import { getRapidQueue } from "@/server/queries/inspections";
 import { getPlants } from "@/server/queries/plant";
-import { getCurrentRole, getRememberedPlantId } from "@/server/session";
+import { getCurrentAccount, getRememberedPlantId } from "@/server/session";
 
 export const metadata: Metadata = { title: "Rychlá revize" };
 
 // Mobilní režim pro revizního technika: fronta spotřebičů v místnosti a zápis jedním klikem.
 export default async function RapidInspectionPage({ searchParams }: PageProps<"/inspections/rapid">) {
-  const [role, plants, rememberedId, params] = await Promise.all([getCurrentRole(), getPlants(), getRememberedPlantId(), searchParams]);
+  const [account, plants, rememberedId, params] = await Promise.all([getCurrentAccount(), getPlants(), getRememberedPlantId(), searchParams]);
+  if (!account.can("rapid")) return <NoAccess title="Rychlá revize" current={account.accountType} suggest="INSPECTOR_APPLIANCES" />;
+  const role = account.definition.workflowRole;
   // Dávka z plánovače: `?ids=a,b,c` v pořadí pochůzky.
   const planIds = typeof params.ids === "string" ? params.ids.split(",").filter(Boolean).slice(0, 500) : [];
   const plant = role === "MAINTENANCE" ? (plants.find((entry) => entry.id === rememberedId) ?? plants[0]) : undefined;
-  const items = await getRapidQueue(plant?.id);
+  const items = await getRapidQueue(plant?.id, new Date(), account.types);
 
   return (
     <>

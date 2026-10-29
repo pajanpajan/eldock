@@ -3,7 +3,12 @@ import "server-only";
 import { DEADLINE_TYPES, compareByUrgency, needsAttention, pragueToday, summarizeInspections, type InspectionSummary } from "@/lib/inspection";
 import type { PlannerItem } from "@/lib/inspection-planner";
 import { PORTABLE_TYPES } from "@/lib/inspection-rules";
+import type { EquipmentType } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/prisma";
+
+/** Výřez závodu a typů zařízení (účet) pro `equipment`. */
+const plantScope = (plantId?: string) => (plantId ? { floor: { building: { plantId } } } : {});
+const typeScope = (types: EquipmentType[] | null) => (types ? { type: { in: types } } : {});
 
 export interface InspectionWatchItem {
   id: string;
@@ -19,9 +24,9 @@ export interface InspectionWatchItem {
  * Hlídač elektrorevizí: zařízení s propadlou nebo brzy končící revizí, seřazená podle
  * naléhavosti. Bez `plantId` napříč všemi závody (CAE přehled).
  */
-export async function getInspectionWatch(plantId?: string, now: Date = new Date()) {
+export async function getInspectionWatch(plantId?: string, now: Date = new Date(), types: EquipmentType[] | null = null) {
   const equipment = await prisma.equipment.findMany({
-    where: plantId ? { floor: { building: { plantId } } } : undefined,
+    where: { ...plantScope(plantId), ...typeScope(types) },
     orderBy: { tag: "asc" },
     select: {
       id: true,
@@ -60,9 +65,9 @@ export async function getInspectionWatch(plantId?: string, now: Date = new Date(
 export type InspectionWatch = Awaited<ReturnType<typeof getInspectionWatch>>;
 
 /** Přehled revizí (`/inspections`): všechna zařízení závodu se stavem lhůty – podklad pro hromadnou revizi. */
-export async function getInspectionOverview(plantId?: string, now: Date = new Date()) {
+export async function getInspectionOverview(plantId?: string, now: Date = new Date(), types: EquipmentType[] | null = null) {
   const equipment = await prisma.equipment.findMany({
-    where: plantId ? { floor: { building: { plantId } } } : undefined,
+    where: { ...plantScope(plantId), ...typeScope(types) },
     orderBy: { tag: "asc" },
     select: {
       id: true,
@@ -94,10 +99,11 @@ export async function getInspectionOverview(plantId?: string, now: Date = new Da
 export type InspectionOverviewItem = Awaited<ReturnType<typeof getInspectionOverview>>[number];
 
 /** Rychlá revize (`/inspections/rapid`): přenosné spotřebiče a nářadí s místností, stavem a posledním měřením. */
-export async function getRapidQueue(plantId?: string, now: Date = new Date()) {
+export async function getRapidQueue(plantId?: string, now: Date = new Date(), types: EquipmentType[] | null = null) {
   const today = pragueToday(now);
+  const portable = PORTABLE_TYPES.filter((type) => !types || types.includes(type));
   const equipment = await prisma.equipment.findMany({
-    where: { type: { in: [...PORTABLE_TYPES] }, ...(plantId ? { floor: { building: { plantId } } } : {}) },
+    where: { type: { in: portable }, ...plantScope(plantId) },
     orderBy: { tag: "asc" },
     select: {
       id: true,
@@ -140,9 +146,9 @@ export async function getRapidQueue(plantId?: string, now: Date = new Date()) {
 export type RapidItem = Awaited<ReturnType<typeof getRapidQueue>>[number];
 
 /** Plánovač revizí (`/inspections/planner`): všechna zařízení s místem pro řazení pochůzky. */
-export async function getPlannerItems(plantId?: string, now: Date = new Date()): Promise<PlannerItem[]> {
+export async function getPlannerItems(plantId?: string, now: Date = new Date(), types: EquipmentType[] | null = null): Promise<PlannerItem[]> {
   const equipment = await prisma.equipment.findMany({
-    where: plantId ? { floor: { building: { plantId } } } : undefined,
+    where: { ...plantScope(plantId), ...typeScope(types) },
     orderBy: { tag: "asc" },
     select: {
       id: true,
@@ -186,8 +192,8 @@ export async function getPlannerItems(plantId?: string, now: Date = new Date()):
 }
 
 /** Auditní report / Kniha revizí: všechna zařízení s poslední revizí, otevřené závady a aktivní provizoria. */
-export async function getAuditReport(plantId?: string, now: Date = new Date()) {
-  const scope = plantId ? { floor: { building: { plantId } } } : {};
+export async function getAuditReport(plantId?: string, now: Date = new Date(), types: EquipmentType[] | null = null) {
+  const scope = { ...plantScope(plantId), ...typeScope(types) };
   const [equipment, defects, mods] = await Promise.all([
     prisma.equipment.findMany({
       where: scope,

@@ -9,7 +9,7 @@ import { ResolveDefectDialog } from "./ResolveDefectDialog";
 const DAYS = ["den", "dny", "dní"] as const;
 
 /** Závady revizní zprávy: závažnost, odpočet lhůty, potvrzení odstranění. */
-export function DefectList({ defects, now }: { defects: EquipmentDefect[]; now: Date }) {
+export function DefectList({ defects, now, canResolve = true }: { defects: EquipmentDefect[]; now: Date; canResolve?: boolean }) {
   if (!defects.length) return null;
   return (
     <ul className="space-y-2" aria-label="Závady z revize">
@@ -39,7 +39,7 @@ export function DefectList({ defects, now }: { defects: EquipmentDefect[]; now: 
                   Lhůta {formatDateShort(defect.deadline)} ·{" "}
                   {daysLeft < 0 ? `${-daysLeft} ${plural(-daysLeft, DAYS)} po lhůtě` : daysLeft === 0 ? "odstranit dnes" : `zbývá ${daysLeft} ${plural(daysLeft, DAYS)}`}
                 </p>
-                <ResolveDefectDialog defectId={defect.id} description={defect.description} />
+                {canResolve ? <ResolveDefectDialog defectId={defect.id} description={defect.description} /> : null}
               </div>
             )}
           </li>

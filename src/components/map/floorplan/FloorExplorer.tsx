@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState, type FormEvent } from "react";
-import { Search, X } from "lucide-react";
+import { EyeOff, Search, X } from "lucide-react";
 import type { ReactZoomPanPinchRef } from "react-zoom-pan-pinch";
 
 import { StatusLegend } from "@/components/common/StatusLegend";
@@ -33,7 +33,21 @@ function toggle<T>(set: ReadonlySet<T>, value: T): Set<T> {
 }
 
 /** Půdorys patra: vrstvy, filtry, hledání tagu, zoomovatelný viewer, tabulka s hromadnou revizí a rychlý náhled. */
-export function FloorExplorer({ floor }: { floor: FloorView }) {
+export function FloorExplorer({
+  floor,
+  showInspections = true,
+  canBatchInspect = true,
+  scopeLabel = null,
+}: {
+  floor: FloorView;
+  /** Lhůtník revizí (CAE ne). */
+  showInspections?: boolean;
+  /** Hromadná revize v tabulce. */
+  canBatchInspect?: boolean;
+  /** Výřez dat účtu („Revizní technik VTZ: …“). */
+  scopeLabel?: string | null;
+}) {
+  const [spider, setSpider] = useState(false);
   const apiRef = useRef<ReactZoomPanPinchRef>(null);
   const [statuses, setStatuses] = useState<ReadonlySet<EquipmentStatus>>(new Set());
   const [types, setTypes] = useState<ReadonlySet<EquipmentType>>(new Set());
@@ -178,13 +192,34 @@ export function FloorExplorer({ floor }: { floor: FloorView }) {
         </div>
       </div>
 
+      {scopeLabel ? (
+        <p className="flex items-center gap-2 rounded-lg border border-sky-500/40 bg-sky-500/10 px-3 py-2 text-sm text-sky-200" data-testid="account-scope">
+          <EyeOff className="size-4 shrink-0" aria-hidden />
+          Výřez účtu – {scopeLabel}
+        </p>
+      ) : null}
+
       <MapLayersPanel
         layers={layers}
         counts={counts}
         attentionOnly={attentionOnly}
+        showAttention={showInspections}
         onToggleLayer={(key) => setLayers((current) => toggle(current, key))}
         onToggleAttention={() => setAttentionOnly((value) => !value)}
       />
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          aria-pressed={spider}
+          onClick={() => setSpider((value) => !value)}
+          className={cn("touch-target gap-2", spider && "border-yellow-400 bg-yellow-400/15 text-yellow-200")}
+        >
+          ⚡ Zobrazit pavouka napájení (Hierarchie)
+        </Button>
+        {spider ? <span className="text-xs text-muted-foreground">Žlutě vývody z rozváděčů patra, modře napájení z jiného patra nebo skryté vrstvy.</span> : null}
+      </div>
 
       <FloorplanViewer
         svg={floor.floorplanSvg}
@@ -193,6 +228,8 @@ export function FloorExplorer({ floor }: { floor: FloorView }) {
         selectedId={selectedId}
         onSelect={select}
         apiRef={apiRef}
+        spider={spider}
+        showInspections={showInspections}
       />
       <StatusLegend
         extra={<span>Kolečko myši / dva prsty = zoom · tažení = posun · dvojklik = přiblížit</span>}
@@ -212,10 +249,12 @@ export function FloorExplorer({ floor }: { floor: FloorView }) {
           onSelect={select}
           checked={checked}
           onCheckedChange={setChecked}
+          selectable={canBatchInspect}
+          showInspections={showInspections}
         />
       </section>
 
-      <BatchInspectionBar items={batchItems} today={floor.today} onClear={() => setChecked(new Set())} />
+      {canBatchInspect ? <BatchInspectionBar items={batchItems} today={floor.today} onClear={() => setChecked(new Set())} /> : null}
 
       <EquipmentQuickView equipment={sheetOpen ? selected : null} onOpenChange={setSheetOpen} />
     </div>
