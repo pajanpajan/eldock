@@ -8,13 +8,18 @@ import { validatePlacement, type PowerSource } from "@/lib/power-hierarchy";
 import { floorLabel, floorName, rectPolygon, type StudioDraft } from "@/lib/studio-draft";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 
+import { preparePlant } from "./plants";
+
 const fail = (message: string): never => {
   throw new WorkflowError("VALIDATION", message);
 };
 
 export async function saveStudioBuilding(prisma: PrismaClient, draft: StudioDraft) {
   const grid: GridSpec = clampGrid(draft.grid);
-  const plant = await prisma.plant.findUnique({ where: { id: draft.plantId }, select: { id: true } });
+  // Nový závod od nuly: ověřit hned, založit až v transakci spolu s budovou.
+  const newPlant = draft.newPlant ? await preparePlant(prisma, draft.newPlant) : null;
+  if (newPlant && draft.building.mode !== "new") fail("Nový závod začíná novou budovou.");
+  const plant = newPlant ? { id: "" } : await prisma.plant.findUnique({ where: { id: draft.plantId }, select: { id: true } });
   if (!plant) throw new WorkflowError("NOT_FOUND", "Závod nebyl nalezen.");
 
   // Existující budova a patra
@@ -27,7 +32,7 @@ export async function saveStudioBuilding(prisma: PrismaClient, draft: StudioDraf
     const { code, name } = draft.building;
     if (!/^[A-Z0-9]{1,4}$/i.test(code.trim())) fail("Kód budovy: 1–4 písmena nebo číslice (např. C).");
     if (name.trim().length < 3) fail("Zadejte název budovy.");
-    if (await prisma.building.findFirst({ where: { plantId: plant.id, code: code.trim().toUpperCase() }, select: { id: true } })) {
+    if (!newPlant && (await prisma.building.findFirst({ where: { plantId: plant.id, code: code.trim().toUpperCase() }, select: { id: true } }))) {
       fail(`Budova s kódem ${code.trim().toUpperCase()} v závodě už existuje.`);
     }
   }
@@ -39,10 +44,12 @@ export async function saveStudioBuilding(prisma: PrismaClient, draft: StudioDraf
   if (!existingBuilding && draft.floors.length === 0) fail("Přidejte alespoň jedno patro.");
 
   // Zdroje napájení: rozváděče a trafa závodu + rozváděče konceptu
-  const plantSources = await prisma.equipment.findMany({
-    where: { type: { in: ["SWITCHBOARD", "TRANSFORMER"] }, floor: { building: { plantId: plant.id } } },
-    select: { id: true, tag: true, type: true, floorId: true },
-  });
+  const plantSources = newPlant
+    ? []
+    : await prisma.equipment.findMany({
+        where: { type: { in: ["SWITCHBOARD", "TRANSFORMER"] }, floor: { building: { plantId: plant.id } } },
+        select: { id: true, tag: true, type: true, floorId: true },
+      });
   const draftSources: PowerSource[] = draft.equipment
     .filter((item) => item.type === "SWITCHBOARD" || item.type === "TRANSFORMER")
     .map((item) => ({ id: `draft:${item.key}`, tag: item.tag, type: item.type, floorId: item.floor.kind === "draft" ? `draft:${item.floor.key}` : item.floor.id }));
@@ -71,6 +78,7 @@ export async function saveStudioBuilding(prisma: PrismaClient, draft: StudioDraf
   }
 
   return prisma.$transaction(async (tx) => {
+    if (newPlant) plant.id = (await tx.plant.create({ data: newPlant, select: { id: true } })).id;
     let buildingId = existingBuilding?.id;
     if (draft.building.mode === "new") {
       const last = await tx.building.findFirst({ where: { plantId: plant.id }, orderBy: { sortOrder: "desc" }, select: { sortOrder: true } });
@@ -147,6 +155,6 @@ export async function saveStudioBuilding(prisma: PrismaClient, draft: StudioDraf
       floorIds.get(draft.floors.find((floor) => floor.level === 0)?.key ?? "") ??
       floorIds.values().next().value ??
       existingBuilding?.floors[0]?.id;
-    return { plantId: plant.id, buildingId: buildingId!, firstFloorId: firstFloorId ?? null, floors: floorIds.size, equipment: equipmentIds.size };
+    return { plantId: plant.id, plantCreated: Boolean(newPlant), buildingId: buildingId!, firstFloorId: firstFloorId ?? null, floors: floorIds.size, equipment: equipmentIds.size };
   });
 }

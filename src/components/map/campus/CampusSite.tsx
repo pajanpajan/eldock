@@ -6,7 +6,7 @@ const GREEN = "#12221a";
 const TREE = "#1c3a29";
 
 /** Statické kulisy areálu: plot, ulice, komunikace, parkoviště, zeleň, vrátnice, růžice a měřítko. */
-export function CampusSite({ layout, width, height }: { layout: SiteLayout; width: number; height: number }) {
+export function CampusSite({ layout, width, height, widthM }: { layout: SiteLayout; width: number; height: number; /** Šířka mapy v metrech (popisek měřítka 100 px). */ widthM?: number }) {
   const { fence, gate } = layout;
   const fenceBottom = fence.y + fence.h;
 
@@ -105,7 +105,7 @@ export function CampusSite({ layout, width, height }: { layout: SiteLayout; widt
         <rect x={50} y={-3} width={50} height={6} fill="#334155" stroke="#cbd5e1" strokeWidth={0.8} />
         <text x={0} y={-8}>0</text>
         <text x={100} y={-8} textAnchor="end">
-          50 m
+          {widthM ? Math.round((widthM * 100) / width) : 50} m
         </text>
       </g>
     </g>

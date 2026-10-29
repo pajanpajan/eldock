@@ -5,9 +5,10 @@ import type { Permission } from "@/lib/accounts";
 import { auditReportHref, inspectionsHref, plannerHref, rapidInspectionHref } from "@/lib/routes";
 import { getAccountUsers } from "@/server/queries/accounts";
 import { getPlants } from "@/server/queries/plant";
-import { getCurrentAccount, getRememberedPlantId } from "@/server/session";
+import { getAuthSession, getCurrentAccount, getRememberedPlantId } from "@/server/session";
 
 import { AccountSwitcher } from "./AccountSwitcher";
+import { LogoutButton } from "./LogoutButton";
 import { Logo } from "./Logo";
 import { PlantSwitcher } from "./PlantSwitcher";
 
@@ -23,6 +24,16 @@ const NAV: { href: string; label: string; srLabel: string; icon: LucideIcon; per
 
 /** Horní lišta: logo, přepínač závodu (údržba), navigace podle oprávnění účtu a přepínač účtu. */
 export async function AppHeader() {
+  // Nepřihlášený uživatel (stránka /login) vidí jen logo.
+  if (!(await getAuthSession())) {
+    return (
+      <header className="border-b border-border bg-background/90">
+        <div className="mx-auto flex min-h-14 w-full max-w-[1800px] items-center px-3 py-2 sm:px-6">
+          <Logo />
+        </div>
+      </header>
+    );
+  }
   const [account, accounts, plants, rememberedPlantId] = await Promise.all([getCurrentAccount(), getAccountUsers(), getPlants(), getRememberedPlantId()]);
   const links = NAV.filter((item) => account.can(item.permission));
 
@@ -60,6 +71,7 @@ export async function AppHeader() {
             accounts={accounts.flatMap(({ id, name, title, accountType }) => (accountType ? [{ id, name, title, accountType }] : []))}
             currentId={account.user.id}
           />
+          <LogoutButton />
         </div>
       </div>
     </header>

@@ -13,12 +13,14 @@ export async function getEquipmentDetail(equipmentId: string) {
       floor: {
         select: {
           id: true,
+          code: true,
           name: true,
           building: {
             select: {
               id: true,
+              code: true,
               name: true,
-              plant: { select: { id: true, name: true } },
+              plant: { select: { id: true, code: true, name: true, customerName: true } },
               _count: { select: { floors: true } },
             },
           },

@@ -4,6 +4,7 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 
 import { ACCOUNT_TYPES, canSeeType, can, equipmentScope, visibleTypes, type Permission } from "@/lib/accounts";
+import { AUTH_COOKIE, isAuthBypassed, verifyAuthToken } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ACCOUNT_COOKIE, DEMO_USER_ID, PLANT_COOKIE, ROLE_COOKIE, parseRole, type AppRole } from "@/lib/roles";
 
@@ -45,4 +46,11 @@ export const getCurrentRole = cache(async (): Promise<AppRole> => (await getCurr
 export const getRememberedPlantId = cache(async (): Promise<string | undefined> => {
   const store = await cookies();
   return store.get(PLANT_COOKIE)?.value;
+});
+
+/** Přihlášení z cookie `digitry-auth` (při `DIGITRY_BYPASS_AUTH=1` vždy platné). */
+export const getAuthSession = cache(async () => {
+  if (isAuthBypassed()) return { userId: "bypass", expires: Number.MAX_SAFE_INTEGER };
+  const store = await cookies();
+  return verifyAuthToken(store.get(AUTH_COOKIE)?.value);
 });

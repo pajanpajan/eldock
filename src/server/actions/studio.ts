@@ -1,9 +1,11 @@
 "use server";
 
+import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
+import { PLANT_COOKIE } from "@/lib/roles";
 import { floorHref, plantHref } from "@/lib/routes";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 import { assertPermission } from "@/server/permissions";
@@ -34,6 +36,10 @@ const equipmentType = z.enum([
 
 const draftSchema = z.object({
   plantId: id,
+  newPlant: z
+    .object({ name: text(120), code: text(6), location: text(200), widthM: z.number().int().min(1).max(5000), depthM: z.number().int().min(1).max(5000) })
+    .nullable()
+    .optional(),
   grid: z.object({ cols: z.number().int(), rows: z.number().int(), stepMeters: z.number().positive().max(30), scale: z.enum(["1:100", "1:200", "1:500"]) }),
   building: z.discriminatedUnion("mode", [
     z.object({
@@ -74,16 +80,19 @@ const draftSchema = z.object({
     .max(200),
 });
 
-/** Uloží budovu ze Studia (ředitel, vedoucí údržby) a vrátí odkaz na první patro. */
-export async function saveStudioAction(input: z.input<typeof draftSchema>): Promise<ActionResult<{ href: string; floors: number; equipment: number }>> {
+/** Uloží budovu ze Studia (ředitel, vedoucí údržby) a vrátí odkaz na první patro; nový závod si zapamatuje jako aktuální. */
+export async function saveStudioAction(input: z.input<typeof draftSchema>): Promise<ActionResult<{ href: string; floors: number; equipment: number; plantCreated: boolean }>> {
   const parsed = draftSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Neplatná data konceptu. Zkontrolujte vyplněné údaje." };
   try {
     await assertPermission("studio");
     const result = await saveStudioBuilding(prisma, parsed.data);
+    if (result.plantCreated) {
+      (await cookies()).set(PLANT_COOKIE, result.plantId, { path: "/", maxAge: 60 * 60 * 24 * 365, sameSite: "lax", httpOnly: true });
+    }
     revalidatePath("/", "layout");
     const href = result.firstFloorId ? floorHref(result.plantId, result.buildingId, result.firstFloorId) : plantHref(result.plantId);
-    return { ok: true, data: { href, floors: result.floors, equipment: result.equipment } };
+    return { ok: true, data: { href, floors: result.floors, equipment: result.equipment, plantCreated: result.plantCreated } };
   } catch (error) {
     if (error instanceof WorkflowError) return { ok: false, error: error.message };
     console.error(error);

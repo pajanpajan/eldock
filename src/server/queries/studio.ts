@@ -10,6 +10,8 @@ export async function getStudioData(plantId: string) {
       id: true,
       code: true,
       name: true,
+      campusWidthM: true,
+      campusDepthM: true,
       buildings: {
         orderBy: { sortOrder: "asc" },
         select: {

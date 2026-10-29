@@ -220,6 +220,9 @@ model Plant {
   campusMapUrl   String?
   campusViewBoxW Int     @default(1000)
   campusViewBoxH Int     @default(700)
+  // Skutečný rozměr pozemku v metrech (převod rozměru budovy ve Studiu na mapu)
+  campusWidthM   Int     @default(400)
+  campusDepthM   Int     @default(280)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

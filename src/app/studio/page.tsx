@@ -18,6 +18,8 @@ export default async function StudioPage({ searchParams }: PageProps<"/studio">)
   const requested = typeof params.plant === "string" ? params.plant : undefined;
   const plant = plants.find((entry) => entry.id === requested) ?? plants.find((entry) => entry.id === rememberedId) ?? plants[0];
   if (!plant) notFound();
+  // „+ Nový závod od nuly“ (?new=plant) otevře Studio rovnou v režimu čisté mapy areálu.
+  const startNewPlant = params.new === "plant";
   const data = await getStudioData(plant.id);
   if (!data) notFound();
 
@@ -27,7 +29,7 @@ export default async function StudioPage({ searchParams }: PageProps<"/studio">)
         title="Studio výstavby závodu"
         description={`${data.plant.name} · nová budova, patra, místnosti a zařízení s hierarchií napájení přímo v konstrukčním rastru.`}
       />
-      <StudioWizard key={data.plant.id} data={data} />
+      <StudioWizard key={`${data.plant.id}:${startNewPlant}`} data={data} startNewPlant={startNewPlant} />
     </>
   );
 }

@@ -65,7 +65,7 @@ export function AccountSwitcher({ accounts, currentId }: { accounts: SwitcherAcc
         <ChevronDown className="size-4 text-muted-foreground" aria-hidden />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-[min(92vw,26rem)]">
-        <DropdownMenuLabel>Přepnout účet (demo bez přihlášení)</DropdownMenuLabel>
+        <DropdownMenuLabel>Přepnout účet</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {accounts.map((account) => {
           const item = ACCOUNT_TYPES[account.accountType];

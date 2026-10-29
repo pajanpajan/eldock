@@ -16,6 +16,7 @@ import { DocumentationTabs } from "@/components/equipment/DocumentationTabs";
 import { QrDialog } from "@/components/equipment/QrDialog";
 import { RevisionTimeline } from "@/components/equipment/RevisionTimeline";
 import { SafetyBanner } from "@/components/equipment/SafetyBanner";
+import { PanelDiagnostics } from "@/components/equipment/PanelDiagnostics";
 import { SchematicViewer } from "@/components/equipment/SchematicViewer";
 import { CompliancePassport } from "@/components/inspections/CompliancePassport";
 import { InspectionLogbook } from "@/components/inspections/InspectionLogbook";
@@ -26,10 +27,13 @@ import { TemporaryModBanner } from "@/components/temporary-mods/TemporaryModBann
 import { TemporaryModDialog } from "@/components/temporary-mods/TemporaryModDialog";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { Button } from "@/components/ui/button";
-import { EQUIPMENT_TYPE_LABELS } from "@/lib/format";
+import { EQUIPMENT_TYPE_LABELS, formatDate } from "@/lib/format";
 import { pragueToday, summarizeInspections } from "@/lib/inspection";
 import { USAGE_GROUP_LABELS, inspectionRuleFor, isLightCard, type UsageGroup } from "@/lib/inspection-rules";
+import { renderPanelSheetSvg } from "@/lib/mock-graphics/pcschematic";
+import { buildPanelModel } from "@/lib/panel-model";
 import { buildingHref, caeTicketHref, equipmentHref, floorHref, plantHref } from "@/lib/routes";
+import { hasPanelBook } from "@/lib/sheet-nav";
 import { getEquipmentDetail, getPowerNodes } from "@/server/queries/equipment";
 import { getCurrentAccount } from "@/server/session";
 
@@ -88,6 +92,20 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
   const light = isLightCard(equipment.type);
   const activeMods = equipment.temporaryMods.filter((mod) => mod.status === "ACTIVE");
   const rule = inspectionRuleFor({ ...equipment, externalInfluences: equipment.externalInfluences });
+  // Rozváděče a stroje: vícelistová kniha PCSCHEMATIC a diagnostika nad stejným modelem rozváděče.
+  const panelModel = !light && hasPanelBook(equipment.type)
+    ? buildPanelModel({
+        ...equipment,
+        plantCode: building.plant.code,
+        plantName: building.plant.name,
+        customerName: building.plant.customerName,
+        buildingCode: building.code,
+        floorCode: floor.code,
+        feeds: equipment.feeds,
+        revision: selected ? { version: selected.version, date: formatDate(selected.createdAt), author: selected.author?.name ?? "Digitry CAE" } : undefined,
+      })
+    : null;
+  const book = panelModel ? { sheets: panelModel.sheets.map((sheet) => ({ ...sheet, svg: renderPanelSheetSvg(panelModel, sheet.number) })) } : undefined;
   const inspectionsPanel = (
     <InspectionLogbook
       equipmentId={equipment.id}
@@ -216,6 +234,7 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
             panels={{
               schema: (
                 <SchematicViewer
+                  book={book}
                   basePath={basePath}
                   selectedId={selected?.id ?? ""}
                   revisions={equipment.revisions.map(({ id: revisionId, version, status, title, schematicUrl, schematicFormat, sheetCount, createdAt }) => ({
@@ -253,6 +272,7 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
               ),
               // CAE projektant lhůtník revizí nevidí.
               ...(showInspections ? { inspections: inspectionsPanel } : {}),
+              ...(panelModel ? { diagnostics: <PanelDiagnostics model={panelModel} /> } : {}),
             }}
           />
         )}

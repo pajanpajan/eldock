@@ -21,6 +21,9 @@ describe("umístění budovy v areálu", () => {
 
   it("rozměr ze šablony v metrech a první volné místo", () => {
     expect(metersToRect(66, 42)).toEqual({ w: 16.5, h: 15 });
+    // Nový závod 300 × 200 m: stejná hala zabere větší část mapy, obří hala nepřeteče
+    expect(metersToRect(66, 42, { width: 300, height: 200 })).toEqual({ w: 22, h: 21 });
+    expect(metersToRect(900, 42, { width: 300, height: 200 }).w).toBe(100);
     const spot = findFreeSpot({ w: 20, h: 20 }, [{ x: 0, y: 0, w: 50, h: 100 }]);
     expect(spot.x).toBeGreaterThanOrEqual(52);
     expect(rectsOverlap(spot, { x: 0, y: 0, w: 50, h: 100 })).toBe(false);

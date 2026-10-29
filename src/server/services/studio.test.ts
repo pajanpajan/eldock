@@ -89,4 +89,31 @@ describe("saveStudioBuilding", () => {
     expect(result).toMatchObject({ buildingId: "b", floors: 1, equipment: 1 });
     expect(await prisma.equipment.findFirstOrThrow({ where: { tag: "ML-09" } })).toMatchObject({ floorId: "f", fedFromEquipmentId: "eq-R-LIS-01" });
   });
+
+  it("nový závod od nuly: závod s rozměrem pozemku, budova, patro a hlavní rozváděč v jedné transakci", async () => {
+    const result = await saveStudioBuilding(
+      prisma,
+      draft({
+        plantId: "",
+        newPlant: { name: "Závod Turnov – Optika", code: "tur", location: "Nádražní 15, Turnov", widthM: 300, depthM: 200 },
+        floors: [{ key: "f0", level: 0, usage: "Montáž optiky", zones: [], gates: [] }],
+        equipment: [{ key: "rm", floor: { kind: "draft", key: "f0" }, at: "B9", tag: "RM1", name: "Hlavní rozváděč", type: "SWITCHBOARD", parent: null, circuit: null, zone: null, isRoot: true }],
+      }),
+    );
+    expect(result).toMatchObject({ plantCreated: true, floors: 1, equipment: 1 });
+    const plant = await prisma.plant.findUniqueOrThrow({ where: { id: result.plantId }, include: { buildings: { include: { floors: { include: { equipment: true } } } } } });
+    expect(plant).toMatchObject({ code: "TUR", city: "Turnov", address: "Nádražní 15", campusWidthM: 300, campusDepthM: 200 });
+    expect(plant.buildings.map((building) => building.code)).toEqual(["C"]);
+    expect(plant.buildings[0].floors[0].equipment.map((item) => item.tag)).toEqual(["RM1"]);
+  });
+
+  it("nový závod: duplicitní kód, rozměr mimo meze nebo existující budova neprojdou a nic nevznikne", async () => {
+    const base = { name: "Závod X", code: "TST", location: "", widthM: 300, depthM: 200 };
+    await expect(saveStudioBuilding(prisma, draft({ newPlant: base }))).rejects.toThrow(/TST už existuje/);
+    await expect(saveStudioBuilding(prisma, draft({ newPlant: { ...base, code: "NEW", widthM: 10 } }))).rejects.toThrow(/Rozměr areálu/);
+    await expect(saveStudioBuilding(prisma, draft({ newPlant: { ...base, code: "NEW" }, building: { mode: "existing", id: "b" } }))).rejects.toThrow(/novou budovou/);
+    // Odkaz na rozváděč jiného závodu v novém závodě neplatí
+    await expect(saveStudioBuilding(prisma, draft({ newPlant: { ...base, code: "NEW" } }))).rejects.toThrow(/R-SV-01/);
+    expect(await prisma.plant.count({ where: { code: "NEW" } })).toBe(0);
+  });
 });

@@ -35,8 +35,20 @@ export type StudioBuildingDraft =
   | { mode: "new"; code: string; name: string; type: BuildingType; map: { x: number; y: number; w: number; h: number } }
   | { mode: "existing"; id: string };
 
+/** Nový závod od nuly (Studio): vznikne ve stejné transakci jako první budova. */
+export interface StudioNewPlantDraft {
+  name: string;
+  code: string;
+  /** „Ulice 12, Město“ nebo jen město. */
+  location: string;
+  widthM: number;
+  depthM: number;
+}
+
 export interface StudioDraft {
+  /** Stávající závod; při `newPlant` se ignoruje. */
   plantId: string;
+  newPlant?: StudioNewPlantDraft | null;
   grid: GridSpec;
   building: StudioBuildingDraft;
   floors: StudioFloorDraft[];

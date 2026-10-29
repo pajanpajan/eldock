@@ -3,7 +3,9 @@
 import { useRef, useState, type PointerEvent } from "react";
 import { TriangleAlert } from "lucide-react";
 
-import { centerAt, moveRect, polygonBounds, rectsOverlap, resizeRect, type CampusRect } from "@/lib/campus-layout";
+import { CampusSite } from "@/components/map/campus/CampusSite";
+import { getSiteLayout } from "@/components/map/campus/site-layouts";
+import { centerAt, moveRect, polygonBounds, rectsOverlap, resizeRect, type CampusRect, type CampusSize } from "@/lib/campus-layout";
 
 interface CampusBuilding {
   id: string;
@@ -23,6 +25,10 @@ interface Props {
   /** Zvýrazněná stávající budova (režim úprav). */
   highlightId?: string | null;
   newLabel?: string;
+  /** Kód závodu (kulisy areálu); neznámý kód = čistý oplocený pozemek s vrátnicí. */
+  plantCode?: string;
+  /** Rozměr pozemku v metrech (popisek a měřítko). */
+  campus?: CampusSize;
 }
 
 // SVG v jednotkách 1000 × 700 (jako mapa areálu); data budov jsou v procentech.
@@ -30,7 +36,7 @@ const W = 1000;
 const H = 700;
 
 /** Velká mapa areálu: novou budovu lze umístit kliknutím, posunout tažením a zvětšit úchytem. */
-export function CampusPlacementMap({ buildings, rect, onChange, label, highlightId = null, newLabel = "Nová budova" }: Props) {
+export function CampusPlacementMap({ buildings, rect, onChange, label, highlightId = null, newLabel = "Nová budova", plantCode = "", campus }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [drag, setDrag] = useState<{ kind: "move" | "resize"; x: number; y: number; start: CampusRect } | null>(null);
   const overlaps = rect ? buildings.filter((building) => rectsOverlap(rect, polygonBounds(building.mapPolygon))) : [];
@@ -79,8 +85,13 @@ export function CampusPlacementMap({ buildings, rect, onChange, label, highlight
             <path d="M25 0H0V25" fill="none" stroke="#111c30" strokeWidth="1" />
           </pattern>
         </defs>
-        <rect width={W} height={H} fill="url(#campus-grid)" />
-        <rect x={4} y={4} width={W - 8} height={H - 8} fill="none" stroke="#334155" strokeDasharray="10 6" strokeWidth={2} />
+        <CampusSite layout={getSiteLayout(plantCode)} width={W} height={H} widthM={campus?.width} />
+        <rect width={W} height={H} fill="url(#campus-grid)" opacity={0.6} pointerEvents="none" />
+        {campus ? (
+          <text x={40} y={28} fontSize={16} fontWeight={600} fill="#94a3b8" data-testid="campus-size">
+            Areál {campus.width} × {campus.height} m
+          </text>
+        ) : null}
         {buildings.map((building) => {
           const highlighted = building.id === highlightId;
           const overlapping = overlaps.some((entry) => entry.id === building.id);

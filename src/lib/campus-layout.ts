@@ -10,8 +10,16 @@ export interface CampusRect {
 }
 
 export const MIN_SIZE = 4;
-/** Přibližný rozměr areálu v metrech pro převod rozměru budovy (šablony) na procenta mapy. */
+/** Výchozí rozměr areálu v metrech (závody ze seedu) pro převod rozměru budovy na procenta mapy. */
 export const CAMPUS_METERS = { width: 400, height: 280 } as const;
+
+export interface CampusSize {
+  width: number;
+  height: number;
+}
+
+/** Povolený rozměr pozemku nového závodu v metrech. */
+export const CAMPUS_LIMITS = { min: 50, max: 2000 } as const;
 
 const round = (value: number) => Math.round(value * 10) / 10;
 
@@ -49,10 +57,10 @@ export function polygonBounds(points: string): CampusRect {
 /** Překryv obdélníků (dotyk hranou není překryv). */
 export const rectsOverlap = (a: CampusRect, b: CampusRect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 
-/** Rozměr budovy v metrech → procenta mapy areálu. */
-export const metersToRect = (widthM: number, depthM: number) => ({
-  w: round(Math.max(MIN_SIZE, (widthM / CAMPUS_METERS.width) * 100)),
-  h: round(Math.max(MIN_SIZE, (depthM / CAMPUS_METERS.height) * 100)),
+/** Rozměr budovy v metrech → procenta mapy areálu daného rozměru (budova větší než areál = celý areál). */
+export const metersToRect = (widthM: number, depthM: number, campus: CampusSize = CAMPUS_METERS) => ({
+  w: round(Math.min(100, Math.max(MIN_SIZE, (widthM / campus.width) * 100))),
+  h: round(Math.min(100, Math.max(MIN_SIZE, (depthM / campus.height) * 100))),
 });
 
 /** První volné místo pro budovu dané velikosti (prohledává areál po řádcích s okrajem 2 %). */

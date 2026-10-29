@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Building2, Cpu, Plus, Hourglass, MousePointerClick, TriangleAlert } from "lucide-react";
+import { Building2, Cpu, Factory, Plus, Hourglass, MousePointerClick, TriangleAlert } from "lucide-react";
 
 import { EmptyState } from "@/components/common/EmptyState";
 import { KpiTile } from "@/components/common/KpiTile";
@@ -38,12 +38,19 @@ export default async function PlantPage({ params }: PageProps<"/plant/[plantId]"
         description={[plant.customerName, plant.address, plant.city].filter(Boolean).join(" · ")}
         actions={
           account.can("studio") ? (
-            <Button asChild size="lg" className="touch-target gap-2">
-              <Link href={`/studio?plant=${plant.id}`}>
-                <Plus className="size-4" aria-hidden />
-                Přidat budovu do areálu
-              </Link>
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild size="lg" variant="outline" className="touch-target gap-2">
+                <Link href={`/studio?plant=${plant.id}&new=plant`}>
+                  <Factory className="size-4" aria-hidden />+ Nový závod od nuly
+                </Link>
+              </Button>
+              <Button asChild size="lg" className="touch-target gap-2">
+                <Link href={`/studio?plant=${plant.id}`}>
+                  <Plus className="size-4" aria-hidden />
+                  Přidat budovu do areálu
+                </Link>
+              </Button>
+            </div>
           ) : null
         }
       />

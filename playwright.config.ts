@@ -1,5 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
+import { E2E_AUTH_SECRET, E2E_AUTH_STATE } from "./e2e/auth";
+
 // E2E testy běží proti vlastnímu dev serveru na portu 3200 s čistou databází `e2e.db`
 // a odděleným build adresářem `.next-e2e` – běžící `npm run dev` (port 3000, dev.db) neruší.
 const PORT = 3200;
@@ -17,6 +19,7 @@ export default defineConfig({
     baseURL: `http://localhost:${PORT}`,
     locale: "cs-CZ",
     timezoneId: "Europe/Prague",
+    storageState: E2E_AUTH_STATE,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
@@ -38,6 +41,6 @@ export default defineConfig({
     reuseExistingServer: false,
     stdout: "ignore",
     stderr: "pipe",
-    env: { DATABASE_URL: "file:./e2e.db", NEXT_DIST_DIR: ".next-e2e", NEXT_TELEMETRY_DISABLED: "1" },
+    env: { DATABASE_URL: "file:./e2e.db", NEXT_DIST_DIR: ".next-e2e", NEXT_TELEMETRY_DISABLED: "1", DIGITRY_AUTH_SECRET: E2E_AUTH_SECRET, DIGITRY_ACCESS_PASSWORD: "digitry2026", DIGITRY_BYPASS_AUTH: "" },
   },
 });
