@@ -8,6 +8,7 @@ export async function getStudioData(plantId: string) {
     where: { id: plantId },
     select: {
       id: true,
+      code: true,
       name: true,
       buildings: {
         orderBy: { sortOrder: "asc" },
@@ -17,6 +18,8 @@ export async function getStudioData(plantId: string) {
           name: true,
           type: true,
           mapPolygon: true,
+          labelX: true,
+          labelY: true,
           floors: { orderBy: { level: "asc" }, select: { id: true, level: true, code: true, name: true, floorplanSvg: true } },
         },
       },

@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Building2, Cpu, Hourglass, MousePointerClick, TriangleAlert } from "lucide-react";
+import { Building2, Cpu, Plus, Hourglass, MousePointerClick, TriangleAlert } from "lucide-react";
 
+import { EmptyState } from "@/components/common/EmptyState";
 import { KpiTile } from "@/components/common/KpiTile";
 import { LocationBreadcrumb } from "@/components/common/LocationBreadcrumb";
 import { PageHeader } from "@/components/common/PageHeader";
@@ -9,6 +11,7 @@ import { PageTransition } from "@/components/layout/PageTransition";
 import { StatusLegend } from "@/components/common/StatusLegend";
 import { InspectionWatcher } from "@/components/inspections/InspectionWatcher";
 import { CampusExplorer } from "@/components/map/campus/CampusExplorer";
+import { Button } from "@/components/ui/button";
 import { EQUIPMENT_STATUS } from "@/lib/status";
 import { getInspectionWatch } from "@/server/queries/inspections";
 import { getPlantOverview } from "@/server/queries/plant";
@@ -33,7 +36,26 @@ export default async function PlantPage({ params }: PageProps<"/plant/[plantId]"
         breadcrumb={<LocationBreadcrumb items={[{ label: plant.name }]} />}
         title={plant.name}
         description={[plant.customerName, plant.address, plant.city].filter(Boolean).join(" · ")}
+        actions={
+          account.can("studio") ? (
+            <Button asChild size="lg" className="touch-target gap-2">
+              <Link href={`/studio?plant=${plant.id}`}>
+                <Plus className="size-4" aria-hidden />
+                Přidat budovu do areálu
+              </Link>
+            </Button>
+          ) : null
+        }
       />
+
+      {plant.buildings.length === 0 ? (
+        <EmptyState
+          className="mb-6"
+          icon={Building2}
+          title="Areál zatím nemá žádné budovy"
+          description={account.can("studio") ? "Navrhněte první budovu ve Studiu výstavby – umístíte ji tažením na mapě areálu." : "Budovy přidává technický ředitel nebo vedoucí údržby ve Studiu výstavby."}
+        />
+      ) : null}
 
       <section aria-label="Souhrn závodu" className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KpiTile label="Budovy" value={plant.buildings.length} icon={Building2} />

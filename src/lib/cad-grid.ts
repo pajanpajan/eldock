@@ -99,13 +99,46 @@ export interface GridZone {
   kind: ZoneKind;
 }
 
-/** Zóna mezi dvěma průsečíky („A1“–„C11“) → obdélník půdorysu s malou mezerou od os. */
+// Zóny se zadávají jako BUŇKY rastru (pole mezi sousedními osami): buňka „B2“ leží mezi
+// osami B–C a 2–3. „B2“–„B5“ je tedy platný pás výšky 1 modulu a i jediná buňka je místnost.
+
+/** Počet buněk rastru (o jednu méně než os). */
+export const cellCount = (spec: Pick<GridSpec, "cols" | "rows">) => ({ cols: spec.cols - 1, rows: spec.rows - 1 });
+
+/** „B5“ → buňka { row: 1, col: 4 } (0-based); mimo rastr → `null`. */
+export function parseCellRef(ref: string, spec: Pick<GridSpec, "cols" | "rows">): GridPoint | null {
+  const cells = cellCount(spec);
+  return parseGridRef(ref, { cols: cells.cols, rows: cells.rows });
+}
+
+/** Buňka pod bodem v procentech půdorysu (tažení myší v rastru). */
+export function cellAt(percent: { x: number; y: number }, spec: Pick<GridSpec, "cols" | "rows">, viewBox = FLOOR_VIEWBOX): GridPoint {
+  const o = gridOutline(viewBox);
+  const cells = cellCount(spec);
+  const px = (percent.x / 100) * viewBox.width;
+  const py = (percent.y / 100) * viewBox.height;
+  const col = Math.floor(((px - o.x) / o.w) * cells.cols);
+  const row = Math.floor(((py - o.y) / o.h) * cells.rows);
+  return { col: Math.min(cells.cols - 1, Math.max(0, col)), row: Math.min(cells.rows - 1, Math.max(0, row)) };
+}
+
+/** Rozsah buněk zóny jako osy (levý horní a pravý dolní průsečík). */
+function zoneAxes(zone: Pick<GridZone, "from" | "to">, spec: Pick<GridSpec, "cols" | "rows">) {
+  const a = parseCellRef(zone.from, spec);
+  const b = parseCellRef(zone.to, spec);
+  if (!a || !b) return null;
+  return {
+    start: { col: Math.min(a.col, b.col), row: Math.min(a.row, b.row) },
+    end: { col: Math.max(a.col, b.col) + 1, row: Math.max(a.row, b.row) + 1 },
+  };
+}
+
+/** Zóna z buněk („B2“–„B5“) → obdélník půdorysu s malou mezerou od os. */
 export function zoneToRoom(zone: GridZone, spec: GridSpec, viewBox = FLOOR_VIEWBOX): FloorplanRoom | null {
-  const a = parseGridRef(zone.from, spec);
-  const b = parseGridRef(zone.to, spec);
-  if (!a || !b || a.col === b.col || a.row === b.row) return null;
-  const p1 = gridToPx({ col: Math.min(a.col, b.col), row: Math.min(a.row, b.row) }, spec, viewBox);
-  const p2 = gridToPx({ col: Math.max(a.col, b.col), row: Math.max(a.row, b.row) }, spec, viewBox);
+  const axes = zoneAxes(zone, spec);
+  if (!axes) return null;
+  const p1 = gridToPx(axes.start, spec, viewBox);
+  const p2 = gridToPx(axes.end, spec, viewBox);
   const inset = 8;
   return {
     label: zone.name.trim() || "Místnost",
@@ -115,6 +148,21 @@ export function zoneToRoom(zone: GridZone, spec: GridSpec, viewBox = FLOOR_VIEWB
     h: Math.round(p2.y - p1.y - 2 * inset),
     kind: ZONE_KINDS[zone.kind].room,
   };
+}
+
+/** Leží průsečík os uvnitř zóny (včetně obvodu)? – převzetí místnosti při osazení zařízení. */
+export function zoneContains(zone: Pick<GridZone, "from" | "to">, point: GridPoint, spec: Pick<GridSpec, "cols" | "rows">): boolean {
+  const axes = zoneAxes(zone, spec);
+  return !!axes && point.col >= axes.start.col && point.col <= axes.end.col && point.row >= axes.start.row && point.row <= axes.end.row;
+}
+
+/** Nejmenší zóna obsahující bod (vnořené místnosti mají přednost). */
+export function zoneAt<T extends Pick<GridZone, "from" | "to">>(zones: readonly T[], point: GridPoint, spec: Pick<GridSpec, "cols" | "rows">): T | null {
+  const area = (zone: T) => {
+    const axes = zoneAxes(zone, spec)!;
+    return (axes.end.col - axes.start.col) * (axes.end.row - axes.start.row);
+  };
+  return zones.filter((zone) => zoneContains(zone, point, spec)).sort((a, b) => area(a) - area(b))[0] ?? null;
 }
 
 export interface GridGate {
@@ -133,6 +181,87 @@ export function gateToFloorplan(gate: GridGate, spec: GridSpec, viewBox = FLOOR_
   if (point.col === 0 || point.col === spec.cols - 1) return { x: Math.round(x), y: Math.round(y - half), length: Math.round(half * 2), orient: "v", label };
   if (point.row === 0 || point.row === spec.rows - 1) return { x: Math.round(x - half), y: Math.round(y), length: Math.round(half * 2), orient: "h", label };
   return null;
+}
+
+/** Nejbližší průsečík na obvodové stěně k bodu v procentech (vrata jedním klikem u zdi). */
+export function nearestWallPoint(percent: { x: number; y: number }, spec: Pick<GridSpec, "cols" | "rows">, viewBox = FLOOR_VIEWBOX): GridPoint {
+  const point = nearestGridPoint(percent, spec, viewBox);
+  const o = gridOutline(viewBox);
+  const px = (percent.x / 100) * viewBox.width;
+  const py = (percent.y / 100) * viewBox.height;
+  const distances = [
+    { wall: "left", d: Math.abs(px - o.x) },
+    { wall: "right", d: Math.abs(px - (o.x + o.w)) },
+    { wall: "top", d: Math.abs(py - o.y) },
+    { wall: "bottom", d: Math.abs(py - (o.y + o.h)) },
+  ].sort((a, b) => a.d - b.d);
+  switch (distances[0].wall) {
+    case "left":
+      return { ...point, col: 0 };
+    case "right":
+      return { ...point, col: spec.cols - 1 };
+    case "top":
+      return { ...point, row: 0 };
+    default:
+      return { ...point, row: spec.rows - 1 };
+  }
+}
+
+/** Je průsečík na obvodu rastru (vrata)? */
+export const isWallPoint = (point: GridPoint, spec: Pick<GridSpec, "cols" | "rows">) =>
+  point.col === 0 || point.col === spec.cols - 1 || point.row === 0 || point.row === spec.rows - 1;
+
+// ---------------------------------------------------------------------------
+//  Šablony rozdělení patra (1 klik)
+// ---------------------------------------------------------------------------
+
+export const FLOOR_TEMPLATES = [
+  { key: "two-lines", label: "2 výrobní linky + sklad" },
+  { key: "switchroom", label: "Rozvodna + zázemí" },
+  { key: "offices", label: "Kanceláře podél chodby" },
+] as const;
+
+export type FloorTemplateKey = (typeof FLOOR_TEMPLATES)[number]["key"];
+
+/** Zóny šablony pro daný rastr (buňky); funguje i pro nejmenší rastr 4 × 4 os. */
+export function floorTemplate(key: FloorTemplateKey, spec: Pick<GridSpec, "cols" | "rows">): GridZone[] {
+  const cells = cellCount(spec);
+  const ref = (row: number, col: number) => formatGridRef({ row, col });
+  const lastRow = cells.rows - 1;
+  const lastCol = cells.cols - 1;
+  const half = Math.max(1, Math.floor(cells.cols / 2));
+  switch (key) {
+    case "two-lines": {
+      const band = Math.max(1, Math.floor(cells.rows * 0.35));
+      return [
+        { from: ref(0, 0), to: ref(band - 1, lastCol), name: "Výrobní linka 1", kind: "PRODUCTION" },
+        { from: ref(band, 0), to: ref(Math.min(2 * band - 1, lastRow - 1), lastCol), name: "Výrobní linka 2", kind: "PRODUCTION" },
+        { from: ref(Math.min(2 * band, lastRow), 0), to: ref(lastRow, half - 1), name: "Zázemí a šatny", kind: "STORAGE" },
+        { from: ref(Math.min(2 * band, lastRow), half), to: ref(lastRow, lastCol), name: "Sklad komponent", kind: "STORAGE" },
+      ];
+    }
+    case "switchroom": {
+      const split = Math.max(1, Math.floor(cells.cols * 0.6));
+      return [
+        { from: ref(0, 0), to: ref(lastRow, split - 1), name: "Rozvodna nn", kind: "HAZARD" },
+        { from: ref(0, split), to: ref(lastRow, lastCol), name: "Zázemí", kind: "STORAGE" },
+      ];
+    }
+    case "offices": {
+      const corridor = Math.max(1, Math.floor(cells.rows / 2));
+      return [
+        { from: ref(0, 0), to: ref(corridor - 1, half - 1), name: "Kanceláře A", kind: "STORAGE" },
+        { from: ref(0, half), to: ref(corridor - 1, lastCol), name: "Kanceláře B", kind: "STORAGE" },
+        { from: ref(corridor, 0), to: ref(corridor, lastCol), name: "Chodba", kind: "STORAGE" },
+        ...(corridor + 1 <= lastRow
+          ? [
+              { from: ref(corridor + 1, 0), to: ref(lastRow, half - 1), name: "Zasedací místnost", kind: "STORAGE" as const },
+              { from: ref(corridor + 1, half), to: ref(lastRow, lastCol), name: "Kuchyňka", kind: "STORAGE" as const },
+            ]
+          : []),
+      ];
+    }
+  }
 }
 
 /** Délka 10 m v px a štítek měřítka pro rysku půdorysu. */

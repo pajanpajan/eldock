@@ -34,7 +34,7 @@ export async function AppHeader() {
         </Link>
 
         {account.definition.workflowRole === "MAINTENANCE" ? (
-          <PlantSwitcher plants={plants} fallbackId={rememberedPlantId ?? plants[0]?.id} />
+          <PlantSwitcher plants={plants} fallbackId={rememberedPlantId ?? plants[0]?.id} canCreate={account.can("studio")} />
         ) : (
           <span className="hidden text-sm text-muted-foreground md:inline">Všechny závody</span>
         )}

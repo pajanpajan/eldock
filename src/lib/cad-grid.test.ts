@@ -2,7 +2,15 @@ import { describe, expect, it } from "vitest";
 
 import {
   DEFAULT_GRID,
+  FLOOR_TEMPLATES,
+  cellAt,
   clampGrid,
+  floorTemplate,
+  isWallPoint,
+  nearestWallPoint,
+  parseCellRef,
+  zoneAt,
+  zoneContains,
   colLabels,
   formatGridRef,
   gateToFloorplan,
@@ -41,19 +49,63 @@ describe("konstrukční rastr", () => {
     expect(nearestGridPoint({ x: 50, y: 50 }, DEFAULT_GRID)).toEqual({ col: 6, row: 3 });
   });
 
-  it("zóna A1–C11 a vrata na obvodu", () => {
+  it("zóna z buněk A1–C11 (buňka = pole mezi sousedními osami) a vrata na obvodu", () => {
     expect(zoneToRoom({ from: "A1", to: "C11", name: "Montážní linka 1", kind: "PRODUCTION" }, DEFAULT_GRID)).toEqual({
       label: "Montážní linka 1",
       x: 78,
       y: 78,
-      w: 939,
-      h: 181,
+      w: 1034,
+      h: 280,
       kind: "zone",
     });
-    expect(zoneToRoom({ from: "A1", to: "A5", name: "Čára", kind: "STORAGE" }, DEFAULT_GRID)).toBeNull();
+    expect(zoneToRoom({ from: "A1", to: "A12", name: "Mimo", kind: "STORAGE" }, DEFAULT_GRID)).toBeNull();
     expect(gateToFloorplan({ at: "G12", label: "Vrata – expedice" }, DEFAULT_GRID)).toMatchObject({ orient: "v", x: 1120, label: "Vrata – expedice" });
     expect(gateToFloorplan({ at: "H4", label: "" }, DEFAULT_GRID)).toMatchObject({ orient: "h", label: "Vrata" });
     expect(gateToFloorplan({ at: "D5", label: "Uvnitř" }, DEFAULT_GRID)).toBeNull();
+  });
+
+  it("B2–B5 na stejné ose je platný pás výšky 1 modulu, i jediná buňka je místnost (oprava chyby)", () => {
+    const band = zoneToRoom({ from: "B2", to: "B5", name: "Pás", kind: "STORAGE" }, DEFAULT_GRID)!;
+    expect(band).not.toBeNull();
+    const b2 = gridToPx({ row: 1, col: 1 }, DEFAULT_GRID);
+    const c6 = gridToPx({ row: 2, col: 5 }, DEFAULT_GRID);
+    expect(band).toMatchObject({ x: Math.round(b2.x + 8), y: Math.round(b2.y + 8), w: Math.round(c6.x - b2.x - 16), h: Math.round(c6.y - b2.y - 16) });
+    // Pořadí bodů nehraje roli, jedna buňka = 1 modul × 1 modul
+    expect(zoneToRoom({ from: "B5", to: "B2", name: "Pás", kind: "STORAGE" }, DEFAULT_GRID)).toEqual(band);
+    expect(zoneToRoom({ from: "D4", to: "D4", name: "Buňka", kind: "HAZARD" }, DEFAULT_GRID)).toMatchObject({ w: 79, h: 83, kind: "electrical" });
+  });
+
+  it("buňka pod kurzorem, místnost pod průsečíkem a vrata u nejbližší zdi", () => {
+    expect(cellAt({ x: 50, y: 50 }, DEFAULT_GRID)).toEqual({ col: 5, row: 3 });
+    expect(cellAt({ x: 99, y: 99 }, DEFAULT_GRID)).toEqual({ col: 10, row: 6 });
+    expect(parseCellRef("H1", DEFAULT_GRID)).toBeNull();
+    const zones = [
+      { from: "A1", to: "G11", name: "Hala", kind: "PRODUCTION" as const },
+      { from: "B2", to: "C3", name: "Svařovna", kind: "HAZARD" as const },
+    ];
+    expect(zoneAt(zones, { row: 2, col: 2 }, DEFAULT_GRID)?.name).toBe("Svařovna");
+    expect(zoneAt(zones, { row: 5, col: 8 }, DEFAULT_GRID)?.name).toBe("Hala");
+    expect(zoneContains(zones[1], { row: 6, col: 8 }, DEFAULT_GRID)).toBe(false);
+    expect(nearestWallPoint({ x: 93, y: 60 }, DEFAULT_GRID)).toMatchObject({ col: 11 });
+    expect(nearestWallPoint({ x: 40, y: 92 }, DEFAULT_GRID)).toMatchObject({ row: 7 });
+    expect(isWallPoint({ row: 3, col: 0 }, DEFAULT_GRID)).toBe(true);
+    expect(isWallPoint({ row: 3, col: 4 }, DEFAULT_GRID)).toBe(false);
+  });
+
+  it("šablony rozdělení patra vytvoří platné, nepřekrývající se zóny i v nejmenším rastru", () => {
+    for (const spec of [DEFAULT_GRID, { ...DEFAULT_GRID, cols: 4, rows: 4 }]) {
+      for (const template of FLOOR_TEMPLATES) {
+        const zones = floorTemplate(template.key, spec);
+        expect(zones.length).toBeGreaterThan(1);
+        for (const zone of zones) expect(zoneToRoom(zone, spec)).not.toBeNull();
+      }
+    }
+    expect(floorTemplate("two-lines", DEFAULT_GRID).map((zone) => `${zone.from}–${zone.to} ${zone.name}`)).toEqual([
+      "A1–B11 Výrobní linka 1",
+      "C1–D11 Výrobní linka 2",
+      "E1–G5 Zázemí a šatny",
+      "E6–G11 Sklad komponent",
+    ]);
   });
 
   it("měřítková ryska podle rozteče a vygenerovaný půdorys", () => {
@@ -61,7 +113,7 @@ describe("konstrukční rastr", () => {
     const svg = renderGridFloorplanSvg({
       floorName: "1. NP - Montáž",
       spec: { ...DEFAULT_GRID, cols: 6, rows: 5, scale: "1:500" },
-      zones: [{ from: "A1", to: "C3", name: "Linka <1>", kind: "PRODUCTION" }],
+      zones: [{ from: "A1", to: "C3", name: "Linka <1>", kind: "PRODUCTION" }, { from: "D2", to: "D2", name: "Buňka", kind: "HAZARD" }],
       gates: [{ at: "C6", label: "Vrata" }],
     });
     expect(svg.startsWith("<svg")).toBe(true);
