@@ -1,24 +1,30 @@
 // Přihlašovací brána: podepsaný token v httpOnly cookie `digitry-auth`.
 // Jen Web Crypto (žádné Node API) – modul používá `src/proxy.ts` i Server Actions.
 
+// Název cookie zůstává z doby před rebrandingem (zpětná kompatibilita přihlášení).
 export const AUTH_COOKIE = "digitry-auth";
 /** Platnost přihlášení (12 h = jedna dlouhá směna + rezerva). */
 export const AUTH_TTL_SECONDS = 60 * 60 * 12;
-/** Výchozí přístupové heslo dema, pokud `DIGITRY_ACCESS_PASSWORD` není nastavené. */
-export const DEFAULT_ACCESS_PASSWORD = "digitry2026";
+/** Výchozí přístupové heslo dema, pokud `ELDOCK_ACCESS_PASSWORD` není nastavené. */
+export const DEFAULT_ACCESS_PASSWORD = "eldock2026";
+
+/** Proměnná prostředí `ELDOCK_<name>`, se zpětnou kompatibilitou na `DIGITRY_<name>`. */
+export function brandEnv(name: string): string | undefined {
+  return process.env[`ELDOCK_${name}`] || process.env[`DIGITRY_${name}`] || undefined;
+}
 
 export function accessPassword(): string {
-  return process.env.DIGITRY_ACCESS_PASSWORD || DEFAULT_ACCESS_PASSWORD;
+  return brandEnv("ACCESS_PASSWORD") || DEFAULT_ACCESS_PASSWORD;
 }
 
-/** Tajemství podpisu; bez `DIGITRY_AUTH_SECRET` se odvodí z hesla (změna hesla = odhlášení všech). */
+/** Tajemství podpisu; bez `ELDOCK_AUTH_SECRET` se odvodí z hesla (změna hesla = odhlášení všech). */
 export function authSecret(): string {
-  return process.env.DIGITRY_AUTH_SECRET || `digitry-auth:${accessPassword()}`;
+  return brandEnv("AUTH_SECRET") || `digitry-auth:${accessPassword()}`;
 }
 
-/** `DIGITRY_BYPASS_AUTH=1` vypne bránu (lokální vývoj, starší E2E). */
+/** `ELDOCK_BYPASS_AUTH=1` vypne bránu (jen lokální vývoj). */
 export function isAuthBypassed(): boolean {
-  return process.env.DIGITRY_BYPASS_AUTH === "1";
+  return brandEnv("BYPASS_AUTH") === "1";
 }
 
 const encoder = new TextEncoder();

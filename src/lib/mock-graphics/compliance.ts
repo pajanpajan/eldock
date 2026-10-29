@@ -297,7 +297,7 @@ export function renderInspectionReportSvg(ctx: InspectionReportContext): string 
           },
           {
             heading: "Podklady",
-            lines: [`${ctx.name}, jmenovité napětí ${ctx.ratedVoltage ?? "–"}, jmenovitý proud ${ctx.ratedCurrent ?? "–"}. Platná elektrodokumentace v systému Digitry.`],
+            lines: [`${ctx.name}, jmenovité napětí ${ctx.ratedVoltage ?? "–"}, jmenovitý proud ${ctx.ratedCurrent ?? "–"}. Platná elektrodokumentace v systému Eldock (eldock.cz).`],
           },
         ],
     verdict: {

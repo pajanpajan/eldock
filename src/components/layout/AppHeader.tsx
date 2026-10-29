@@ -29,7 +29,7 @@ export async function AppHeader() {
     return (
       <header className="border-b border-border bg-background/90">
         <div className="mx-auto flex min-h-14 w-full max-w-[1800px] items-center px-3 py-2 sm:px-6">
-          <Logo />
+          <Logo withTagline />
         </div>
       </header>
     );
@@ -40,8 +40,8 @@ export async function AppHeader() {
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur">
       <div className="mx-auto flex min-h-14 w-full max-w-[1800px] flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 sm:px-6">
-        <Link href="/" className="touch-target flex items-center rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50" aria-label="Digitry – úvodní stránka">
-          <Logo />
+        <Link href="/" className="touch-target flex items-center rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50" aria-label="Eldock – úvodní stránka">
+          <Logo withTagline />
         </Link>
 
         {account.definition.workflowRole === "MAINTENANCE" ? (

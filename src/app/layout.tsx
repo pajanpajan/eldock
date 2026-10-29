@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { BRAND } from "@/lib/brand";
 
 import "./globals.css";
 
@@ -19,12 +20,12 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "Digitry",
-    template: "%s · Digitry",
+    default: `${BRAND.name} – ${BRAND.tagline}`,
+    template: `%s · ${BRAND.name}`,
   },
-  description: "Elektrodokumentace a údržba výrobních závodů",
-  applicationName: "Digitry",
-  appleWebApp: { capable: true, title: "Digitry", statusBarStyle: "black-translucent" },
+  description: BRAND.description,
+  applicationName: BRAND.name,
+  appleWebApp: { capable: true, title: BRAND.name, statusBarStyle: "black-translucent" },
   formatDetection: { telephone: false },
 };
 

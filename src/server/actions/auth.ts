@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
-import { AUTH_COOKIE, AUTH_TTL_SECONDS, checkAccessPassword, safeNextPath, signAuthToken } from "@/lib/auth";
+import { AUTH_COOKIE, AUTH_TTL_SECONDS, brandEnv, checkAccessPassword, safeNextPath, signAuthToken } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 import { setAccount } from "./session";
@@ -45,7 +45,7 @@ export async function login(_state: LoginState, formData: FormData): Promise<Log
     maxAge: AUTH_TTL_SECONDS,
     sameSite: "lax",
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production" && process.env.DIGITRY_INSECURE_COOKIE !== "1",
+    secure: process.env.NODE_ENV === "production" && brandEnv("INSECURE_COOKIE") !== "1",
   });
   await setAccount(user.id, "/", safeNextPath(input.next));
   return {};

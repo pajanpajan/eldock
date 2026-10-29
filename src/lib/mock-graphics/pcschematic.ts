@@ -88,7 +88,7 @@ function frame(model: PanelModel, sheet: number) {
   parts.push(rect(PC_AREA.x, ty, 170, th, { width: 1.2, fill: "#f3f4f6" }));
   parts.push(text(PC_AREA.x + 12, ty + 30, "PCSCHEMATIC", { size: 17, weight: 800 }));
   parts.push(text(PC_AREA.x + 12, ty + 48, "Automation", { size: 13, fill: MUTED }));
-  parts.push(text(PC_AREA.x + 12, ty + 70, "Digitry CAE · ISO/IEC 81346", { size: 9, fill: MUTED }));
+  parts.push(text(PC_AREA.x + 12, ty + 70, "ELDOCK · eldock.cz · ISO/IEC 81346", { size: 9, fill: MUTED }));
   const cells: [label: string, value: string, x: number, w: number, row: 0 | 1][] = [
     ["Project title", model.title, 170, 300, 0],
     ["Customer", model.customer, 470, 230, 0],

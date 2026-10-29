@@ -1,5 +1,5 @@
 // =============================================================================
-//  Digitry – Industrial Electrical Documentation & Maintenance Twin (MVP)
+//  Eldock – Industrial Electrical Documentation & Maintenance Twin (MVP)
 //  Prisma schema · SQLite (dev) → PostgreSQL (prod)
 //
 //  Cílová verze: Prisma ORM 7.x
@@ -180,7 +180,7 @@ model User {
   name      String
   email     String   @unique
   role      UserRole
-  company   String?  // např. "Závod Jablonec – Údržba" / "Digitry CAE"
+  company   String?  // např. "Závod Jablonec – Údržba" / "Eldock CAE"
   phone     String?
   avatarUrl String?
 

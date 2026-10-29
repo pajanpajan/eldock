@@ -12,7 +12,7 @@ import { PrismaClient } from "@/generated/prisma/client";
 const MIGRATIONS = path.resolve("prisma", "migrations");
 
 export async function createTestDb() {
-  const dir = mkdtempSync(path.join(os.tmpdir(), "digitry-test-"));
+  const dir = mkdtempSync(path.join(os.tmpdir(), "eldock-test-"));
   const prisma = new PrismaClient({ adapter: new PrismaBetterSqlite3({ url: `file:${path.join(dir, "test.db")}` }) });
   const folders = readdirSync(MIGRATIONS, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())

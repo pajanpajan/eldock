@@ -95,7 +95,7 @@ export function LoginForm({ accounts, next }: { accounts: LoginAccount[]; next?:
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="flex items-center gap-2 text-xs text-muted-foreground">
           <KeyRound className="size-4" aria-hidden />
-          Přístupové heslo nastavuje správce (proměnná <code className="font-mono">DIGITRY_ACCESS_PASSWORD</code>).
+          Přístupové heslo nastavuje správce (proměnná <code className="font-mono">ELDOCK_ACCESS_PASSWORD</code>).
         </p>
         <Button type="submit" size="lg" disabled={pending} className="h-11 min-w-40">
           {pending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <LogIn className="size-4" aria-hidden />}

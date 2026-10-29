@@ -332,7 +332,7 @@ export function complianceFor(eq: EquipmentSeed): ComplianceSeed[] {
           category,
           title: eq.tag === "RM1" ? "Liniové schéma rozvodny 1. PP – RM1" : `Liniové schéma ${eq.tag}`,
           documentNumber,
-          issuer: "Digitry CAE",
+          issuer: "Eldock CAE",
           author: "Ing. Lucie Marková",
           notes: "Jednopólové schéma s označením polí a vývodových jističů.",
         };
@@ -354,7 +354,7 @@ export function complianceFor(eq: EquipmentSeed): ComplianceSeed[] {
           category,
           title: "Protokol o určení vnějších vlivů",
           documentNumber,
-          issuer: "Komise JBL Automotive / Digitry CAE",
+          issuer: "Komise JBL Automotive / Eldock CAE",
           author: "Ing. Tomáš Král",
           notes: externalInfluencesFor(eq),
         };

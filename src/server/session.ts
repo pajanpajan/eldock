@@ -48,7 +48,7 @@ export const getRememberedPlantId = cache(async (): Promise<string | undefined> 
   return store.get(PLANT_COOKIE)?.value;
 });
 
-/** Přihlášení z cookie `digitry-auth` (při `DIGITRY_BYPASS_AUTH=1` vždy platné). */
+/** Přihlášení z cookie `digitry-auth` (při `ELDOCK_BYPASS_AUTH=1` vždy platné). */
 export const getAuthSession = cache(async () => {
   if (isAuthBypassed()) return { userId: "bypass", expires: Number.MAX_SAFE_INTEGER };
   const store = await cookies();

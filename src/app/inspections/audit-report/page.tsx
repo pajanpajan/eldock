@@ -7,9 +7,11 @@ import { NoAccess } from "@/components/common/NoAccess";
 import { PageHeader } from "@/components/common/PageHeader";
 import { AuditReportActions } from "@/components/inspections/AuditReportActions";
 import { InspectionStatusBadge } from "@/components/inspections/InspectionStatusBadge";
+import { LogoMark } from "@/components/layout/Logo";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { summarizeAudit } from "@/lib/audit-report";
+import { BRAND_PRINT_LINE } from "@/lib/brand";
 import { defectState } from "@/lib/defects";
 import { EQUIPMENT_TYPE_LABELS, formatDateShort, formatDateTime } from "@/lib/format";
 import { inspectionRuleFor } from "@/lib/inspection-rules";
@@ -57,6 +59,10 @@ export default async function AuditReportPage() {
   return (
     <PageTransition>
       <div className="print-report space-y-8">
+        <p className="hidden items-center gap-2 text-xs font-semibold tracking-wide print:flex">
+          <LogoMark className="size-5" />
+          {BRAND_PRINT_LINE} · Auditní report pro TIČR / ISO audit
+        </p>
         <PageHeader
           title="Auditní report – Kniha revizí"
           description={`${plantName} · stav k ${formatDateTime(now)} · ČSN 33 1500, ČSN 33 1600 ed. 2, NV 378/2001 Sb., NV 190/2022 Sb.`}

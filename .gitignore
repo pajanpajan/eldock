@@ -9,6 +9,7 @@ next-env.d.ts
 
 # env
 .env
+.env.production
 .env*.local
 
 # prisma
@@ -41,3 +42,6 @@ npm-debug.log*
 /.next-e2e/
 /e2e.db*
 /e2e/.auth/
+
+# produkční data Docker Compose (databáze, nahrané soubory, certifikáty)
+/data/

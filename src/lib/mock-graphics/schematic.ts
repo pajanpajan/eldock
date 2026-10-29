@@ -197,7 +197,7 @@ function titleBlock(input: SchematicInput, sheet: number, sheetCount: number, ch
   const parts = [
     cell(x, y, w, 90),
     cell(x, y, 86, 48),
-    text(x + 43, y + 24, "DIGITRY", { size: 14, bold: true, anchor: "middle" }),
+    text(x + 43, y + 24, "ELDOCK", { size: 14, bold: true, anchor: "middle" }),
     text(x + 43, y + 38, "CAE", { size: 9, anchor: "middle", fill: MUTED }),
     cell(x + 86, y, w - 86, 30),
     label(x + 86, y, "Zařízení"),

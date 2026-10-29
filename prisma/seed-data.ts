@@ -47,8 +47,8 @@ export type UserKey = "novak" | "dvorakova" | "kral" | "markova";
 export const USERS: { key: UserKey; id: string; name: string; email: string; role: UserRole; company: string; phone: string }[] = [
   { key: "novak", id: "user-novak", name: "Petr Novák", email: "petr.novak@jbl-automotive.example", role: "MAINTENANCE", company: "Závod Jablonec – Údržba, směna A", phone: "+420 777 100 201" },
   { key: "dvorakova", id: "user-dvorakova", name: "Jana Dvořáková", email: "jana.dvorakova@jbl-automotive.example", role: "MAINTENANCE", company: "Závod Jablonec – Údržba, směna B", phone: "+420 777 100 202" },
-  { key: "kral", id: "user-kral", name: "Ing. Tomáš Král", email: "tomas.kral@digitry.example", role: "CAE_ENGINEER", company: "Digitry CAE", phone: "+420 603 200 301" },
-  { key: "markova", id: "user-markova", name: "Ing. Lucie Marková", email: "lucie.markova@digitry.example", role: "CAE_ENGINEER", company: "Digitry CAE", phone: "+420 603 200 302" },
+  { key: "kral", id: "user-kral", name: "Ing. Tomáš Král", email: "tomas.kral@eldock.cz", role: "CAE_ENGINEER", company: "Eldock CAE", phone: "+420 603 200 301" },
+  { key: "markova", id: "user-markova", name: "Ing. Lucie Marková", email: "lucie.markova@eldock.cz", role: "CAE_ENGINEER", company: "Eldock CAE", phone: "+420 603 200 302" },
 ];
 
 // ---------------------------------------------------------------------------

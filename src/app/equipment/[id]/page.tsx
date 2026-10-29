@@ -102,7 +102,7 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
         buildingCode: building.code,
         floorCode: floor.code,
         feeds: equipment.feeds,
-        revision: selected ? { version: selected.version, date: formatDate(selected.createdAt), author: selected.author?.name ?? "Digitry CAE" } : undefined,
+        revision: selected ? { version: selected.version, date: formatDate(selected.createdAt), author: selected.author?.name ?? "Eldock CAE" } : undefined,
       })
     : null;
   const book = panelModel ? { sheets: panelModel.sheets.map((sheet) => ({ ...sheet, svg: renderPanelSheetSvg(panelModel, sheet.number) })) } : undefined;

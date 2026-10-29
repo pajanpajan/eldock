@@ -41,6 +41,6 @@ export default defineConfig({
     reuseExistingServer: false,
     stdout: "ignore",
     stderr: "pipe",
-    env: { DATABASE_URL: "file:./e2e.db", NEXT_DIST_DIR: ".next-e2e", NEXT_TELEMETRY_DISABLED: "1", DIGITRY_AUTH_SECRET: E2E_AUTH_SECRET, DIGITRY_ACCESS_PASSWORD: "digitry2026", DIGITRY_BYPASS_AUTH: "" },
+    env: { DATABASE_URL: "file:./e2e.db", NEXT_DIST_DIR: ".next-e2e", NEXT_TELEMETRY_DISABLED: "1", ELDOCK_AUTH_SECRET: E2E_AUTH_SECRET, ELDOCK_ACCESS_PASSWORD: "eldock2026", ELDOCK_BYPASS_AUTH: "", DIGITRY_BYPASS_AUTH: "" },
   },
 });

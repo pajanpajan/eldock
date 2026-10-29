@@ -1,0 +1,58 @@
+# Eldock – produkční nasazení (Hetzner Cloud VPS i on-premise server v továrně)
+#
+#   cp .env.production.example .env.production   # doplnit heslo, tajemství a domény
+#   docker compose --env-file .env.production up -d --build
+#
+# Data zůstávají na hostiteli v ./data (zálohujte celý adresář):
+#   ./data/db       SQLite databáze (eldock.db)
+#   ./data/storage  nahrané fotky, revize, schémata a vygenerované dokumenty
+#   ./data/caddy    certifikáty Let's Encrypt a stav Caddy
+
+name: eldock
+
+services:
+  eldock-app:
+    build: .
+    image: eldock:latest
+    container_name: eldock-app
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: file:/app/data/db/eldock.db
+      ELDOCK_ACCESS_PASSWORD: ${ELDOCK_ACCESS_PASSWORD:?Nastavte ELDOCK_ACCESS_PASSWORD v .env.production}
+      ELDOCK_AUTH_SECRET: ${ELDOCK_AUTH_SECRET:?Nastavte ELDOCK_AUTH_SECRET (openssl rand -base64 32)}
+      # 1 = při prvním startu nad prázdnou databází nahrát demo data, 0 = začít s prázdnou aplikací
+      ELDOCK_SEED_DEMO: ${ELDOCK_SEED_DEMO:-1}
+      # 1 = cookie bez příznaku Secure (jen provoz bez HTTPS v uzavřené síti)
+      ELDOCK_INSECURE_COOKIE: ${ELDOCK_INSECURE_COOKIE:-0}
+    volumes:
+      - ./data/db:/app/data/db
+      - ./data/storage:/app/storage
+    # Aplikace je dostupná jen uvnitř sítě Compose – ven ji publikuje Caddy.
+    expose:
+      - "3000"
+    networks: [eldock]
+
+  caddy:
+    image: caddy:2.10-alpine
+    container_name: eldock-caddy
+    restart: unless-stopped
+    depends_on:
+      - eldock-app
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3
+    environment:
+      # Domény, pro které Caddy vystaví a obnovuje certifikát Let's Encrypt (oddělené čárkou a mezerou).
+      # On-premise bez internetu: ELDOCK_DOMAINS=":80" (jen HTTP v uzavřené síti, + ELDOCK_INSECURE_COOKIE=1),
+      # nebo interní název serveru a v Caddyfile `tls internal` (vlastní certifikační autorita Caddy) – viz README.
+      ELDOCK_DOMAINS: ${ELDOCK_DOMAINS:-eldock.cz, www.eldock.cz, app.eldock.cz}
+      ELDOCK_ACME_EMAIL: ${ELDOCK_ACME_EMAIL:-admin@eldock.cz}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./data/caddy/data:/data
+      - ./data/caddy/config:/config
+    networks: [eldock]
+
+networks:
+  eldock:

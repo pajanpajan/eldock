@@ -1,0 +1,21 @@
+# Do obrazu nepatří lokální závislosti, buildy, databáze, nahrané soubory ani tajemství
+node_modules
+.next
+.next-e2e
+src/generated
+*.db
+*.db-journal
+storage/uploads/**
+!storage/uploads/*/.gitkeep
+data
+.env
+.env*.local
+playwright-report
+test-results
+e2e/.auth
+coverage
+*.tsbuildinfo
+.git
+.claude
+npm-debug.log*
+.env.production

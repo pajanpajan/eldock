@@ -18,8 +18,8 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center gap-6 py-6">
       <div className="flex flex-col items-center gap-3 text-center">
-        <Logo className="scale-125" />
-        <h1 className="text-2xl font-semibold tracking-tight">Přihlášení do Digitry</h1>
+        <Logo className="scale-125" withTagline />
+        <h1 className="text-2xl font-semibold tracking-tight">Přihlášení do Eldock</h1>
         <p className="max-w-xl text-sm text-muted-foreground">
           Elektrodokumentace a údržba závodu. Vyberte svůj účet (nebo zadejte e-mail) a přístupové heslo / PIN závodu.
         </p>

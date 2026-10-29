@@ -8,5 +8,5 @@ export const ACCOUNTS: { id: string; name: string; email: string; role: UserRole
   { id: "acc-svoboda", name: "Petr Svoboda", email: "petr.svoboda@jbl-automotive.example", role: "MAINTENANCE", accountType: "MAINTENANCE_TECH", title: "Směnový údržbář", company: "Závod Jablonec – Údržba, směna A", phone: "+420 777 100 211" },
   { id: "acc-kovar", name: "Ing. Jiří Kovář", email: "jiri.kovar@revize-kovar.example", role: "MAINTENANCE", accountType: "INSPECTOR_VTZ", title: "Revizní technik VTZ E2A", company: "Revize Kovář s.r.o.", phone: "+420 602 300 401" },
   { id: "acc-cerny", name: "Milan Černý", email: "milan.cerny@revize-kovar.example", role: "MAINTENANCE", accountType: "INSPECTOR_APPLIANCES", title: "Technik revizí spotřebičů ČSN 33 1600", company: "Revize Kovář s.r.o.", phone: "+420 602 300 402" },
-  { id: "acc-krejci", name: "Ing. Tomáš Krejčí", email: "tomas.krejci@digitry.example", role: "CAE_ENGINEER", accountType: "CAE_ENGINEER", title: "CAE projektant", company: "Digitry CAE", phone: "+420 603 200 303" },
+  { id: "acc-krejci", name: "Ing. Tomáš Krejčí", email: "tomas.krejci@eldock.cz", role: "CAE_ENGINEER", accountType: "CAE_ENGINEER", title: "CAE projektant", company: "Eldock CAE", phone: "+420 603 200 303" },
 ];

@@ -157,7 +157,7 @@ export function renderDocumentSvg(input: DocumentInput): string {
   out.push(`<circle cx="${M + 230}" cy="${sy + 30}" r="34" fill="none" stroke="#2563eb" stroke-width="2" opacity="0.55"/>`);
   out.push(`<text x="${M + 230}" y="${sy + 34}" font-family="${FONT}" font-size="9" fill="#2563eb" opacity="0.7" text-anchor="middle">RAZÍTKO</text>`);
 
-  out.push(`<text x="${W / 2}" y="${H - M + 14}" font-family="${FONT}" font-size="9.5" fill="#a1a1aa" text-anchor="middle">Demo dokument Digitry – vygenerováno aplikací, fiktivní údaje · strana 1/1</text>`);
+  out.push(`<text x="${W / 2}" y="${H - M + 14}" font-family="${FONT}" font-size="9.5" fill="#a1a1aa" text-anchor="middle">Demo dokument ELDOCK · eldock.cz – vygenerováno aplikací, fiktivní údaje · strana 1/1</text>`);
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${out.join("")}</svg>`;
 }

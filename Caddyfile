@@ -1,0 +1,39 @@
+# Eldock – reverzní proxy s automatickým HTTPS (Let's Encrypt)
+# Domény a e-mail pro ACME se nastavují v docker-compose.yml / .env.production
+# (výchozí: eldock.cz, www.eldock.cz, app.eldock.cz).
+
+{
+	email {$ELDOCK_ACME_EMAIL:admin@eldock.cz}
+}
+
+(security_headers) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Frame-Options "DENY"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(self), microphone=(self), geolocation=()"
+		-Server
+	}
+}
+
+{$ELDOCK_DOMAINS:eldock.cz, www.eldock.cz, app.eldock.cz} {
+	import security_headers
+	encode zstd gzip
+
+	# Nahrávání fotek a revizí z haly (výchozí limit Next.js server actions je menší)
+	request_body {
+		max_size 50MB
+	}
+
+	reverse_proxy eldock-app:3000 {
+		# X-Forwarded-Host / -Proto nastavuje Caddy sám – QR kódy pak obsahují správnou https adresu.
+		health_uri /manifest.webmanifest
+		health_interval 30s
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

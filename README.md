@@ -1,4 +1,6 @@
-# Digitry – elektrodokumentace a údržba výrobních závodů (MVP)
+# Eldock – Průmyslový dok dokumentace a revizí
+
+**[eldock.cz](https://eldock.cz)** · eldock.eu · eldock.sk — elektrodokumentace, revize a údržba výrobních závodů.
 
 B2B webová aplikace (PWA) pro správu elektrodokumentace výrobních závodů – schémata, kusovníky, dispozice rozváděčů – a pro **As-Built workflow** mezi údržbou v hale a externími CAE projektanty:
 
@@ -21,7 +23,7 @@ Další screenshoty jsou v [`docs/screenshots/`](docs/screenshots/).
 - **Průvodce „Zadat změnu“** pro tablet a rukavice: zákres prstem/perem/myší, fotky (zmenšení na zařízení), hlasová poznámka (Web Speech API, jinak simulace), priorita.
 - **CAE Back-Office:** KPI, tickety napříč závody s filtry a SLA, detail ticketu se zákresem a timeline, převzetí, nahrání revize (minor/major, editovatelný kusovník, demo „Vygenerovat upravené schéma“), storno, komentáře.
 - **Schválení údržbou:** porovnání revizí vedle sebe (synchronní zoom), posuvníkem a prolínáním, rozdíl kusovníku, „Potvrdit a propsat do systému“ / „Vrátit k přepracování“ s komentářem.
-- **Přepínač pohledu** v hlavičce: `Pohled: Údržba v hale` ↔ `Pohled: CAE Projektant` (bez přihlašování, MVP).
+- **Přihlašovací brána** (`/login`, přístupové heslo `ELDOCK_ACCESS_PASSWORD`) a přepínač účtů v hlavičce (ředitel, údržba, revizní technici, CAE projektant).
 - Instalovatelná PWA, tmavé vysoce kontrastní rozhraní, celé UI česky.
 
 ## Požadavky
@@ -108,7 +110,7 @@ docs/PLAN.md              implementační plán, stavový automat, demo data a d
 
 ## Známá omezení (MVP)
 
-- Bez přihlašování a oprávnění – role je jen cookie z přepínače; demo uživatel role = Petr Novák (údržba) / Ing. Tomáš Král (CAE). `/api/uploads` neověřuje roli ani obsah souboru (jen příponu a velikost).
+- Přihlášení je společné přístupové heslo závodu (ne osobní hesla) a účet si lze v hlavičce přepnout (demo). `/api/uploads` neověřuje obsah souboru (jen příponu a velikost).
 - Hlasová poznámka: rozpoznávání řeči z prohlížeče (Chrome/Edge), jinak simulace; audio se neukládá.
 - Redlining jen nad SVG/obrázkem schématu (ne nad PDF), schémata v seedu mají 1 list.
 - „Vygenerovat upravené schéma“ umí vykreslit jen prvky mock schématu (Q1, F1–F6, K1–K4, T1, A1, X1, X2).
@@ -119,6 +121,68 @@ docs/PLAN.md              implementační plán, stavový automat, demo data a d
 
 1. V `prisma/schema.prisma` změňte `provider = "sqlite"` na `"postgresql"`. Strukturovaná data (zákresy, polygony) jsou uložená jako `String` se serializovaným JSON, schéma tedy funguje beze změn (volitelně lze přejít na `Json`).
 2. `npm i @prisma/adapter-pg@7 pg` a v `src/lib/prisma.ts` (a v `prisma/seed.ts`, `scripts/smoke-workflow.ts`) nahraďte `PrismaBetterSqlite3` za `PrismaPg({ connectionString: process.env.DATABASE_URL })`.
-3. `DATABASE_URL="postgresql://uzivatel:heslo@server:5432/digitry"` v `.env`.
+3. `DATABASE_URL="postgresql://uzivatel:heslo@server:5432/eldock"` v `.env`.
 4. Smažte staré SQLite migrace (`prisma/migrations`) a vytvořte nové: `npx prisma migrate dev --name init`, pak `npx prisma generate` a `npm run db:seed`.
 5. Nahrané soubory ze `storage/uploads` přesuňte na sdílené úložiště (nebo S3 – stačí upravit `src/server/storage.ts` a `/api/files`).
+
+## Nasazení na Hetzner Cloud a nastavení DNS u Czechia.com (eldock.cz)
+
+Produkční balíček tvoří `Dockerfile` (Node 22 LTS, Next.js `output: "standalone"`, neprivilegovaný uživatel `eldock`), `docker-entrypoint.sh`, `docker-compose.yml` a `Caddyfile`. Stejná sestava běží na Hetzner VPS i na serveru v továrně bez internetu.
+
+| Služba | Co dělá |
+|---|---|
+| `eldock-app` | Next.js server na interním portu 3000. Při startu aplikuje migrace (`prisma migrate deploy`) a nad prázdnou databází nahraje demo data (`ELDOCK_SEED_DEMO=1`). |
+| `caddy` | Reverzní proxy na portech 80/443: automatický certifikát **Let's Encrypt** pro `eldock.cz`, `www.eldock.cz`, `app.eldock.cz`, HSTS, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`. |
+
+Trvalá data jsou na hostiteli v `./data`: `./data/db` (SQLite `eldock.db`), `./data/storage` (fotky, revize, schémata), `./data/caddy` (certifikáty). **Zálohujte celý adresář `./data`.**
+
+### 1. Server u Hetzner Cloud
+
+1. V [Hetzner Cloud Console](https://console.hetzner.cloud) vytvořte projekt a server: lokalita **Falkenstein / Norimberk** (EU), obraz **Ubuntu 24.04**, typ **CX22** (2 vCPU, 4 GB RAM) stačí pro jeden závod; přidejte svůj SSH klíč.
+2. Firewall (Hetzner Firewall): povolte příchozí **22/tcp** (jen z vaší IP), **80/tcp**, **443/tcp** a **443/udp** (HTTP/3).
+3. Poznamenejte si veřejnou **IPv4** (a IPv6) serveru.
+4. Na serveru nainstalujte Docker:
+   ```bash
+   ssh root@<IPv4>
+   curl -fsSL https://get.docker.com | sh
+   ```
+
+### 2. DNS u Czechia.com
+
+V administraci [Czechia.com](https://www.czechia.com) → *Domény* → `eldock.cz` → *DNS záznamy* nastavte (TTL např. 3600):
+
+| Název | Typ | Hodnota |
+|---|---|---|
+| `@` (eldock.cz) | A | `<IPv4 serveru>` |
+| `www` | A | `<IPv4 serveru>` |
+| `app` | A | `<IPv4 serveru>` |
+| `@`, `www`, `app` | AAAA | `<IPv6 serveru>` (volitelné) |
+| `@` | CAA | `0 issue "letsencrypt.org"` (doporučeno) |
+
+Ověření propagace: `nslookup app.eldock.cz` musí vrátit IP serveru – **až potom** spusťte Caddy (jinak Let's Encrypt certifikát nevydá). Domény `eldock.eu` a `eldock.sk` stačí nasměrovat stejně a přidat je do `ELDOCK_DOMAINS` (nebo v Caddyfile přesměrovat `redir https://eldock.cz{uri}`).
+
+### 3. Spuštění
+
+```bash
+git clone <repozitář> /opt/eldock && cd /opt/eldock
+cp .env.production.example .env.production
+openssl rand -base64 32          # → ELDOCK_AUTH_SECRET v .env.production
+nano .env.production             # heslo, tajemství, domény, e-mail pro Let's Encrypt
+docker compose --env-file .env.production up -d --build
+docker compose logs -f eldock-app   # „[eldock] Startuji aplikaci…“
+```
+
+Aplikace pak běží na **https://app.eldock.cz** (i `eldock.cz` a `www.eldock.cz`). Pro ostrý provoz bez demo dat nastavte před prvním startem `ELDOCK_SEED_DEMO="0"`.
+
+**Aktualizace:** `git pull && docker compose --env-file .env.production up -d --build` – migrace se aplikují automaticky, data v `./data` zůstávají.
+**Záloha:** `docker compose stop eldock-app && tar czf eldock-$(date +%F).tgz data/db data/storage && docker compose start eldock-app` (nebo Hetzner Backups / Snapshots).
+
+### On-premise / air-gapped server v továrně
+
+1. Na stroji s internetem sestavte a exportujte obrazy: `docker compose build && docker save eldock:latest caddy:2.10-alpine | gzip > eldock-images.tgz`.
+2. Na serveru v továrně: `docker load < eldock-images.tgz`, zkopírujte repozitář (stačí `docker-compose.yml`, `Caddyfile`, `.env.production`) a spusťte `docker compose --env-file .env.production up -d` (bez `--build`).
+3. Bez veřejné domény zvolte v `.env.production` jednu z variant:
+   - **HTTP v uzavřené síti:** `ELDOCK_DOMAINS=":80"` a `ELDOCK_INSECURE_COOKIE="1"`;
+   - **HTTPS s interní CA Caddy:** `ELDOCK_DOMAINS="eldock.zavod.local"` a v `Caddyfile` do bloku webu doplňte `tls internal` (kořenový certifikát z `./data/caddy/data/caddy/pki/authorities/local/root.crt` nainstalujte na tablety), případně vlastní certifikát firmy: `tls /cesta/cert.pem /cesta/key.pem`.
+4. Aplikace nenačítá žádné externí zdroje (fonty jsou součástí buildu), takže za běhu internet nepotřebuje.
+

@@ -7,6 +7,7 @@ import { Lightbulb, MicOff, Plus, Search, Sparkles, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { BRAND_PRINT_LINE } from "@/lib/brand";
 import { EQUIPMENT_TYPE_ICONS } from "@/lib/equipment-icons";
 import { EQUIPMENT_TYPE_LABELS, formatCount, formatDateShort } from "@/lib/format";
 import {
@@ -385,6 +386,7 @@ export function InspectionPlanner({
 function RouteSheet({ items, title, timeframe, plantName, now }: { items: PlannerItem[]; title: string; timeframe: string; plantName: string; now: Date }) {
   return (
     <section className="print-route" aria-hidden>
+      <p className="route-brand">{BRAND_PRINT_LINE}</p>
       <h1>Pochůzkový list revizí – {plantName}</h1>
       <p>
         Požadavek: „{title}“ · {timeframe} · vytištěno {formatDateShort(now)} · {formatCount(items.length, PIECES)}

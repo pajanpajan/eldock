@@ -1,13 +1,14 @@
 import type { MetadataRoute } from "next";
 
+import { BRAND } from "@/lib/brand";
 import { BRAND_DARK } from "@/lib/brand-icon";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/",
-    name: "Digitry – elektrodokumentace a údržba",
-    short_name: "Digitry",
-    description: "Elektrodokumentace výrobních závodů a schvalování změn As-Built mezi údržbou a CAE.",
+    name: `${BRAND.name} – ${BRAND.tagline}`,
+    short_name: BRAND.name,
+    description: `${BRAND.description}; schvalování změn As-Built mezi údržbou a CAE.`,
     lang: "cs",
     start_url: "/",
     scope: "/",

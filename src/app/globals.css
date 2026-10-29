@@ -187,6 +187,13 @@
   .print-route * {
     visibility: visible !important;
   }
+  .print-route .route-brand {
+    font-size: 8pt;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    border-bottom: 2pt solid #facc15;
+    padding-bottom: 2pt;
+  }
   .print-route h1 {
     font-size: 15pt;
     font-weight: 700;

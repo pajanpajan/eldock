@@ -1,0 +1,4 @@
+# Shell skripty pro Docker musí mít LF i při checkoutu na Windows
+*.sh text eol=lf
+Dockerfile text eol=lf
+Caddyfile text eol=lf
