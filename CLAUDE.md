@@ -133,6 +133,18 @@ Start by setting up the project structure, database schema, and seeding the real
 - **Architektura:** čtení dat v `src/server/queries`, business logika ve `src/server/services` (dostává `prisma` a `actor`), Server Actions v `src/server/actions` jsou tenké, pravidla přechodů v `src/lib/workflow`. Soubory jen ve `storage/uploads` přes `/api/uploads` a `/api/files`.
 - **UI:** výhradně česky, kód anglicky. Stavové barvy a popisky jen ze `src/lib/status.ts`. Žádné externí obrázky ani CDN – grafika je SVG/CSS generovaná kódem.
 - **Ověření:** `npm run verify` (typecheck, lint, test, build) musí projít před každým commitem (ve fázích 0–1 stačí `npm run typecheck` a `npm run lint`).
-- **Prostředí:** Windows – používej npm skripty a Node/TS skripty místo bash-only příkazů. Nikdy nedělej `git push`. Na mazání mimo projekt a nevratné operace se nejdřív zeptej.
+- **Prostředí:** Windows – používej npm skripty a Node/TS skripty místo bash-only příkazů. `git push` dělej jen při nasazení (viz níže), jinak nikdy. Na mazání mimo projekt a nevratné operace se nejdřív zeptej.
+
+## 6. Nasazení na produkci (Hetzner, https://eldock.cz)
+
+Když uživatel řekne **„nasaď to na produkci“** nebo **„deploy“**:
+
+1. Ověř změny (`npm run verify`) a commitni je (`git add -A`, commit s výstižnou zprávou).
+2. `git push` na GitHub (`origin main`).
+3. Spusť nasazení přes SSH:
+   `ssh root@91.99.148.62 "cd /root/eldock && git pull && docker-compose up -d --build"`
+4. Ověř výsledek (výstup buildu, `docker-compose ps`, odpověď https://eldock.cz) a shrň ho.
+
+**Pozor:** na serveru je v `/root/eldock` ručně vytvořený soubor `.env` s produkčními hesly – při nasazení na něj nikdy nesahej, nečti ho do výstupu, nepřepisuj ho a nedávej ho do Gitu. Na serveru nespouštěj nic jiného než výše uvedený příkaz a čtecí kontroly; cokoli dalšího (mazání, reset, změny konfigurace) jen po výslovném souhlasu.
 
 @AGENTS.md
