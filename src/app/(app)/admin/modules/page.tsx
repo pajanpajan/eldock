@@ -5,25 +5,25 @@ import { ModuleConfigurator } from "@/components/admin/ModuleConfigurator";
 import { NoAccess } from "@/components/common/NoAccess";
 import { PageHeader } from "@/components/common/PageHeader";
 import { PageTransition } from "@/components/layout/PageTransition";
-import { getModuleState } from "@/server/modules";
+import { getModuleConfig } from "@/server/modules";
 import { getCurrentAccount } from "@/server/session";
 
-export const metadata: Metadata = { title: "Konfigurace modulů a tarifu" };
+export const metadata: Metadata = { title: "Správa modulů a tarifů" };
 
-// Licenční moduly tenantu: Core je vždy aktivní, add-ony zapíná / vypíná technický ředitel.
+// Licenční moduly tenantu: presety tarifů, režim neaktivních funkcí, moduly s podfunkcemi a dopad na role.
 export default async function AdminModulesPage() {
   const account = await getCurrentAccount();
-  if (!account.can("manageUsers")) return <NoAccess title="Konfigurace modulů a tarifu" current={account.accountType} suggest="PLANT_ADMIN" />;
-  const state = await getModuleState();
+  if (!account.can("manageModules")) return <NoAccess title="Správa modulů a tarifů" current={account.accountType} suggest="PLANT_ADMIN" />;
+  const config = await getModuleConfig();
 
   return (
     <PageTransition>
       <PageHeader
-        title="Konfigurace modulů a tarifu"
-        description="Eldock Core je součástí každého tarifu. Add-on moduly zapněte podle zakoupeného tarifu – vypnutý modul se ze všech obrazovek čistě skryje, data zůstávají uložená."
+        title="Správa modulů a tarifů"
+        description="Eldock Core je součástí každého tarifu. Add-on moduly a jejich funkce zapněte podle zakoupeného tarifu – změna platí okamžitě pro všechny uživatele, data zůstávají uložená."
       />
-      <AdminTabs current="/admin/modules" />
-      <ModuleConfigurator state={state} />
+      <AdminTabs current="/admin/modules" canUsers={account.can("manageUsers")} canModules />
+      <ModuleConfigurator initial={config} />
     </PageTransition>
   );
 }

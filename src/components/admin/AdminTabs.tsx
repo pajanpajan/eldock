@@ -4,15 +4,17 @@ import { Blocks, UsersRound } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const TABS = [
-  { href: "/admin/users", label: "Podúčty a oprávnění", icon: UsersRound },
-  { href: "/admin/modules", label: "Moduly a tarif", icon: Blocks },
+  { href: "/admin/users", label: "Podúčty a oprávnění", icon: UsersRound, key: "users" },
+  { href: "/admin/modules", label: "Moduly a tarif", icon: Blocks, key: "modules" },
 ] as const;
 
-/** Záložky administrace závodu (technický ředitel). */
-export function AdminTabs({ current }: { current: (typeof TABS)[number]["href"] }) {
+/** Záložky administrace závodu – jen ty, na které má účet oprávnění. */
+export function AdminTabs({ current, canUsers, canModules }: { current: (typeof TABS)[number]["href"]; canUsers: boolean; canModules: boolean }) {
+  const tabs = TABS.filter((tab) => (tab.key === "users" ? canUsers : canModules));
+  if (tabs.length < 2) return null;
   return (
     <nav aria-label="Administrace" className="mb-6 flex flex-wrap gap-1 rounded-xl border border-border bg-card p-1">
-      {TABS.map(({ href, label, icon: Icon }) => (
+      {tabs.map(({ href, label, icon: Icon }) => (
         <Link
           key={href}
           href={href}

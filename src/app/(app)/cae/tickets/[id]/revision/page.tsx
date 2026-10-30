@@ -16,7 +16,9 @@ import { REVISION_STATUS } from "@/lib/status";
 import { cn } from "@/lib/utils";
 import { canPerform } from "@/lib/workflow/state-machine";
 import { getRevisionFormData } from "@/server/queries/cae";
-import { getCurrentRole } from "@/server/session";
+import { ModuleDisabled } from "@/components/common/ModuleDisabled";
+import { getFeatures } from "@/server/modules";
+import { getCurrentAccount, getCurrentRole } from "@/server/session";
 type Props = PageProps<"/cae/tickets/[id]/revision">;
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -50,6 +52,9 @@ export default async function RevisionUploadPage({ params }: Props) {
       badges={<StatusBadge kind="changeRequest" status={changeRequest.status} />}
     />
   );
+
+  const caeFeatures = await getFeatures();
+  if (!caeFeatures.on("cae.ticketing")) return <ModuleDisabled feature="cae.ticketing" canManage={(await getCurrentAccount()).can("manageModules")} />;
 
   if (role !== "CAE_ENGINEER") {
     return (

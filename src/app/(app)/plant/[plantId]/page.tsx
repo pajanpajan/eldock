@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { EQUIPMENT_STATUS } from "@/lib/status";
 import { getInspectionWatch } from "@/server/queries/inspections";
 import { getPlantOverview } from "@/server/queries/plant";
-import { getModuleState } from "@/server/modules";
+import { getFeatures } from "@/server/modules";
 import { getCurrentAccount } from "@/server/session";
 
 export async function generateMetadata({ params }: PageProps<"/plant/[plantId]">): Promise<Metadata> {
@@ -26,7 +26,7 @@ export async function generateMetadata({ params }: PageProps<"/plant/[plantId]">
 
 // Level 1 – Půdorys areálu.
 export default async function PlantPage({ params }: PageProps<"/plant/[plantId]">) {
-  const [{ plantId }, account, modules] = await Promise.all([params, getCurrentAccount(), getModuleState()]);
+  const [{ plantId }, account, modules] = await Promise.all([params, getCurrentAccount(), getFeatures()]);
   const [plant, watch] = await Promise.all([getPlantOverview(plantId, account.types), getInspectionWatch(plantId, new Date(), account.types)]);
   if (!plant) notFound();
 
@@ -37,7 +37,7 @@ export default async function PlantPage({ params }: PageProps<"/plant/[plantId]"
         title={plant.name}
         description={[plant.customerName, plant.address, plant.city].filter(Boolean).join(" · ")}
         actions={
-          account.can("studio") && modules.ENTERPRISE_TOOLS ? (
+          account.can("studio") && modules.on("enterprise.studio") ? (
             <div className="flex flex-wrap gap-2">
               <Button asChild size="lg" variant="outline" className="touch-target gap-2">
                 <Link href={`/studio?plant=${plant.id}&new=plant`}>

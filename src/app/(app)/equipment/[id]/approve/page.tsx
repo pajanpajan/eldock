@@ -18,7 +18,7 @@ import { formatDateTime, formatRelative } from "@/lib/format";
 import { parseMarkup } from "@/lib/markup";
 import { buildingHref, equipmentHref, floorHref, plantHref } from "@/lib/routes";
 import { getApprovalData } from "@/server/queries/equipment";
-import { getModuleState } from "@/server/modules";
+import { getFeatures } from "@/server/modules";
 import { getCurrentAccount } from "@/server/session";
 
 type Props = PageProps<"/equipment/[id]/approve">;
@@ -44,7 +44,7 @@ function Section({ title, icon: Icon, children }: { title: string; icon: typeof 
 // Schválení nové revize údržbou: porovnání, shrnutí CAE, rozdíl kusovníku a rozhodnutí.
 export default async function ApprovePage({ params }: Props) {
   const { id } = await params;
-  const [data, account, modules] = await Promise.all([getApprovalData(id), getCurrentAccount(), getModuleState()]);
+  const [data, account, modules] = await Promise.all([getApprovalData(id), getCurrentAccount(), getFeatures()]);
   if (!data) notFound();
 
   const { equipment, change, pending, active } = data;
@@ -129,10 +129,10 @@ export default async function ApprovePage({ params }: Props) {
 
         <Section title={`Porovnání schémat ${active?.version ?? ""} → ${pending.version}`} icon={FileText}>
           <LazyRevisionCompare
-            before={active ? { version: active.version, url: active.schematicUrl, format: active.schematicFormat } : null}
+            // Bez porovnávače (cae.visual_diff) se ukáže jen nová revize ke schválení.
+            before={active && modules.on("cae.visual_diff") ? { version: active.version, url: active.schematicUrl, format: active.schematicFormat } : null}
             after={{ version: pending.version, url: pending.schematicUrl, format: pending.schematicFormat }}
             markup={markup}
-            advanced={modules.CAE_ADVANCED}
           />
         </Section>
 

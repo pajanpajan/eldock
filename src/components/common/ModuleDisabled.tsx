@@ -1,35 +1,46 @@
 import Link from "next/link";
-import { Blocks } from "lucide-react";
+import { Check, Lock } from "lucide-react";
 
-import { EmptyState } from "@/components/common/EmptyState";
 import { Button } from "@/components/ui/button";
-import { MODULES, type AddonModule } from "@/lib/modules";
+import { FEATURES, MODULES, type FeatureKey } from "@/lib/modules";
 import { APP_HOME } from "@/lib/routes";
 
-/** Stránka add-onu, který tenant nemá aktivní (přímé URL nebo stará záložka). */
-export function ModuleDisabled({ module, feature, canManage }: { module: AddonModule; feature: string; canManage: boolean }) {
-  const definition = MODULES[module];
+/** Stránka funkce, kterou tenant nemá aktivní (přímé URL, stará záložka, QR na zamčenou stránku). */
+export function ModuleDisabled({ feature, canManage }: { feature: FeatureKey; canManage: boolean }) {
+  const definition = FEATURES[feature];
+  const pack = MODULES[definition.module];
   return (
-    <EmptyState
-      className="my-auto"
-      icon={Blocks}
-      title={`${feature} je součástí modulu „${definition.label}“`}
-      description={canManage ? "Modul není ve vašem tarifu aktivní. Zapnout ho můžete v konfiguraci modulů." : "Modul není ve vašem tarifu aktivní. O jeho zapnutí požádejte technického ředitele."}
-      action={
-        <Button asChild className="touch-target">
-          <Link href={canManage ? "/admin/modules" : APP_HOME}>{canManage ? "Konfigurace modulů" : "Zpět do aplikace"}</Link>
+    <section className="mx-auto my-auto w-full max-w-xl rounded-2xl border border-primary/40 bg-card p-6 sm:p-8" data-testid="feature-locked">
+      <div className="flex items-center gap-3">
+        <span className="flex size-11 items-center justify-center rounded-xl bg-primary/15 text-primary">
+          <Lock className="size-5" aria-hidden />
+        </span>
+        <div>
+          <p className="text-xs font-semibold tracking-wide text-primary uppercase">Modul Pro · {pack.label}</p>
+          <h1 className="text-xl font-semibold">{definition.label} není ve vašem tarifu aktivní</h1>
+        </div>
+      </div>
+      <p className="mt-4">{definition.benefit}</p>
+      <ul className="mt-4 space-y-1 text-sm text-muted-foreground">
+        {pack.features.map((item) => (
+          <li key={item} className="flex items-start gap-2">
+            <Check className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
+            {item}
+          </li>
+        ))}
+      </ul>
+      <div className="mt-6 flex flex-wrap gap-2">
+        {canManage ? (
+          <Button asChild className="touch-target">
+            <Link href="/admin/modules">Přejít do správy modulů a aktivovat</Link>
+          </Button>
+        ) : (
+          <p className="w-full text-sm text-muted-foreground">O aktivaci modulu požádejte technického ředitele nebo vedoucího údržby.</p>
+        )}
+        <Button asChild variant="outline" className="touch-target">
+          <Link href={APP_HOME}>Zpět do aplikace</Link>
         </Button>
-      }
-    />
-  );
-}
-
-/** Nenápadný odznak u funkce, která je v jiném modulu. */
-export function ModuleBadge({ module }: { module: AddonModule }) {
-  return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2 py-0.5 text-xs text-muted-foreground" data-testid="module-badge">
-      <Blocks className="size-3" aria-hidden />
-      Dostupné v modulu {MODULES[module].badge}
-    </span>
+      </div>
+    </section>
   );
 }

@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { inspectionAlertsHref, inspectionsHref } from "@/lib/routes";
 import { getPlannerItems } from "@/server/queries/inspections";
 import { getPlants } from "@/server/queries/plant";
-import { getModuleState } from "@/server/modules";
+import { getFeatures } from "@/server/modules";
 import { getCurrentAccount, getRememberedPlantId } from "@/server/session";
 
 export const metadata: Metadata = { title: "Plánovač revizí" };
@@ -20,7 +20,7 @@ export const metadata: Metadata = { title: "Plánovač revizí" };
 export default async function InspectionPlannerPage() {
   const [account, plants, rememberedId] = await Promise.all([getCurrentAccount(), getPlants(), getRememberedPlantId()]);
   if (!account.can("planner")) return <NoAccess title="Plánovač revizí" current={account.accountType} suggest="INSPECTOR_VTZ" />;
-  if (!(await getModuleState()).INSPECTIONS_PRO) return <ModuleDisabled module="INSPECTIONS_PRO" feature="Plánovač revizí" canManage={account.can("manageUsers")} />;
+  if (!(await getFeatures()).on("inspections.planner")) return <ModuleDisabled feature="inspections.planner" canManage={account.can("manageModules")} />;
   const role = account.definition.workflowRole;
   // Údržba plánuje svůj závod, CAE všechny závody.
   const plant = role === "MAINTENANCE" ? (plants.find((entry) => entry.id === rememberedId) ?? plants[0]) : undefined;
@@ -35,7 +35,7 @@ export default async function InspectionPlannerPage() {
         description={`${plant ? plant.name : "Všechny závody"} · měsíční přehled, hlasový dispečer a optimalizace pochůzky.`}
         actions={
           <>
-            {account.can("inspections") ? (
+            {account.can("inspections") && (await getFeatures()).on("inspections.alerts") ? (
               <Button asChild variant="outline" className="touch-target gap-2">
                 <Link href={inspectionAlertsHref}>
                   <BellRing className="size-4" aria-hidden />

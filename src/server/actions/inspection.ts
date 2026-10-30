@@ -14,7 +14,7 @@ import {
   renderInspectionReport,
   renderQuickReport,
 } from "@/server/services/inspection";
-import { assertModule } from "@/server/modules";
+import { assertFeature } from "@/server/modules";
 import { assertPermission } from "@/server/permissions";
 import { saveUpload } from "@/server/storage";
 
@@ -125,7 +125,7 @@ export async function recordQuickInspectionAction(input: z.input<typeof quickSch
     input,
     async (data) => {
       await assertPermission("recordInspection");
-      await assertModule("INSPECTIONS_PRO");
+      await assertFeature("inspections.planner");
       const reportUrl = await saveReport(await renderQuickReport(prisma, data));
       const record = await recordQuickInspection(prisma, { ...data, reportUrl });
       return { id: record.id, validUntil: record.validUntil, result: record.result };

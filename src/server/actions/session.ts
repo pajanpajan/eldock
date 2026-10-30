@@ -10,7 +10,7 @@ import { ACCOUNT_TYPES } from "@/lib/accounts";
 import { resolveHome } from "@/lib/modules";
 import { prisma } from "@/lib/prisma";
 import { ACCOUNT_COOKIE, DEMO_USER_ID, PLANT_COOKIE, ROLE_COOKIE, roleSchema } from "@/lib/roles";
-import { getModuleState } from "@/server/modules";
+import { getFeatures } from "@/server/modules";
 import { getRememberedPlantId } from "@/server/session";
 
 const COOKIE_OPTIONS = {
@@ -41,7 +41,7 @@ export async function setAccount(userId: string, pathname: string, redirectTo?: 
   revalidatePath("/", "layout");
 
   if (redirectTo?.startsWith("/") && !redirectTo.startsWith("//")) redirect(redirectTo);
-  if (definition.home !== "plant") redirect(resolveHome(definition.home, await getModuleState()));
+  if (definition.home !== "plant") redirect(resolveHome(definition.home, (await getFeatures()).flags));
   const plantId =
     fromPath ??
     (await getRememberedPlantId()) ??

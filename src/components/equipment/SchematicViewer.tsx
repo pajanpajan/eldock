@@ -8,6 +8,7 @@ import { TransformComponent, TransformWrapper, useControls } from "react-zoom-pa
 
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { LazyRevisionCompare } from "@/components/lazy";
+import { LockedButton } from "@/components/modules/Upsell";
 import { Button } from "@/components/ui/button";
 import type { RevisionStatus, SchematicFormat } from "@/generated/prisma/enums";
 import { formatDate, plural } from "@/lib/format";
@@ -50,7 +51,9 @@ export function SchematicViewer({
   basePath,
   book,
   interactive,
-  advancedCompare = true,
+  compare: compareMode = "on",
+  interactiveLocked = false,
+  canManageModules = false,
 }: {
   revisions: ViewerRevision[];
   selectedId: string;
@@ -58,8 +61,11 @@ export function SchematicViewer({
   book?: { sheets: BookSheet[] };
   /** Vrstva „Interaktivní prvky ve schématu“ (CAE reference) vybrané revize. */
   interactive?: { node: ReactNode; count: number };
-  /** Posuvník, barevný diff a prolínání (modul CAE Advanced); jinak jen vedle sebe. */
-  advancedCompare?: boolean;
+  /** Porovnávač revizí (cae.visual_diff): zapnuto, zamčeno (Obchodní demo) nebo skryto. */
+  compare?: "on" | "locked" | "off";
+  /** Interaktivní prvky ve výkresu jsou mimo tarif (Obchodní demo → zamčené tlačítko). */
+  interactiveLocked?: boolean;
+  canManageModules?: boolean;
 }) {
   const searchParams = useSearchParams();
   const [comparing, setComparing] = useState(false);
@@ -80,7 +86,7 @@ export function SchematicViewer({
   const previous = revision
     ? [...revisions].filter((item) => item.id !== revision.id && item.status !== "REJECTED" && item.createdAt < revision.createdAt).sort((a, b) => +b.createdAt - +a.createdAt)[0] ?? null
     : null;
-  const compare = comparing && !sheet && revision && previous ? { previous, revision } : null;
+  const compare = comparing && compareMode === "on" && !sheet && revision && previous ? { previous, revision } : null;
 
   function onSheetClick(event: MouseEvent<HTMLDivElement>) {
     const target = (event.target as Element).closest("[data-xref]");
@@ -118,6 +124,11 @@ export function SchematicViewer({
         <span className="text-sm text-muted-foreground" data-testid="sheet-indicator">
           {sheet ? `List ${sheet.number} / ${sheets.length} · ${sheet.pageRef}` : revision ? `Výkres revize · ${revision.sheetCount} ${plural(revision.sheetCount, ["list", "listy", "listů"])} · ${formatDate(revision.createdAt)}` : ""}
         </span>
+        {interactiveLocked ? (
+          <LockedButton feature="cae.hotspots" canManage={canManageModules} className="ml-auto">
+            Interaktivní prvky
+          </LockedButton>
+        ) : null}
         {interactive ? (
           <Button
             variant={showLayer ? "default" : "outline"}
@@ -132,8 +143,13 @@ export function SchematicViewer({
             Interaktivní prvky ({interactive.count})
           </Button>
         ) : null}
-        {revision && !sheet && previous && !showLayer ? (
-          <Button variant={compare ? "secondary" : "outline"} className={cn("touch-target gap-2", !interactive && "ml-auto")} aria-pressed={!!compare} onClick={() => setComparing((value) => !value)}>
+        {revision && !sheet && previous && !showLayer && compareMode === "locked" ? (
+          <LockedButton feature="cae.visual_diff" canManage={canManageModules} className={cn(!interactive && !interactiveLocked && "ml-auto")}>
+            Porovnat s {previous.version}
+          </LockedButton>
+        ) : null}
+        {revision && !sheet && previous && !showLayer && compareMode === "on" ? (
+          <Button variant={compare ? "secondary" : "outline"} className={cn("touch-target gap-2", !interactive && !interactiveLocked && "ml-auto")} aria-pressed={!!compare} onClick={() => setComparing((value) => !value)}>
             {compare ? <X className="size-4" /> : <Columns2 className="size-4" />}
             {compare ? "Zavřít porovnání" : `Porovnat s ${previous.version}`}
           </Button>
@@ -213,7 +229,6 @@ export function SchematicViewer({
             after={{ version: compare.revision.version, url: compare.revision.schematicUrl, format: compare.revision.schematicFormat }}
             markup={null}
             labels={["Předchozí", "Vybraná"]}
-            advanced={advancedCompare}
           />
         ) : sheet ? (
           <div className="relative overflow-hidden rounded-xl border border-border bg-white">

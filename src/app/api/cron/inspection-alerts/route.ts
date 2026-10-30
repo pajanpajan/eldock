@@ -1,7 +1,8 @@
 import { brandEnv } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { smtpTransportFromEnv } from "@/server/mailer";
-import { loadModuleState } from "@/server/services/modules";
+import { effectiveFeatures } from "@/lib/modules";
+import { loadModuleConfig } from "@/server/services/modules";
 import { sendAllInspectionDigests } from "@/server/services/notifications";
 
 /**
@@ -14,7 +15,7 @@ export async function POST(request: Request) {
   if (!secret) return Response.json({ error: "Cron není nastaven (ELDOCK_CRON_SECRET)." }, { status: 503 });
   if (request.headers.get("authorization") !== `Bearer ${secret}`) return Response.json({ error: "Neplatný token." }, { status: 401 });
 
-  if (!(await loadModuleState(prisma)).INSPECTIONS_PRO) return Response.json({ error: "Modul Revize & Legislativa není aktivní." }, { status: 403 });
+  if (!effectiveFeatures(await loadModuleConfig(prisma))["inspections.alerts"]) return Response.json({ error: "Hlídač lhůt není ve vašem tarifu aktivní." }, { status: 403 });
 
   const origin = brandEnv("PUBLIC_URL") ?? new URL(request.url).origin;
   const logs = await sendAllInspectionDigests(prisma, { origin, transport: smtpTransportFromEnv() });

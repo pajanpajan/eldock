@@ -5,7 +5,6 @@ import { Blend, ChevronLeft, ChevronRight, Columns2, Eye, EyeOff, Loader2, Maxim
 import { TransformComponent, TransformWrapper, useControls, type ReactZoomPanPinchRef } from "react-zoom-pan-pinch";
 
 import { MarkupOverlay } from "@/components/canvas/MarkupOverlay";
-import { ModuleBadge } from "@/components/common/ModuleDisabled";
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { SchematicFormat } from "@/generated/prisma/enums";
@@ -163,7 +162,6 @@ export function RevisionCompare({
   markup,
   labels = ["Platná", "Nová"],
   initialPage = 1,
-  advanced = true,
 }: {
   before: CompareSide | null;
   after: CompareSide;
@@ -171,8 +169,6 @@ export function RevisionCompare({
   /** Popisky stran (výchozí „Platná“ / „Nová“ pro schvalování). */
   labels?: [string, string];
   initialPage?: number;
-  /** Posuvník, barevný diff a prolínání (modul CAE Advanced); bez něj jen vedle sebe. */
-  advanced?: boolean;
 }) {
   const [mode, setMode] = useState<Mode>("side");
   const [page, setPage] = useState(initialPage);
@@ -185,7 +181,7 @@ export function RevisionCompare({
   const old = useRendered(before, page);
   const now = useRendered(after, page);
   const diff = useDiff(old?.value ?? null, now?.value ?? null, mode === "diff");
-  const activeMode: Mode = before && advanced ? mode : "side";
+  const activeMode: Mode = before ? mode : "side";
   const pdf = before?.format === "PDF" || after.format === "PDF";
   const pageCount = Math.max(old?.value?.pageCount ?? 1, now?.value?.pageCount ?? 1);
   // Zákres technika je v souřadnicích SVG schématu – nad PDF ho neukazujeme.
@@ -213,8 +209,7 @@ export function RevisionCompare({
   return (
     <div className="space-y-3" data-testid="revision-compare">
       <div className="flex flex-wrap items-center gap-2">
-        {before && !advanced ? <ModuleBadge module="CAE_ADVANCED" /> : null}
-        {before && advanced ? (
+        {before ? (
           <ToggleGroup
             type="single"
             value={activeMode}

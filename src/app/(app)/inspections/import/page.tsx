@@ -10,7 +10,7 @@ import { PageTransition } from "@/components/layout/PageTransition";
 import { Button } from "@/components/ui/button";
 import { inspectionsHref } from "@/lib/routes";
 import { getImportFloors } from "@/server/queries/inspections";
-import { getModuleState } from "@/server/modules";
+import { getFeatures } from "@/server/modules";
 import { getCurrentAccount, getRememberedPlantId } from "@/server/session";
 
 export const metadata: Metadata = { title: "Hromadný import zařízení" };
@@ -19,7 +19,7 @@ export const metadata: Metadata = { title: "Hromadný import zařízení" };
 export default async function EquipmentImportPage() {
   const [account, floors, rememberedId] = await Promise.all([getCurrentAccount(), getImportFloors(), getRememberedPlantId()]);
   if (!account.can("recordInspection") && !account.can("studio")) return <NoAccess title="Hromadný import zařízení" current={account.accountType} suggest="MAINTENANCE_LEAD" />;
-  if (!(await getModuleState()).ENTERPRISE_TOOLS) return <ModuleDisabled module="ENTERPRISE_TOOLS" feature="Hromadný import zařízení" canManage={account.can("manageUsers")} />;
+  if (!(await getFeatures()).on("enterprise.csv_import")) return <ModuleDisabled feature="enterprise.csv_import" canManage={account.can("manageModules")} />;
 
   return (
     <PageTransition>

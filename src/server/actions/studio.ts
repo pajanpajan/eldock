@@ -8,7 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { PLANT_COOKIE } from "@/lib/roles";
 import { floorHref, plantHref } from "@/lib/routes";
 import { WorkflowError } from "@/lib/workflow/state-machine";
-import { assertModule } from "@/server/modules";
+import { assertFeature } from "@/server/modules";
 import { assertPermission } from "@/server/permissions";
 import { saveStudioBuilding } from "@/server/services/studio";
 
@@ -87,7 +87,7 @@ export async function saveStudioAction(input: z.input<typeof draftSchema>): Prom
   if (!parsed.success) return { ok: false, error: "Neplatná data konceptu. Zkontrolujte vyplněné údaje." };
   try {
     await assertPermission("studio");
-    await assertModule("ENTERPRISE_TOOLS");
+    await assertFeature("enterprise.studio");
     const result = await saveStudioBuilding(prisma, parsed.data);
     if (result.plantCreated) {
       (await cookies()).set(PLANT_COOKIE, result.plantId, { path: "/", maxAge: 60 * 60 * 24 * 365, sameSite: "lax", httpOnly: true });

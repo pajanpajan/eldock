@@ -22,8 +22,9 @@ import { REVISION_STATUS, SLA_LEVEL } from "@/lib/status";
 import { cn } from "@/lib/utils";
 import { canPerform } from "@/lib/workflow/state-machine";
 import { getTicketDetail } from "@/server/queries/cae";
-import { getModuleState } from "@/server/modules";
-import { getCurrentRole, getCurrentUser } from "@/server/session";
+import { ModuleDisabled } from "@/components/common/ModuleDisabled";
+import { getFeatures } from "@/server/modules";
+import { getCurrentAccount, getCurrentRole, getCurrentUser } from "@/server/session";
 
 type Props = PageProps<"/cae/tickets/[id]">;
 
@@ -48,8 +49,9 @@ function Section({ title, icon: Icon, children, className }: { title: string; ic
 // Detail ticketu pro CAE projektanta: podklady od technika vlevo, akce a timeline vpravo.
 export default async function TicketDetailPage({ params }: Props) {
   const { id } = await params;
-  const [ticket, role, user, modules] = await Promise.all([getTicketDetail(id), getCurrentRole(), getCurrentUser(), getModuleState()]);
+  const [ticket, role, user, modules] = await Promise.all([getTicketDetail(id), getCurrentRole(), getCurrentUser(), getFeatures()]);
   if (!ticket) notFound();
+  if (!modules.on("cae.ticketing")) return <ModuleDisabled feature="cae.ticketing" canManage={(await getCurrentAccount()).can("manageModules")} />;
 
   const now = new Date();
   const { equipment } = ticket;
@@ -132,7 +134,7 @@ export default async function TicketDetailPage({ params }: Props) {
             </Section>
           </div>
 
-          {ticket.baseRevision && ticket.resolvingRevisions[0] && modules.CAE_ADVANCED ? (
+          {ticket.baseRevision && ticket.resolvingRevisions[0] && modules.on("cae.visual_diff") ? (
             <Section title="Porovnat revize (Visual Diff)">
               <LazyRevisionCompare
                 before={{ version: ticket.baseRevision.version, url: ticket.baseRevision.schematicUrl, format: ticket.baseRevision.schematicFormat }}

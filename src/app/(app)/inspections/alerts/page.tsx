@@ -14,7 +14,7 @@ import { inspectionsHref, plannerHref } from "@/lib/routes";
 import { getDigestLog, getDigestPreview } from "@/server/queries/notifications";
 import { getPlants } from "@/server/queries/plant";
 import { requestOrigin } from "@/server/request-url";
-import { getModuleState } from "@/server/modules";
+import { getFeatures } from "@/server/modules";
 import { getCurrentAccount, getRememberedPlantId } from "@/server/session";
 
 export const metadata: Metadata = { title: "Notifikace a hlídač lhůt" };
@@ -23,7 +23,7 @@ export const metadata: Metadata = { title: "Notifikace a hlídač lhůt" };
 export default async function InspectionAlertsPage() {
   const [account, plants, rememberedId] = await Promise.all([getCurrentAccount(), getPlants(), getRememberedPlantId()]);
   if (!account.can("inspections")) return <NoAccess title="Notifikace a hlídač lhůt" current={account.accountType} suggest="MAINTENANCE_LEAD" />;
-  if (!(await getModuleState()).INSPECTIONS_PRO) return <ModuleDisabled module="INSPECTIONS_PRO" feature="Hlídač lhůt" canManage={account.can("manageUsers")} />;
+  if (!(await getFeatures()).on("inspections.alerts")) return <ModuleDisabled feature="inspections.alerts" canManage={account.can("manageModules")} />;
   const plant = plants.find((entry) => entry.id === rememberedId) ?? plants[0];
   if (!plant) return <NoAccess title="Notifikace a hlídač lhůt" current={account.accountType} suggest="PLANT_ADMIN" />;
 

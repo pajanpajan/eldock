@@ -22,7 +22,7 @@ import { tempModCountdown } from "@/lib/temporary-mod";
 import { cn } from "@/lib/utils";
 import { getAuditReport } from "@/server/queries/inspections";
 import { getPlants } from "@/server/queries/plant";
-import { getModuleState } from "@/server/modules";
+import { getFeatures } from "@/server/modules";
 import { getCurrentAccount, getRememberedPlantId } from "@/server/session";
 
 export const metadata: Metadata = { title: "Auditní report revizí" };
@@ -31,7 +31,7 @@ export const metadata: Metadata = { title: "Auditní report revizí" };
 export default async function AuditReportPage() {
   const [account, plants, rememberedId] = await Promise.all([getCurrentAccount(), getPlants(), getRememberedPlantId()]);
   if (!account.can("audit")) return <NoAccess title="Auditní report" current={account.accountType} suggest="PLANT_ADMIN" />;
-  if (!(await getModuleState()).INSPECTIONS_PRO) return <ModuleDisabled module="INSPECTIONS_PRO" feature="Auditní report" canManage={account.can("manageUsers")} />;
+  if (!(await getFeatures()).on("inspections.audit")) return <ModuleDisabled feature="inspections.audit" canManage={account.can("manageModules")} />;
   const role = account.definition.workflowRole;
   const plant = role === "MAINTENANCE" ? (plants.find((entry) => entry.id === rememberedId) ?? plants[0]) : undefined;
   const now = new Date();

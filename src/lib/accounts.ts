@@ -9,6 +9,7 @@ import type { AppRole } from "./roles";
 
 export type Permission =
   | "manageUsers" // správa podúčtů (/admin/users)
+  | "manageModules" // správa modulů a tarifů (/admin/modules)
   | "studio" // Studio výstavby závodu (/studio)
   | "audit" // Auditní report / Kniha revizí
   | "kpi" // manažerské KPI
@@ -54,6 +55,7 @@ export const ACCOUNT_TYPES: Record<AccountType, AccountDefinition> = {
     layers: ALL,
     permissions: [
       "manageUsers",
+      "manageModules",
       "studio",
       "audit",
       "kpi",
@@ -75,7 +77,7 @@ export const ACCOUNT_TYPES: Record<AccountType, AccountDefinition> = {
     label: "Vedoucí údržby",
     scopeDescription: "Všechna zařízení – schvaluje CAE revize, řídí LOTO, provizoria a odstraňování závad.",
     layers: ALL,
-    permissions: ["studio", "audit", "kpi", "approveRevision", "submitChange", "temporaryMods", "resolveDefects", "recordInspection", "inspections", "planner", "rapid"],
+    permissions: ["manageModules", "studio", "audit", "kpi", "approveRevision", "submitChange", "temporaryMods", "resolveDefects", "recordInspection", "inspections", "planner", "rapid"],
     workflowRole: "MAINTENANCE",
     showInspections: true,
     badge: "border-emerald-500/50 bg-emerald-500/15 text-emerald-300",
@@ -128,6 +130,7 @@ export const ACCOUNT_ORDER: AccountType[] = ["PLANT_ADMIN", "MAINTENANCE_LEAD", 
 
 export const PERMISSION_LABELS: Record<Permission, string> = {
   manageUsers: "Správa podúčtů",
+  manageModules: "Správa modulů a tarifů",
   studio: "Studio výstavby",
   audit: "Auditní report",
   kpi: "Manažerské KPI",

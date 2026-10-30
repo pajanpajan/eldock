@@ -34,14 +34,15 @@ interface Props {
   equipment: { id: string; tag: string; name: string };
   /** Platná revize – podklad pro zákres. */
   schematic: { url: string; version: string; sheetCount: number; pdf: boolean } | null;
-  /** Kreslení do fotek (modul CAE Advanced). */
-  annotatePhotos?: boolean;
+  /** Kreslení do fotek (cae.canvas_annotation): zapnuto, zamčeno (Obchodní demo) nebo skryto. */
+  annotatePhotos?: boolean | "locked";
+  canManageModules?: boolean;
   /** Otevřený požadavek → režim „Doplnit k otevřené změně“. */
   openChange: { id: string; number: string } | null;
 }
 
 /** Průvodce „Zadat změnu“: Zákres → Fotky → Poznámka → Souhrn (u otevřené změny bez zákresu). */
-export function ChangeRequestWizard({ equipment, schematic, openChange, annotatePhotos = true }: Props) {
+export function ChangeRequestWizard({ equipment, schematic, openChange, annotatePhotos = true, canManageModules = false }: Props) {
   const router = useRouter();
   const mode = openChange ? "comment" : "new";
   const steps = stepsFor(mode).filter((step) => step !== "markup" || schematic);
@@ -193,7 +194,7 @@ export function ChangeRequestWizard({ equipment, schematic, openChange, annotate
             pdf={schematic.pdf}
           />
         ) : null}
-        {step === "photos" ? <PhotoStep photos={state.photos} dispatch={dispatch} annotate={annotatePhotos} /> : null}
+        {step === "photos" ? <PhotoStep photos={state.photos} dispatch={dispatch} annotate={annotatePhotos} canManageModules={canManageModules} /> : null}
         {step === "note" ? <VoiceNote text={state.text} priority={state.priority} dispatch={dispatch} showPriority={!openChange} /> : null}
         {step === "summary" ? (
           <div className="space-y-4">

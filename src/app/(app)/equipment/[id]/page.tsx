@@ -36,7 +36,7 @@ import { checkLabel } from "@/lib/qr-label";
 import { hasPanelBook } from "@/lib/sheet-nav";
 import { buildLabelData } from "@/server/equipment-label";
 import { getEquipmentDetail, getLinkableEquipment, getPowerNodes, getRevisionBom, getSchematicReferences } from "@/server/queries/equipment";
-import { getModuleState } from "@/server/modules";
+import { getFeatures } from "@/server/modules";
 import { getCurrentAccount } from "@/server/session";
 
 type Props = PageProps<"/equipment/[id]">;
@@ -50,7 +50,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 // Detail zařízení – Documentation Hub (dostupný i přes QR kód).
 export default async function EquipmentPage({ params, searchParams }: Props) {
   const [{ id }, { rev, qr }] = await Promise.all([params, searchParams]);
-  const [equipment, account, modules] = await Promise.all([getEquipmentDetail(id), getCurrentAccount(), getModuleState()]);
+  const [equipment, account, modules] = await Promise.all([getEquipmentDetail(id), getCurrentAccount(), getFeatures()]);
   if (!equipment) notFound();
   const role = account.definition.workflowRole;
   // Mimo výřez účtu (např. konvice pro revizního technika VTZ) – jen informace, ne data.
@@ -83,7 +83,7 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
   const fieldView = !!account.definition.fieldView && !isLightCard(equipment.type);
   // Interaktivní reference ve výkresu vybrané revize (CAE / správce závodu je upravuje).
   const canEditReferences = account.can("caeOffice") || account.can("studio");
-  const withReferences = !!selected && !isLightCard(equipment.type) && modules.CAE_ADVANCED;
+  const withReferences = !!selected && !isLightCard(equipment.type) && modules.on("cae.hotspots");
   // Nezávislé dotazy po ověření přístupu najednou: napájení (LOTO), štítek, kusovník vybrané revize, reference.
   const [powerNodes, label, bom, references, linkable] = await Promise.all([
     getPowerNodes(plantId),
@@ -125,7 +125,7 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
       now={now}
       canRecord={account.can("recordInspection")}
       canResolveDefects={account.can("resolveDefects")}
-      showReports={modules.INSPECTIONS_PRO}
+      showReports={modules.on("inspections.pdf_reports")}
     />
   );
 
@@ -227,7 +227,7 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
               {!light && account.can("temporaryMods") ? <TemporaryModDialog equipmentId={equipment.id} tag={equipment.tag} version={active?.version ?? null} /> : null}
               {light || fieldView ? null : account.can("submitChange") ? (
                 <ChangeRequestCta href={`${basePath}/change-request`} openNumber={openChange?.number ?? null} />
-              ) : openChange && role === "CAE_ENGINEER" ? (
+              ) : openChange && role === "CAE_ENGINEER" && modules.on("cae.ticketing") ? (
                 <Button asChild size="lg" className="touch-target gap-2">
                   <Link href={caeTicketHref(openChange.id)}>
                     <Inbox className="size-4" />
@@ -282,9 +282,11 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
             panels={{
               schema: (
                 <SchematicViewer
-                  advancedCompare={modules.CAE_ADVANCED}
+                  compare={modules.on("cae.visual_diff") ? "on" : modules.upsell ? "locked" : "off"}
+                  interactiveLocked={!modules.on("cae.hotspots") && modules.upsell && !isLightCard(equipment.type)}
+                  canManageModules={account.can("manageModules")}
                   interactive={
-                    selected && modules.CAE_ADVANCED && (references.length || canEditReferences)
+                    selected && modules.on("cae.hotspots") && (references.length || canEditReferences)
                       ? {
                           count: references.length,
                           node: (

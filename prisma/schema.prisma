@@ -670,3 +670,20 @@ model TenantModule {
   updatedById String?
   updatedAt   DateTime @updatedAt
 }
+
+/// Podfunkce licenčních modulů ("cae.visual_diff", "inspections.alerts" …). Účinná jen se zapnutým
+/// modulem. Chybějící řádek = zapnuto.
+model TenantFeature {
+  key         String   @id
+  enabled     Boolean  @default(true)
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+}
+
+/// Nastavení tenantu (klíč → hodnota), např. "modules.displayMode" = "CLEAN" | "UPSELL".
+model TenantSetting {
+  key         String   @id
+  value       String
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+}

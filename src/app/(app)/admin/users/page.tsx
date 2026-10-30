@@ -23,7 +23,7 @@ export default async function AdminUsersPage() {
   return (
     <PageTransition>
       <PageHeader title="Správa podúčtů" description="Účty závodu, jejich oprávnění a kategorie zařízení, které vidí (výřez dat na mapě i v přehledech)." />
-      <AdminTabs current="/admin/users" />
+      <AdminTabs current="/admin/users" canUsers canModules={account.can("manageModules")} />
       <div className="space-y-6">
         <div className="overflow-x-auto rounded-xl border border-border bg-card">
           <Table>

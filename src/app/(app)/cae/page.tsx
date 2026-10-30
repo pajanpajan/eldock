@@ -11,7 +11,9 @@ import { formatCount } from "@/lib/format";
 import { CHANGE_REQUEST_PRIORITY, CHANGE_REQUEST_STATUS } from "@/lib/status";
 import { getCaeTickets } from "@/server/queries/cae";
 import { getPlants } from "@/server/queries/plant";
-import { getCurrentRole, getCurrentUser } from "@/server/session";
+import { ModuleDisabled } from "@/components/common/ModuleDisabled";
+import { getFeatures } from "@/server/modules";
+import { getCurrentAccount, getCurrentRole, getCurrentUser } from "@/server/session";
 
 export const metadata: Metadata = { title: "CAE Back-Office" };
 
@@ -24,6 +26,9 @@ export default async function CaeDashboardPage({ searchParams }: PageProps<"/cae
     getPlants(),
     searchParams,
   ]);
+
+  const caeFeatures = await getFeatures();
+  if (!caeFeatures.on("cae.ticketing")) return <ModuleDisabled feature="cae.ticketing" canManage={(await getCurrentAccount()).can("manageModules")} />;
 
   if (role !== "CAE_ENGINEER") {
     return (

@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { inspectionsHref } from "@/lib/routes";
 import { getRapidQueue } from "@/server/queries/inspections";
 import { getPlants } from "@/server/queries/plant";
-import { getModuleState } from "@/server/modules";
+import { getFeatures } from "@/server/modules";
 import { getCurrentAccount, getRememberedPlantId } from "@/server/session";
 
 export const metadata: Metadata = { title: "Rychlá revize" };
@@ -20,7 +20,7 @@ export const metadata: Metadata = { title: "Rychlá revize" };
 export default async function RapidInspectionPage({ searchParams }: PageProps<"/inspections/rapid">) {
   const [account, plants, rememberedId, params] = await Promise.all([getCurrentAccount(), getPlants(), getRememberedPlantId(), searchParams]);
   if (!account.can("rapid")) return <NoAccess title="Rychlá revize" current={account.accountType} suggest="INSPECTOR_APPLIANCES" />;
-  if (!(await getModuleState()).INSPECTIONS_PRO) return <ModuleDisabled module="INSPECTIONS_PRO" feature="Rychlá revize" canManage={account.can("manageUsers")} />;
+  if (!(await getFeatures()).on("inspections.planner")) return <ModuleDisabled feature="inspections.planner" canManage={account.can("manageModules")} />;
   const role = account.definition.workflowRole;
   // Dávka z plánovače: `?ids=a,b,c` v pořadí pochůzky.
   const planIds = typeof params.ids === "string" ? params.ids.split(",").filter(Boolean).slice(0, 500) : [];

@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 import { generateRevisionSchematic } from "@/server/services/schematic";
 import * as workflow from "@/server/services/workflow";
+import { assertFeature } from "@/server/modules";
 import { assertPermission } from "@/server/permissions";
 import { saveUpload } from "@/server/storage";
 import { getCurrentRole, getCurrentUser } from "@/server/session";
@@ -110,6 +111,7 @@ export async function addCommentAction(input: z.input<typeof commentSchema>) {
 
 export async function assignChangeRequestAction(input: { changeRequestId: string }) {
   return run(crSchema, input, async (actor, data) => {
+    await assertFeature("cae.ticketing");
     const changeRequest = await workflow.assignChangeRequest(prisma, actor, data);
     return { id: changeRequest.id, number: changeRequest.number };
   });
@@ -117,6 +119,7 @@ export async function assignChangeRequestAction(input: { changeRequestId: string
 
 export async function uploadRevisionAction(input: z.input<typeof uploadSchema>) {
   return run(uploadSchema, input, async (actor, data) => {
+    await assertFeature("cae.ticketing");
     const revision = await workflow.uploadRevision(prisma, actor, data);
     return { id: revision.id, version: revision.version };
   });

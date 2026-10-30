@@ -4,6 +4,7 @@ import { useRef, useState, type Dispatch } from "react";
 import dynamic from "next/dynamic";
 import { Camera, ImagePlus, PenLine, RotateCw, X } from "lucide-react";
 
+import { LockedButton } from "@/components/modules/Upsell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
@@ -19,7 +20,18 @@ const MAX_PHOTOS = 10;
  * Krok 2 – fotky zapojení / štítku: fotoaparát nebo galerie, zmenšení na klientu, nahrání s průběhem.
  * Do každé nahrané fotky lze zakreslit místo změny – nahraje se složená fotka se zákresem.
  */
-export function PhotoStep({ photos, dispatch, annotate = true }: { photos: WizardPhoto[]; dispatch: Dispatch<WizardAction>; annotate?: boolean }) {
+export function PhotoStep({
+  photos,
+  dispatch,
+  annotate = true,
+  canManageModules = false,
+}: {
+  photos: WizardPhoto[];
+  dispatch: Dispatch<WizardAction>;
+  /** Kreslení do fotek: zapnuto, zamčeno (Obchodní demo) nebo skryto. */
+  annotate?: boolean | "locked";
+  canManageModules?: boolean;
+}) {
   const inputRef = useRef<HTMLInputElement>(null);
   const files = useRef(new Map<string, File>());
   const [annotating, setAnnotating] = useState<WizardPhoto | null>(null);
@@ -146,7 +158,11 @@ export function PhotoStep({ photos, dispatch, annotate = true }: { photos: Wizar
                     <PenLine className="size-3.5" aria-hidden /> Se zákresem
                   </span>
                 ) : null}
-                {photo.url && annotate ? (
+                {photo.url && annotate === "locked" ? (
+                  <LockedButton feature="cae.canvas_annotation" canManage={canManageModules} variant="secondary" className="absolute bottom-2 left-2">
+                    Zakreslit
+                  </LockedButton>
+                ) : photo.url && annotate === true ? (
                   <Button
                     type="button"
                     variant="secondary"
