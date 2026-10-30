@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
-import { headers } from "next/headers";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Cable, EyeOff, Inbox } from "lucide-react";
+import { Cable, EyeOff, Inbox, QrCode, ShieldX } from "lucide-react";
 
 import { EmptyState } from "@/components/common/EmptyState";
 import { LocationBreadcrumb } from "@/components/common/LocationBreadcrumb";
@@ -13,7 +12,8 @@ import { BomTable } from "@/components/equipment/BomTable";
 import { Cabinet3D } from "@/components/equipment/Cabinet3D";
 import { ChangeRequestCta } from "@/components/equipment/ChangeRequestCta";
 import { DocumentationTabs } from "@/components/equipment/DocumentationTabs";
-import { QrDialog } from "@/components/equipment/QrDialog";
+import { EquipmentPhotoCard } from "@/components/equipment/EquipmentPhotoCard";
+import { QrLabelCard } from "@/components/equipment/QrLabelCard";
 import { RevisionTimeline } from "@/components/equipment/RevisionTimeline";
 import { SafetyBanner } from "@/components/equipment/SafetyBanner";
 import { PanelDiagnostics } from "@/components/equipment/PanelDiagnostics";
@@ -26,6 +26,7 @@ import { TemporaryModArchive } from "@/components/temporary-mods/TemporaryModArc
 import { TemporaryModBanner } from "@/components/temporary-mods/TemporaryModBanner";
 import { TemporaryModDialog } from "@/components/temporary-mods/TemporaryModDialog";
 import { PageTransition } from "@/components/layout/PageTransition";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { EQUIPMENT_TYPE_LABELS, formatDate } from "@/lib/format";
 import { pragueToday, summarizeInspections } from "@/lib/inspection";
@@ -33,7 +34,9 @@ import { USAGE_GROUP_LABELS, inspectionRuleFor, isLightCard, type UsageGroup } f
 import { renderPanelSheetSvg } from "@/lib/mock-graphics/pcschematic";
 import { buildPanelModel } from "@/lib/panel-model";
 import { buildingHref, caeTicketHref, equipmentHref, floorHref, plantHref } from "@/lib/routes";
+import { checkLabel } from "@/lib/qr-label";
 import { hasPanelBook } from "@/lib/sheet-nav";
+import { buildLabelData } from "@/server/equipment-label";
 import { getEquipmentDetail, getPowerNodes } from "@/server/queries/equipment";
 import { getCurrentAccount } from "@/server/session";
 
@@ -45,18 +48,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return { title: equipment?.name ?? "Zařízení" };
 }
 
-/** Absolutní URL pro QR kód podle hlaviček požadavku (funguje i přes IP v síti haly). */
-async function absoluteUrl(pathname: string) {
-  const list = await headers();
-  const host = list.get("x-forwarded-host") ?? list.get("host") ?? "localhost:3000";
-  const proto = list.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
-  return `${proto}://${host}${pathname}`;
-}
-
 // Detail zařízení – Documentation Hub (dostupný i přes QR kód).
 export default async function EquipmentPage({ params, searchParams }: Props) {
   const { id } = await params;
-  const { rev } = await searchParams;
+  const { rev, qr } = await searchParams;
   const [equipment, account] = await Promise.all([getEquipmentDetail(id), getCurrentAccount()]);
   if (!equipment) notFound();
   const role = account.definition.workflowRole;
@@ -82,11 +77,13 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
   const active = equipment.revisions.find((revision) => revision.status === "ACTIVE") ?? equipment.revisions[0] ?? null;
   const pending = equipment.revisions.find((revision) => revision.status === "PENDING_APPROVAL") ?? null;
   const selected = equipment.revisions.find((revision) => revision.id === rev) ?? active;
-  const location = `${building.plant.name} › ${building.name} › ${floor.name}`;
-  const qrUrl = await absoluteUrl(basePath);
   // Pevné „teď“ pro relativní časy (server i klient vykreslí totéž).
   const now = new Date();
   const inspection = summarizeInspections(equipment.inspections, now);
+  const label = await buildLabelData(equipment, inspection);
+  // Naskenovaný štítek s jiným kódem = štítek byl mezitím přegenerován (fyzicky neplatný).
+  const labelCheck = checkLabel(qr, equipment.qrToken);
+  const canEditCard = account.can("submitChange") || account.can("recordInspection");
   const today = pragueToday(now);
   // Spotřebiče, nářadí a bezpečnostní zařízení: lehká karta jen s revizemi a měřením.
   const light = isLightCard(equipment.type);
@@ -193,7 +190,12 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
           }
           actions={
             <>
-              <QrDialog url={qrUrl} tag={equipment.tag} name={equipment.name} location={location} />
+              <Button asChild variant="outline" className="touch-target gap-2">
+                <a href="#qr-stitek">
+                  <QrCode className="size-4" />
+                  QR štítek
+                </a>
+              </Button>
               {!light && account.can("temporaryMods") ? <TemporaryModDialog equipmentId={equipment.id} tag={equipment.tag} version={active?.version ?? null} /> : null}
               {light ? null : account.can("submitChange") ? (
                 <ChangeRequestCta href={`${basePath}/change-request`} openNumber={openChange?.number ?? null} />
@@ -208,6 +210,30 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
             </>
           }
         />
+
+        {labelCheck === "replaced" ? (
+          <Alert variant="destructive" data-testid="qr-label-replaced">
+            <ShieldX />
+            <AlertTitle>Neplatný QR štítek</AlertTitle>
+            <AlertDescription>
+              Naskenovaný štítek u {equipment.tag} byl nahrazen novým kódem a už neplatí. Ověřte, že jste u správného zařízení, a nahlaste výměnu štítku – platný štítek vytisknete níže.
+            </AlertDescription>
+          </Alert>
+        ) : null}
+
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+          <EquipmentPhotoCard
+            equipmentId={equipment.id}
+            tag={equipment.tag}
+            name={equipment.name}
+            type={equipment.type}
+            photoUrl={equipment.photoUrl}
+            inspection={showInspections ? inspection : null}
+            documentStatus={light ? null : equipment.status}
+            canEdit={canEditCard}
+          />
+          <QrLabelCard label={label} printHref={`${basePath}/label`} canEdit={canEditCard} />
+        </div>
 
         {openChange ? (
           <SafetyBanner

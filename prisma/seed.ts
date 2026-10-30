@@ -430,8 +430,10 @@ async function main() {
     await prisma.temporaryModification.create({ data: { ...mod, equipmentId: equipmentId.get(mod.equipmentId)! } });
   }
 
-  // Reálné projekty PCSCHEMATIC (PDF v public/demo-docs)
+  // Reálné projekty PCSCHEMATIC (PDF v public/demo-docs), fotografie a další spotřebiče
   await seedDemoDocs(prisma);
+  // Kódy QR štítků (stejně jako migrace 20261030190000)
+  await prisma.$executeRaw`UPDATE "Equipment" SET "qrToken" = upper(hex(randomblob(5))) WHERE "qrToken" IS NULL`;
 
   // Souhrn
   const [plants, buildings, floors, equipment, revisions, bom, openCr, closedCr, events, documents, inspections, defects, mods] = await Promise.all([

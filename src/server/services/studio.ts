@@ -4,6 +4,7 @@
 import type { PrismaClient } from "@/generated/prisma/client";
 import { DEFAULT_GRID, clampGrid, gridToPercent, parseGridRef, renderGridFloorplanSvg, type GridSpec } from "@/lib/cad-grid";
 import { inspectionRuleFor, isPortable } from "@/lib/inspection-rules";
+import { newQrToken } from "@/lib/qr-label";
 import { validatePlacement, type PowerSource } from "@/lib/power-hierarchy";
 import { floorLabel, floorName, rectPolygon, type StudioDraft } from "@/lib/studio-draft";
 import { WorkflowError } from "@/lib/workflow/state-machine";
@@ -133,6 +134,7 @@ export async function saveStudioBuilding(prisma: PrismaClient, draft: StudioDraf
           protectionClass: isPortable(item.type) ? "I" : null,
           inspectionIntervalMonths: inspectionRuleFor({ type: item.type, usageGroup: isPortable(item.type) ? "C" : null }).months,
           description: "Osazeno ve Studiu výstavby závodu.",
+          qrToken: newQrToken(),
         },
       });
       equipmentIds.set(item.key, created.id);
