@@ -11,6 +11,7 @@ import type { SchematicFormat } from "@/generated/prisma/enums";
 import type { MarkupData } from "@/lib/markup";
 import { SCHEMATIC_HEIGHT, SCHEMATIC_WIDTH } from "@/lib/mock-graphics/schematic";
 import { cn } from "@/lib/utils";
+import { PdfViewer } from "@/components/equipment/PdfViewer";
 
 export interface CompareSide {
   version: string;
@@ -63,7 +64,18 @@ const Label = ({ children, className }: { children: React.ReactNode; className?:
  * Porovnání platné a nové revize: vedle sebe (synchronizovaný zoom/posun), posuvník a prolínání.
  * Zákres technika lze zobrazit nad starou verzí. PDF se porovnává jen vedle sebe (bez zoomu).
  */
-export function RevisionCompare({ before, after, markup }: { before: CompareSide | null; after: CompareSide; markup: MarkupData | null }) {
+export function RevisionCompare({
+  before,
+  after,
+  markup,
+  labels = ["Platná", "Nová"],
+}: {
+  before: CompareSide | null;
+  after: CompareSide;
+  markup: MarkupData | null;
+  /** Popisky stran (výchozí „Platná“ / „Nová“ pro schvalování). */
+  labels?: [string, string];
+}) {
   const [mode, setMode] = useState<Mode>("side");
   const [showMarkup, setShowMarkup] = useState(!!markup?.strokes.length);
   const [position, setPosition] = useState(50);
@@ -93,10 +105,10 @@ export function RevisionCompare({ before, after, markup }: { before: CompareSide
         {[before, after].filter((side): side is CompareSide => !!side).map((side, index) => (
           <figure key={side.version} className="space-y-1">
             <figcaption className="text-sm text-muted-foreground">
-              {index === 0 && before ? "Platná" : "Nová"} <span className="font-mono text-foreground">{side.version}</span>
+              {index === 0 && before ? labels[0] : labels[1]} <span className="font-mono text-foreground">{side.version}</span>
             </figcaption>
             {side.format === "PDF" ? (
-              <iframe src={side.url} title={`Schéma ${side.version}`} className="aspect-[1.414] w-full rounded-xl border border-border bg-white" />
+              <PdfViewer url={side.url} title={`Schéma ${side.version}`} compact />
             ) : (
               <Sheet side={side} alt={`Schéma ${side.version}`} />
             )}
@@ -142,7 +154,7 @@ export function RevisionCompare({ before, after, markup }: { before: CompareSide
           {([before, after] as const).map((side, index) => (
             <div key={side.version} className="relative overflow-hidden rounded-xl border border-border bg-white">
               <Label className={index === 0 ? "left-2 bg-zinc-800 text-zinc-100" : "left-2 bg-sky-500 text-sky-950"}>
-                {index === 0 ? "Platná" : "Nová"} {side.version}
+                {index === 0 ? labels[0] : labels[1]} {side.version}
               </Label>
               <TransformWrapper
                 ref={refs[index]}
@@ -162,8 +174,8 @@ export function RevisionCompare({ before, after, markup }: { before: CompareSide
       ) : (
         <div className="space-y-3">
           <div className="relative mx-auto max-w-[calc((100dvh-12rem)*1.414)] overflow-hidden rounded-xl border border-border bg-white" data-testid="compare-overlay">
-            <Label className="left-2 bg-zinc-800 text-zinc-100">Platná {before.version}</Label>
-            <Label className="right-2 bg-sky-500 text-sky-950">Nová {after.version}</Label>
+            <Label className="left-2 bg-zinc-800 text-zinc-100">{labels[0]} {before.version}</Label>
+            <Label className="right-2 bg-sky-500 text-sky-950">{labels[1]} {after.version}</Label>
             <TransformWrapper maxScale={8} doubleClick={{ mode: "zoomIn", step: 0.7 }} wheel={{ step: 0.12 }} panning={{ excluded: ["compare-handle"] }}>
               <TransformComponent wrapperClass="!w-full" contentClass="!w-full">
                 <div className="relative w-full">

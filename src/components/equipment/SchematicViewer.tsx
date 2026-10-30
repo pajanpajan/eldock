@@ -1,19 +1,22 @@
 "use client";
 
-import type { MouseEvent } from "react";
+import { useState, type MouseEvent } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { BookOpen, ChevronLeft, ChevronRight, Download, FileImage, Maximize, Minus, Plus } from "lucide-react";
+import { BookOpen, ChevronLeft, ChevronRight, Columns2, Download, FileImage, FileText, Maximize, Minus, Plus, X } from "lucide-react";
 import { TransformComponent, TransformWrapper, useControls } from "react-zoom-pan-pinch";
 
 import { StatusBadge } from "@/components/common/StatusBadge";
+import { RevisionCompare } from "@/components/revisions/RevisionCompare";
 import { Button } from "@/components/ui/button";
 import type { RevisionStatus, SchematicFormat } from "@/generated/prisma/enums";
-import { formatDate } from "@/lib/format";
+import { formatDate, plural } from "@/lib/format";
 import { PC_HEIGHT, PC_WIDTH, columnRect } from "@/lib/mock-graphics/pcschematic";
 import { parseXref } from "@/lib/panel-model";
 import { openSheet } from "@/lib/sheet-nav";
 import { cn } from "@/lib/utils";
+
+import { PdfViewer, downloadHref } from "./PdfViewer";
 
 export interface ViewerRevision {
   id: string;
@@ -37,7 +40,9 @@ export interface BookSheet {
 /**
  * Prohlížeč dokumentace vybrané revize (`?rev=`). U rozváděčů a strojů je to vícelistová kniha
  * PCSCHEMATIC s obsahem (`?sheet=1…6`, křížové odkazy „/4.6“ otevřou list a zvýrazní sloupec)
- * a původní výkres revize od CAE (`?sheet=orig`): SVG/obrázek přes `<img>` se zoomem, PDF v `<iframe>`.
+ * a původní výkres revize od CAE (`?sheet=orig`): SVG/obrázek přes `<img>` se zoomem, PDF ve vestavěném
+ * prohlížeči (celá obrazovka, stažení originálu). PDF projekt se otevírá jako výchozí. Revizi lze porovnat
+ * s předchozí verzí vedle sebe.
  */
 export function SchematicViewer({
   revisions,
@@ -51,14 +56,23 @@ export function SchematicViewer({
   book?: { sheets: BookSheet[] };
 }) {
   const searchParams = useSearchParams();
+  const [comparing, setComparing] = useState(false);
   const revision = revisions.find((item) => item.id === selectedId) ?? revisions[0];
   if (!revision && !book) return <p className="text-muted-foreground">Zařízení zatím nemá žádnou revizi dokumentace.</p>;
 
   const sheetParam = searchParams.get("sheet");
   const sheets = book?.sheets ?? [];
-  const sheetNumber = sheets.length && sheetParam !== "orig" ? Math.min(sheets.length, Math.max(1, Number(sheetParam) || 1)) : 0;
+  // Reálný projekt v PDF má přednost před knihou vygenerovanou aplikací (dokud uživatel neotevře list).
+  const pdfFirst = !sheetParam && revision?.schematicFormat === "PDF";
+  const sheetNumber = sheets.length && sheetParam !== "orig" && !pdfFirst ? Math.min(sheets.length, Math.max(1, Number(sheetParam) || 1)) : 0;
   const sheet = sheets.find((entry) => entry.number === sheetNumber) ?? null;
   const column = sheet ? Number(searchParams.get("col")) || null : null;
+
+  // Předchozí revize = nejbližší starší podle data (pro rychlé porovnání).
+  const previous = revision
+    ? [...revisions].filter((item) => item.id !== revision.id && item.status !== "REJECTED" && item.createdAt < revision.createdAt).sort((a, b) => +b.createdAt - +a.createdAt)[0] ?? null
+    : null;
+  const compare = comparing && !sheet && revision && previous ? { previous, revision } : null;
 
   function onSheetClick(event: MouseEvent<HTMLDivElement>) {
     const target = (event.target as Element).closest("[data-xref]");
@@ -94,11 +108,17 @@ export function SchematicViewer({
           </>
         ) : null}
         <span className="text-sm text-muted-foreground" data-testid="sheet-indicator">
-          {sheet ? `List ${sheet.number} / ${sheets.length} · ${sheet.pageRef}` : revision ? `Výkres revize · ${revision.sheetCount} ${revision.sheetCount === 1 ? "list" : "listy"} · ${formatDate(revision.createdAt)}` : ""}
+          {sheet ? `List ${sheet.number} / ${sheets.length} · ${sheet.pageRef}` : revision ? `Výkres revize · ${revision.sheetCount} ${plural(revision.sheetCount, ["list", "listy", "listů"])} · ${formatDate(revision.createdAt)}` : ""}
         </span>
-        {revision && !sheet ? (
-          <Button asChild variant="outline" className="touch-target ml-auto gap-2">
-            <a href={`${revision.schematicUrl}?download=1`} download>
+        {revision && !sheet && previous ? (
+          <Button variant={compare ? "secondary" : "outline"} className="touch-target ml-auto gap-2" aria-pressed={!!compare} onClick={() => setComparing((value) => !value)}>
+            {compare ? <X className="size-4" /> : <Columns2 className="size-4" />}
+            {compare ? "Zavřít porovnání" : `Porovnat s ${previous.version}`}
+          </Button>
+        ) : null}
+        {revision && !sheet && revision.schematicFormat !== "PDF" ? (
+          <Button asChild variant="outline" className={cn("touch-target gap-2", !previous && "ml-auto")}>
+            <a href={downloadHref(revision.schematicUrl)} download>
               <Download className="size-4" />
               Stáhnout
             </a>
@@ -151,8 +171,10 @@ export function SchematicViewer({
                       !sheet ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground",
                     )}
                   >
-                    <FileImage className="mt-0.5 size-4 shrink-0" aria-hidden />
-                    <span className="leading-snug">Původní výkres revize {revision.version} (CAE)</span>
+                    {revision.schematicFormat === "PDF" ? <FileText className="mt-0.5 size-4 shrink-0" aria-hidden /> : <FileImage className="mt-0.5 size-4 shrink-0" aria-hidden />}
+                    <span className="leading-snug">
+                      {revision.schematicFormat === "PDF" ? `Projekt PDF ${revision.version} (${revision.sheetCount} listů)` : `Původní výkres revize ${revision.version} (CAE)`}
+                    </span>
                   </button>
                 </li>
               ) : null}
@@ -160,7 +182,14 @@ export function SchematicViewer({
           </nav>
         ) : null}
 
-        {sheet ? (
+        {compare ? (
+          <RevisionCompare
+            before={{ version: compare.previous.version, url: compare.previous.schematicUrl, format: compare.previous.schematicFormat }}
+            after={{ version: compare.revision.version, url: compare.revision.schematicUrl, format: compare.revision.schematicFormat }}
+            markup={null}
+            labels={["Předchozí", "Vybraná"]}
+          />
+        ) : sheet ? (
           <div className="relative overflow-hidden rounded-xl border border-border bg-white">
             <TransformWrapper key={`sheet-${sheet.number}`} maxScale={8} doubleClick={{ mode: "zoomIn", step: 0.7 }} wheel={{ step: 0.12 }}>
               <TransformComponent wrapperClass="!w-full" contentClass="!w-full">
@@ -182,7 +211,16 @@ export function SchematicViewer({
             </TransformWrapper>
           </div>
         ) : revision?.schematicFormat === "PDF" ? (
-          <iframe src={revision.schematicUrl} title={revision.title} className="aspect-[1.414] w-full rounded-xl border border-border bg-white" />
+          <PdfViewer
+            key={revision.id}
+            url={revision.schematicUrl}
+            title={`${revision.title} ${revision.version}`}
+            label={
+              <>
+                <span className="text-foreground">{revision.title}</span> · <span className="font-mono">{revision.version}</span>
+              </>
+            }
+          />
         ) : revision ? (
           <div className="relative overflow-hidden rounded-xl border border-border bg-white">
             <TransformWrapper key={revision.id} maxScale={8} doubleClick={{ mode: "zoomIn", step: 0.7 }} wheel={{ step: 0.12 }}>

@@ -30,6 +30,7 @@ import {
 } from "./seed-data";
 import { defectDeadline, severityForResult, splitDefects } from "../src/lib/defects";
 import { ACCOUNTS } from "./seed-accounts";
+import { seedDemoDocs } from "./seed-demo-docs";
 import { LIGHT_EQUIPMENT } from "./seed-appliances";
 import { TEMPORARY_MODS } from "./seed-temporary-mods";
 import { FEEDS, INSPECTORS, type DefectSeed, complianceFor, externalInfluencesFor, inspectionsFor, intervalFor } from "./seed-compliance";
@@ -428,6 +429,9 @@ async function main() {
   for (const mod of TEMPORARY_MODS(spawned)) {
     await prisma.temporaryModification.create({ data: { ...mod, equipmentId: equipmentId.get(mod.equipmentId)! } });
   }
+
+  // Reálné projekty PCSCHEMATIC (PDF v public/demo-docs)
+  await seedDemoDocs(prisma);
 
   // Souhrn
   const [plants, buildings, floors, equipment, revisions, bom, openCr, closedCr, events, documents, inspections, defects, mods] = await Promise.all([

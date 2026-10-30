@@ -16,6 +16,7 @@
     "db:seed": "prisma db seed",
     "db:reset": "prisma migrate reset --force && prisma generate && prisma db seed",
     "db:studio": "prisma studio",
+    "db:demo-docs": "tsx prisma/demo-docs.ts",
     "smoke": "tsx scripts/smoke-workflow.ts",
     "test:e2e": "playwright test",
     "verify": "npm run typecheck && npm run lint && npm run test && npm run build"

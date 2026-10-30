@@ -2,7 +2,8 @@
 # Eldock – start kontejneru:
 #   1. (root) připraví svazky /app/data/db a /app/storage pro uživatele `eldock` a přejde na něj
 #   2. aplikuje Prisma migrace (`prisma migrate deploy`) – bezpečné při každém startu
-#   3. je-li databáze prázdná a ELDOCK_SEED_DEMO=1, naplní ji demo daty (`npm run db:seed`)
+#   3. je-li databáze prázdná a ELDOCK_SEED_DEMO=1, naplní ji demo daty (`npm run db:seed`),
+#      jinak jen doplní chybějící demo zařízení s PDF projekty (`npm run db:demo-docs`)
 #   4. spustí aplikaci (CMD, výchozí `node server.js`)
 set -eu
 
@@ -35,6 +36,10 @@ if [ "$PLANTS" = "0" ]; then
   fi
 else
   echo "[eldock] Databáze obsahuje ${PLANTS} závod(y) – seed se přeskakuje."
+  # Nová demo zařízení s reálnými PDF doplní i do existující databáze (nic nemaže ani nepřepisuje).
+  if [ "${ELDOCK_SEED_DEMO:-1}" = "1" ]; then
+    npm run db:demo-docs --silent || echo "[eldock] Varování: doplnění demo dokumentace PDF selhalo."
+  fi
 fi
 
 cd /app
