@@ -200,6 +200,7 @@ model User {
   uploadedAttachments    Attachment[]
 
   @@index([role])
+  @@index([accountType])
 }
 
 // -----------------------------------------------------------------------------
@@ -345,6 +346,7 @@ model Equipment {
   @@index([floorId])
   @@index([status])
   @@index([fedFromEquipmentId])
+  @@index([type])
 }
 
 /// Dokument výrobní dokumentace rozváděče (ČSN EN 61439) – záložka Pasport & Shoda.
@@ -399,6 +401,7 @@ model InspectionRecord {
 
   @@index([equipmentId, inspectionDate])
   @@index([validUntil])
+  @@index([equipmentId, type, validUntil])
 }
 
 // -----------------------------------------------------------------------------
@@ -451,6 +454,8 @@ model DocumentRevision {
   @@unique([equipmentId, major, minor])
   @@index([equipmentId, status])
   @@index([changeRequestId])
+  @@index([authorId])
+  @@index([approverId])
 }
 
 /// Položka kusovníku (BOM) dané revize.
@@ -518,6 +523,9 @@ model ChangeRequest {
   @@index([equipmentId, status])
   @@index([status])
   @@index([assigneeId])
+  @@index([reporterId])
+  @@index([baseRevisionId])
+  @@index([submittedAt])
 }
 
 /// Přílohy ticketu – fotky z haly (Krok 2), hlasové poznámky, export markupu.
@@ -537,6 +545,7 @@ model Attachment {
   uploadedBy    User          @relation(fields: [uploadedById], references: [id])
 
   @@index([changeRequestId])
+  @@index([uploadedById])
 }
 
 /// Timeline událostí ticketu (stavový automat + komentáře).
@@ -556,6 +565,8 @@ model ChangeRequestEvent {
   revision      DocumentRevision? @relation(fields: [revisionId], references: [id], onDelete: SetNull)
 
   @@index([changeRequestId, createdAt])
+  @@index([actorId])
+  @@index([revisionId])
 }
 
 /// Závada z revizní zprávy – sleduje se až do odstranění.
@@ -579,6 +590,7 @@ model InspectionDefect {
 
   @@index([equipmentId, status])
   @@index([inspectionId])
+  @@index([status, deadline])
 }
 
 /// Dočasné provizorní zapojení (např. náhrada dílu čekající na dodávku) – do 7–14 dnů odstranit.
@@ -607,6 +619,7 @@ model TemporaryModification {
 
   @@index([equipmentId, status])
   @@index([status, expiresAt])
+  @@index([spawnedChangeRequestId])
 }
 
 /// Log odeslaných notifikací (souhrnné avízo lhůt revizí). Bez SMTP se e-mail jen uloží sem.
@@ -625,6 +638,7 @@ model NotificationLog {
   createdAt   DateTime @default(now())
 
   @@index([kind, createdAt])
+  @@index([kind, plantId, createdAt])
 }
 
 /// Interaktivní reference ve výkresu revize (CAE): značka prvku s pozicí na stránce a volitelnou

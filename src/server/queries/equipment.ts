@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cache } from "react";
+
 import { DEADLINE_TYPES, summarizeInspections } from "@/lib/inspection";
 import type { PowerNode } from "@/lib/power-tree";
 import { prisma } from "@/lib/prisma";
@@ -7,7 +9,7 @@ import { prisma } from "@/lib/prisma";
 const OPEN_STATUSES = ["SUBMITTED", "IN_PROGRESS", "WAITING_APPROVAL"] as const;
 
 /** Detail zařízení: lokace, napájení, revize (autor, schvalovatel, BOM), otevřený požadavek, pasport a revizní zprávy. */
-export async function getEquipmentDetail(equipmentId: string) {
+async function loadEquipmentDetail(equipmentId: string) {
   return prisma.equipment.findUnique({
     where: { id: equipmentId },
     include: {
@@ -44,7 +46,6 @@ export async function getEquipmentDetail(equipmentId: string) {
           author: { select: { name: true, company: true } },
           approver: { select: { name: true } },
           changeRequest: { select: { id: true, number: true } },
-          bomItems: { orderBy: { position: "asc" } },
         },
       },
       changeRequests: {
@@ -62,6 +63,9 @@ export async function getEquipmentDetail(equipmentId: string) {
   });
 }
 
+/** Deduplikace v rámci požadavku (generateMetadata + stránka). */
+export const getEquipmentDetail = cache(loadEquipmentDetail);
+
 export type EquipmentDetail = NonNullable<Awaited<ReturnType<typeof getEquipmentDetail>>>;
 export type EquipmentRevision = EquipmentDetail["revisions"][number];
 export type OpenChangeRequest = EquipmentDetail["changeRequests"][number];
@@ -69,6 +73,26 @@ export type EquipmentComplianceDocument = EquipmentDetail["complianceDocuments"]
 export type EquipmentInspection = EquipmentDetail["inspections"][number];
 export type EquipmentDefect = EquipmentInspection["defects"][number];
 export type EquipmentTemporaryMod = EquipmentDetail["temporaryMods"][number];
+
+/** Kusovník jedné revize (záložky Kusovník a 3D) – detail zařízení už nenačítá BOM všech revizí. */
+export async function getRevisionBom(revisionId: string) {
+  return prisma.bomItem.findMany({ where: { revisionId }, orderBy: { position: "asc" } });
+}
+
+/** Data QR štítku k tisku (bez dokumentace, revizí a ticketů). */
+export async function getEquipmentLabel(equipmentId: string) {
+  return prisma.equipment.findUnique({
+    where: { id: equipmentId },
+    select: {
+      id: true,
+      tag: true,
+      name: true,
+      type: true,
+      qrToken: true,
+      inspections: { select: { type: true, inspectionDate: true, validUntil: true, result: true } },
+    },
+  });
+}
 
 /** Uzly stromu napájení závodu (LOTO karta: kde vypnout a co zůstane bez proudu). */
 export async function getPowerNodes(plantId: string): Promise<PowerNode[]> {
@@ -96,7 +120,7 @@ const revisionForCompare = {
 } as const;
 
 /** Podklady schválení: otevřený požadavek, revize ke schválení a dosavadní platná revize. */
-export async function getApprovalData(equipmentId: string) {
+async function loadApprovalData(equipmentId: string) {
   const equipment = await prisma.equipment.findUnique({
     where: { id: equipmentId },
     select: {
@@ -143,6 +167,9 @@ export async function getApprovalData(equipmentId: string) {
   ]);
   return { equipment, change, pending, active };
 }
+
+/** Deduplikace v rámci požadavku (generateMetadata + stránka). */
+export const getApprovalData = cache(loadApprovalData);
 
 export type ApprovalData = NonNullable<Awaited<ReturnType<typeof getApprovalData>>>;
 export type CompareRevision = NonNullable<ApprovalData["active"]>;

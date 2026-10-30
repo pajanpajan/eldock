@@ -22,10 +22,12 @@ ENV NEXT_TELEMETRY_DISABLED=1 \
 
 # ---------------------------------------------------------------------------
 FROM base AS deps
+# Vrstva závislostí se mění jen se zámkem balíčků nebo schématem – ne s každou migrací či seedem
+# (dřív `COPY prisma` znovu spouštělo npm ci při každé nové migraci).
 COPY package.json package-lock.json ./
-COPY prisma ./prisma
+COPY prisma/schema.prisma ./prisma/schema.prisma
 COPY prisma.config.ts ./
-# postinstall spustí `prisma generate` (schéma je už zkopírované); better-sqlite3 stáhne binárku pro Linux
+# postinstall spustí `prisma generate` (stačí mu schéma); better-sqlite3 stáhne binárku pro Linux
 RUN npm ci --no-audit --no-fund
 
 # ---------------------------------------------------------------------------

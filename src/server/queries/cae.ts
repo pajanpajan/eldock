@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cache } from "react";
+
 import { prisma } from "@/lib/prisma";
 import { formatVersion, nextVersion } from "@/lib/workflow/state-machine";
 
@@ -48,7 +50,7 @@ export async function getCaeTickets() {
 export type CaeTicketRow = Awaited<ReturnType<typeof getCaeTickets>>[number];
 
 /** Detail ticketu: zákres nad základní revizí, fotky, přepis, revize k požadavku a timeline. */
-export async function getTicketDetail(id: string) {
+async function loadTicketDetail(id: string) {
   return prisma.changeRequest.findUnique({
     where: { id },
     include: {
@@ -78,6 +80,9 @@ export async function getTicketDetail(id: string) {
     },
   });
 }
+
+/** Deduplikace v rámci požadavku (generateMetadata + stránka). */
+export const getTicketDetail = cache(loadTicketDetail);
 
 export type TicketDetail = NonNullable<Awaited<ReturnType<typeof getTicketDetail>>>;
 export type TicketEvent = TicketDetail["events"][number];

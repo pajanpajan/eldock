@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, type Dispatch } from "react";
+import dynamic from "next/dynamic";
 import { Camera, ImagePlus, PenLine, RotateCw, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -8,7 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { resizeImage, uploadFile } from "@/lib/upload-client";
 
-import { PhotoAnnotator } from "./PhotoAnnotator";
+// Editor zákresu (canvas) se stáhne až po kliknutí na „Zakreslit“.
+const PhotoAnnotator = dynamic(() => import("./PhotoAnnotator").then((m) => m.PhotoAnnotator), { ssr: false });
 import type { WizardAction, WizardPhoto } from "./wizard-state";
 
 const MAX_PHOTOS = 10;

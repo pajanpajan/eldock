@@ -11,7 +11,7 @@ import { SwitchRoleButton } from "@/components/common/SwitchRoleButton";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { ApprovalActions } from "@/components/revisions/ApprovalActions";
 import { BomDiffTable } from "@/components/revisions/BomDiffTable";
-import { RevisionCompare } from "@/components/revisions/RevisionCompare";
+import { LazyRevisionCompare } from "@/components/lazy";
 import { Button } from "@/components/ui/button";
 import { diffBom } from "@/lib/bom-diff";
 import { formatDateTime, formatRelative } from "@/lib/format";
@@ -128,7 +128,7 @@ export default async function ApprovePage({ params }: Props) {
         </div>
 
         <Section title={`Porovnání schémat ${active?.version ?? ""} → ${pending.version}`} icon={FileText}>
-          <RevisionCompare
+          <LazyRevisionCompare
             before={active ? { version: active.version, url: active.schematicUrl, format: active.schematicFormat } : null}
             after={{ version: pending.version, url: pending.schematicUrl, format: pending.schematicFormat }}
             markup={markup}

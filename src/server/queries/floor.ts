@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cache } from "react";
+
 import { DEADLINE_TYPES, pragueToday, summarizeInspections } from "@/lib/inspection";
 import type { EquipmentType } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/prisma";
@@ -7,7 +9,7 @@ import { prisma } from "@/lib/prisma";
 const OPEN_STATUSES = ["SUBMITTED", "IN_PROGRESS", "WAITING_APPROVAL"] as const;
 
 /** Level 3 – patro s půdorysem a zařízeními (aktivní revize + otevřený požadavek na změnu). */
-export async function getFloorView(plantId: string, buildingId: string, floorId: string, types: EquipmentType[] | null = null) {
+async function loadFloorView(plantId: string, buildingId: string, floorId: string, types: EquipmentType[] | null = null) {
   const floor = await prisma.floor.findFirst({
     where: { id: floorId, buildingId, building: { plantId } },
     include: {
@@ -89,6 +91,9 @@ export async function getFloorView(plantId: string, buildingId: string, floorId:
     })),
   };
 }
+
+/** Deduplikace v rámci požadavku (generateMetadata + stránka). */
+export const getFloorView = cache(loadFloorView);
 
 export type FloorView = NonNullable<Awaited<ReturnType<typeof getFloorView>>>;
 export type FloorEquipment = FloorView["equipment"][number];

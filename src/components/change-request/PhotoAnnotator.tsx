@@ -127,7 +127,7 @@ export function PhotoAnnotator({
       // Rozepsaný popisek se uloží také (blur inputu proběhne až po kliknutí).
       const text = pendingText?.value.trim();
       drawAnnotations(ctx, text && pendingText ? [...shapes, { kind: "text", color, at: pendingText.at, text }] : shapes, output.width, output.height);
-      const blob = await new Promise<Blob | null>((resolve) => output.toBlob(resolve, "image/jpeg", 0.9));
+      const blob = await new Promise<Blob | null>((resolve) => output.toBlob(resolve, "image/jpeg", 0.85));
       if (!blob) throw new Error("Zákres se nepodařilo uložit.");
       const base = fileName.replace(/\.[^.]+$/, "") || "fotka";
       await onSave(new File([blob], `${base}-zakres.jpg`, { type: "image/jpeg" }));

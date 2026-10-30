@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cache } from "react";
+
 import type { BuildingType, EquipmentStatus, EquipmentType } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/prisma";
 import { buildingEntryHref } from "@/lib/routes";
@@ -45,7 +47,7 @@ const countStatuses = (statuses: EquipmentStatus[]): StatusCounts => ({
 });
 
 /** Level 1 – areál: budovy s geometrií, patry a souhrnem stavů zařízení. */
-export async function getPlantOverview(plantId: string, types: EquipmentType[] | null = null) {
+async function loadPlantOverview(plantId: string, types: EquipmentType[] | null = null) {
   const plant = await prisma.plant.findUnique({
     where: { id: plantId },
     include: {
@@ -97,5 +99,8 @@ export async function getPlantOverview(plantId: string, types: EquipmentType[] |
     } satisfies StatusCounts,
   };
 }
+
+/** Deduplikace v rámci požadavku (generateMetadata + stránka). */
+export const getPlantOverview = cache(loadPlantOverview);
 
 export type PlantOverview = NonNullable<Awaited<ReturnType<typeof getPlantOverview>>>;

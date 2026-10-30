@@ -15,15 +15,15 @@ import { getCurrentAccount } from "@/server/session";
 type Props = PageProps<"/plant/[plantId]/building/[buildingId]">;
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const { plantId, buildingId } = await params;
-  const building = await getBuildingOverview(plantId, buildingId);
+  const [{ plantId, buildingId }, account] = await Promise.all([params, getCurrentAccount()]);
+  const building = await getBuildingOverview(plantId, buildingId, account.types);
   return { title: building?.name ?? "Budova" };
 }
 
 // Level 2 – 45° izometrický pohled na budovu a výběr patra.
 export default async function BuildingPage({ params }: Props) {
-  const { plantId, buildingId } = await params;
-  const building = await getBuildingOverview(plantId, buildingId, (await getCurrentAccount()).types);
+  const [{ plantId, buildingId }, account] = await Promise.all([params, getCurrentAccount()]);
+  const building = await getBuildingOverview(plantId, buildingId, account.types);
   if (!building) notFound();
 
   const equipment = building.floors.reduce((sum, floor) => sum + floor.counts.total, 0);

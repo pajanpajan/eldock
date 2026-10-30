@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cache } from "react";
+
 import type { EquipmentStatus, EquipmentType } from "@/generated/prisma/enums";
 import { extractFloorplanRooms } from "@/lib/mock-graphics/floorplan";
 import { prisma } from "@/lib/prisma";
@@ -21,7 +23,7 @@ export interface FloorOverview {
 }
 
 /** Level 2 – budova s patry (od nejnižšího), dispozicí a piny zařízení. */
-export async function getBuildingOverview(plantId: string, buildingId: string, types: EquipmentType[] | null = null) {
+async function loadBuildingOverview(plantId: string, buildingId: string, types: EquipmentType[] | null = null) {
   const building = await prisma.building.findFirst({
     where: { id: buildingId, plantId },
     include: {
@@ -82,5 +84,8 @@ export async function getBuildingOverview(plantId: string, buildingId: string, t
     floors,
   };
 }
+
+/** Deduplikace v rámci požadavku (generateMetadata + stránka). */
+export const getBuildingOverview = cache(loadBuildingOverview);
 
 export type BuildingDetail = NonNullable<Awaited<ReturnType<typeof getBuildingOverview>>>;

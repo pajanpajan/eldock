@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cache } from "react";
+
 import { DEADLINE_TYPES, compareByUrgency, governingInspection, needsAttention, pragueToday, summarizeInspections, type InspectionSummary } from "@/lib/inspection";
 import type { PlannerItem } from "@/lib/inspection-planner";
 import { PORTABLE_TYPES } from "@/lib/inspection-rules";
@@ -245,7 +247,7 @@ export async function getAuditReport(plantId?: string, now: Date = new Date(), t
 export type AuditReport = Awaited<ReturnType<typeof getAuditReport>>;
 
 /** Revizní protokol k tisku (`/inspections/report/[id]`): záznam, zařízení, umístění a závady. */
-export async function getInspectionProtocol(recordId: string) {
+async function loadInspectionProtocol(recordId: string) {
   return prisma.inspectionRecord.findUnique({
     where: { id: recordId },
     include: {
@@ -274,6 +276,9 @@ export async function getInspectionProtocol(recordId: string) {
     },
   });
 }
+
+/** Deduplikace v rámci požadavku (generateMetadata + stránka). */
+export const getInspectionProtocol = cache(loadInspectionProtocol);
 
 export type InspectionProtocolData = NonNullable<Awaited<ReturnType<typeof getInspectionProtocol>>>;
 

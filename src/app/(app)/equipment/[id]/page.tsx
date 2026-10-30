@@ -8,17 +8,12 @@ import { LocationBreadcrumb } from "@/components/common/LocationBreadcrumb";
 import { PageHeader } from "@/components/common/PageHeader";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { SwitchRoleButton } from "@/components/common/SwitchRoleButton";
-import { BomTable } from "@/components/equipment/BomTable";
-import { Cabinet3D } from "@/components/equipment/Cabinet3D";
 import { ChangeRequestCta } from "@/components/equipment/ChangeRequestCta";
 import { DocumentationTabs } from "@/components/equipment/DocumentationTabs";
 import { EquipmentPhotoCard } from "@/components/equipment/EquipmentPhotoCard";
 import { FieldQuickActions } from "@/components/equipment/FieldQuickActions";
-import { InteractiveSchematic } from "@/components/equipment/InteractiveSchematic";
-import { QrLabelCard } from "@/components/equipment/QrLabelCard";
 import { RevisionTimeline } from "@/components/equipment/RevisionTimeline";
 import { SafetyBanner } from "@/components/equipment/SafetyBanner";
-import { PanelDiagnostics } from "@/components/equipment/PanelDiagnostics";
 import { SchematicViewer } from "@/components/equipment/SchematicViewer";
 import { CompliancePassport } from "@/components/inspections/CompliancePassport";
 import { InspectionLogbook } from "@/components/inspections/InspectionLogbook";
@@ -28,6 +23,7 @@ import { TemporaryModArchive } from "@/components/temporary-mods/TemporaryModArc
 import { TemporaryModBanner } from "@/components/temporary-mods/TemporaryModBanner";
 import { TemporaryModDialog } from "@/components/temporary-mods/TemporaryModDialog";
 import { PageTransition } from "@/components/layout/PageTransition";
+import { LazyBomTable, LazyCabinet3D, LazyInteractiveSchematic, LazyPanelDiagnostics, LazyQrLabelCard } from "@/components/lazy";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { EQUIPMENT_TYPE_LABELS, formatDate } from "@/lib/format";
@@ -39,7 +35,7 @@ import { buildingHref, caeTicketHref, equipmentHref, floorHref, plantHref } from
 import { checkLabel } from "@/lib/qr-label";
 import { hasPanelBook } from "@/lib/sheet-nav";
 import { buildLabelData } from "@/server/equipment-label";
-import { getEquipmentDetail, getLinkableEquipment, getPowerNodes, getSchematicReferences } from "@/server/queries/equipment";
+import { getEquipmentDetail, getLinkableEquipment, getPowerNodes, getRevisionBom, getSchematicReferences } from "@/server/queries/equipment";
 import { getModuleState } from "@/server/modules";
 import { getCurrentAccount } from "@/server/session";
 
@@ -53,8 +49,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 // Detail zařízení – Documentation Hub (dostupný i přes QR kód).
 export default async function EquipmentPage({ params, searchParams }: Props) {
-  const { id } = await params;
-  const { rev, qr } = await searchParams;
+  const [{ id }, { rev, qr }] = await Promise.all([params, searchParams]);
   const [equipment, account, modules] = await Promise.all([getEquipmentDetail(id), getCurrentAccount(), getModuleState()]);
   if (!equipment) notFound();
   const role = account.definition.workflowRole;
@@ -70,8 +65,6 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
     );
   }
   const showInspections = account.definition.showInspections;
-  const powerNodes = await getPowerNodes(equipment.floor.building.plant.id);
-
   const { floor } = equipment;
   const { building } = floor;
   const plantId = building.plant.id;
@@ -83,7 +76,6 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
   // Pevné „teď“ pro relativní časy (server i klient vykreslí totéž).
   const now = new Date();
   const inspection = summarizeInspections(equipment.inspections, now);
-  const label = await buildLabelData(equipment, inspection);
   // Naskenovaný štítek s jiným kódem = štítek byl mezitím přegenerován (fyzicky neplatný).
   const labelCheck = checkLabel(qr, equipment.qrToken);
   const canEditCard = account.can("submitChange") || account.can("recordInspection");
@@ -91,9 +83,15 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
   const fieldView = !!account.definition.fieldView && !isLightCard(equipment.type);
   // Interaktivní reference ve výkresu vybrané revize (CAE / správce závodu je upravuje).
   const canEditReferences = account.can("caeOffice") || account.can("studio");
-  const [references, linkable] = selected && !isLightCard(equipment.type) && modules.CAE_ADVANCED
-    ? await Promise.all([getSchematicReferences(selected.id, now), canEditReferences ? getLinkableEquipment(plantId) : Promise.resolve([])])
-    : [[], []];
+  const withReferences = !!selected && !isLightCard(equipment.type) && modules.CAE_ADVANCED;
+  // Nezávislé dotazy po ověření přístupu najednou: napájení (LOTO), štítek, kusovník vybrané revize, reference.
+  const [powerNodes, label, bom, references, linkable] = await Promise.all([
+    getPowerNodes(plantId),
+    buildLabelData(equipment, inspection),
+    selected ? getRevisionBom(selected.id) : Promise.resolve([]),
+    withReferences ? getSchematicReferences(selected.id, now) : Promise.resolve([]),
+    withReferences && canEditReferences ? getLinkableEquipment(plantId) : Promise.resolve([]),
+  ]);
   const today = pragueToday(now);
   // Spotřebiče, nářadí a bezpečnostní zařízení: lehká karta jen s revizemi a měřením.
   const light = isLightCard(equipment.type);
@@ -144,7 +142,7 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
         documentStatus={light ? null : equipment.status}
         canEdit={canEditCard}
       />
-      <QrLabelCard label={label} printHref={`${basePath}/label`} canEdit={canEditCard} />
+      <LazyQrLabelCard label={label} printHref={`${basePath}/label`} canEdit={canEditCard} />
     </div>
   );
 
@@ -290,7 +288,7 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
                       ? {
                           count: references.length,
                           node: (
-                            <InteractiveSchematic
+                            <LazyInteractiveSchematic
                               key={selected.id}
                               revision={{ id: selected.id, version: selected.version, url: selected.schematicUrl, format: selected.schematicFormat, sheetCount: selected.sheetCount }}
                               references={references}
@@ -321,10 +319,10 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
                   <p className="text-sm text-muted-foreground">
                     Kusovník revize <span className="font-mono text-foreground">{selected.version}</span>
                   </p>
-                  <BomTable rows={selected.bomItems} fileName={`kusovnik-${equipment.tag}-${selected.version}.csv`} />
+                  <LazyBomTable rows={bom} fileName={`kusovnik-${equipment.tag}-${selected.version}.csv`} />
                 </div>
               ) : null,
-              "3d": selected ? <Cabinet3D bom={selected.bomItems} tag={equipment.tag} /> : null,
+              "3d": selected ? <LazyCabinet3D bom={bom} tag={equipment.tag} /> : null,
               history: (
                 <div className="space-y-8">
                   <RevisionTimeline revisions={equipment.revisions} basePath={basePath} selectedId={selected?.id ?? null} />
@@ -341,7 +339,7 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
               ),
               // CAE projektant lhůtník revizí nevidí, terénní pohled ho nemá jako záložku (stav je v hlavičce).
               ...(showInspections && !fieldView ? { inspections: inspectionsPanel } : {}),
-              ...(panelModel ? { diagnostics: <PanelDiagnostics model={panelModel} /> } : {}),
+              ...(panelModel ? { diagnostics: <LazyPanelDiagnostics model={panelModel} /> } : {}),
             }}
           />
           </div>

@@ -9,6 +9,9 @@ import { APP_HOME } from "@/lib/routes";
  */
 const PUBLIC_PATHS = new Set(["/", "/login"]);
 
+/** Reálné PDF projekty (public/demo-docs): přihlášený prohlížeč je drží den, pak ověří na pozadí. */
+const DEMO_DOCS_CACHE = "private, max-age=86400, stale-while-revalidate=604800";
+
 export async function proxy(request: NextRequest) {
   if (isAuthBypassed()) return NextResponse.next();
   const { pathname, search } = request.nextUrl;
@@ -17,15 +20,22 @@ export async function proxy(request: NextRequest) {
   if (pathname.startsWith("/api/cron/")) return NextResponse.next();
 
   const session = await verifyAuthToken(request.cookies.get(AUTH_COOKIE)?.value);
-  if (session) return NextResponse.next();
+  if (session) {
+    const response = NextResponse.next();
+    if (pathname.startsWith("/demo-docs/")) response.headers.set("Cache-Control", DEMO_DOCS_CACHE);
+    return response;
+  }
 
   if (pathname.startsWith("/api/")) {
-    return NextResponse.json({ error: "Nepřihlášeno – přihlaste se na /login." }, { status: 401 });
+    return NextResponse.json({ error: "Nepřihlášeno – přihlaste se na /login." }, { status: 401, headers: { "Cache-Control": "no-store" } });
   }
   const url = request.nextUrl.clone();
   url.pathname = "/login";
   url.search = pathname === APP_HOME ? "" : `?next=${encodeURIComponent(pathname + search)}`;
-  return NextResponse.redirect(url);
+  // Přesměrování na přihlášení se nesmí cachovat (po přihlášení musí cíl fungovat hned).
+  const redirect = NextResponse.redirect(url);
+  redirect.headers.set("Cache-Control", "no-store");
+  return redirect;
 }
 
 export const config = {

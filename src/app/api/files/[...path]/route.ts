@@ -1,29 +1,35 @@
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
+import { etagMatches, fileCacheControl, fileETag } from "@/lib/file-cache";
 import { contentTypeFor, resolveUploadPath } from "@/lib/files";
 
 const UPLOAD_ROOT = path.join(process.cwd(), "storage", "uploads");
 
-/** Servíruje soubory ze storage/uploads (fotky, revize, zákresy, hlasové poznámky). */
+/**
+ * Servíruje soubory ze storage/uploads (fotky, revize, zákresy, hlasové poznámky).
+ * Nahrané soubory (UUID) se cachují natrvalo, seed soubory den; opakovaný dotaz s ETagem → 304.
+ */
 export async function GET(request: Request, ctx: RouteContext<"/api/files/[...path]">) {
   const { path: segments } = await ctx.params;
   const filePath = resolveUploadPath(UPLOAD_ROOT, segments);
   if (!filePath) return new Response("Soubor nenalezen.", { status: 404 });
 
-  let body: Buffer;
+  let info: Awaited<ReturnType<typeof stat>>;
   try {
-    body = await readFile(filePath);
+    info = await stat(filePath);
   } catch {
     return new Response("Soubor nenalezen.", { status: 404 });
   }
+  if (!info.isFile()) return new Response("Soubor nenalezen.", { status: 404 });
 
+  const etag = fileETag(info.size, info.mtimeMs);
   const contentType = contentTypeFor(filePath);
   const headers = new Headers({
     "Content-Type": contentType,
-    "Content-Length": String(body.byteLength),
-    // Seed soubory se při resetu přepisují – krátká cache, revalidace u prohlížeče.
-    "Cache-Control": "private, max-age=60, must-revalidate",
+    "Cache-Control": fileCacheControl(segments),
+    ETag: etag,
+    "Last-Modified": info.mtime.toUTCString(),
     "X-Content-Type-Options": "nosniff",
   });
   // SVG otevřené přímo v okně nesmí spouštět skripty.
@@ -31,6 +37,10 @@ export async function GET(request: Request, ctx: RouteContext<"/api/files/[...pa
   if (new URL(request.url).searchParams.has("download")) {
     headers.set("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(path.basename(filePath))}`);
   }
+  // Prohlížeč má platnou kopii → bez těla (soubor se ani nečte z disku).
+  if (etagMatches(request.headers.get("if-none-match"), etag)) return new Response(null, { status: 304, headers });
 
+  const body = await readFile(filePath);
+  headers.set("Content-Length", String(body.byteLength));
   return new Response(new Uint8Array(body), { headers });
 }

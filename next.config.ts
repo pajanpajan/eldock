@@ -7,7 +7,7 @@ const nextConfig: NextConfig = {
   // Produkční Docker obraz (viz Dockerfile): `.next/standalone` obsahuje server.js a jen nutné node_modules.
   output: "standalone",
   // Nahrané soubory a zdrojáky (trasované kvůli cestám přes process.cwd()) do obrazu nepatří – data jsou ve svazku.
-  outputFileTracingExcludes: { "*": ["storage/**", "src/**", "e2e/**", "*.db", "*.db-journal"] },
+  outputFileTracingExcludes: { "*": ["storage/**", "src/**", "e2e/**", "*.db", "*.db-journal", "*.db-wal", "*.db-shm"] },
   turbopack: {
     rules: {
       "*.css": {

@@ -7,7 +7,7 @@ import { BookOpen, ChevronLeft, ChevronRight, Columns2, Download, FileImage, Fil
 import { TransformComponent, TransformWrapper, useControls } from "react-zoom-pan-pinch";
 
 import { StatusBadge } from "@/components/common/StatusBadge";
-import { RevisionCompare } from "@/components/revisions/RevisionCompare";
+import { LazyRevisionCompare } from "@/components/lazy";
 import { Button } from "@/components/ui/button";
 import type { RevisionStatus, SchematicFormat } from "@/generated/prisma/enums";
 import { formatDate, plural } from "@/lib/format";
@@ -208,7 +208,7 @@ export function SchematicViewer({
         ) : null}
 
         {compare ? (
-          <RevisionCompare
+          <LazyRevisionCompare
             before={{ version: compare.previous.version, url: compare.previous.schematicUrl, format: compare.previous.schematicFormat }}
             after={{ version: compare.revision.version, url: compare.revision.schematicUrl, format: compare.revision.schematicFormat }}
             markup={null}

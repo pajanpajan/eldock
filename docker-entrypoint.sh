@@ -23,7 +23,8 @@ node node_modules/prisma/build/index.js migrate deploy
 # Prázdná databáze = žádný závod
 PLANTS="$(node -e '
   const Database = require("better-sqlite3");
-  const db = new Database(process.argv[1], { readonly: true });
+  // Ne readonly: databáze v režimu WAL potřebuje k otevření i soubor -shm.
+  const db = new Database(process.argv[1], { fileMustExist: true });
   console.log(db.prepare("SELECT COUNT(*) AS c FROM \"Plant\"").get().c);
 ' "$DB_FILE")"
 

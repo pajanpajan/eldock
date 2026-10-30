@@ -84,14 +84,18 @@ test("hlídač lhůt: avízo bez SMTP se uloží do logu s náhledem", async ({ 
 
 test("hromadný import z Excelu: spárování lokality, hromadné přiřazení a QR kódy", async ({ page }) => {
   await page.goto("/inspections/import");
-  await page.getByLabel("…nebo vložte tabulku z Excelu (Ctrl+V)").fill(
+  const pasted =
     [
       "Název\tEvidenční číslo\tKategorie\tInterval revize (měsíce)\tPoslední revize\tLokace",
       "Konvice E2E\tE2E-SP-01\tSpotřebič\t24\t12.03.2026\tAdministrativa 2. NP kuchyňka",
       "Vrtačka E2E\tE2E-NR-01\tNářadí\t6\t\tdílna u brusky",
       "Lampa\tE2E-X\tSvítidlo\t\t\t",
-    ].join("\n"),
-  );
+    ].join("\n");
+  // Průvodce se načítá líně – vložit až po hydrataci
+  await expect(async () => {
+    await page.getByLabel("…nebo vložte tabulku z Excelu (Ctrl+V)").fill(pasted);
+    await expect(page.getByRole("button", { name: "Načíst vložená data" })).toBeEnabled({ timeout: 1_000 });
+  }).toPass({ timeout: 30_000 });
   await page.getByRole("button", { name: "Načíst vložená data" }).click();
   await expect(page.getByTestId("import-row")).toHaveCount(3);
   await expect(page.getByLabel("Patro pro E2E-SP-01")).toHaveValue("floor-jbc-k-2np");

@@ -15,15 +15,14 @@ import { getCurrentAccount } from "@/server/session";
 type Props = PageProps<"/plant/[plantId]/building/[buildingId]/floor/[floorId]">;
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const { plantId, buildingId, floorId } = await params;
-  const floor = await getFloorView(plantId, buildingId, floorId);
+  const [{ plantId, buildingId, floorId }, account] = await Promise.all([params, getCurrentAccount()]);
+  const floor = await getFloorView(plantId, buildingId, floorId, account.types);
   return { title: floor ? `${floor.building.name} · ${floor.name}` : "Patro" };
 }
 
 // Level 3 – půdorys patra s piny zařízení.
 export default async function FloorPage({ params }: Props) {
-  const { plantId, buildingId, floorId } = await params;
-  const account = await getCurrentAccount();
+  const [{ plantId, buildingId, floorId }, account] = await Promise.all([params, getCurrentAccount()]);
   const floor = await getFloorView(plantId, buildingId, floorId, account.types);
   if (!floor) notFound();
 

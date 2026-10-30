@@ -6,19 +6,19 @@ import { QrLabelFace } from "@/components/equipment/QrLabelFace";
 import { summarizeInspections } from "@/lib/inspection";
 import { LABEL_SIZE_MM } from "@/lib/qr-label";
 import { buildLabelData } from "@/server/equipment-label";
-import { getEquipmentDetail } from "@/server/queries/equipment";
+import { getEquipmentLabel } from "@/server/queries/equipment";
 import { getCurrentAccount } from "@/server/session";
 
 export async function generateMetadata({ params }: PageProps<"/equipment/[id]/label">): Promise<Metadata> {
   const { id } = await params;
-  const equipment = await getEquipmentDetail(id);
+  const equipment = await getEquipmentLabel(id);
   return { title: equipment ? `Štítek ${equipment.tag}` : "Štítek" };
 }
 
 // Ořezaný tisk štítku pro štítkovače (62 × 29 mm): stránka = štítek, bez okrajů, záhlaví a zápatí prohlížeče.
 export default async function LabelPrintPage({ params }: PageProps<"/equipment/[id]/label">) {
   const { id } = await params;
-  const [equipment, account] = await Promise.all([getEquipmentDetail(id), getCurrentAccount()]);
+  const [equipment, account] = await Promise.all([getEquipmentLabel(id), getCurrentAccount()]);
   if (!equipment || !account.canSee(equipment.type)) notFound();
   const label = await buildLabelData(equipment, summarizeInspections(equipment.inspections));
   const { width, height } = LABEL_SIZE_MM;
