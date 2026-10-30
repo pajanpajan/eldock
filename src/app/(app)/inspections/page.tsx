@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { FileCheck2, ScanLine } from "lucide-react";
+import { BellRing, FileCheck2, FileSpreadsheet, ScanLine } from "lucide-react";
 
 import { NoAccess } from "@/components/common/NoAccess";
 import { PageHeader } from "@/components/common/PageHeader";
@@ -9,7 +9,7 @@ import { InspectionWatcher } from "@/components/inspections/InspectionWatcher";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { Button } from "@/components/ui/button";
 import { pragueToday } from "@/lib/inspection";
-import { auditReportHref, rapidInspectionHref } from "@/lib/routes";
+import { auditReportHref, inspectionAlertsHref, inspectionImportHref, rapidInspectionHref } from "@/lib/routes";
 import { getInspectionOverview, getInspectionWatch } from "@/server/queries/inspections";
 import { getPlants } from "@/server/queries/plant";
 import { getCurrentAccount, getRememberedPlantId } from "@/server/session";
@@ -38,6 +38,20 @@ export default async function InspectionsPage() {
                 <Link href={auditReportHref}>
                   <FileCheck2 className="size-4" aria-hidden />
                   Auditní report
+                </Link>
+              </Button>
+            ) : null}
+            <Button asChild size="lg" variant="outline" className="touch-target gap-2">
+              <Link href={inspectionAlertsHref}>
+                <BellRing className="size-4" aria-hidden />
+                Hlídač lhůt
+              </Link>
+            </Button>
+            {account.can("recordInspection") || account.can("studio") ? (
+              <Button asChild size="lg" variant="outline" className="touch-target gap-2">
+                <Link href={inspectionImportHref}>
+                  <FileSpreadsheet className="size-4" aria-hidden />
+                  Import z CSV
                 </Link>
               </Button>
             ) : null}

@@ -28,6 +28,8 @@ const measurements = {
   measuringInstrument: z.string().max(120).optional().nullable(),
   protectiveConductorResistance: z.number().min(0).max(100).optional().nullable(),
   insulationResistance: z.number().min(0).max(100_000).optional().nullable(),
+  leakageCurrent: z.number().min(0).max(100).optional().nullable(),
+  functionalTest: z.boolean().optional().nullable(),
 };
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const defects = z.string().max(4000).optional().nullable();

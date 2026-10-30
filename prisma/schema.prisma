@@ -29,63 +29,63 @@ datasource db {
 
 /// Role uživatele – odpovídá přepínači pohledu v navbaru.
 enum UserRole {
-  MAINTENANCE   // Pohled: Údržba v hale
-  CAE_ENGINEER  // Pohled: CAE Projektant
+  MAINTENANCE // Pohled: Údržba v hale
+  CAE_ENGINEER // Pohled: CAE Projektant
   ADMIN
 }
 
 /// Typ účtu (výřez dat a oprávnění). Workflow role se z něj odvozuje (lib/accounts.ts).
 enum AccountType {
-  PLANT_ADMIN          // Technický ředitel – vše, KPI, audit, studio, správa účtů
-  MAINTENANCE_LEAD     // Vedoucí údržby – vše, schvaluje revize, LOTO, provizoria, závady
-  MAINTENANCE_TECH     // Směnový údržbář – pevná zařízení, zadává změny a provizoria
-  INSPECTOR_VTZ        // Revizní technik VTZ – jen vyhrazená technická zařízení
+  PLANT_ADMIN // Technický ředitel – vše, KPI, audit, studio, správa účtů
+  MAINTENANCE_LEAD // Vedoucí údržby – vše, schvaluje revize, LOTO, provizoria, závady
+  MAINTENANCE_TECH // Směnový údržbář – pevná zařízení, zadává změny a provizoria
+  INSPECTOR_VTZ // Revizní technik VTZ – jen vyhrazená technická zařízení
   INSPECTOR_APPLIANCES // Technik revizí spotřebičů – jen spotřebiče a nářadí
-  CAE_ENGINEER         // CAE projektant – výkresová dokumentace a požadavky na změnu
+  CAE_ENGINEER // CAE projektant – výkresová dokumentace a požadavky na změnu
 }
 
 /// Stav dokumentace zařízení = barva pinu na půdorysu.
 enum EquipmentStatus {
-  ACTIVE            // 🟢 dokumentace 100% aktuální
-  PENDING_UPDATE    // 🟠 nahlášena změna, CAE na ní pracuje
-  WAITING_APPROVAL  // 🔵 CAE nahrál novou revizi, čeká na potvrzení údržbou
+  ACTIVE // 🟢 dokumentace 100% aktuální
+  PENDING_UPDATE // 🟠 nahlášena změna, CAE na ní pracuje
+  WAITING_APPROVAL // 🔵 CAE nahrál novou revizi, čeká na potvrzení údržbou
 }
 
 enum EquipmentType {
   // Pevná infrastruktura (schéma, kusovník, 3D)
-  SWITCHBOARD      // Rozváděč
-  TRANSFORMER      // Transformátor / trafostanice
-  PRODUCTION_LINE  // Výrobní linka
-  MACHINE          // Pevný stroj
-  CNC_MACHINE      // CNC stroj
-  ROBOT_CELL       // Robotické pracoviště
-  HVAC_UNIT        // Vzduchotechnika
-  COMPRESSOR       // Kompresor
+  SWITCHBOARD // Rozváděč
+  TRANSFORMER // Transformátor / trafostanice
+  PRODUCTION_LINE // Výrobní linka
+  MACHINE // Pevný stroj
+  CNC_MACHINE // CNC stroj
+  ROBOT_CELL // Robotické pracoviště
+  HVAC_UNIT // Vzduchotechnika
+  COMPRESSOR // Kompresor
   // Spotřebiče a revizní zařízení (lehká karta bez schématu a 3D)
-  POWER_TOOL         // Ruční elektrické nářadí
-  APPLIANCE          // Spotřebič (konvice, mikrovlnka, PC)
-  EXTENSION_CORD     // Prodlužovací přívod
-  WELDER             // Svářečka
-  LIGHTNING_ROD      // Hromosvod / LPS
+  POWER_TOOL // Ruční elektrické nářadí
+  APPLIANCE // Spotřebič (konvice, mikrovlnka, PC)
+  EXTENSION_CORD // Prodlužovací přívod
+  WELDER // Svářečka
+  LIGHTNING_ROD // Hromosvod / LPS
   EMERGENCY_LIGHTING // Nouzové osvětlení
   OTHER
 }
 
 enum BuildingType {
-  PRODUCTION  // Výrobní hala
-  ASSEMBLY    // Montáž
-  ENERGY      // Energetika
-  WAREHOUSE   // Sklad
-  OFFICE      // Administrativa
+  PRODUCTION // Výrobní hala
+  ASSEMBLY // Montáž
+  ENERGY // Energetika
+  WAREHOUSE // Sklad
+  OFFICE // Administrativa
   OTHER
 }
 
 /// Životní cyklus revize dokumentace.
 enum RevisionStatus {
-  PENDING_APPROVAL  // nahraná CAE, čeká na potvrzení údržbou
-  ACTIVE            // aktuálně platná (max. 1 na zařízení – hlídá aplikační logika)
-  ARCHIVED          // nahrazená novější revizí → Historie změn
-  REJECTED          // vrácena k přepracování
+  PENDING_APPROVAL // nahraná CAE, čeká na potvrzení údržbou
+  ACTIVE // aktuálně platná (max. 1 na zařízení – hlídá aplikační logika)
+  ARCHIVED // nahrazená novější revizí → Historie změn
+  REJECTED // vrácena k přepracování
 }
 
 enum SchematicFormat {
@@ -96,23 +96,23 @@ enum SchematicFormat {
 
 /// Stavový automat požadavku na změnu (Zadat změnu).
 enum ChangeRequestStatus {
-  SUBMITTED         // technik odeslal, ticket v CAE back-office
-  IN_PROGRESS       // CAE projektant převzal / přepracovává
-  WAITING_APPROVAL  // nová revize nahrána, čeká na údržbu
-  APPROVED          // potvrzeno a propsáno do systému (uzavřeno)
-  CANCELLED         // stornováno
+  SUBMITTED // technik odeslal, ticket v CAE back-office
+  IN_PROGRESS // CAE projektant převzal / přepracovává
+  WAITING_APPROVAL // nová revize nahrána, čeká na údržbu
+  APPROVED // potvrzeno a propsáno do systému (uzavřeno)
+  CANCELLED // stornováno
 }
 
 enum ChangeRequestPriority {
   LOW
   NORMAL
   HIGH
-  CRITICAL  // bezpečnostně relevantní změna
+  CRITICAL // bezpečnostně relevantní změna
 }
 
 enum AttachmentType {
-  PHOTO        // fotodokumentace z haly
-  VOICE_NOTE   // audio záznam (simulovaný)
+  PHOTO // fotodokumentace z haly
+  VOICE_NOTE // audio záznam (simulovaný)
   MARKUP_IMAGE // export redline vrstvy jako PNG
   OTHER
 }
@@ -130,39 +130,39 @@ enum ChangeRequestEventType {
 
 /// Výrobní dokumentace rozváděče dle ČSN EN 61439 (Pasport & Shoda).
 enum ComplianceCategory {
-  SINGLE_LINE_DIAGRAM    // Liniové schéma
+  SINGLE_LINE_DIAGRAM // Liniové schéma
   CONFORMITY_DECLARATION // EU prohlášení o shodě
-  ROUTINE_VERIFICATION   // Kusová zkouška (čl. 11)
-  THERMAL_CALCULATION    // Ověření oteplení výpočtem (čl. 10.10.4)
-  EXTERNAL_INFLUENCES    // Protokol o určení vnějších vlivů
+  ROUTINE_VERIFICATION // Kusová zkouška (čl. 11)
+  THERMAL_CALCULATION // Ověření oteplení výpočtem (čl. 10.10.4)
+  EXTERNAL_INFLUENCES // Protokol o určení vnějších vlivů
 }
 
 /// Druh revize elektrického zařízení dle ČSN 33 1500.
 enum InspectionType {
-  INITIAL       // Výchozí revize
-  PERIODIC      // Pravidelná revize
+  INITIAL // Výchozí revize
+  PERIODIC // Pravidelná revize
   EXTRAORDINARY // Mimořádná revize
-  THERMOVISION  // Termovizní měření (doplňkové, nepočítá se do lhůty)
+  THERMOVISION // Termovizní měření (doplňkové, nepočítá se do lhůty)
 }
 
 /// Celkový posudek revizní zprávy.
 enum InspectionResult {
-  CAPABLE              // Schopno bezpečného provozu
+  CAPABLE // Schopno bezpečného provozu
   CAPABLE_WITH_DEFECTS // Schopno bezpečného provozu s výhradou
-  INCAPABLE            // Neschopno bezpečného provozu
+  INCAPABLE // Neschopno bezpečného provozu
 }
 
 /// Dočasné provizorium v zařízení (nemění oficiální dokumentaci).
 enum TemporaryModStatus {
-  ACTIVE          // aktivní provizorium – varuje obsluhu
+  ACTIVE // aktivní provizorium – varuje obsluhu
   RESTORED_1_TO_1 // odstraněno, vráceno do stavu 1:1 dle schématu
   CONVERTED_TO_CR // odstraněno, finální stav se liší → požadavek na změnu dokumentace
 }
 
 /// Závažnost revizní závady (lhůta odstranění).
 enum DefectSeverity {
-  MINOR    // drobná – do 90 dnů
-  MAJOR    // závažná – do 30 dnů
+  MINOR // drobná – do 90 dnů
+  MAJOR // závažná – do 30 dnů
   CRITICAL // kritická – ihned, zařízení mimo provoz
 }
 
@@ -180,17 +180,17 @@ model User {
   name      String
   email     String   @unique
   role      UserRole
-  company   String?  // např. "Závod Jablonec – Údržba" / "Eldock CAE"
+  company   String? // např. "Závod Jablonec – Údržba" / "Eldock CAE"
   phone     String?
   avatarUrl String?
 
   // Účet v aplikaci (null = historický uživatel bez přihlášení, např. autor starých revizí)
   accountType AccountType?
-  title       String?  // „Technický ředitel“
-  scopeLayers String?  // vlastní výřez kategorií (klíče vrstev mapy oddělené čárkou); null = výchozí pro typ účtu
-  sortOrder   Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  title       String? // „Technický ředitel“
+  scopeLayers String? // vlastní výřez kategorií (klíče vrstev mapy oddělené čárkou); null = výchozí pro typ účtu
+  sortOrder   Int          @default(0)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
 
   authoredRevisions      DocumentRevision[]   @relation("RevisionAuthor")
   approvedRevisions      DocumentRevision[]   @relation("RevisionApprover")
@@ -208,13 +208,13 @@ model User {
 
 /// Level 1 – Závod / areál klienta.
 model Plant {
-  id           String   @id @default(cuid())
-  code         String   @unique // např. "JBC"
-  name         String           // "Závod Jablonec"
-  customerName String           // název klientské firmy
+  id           String  @id @default(cuid())
+  code         String  @unique // např. "JBC"
+  name         String // "Závod Jablonec"
+  customerName String // název klientské firmy
   address      String?
   city         String?
-  country      String   @default("CZ")
+  country      String  @default("CZ")
 
   // Podklad mapy areálu (SVG generované v aplikaci nebo nahraný obrázek)
   campusMapUrl   String?
@@ -232,17 +232,17 @@ model Plant {
 
 /// Budova v areálu – klikací oblast v Campus View.
 model Building {
-  id        String       @id @default(cuid())
-  plantId   String
-  code      String       // "A", "B", "E"
-  name      String       // "Hala A - Lisovna"
-  shortName String?      // "Lisovna"
-  type      BuildingType @default(PRODUCTION)
+  id          String       @id @default(cuid())
+  plantId     String
+  code        String // "A", "B", "E"
+  name        String // "Hala A - Lisovna"
+  shortName   String? // "Lisovna"
+  type        BuildingType @default(PRODUCTION)
   description String?
 
   // Geometrie v Campus View (procenta vůči viewBoxu areálu)
-  mapPolygon String  // SVG points "x1,y1 x2,y2 ..." – obrys budovy
-  labelX     Float   // pozice štítku/badge
+  mapPolygon String // SVG points "x1,y1 x2,y2 ..." – obrys budovy
+  labelX     Float // pozice štítku/badge
   labelY     Float
   color      String? // volitelný akcent (#hex)
 
@@ -259,11 +259,11 @@ model Building {
 
 /// Level 2/3 – Patro budovy (izometrický výběr + 2D půdorys).
 model Floor {
-  id         String  @id @default(cuid())
-  buildingId String
-  level      Int     // -1 = 1. PP, 0 = 1. NP, 1 = 2. NP …
-  code       String  // "1PP", "1NP", "2NP"
-  name       String  // "1. PP - Rozvodny"
+  id          String  @id @default(cuid())
+  buildingId  String
+  level       Int // -1 = 1. PP, 0 = 1. NP, 1 = 2. NP …
+  code        String // "1PP", "1NP", "2NP"
+  name        String // "1. PP - Rozvodny"
   description String?
 
   // Level 3 – podklad půdorysu (SVG generované v aplikaci nebo nahraný soubor)
@@ -291,19 +291,19 @@ model Floor {
 model Equipment {
   id          String          @id @default(cuid())
   floorId     String
-  tag         String          // označení dle dokumentace: "RM1", "R-CNC-04"
-  name        String          // "RM1 - Hlavní rozváděč"
+  tag         String // označení dle dokumentace: "RM1", "R-CNC-04"
+  name        String // "RM1 - Hlavní rozváděč"
   type        EquipmentType
   status      EquipmentStatus @default(ACTIVE)
   description String?
 
-  manufacturer    String?
-  model           String?
-  serialNumber    String?
-  yearInstalled   Int?
-  ratedVoltage    String? // "400 V AC / 50 Hz"
-  ratedCurrent    String? // "1600 A"
-  ipRating        String? // "IP54"
+  manufacturer  String?
+  model         String?
+  serialNumber  String?
+  yearInstalled Int?
+  ratedVoltage  String? // "400 V AC / 50 Hz"
+  ratedCurrent  String? // "1600 A"
+  ipRating      String? // "IP54"
 
   // Pozice pinu na půdorysu patra (procenta 0–100)
   pinX Float
@@ -330,9 +330,9 @@ model Equipment {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  floor               Floor                @relation(fields: [floorId], references: [id], onDelete: Cascade)
-  fedFrom             Equipment?           @relation("PowerFeed", fields: [fedFromEquipmentId], references: [id], onDelete: SetNull)
-  feeds               Equipment[]          @relation("PowerFeed")
+  floor               Floor                   @relation(fields: [floorId], references: [id], onDelete: Cascade)
+  fedFrom             Equipment?              @relation("PowerFeed", fields: [fedFromEquipmentId], references: [id], onDelete: SetNull)
+  feeds               Equipment[]             @relation("PowerFeed")
   revisions           DocumentRevision[]
   changeRequests      ChangeRequest[]
   complianceDocuments ComplianceDocument[]
@@ -355,10 +355,10 @@ model ComplianceDocument {
   documentNumber String
   fileUrl        String
   issuedAt       DateTime
-  issuer         String   // výrobce rozváděče / projektant
+  issuer         String // výrobce rozváděče / projektant
   notes          String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
 
   equipment Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
 
@@ -374,23 +374,25 @@ model InspectionRecord {
   validUntil       DateTime
   reportNumber     String
   inspectorName    String
-  inspectorLicense String           // ev. č. osvědčení TIČR dle NV 190/2022 Sb.
+  inspectorLicense String // ev. č. osvědčení TIČR dle NV 190/2022 Sb.
   result           InspectionResult
   defectsSummary   String?
   reportUrl        String
 
   // Měření (revize spotřebičů a nářadí)
   measuringInstrument           String? // "Metrel MI 3309 BT"
-  protectiveConductorResistance Float?  // R_PE [Ω]
-  insulationResistance          Float?  // R_iso [MΩ]
+  protectiveConductorResistance Float? // R_PE [Ω]
+  insulationResistance          Float? // R_iso [MΩ]
+  leakageCurrent                Float? // unikající / rozdílový proud I_PE / I_Δ [mA]
+  functionalTest                Boolean? // funkční zkouška vyhověla (null = neprováděla se)
 
   // Termovize
   maxTempC   Float? // nejvyšší naměřená teplota [°C]
   deltaTempC Float? // ΔT vůči okolí [K]
 
-  defects InspectionDefect[]
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
+  defects   InspectionDefect[]
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
 
   equipment Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
 
@@ -406,22 +408,22 @@ model InspectionRecord {
 model DocumentRevision {
   id          String         @id @default(cuid())
   equipmentId String
-  version     String         // zobrazované "v1.2"
-  major       Int            // 1
-  minor       Int            // 2
+  version     String // zobrazované "v1.2"
+  major       Int // 1
+  minor       Int // 2
   status      RevisionStatus @default(PENDING_APPROVAL)
 
-  title   String  // "Elektrické schéma rozváděče RM1"
+  title   String // "Elektrické schéma rozváděče RM1"
   summary String? // technické shrnutí změn od CAE projektanta
 
   // Soubory
-  schematicUrl    String          // PDF/SVG/obrázek schématu
+  schematicUrl    String // PDF/SVG/obrázek schématu
   schematicFormat SchematicFormat @default(PDF)
   sheetCount      Int             @default(1)
   thumbnailUrl    String?
-  bomFileUrl      String?         // export kusovníku (XLSX/CSV)
-  layoutUrl       String?         // dispozice rozváděče
-  model3dUrl      String?         // 3D náhled skříně (GLB)
+  bomFileUrl      String? // export kusovníku (XLSX/CSV)
+  layoutUrl       String? // dispozice rozváděče
+  model3dUrl      String? // 3D náhled skříně (GLB)
 
   // Autor / schvalovatel
   authorId   String
@@ -429,7 +431,7 @@ model DocumentRevision {
   approvedAt DateTime?
 
   // Odkud revize vznikla (null = výchozí digitalizace)
-  changeRequestId String?
+  changeRequestId  String?
   rejectionComment String? // důvod vrácení k přepracování
 
   createdAt DateTime @default(now())
@@ -440,9 +442,9 @@ model DocumentRevision {
   approver      User?          @relation("RevisionApprover", fields: [approverId], references: [id])
   changeRequest ChangeRequest? @relation("ResolvingRevisions", fields: [changeRequestId], references: [id], onDelete: SetNull)
 
-  bomItems              BomItem[]
-  markedUpInRequests    ChangeRequest[]      @relation("BaseRevision")
-  changeRequestEvents   ChangeRequestEvent[]
+  bomItems            BomItem[]
+  markedUpInRequests  ChangeRequest[]      @relation("BaseRevision")
+  changeRequestEvents ChangeRequestEvent[]
 
   @@unique([equipmentId, major, minor])
   @@index([equipmentId, status])
@@ -451,16 +453,16 @@ model DocumentRevision {
 
 /// Položka kusovníku (BOM) dané revize.
 model BomItem {
-  id          String  @id @default(cuid())
-  revisionId  String
-  position    Int     // pořadí v tabulce
-  designation String  // označení ve schématu: "K4", "Q1", "F12"
-  description String  // "Stykač 3P 25 A, cívka 24 V DC"
+  id           String  @id @default(cuid())
+  revisionId   String
+  position     Int // pořadí v tabulce
+  designation  String // označení ve schématu: "K4", "Q1", "F12"
+  description  String // "Stykač 3P 25 A, cívka 24 V DC"
   manufacturer String?
-  partNumber  String? // objednací číslo
-  quantity    Float   @default(1)
-  unit        String  @default("ks")
-  note        String?
+  partNumber   String? // objednací číslo
+  quantity     Float   @default(1)
+  unit         String  @default("ks")
+  note         String?
 
   revision DocumentRevision @relation(fields: [revisionId], references: [id], onDelete: Cascade)
 
@@ -480,10 +482,10 @@ model ChangeRequest {
   priority    ChangeRequestPriority @default(NORMAL)
 
   // Krok 1 – Redlining nad aktuálním schématem
-  baseRevisionId  String? // revize, nad kterou technik kreslil
-  markupSheet     Int     @default(1) // číslo listu schématu
-  markupData      String? // JSON: tahy pera [{points:[[x,y]...], color, width}]
-  markupImageUrl  String? // PNG export (schéma + červená vrstva)
+  baseRevisionId String? // revize, nad kterou technik kreslil
+  markupSheet    Int     @default(1) // číslo listu schématu
+  markupData     String? // JSON: tahy pera [{points:[[x,y]...], color, width}]
+  markupImageUrl String? // PNG export (schéma + červená vrstva)
 
   // Krok 3 – hlas / rychlá poznámka
   voiceTranscript String? // přepis hlasové poznámky
@@ -502,11 +504,11 @@ model ChangeRequest {
   closedAt    DateTime? // schváleno / stornováno
   updatedAt   DateTime  @updatedAt
 
-  equipment          Equipment            @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
-  baseRevision       DocumentRevision?    @relation("BaseRevision", fields: [baseRevisionId], references: [id], onDelete: SetNull)
-  reporter           User                 @relation("ChangeRequestReporter", fields: [reporterId], references: [id])
-  assignee           User?                @relation("ChangeRequestAssignee", fields: [assigneeId], references: [id])
-  resolvingRevisions DocumentRevision[]   @relation("ResolvingRevisions")
+  equipment          Equipment               @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  baseRevision       DocumentRevision?       @relation("BaseRevision", fields: [baseRevisionId], references: [id], onDelete: SetNull)
+  reporter           User                    @relation("ChangeRequestReporter", fields: [reporterId], references: [id])
+  assignee           User?                   @relation("ChangeRequestAssignee", fields: [assigneeId], references: [id])
+  resolvingRevisions DocumentRevision[]      @relation("ResolvingRevisions")
   attachments        Attachment[]
   events             ChangeRequestEvent[]
   temporaryMods      TemporaryModification[]
@@ -541,7 +543,7 @@ model ChangeRequestEvent {
   changeRequestId String
   type            ChangeRequestEventType
   actorId         String
-  revisionId      String?                // revize, které se událost týká
+  revisionId      String? // revize, které se událost týká
   fromStatus      ChangeRequestStatus?
   toStatus        ChangeRequestStatus?
   comment         String?
@@ -585,9 +587,9 @@ model TemporaryModification {
   title          String
   description    String
   createdByName  String
-  createdByRole  String             // "Revizní technik" / "Údržba"
+  createdByRole  String // "Revizní technik" / "Údržba"
   createdAt      DateTime           @default(now())
-  expiresAt      DateTime           // povinný termín odstranění
+  expiresAt      DateTime // povinný termín odstranění
   photoUrl       String?
   markupJson     String?
   status         TemporaryModStatus @default(ACTIVE)
@@ -603,4 +605,22 @@ model TemporaryModification {
 
   @@index([equipmentId, status])
   @@index([status, expiresAt])
+}
+
+/// Log odeslaných notifikací (souhrnné avízo lhůt revizí). Bez SMTP se e-mail jen uloží sem.
+model NotificationLog {
+  id          String   @id @default(cuid())
+  kind        String // "INSPECTION_DIGEST"
+  plantId     String?
+  subject     String
+  recipients  String // e-maily oddělené čárkou
+  html        String
+  text        String
+  itemCount   Int
+  delivery    String // "SENT" | "LOGGED" | "FAILED"
+  error       String?
+  triggeredBy String // "manual:<userId>" | "cron"
+  createdAt   DateTime @default(now())
+
+  @@index([kind, createdAt])
 }

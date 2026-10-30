@@ -24,6 +24,11 @@ services:
       ELDOCK_SEED_DEMO: ${ELDOCK_SEED_DEMO:-1}
       # 1 = cookie bez příznaku Secure (jen provoz bez HTTPS v uzavřené síti)
       ELDOCK_INSECURE_COOKIE: ${ELDOCK_INSECURE_COOKIE:-0}
+      # Avízo lhůt revizí: SMTP (bez něj se e-mail uloží jen do logu) a token pro cron
+      ELDOCK_SMTP_URL: ${ELDOCK_SMTP_URL:-}
+      ELDOCK_MAIL_FROM: ${ELDOCK_MAIL_FROM:-Eldock <noreply@eldock.cz>}
+      ELDOCK_CRON_SECRET: ${ELDOCK_CRON_SECRET:-}
+      ELDOCK_PUBLIC_URL: ${ELDOCK_PUBLIC_URL:-https://eldock.cz}
     volumes:
       - ./data/db:/app/data/db
       - ./data/storage:/app/storage

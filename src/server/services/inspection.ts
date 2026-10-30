@@ -19,6 +19,10 @@ export interface MeasurementFields {
   protectiveConductorResistance?: number | null;
   /** R_iso [MΩ] */
   insulationResistance?: number | null;
+  /** I_PE / I_Δ [mA] */
+  leakageCurrent?: number | null;
+  /** Funkční zkouška vyhověla (null = neprováděla se). */
+  functionalTest?: boolean | null;
 }
 
 export interface ThermalFields {
@@ -82,10 +86,17 @@ function cleanMeasurements(input: MeasurementFields) {
   const value = (n: number | null | undefined) => (typeof n === "number" && Number.isFinite(n) ? n : null);
   const rpe = value(input.protectiveConductorResistance);
   const riso = value(input.insulationResistance);
-  if ((rpe !== null && (rpe < 0 || rpe > 100)) || (riso !== null && (riso < 0 || riso > 100_000))) {
+  const leakage = value(input.leakageCurrent);
+  if ((rpe !== null && (rpe < 0 || rpe > 100)) || (riso !== null && (riso < 0 || riso > 100_000)) || (leakage !== null && (leakage < 0 || leakage > 100))) {
     throw new WorkflowError("VALIDATION", "Naměřené hodnoty jsou mimo rozsah přístroje.");
   }
-  return { measuringInstrument: input.measuringInstrument?.trim() || null, protectiveConductorResistance: rpe, insulationResistance: riso };
+  return {
+    measuringInstrument: input.measuringInstrument?.trim() || null,
+    protectiveConductorResistance: rpe,
+    insulationResistance: riso,
+    leakageCurrent: leakage,
+    functionalTest: typeof input.functionalTest === "boolean" ? input.functionalTest : null,
+  };
 }
 
 function requireInspector(input: { inspectorName: string; inspectorLicense: string }) {
@@ -210,6 +221,8 @@ export async function recordInspection(prisma: PrismaClient, input: RecordInspec
       measuringInstrument: data.measuringInstrument,
       protectiveConductorResistance: data.protectiveConductorResistance,
       insulationResistance: data.insulationResistance,
+      leakageCurrent: data.leakageCurrent,
+      functionalTest: data.functionalTest,
       maxTempC: data.maxTempC,
       deltaTempC: data.deltaTempC,
       defects: { create: defectRows(equipment.id, data.inspectionDate, input.result, data.defects, input.defectSeverity) },
@@ -360,6 +373,8 @@ export async function recordQuickInspection(prisma: PrismaClient, input: QuickIn
       measuringInstrument: data.measuringInstrument,
       protectiveConductorResistance: data.protectiveConductorResistance,
       insulationResistance: data.insulationResistance,
+      leakageCurrent: data.leakageCurrent,
+      functionalTest: data.functionalTest,
       defects: { create: defectRows(equipment.id, data.inspectionDate, record.result, data.defects) },
     },
   });

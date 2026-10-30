@@ -1,4 +1,4 @@
-import { CalendarClock, ClipboardList, Gauge, Thermometer, TriangleAlert, UserRound } from "lucide-react";
+import { CalendarClock, ClipboardList, FileDown, Gauge, Thermometer, TriangleAlert, UserRound } from "lucide-react";
 
 import type { EquipmentType } from "@/generated/prisma/enums";
 
@@ -7,7 +7,9 @@ import { isLightCard, isPortable, type InspectionRule } from "@/lib/inspection-r
 import { governingInspection, inspectionStateFor, latestOfType, type InspectionState, type InspectionSummary } from "@/lib/inspection";
 import { defectState, thermalLevel } from "@/lib/defects";
 import { DEFECT_STATE, INSPECTION_RESULT, INSPECTION_STATE, THERMAL_LEVEL } from "@/lib/status";
+import { inspectionReportHref } from "@/lib/routes";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import type { EquipmentInspection } from "@/server/queries/equipment";
 
 import { DefectList } from "./DefectList";
@@ -243,11 +245,19 @@ export function InspectionLogbook({ equipmentId, tag, type, protectionClass, int
                         {record.defectsSummary}
                       </p>
                     ) : null}
-                    <DocumentPreviewButton
-                      url={record.reportUrl}
-                      title={`${INSPECTION_TYPE_LABELS[record.type]} ${record.reportNumber}`}
-                      subtitle={`${tag} · platnost do ${formatDateShort(record.validUntil)}`}
-                    />
+                    <div className="flex flex-wrap gap-2">
+                      <DocumentPreviewButton
+                        url={record.reportUrl}
+                        title={`${INSPECTION_TYPE_LABELS[record.type]} ${record.reportNumber}`}
+                        subtitle={`${tag} · platnost do ${formatDateShort(record.validUntil)}`}
+                      />
+                      <Button asChild variant="outline" className="touch-target gap-2">
+                        <a href={inspectionReportHref(record.id)} target="_blank" rel="noopener">
+                          <FileDown className="size-4" aria-hidden />
+                          Generovat revizní zprávu (PDF)
+                        </a>
+                      </Button>
+                    </div>
                   </article>
                 </li>
               );

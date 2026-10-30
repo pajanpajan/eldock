@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Search, TriangleAlert } from "lucide-react";
+import { FileDown, Search, TriangleAlert } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { normalizeSearch } from "@/lib/equipment-filter";
@@ -12,7 +13,7 @@ import { EQUIPMENT_TYPE_LABELS, formatCount } from "@/lib/format";
 import { needsAttention } from "@/lib/inspection";
 import { inspectionRuleFor } from "@/lib/inspection-rules";
 import { MAP_LAYERS, layerOf, type LayerKey } from "@/lib/map-layers";
-import { equipmentHref } from "@/lib/routes";
+import { equipmentHref, inspectionReportHref } from "@/lib/routes";
 import { INSPECTION_STATE } from "@/lib/status";
 import { cn } from "@/lib/utils";
 import type { InspectionOverviewItem } from "@/server/queries/inspections";
@@ -115,12 +116,15 @@ export function InspectionOverviewTable({
               <TableHead className="hidden lg:table-cell">Umístění</TableHead>
               <TableHead className="hidden md:table-cell">Norma · lhůta</TableHead>
               <TableHead>Stav revize</TableHead>
+              <TableHead className="w-12">
+                <span className="sr-only">Revizní zpráva</span>
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {visible.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
                   Filtru neodpovídá žádné zařízení.
                 </TableCell>
               </TableRow>
@@ -161,6 +165,15 @@ export function InspectionOverviewTable({
                     </TableCell>
                     <TableCell>
                       <InspectionStatusBadge summary={item.summary} />
+                    </TableCell>
+                    <TableCell>
+                      {item.reportId ? (
+                        <Button asChild variant="ghost" size="icon" className="touch-target" title="Generovat revizní zprávu (PDF)">
+                          <a href={inspectionReportHref(item.reportId)} target="_blank" rel="noopener" aria-label={`Generovat revizní zprávu (PDF) – ${item.tag}`}>
+                            <FileDown className="size-4" />
+                          </a>
+                        </Button>
+                      ) : null}
                     </TableCell>
                   </TableRow>
                 );

@@ -29,6 +29,8 @@ export interface WizardPhoto {
   /** 0–100 během nahrávání. */
   progress: number;
   error: string | null;
+  /** Fotka nese zákres (kreslení do fotky) – nahraná je už složená verze. */
+  annotated?: boolean;
 }
 
 export interface WizardState {

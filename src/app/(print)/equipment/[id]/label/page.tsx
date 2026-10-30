@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
-import { LabelPrintToolbar } from "@/components/equipment/LabelPrintToolbar";
+import { PrintToolbar } from "@/components/common/PrintToolbar";
 import { QrLabelFace } from "@/components/equipment/QrLabelFace";
 import { summarizeInspections } from "@/lib/inspection";
 import { LABEL_SIZE_MM } from "@/lib/qr-label";
@@ -35,7 +35,14 @@ export default async function LabelPrintPage({ params }: PageProps<"/equipment/[
           .label-print .qr-label { width: ${width}mm !important; height: ${height}mm !important; max-width: none !important; border-radius: 0 !important; box-shadow: none !important; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
         }
       `}</style>
-      <LabelPrintToolbar tag={equipment.tag} width={width} height={height} />
+      <PrintToolbar
+        className="max-w-[34rem]"
+        hint={
+          <>
+            Štítek <span className="font-mono text-foreground">{equipment.tag}</span> · {width} × {height} mm. V dialogu tisku zvolte štítkovač, měřítko 100 % a vypněte záhlaví a zápatí.
+          </>
+        }
+      />
       <QrLabelFace label={label} className="w-full max-w-[34rem] shadow-xl shadow-black/50" />
     </div>
   );

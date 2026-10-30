@@ -24,6 +24,7 @@ import type { DefectSeverity, InspectionResult, InspectionType } from "@/generat
 import { INSPECTION_TYPE_LABELS, formatDateShort } from "@/lib/format";
 import { computeValidUntil, defaultValidityMonths } from "@/lib/inspection";
 import { evaluateMeasurements, measurementLimits } from "@/lib/inspection-rules";
+import { leakageLimitMa } from "@/lib/inspection-protocol";
 import { DEFECT_DEADLINE_DAYS, severityForResult, thermalLevel } from "@/lib/defects";
 import { DEFECT_SEVERITY, INSPECTION_RESULT, THERMAL_LEVEL } from "@/lib/status";
 import { uploadFile, type UploadedFile } from "@/lib/upload-client";
@@ -58,6 +59,9 @@ export function RecordInspectionDialog({ equipmentId, tag, intervalMonths, today
   const [instrument, setInstrument] = useState("Metrel MI 3309 BT");
   const [rpe, setRpe] = useState(limits.typical.rpe === null ? "" : String(limits.typical.rpe));
   const [riso, setRiso] = useState(String(limits.typical.riso));
+  const [leakage, setLeakage] = useState(measurable ? "0,4" : "");
+  // Funkční zkouška: "ok" / "fail" / "" (neprováděla se)
+  const [functional, setFunctional] = useState<"ok" | "fail" | "">(measurable ? "ok" : "");
   const [maxTemp, setMaxTemp] = useState("");
   const [deltaTemp, setDeltaTemp] = useState("");
   const [severity, setSeverity] = useState<DefectSeverity | null>(null);
@@ -127,8 +131,9 @@ export function RecordInspectionDialog({ equipmentId, tag, intervalMonths, today
         ...(type === "THERMOVISION" ? { maxTempC: toNumber(maxTemp), deltaTempC: toNumber(deltaTemp) } : {}),
         defectSeverity: needsDefects ? (severity ?? severityForResult(result)) : null,
         ...(measurable
-          ? { measuringInstrument: instrument || null, protectiveConductorResistance: toNumber(rpe), insulationResistance: toNumber(riso) }
+          ? { measuringInstrument: instrument || null, protectiveConductorResistance: toNumber(rpe), insulationResistance: toNumber(riso), leakageCurrent: toNumber(leakage) }
           : {}),
+        ...(type === "THERMOVISION" ? {} : { functionalTest: functional === "" ? null : functional === "ok" }),
       });
       if (!response.ok) {
         toast.error(response.error);
@@ -288,9 +293,31 @@ export function RecordInspectionDialog({ equipmentId, tag, intervalMonths, today
                   <Label htmlFor="inspection-instrument">Měřicí přístroj</Label>
                   <Input id="inspection-instrument" value={instrument} onChange={(event) => setInstrument(event.target.value)} maxLength={120} className="h-11" />
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="inspection-leakage">
+                    I<sub>PE</sub> / I<sub>Δ</sub> [mA] ≤ {leakageLimitMa(protectionClass).toLocaleString("cs-CZ")}
+                  </Label>
+                  <Input id="inspection-leakage" inputMode="decimal" value={leakage} onChange={(event) => setLeakage(event.target.value)} className="h-11 font-mono" />
+                </div>
                 {measurement && !measurement.ok ? (
                   <p className="text-sm text-red-300 sm:col-span-3">{measurement.failures.join(" ")}</p>
                 ) : null}
+              </div>
+            ) : null}
+
+            {type !== "THERMOVISION" ? (
+              <div className="space-y-2">
+                <Label htmlFor="inspection-functional">Funkční zkouška</Label>
+                <select
+                  id="inspection-functional"
+                  value={functional}
+                  onChange={(event) => setFunctional(event.target.value as "ok" | "fail" | "")}
+                  className="h-11 w-full rounded-md border border-input bg-transparent px-3 text-sm dark:bg-input/30"
+                >
+                  <option value="ok">Vyhovuje</option>
+                  <option value="fail">Nevyhovuje</option>
+                  <option value="">Neprováděla se</option>
+                </select>
               </div>
             ) : null}
 

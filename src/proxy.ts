@@ -13,6 +13,8 @@ export async function proxy(request: NextRequest) {
   if (isAuthBypassed()) return NextResponse.next();
   const { pathname, search } = request.nextUrl;
   if (PUBLIC_PATHS.has(pathname)) return NextResponse.next();
+  // Cron (avízo lhůt revizí) se ověřuje vlastním tajným tokenem v Route Handleru.
+  if (pathname.startsWith("/api/cron/")) return NextResponse.next();
 
   const session = await verifyAuthToken(request.cookies.get(AUTH_COOKIE)?.value);
   if (session) return NextResponse.next();

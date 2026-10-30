@@ -1,21 +1,43 @@
 "use client";
 
-import { useRef, type Dispatch } from "react";
-import { Camera, ImagePlus, RotateCw, X } from "lucide-react";
+import { useRef, useState, type Dispatch } from "react";
+import { Camera, ImagePlus, PenLine, RotateCw, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { resizeImage, uploadFile } from "@/lib/upload-client";
 
+import { PhotoAnnotator } from "./PhotoAnnotator";
 import type { WizardAction, WizardPhoto } from "./wizard-state";
 
 const MAX_PHOTOS = 10;
 
-/** Krok 2 – fotky zapojení / štítku: fotoaparát nebo galerie, zmenšení na klientu, nahrání s průběhem. */
+/**
+ * Krok 2 – fotky zapojení / štítku: fotoaparát nebo galerie, zmenšení na klientu, nahrání s průběhem.
+ * Do každé nahrané fotky lze zakreslit místo změny – nahraje se složená fotka se zákresem.
+ */
 export function PhotoStep({ photos, dispatch }: { photos: WizardPhoto[]; dispatch: Dispatch<WizardAction> }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const files = useRef(new Map<string, File>());
+  const [annotating, setAnnotating] = useState<WizardPhoto | null>(null);
+
+  async function saveAnnotation(photo: WizardPhoto, file: File) {
+    files.current.set(photo.key, file);
+    dispatch({ type: "updatePhoto", key: photo.key, patch: { previewUrl: URL.createObjectURL(file), url: null, progress: 0, error: null } });
+    try {
+      const result = await uploadFile("photo", file, (progress) => dispatch({ type: "updatePhoto", key: photo.key, patch: { progress } }));
+      dispatch({
+        type: "updatePhoto",
+        key: photo.key,
+        patch: { url: result.url, sizeBytes: result.sizeBytes, progress: 100, annotated: true, caption: photo.caption || "Zákres do fotky" },
+      });
+      setAnnotating(null);
+    } catch (error) {
+      dispatch({ type: "updatePhoto", key: photo.key, patch: { error: error instanceof Error ? error.message : "Nahrání se nepodařilo." } });
+      setAnnotating(null);
+    }
+  }
 
   async function upload(key: string, file: File) {
     dispatch({ type: "updatePhoto", key, patch: { progress: 0, error: null } });
@@ -117,6 +139,23 @@ export function PhotoStep({ photos, dispatch }: { photos: WizardPhoto[]; dispatc
                 >
                   <X className="size-5" />
                 </Button>
+                {photo.annotated ? (
+                  <span className="absolute top-2 left-2 flex items-center gap-1 rounded-md bg-red-600 px-2 py-1 text-xs font-semibold text-white">
+                    <PenLine className="size-3.5" aria-hidden /> Se zákresem
+                  </span>
+                ) : null}
+                {photo.url ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="touch-target absolute bottom-2 left-2 gap-1.5"
+                    onClick={() => setAnnotating(photo)}
+                    aria-label={`Zakreslit do fotky ${photo.fileName}`}
+                  >
+                    <PenLine className="size-4" />
+                    Zakreslit
+                  </Button>
+                ) : null}
                 {!photo.url && !photo.error ? (
                   <div className="absolute inset-x-0 bottom-0 bg-zinc-950/80 p-2">
                     <Progress value={photo.progress} aria-label="Průběh nahrávání" />
@@ -145,6 +184,17 @@ export function PhotoStep({ photos, dispatch }: { photos: WizardPhoto[]; dispatc
             </li>
           ))}
         </ul>
+      ) : null}
+
+      {annotating ? (
+        <PhotoAnnotator
+          key={annotating.key}
+          open
+          imageSrc={annotating.previewUrl}
+          fileName={annotating.fileName}
+          onClose={() => setAnnotating(null)}
+          onSave={(file) => saveAnnotation(annotating, file)}
+        />
       ) : null}
     </div>
   );

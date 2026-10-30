@@ -132,7 +132,7 @@ Produkční balíček tvoří `Dockerfile` (Node 22 LTS, Next.js `output: "stand
 | Služba | Co dělá |
 |---|---|
 | `eldock-app` | Next.js server na interním portu 3000. Při startu aplikuje migrace (`prisma migrate deploy`) a nad prázdnou databází nahraje demo data (`ELDOCK_SEED_DEMO=1`). |
-| `caddy` | Reverzní proxy na portech 80/443: automatický certifikát **Let's Encrypt** pro `eldock.cz`, `www.eldock.cz`, `app.eldock.cz`, HSTS, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`. |
+| `caddy` | Reverzní proxy na portech 80/443: automatický certifikát **Let's Encrypt** pro `eldock.cz`, `www.eldock.cz`, `app.eldock.cz`, HSTS, `X-Frame-Options: SAMEORIGIN` (vlastní náhledy PDF v `<iframe>` fungují, cizí weby aplikaci nevloží), `X-Content-Type-Options: nosniff`. |
 
 Trvalá data jsou na hostiteli v `./data`: `./data/db` (SQLite `eldock.db`), `./data/storage` (fotky, revize, schémata), `./data/caddy` (certifikáty). **Zálohujte celý adresář `./data`.**
 

@@ -250,7 +250,7 @@ const DEMO_APPLIANCES = [
     protectionClass: "I",
     inventoryNumber: "INV-2024-0412",
     assignedZone: "Dílna údržby – Hala A",
-    measurements: { rpe: 0.18, riso: 210 },
+    measurements: { rpe: 0.18, riso: 210, leakage: 0.35 },
   },
   {
     tag: "SP-0330",
@@ -265,7 +265,7 @@ const DEMO_APPLIANCES = [
     protectionClass: "I",
     inventoryNumber: "INV-2023-0188",
     assignedZone: "Kanceláře – 2. NP",
-    measurements: { rpe: 0.07, riso: 150 },
+    measurements: { rpe: 0.07, riso: 150, leakage: 0.22 },
   },
 ];
 
@@ -279,7 +279,7 @@ const INSPECTOR_VTZ = { name: "Ing. Jiří Kovář", license: "TIČR č. E-2210/
 async function addInspection(
   prisma: PrismaClient,
   equipmentId: string,
-  options: { daysAgo: number; inspector: { name: string; license: string }; measurements?: { rpe: number; riso: number } },
+  options: { daysAgo: number; inspector: { name: string; license: string }; measurements?: { rpe: number; riso: number; leakage: number } },
 ) {
   const eq = await prisma.equipment.findUniqueOrThrow({
     where: { id: equipmentId },
@@ -330,6 +330,8 @@ async function addInspection(
       measuringInstrument: measurements?.instrument ?? null,
       protectiveConductorResistance: measurements?.rpe ?? null,
       insulationResistance: measurements?.riso ?? null,
+      leakageCurrent: options.measurements?.leakage ?? null,
+      functionalTest: true,
     },
   });
 }

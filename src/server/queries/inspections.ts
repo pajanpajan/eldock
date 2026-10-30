@@ -1,6 +1,6 @@
 import "server-only";
 
-import { DEADLINE_TYPES, compareByUrgency, needsAttention, pragueToday, summarizeInspections, type InspectionSummary } from "@/lib/inspection";
+import { DEADLINE_TYPES, compareByUrgency, governingInspection, needsAttention, pragueToday, summarizeInspections, type InspectionSummary } from "@/lib/inspection";
 import type { PlannerItem } from "@/lib/inspection-planner";
 import { PORTABLE_TYPES } from "@/lib/inspection-rules";
 import type { EquipmentType } from "@/generated/prisma/enums";
@@ -82,7 +82,7 @@ export async function getInspectionOverview(plantId?: string, now: Date = new Da
       floor: { select: { name: true, building: { select: { name: true, plant: { select: { name: true } } } } } },
       inspections: {
         where: { type: { in: [...DEADLINE_TYPES] } },
-        select: { type: true, inspectionDate: true, validUntil: true, result: true },
+        select: { id: true, type: true, inspectionDate: true, validUntil: true, result: true },
       },
     },
   });
@@ -92,6 +92,8 @@ export async function getInspectionOverview(plantId?: string, now: Date = new Da
       location: `${floor.building.name} › ${floor.name}`,
       plantName: floor.building.plant.name,
       summary: summarizeInspections(inspections, now),
+      /** Rozhodující revize → revizní protokol k tisku. */
+      reportId: governingInspection(inspections)?.id ?? null,
     }))
     .sort((a, b) => compareByUrgency(a.summary, b.summary) || a.tag.localeCompare(b.tag));
 }
@@ -241,3 +243,63 @@ export async function getAuditReport(plantId?: string, now: Date = new Date(), t
 }
 
 export type AuditReport = Awaited<ReturnType<typeof getAuditReport>>;
+
+/** Revizní protokol k tisku (`/inspections/report/[id]`): záznam, zařízení, umístění a závady. */
+export async function getInspectionProtocol(recordId: string) {
+  return prisma.inspectionRecord.findUnique({
+    where: { id: recordId },
+    include: {
+      defects: { orderBy: { createdAt: "asc" }, select: { id: true, description: true, severity: true, deadline: true, status: true } },
+      equipment: {
+        select: {
+          id: true,
+          tag: true,
+          name: true,
+          type: true,
+          manufacturer: true,
+          model: true,
+          serialNumber: true,
+          inventoryNumber: true,
+          yearInstalled: true,
+          ratedVoltage: true,
+          ratedCurrent: true,
+          ipRating: true,
+          usageGroup: true,
+          protectionClass: true,
+          externalInfluences: true,
+          assignedZone: true,
+          floor: { select: { name: true, building: { select: { name: true, plant: { select: { name: true, code: true, customerName: true, address: true, city: true } } } } } },
+        },
+      },
+    },
+  });
+}
+
+export type InspectionProtocolData = NonNullable<Awaited<ReturnType<typeof getInspectionProtocol>>>;
+
+/** Patra všech závodů pro přiřazení lokality při importu (Závod → Budova → Patro). */
+export async function getImportFloors() {
+  const floors = await prisma.floor.findMany({
+    orderBy: [{ building: { plant: { code: "asc" } } }, { building: { sortOrder: "asc" } }, { level: "asc" }],
+    select: {
+      id: true,
+      name: true,
+      code: true,
+      level: true,
+      building: { select: { name: true, code: true, shortName: true, plant: { select: { id: true, name: true } } } },
+    },
+  });
+  return floors.map((floor) => ({
+    id: floor.id,
+    plantId: floor.building.plant.id,
+    plantName: floor.building.plant.name,
+    buildingName: floor.building.name,
+    buildingCode: floor.building.code,
+    buildingShortName: floor.building.shortName,
+    floorName: floor.name,
+    floorCode: floor.code,
+    level: floor.level,
+  }));
+}
+
+export type ImportFloor = Awaited<ReturnType<typeof getImportFloors>>[number];

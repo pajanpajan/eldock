@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ListChecks } from "lucide-react";
+import { BellRing, ListChecks } from "lucide-react";
 
 import { NoAccess } from "@/components/common/NoAccess";
 import { PageHeader } from "@/components/common/PageHeader";
 import { InspectionPlanner } from "@/components/inspections/InspectionPlanner";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { Button } from "@/components/ui/button";
-import { inspectionsHref } from "@/lib/routes";
+import { inspectionAlertsHref, inspectionsHref } from "@/lib/routes";
 import { getPlannerItems } from "@/server/queries/inspections";
 import { getPlants } from "@/server/queries/plant";
 import { getCurrentAccount, getRememberedPlantId } from "@/server/session";
@@ -31,12 +31,22 @@ export default async function InspectionPlannerPage() {
         title="Chytrý plánovač revizí"
         description={`${plant ? plant.name : "Všechny závody"} · měsíční přehled, hlasový dispečer a optimalizace pochůzky.`}
         actions={
-          <Button asChild variant="outline" className="touch-target gap-2">
-            <Link href={inspectionsHref}>
-              <ListChecks className="size-4" aria-hidden />
-              Přehled revizí
-            </Link>
-          </Button>
+          <>
+            {account.can("inspections") ? (
+              <Button asChild variant="outline" className="touch-target gap-2">
+                <Link href={inspectionAlertsHref}>
+                  <BellRing className="size-4" aria-hidden />
+                  Notifikace a hlídač lhůt
+                </Link>
+              </Button>
+            ) : null}
+            <Button asChild variant="outline" className="touch-target gap-2">
+              <Link href={inspectionsHref}>
+                <ListChecks className="size-4" aria-hidden />
+                Přehled revizí
+              </Link>
+            </Button>
+          </>
         }
       />
       <InspectionPlanner
