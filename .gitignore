@@ -45,3 +45,6 @@ npm-debug.log*
 
 # produkční data Docker Compose (databáze, nahrané soubory, certifikáty)
 /data/
+
+# lokální oprávnění Claude Code
+.claude/settings.local.json
