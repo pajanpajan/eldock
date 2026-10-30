@@ -27,12 +27,15 @@ export function InspectionOverviewTable({
   today,
   showPlant,
   canBatchInspect = true,
+  showReports = true,
 }: {
   items: InspectionOverviewItem[];
   today: string;
   showPlant: boolean;
   /** Hromadná revize (checkboxy a lišta) – jen účty, které zapisují revize. */
   canBatchInspect?: boolean;
+  /** Generování PDF revizních zpráv (modul Revize & Legislativa). */
+  showReports?: boolean;
 }) {
   const [layer, setLayer] = useState<LayerKey | "ALL">("ALL");
   const [attentionOnly, setAttentionOnly] = useState(false);
@@ -167,7 +170,7 @@ export function InspectionOverviewTable({
                       <InspectionStatusBadge summary={item.summary} />
                     </TableCell>
                     <TableCell>
-                      {item.reportId ? (
+                      {showReports && item.reportId ? (
                         <Button asChild variant="ghost" size="icon" className="touch-target" title="Generovat revizní zprávu (PDF)">
                           <a href={inspectionReportHref(item.reportId)} target="_blank" rel="noopener" aria-label={`Generovat revizní zprávu (PDF) – ${item.tag}`}>
                             <FileDown className="size-4" />

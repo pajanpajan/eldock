@@ -17,7 +17,7 @@ const MAX_PHOTOS = 10;
  * Krok 2 – fotky zapojení / štítku: fotoaparát nebo galerie, zmenšení na klientu, nahrání s průběhem.
  * Do každé nahrané fotky lze zakreslit místo změny – nahraje se složená fotka se zákresem.
  */
-export function PhotoStep({ photos, dispatch }: { photos: WizardPhoto[]; dispatch: Dispatch<WizardAction> }) {
+export function PhotoStep({ photos, dispatch, annotate = true }: { photos: WizardPhoto[]; dispatch: Dispatch<WizardAction>; annotate?: boolean }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const files = useRef(new Map<string, File>());
   const [annotating, setAnnotating] = useState<WizardPhoto | null>(null);
@@ -144,7 +144,7 @@ export function PhotoStep({ photos, dispatch }: { photos: WizardPhoto[]; dispatc
                     <PenLine className="size-3.5" aria-hidden /> Se zákresem
                   </span>
                 ) : null}
-                {photo.url ? (
+                {photo.url && annotate ? (
                   <Button
                     type="button"
                     variant="secondary"

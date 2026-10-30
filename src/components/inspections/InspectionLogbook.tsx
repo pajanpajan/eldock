@@ -52,10 +52,12 @@ interface Props {
   /** Zápis nové revize (revizní technik, vedení údržby). */
   canRecord?: boolean;
   canResolveDefects?: boolean;
+  /** Generování PDF revizních zpráv (modul Revize & Legislativa). */
+  showReports?: boolean;
 }
 
 /** Záložka „Revize & Lhůtník“: semafor, odpočet, historie revizních zpráv a termovizí, zápis nové revize. */
-export function InspectionLogbook({ equipmentId, tag, type, protectionClass, intervalMonths, rule, inspections, summary, today, now, canRecord = true, canResolveDefects = true }: Props) {
+export function InspectionLogbook({ equipmentId, tag, type, protectionClass, intervalMonths, rule, inspections, summary, today, now, canRecord = true, canResolveDefects = true, showReports = true }: Props) {
   const measurable = isPortable(type);
   const openDefects = inspections.flatMap((record) => record.defects).filter((defect) => defect.status === "OPEN");
   const overdueDefects = openDefects.filter((defect) => defectState(defect, now).state === "OVERDUE").length;
@@ -251,12 +253,14 @@ export function InspectionLogbook({ equipmentId, tag, type, protectionClass, int
                         title={`${INSPECTION_TYPE_LABELS[record.type]} ${record.reportNumber}`}
                         subtitle={`${tag} · platnost do ${formatDateShort(record.validUntil)}`}
                       />
+                      {showReports ? (
                       <Button asChild variant="outline" className="touch-target gap-2">
                         <a href={inspectionReportHref(record.id)} target="_blank" rel="noopener">
                           <FileDown className="size-4" aria-hidden />
                           Generovat revizní zprávu (PDF)
                         </a>
                       </Button>
+                      ) : null}
                     </div>
                   </article>
                 </li>

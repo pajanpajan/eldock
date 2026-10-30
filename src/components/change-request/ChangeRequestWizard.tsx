@@ -33,13 +33,15 @@ import {
 interface Props {
   equipment: { id: string; tag: string; name: string };
   /** Platná revize – podklad pro zákres. */
-  schematic: { url: string; version: string; sheetCount: number } | null;
+  schematic: { url: string; version: string; sheetCount: number; pdf: boolean } | null;
+  /** Kreslení do fotek (modul CAE Advanced). */
+  annotatePhotos?: boolean;
   /** Otevřený požadavek → režim „Doplnit k otevřené změně“. */
   openChange: { id: string; number: string } | null;
 }
 
 /** Průvodce „Zadat změnu“: Zákres → Fotky → Poznámka → Souhrn (u otevřené změny bez zákresu). */
-export function ChangeRequestWizard({ equipment, schematic, openChange }: Props) {
+export function ChangeRequestWizard({ equipment, schematic, openChange, annotatePhotos = true }: Props) {
   const router = useRouter();
   const mode = openChange ? "comment" : "new";
   const steps = stepsFor(mode).filter((step) => step !== "markup" || schematic);
@@ -188,9 +190,10 @@ export function ChangeRequestWizard({ equipment, schematic, openChange }: Props)
             sheet={state.sheet}
             sheetCount={schematic.sheetCount}
             onSheetChange={(sheet) => dispatch({ type: "setSheet", sheet })}
+            pdf={schematic.pdf}
           />
         ) : null}
-        {step === "photos" ? <PhotoStep photos={state.photos} dispatch={dispatch} /> : null}
+        {step === "photos" ? <PhotoStep photos={state.photos} dispatch={dispatch} annotate={annotatePhotos} /> : null}
         {step === "note" ? <VoiceNote text={state.text} priority={state.priority} dispatch={dispatch} showPriority={!openChange} /> : null}
         {step === "summary" ? (
           <div className="space-y-4">
@@ -205,7 +208,7 @@ export function ChangeRequestWizard({ equipment, schematic, openChange }: Props)
                 <div className="space-y-2">
                   <h3 className="text-sm font-medium text-muted-foreground">Zákres ({state.strokes.length} tahů)</h3>
                   {markup ? (
-                    <MarkupPreview src={schematic.url} markup={markup} alt={`Zákres nad ${schematic.version}`} />
+                    <MarkupPreview src={schematic.url} markup={markup} alt={`Zákres nad ${schematic.version}`} pdfPage={schematic.pdf ? state.sheet : null} />
                   ) : (
                     <p className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">Bez zákresu.</p>
                   )}

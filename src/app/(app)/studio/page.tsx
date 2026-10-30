@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
+import { ModuleDisabled } from "@/components/common/ModuleDisabled";
 import { NoAccess } from "@/components/common/NoAccess";
 import { PageHeader } from "@/components/common/PageHeader";
 import { StudioWizard } from "@/components/studio/StudioWizard";
 import { getPlants } from "@/server/queries/plant";
 import { getStudioData } from "@/server/queries/studio";
+import { getModuleState } from "@/server/modules";
 import { getCurrentAccount, getRememberedPlantId } from "@/server/session";
 
 export const metadata: Metadata = { title: "Studio výstavby závodu" };
@@ -14,6 +16,7 @@ export const metadata: Metadata = { title: "Studio výstavby závodu" };
 export default async function StudioPage({ searchParams }: PageProps<"/studio">) {
   const [account, plants, rememberedId, params] = await Promise.all([getCurrentAccount(), getPlants(), getRememberedPlantId(), searchParams]);
   if (!account.can("studio")) return <NoAccess title="Studio výstavby závodu" current={account.accountType} suggest="PLANT_ADMIN" />;
+  if (!(await getModuleState()).ENTERPRISE_TOOLS) return <ModuleDisabled module="ENTERPRISE_TOOLS" feature="Studio výstavby závodu" canManage={account.can("manageUsers")} />;
   // Areál z odkazu „Přidat budovu do areálu“ (?plant=), jinak naposledy otevřený.
   const requested = typeof params.plant === "string" ? params.plant : undefined;
   const plant = plants.find((entry) => entry.id === requested) ?? plants.find((entry) => entry.id === rememberedId) ?? plants[0];

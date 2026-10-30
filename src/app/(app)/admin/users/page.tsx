@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { AdminTabs } from "@/components/admin/AdminTabs";
 import { CreateSubAccountForm } from "@/components/admin/CreateSubAccountForm";
 import { NoAccess } from "@/components/common/NoAccess";
 import { PageHeader } from "@/components/common/PageHeader";
@@ -22,6 +23,7 @@ export default async function AdminUsersPage() {
   return (
     <PageTransition>
       <PageHeader title="Správa podúčtů" description="Účty závodu, jejich oprávnění a kategorie zařízení, které vidí (výřez dat na mapě i v přehledech)." />
+      <AdminTabs current="/admin/users" />
       <div className="space-y-6">
         <div className="overflow-x-auto rounded-xl border border-border bg-card">
           <Table>

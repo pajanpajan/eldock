@@ -22,6 +22,7 @@ import { REVISION_STATUS, SLA_LEVEL } from "@/lib/status";
 import { cn } from "@/lib/utils";
 import { canPerform } from "@/lib/workflow/state-machine";
 import { getTicketDetail } from "@/server/queries/cae";
+import { getModuleState } from "@/server/modules";
 import { getCurrentRole, getCurrentUser } from "@/server/session";
 
 type Props = PageProps<"/cae/tickets/[id]">;
@@ -47,7 +48,7 @@ function Section({ title, icon: Icon, children, className }: { title: string; ic
 // Detail ticketu pro CAE projektanta: podklady od technika vlevo, akce a timeline vpravo.
 export default async function TicketDetailPage({ params }: Props) {
   const { id } = await params;
-  const [ticket, role, user] = await Promise.all([getTicketDetail(id), getCurrentRole(), getCurrentUser()]);
+  const [ticket, role, user, modules] = await Promise.all([getTicketDetail(id), getCurrentRole(), getCurrentUser(), getModuleState()]);
   if (!ticket) notFound();
 
   const now = new Date();
@@ -96,15 +97,8 @@ export default async function TicketDetailPage({ params }: Props) {
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,26rem)]">
         <div className="space-y-6">
           <Section title="Zákres technika" icon={FileText}>
-            {ticket.baseRevision && ticket.baseRevision.schematicFormat !== "PDF" ? (
-              <MarkupLayerViewer src={ticket.baseRevision.schematicUrl} markup={markup} version={ticket.baseRevision.version} />
-            ) : ticket.baseRevision ? (
-              <p className="text-sm text-muted-foreground">
-                Základní revize {ticket.baseRevision.version} je PDF – zákres nad ní nelze zobrazit.{" "}
-                <a href={ticket.baseRevision.schematicUrl} className="text-primary underline" target="_blank" rel="noreferrer">
-                  Otevřít PDF
-                </a>
-              </p>
+            {ticket.baseRevision ? (
+              <MarkupLayerViewer src={ticket.baseRevision.schematicUrl} markup={markup} version={ticket.baseRevision.version} pdf={ticket.baseRevision.schematicFormat === "PDF"} />
             ) : (
               <p className="text-sm text-muted-foreground">Zařízení nemělo platnou revizi, technik nekreslil.</p>
             )}
@@ -138,7 +132,7 @@ export default async function TicketDetailPage({ params }: Props) {
             </Section>
           </div>
 
-          {ticket.baseRevision && ticket.resolvingRevisions[0] ? (
+          {ticket.baseRevision && ticket.resolvingRevisions[0] && modules.CAE_ADVANCED ? (
             <Section title="Porovnat revize (Visual Diff)">
               <RevisionCompare
                 before={{ version: ticket.baseRevision.version, url: ticket.baseRevision.schematicUrl, format: ticket.baseRevision.schematicFormat }}

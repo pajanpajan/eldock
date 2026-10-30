@@ -7,6 +7,7 @@ import { TransformComponent, TransformWrapper, useControls } from "react-zoom-pa
 import { Button } from "@/components/ui/button";
 import type { MarkupStroke } from "@/lib/markup";
 import { SCHEMATIC_HEIGHT, SCHEMATIC_WIDTH } from "@/lib/mock-graphics/schematic";
+import { useDrawingImage } from "@/lib/use-drawing-image";
 import { cn } from "@/lib/utils";
 
 type Tool = "pen" | "highlighter" | "eraser";
@@ -67,6 +68,8 @@ interface Props {
   sheet: number;
   sheetCount: number;
   onSheetChange: (sheet: number) => void;
+  /** Podklad je PDF – `sheet` je číslo stránky. */
+  pdf?: boolean;
 }
 
 /**
@@ -74,7 +77,9 @@ interface Props {
  * pero / zvýrazňovač / guma (maže celý tah), zpět / znovu, režim Kreslit ↔ Posouvat se zoomem.
  * Souřadnice tahů jsou normalizované 0–1 vůči listu.
  */
-export function RedlineCanvas({ src, alt, strokes, onChange, sheet, sheetCount, onSheetChange }: Props) {
+export function RedlineCanvas({ src, alt, strokes, onChange, sheet, sheetCount, onSheetChange, pdf = false }: Props) {
+  // PDF revize: kreslí se nad stránkou vykreslenou přes pdf.js (list = stránka PDF).
+  const image = useDrawingImage(src, pdf ? sheet : null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [tool, setTool] = useState<Tool>("pen");
   const [mode, setMode] = useState<Mode>("draw");
@@ -279,9 +284,10 @@ export function RedlineCanvas({ src, alt, strokes, onChange, sheet, sheetCount, 
         >
           <TransformComponent wrapperClass="!w-full" contentClass="!w-full">
             <div className="relative w-full" style={{ aspectRatio: aspect }}>
-              {/* eslint-disable-next-line @next/next/no-img-element -- schéma z /api/files; SVG přes <img> nespouští skripty */}
-              <img
-                src={src}
+              {image.src ? (
+                // eslint-disable-next-line @next/next/no-img-element -- schéma z /api/files nebo vykreslené PDF (blob:); SVG přes <img> nespouští skripty
+                <img
+                src={image.src}
                 alt={alt}
                 draggable={false}
                 className="absolute inset-0 size-full object-contain select-none"
@@ -290,6 +296,9 @@ export function RedlineCanvas({ src, alt, strokes, onChange, sheet, sheetCount, 
                   if (naturalWidth && naturalHeight) setAspect(naturalWidth / naturalHeight);
                 }}
               />
+              ) : (
+                <span className="absolute inset-0 flex items-center justify-center text-sm text-zinc-500">{image.error ? "Výkres se nepodařilo vykreslit." : "Vykresluji výkres…"}</span>
+              )}
               <canvas
                 ref={canvasRef}
                 aria-label="Plocha pro zákres – kreslete prstem, perem nebo myší"

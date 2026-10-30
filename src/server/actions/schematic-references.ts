@@ -6,6 +6,7 @@ import { z } from "zod";
 import { PERMISSION_LABELS } from "@/lib/accounts";
 import { prisma } from "@/lib/prisma";
 import { WorkflowError } from "@/lib/workflow/state-machine";
+import { assertModule } from "@/server/modules";
 import { createReference, deleteReference, updateReference } from "@/server/services/schematic-references";
 import { getCurrentAccount } from "@/server/session";
 
@@ -31,6 +32,7 @@ async function run<T>(action: () => Promise<T>): Promise<ActionResult<T>> {
     if (!account.can("caeOffice") && !account.can("studio")) {
       throw new WorkflowError("FORBIDDEN", `Účet ${account.definition.label} nemá oprávnění: ${PERMISSION_LABELS.caeOffice} nebo ${PERMISSION_LABELS.studio}.`);
     }
+    await assertModule("CAE_ADVANCED");
     const data = await action();
     revalidatePath("/equipment/[id]", "page");
     return { ok: true, data };

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Construction, ShieldCheck, ShieldX, Wrench } from "lucide-react";
 
 import { KpiTile } from "@/components/common/KpiTile";
+import { ModuleDisabled } from "@/components/common/ModuleDisabled";
 import { NoAccess } from "@/components/common/NoAccess";
 import { PageHeader } from "@/components/common/PageHeader";
 import { AuditReportActions } from "@/components/inspections/AuditReportActions";
@@ -21,6 +22,7 @@ import { tempModCountdown } from "@/lib/temporary-mod";
 import { cn } from "@/lib/utils";
 import { getAuditReport } from "@/server/queries/inspections";
 import { getPlants } from "@/server/queries/plant";
+import { getModuleState } from "@/server/modules";
 import { getCurrentAccount, getRememberedPlantId } from "@/server/session";
 
 export const metadata: Metadata = { title: "Auditní report revizí" };
@@ -29,6 +31,7 @@ export const metadata: Metadata = { title: "Auditní report revizí" };
 export default async function AuditReportPage() {
   const [account, plants, rememberedId] = await Promise.all([getCurrentAccount(), getPlants(), getRememberedPlantId()]);
   if (!account.can("audit")) return <NoAccess title="Auditní report" current={account.accountType} suggest="PLANT_ADMIN" />;
+  if (!(await getModuleState()).INSPECTIONS_PRO) return <ModuleDisabled module="INSPECTIONS_PRO" feature="Auditní report" canManage={account.can("manageUsers")} />;
   const role = account.definition.workflowRole;
   const plant = role === "MAINTENANCE" ? (plants.find((entry) => entry.id === rememberedId) ?? plants[0]) : undefined;
   const now = new Date();

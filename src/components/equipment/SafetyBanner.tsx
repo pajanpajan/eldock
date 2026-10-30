@@ -40,7 +40,7 @@ export function SafetyBanner({
         <Hourglass className={cn("size-8 shrink-0", style.text)} aria-hidden />
         <div className="flex-1 space-y-1">
           <h2 className="text-lg font-semibold">
-            Nová revize {pendingRevision?.version ?? ""} čeká na {canReview ? "vaše potvrzení" : "potvrzení údržbou"}
+            Nová revize {pendingRevision?.version ?? ""} čeká na {canReview ? "vaše potvrzení" : "potvrzení vedoucím údržby"}
           </h2>
           <p className="text-sm text-muted-foreground">
             {pendingRevision
@@ -102,7 +102,12 @@ export function SafetyBanner({
             <figcaption className="text-xs font-medium tracking-wide text-orange-200/90 uppercase">
               Zákres technika nad revizí {change.baseRevision.version}
             </figcaption>
-            <MarkupPreview src={change.baseRevision.schematicUrl} markup={markup} alt={`Schéma ${change.baseRevision.version} se zákresem změny`} />
+            <MarkupPreview
+              src={change.baseRevision.schematicUrl}
+              markup={markup}
+              alt={`Schéma ${change.baseRevision.version} se zákresem změny`}
+              pdfPage={change.baseRevision.schematicFormat === "PDF" ? markup.sheet : null}
+            />
           </figure>
         ) : null}
         <div className="space-y-4">

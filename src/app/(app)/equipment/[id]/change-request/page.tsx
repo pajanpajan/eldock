@@ -10,6 +10,7 @@ import { ChangeRequestWizard } from "@/components/change-request/ChangeRequestWi
 import { SwitchRoleButton } from "@/components/common/SwitchRoleButton";
 import { equipmentHref, floorHref, plantHref } from "@/lib/routes";
 import { getEquipmentDetail } from "@/server/queries/equipment";
+import { getModuleState } from "@/server/modules";
 import { getCurrentAccount } from "@/server/session";
 
 type Props = PageProps<"/equipment/[id]/change-request">;
@@ -23,7 +24,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 // Průvodce „Zadat změnu“ (jen pohled Údržba).
 export default async function ChangeRequestPage({ params }: Props) {
   const { id } = await params;
-  const [equipment, account] = await Promise.all([getEquipmentDetail(id), getCurrentAccount()]);
+  const [equipment, account, modules] = await Promise.all([getEquipmentDetail(id), getCurrentAccount(), getModuleState()]);
   if (!equipment) notFound();
 
   const { floor } = equipment;
@@ -68,7 +69,8 @@ export default async function ChangeRequestPage({ params }: Props) {
       {header}
       <ChangeRequestWizard
         equipment={{ id: equipment.id, tag: equipment.tag, name: equipment.name }}
-        schematic={active ? { url: active.schematicUrl, version: active.version, sheetCount: active.sheetCount } : null}
+        schematic={active ? { url: active.schematicUrl, version: active.version, sheetCount: active.sheetCount, pdf: active.schematicFormat === "PDF" } : null}
+        annotatePhotos={modules.CAE_ADVANCED}
         openChange={openChange ? { id: openChange.id, number: openChange.number } : null}
       />
     </>

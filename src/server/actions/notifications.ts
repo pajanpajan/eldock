@@ -6,6 +6,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 import { smtpTransportFromEnv } from "@/server/mailer";
+import { assertModule } from "@/server/modules";
 import { assertPermission } from "@/server/permissions";
 import { requestOrigin } from "@/server/request-url";
 import { sendInspectionDigest } from "@/server/services/notifications";
@@ -23,6 +24,7 @@ export async function sendInspectionDigestAction(input: z.input<typeof schema>):
   if (!parsed.success) return { ok: false, error: "Neplatná data." };
   try {
     await assertPermission("inspections");
+    await assertModule("INSPECTIONS_PRO");
     const user = await getCurrentUser();
     const log = await sendInspectionDigest(prisma, {
       plantId: parsed.data.plantId,

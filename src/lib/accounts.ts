@@ -37,6 +37,11 @@ export interface AccountDefinition {
   badge: string;
   /** Kam účet po přepnutí přistane: „plant“ = mapa závodu. */
   home: "plant" | "/cae" | "/inspections/rapid" | "/inspections/planner";
+  /**
+   * Terénní pohled (směnový údržbář): rychlý přístup ke schématu, QR štítku a nahlášení změny,
+   * bez manažerských přehledů (KPI, hlídač lhůt, pasport, lhůtník).
+   */
+  fieldView?: boolean;
 }
 
 const ALL = [...ALL_LAYERS];
@@ -85,6 +90,7 @@ export const ACCOUNT_TYPES: Record<AccountType, AccountDefinition> = {
     showInspections: true,
     badge: "border-orange-500/50 bg-orange-500/15 text-orange-300",
     home: "plant",
+    fieldView: true,
   },
   INSPECTOR_VTZ: {
     label: "Revizní technik VTZ",

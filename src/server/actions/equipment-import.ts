@@ -6,6 +6,7 @@ import { z } from "zod";
 import { PERMISSION_LABELS } from "@/lib/accounts";
 import { prisma } from "@/lib/prisma";
 import { WorkflowError } from "@/lib/workflow/state-machine";
+import { assertModule } from "@/server/modules";
 import { importEquipment } from "@/server/services/equipment-import";
 import { saveUpload } from "@/server/storage";
 import { getCurrentAccount } from "@/server/session";
@@ -40,6 +41,7 @@ export async function importEquipmentAction(input: z.input<typeof schema>): Prom
     if (!account.can("recordInspection") && !account.can("studio")) {
       throw new WorkflowError("FORBIDDEN", `Účet ${account.definition.label} nemá oprávnění: ${PERMISSION_LABELS.recordInspection} nebo ${PERMISSION_LABELS.studio}.`);
     }
+    await assertModule("ENTERPRISE_TOOLS");
     const result = await importEquipment(prisma, {
       items: parsed.data.items.map((item) => ({ ...item, tag: item.tag.toUpperCase(), lastInspection: item.lastInspection ? new Date(`${item.lastInspection}T12:00:00Z`) : null })),
       writeReport: async (svg) => (await saveUpload("documents", ".svg", svg)).url,

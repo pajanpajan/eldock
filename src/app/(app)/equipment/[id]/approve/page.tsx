@@ -18,6 +18,7 @@ import { formatDateTime, formatRelative } from "@/lib/format";
 import { parseMarkup } from "@/lib/markup";
 import { buildingHref, equipmentHref, floorHref, plantHref } from "@/lib/routes";
 import { getApprovalData } from "@/server/queries/equipment";
+import { getModuleState } from "@/server/modules";
 import { getCurrentAccount } from "@/server/session";
 
 type Props = PageProps<"/equipment/[id]/approve">;
@@ -43,7 +44,7 @@ function Section({ title, icon: Icon, children }: { title: string; icon: typeof 
 // Schválení nové revize údržbou: porovnání, shrnutí CAE, rozdíl kusovníku a rozhodnutí.
 export default async function ApprovePage({ params }: Props) {
   const { id } = await params;
-  const [data, account] = await Promise.all([getApprovalData(id), getCurrentAccount()]);
+  const [data, account, modules] = await Promise.all([getApprovalData(id), getCurrentAccount(), getModuleState()]);
   if (!data) notFound();
 
   const { equipment, change, pending, active } = data;
@@ -131,6 +132,7 @@ export default async function ApprovePage({ params }: Props) {
             before={active ? { version: active.version, url: active.schematicUrl, format: active.schematicFormat } : null}
             after={{ version: pending.version, url: pending.schematicUrl, format: pending.schematicFormat }}
             markup={markup}
+            advanced={modules.CAE_ADVANCED}
           />
         </Section>
 

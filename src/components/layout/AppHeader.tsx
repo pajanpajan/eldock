@@ -2,7 +2,9 @@ import Link from "next/link";
 import { CalendarCheck, CalendarRange, FileCheck2, Inbox, PencilRuler, ScanLine, UsersRound, type LucideIcon } from "lucide-react";
 
 import type { Permission } from "@/lib/accounts";
+import type { AddonModule } from "@/lib/modules";
 import { APP_HOME, auditReportHref, inspectionsHref, plannerHref, rapidInspectionHref } from "@/lib/routes";
+import { getModuleState } from "@/server/modules";
 import { getAccountUsers } from "@/server/queries/accounts";
 import { getPlants } from "@/server/queries/plant";
 import { getAuthSession, getCurrentAccount, getRememberedPlantId } from "@/server/session";
@@ -12,14 +14,14 @@ import { LogoutButton } from "./LogoutButton";
 import { Logo } from "./Logo";
 import { PlantSwitcher } from "./PlantSwitcher";
 
-const NAV: { href: string; label: string; srLabel: string; icon: LucideIcon; permission: Permission }[] = [
+const NAV: { href: string; label: string; srLabel: string; icon: LucideIcon; permission: Permission; module?: AddonModule; hideInFieldView?: boolean }[] = [
   { href: "/cae", label: "Back-Office", srLabel: "CAE Back-Office", icon: Inbox, permission: "caeOffice" },
-  { href: inspectionsHref, label: "Revize", srLabel: "Přehled revizí", icon: CalendarCheck, permission: "inspections" },
-  { href: plannerHref, label: "Plánovač", srLabel: "Plánovač revizí", icon: CalendarRange, permission: "planner" },
-  { href: rapidInspectionHref, label: "Rychlá revize", srLabel: "Rychlá revize", icon: ScanLine, permission: "rapid" },
-  { href: auditReportHref, label: "Audit", srLabel: "Auditní report", icon: FileCheck2, permission: "audit" },
-  { href: "/studio", label: "Studio", srLabel: "Studio výstavby závodu", icon: PencilRuler, permission: "studio" },
-  { href: "/admin/users", label: "Účty", srLabel: "Správa podúčtů", icon: UsersRound, permission: "manageUsers" },
+  { href: inspectionsHref, label: "Revize", srLabel: "Přehled revizí", icon: CalendarCheck, permission: "inspections", hideInFieldView: true },
+  { href: plannerHref, label: "Plánovač", srLabel: "Plánovač revizí", icon: CalendarRange, permission: "planner", module: "INSPECTIONS_PRO" },
+  { href: rapidInspectionHref, label: "Rychlá revize", srLabel: "Rychlá revize", icon: ScanLine, permission: "rapid", module: "INSPECTIONS_PRO" },
+  { href: auditReportHref, label: "Audit", srLabel: "Auditní report", icon: FileCheck2, permission: "audit", module: "INSPECTIONS_PRO" },
+  { href: "/studio", label: "Studio", srLabel: "Studio výstavby závodu", icon: PencilRuler, permission: "studio", module: "ENTERPRISE_TOOLS" },
+  { href: "/admin/users", label: "Správa", srLabel: "Správa účtů a modulů", icon: UsersRound, permission: "manageUsers" },
 ];
 
 /** Horní lišta: logo, přepínač závodu (údržba), navigace podle oprávnění účtu a přepínač účtu. */
@@ -36,8 +38,11 @@ export async function AppHeader() {
       </header>
     );
   }
-  const [account, accounts, plants, rememberedPlantId] = await Promise.all([getCurrentAccount(), getAccountUsers(), getPlants(), getRememberedPlantId()]);
-  const links = NAV.filter((item) => account.can(item.permission));
+  const [account, accounts, plants, rememberedPlantId, modules] = await Promise.all([getCurrentAccount(), getAccountUsers(), getPlants(), getRememberedPlantId(), getModuleState()]);
+  // Položky add-onů, které tenant nemá aktivní, se v navigaci vůbec nezobrazí.
+  const links = NAV.filter(
+    (item) => account.can(item.permission) && (!item.module || modules[item.module]) && !(item.hideInFieldView && account.definition.fieldView),
+  );
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur">
@@ -47,7 +52,7 @@ export async function AppHeader() {
         </Link>
 
         {account.definition.workflowRole === "MAINTENANCE" ? (
-          <PlantSwitcher plants={plants} fallbackId={rememberedPlantId ?? plants[0]?.id} canCreate={account.can("studio")} />
+          <PlantSwitcher plants={plants} fallbackId={rememberedPlantId ?? plants[0]?.id} canCreate={account.can("studio") && modules.ENTERPRISE_TOOLS} />
         ) : (
           <span className="hidden text-sm text-muted-foreground md:inline">Všechny závody</span>
         )}

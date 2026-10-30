@@ -13,6 +13,7 @@ import { Cabinet3D } from "@/components/equipment/Cabinet3D";
 import { ChangeRequestCta } from "@/components/equipment/ChangeRequestCta";
 import { DocumentationTabs } from "@/components/equipment/DocumentationTabs";
 import { EquipmentPhotoCard } from "@/components/equipment/EquipmentPhotoCard";
+import { FieldQuickActions } from "@/components/equipment/FieldQuickActions";
 import { InteractiveSchematic } from "@/components/equipment/InteractiveSchematic";
 import { QrLabelCard } from "@/components/equipment/QrLabelCard";
 import { RevisionTimeline } from "@/components/equipment/RevisionTimeline";
@@ -39,6 +40,7 @@ import { checkLabel } from "@/lib/qr-label";
 import { hasPanelBook } from "@/lib/sheet-nav";
 import { buildLabelData } from "@/server/equipment-label";
 import { getEquipmentDetail, getLinkableEquipment, getPowerNodes, getSchematicReferences } from "@/server/queries/equipment";
+import { getModuleState } from "@/server/modules";
 import { getCurrentAccount } from "@/server/session";
 
 type Props = PageProps<"/equipment/[id]">;
@@ -53,7 +55,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function EquipmentPage({ params, searchParams }: Props) {
   const { id } = await params;
   const { rev, qr } = await searchParams;
-  const [equipment, account] = await Promise.all([getEquipmentDetail(id), getCurrentAccount()]);
+  const [equipment, account, modules] = await Promise.all([getEquipmentDetail(id), getCurrentAccount(), getModuleState()]);
   if (!equipment) notFound();
   const role = account.definition.workflowRole;
   // Mimo výřez účtu (např. konvice pro revizního technika VTZ) – jen informace, ne data.
@@ -85,9 +87,11 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
   // Naskenovaný štítek s jiným kódem = štítek byl mezitím přegenerován (fyzicky neplatný).
   const labelCheck = checkLabel(qr, equipment.qrToken);
   const canEditCard = account.can("submitChange") || account.can("recordInspection");
+  // Terénní pohled (směnový údržbář): rychlé akce nahoře, bez pasportu a lhůtníku.
+  const fieldView = !!account.definition.fieldView && !isLightCard(equipment.type);
   // Interaktivní reference ve výkresu vybrané revize (CAE / správce závodu je upravuje).
   const canEditReferences = account.can("caeOffice") || account.can("studio");
-  const [references, linkable] = selected && !isLightCard(equipment.type)
+  const [references, linkable] = selected && !isLightCard(equipment.type) && modules.CAE_ADVANCED
     ? await Promise.all([getSchematicReferences(selected.id, now), canEditReferences ? getLinkableEquipment(plantId) : Promise.resolve([])])
     : [[], []];
   const today = pragueToday(now);
@@ -123,7 +127,25 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
       now={now}
       canRecord={account.can("recordInspection")}
       canResolveDefects={account.can("resolveDefects")}
+      showReports={modules.INSPECTIONS_PRO}
     />
+  );
+
+  // Fotka a QR štítek: v terénním pohledu až pod dokumentací (údržbář jde primárně ke schématu).
+  const cardGrid = (
+    <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+      <EquipmentPhotoCard
+        equipmentId={equipment.id}
+        tag={equipment.tag}
+        name={equipment.name}
+        type={equipment.type}
+        photoUrl={equipment.photoUrl}
+        inspection={showInspections ? inspection : null}
+        documentStatus={light ? null : equipment.status}
+        canEdit={canEditCard}
+      />
+      <QrLabelCard label={label} printHref={`${basePath}/label`} canEdit={canEditCard} />
+    </div>
   );
 
   return (
@@ -196,14 +218,16 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
           }
           actions={
             <>
+              {fieldView ? null : (
               <Button asChild variant="outline" className="touch-target gap-2">
                 <a href="#qr-stitek">
                   <QrCode className="size-4" />
                   QR štítek
                 </a>
               </Button>
+              )}
               {!light && account.can("temporaryMods") ? <TemporaryModDialog equipmentId={equipment.id} tag={equipment.tag} version={active?.version ?? null} /> : null}
-              {light ? null : account.can("submitChange") ? (
+              {light || fieldView ? null : account.can("submitChange") ? (
                 <ChangeRequestCta href={`${basePath}/change-request`} openNumber={openChange?.number ?? null} />
               ) : openChange && role === "CAE_ENGINEER" ? (
                 <Button asChild size="lg" className="touch-target gap-2">
@@ -227,19 +251,11 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
           </Alert>
         ) : null}
 
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-          <EquipmentPhotoCard
-            equipmentId={equipment.id}
-            tag={equipment.tag}
-            name={equipment.name}
-            type={equipment.type}
-            photoUrl={equipment.photoUrl}
-            inspection={showInspections ? inspection : null}
-            documentStatus={light ? null : equipment.status}
-            canEdit={canEditCard}
-          />
-          <QrLabelCard label={label} printHref={`${basePath}/label`} canEdit={canEditCard} />
-        </div>
+        {fieldView ? (
+          <FieldQuickActions basePath={basePath} changeHref={`${basePath}/change-request`} openNumber={openChange?.number ?? null} canSubmit={account.can("submitChange")} />
+        ) : null}
+
+        {fieldView ? null : cardGrid}
 
         {openChange ? (
           <SafetyBanner
@@ -262,12 +278,15 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
             labels={{ inspections: `Revize & Měření (${rule.standard})` }}
           />
         ) : (
+          <div id="dokumentace" className="scroll-mt-24">
           <DocumentationTabs
+            labels={fieldView ? { passport: "LOTO – bezpečné odpojení" } : undefined}
             panels={{
               schema: (
                 <SchematicViewer
+                  advancedCompare={modules.CAE_ADVANCED}
                   interactive={
-                    selected && (references.length || canEditReferences)
+                    selected && modules.CAE_ADVANCED && (references.length || canEditReferences)
                       ? {
                           count: references.length,
                           node: (
@@ -312,18 +331,23 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
                   <TemporaryModArchive mods={equipment.temporaryMods} canOpenTicket={role === "CAE_ENGINEER"} />
                 </div>
               ),
-              passport: (
+              passport: fieldView ? (
+                <LotoCard equipment={equipment} nodes={powerNodes} />
+              ) : (
                 <div className="space-y-8">
                   <LotoCard equipment={equipment} nodes={powerNodes} />
                   <CompliancePassport equipment={equipment} />
                 </div>
               ),
-              // CAE projektant lhůtník revizí nevidí.
-              ...(showInspections ? { inspections: inspectionsPanel } : {}),
+              // CAE projektant lhůtník revizí nevidí, terénní pohled ho nemá jako záložku (stav je v hlavičce).
+              ...(showInspections && !fieldView ? { inspections: inspectionsPanel } : {}),
               ...(panelModel ? { diagnostics: <PanelDiagnostics model={panelModel} /> } : {}),
             }}
           />
+          </div>
         )}
+
+        {fieldView ? cardGrid : null}
       </div>
     </PageTransition>
   );

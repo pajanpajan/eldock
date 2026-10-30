@@ -50,6 +50,7 @@ export function SchematicViewer({
   basePath,
   book,
   interactive,
+  advancedCompare = true,
 }: {
   revisions: ViewerRevision[];
   selectedId: string;
@@ -57,6 +58,8 @@ export function SchematicViewer({
   book?: { sheets: BookSheet[] };
   /** Vrstva „Interaktivní prvky ve schématu“ (CAE reference) vybrané revize. */
   interactive?: { node: ReactNode; count: number };
+  /** Posuvník, barevný diff a prolínání (modul CAE Advanced); jinak jen vedle sebe. */
+  advancedCompare?: boolean;
 }) {
   const searchParams = useSearchParams();
   const [comparing, setComparing] = useState(false);
@@ -210,6 +213,7 @@ export function SchematicViewer({
             after={{ version: compare.revision.version, url: compare.revision.schematicUrl, format: compare.revision.schematicFormat }}
             markup={null}
             labels={["Předchozí", "Vybraná"]}
+            advanced={advancedCompare}
           />
         ) : sheet ? (
           <div className="relative overflow-hidden rounded-xl border border-border bg-white">

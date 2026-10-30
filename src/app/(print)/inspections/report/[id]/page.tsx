@@ -7,6 +7,7 @@ import { BRAND } from "@/lib/brand";
 import { EQUIPMENT_TYPE_LABELS, INSPECTION_TYPE_LABELS, formatDate } from "@/lib/format";
 import { PROTOCOL_TITLES, VERDICTS, protocolMeasurements, protocolScope, protocolVariant } from "@/lib/inspection-protocol";
 import { USAGE_GROUP_LABELS, type UsageGroup } from "@/lib/inspection-rules";
+import { getModuleState } from "@/server/modules";
 import { getInspectionProtocol } from "@/server/queries/inspections";
 import { getCurrentAccount } from "@/server/session";
 
@@ -23,8 +24,8 @@ const SEVERITY: Record<string, string> = { CRITICAL: "kritická", MAJOR: "záva�
 // Revizní protokol A4 k tisku / uložení do PDF – varianta VTZ nebo spotřebiče podle typu zařízení.
 export default async function InspectionReportPage({ params }: Props) {
   const { id } = await params;
-  const [record, account] = await Promise.all([getInspectionProtocol(id), getCurrentAccount()]);
-  if (!record || !account.can("inspections") || !account.canSee(record.equipment.type)) notFound();
+  const [record, account, modules] = await Promise.all([getInspectionProtocol(id), getCurrentAccount(), getModuleState()]);
+  if (!record || !modules.INSPECTIONS_PRO || !account.can("inspections") || !account.canSee(record.equipment.type)) notFound();
 
   const { equipment } = record;
   const { building } = equipment.floor;

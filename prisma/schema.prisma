@@ -648,3 +648,11 @@ model SchematicReference {
   @@index([revisionId, page])
   @@index([linkedEquipmentId])
 }
+
+/// Licenční moduly (add-ony nad Core) – globální konfigurace tenantu. Chybějící řádek = modul zapnutý.
+model TenantModule {
+  key         String   @id // "INSPECTIONS_PRO" | "CAE_ADVANCED" | "ENTERPRISE_TOOLS"
+  enabled     Boolean  @default(true)
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+}

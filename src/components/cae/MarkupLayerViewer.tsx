@@ -26,7 +26,7 @@ function ZoomControls() {
 }
 
 /** Schéma revize, nad kterou technik kreslil, s přepínatelnou vrstvou zákresu a zoomem. */
-export function MarkupLayerViewer({ src, markup, version }: { src: string; markup: MarkupData | null; version: string }) {
+export function MarkupLayerViewer({ src, markup, version, pdf = false }: { src: string; markup: MarkupData | null; version: string; pdf?: boolean }) {
   const [visible, setVisible] = useState(true);
   const strokes = markup?.strokes.length ?? 0;
   return (
@@ -54,6 +54,7 @@ export function MarkupLayerViewer({ src, markup, version }: { src: string; marku
               markup={visible ? markup : null}
               alt={`Schéma ${version}${visible && strokes ? " se zákresem technika" : ""}`}
               className="w-full rounded-none"
+              pdfPage={pdf ? (markup?.sheet ?? 1) : null}
             />
           </TransformComponent>
           <ZoomControls />
