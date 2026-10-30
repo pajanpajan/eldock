@@ -231,6 +231,7 @@ export async function seedDemoDocs(prisma: PrismaClient): Promise<number> {
   }
   created += await seedDemoAppliances(prisma);
   await seedDemoInspections(prisma);
+  await seedDemoReferences(prisma);
   await seedDemoPhotos(prisma);
   return created;
 }
@@ -416,4 +417,35 @@ async function seedDemoPhotos(prisma: PrismaClient) {
     await writeFile(path.join(dir, fileName), renderEquipmentPhotoSvg(kind, tag));
     await prisma.equipment.update({ where: { id }, data: { photoUrl: `/api/files/photos/seed/${fileName}` } });
   }
+}
+
+/**
+ * Interaktivní reference ve výkresu pohonu vrat (v1.1, `pohon-vrat-motor.pdf`). Pozice = levý okraj
+ * a účaří popisku ve skutečném PDF (vyčteno přes pdf.js), stránka 6 silové schéma, 7 ovládání, 17 PLC.
+ */
+const DEMO_REFERENCES: { page: number; designation: string; title: string; description: string; x: number; y: number; linkedTag: string | null }[] = [
+  { page: 6, designation: "-Q3", title: "Hlavní vypínač přívodu", description: "Napájení pohonu z rozváděče skladu R-SKL, vývod QF7.", x: 11.3, y: 55.8, linkedTag: "R-SKL" },
+  { page: 6, designation: "-Q1", title: "Stykač – vrata nahoru", description: "Reverzační kombinace s -Q2, vzájemně blokováno proti současnému sepnutí.", x: 12.8, y: 24.6, linkedTag: "PV-M1" },
+  { page: 6, designation: "-Q2", title: "Stykač – vrata dolů", description: "Reverzační kombinace s -Q1.", x: 22.3, y: 24.6, linkedTag: "PV-M1" },
+  { page: 6, designation: "-F2", title: "Jistič ovládání", description: "Jištění ovládacích obvodů a motorového vývodu.", x: 12.6, y: 41.0, linkedTag: null },
+  { page: 6, designation: "-X1", title: "Svorkovnice pohonu", description: "Připojení motoru a koncových spínačů.", x: 13.1, y: 64.2, linkedTag: null },
+  { page: 6, designation: "-M1", title: "Pohon sekčních vrat 3~ 400 V", description: "Asynchronní motor pohonu vrat rampy 2.", x: 16.3, y: 81.0, linkedTag: "PV-M1" },
+  { page: 7, designation: "-S1", title: "Tlačítko STOP", description: "Zastavení pohybu vrat (rozpínací kontakt v ovládání).", x: 12.1, y: 35.6, linkedTag: null },
+  { page: 7, designation: "-S2", title: "Tlačítko Vrata nahoru", description: "Ovládání stykače -Q1.", x: 41.2, y: 36.4, linkedTag: null },
+  { page: 7, designation: "-S3", title: "Tlačítko Vrata dolů", description: "Ovládání stykače -Q2.", x: 69.8, y: 36.4, linkedTag: null },
+  { page: 17, designation: "-UC2", title: "Řídicí jednotka vrat (PLC)", description: "Vstupy tlačítek a koncových spínačů, výstupy na stykače -Q1/-Q2.", x: 12.6, y: 32.8, linkedTag: "R-PLC-ML1" },
+];
+
+async function seedDemoReferences(prisma: PrismaClient) {
+  const revision = await prisma.documentRevision.findFirst({
+    where: { equipmentId: "eq-pv-m1", schematicUrl: `${DEMO_DOCS_DIR}/pohon-vrat-motor.pdf` },
+    select: { id: true, _count: { select: { references: true } } },
+  });
+  if (!revision || revision._count.references > 0) return;
+  const tags = [...new Set(DEMO_REFERENCES.flatMap((reference) => (reference.linkedTag ? [reference.linkedTag] : [])))];
+  const linked = await prisma.equipment.findMany({ where: { tag: { in: tags }, floor: { building: { plantId: "plant-jbc" } } }, select: { id: true, tag: true } });
+  const idByTag = new Map(linked.map((equipment) => [equipment.tag, equipment.id]));
+  await prisma.schematicReference.createMany({
+    data: DEMO_REFERENCES.map(({ linkedTag, ...reference }) => ({ ...reference, revisionId: revision.id, linkedEquipmentId: linkedTag ? (idByTag.get(linkedTag) ?? null) : null })),
+  });
 }

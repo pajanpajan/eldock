@@ -278,7 +278,14 @@ export async function uploadRevision(prisma: PrismaClient, actor: Actor, input: 
 
     const revisions = await tx.documentRevision.findMany({
       where: { equipmentId: changeRequest.equipmentId },
-      select: { major: true, minor: true, status: true, title: true, bomItems: { orderBy: { position: "asc" } } },
+      select: {
+        major: true,
+        minor: true,
+        status: true,
+        title: true,
+        bomItems: { orderBy: { position: "asc" } },
+        references: { select: { page: true, designation: true, title: true, description: true, x: true, y: true, linkedEquipmentId: true } },
+      },
     });
     const active = revisions.find((revision) => revision.status === "ACTIVE");
     const version = nextVersion(revisions, input.bump ?? "minor");
@@ -325,6 +332,8 @@ export async function uploadRevision(prisma: PrismaClient, actor: Actor, input: 
             note: clean(item.note),
           })),
         },
+        // Interaktivní reference ve výkresu se přebírají z platné revize (CAE je v nové verzi případně posune).
+        references: { create: active?.references ?? [] },
       },
     });
 

@@ -1,5 +1,6 @@
 import "server-only";
 
+import { DEADLINE_TYPES, summarizeInspections } from "@/lib/inspection";
 import type { PowerNode } from "@/lib/power-tree";
 import { prisma } from "@/lib/prisma";
 
@@ -145,3 +146,61 @@ export async function getApprovalData(equipmentId: string) {
 
 export type ApprovalData = NonNullable<Awaited<ReturnType<typeof getApprovalData>>>;
 export type CompareRevision = NonNullable<ApprovalData["active"]>;
+
+/**
+ * Interaktivní reference ve výkresu revize s kartou propojeného zařízení (stav dokumentace a revize,
+ * platná verze výkresu a poslední „červenky“) pro plovoucí detail prvku.
+ */
+export async function getSchematicReferences(revisionId: string, now: Date = new Date()) {
+  const references = await prisma.schematicReference.findMany({
+    where: { revisionId },
+    orderBy: [{ page: "asc" }, { designation: "asc" }],
+    select: {
+      id: true,
+      page: true,
+      designation: true,
+      title: true,
+      description: true,
+      x: true,
+      y: true,
+      linkedEquipment: {
+        select: {
+          id: true,
+          tag: true,
+          name: true,
+          type: true,
+          status: true,
+          revisions: { where: { status: "ACTIVE" }, select: { version: true, createdAt: true }, take: 1 },
+          changeRequests: { orderBy: { submittedAt: "desc" }, take: 3, select: { id: true, number: true, status: true, submittedAt: true, note: true } },
+          inspections: { where: { type: { in: [...DEADLINE_TYPES] } }, select: { type: true, inspectionDate: true, validUntil: true, result: true } },
+        },
+      },
+    },
+  });
+  return references.map(({ linkedEquipment, ...reference }) => ({
+    ...reference,
+    linked: linkedEquipment
+      ? {
+          id: linkedEquipment.id,
+          tag: linkedEquipment.tag,
+          name: linkedEquipment.name,
+          type: linkedEquipment.type,
+          status: linkedEquipment.status,
+          activeVersion: linkedEquipment.revisions[0]?.version ?? null,
+          changeRequests: linkedEquipment.changeRequests,
+          inspection: summarizeInspections(linkedEquipment.inspections, now),
+        }
+      : null,
+  }));
+}
+
+export type SchematicReferenceView = Awaited<ReturnType<typeof getSchematicReferences>>[number];
+
+/** Zařízení závodu, na která lze referenci ve výkresu propojit. */
+export function getLinkableEquipment(plantId: string) {
+  return prisma.equipment.findMany({
+    where: { floor: { building: { plantId } } },
+    orderBy: { tag: "asc" },
+    select: { id: true, tag: true, name: true },
+  });
+}

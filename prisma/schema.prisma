@@ -337,6 +337,7 @@ model Equipment {
   changeRequests      ChangeRequest[]
   complianceDocuments ComplianceDocument[]
   inspections         InspectionRecord[]
+  schematicReferences SchematicReference[]    @relation("SchematicReferenceTarget")
   defects             InspectionDefect[]
   temporaryMods       TemporaryModification[]
 
@@ -443,6 +444,7 @@ model DocumentRevision {
   changeRequest ChangeRequest? @relation("ResolvingRevisions", fields: [changeRequestId], references: [id], onDelete: SetNull)
 
   bomItems            BomItem[]
+  references          SchematicReference[]
   markedUpInRequests  ChangeRequest[]      @relation("BaseRevision")
   changeRequestEvents ChangeRequestEvent[]
 
@@ -623,4 +625,26 @@ model NotificationLog {
   createdAt   DateTime @default(now())
 
   @@index([kind, createdAt])
+}
+
+/// Interaktivní reference ve výkresu revize (CAE): značka prvku s pozicí na stránce a volitelnou
+/// vazbou na kartu zařízení. Souřadnice v procentech stránky (levý okraj a účaří popisku).
+model SchematicReference {
+  id                String   @id @default(cuid())
+  revisionId        String
+  page              Int      @default(1)
+  designation       String // "-Q1", "-M1"
+  title             String // "Hlavní vypínač přívodu"
+  description       String?
+  x                 Float
+  y                 Float
+  linkedEquipmentId String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  revision        DocumentRevision @relation(fields: [revisionId], references: [id], onDelete: Cascade)
+  linkedEquipment Equipment?       @relation("SchematicReferenceTarget", fields: [linkedEquipmentId], references: [id], onDelete: SetNull)
+
+  @@index([revisionId, page])
+  @@index([linkedEquipmentId])
 }

@@ -11,6 +11,7 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { LocationBreadcrumb } from "@/components/common/LocationBreadcrumb";
 import { PageHeader } from "@/components/common/PageHeader";
 import { StatusBadge } from "@/components/common/StatusBadge";
+import { RevisionCompare } from "@/components/revisions/RevisionCompare";
 import { SwitchRoleButton } from "@/components/common/SwitchRoleButton";
 import { PhotoGallery } from "@/components/equipment/PhotoGallery";
 import { slaLevel } from "@/lib/cae-tickets";
@@ -136,6 +137,17 @@ export default async function TicketDetailPage({ params }: Props) {
               )}
             </Section>
           </div>
+
+          {ticket.baseRevision && ticket.resolvingRevisions[0] ? (
+            <Section title="Porovnat revize (Visual Diff)">
+              <RevisionCompare
+                before={{ version: ticket.baseRevision.version, url: ticket.baseRevision.schematicUrl, format: ticket.baseRevision.schematicFormat }}
+                after={{ version: ticket.resolvingRevisions[0].version, url: ticket.resolvingRevisions[0].schematicUrl, format: ticket.resolvingRevisions[0].schematicFormat }}
+                markup={markup}
+                labels={["Základ", "Nahraná"]}
+              />
+            </Section>
+          ) : null}
 
           {ticket.resolvingRevisions.length ? (
             <Section title="Revize k tomuto ticketu">

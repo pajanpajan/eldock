@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, type MouseEvent } from "react";
+import { useState, type MouseEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { BookOpen, ChevronLeft, ChevronRight, Columns2, Download, FileImage, FileText, Maximize, Minus, Plus, X } from "lucide-react";
+import { BookOpen, ChevronLeft, ChevronRight, Columns2, Download, FileImage, FileText, Link2, Maximize, Minus, Plus, X } from "lucide-react";
 import { TransformComponent, TransformWrapper, useControls } from "react-zoom-pan-pinch";
 
 import { StatusBadge } from "@/components/common/StatusBadge";
@@ -49,14 +49,19 @@ export function SchematicViewer({
   selectedId,
   basePath,
   book,
+  interactive,
 }: {
   revisions: ViewerRevision[];
   selectedId: string;
   basePath: string;
   book?: { sheets: BookSheet[] };
+  /** Vrstva „Interaktivní prvky ve schématu“ (CAE reference) vybrané revize. */
+  interactive?: { node: ReactNode; count: number };
 }) {
   const searchParams = useSearchParams();
   const [comparing, setComparing] = useState(false);
+  const [layer, setLayer] = useState(() => searchParams.get("layer") === "refs");
+  const showLayer = layer && !!interactive;
   const revision = revisions.find((item) => item.id === selectedId) ?? revisions[0];
   if (!revision && !book) return <p className="text-muted-foreground">Zařízení zatím nemá žádnou revizi dokumentace.</p>;
 
@@ -110,21 +115,35 @@ export function SchematicViewer({
         <span className="text-sm text-muted-foreground" data-testid="sheet-indicator">
           {sheet ? `List ${sheet.number} / ${sheets.length} · ${sheet.pageRef}` : revision ? `Výkres revize · ${revision.sheetCount} ${plural(revision.sheetCount, ["list", "listy", "listů"])} · ${formatDate(revision.createdAt)}` : ""}
         </span>
-        {revision && !sheet && previous ? (
-          <Button variant={compare ? "secondary" : "outline"} className="touch-target ml-auto gap-2" aria-pressed={!!compare} onClick={() => setComparing((value) => !value)}>
+        {interactive ? (
+          <Button
+            variant={showLayer ? "default" : "outline"}
+            className="touch-target ml-auto gap-2"
+            aria-pressed={showLayer}
+            onClick={() => {
+              setLayer((value) => !value);
+              setComparing(false);
+            }}
+          >
+            <Link2 className="size-4" />
+            Interaktivní prvky ({interactive.count})
+          </Button>
+        ) : null}
+        {revision && !sheet && previous && !showLayer ? (
+          <Button variant={compare ? "secondary" : "outline"} className={cn("touch-target gap-2", !interactive && "ml-auto")} aria-pressed={!!compare} onClick={() => setComparing((value) => !value)}>
             {compare ? <X className="size-4" /> : <Columns2 className="size-4" />}
             {compare ? "Zavřít porovnání" : `Porovnat s ${previous.version}`}
           </Button>
         ) : null}
-        {revision && !sheet && revision.schematicFormat !== "PDF" ? (
-          <Button asChild variant="outline" className={cn("touch-target gap-2", !previous && "ml-auto")}>
+        {revision && !sheet && !showLayer && revision.schematicFormat !== "PDF" ? (
+          <Button asChild variant="outline" className={cn("touch-target gap-2", !previous && !interactive && "ml-auto")}>
             <a href={downloadHref(revision.schematicUrl)} download>
               <Download className="size-4" />
               Stáhnout
             </a>
           </Button>
         ) : null}
-        {sheet ? (
+        {sheet && !showLayer ? (
           <div className="ml-auto flex gap-1">
             <Button variant="outline" size="icon" className="touch-target" disabled={sheet.number <= 1} onClick={() => openSheet(sheet.number - 1)} aria-label="Předchozí list">
               <ChevronLeft className="size-5" />
@@ -136,6 +155,9 @@ export function SchematicViewer({
         ) : null}
       </div>
 
+      {showLayer ? (
+        interactive.node
+      ) : (
       <div className={cn(book ? "grid gap-3 lg:grid-cols-[17rem_minmax(0,1fr)]" : undefined)}>
         {book ? (
           <nav aria-label="Obsah dokumentace" className="rounded-xl border border-border bg-card p-2">
@@ -233,6 +255,7 @@ export function SchematicViewer({
           </div>
         ) : null}
       </div>
+      )}
     </div>
   );
 }

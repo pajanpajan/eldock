@@ -14,11 +14,11 @@ test("reálný projekt PCSCHEMATIC v PDF: náhled, stažení originálu a porovn
   await expect(viewer.getByRole("link", { name: "Stáhnout originál" })).toHaveAttribute("href", "/demo-docs/pohon-vrat-motor.pdf");
   await expect(viewer.getByRole("button", { name: "Celá obrazovka" })).toBeVisible();
 
+  // Porovnání vykresluje obě PDF přes pdf.js (fáze 22) – stará verze vlevo, nová vpravo.
   await page.getByRole("button", { name: "Porovnat s v1.0" }).click();
-  await expect(page.getByTestId("pdf-viewer")).toHaveCount(2);
-  await expect(page.getByText("Předchozí v1.0")).toBeVisible();
-  await expect(page.getByText("Vybraná v1.1")).toBeVisible();
-  await expect(page.getByTestId("pdf-viewer").first().locator("iframe")).toHaveAttribute("src", /pohon-vrat-v2\.pdf/);
+  await expect(page.getByTestId("pdf-viewer")).toHaveCount(0);
+  await expect(page.getByTestId("compare-side-before")).toContainText("Předchozí v1.0");
+  await expect(page.getByTestId("compare-side-after")).toContainText("Vybraná v1.1");
   await page.getByRole("button", { name: "Zavřít porovnání" }).click();
   await expect(page.getByTestId("pdf-viewer")).toHaveCount(1);
 

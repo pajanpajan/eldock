@@ -13,6 +13,7 @@ import { Cabinet3D } from "@/components/equipment/Cabinet3D";
 import { ChangeRequestCta } from "@/components/equipment/ChangeRequestCta";
 import { DocumentationTabs } from "@/components/equipment/DocumentationTabs";
 import { EquipmentPhotoCard } from "@/components/equipment/EquipmentPhotoCard";
+import { InteractiveSchematic } from "@/components/equipment/InteractiveSchematic";
 import { QrLabelCard } from "@/components/equipment/QrLabelCard";
 import { RevisionTimeline } from "@/components/equipment/RevisionTimeline";
 import { SafetyBanner } from "@/components/equipment/SafetyBanner";
@@ -37,7 +38,7 @@ import { buildingHref, caeTicketHref, equipmentHref, floorHref, plantHref } from
 import { checkLabel } from "@/lib/qr-label";
 import { hasPanelBook } from "@/lib/sheet-nav";
 import { buildLabelData } from "@/server/equipment-label";
-import { getEquipmentDetail, getPowerNodes } from "@/server/queries/equipment";
+import { getEquipmentDetail, getLinkableEquipment, getPowerNodes, getSchematicReferences } from "@/server/queries/equipment";
 import { getCurrentAccount } from "@/server/session";
 
 type Props = PageProps<"/equipment/[id]">;
@@ -84,6 +85,11 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
   // Naskenovaný štítek s jiným kódem = štítek byl mezitím přegenerován (fyzicky neplatný).
   const labelCheck = checkLabel(qr, equipment.qrToken);
   const canEditCard = account.can("submitChange") || account.can("recordInspection");
+  // Interaktivní reference ve výkresu vybrané revize (CAE / správce závodu je upravuje).
+  const canEditReferences = account.can("caeOffice") || account.can("studio");
+  const [references, linkable] = selected && !isLightCard(equipment.type)
+    ? await Promise.all([getSchematicReferences(selected.id, now), canEditReferences ? getLinkableEquipment(plantId) : Promise.resolve([])])
+    : [[], []];
   const today = pragueToday(now);
   // Spotřebiče, nářadí a bezpečnostní zařízení: lehká karta jen s revizemi a měřením.
   const light = isLightCard(equipment.type);
@@ -260,6 +266,22 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
             panels={{
               schema: (
                 <SchematicViewer
+                  interactive={
+                    selected && (references.length || canEditReferences)
+                      ? {
+                          count: references.length,
+                          node: (
+                            <InteractiveSchematic
+                              key={selected.id}
+                              revision={{ id: selected.id, version: selected.version, url: selected.schematicUrl, format: selected.schematicFormat, sheetCount: selected.sheetCount }}
+                              references={references}
+                              linkable={linkable}
+                              canEdit={canEditReferences}
+                            />
+                          ),
+                        }
+                      : undefined
+                  }
                   book={book}
                   basePath={basePath}
                   selectedId={selected?.id ?? ""}
