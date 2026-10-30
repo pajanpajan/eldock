@@ -1,5 +1,8 @@
 // Odkazy na úrovně mapy a detail zařízení – jediné místo, kde se skládají URL.
 
+/** Rozcestník přihlášené aplikace (na `/` je veřejná úvodní stránka). */
+export const APP_HOME = "/app";
+
 export const plantHref = (plantId: string) => `/plant/${plantId}`;
 
 export const buildingHref = (plantId: string, buildingId: string) => `${plantHref(plantId)}/building/${buildingId}`;

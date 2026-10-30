@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import { AUTH_COOKIE, AUTH_TTL_SECONDS, brandEnv, checkAccessPassword, safeNextPath, signAuthToken } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { APP_HOME } from "@/lib/routes";
 
 import { setAccount } from "./session";
 
@@ -47,7 +48,7 @@ export async function login(_state: LoginState, formData: FormData): Promise<Log
     httpOnly: true,
     secure: process.env.NODE_ENV === "production" && brandEnv("INSECURE_COOKIE") !== "1",
   });
-  await setAccount(user.id, "/", safeNextPath(input.next));
+  await setAccount(user.id, APP_HOME, safeNextPath(input.next) ?? APP_HOME);
   return {};
 }
 

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { CalendarCheck, CalendarRange, FileCheck2, Inbox, PencilRuler, ScanLine, UsersRound, type LucideIcon } from "lucide-react";
 
 import type { Permission } from "@/lib/accounts";
-import { auditReportHref, inspectionsHref, plannerHref, rapidInspectionHref } from "@/lib/routes";
+import { APP_HOME, auditReportHref, inspectionsHref, plannerHref, rapidInspectionHref } from "@/lib/routes";
 import { getAccountUsers } from "@/server/queries/accounts";
 import { getPlants } from "@/server/queries/plant";
 import { getAuthSession, getCurrentAccount, getRememberedPlantId } from "@/server/session";
@@ -29,7 +29,9 @@ export async function AppHeader() {
     return (
       <header className="border-b border-border bg-background/90">
         <div className="mx-auto flex min-h-14 w-full max-w-[1800px] items-center px-3 py-2 sm:px-6">
-          <Logo withTagline />
+          <Link href="/" className="rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50" aria-label="Eldock – úvodní stránka">
+            <Logo withTagline />
+          </Link>
         </div>
       </header>
     );
@@ -40,7 +42,7 @@ export async function AppHeader() {
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur">
       <div className="mx-auto flex min-h-14 w-full max-w-[1800px] flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 sm:px-6">
-        <Link href="/" className="touch-target flex items-center rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50" aria-label="Eldock – úvodní stránka">
+        <Link href={APP_HOME} className="touch-target flex items-center rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50" aria-label="Eldock – rozcestník aplikace">
           <Logo withTagline />
         </Link>
 

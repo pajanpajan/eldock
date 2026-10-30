@@ -10,7 +10,7 @@ export default function manifest(): MetadataRoute.Manifest {
     short_name: BRAND.name,
     description: `${BRAND.description}; schvalování změn As-Built mezi údržbou a CAE.`,
     lang: "cs",
-    start_url: "/",
+    start_url: "/app",
     scope: "/",
     display: "standalone",
     orientation: "any",

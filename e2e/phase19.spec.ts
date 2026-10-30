@@ -59,7 +59,7 @@ test("Studio: úplně nový závod od nuly – čistá mapa, uložení v jedné 
   await expect(pin(page, "R-A-01")).toBeVisible();
 
   // Aplikace si nový závod zapamatovala (cookie digitry-plant)
-  await page.goto("/");
+  await page.goto("/app");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Závod Mladá Boleslav – Lakovna");
   await expect(page.getByText("Hala A - Lakovna").first()).toBeVisible();
 });

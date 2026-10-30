@@ -1,15 +1,18 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { AUTH_COOKIE, isAuthBypassed, verifyAuthToken } from "@/lib/auth";
+import { APP_HOME } from "@/lib/routes";
 
 /**
- * Přihlašovací brána: bez platné cookie `digitry-auth` vede každá stránka na `/login`
+ * Přihlašovací brána: veřejná je jen úvodní stránka `/` a `/login`. Bez platné cookie `digitry-auth` vede každá jiná stránka na `/login`
  * (s návratem `?next=`), API odpoví 401. Statické soubory, ikony a manifest PWA vyřazuje matcher.
  */
+const PUBLIC_PATHS = new Set(["/", "/login"]);
+
 export async function proxy(request: NextRequest) {
   if (isAuthBypassed()) return NextResponse.next();
   const { pathname, search } = request.nextUrl;
-  if (pathname === "/login") return NextResponse.next();
+  if (PUBLIC_PATHS.has(pathname)) return NextResponse.next();
 
   const session = await verifyAuthToken(request.cookies.get(AUTH_COOKIE)?.value);
   if (session) return NextResponse.next();
@@ -19,7 +22,7 @@ export async function proxy(request: NextRequest) {
   }
   const url = request.nextUrl.clone();
   url.pathname = "/login";
-  url.search = pathname === "/" ? "" : `?next=${encodeURIComponent(pathname + search)}`;
+  url.search = pathname === APP_HOME ? "" : `?next=${encodeURIComponent(pathname + search)}`;
   return NextResponse.redirect(url);
 }
 

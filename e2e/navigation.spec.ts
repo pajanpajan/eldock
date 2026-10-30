@@ -5,7 +5,7 @@ import { pin, startAs } from "./helpers";
 // 3úrovňová navigace: areál → izometrie budovy → půdorys patra → detail zařízení.
 test("areál → budova → patro → detail zařízení", async ({ page }) => {
   await startAs(page, "MAINTENANCE");
-  await page.goto("/");
+  await page.goto("/app");
   await expect(page).toHaveURL(/\/plant\/plant-jbc$/);
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Závod Jablonec");
 
