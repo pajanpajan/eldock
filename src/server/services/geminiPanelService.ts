@@ -68,6 +68,10 @@ ale u každého modulu výrobce ověř podle loga a typového kódu (rozváděč
   return `Jsi zkušený elektrotechnik. Na fotce je otevřený rozváděč s modulovými přístroji na DIN lištách.
 Najdi všechny DIN lišty (shora dolů, číslováno od 1) a na každé všechny přístroje zleva doprava.
 ${brand}
+Vícepólové přístroje NEROZDĚLUJ na jednotlivé moduly: sleduj ovládací páčky spojené propojovací hrazdičkou
+(společná páčka přes 2, 3 nebo 4 moduly), jedno společné tlačítko TEST a jeden typový štítek přes celou šířku –
+takový přístroj vrať jako JEDEN prvek s poles 2P / 3P / 3P+N / 4P a modules 2 / 3 / 4 a s jedním box_2d přes celou šířku.
+Třífázový jistič (3 páčky spojené hrazdičkou) = 1 prvek 3P, 3M; čtyřpólový chránič = 1 prvek 4P, 4M.
 Pro každý přístroj vrať: rail, position (od 1 zleva), box_2d [ymin, xmin, ymax, xmax] v rozsahu 0–1000,
 text (vše čitelné z čela: výrobce, typ, objednací číslo), category, poles (1P, 1P+N, 2P, 3P, 3P+N, 4P),
 ratedCurrentA, trippingCurve (B/C/D), modules (šířka v modulech 18 mm), manufacturer (výrobce tohoto modulu),

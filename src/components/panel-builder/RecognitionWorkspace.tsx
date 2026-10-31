@@ -7,19 +7,20 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import type { ComponentCategory, RecognitionStatus } from "@/generated/prisma/enums";
+import type { ItemConfig } from "@/lib/panel-builder/configurator";
 import type { BoundingBox } from "@/lib/panel-builder/layout";
 import { RECOGNITION } from "@/lib/panel-builder/project";
 import { cn } from "@/lib/utils";
 import { analyzePanelProjectAction } from "@/server/actions/panel-builder";
-import type { PickerComponent } from "@/server/queries/panel-builder";
 
 import { DinRails } from "./DinRails";
-import { SmartFallbackPicker } from "./SmartFallbackPicker";
+import { ItemConfigurator } from "./ItemConfigurator";
 
 export interface WorkspaceItem {
   id: string;
   designation: string;
   circuitLabel: string;
+  customTypeCode: string | null;
   dinRailIndex: number;
   positionOnRail: number;
   modulesWidth: number;
@@ -28,7 +29,8 @@ export interface WorkspaceItem {
   confidence: number;
   rawOcrText: string | null;
   detected: { category?: ComponentCategory | null; poles?: string | null; ratedCurrentA?: number | null; trippingCurve?: string | null; manufacturer?: string | null } | null;
-  component: Pick<PickerComponent, "id" | "manufacturer" | "typeCode" | "category" | "powerLossWatts"> | null;
+  config: ItemConfig | null;
+  component: { id: string; manufacturer: string; typeCode: string; articleNumber: string; category: ComponentCategory; powerLossWatts: number; estimated: boolean } | null;
 }
 
 const TONE: Record<RecognitionStatus, string> = {
@@ -37,14 +39,15 @@ const TONE: Record<RecognitionStatus, string> = {
   UNRECOGNIZED: "border-red-500/80 bg-red-500/20 text-red-100",
 };
 
-/** Krok 1: fotka s rámečky rozpoznání, DIN lišty v měřítku a Smart Fallback Picker. */
+const SELECTED = "#fbbf24";
+
+/** Krok 1: fotka s rámečky rozpoznání, DIN lišty v měřítku a živý konfigurátor vybraného modulu. */
 export function RecognitionWorkspace({
   projectId,
   photoUrl,
   items,
   rails,
   modulesPerRail,
-  catalog,
   dominant,
 }: {
   projectId: string;
@@ -52,22 +55,23 @@ export function RecognitionWorkspace({
   items: WorkspaceItem[];
   rails: number;
   modulesPerRail: number;
-  catalog: PickerComponent[];
   dominant: string;
 }) {
   const router = useRouter();
   const unresolved = items.filter((item) => item.recognitionStatus !== "VERIFIED");
   const [selectedId, setSelectedId] = useState<string | null>(unresolved[0]?.id ?? null);
   const [analyzing, startAnalyze] = useTransition();
+  // Po sloučení zmizí sousední prvky – vybraný (sloučený) zůstává, smazaný výběr spadne na první prvek.
   const selected = items.find((item) => item.id === selectedId) ?? null;
+  const rightNeighbors = selected ? items.filter((item) => item.dinRailIndex === selected.dinRailIndex && item.positionOnRail > selected.positionOnRail).length : 0;
 
-  function nextUnresolved(afterId: string | null) {
-    const order = items.filter((item) => item.recognitionStatus !== "VERIFIED" && item.id !== afterId);
+  function nextUnresolved() {
+    const order = items.filter((item) => item.recognitionStatus !== "VERIFIED" && item.id !== selectedId);
     setSelectedId(order[0]?.id ?? null);
   }
 
   function reanalyze() {
-    if (!window.confirm("Znovu analyzovat fotku? Rozpoznané prvky a ruční přiřazení se nahradí.")) return;
+    if (!window.confirm("Znovu analyzovat fotku? Rozpoznané prvky a ruční nastavení se nahradí.")) return;
     startAnalyze(async () => {
       const result = await analyzePanelProjectAction(projectId);
       if (!result.ok) return void toast.error(result.error);
@@ -99,15 +103,35 @@ export function RecognitionWorkspace({
             {/* eslint-disable-next-line @next/next/no-img-element -- fotka z /api/files (SVG i JPG), rámečky v % */}
             <img src={photoUrl} alt="Fotka rozváděče" className="block h-auto w-full" />
             <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-0 size-full">
-              {items.map((item) => {
+              {/* Vybraný rámeček se kreslí naposledy, ať je nahoře */}
+              {[...items].sort((a, b) => Number(a.id === selectedId) - Number(b.id === selectedId)).map((item) => {
                 if (!item.box) return null;
                 const [ymin, xmin, ymax, xmax] = item.box;
                 const style = RECOGNITION[item.recognitionStatus];
                 const active = item.id === selectedId;
                 return (
-                  <g key={item.id} role="button" tabIndex={0} aria-label={`${item.designation} – ${style.label}`} className="cursor-pointer outline-none" onClick={() => setSelectedId(item.id)} onKeyDown={(event) => (event.key === "Enter" || event.key === " ") && setSelectedId(item.id)}>
-                    <rect x={xmin} y={ymin} width={xmax - xmin} height={ymax - ymin} fill={style.fill} stroke={style.stroke} strokeWidth={active ? 0.9 : 0.45} vectorEffect="non-scaling-stroke" style={{ strokeWidth: active ? 4 : 2 }} />
-                    {item.recognitionStatus === "UNRECOGNIZED" ? (
+                  <g
+                    key={item.id}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`${item.designation} – ${style.label}`}
+                    aria-pressed={active}
+                    className="cursor-pointer outline-none"
+                    opacity={selected && !active ? 0.3 : 1}
+                    onClick={() => setSelectedId(item.id)}
+                    onKeyDown={(event) => (event.key === "Enter" || event.key === " ") && setSelectedId(item.id)}
+                  >
+                    <rect
+                      x={xmin}
+                      y={ymin}
+                      width={xmax - xmin}
+                      height={ymax - ymin}
+                      fill={active ? "rgba(251,191,36,0.22)" : style.fill}
+                      stroke={active ? SELECTED : style.stroke}
+                      vectorEffect="non-scaling-stroke"
+                      style={{ strokeWidth: active ? 3 : 2, filter: active ? "drop-shadow(0 0 4px rgba(251,191,36,0.9))" : undefined }}
+                    />
+                    {item.recognitionStatus === "UNRECOGNIZED" && !active ? (
                       <text x={(xmin + xmax) / 2} y={(ymin + ymax) / 2} fontSize={4} fontWeight={800} fill="#fff" textAnchor="middle" dominantBaseline="middle" style={{ paintOrder: "stroke", stroke: "#ef4444", strokeWidth: 0.8 }}>
                         ?
                       </text>
@@ -116,42 +140,51 @@ export function RecognitionWorkspace({
                 );
               })}
             </svg>
+            {/* Jmenovka vybraného modulu v HTML (ostrý text nezávislý na deformaci SVG) */}
+            {selected?.box ? (
+              <span
+                className="pointer-events-none absolute -translate-y-full rounded-sm bg-amber-400 px-1.5 py-0.5 font-mono text-[11px] font-extrabold whitespace-nowrap text-neutral-950 shadow-[0_0_12px_rgba(251,191,36,0.8)]"
+                style={{ left: `${selected.box[1]}%`, top: `calc(${selected.box[0]}% - 2px)` }}
+                data-testid="photo-selected-label"
+              >
+                {selected.designation} · {selected.modulesWidth}M
+              </span>
+            ) : null}
           </div>
         ) : (
-          <p className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">Projekt nemá fotku – prvky lze doplnit ručně v pickeru.</p>
+          <p className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">Projekt nemá fotku – prvky lze nastavit ručně v konfigurátoru.</p>
         )}
 
         <DinRails
-          items={items.map((item) => ({ ...item, caption: item.component?.typeCode ?? (item.recognitionStatus === "UNRECOGNIZED" ? "?" : (item.rawOcrText ?? "")) }))}
+          items={items.map((item) => ({ ...item, caption: item.customTypeCode || item.component?.typeCode || (item.recognitionStatus === "UNRECOGNIZED" ? "?" : (item.rawOcrText ?? "")) }))}
           rails={rails}
           modulesPerRail={modulesPerRail}
           selectedIds={new Set(selectedId ? [selectedId] : [])}
+          selectedVariant="edit"
           onSelect={(item) => setSelectedId(item.id)}
           tone={(item) => TONE[item.recognitionStatus]}
         />
       </section>
 
-      <section aria-label="Bleskový identifikátor nerozpoznaných prvků" className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 sm:p-5">
+      <section aria-label="Konfigurátor prvku" className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 sm:p-5">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className="font-semibold">Bleskový identifikátor nerozpoznaných prvků</h2>
-          <span className="text-xs text-muted-foreground">Smart Fallback Picker na 3 kliky</span>
+          <h2 className="font-semibold">Konfigurátor prvku</h2>
+          <span className="text-xs text-muted-foreground">Každý klik se hned uloží a modul zezelená</span>
         </div>
         {selected ? (
-          <SmartFallbackPicker
-            key={selected.id}
-            item={selected}
-            catalog={catalog}
-            dominant={dominant}
-            onAssigned={() => {
-              nextUnresolved(selected.id);
-              router.refresh();
-            }}
-          />
+          <>
+            <ItemConfigurator key={`${selected.id}:${selected.modulesWidth}:${selected.component?.id ?? "-"}`} item={selected} dominant={dominant} rightNeighbors={rightNeighbors} onChanged={() => router.refresh()} />
+            {unresolved.some((item) => item.id !== selected.id) ? (
+              <Button variant="outline" className="touch-target gap-2 self-start" onClick={nextUnresolved}>
+                Další nedořešený prvek <ArrowRight className="size-4" aria-hidden />
+              </Button>
+            ) : null}
+          </>
         ) : (
           <div className="flex flex-col items-start gap-3 py-6 text-sm" data-testid="picker-done">
             <p>{unresolved.length ? "Vyberte prvek na fotce nebo na DIN liště." : "Všechny přístroje jsou ověřené a spárované s katalogem."}</p>
             {unresolved.length ? (
-              <Button variant="outline" className="touch-target gap-2" onClick={() => nextUnresolved(null)}>
+              <Button variant="outline" className="touch-target gap-2" onClick={nextUnresolved}>
                 Další nerozpoznaný <ArrowRight className="size-4" aria-hidden />
               </Button>
             ) : null}

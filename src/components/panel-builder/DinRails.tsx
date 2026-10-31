@@ -23,6 +23,7 @@ export function DinRails<T extends RailItem>({
   rails,
   modulesPerRail,
   selectedIds,
+  selectedVariant = "pick",
   onSelect,
   tone,
   badge,
@@ -31,6 +32,8 @@ export function DinRails<T extends RailItem>({
   rails: number;
   modulesPerRail: number;
   selectedIds?: ReadonlySet<string>;
+  /** „edit“ = jediný upravovaný modul (jantarově se štítkem), „pick“ = vícenásobný výběr. */
+  selectedVariant?: "edit" | "pick";
   onSelect?: (item: T) => void;
   tone: (item: T) => string;
   badge?: (item: T) => ReactNode;
@@ -43,7 +46,7 @@ export function DinRails<T extends RailItem>({
         const used = railItems.reduce((sum, item) => sum + item.modulesWidth, 0);
         const capacity = Math.max(modulesPerRail, used);
         return (
-          <div key={rail} className="flex items-stretch gap-2">
+          <div key={rail} className={cn("flex items-stretch gap-2", selectedVariant === "edit" && "mt-5")}>
             <span className="flex w-14 shrink-0 flex-col justify-center font-mono text-[11px] text-muted-foreground">
               Lišta {rail}
               <span className={cn(used > modulesPerRail && "text-red-400")}>
@@ -51,7 +54,7 @@ export function DinRails<T extends RailItem>({
               </span>
             </span>
             <div
-              className="relative flex h-16 flex-1 overflow-hidden rounded-md border border-border bg-muted/30"
+              className={cn("relative flex h-16 flex-1 rounded-md border border-border bg-muted/30", selectedVariant === "pick" && "overflow-hidden")}
               // mřížka pozic po 1 modulu
               style={{ backgroundImage: `repeating-linear-gradient(90deg, transparent 0, transparent calc(${100 / capacity}% - 1px), rgba(161,161,170,0.18) calc(${100 / capacity}% - 1px), rgba(161,161,170,0.18) ${100 / capacity}%)` }}
             >
@@ -68,14 +71,21 @@ export function DinRails<T extends RailItem>({
                     aria-label={`${item.designation} ${item.caption}`}
                     className={cn(
                       "relative z-10 m-0.5 flex min-w-0 flex-col items-center justify-center gap-0.5 rounded border-2 px-0.5 text-center transition-transform outline-none focus-visible:ring-3 focus-visible:ring-ring/50 enabled:hover:-translate-y-0.5",
-                      tone(item),
-                      selected && "ring-3 ring-primary",
+                      selected && selectedVariant === "edit"
+                        ? "z-20 scale-105 border-amber-300 bg-amber-400 font-extrabold text-neutral-950 shadow-[0_0_25px_rgba(251,191,36,0.8)] ring-4 ring-white/90"
+                        : tone(item),
+                      selected && selectedVariant === "pick" && "ring-3 ring-primary",
                     )}
                     style={{ width: `calc(${(item.modulesWidth / capacity) * 100}% - 4px)` }}
                   >
                     <span className="max-w-full truncate font-mono text-[11px] font-semibold">{item.designation}</span>
                     <span className="max-w-full truncate text-[9px] opacity-80">{item.caption}</span>
                     {badge ? <span className="absolute -top-1 -right-1">{badge(item)}</span> : null}
+                    {selected && selectedVariant === "edit" ? (
+                      <span className="pointer-events-none absolute -top-6 left-1/2 -translate-x-1/2 rounded bg-amber-400 px-1.5 py-0.5 text-[10px] font-extrabold whitespace-nowrap text-neutral-950 shadow" data-testid="rail-editing">
+                        ▼ UPRAVUJETE
+                      </span>
+                    ) : null}
                   </button>
                 );
               })}

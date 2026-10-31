@@ -40,7 +40,7 @@ export default async function PanelDocumentationPage({ params }: PageProps<"/pan
   const drawingItems: DrawingItem[] = project.items.map((item) => ({
     id: item.id,
     designation: item.designation,
-    typeCode: item.catalogComponent?.typeCode ?? "?",
+    typeCode: item.customTypeCode ?? item.catalogComponent?.typeCode ?? "?",
     manufacturer: item.catalogComponent?.manufacturer ?? null,
     category: item.catalogComponent?.category ?? null,
     poles: item.catalogComponent?.poles ?? null,

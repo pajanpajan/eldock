@@ -53,9 +53,12 @@ export const MANUFACTURER_OPTIONS = [
   { value: "Schneider", label: "Schneider Electric" },
   { value: "Hager", label: "Hager" },
   { value: "Noark", label: "Noark" },
+  { value: "Bonega", label: "Bonega" },
   { value: "Schrack", label: "Schrack" },
   { value: "Saltek", label: "Saltek" },
   { value: "Finder", label: "Finder" },
+  { value: "Elko EP", label: "Elko EP" },
+  { value: "Mean Well", label: "Mean Well" },
 ] as const;
 
 /** Rychlé záložky výrobce v Smart Fallback Pickeru (null = všichni). */
@@ -66,8 +69,13 @@ export const PICKER_MANUFACTURERS = [
   { value: "OEZ", label: "OEZ" },
   { value: "Schneider", label: "SCHNEIDER" },
   { value: "Hager", label: "HAGER" },
+  { value: "Noark", label: "NOARK" },
+  { value: "Bonega", label: "BONEGA" },
+  { value: "Schrack", label: "SCHRACK" },
   { value: "Saltek", label: "SALTEK" },
   { value: "Finder", label: "FINDER" },
+  { value: "Elko EP", label: "ELKO EP" },
+  { value: "Mean Well", label: "MEAN WELL" },
 ] as const;
 
 const MANUFACTURER_ALIASES: [RegExp, string][] = [
@@ -80,6 +88,12 @@ const MANUFACTURER_ALIASES: [RegExp, string][] = [
   [/^schrack\b/, "Schrack"],
   [/^saltek\b/, "Saltek"],
   [/^finder\b/, "Finder"],
+  [/^bonega\b/, "Bonega"],
+  [/^elko\b/, "Elko EP"],
+  [/^mean ?well\b/, "Mean Well"],
+  [/^(pollock|hlak)\b/, "Pollock"],
+  [/^orno\b/, "Orno"],
+  [/^hakel\b/, "Hakel"],
   [/^siemens\b/, "Siemens"],
   [/^legrand\b/, "Legrand"],
 ];

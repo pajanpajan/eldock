@@ -11,8 +11,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { PrismaClient } from "../src/generated/prisma/client";
-import type { ComponentCategory } from "../src/generated/prisma/enums";
 import { renderPanelPhotoSvg } from "../src/lib/mock-graphics/panel-photo";
+import { GENERATED_CATALOG, type SeedComponent } from "./seed-catalog-generated";
 import { buildSearchText, iecSymbolFor } from "../src/lib/panel-builder/catalog";
 import { demoDetections } from "../src/lib/panel-builder/matching";
 import { REFERENCE_DEVICES, REFERENCE_DIMS, withPositions } from "../src/lib/panel-builder/reference";
@@ -20,23 +20,6 @@ import { applyDetections } from "../src/server/services/panel-builder";
 
 const UPLOADS = fileURLToPath(new URL("../storage/uploads", import.meta.url));
 
-interface SeedComponent {
-  manufacturer: string;
-  series: string;
-  typeCode: string;
-  articleNumber: string;
-  category: ComponentCategory;
-  poles: string;
-  ratedCurrentA: number;
-  trippingCurve?: string;
-  breakingCapacityKa?: number;
-  rcdSensitivityMa?: number;
-  rcdType?: string;
-  modulesCount: number;
-  powerLossWatts: number;
-  description: string;
-  dims?: [number, number, number];
-}
 
 const S200 = "System pro M compact S200";
 const mcb = (manufacturer: string, series: string, typeCode: string, articleNumber: string, poles: string, curve: string, current: number, ka: number, loss: number): SeedComponent => ({
@@ -54,7 +37,7 @@ const mcb = (manufacturer: string, series: string, typeCode: string, articleNumb
   description: `Jistič ${poles}, ${current} A, char. ${curve}, ${ka} kA`,
 });
 
-export const CATALOG: SeedComponent[] = [
+const EXPLICIT: SeedComponent[] = [
   // --- ABB – referenční rozváděč PB-001 ---
   { manufacturer: "ABB", series: "SD200", typeCode: "SD203/40", articleNumber: "2CDD283101R0040", category: "MAIN_SWITCH", poles: "3P", ratedCurrentA: 40, modulesCount: 3, powerLossWatts: 6.81, description: "Vypínač 3P, 40 A" },
   {
@@ -229,6 +212,21 @@ export const CATALOG: SeedComponent[] = [
   { manufacturer: "Finder", series: "40.52", typeCode: "40.52.8.230.0000", articleNumber: "405282300000", category: "RELAY", poles: "2P", ratedCurrentA: 8, modulesCount: 1, powerLossWatts: 0.6, description: "Relé 2 přepínací kontakty 8 A, cívka 230 V AC" },
 ];
 
+/**
+ * Celý seed katalog: ručně zapsané prvky (referenční rozváděč a dřívější ukázky) + generovaný
+ * průmyslový katalog. Duplicity (stejný výrobce a typ nebo stejné objednací číslo) vyhrává ruční zápis.
+ */
+export const CATALOG: SeedComponent[] = (() => {
+  const seen = new Set<string>();
+  const key = (component: SeedComponent) => `${component.manufacturer.toLowerCase()}|${component.typeCode.toLowerCase().replace(/s+/g, "")}`;
+  return [...EXPLICIT, ...GENERATED_CATALOG].filter((component) => {
+    const keys = [key(component), `article|${component.articleNumber}`];
+    if (keys.some((k) => seen.has(k))) return false;
+    keys.forEach((k) => seen.add(k));
+    return true;
+  });
+})();
+
 // ---------------------------------------------------------------------------
 //  Vzorový projekt PB-001 (referenční domovní / podružný rozváděč)
 // ---------------------------------------------------------------------------
@@ -258,6 +256,12 @@ export async function seedCatalog(prisma: PrismaClient) {
       breakingCapacityKa: component.breakingCapacityKa ?? (component.category === "RCD" ? 10 : null),
       rcdSensitivityMa: component.rcdSensitivityMa ?? null,
       rcdType: component.rcdType ?? null,
+      spdType: component.spdType ?? (component.category === "SPD" ? "T2" : null),
+      surgeCurrentKa: component.surgeCurrentKa ?? null,
+      contactConfig: component.contactConfig ?? null,
+      coilVoltage: component.coilVoltage ?? (component.category === "CONTACTOR" ? "230V AC" : null),
+      relaySubtype: component.relaySubtype ?? null,
+      moduleSubtype: component.moduleSubtype ?? null,
       modulesCount: component.modulesCount,
       widthMm,
       heightMm,

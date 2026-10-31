@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { PrismaClient } from "@/generated/prisma/client";
+import { defaultConfig } from "@/lib/panel-builder/configurator";
 import { proposeTree, treeNodeFrom, type TreeNode } from "@/lib/panel-builder/tree";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 
 import { CATALOG, seedPanelBuilder } from "../../../prisma/seed-panel-builder";
 import { analyzePanelPhoto, lookupComponent } from "./geminiPanelService";
-import { analyzeProject, assignCatalogComponent, createPanelProject, importDatasheet, lookupComponentForItem, releaseDocumentation, saveTree } from "./panel-builder";
+import { analyzeProject, assignCatalogComponent, createPanelProject, importDatasheet, lookupComponentForItem, configureItem, mergeItems, releaseDocumentation, saveTree, splitItem, updateItemText } from "./panel-builder";
 import { createTestDb, seedMinimal } from "./test-db";
 
 let db: Awaited<ReturnType<typeof createTestDb>>;
@@ -115,9 +116,9 @@ describe("AI Panel Builder – projekt a analýza fotky", () => {
 
     const hints = { category: "MCB" as const, poles: "1P", current: 10, curve: "B", manufacturer: "ABB" };
     expect(await lookupComponentForItem(prisma, { itemId: f6.id, text: "S201-B10", hints }, lookupComponent)).toMatchObject({ mode: "CATALOG", component: { id: s201b10.id, status: "existing" } });
-    const created = await lookupComponentForItem(prisma, { itemId: f6.id, text: "S201 C13", hints }, lookupComponent);
-    expect(created).toMatchObject({ mode: "DEMO", component: { typeCode: "S201-C13", articleNumber: "2CDS251001R0134", status: "created" } });
-    expect(await prisma.catalogComponent.findUniqueOrThrow({ where: { articleNumber: "2CDS251001R0134" } })).toMatchObject({ dataSource: "IEC_ESTIMATE" });
+    const created = await lookupComponentForItem(prisma, { itemId: f6.id, text: "S203 D25", hints }, lookupComponent);
+    expect(created).toMatchObject({ mode: "DEMO", component: { typeCode: "S203-D25", articleNumber: "2CDS253001R0251", status: "created" } });
+    expect(await prisma.catalogComponent.findUniqueOrThrow({ where: { articleNumber: "2CDS253001R0251" } })).toMatchObject({ dataSource: "IEC_ESTIMATE" });
     await expect(lookupComponentForItem(prisma, { itemId: f6.id, text: "x", hints }, lookupComponent)).rejects.toBeInstanceOf(WorkflowError);
 
     await assignCatalogComponent(prisma, f6.id, s201b10.id);
@@ -175,5 +176,75 @@ describe("AI Panel Builder – strom zapojení", () => {
     expect(await prisma.panelBoardProject.findUniqueOrThrow({ where: { id: project.id } })).toMatchObject({ status: "COMPLETED", equipmentId: "eq-R-LIS-01", releasedAt: now });
     // uzavřený projekt zůstává COMPLETED i po další úpravě stromu
     expect((await saveTree(prisma, project.id, assignments(nodes))).status).toBe("COMPLETED");
+  });
+});
+
+describe("AI Panel Builder – živý konfigurátor a geometrie DIN lišty", () => {
+  async function pb001Items() {
+    await seedPanelBuilder(prisma);
+    const project = await prisma.panelBoardProject.findUniqueOrThrow({ where: { code: "PB-001" } });
+    const items = () =>
+      prisma.panelBoardItem.findMany({ where: { projectId: project.id }, orderBy: [{ dinRailIndex: "asc" }, { positionOnRail: "asc" }], include: { catalogComponent: true } });
+    const byDesignation = async (designation: string) => (await items()).find((item) => item.designation === designation)!;
+    return { project, items, byDesignation };
+  }
+
+  it("klik v konfigurátoru: přesný kus z katalogu, VERIFIED; neznámý výrobce → uložený odhad IEC", async () => {
+    const { byDesignation } = await pb001Items();
+    const f6 = await byDesignation("-F6");
+    const result = await configureItem(prisma, f6.id, { ...defaultConfig("MCB", { manufacturer: "Eaton", modules: 1 }), ratedCurrentA: 10, breakingCapacityKa: 10 });
+    expect(result).toMatchObject({ estimated: false, component: { typeCode: "PL7-B10/1" } });
+    expect(await byDesignation("-F6")).toMatchObject({ recognitionStatus: "VERIFIED", confidence: 1, modulesWidth: 1 });
+    expect(JSON.parse((await byDesignation("-F6")).configJson!)).toMatchObject({ manufacturer: "Eaton", ratedCurrentA: 10 });
+
+    const bonega = await configureItem(prisma, f6.id, { ...defaultConfig("MCB", { manufacturer: "Bonega", modules: 1 }), ratedCurrentA: 10 });
+    expect(bonega).toMatchObject({ estimated: true, component: { manufacturer: "Bonega", typeCode: "Jistič 1P B10 6 kA" } });
+    await configureItem(prisma, f6.id, { ...defaultConfig("MCB", { manufacturer: "Bonega", modules: 1 }), ratedCurrentA: 10 });
+    expect(await prisma.catalogComponent.count({ where: { manufacturer: "Bonega" } })).toBe(1);
+
+    // změna kategorie (F → K) přečísluje značení
+    const f8 = await byDesignation("-F8");
+    await configureItem(prisma, f8.id, defaultConfig("CONTACTOR", { manufacturer: "ABB", modules: 1 }));
+    expect((await prisma.panelBoardItem.findUniqueOrThrow({ where: { id: f8.id } })).designation).toBe("-K1");
+  });
+
+  it("sloučení 3× 1M → 3P (spojený rámeček, přečíslování) a rozdělení zpět na 1M", async () => {
+    const { items, byDesignation } = await pb001Items();
+    const f5 = await byDesignation("-F5");
+    const boxes = (await items()).filter((item) => ["-F5", "-F6", "-F7"].includes(item.designation)).map((item) => JSON.parse(item.boundingBoxJson!) as number[]);
+    expect(await mergeItems(prisma, f5.id, 3)).toMatchObject({ width: 3, removed: 2 });
+
+    const merged = await prisma.panelBoardItem.findUniqueOrThrow({ where: { id: f5.id }, include: { catalogComponent: true } });
+    expect(merged).toMatchObject({ modulesWidth: 3, recognitionStatus: "VERIFIED", designation: "-F5", positionOnRail: 3 });
+    expect(merged.catalogComponent?.typeCode).toBe("S203-B10");
+    expect(JSON.parse(merged.boundingBoxJson!)).toEqual([Math.min(...boxes.map((b) => b[0])), boxes[0][1], Math.max(...boxes.map((b) => b[2])), boxes[2][3]]);
+    const after = await items();
+    expect(after).toHaveLength(11);
+    expect(after.map((item) => item.designation)).toEqual(["-Q1", "-F1", "-F2", "-F3", "-F4", "-F5", "-F6", "-F7", "-F8", "-F9", "-F10"]);
+    expect(after.filter((item) => item.dinRailIndex === 2).map((item) => item.positionOnRail)).toEqual([1, 2, 3, 4, 5, 6]);
+    await expect(mergeItems(prisma, (await byDesignation("-F10")).id, 3)).rejects.toThrow("nejsou na liště 2 další moduly");
+
+    expect(await splitItem(prisma, f5.id)).toMatchObject({ parts: 3 });
+    const split = await items();
+    expect(split).toHaveLength(13);
+    const pieces = split.filter((item) => item.dinRailIndex === 2 && item.positionOnRail >= 3 && item.positionOnRail <= 5);
+    expect(pieces.map((item) => [item.modulesWidth, item.catalogComponent?.typeCode, item.recognitionStatus])).toEqual([
+      [1, "S201-B10", "VERIFIED"],
+      [1, "S201-B10", "VERIFIED"],
+      [1, "S201-B10", "VERIFIED"],
+    ]);
+    expect(split.map((item) => item.designation).slice(-2)).toEqual(["-F11", "-F12"]);
+  });
+
+  it("chytré sloučení: volba 3P u 1M modulu pohltí sousedy vpravo", async () => {
+    const { items, byDesignation } = await pb001Items();
+    const f11 = await byDesignation("-F11");
+    await configureItem(prisma, f11.id, { ...defaultConfig("MCB", { manufacturer: "ABB", modules: 3 }), ratedCurrentA: 16 }, { mergeNeighbors: true });
+    const rail3 = (await items()).filter((item) => item.dinRailIndex === 3);
+    expect(rail3).toHaveLength(1);
+    expect(rail3[0]).toMatchObject({ modulesWidth: 3, recognitionStatus: "VERIFIED" });
+    expect(rail3[0].catalogComponent?.typeCode).toBe("S203-B16");
+    expect(await updateItemText(prisma, f11.id, { customTypeCode: " S203-B16 (výměna 2026) ", circuitLabel: "Tepelné čerpadlo 2" })).toBeTruthy();
+    expect(await prisma.panelBoardItem.findUniqueOrThrow({ where: { id: f11.id } })).toMatchObject({ customTypeCode: "S203-B16 (výměna 2026)", circuitLabel: "Tepelné čerpadlo 2" });
   });
 });

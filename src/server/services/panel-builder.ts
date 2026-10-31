@@ -3,11 +3,13 @@ import type { EnclosureMaterial, EnclosureType } from "@/generated/prisma/enums"
 import { buildSearchText, isMix } from "@/lib/panel-builder/catalog";
 import { extractComponents, type ExtractedComponent } from "@/lib/panel-builder/datasheet-extract";
 import type { EnclosureDims } from "@/lib/panel-builder/layout";
-import { compact, designationsInOrder, matchDetection, type Detection } from "@/lib/panel-builder/matching";
+import { catalogCategory, configFromComponent, defaultConfig, matchConfig, parseConfig, polesForWidth, synthesizeComponent, type ItemConfig } from "@/lib/panel-builder/configurator";
+import { parseBox, type BoundingBox } from "@/lib/panel-builder/layout";
+import { DESIGNATION_PREFIX, compact, designationsInOrder, matchDetection, type Detection } from "@/lib/panel-builder/matching";
 import { nextProjectCode, type ManufacturerInfo } from "@/lib/panel-builder/project";
 import { releaseBlockers, type DocItem } from "@/lib/panel-builder/documentation";
 import { thermalDevices, thermalEnclosure, type ThermalItemInput } from "@/lib/panel-builder/thermal-input";
-import { ancestors, isConnected, isPhaseAssignment, treeNodeFrom, validateTree, type TreeAssignment } from "@/lib/panel-builder/tree";
+import { ancestors, isConnected, isPhaseAssignment, renumber, treeNodeFrom, validateTree, type TreeAssignment } from "@/lib/panel-builder/tree";
 import { calculateThermal } from "@/lib/thermalCalculation";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 
@@ -356,7 +358,7 @@ export const toDocItem = (item: ThermalItemInput & DocItemSource): DocItem => ({
   parentItemId: item.parentItemId,
   fedFromIncomer: item.fedFromIncomer,
   component: item.catalogComponent
-    ? { articleNumber: item.catalogComponent.articleNumber, typeCode: item.catalogComponent.typeCode, manufacturer: item.catalogComponent.manufacturer, description: item.catalogComponent.description, category: item.catalogComponent.category }
+    ? { articleNumber: item.catalogComponent.articleNumber, typeCode: item.customTypeCode ?? item.catalogComponent.typeCode, manufacturer: item.catalogComponent.manufacturer, description: item.catalogComponent.description, category: item.catalogComponent.category }
     : null,
 });
 
@@ -376,4 +378,173 @@ export async function releaseDocumentation(prisma: PrismaClient, projectId: stri
   if (blockers.length) throw new WorkflowError("VALIDATION", `Dokumentaci zatím nelze propustit: ${blockers.join(" ")}`);
   await prisma.panelBoardProject.update({ where: { id: projectId }, data: { equipmentId, status: "COMPLETED", releasedAt: now } });
   return equipment;
+}
+
+// ---------------------------------------------------------------------------
+//  Živý konfigurátor prvku (krok 1) – konfigurace, sloučení a rozdělení modulů
+// ---------------------------------------------------------------------------
+
+/** IEC značení celého projektu znovu v pořadí lišt (po sloučení / rozdělení / změně kategorie). */
+async function renumberProject(prisma: PrismaClient, projectId: string) {
+  const items = await prisma.panelBoardItem.findMany({ where: { projectId }, include: { catalogComponent: { select: { category: true } } } });
+  const designations = renumber(items.map((item) => ({ id: item.id, category: item.catalogComponent?.category ?? null, dinRailIndex: item.dinRailIndex, positionOnRail: item.positionOnRail })));
+  // Dvoufázově kvůli dočasným kolizím značení není potřeba (značení není unikátní v DB).
+  await prisma.$transaction(items.filter((item) => designations.get(item.id) !== item.designation).map((item) => prisma.panelBoardItem.update({ where: { id: item.id }, data: { designation: designations.get(item.id)! } })));
+}
+
+/** Pozice na liště znovu 1..n zleva (po odebrání / přidání modulů). */
+async function resequenceRail(prisma: PrismaClient, projectId: string, rail: number) {
+  const items = await prisma.panelBoardItem.findMany({ where: { projectId, dinRailIndex: rail }, orderBy: [{ positionOnRail: "asc" }, { sortOrder: "asc" }] });
+  await prisma.$transaction(items.map((item, index) => prisma.panelBoardItem.update({ where: { id: item.id }, data: { positionOnRail: index + 1, sortOrder: rail * 100 + index } })));
+}
+
+const unionBox = (boxes: (BoundingBox | null)[]): BoundingBox | null => {
+  const valid = boxes.filter((box): box is BoundingBox => box !== null);
+  if (!valid.length) return null;
+  return [Math.min(...valid.map((b) => b[0])), Math.min(...valid.map((b) => b[1])), Math.max(...valid.map((b) => b[2])), Math.max(...valid.map((b) => b[3]))];
+};
+
+/**
+ * Konfigurace z dlaždic: najde nejbližší přesný kus katalogu (jinak uloží odhad IEC), přiřadí ho,
+ * nastaví šířku a stav VERIFIED. `mergeNeighbors`: širší přístroj pohltí sousední moduly vpravo.
+ */
+export async function configureItem(prisma: PrismaClient, itemId: string, config: ItemConfig, options: { mergeNeighbors?: boolean } = {}) {
+  const item = await prisma.panelBoardItem.findUnique({ where: { id: itemId }, include: { catalogComponent: { select: { category: true } } } });
+  if (!item) throw new WorkflowError("NOT_FOUND", "Prvek rozváděče neexistuje.");
+  if (options.mergeNeighbors && config.modules > item.modulesWidth) await absorbRight(prisma, item.id, config.modules);
+
+  const catalog = await prisma.catalogComponent.findMany({ where: { category: catalogCategory(config) } });
+  let component = matchConfig(catalog, config);
+  if (!component) {
+    const synthesized = synthesizeComponent(config);
+    component = await prisma.catalogComponent.upsert({
+      where: { articleNumber: synthesized.articleNumber },
+      create: { ...synthesized, dataSource: "IEC_ESTIMATE", searchText: buildSearchText(synthesized) },
+      update: {},
+    });
+  }
+  await prisma.panelBoardItem.update({
+    where: { id: itemId },
+    data: { catalogComponentId: component.id, recognitionStatus: "VERIFIED", confidence: 1, modulesWidth: config.modules, configJson: JSON.stringify(config) },
+  });
+  if (DESIGNATION_PREFIX[item.catalogComponent?.category ?? "MCB"] !== DESIGNATION_PREFIX[component.category]) await renumberProject(prisma, item.projectId);
+  return { projectId: item.projectId, component: summary(component, "existing"), estimated: component.dataSource === "IEC_ESTIMATE" };
+}
+
+/** Pohltí sousední moduly vpravo, dokud šířka nedosáhne cíle (chytré sloučení při volbě 3P / 4P). */
+async function absorbRight(prisma: PrismaClient, itemId: string, targetModules: number) {
+  const item = await prisma.panelBoardItem.findUniqueOrThrow({ where: { id: itemId } });
+  const rail = await prisma.panelBoardItem.findMany({ where: { projectId: item.projectId, dinRailIndex: item.dinRailIndex }, orderBy: { positionOnRail: "asc" } });
+  const start = rail.findIndex((entry) => entry.id === item.id);
+  let width = item.modulesWidth;
+  let count = 1;
+  while (width < targetModules && rail[start + count]) width += rail[start + count++].modulesWidth;
+  if (count > 1) await mergeItems(prisma, itemId, count, { keepConfig: true });
+}
+
+/**
+ * Sloučí vybraný modul a `count − 1` sousedů vpravo na téže liště do jednoho přístroje: sečte šířku,
+ * spojí rámečky na fotce, sousedy smaže (jejich potomky ve stromu převezme sloučený prvek), přečísluje.
+ */
+export async function mergeItems(prisma: PrismaClient, itemId: string, count: number, options: { keepConfig?: boolean } = {}) {
+  if (count < 2 || count > 4) throw new WorkflowError("VALIDATION", "Sloučit lze 2 až 4 sousední moduly.");
+  const item = await prisma.panelBoardItem.findUnique({ where: { id: itemId }, include: { catalogComponent: true } });
+  if (!item) throw new WorkflowError("NOT_FOUND", "Prvek rozváděče neexistuje.");
+  const rail = await prisma.panelBoardItem.findMany({ where: { projectId: item.projectId, dinRailIndex: item.dinRailIndex }, orderBy: { positionOnRail: "asc" } });
+  const start = rail.findIndex((entry) => entry.id === item.id);
+  const group = rail.slice(start, start + count);
+  if (group.length < count) throw new WorkflowError("VALIDATION", `Napravo od ${item.designation} nejsou na liště ${count - 1} další moduly ke sloučení.`);
+  const absorbed = group.slice(1);
+  const width = group.reduce((sum, entry) => sum + entry.modulesWidth, 0);
+  const box = unionBox(group.map((entry) => parseBox(entry.boundingBoxJson)));
+  const ids = absorbed.map((entry) => entry.id);
+
+  await prisma.$transaction([
+    prisma.panelBoardItem.updateMany({ where: { parentItemId: { in: ids } }, data: { parentItemId: item.id } }),
+    prisma.panelBoardItem.deleteMany({ where: { id: { in: ids } } }),
+    prisma.panelBoardItem.update({
+      where: { id: item.id },
+      data: {
+        modulesWidth: width,
+        boundingBoxJson: box ? JSON.stringify(box) : null,
+        rawOcrText: group.map((entry) => entry.rawOcrText).filter(Boolean).join(" | ").slice(0, 200) || null,
+        circuitLabel: item.circuitLabel || group.find((entry) => entry.circuitLabel)?.circuitLabel || "",
+      },
+    }),
+  ]);
+  await resequenceRail(prisma, item.projectId, item.dinRailIndex);
+
+  // Známá kategorie → rovnou vícepólový přístroj stejných parametrů (3× 1P B16 → 3P B16).
+  const base = parseConfig(item.configJson) ?? (item.catalogComponent ? configFromComponent(item.catalogComponent) : null);
+  if (!options.keepConfig) {
+    if (base && base.category !== "OTHER" && base.category !== "RELAY") {
+      const poles = polesForWidth(base.category, width);
+      const config = { ...base, poles, modules: width, ...(base.category === "CONTACTOR" ? { contactConfig: `${poles.replace(/\D/g, "") || "2"}NO` } : {}) };
+      await configureItem(prisma, item.id, config);
+    } else {
+      await prisma.panelBoardItem.update({ where: { id: item.id }, data: { recognitionStatus: "PARTIAL", catalogComponentId: null, confidence: 0.5 } });
+    }
+  }
+  await renumberProject(prisma, item.projectId);
+  return { projectId: item.projectId, width, removed: ids.length };
+}
+
+/** Rozdělí vícemodulový přístroj na jednotlivé 1M moduly (rámeček na fotce poměrně podle šířky). */
+export async function splitItem(prisma: PrismaClient, itemId: string) {
+  const item = await prisma.panelBoardItem.findUnique({ where: { id: itemId }, include: { catalogComponent: true } });
+  if (!item) throw new WorkflowError("NOT_FOUND", "Prvek rozváděče neexistuje.");
+  const parts = Math.round(item.modulesWidth);
+  if (parts < 2) throw new WorkflowError("VALIDATION", `${item.designation} má šířku 1 modul – není co rozdělit.`);
+  const box = parseBox(item.boundingBoxJson);
+  const slice = (index: number): string | null => {
+    if (!box) return null;
+    const [ymin, xmin, ymax, xmax] = box;
+    const step = (xmax - xmin) / parts;
+    return JSON.stringify([ymin, Math.round((xmin + step * index) * 100) / 100, ymax, Math.round((xmin + step * (index + 1)) * 100) / 100]);
+  };
+  const base = parseConfig(item.configJson) ?? (item.catalogComponent ? configFromComponent(item.catalogComponent) : null);
+  // Za přístrojem se pozice posunou, nové moduly vloží hned za něj.
+  const after = await prisma.panelBoardItem.findMany({ where: { projectId: item.projectId, dinRailIndex: item.dinRailIndex, positionOnRail: { gt: item.positionOnRail } } });
+  await prisma.$transaction([
+    ...after.map((entry) => prisma.panelBoardItem.update({ where: { id: entry.id }, data: { positionOnRail: entry.positionOnRail + parts - 1 } })),
+    prisma.panelBoardItem.update({ where: { id: item.id }, data: { modulesWidth: 1, boundingBoxJson: slice(0), recognitionStatus: "PARTIAL", catalogComponentId: null } }),
+    prisma.panelBoardItem.createMany({
+      data: Array.from({ length: parts - 1 }, (_, index) => ({
+        projectId: item.projectId,
+        dinRailIndex: item.dinRailIndex,
+        positionOnRail: item.positionOnRail + index + 1,
+        modulesWidth: 1,
+        boundingBoxJson: slice(index + 1),
+        recognitionStatus: "UNRECOGNIZED" as const,
+        confidence: 0.3,
+        rawOcrText: item.rawOcrText,
+        detectedJson: item.detectedJson,
+        designation: `${item.designation}.${index + 1}`,
+        sortOrder: item.sortOrder,
+      })),
+    }),
+  ]);
+  await resequenceRail(prisma, item.projectId, item.dinRailIndex);
+  // Jistič / chránič / … známé kategorie → všechny díly jako 1P (resp. nejmenší varianta) stejných parametrů.
+  if (base && base.category !== "OTHER" && base.category !== "RELAY") {
+    const pieces = await prisma.panelBoardItem.findMany({
+      where: { projectId: item.projectId, dinRailIndex: item.dinRailIndex, positionOnRail: { gte: item.positionOnRail, lt: item.positionOnRail + parts } },
+    });
+    for (const piece of pieces) {
+      await configureItem(prisma, piece.id, { ...defaultConfig(base.category, { manufacturer: base.manufacturer, modules: 1, ratedCurrentA: base.ratedCurrentA, curve: base.curve }), ...(base.category === "MCB" ? { breakingCapacityKa: base.breakingCapacityKa ?? 6 } : {}) });
+    }
+  }
+  await renumberProject(prisma, item.projectId);
+  return { projectId: item.projectId, parts };
+}
+
+/** Ruční typové označení a popis obvodu z karty „Přiřazený přístroj“. */
+export async function updateItemText(prisma: PrismaClient, itemId: string, input: { customTypeCode: string | null; circuitLabel: string }) {
+  const item = await prisma.panelBoardItem.findUnique({ where: { id: itemId }, select: { id: true, projectId: true } });
+  if (!item) throw new WorkflowError("NOT_FOUND", "Prvek rozváděče neexistuje.");
+  return prisma.panelBoardItem.update({
+    where: { id: itemId },
+    data: { customTypeCode: input.customTypeCode?.trim().slice(0, 80) || null, circuitLabel: input.circuitLabel.trim().slice(0, 80) },
+    select: { id: true, projectId: true },
+  });
 }

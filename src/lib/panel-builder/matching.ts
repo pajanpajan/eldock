@@ -3,7 +3,7 @@
 
 import type { ComponentCategory, RecognitionStatus } from "@/generated/prisma/enums";
 
-import { isMix, normalizeManufacturer } from "./catalog";
+import { normalizeManufacturer } from "./catalog";
 import { slotBoxes, type BoundingBox, type EnclosureDims } from "./layout";
 import { REFERENCE_DEVICES, withPositions } from "./reference";
 
@@ -143,71 +143,4 @@ export function demoDetections(dims: EnclosureDims): Detection[] {
       designation: device.designation,
     };
   });
-}
-
-// ---------------------------------------------------------------------------
-//  Smart Fallback Picker
-// ---------------------------------------------------------------------------
-
-export interface PickerSelection {
-  category: ComponentCategory | null;
-  poles: string | null;
-  curve: string | null;
-  current: number | null;
-  manufacturer: string | null;
-  modules: number | null;
-}
-
-/** Dlaždice kroku 1 (velké, pro prsty). */
-export const PICKER_CATEGORIES: { value: ComponentCategory; label: string }[] = [
-  { value: "MCB", label: "Jistič" },
-  { value: "RCD", label: "Chránič" },
-  { value: "RCBO", label: "Jističochránič" },
-  { value: "MAIN_SWITCH", label: "Odpínač" },
-  { value: "SPD", label: "SPD" },
-  { value: "CONTACTOR", label: "Stykač" },
-  { value: "OTHER", label: "Jiné" },
-];
-export const PICKER_POLES = ["1P", "1P+N", "3P", "3P+N", "4P"] as const;
-export const PICKER_CURVES = ["B", "C", "D"] as const;
-export const PICKER_CURRENTS = [6, 10, 16, 20, 25, 32, 40, 63] as const;
-
-/** Kusy z katalogu pro výběr v pickeru: jen zvolený výrobce (null = všichni), stejná šířka napřed. */
-export function pickerCandidates<T extends MatchableComponent & { powerLossWatts: number }>(catalog: readonly T[], selection: PickerSelection): T[] {
-  if (!selection.category) return [];
-  const others = selection.category === "OTHER";
-  return catalog
-    .filter(
-      (component) =>
-        (others ? !["MCB", "RCD", "RCBO", "MAIN_SWITCH", "SPD", "CONTACTOR", "ENCLOSURE"].includes(component.category) : component.category === selection.category) &&
-        (!selection.poles || component.poles === selection.poles) &&
-        (!selection.curve || !component.trippingCurve || component.trippingCurve === selection.curve) &&
-        (!selection.current || component.ratedCurrentA === selection.current) &&
-        (!selection.manufacturer || sameManufacturer(component.manufacturer, selection.manufacturer)),
-    )
-    .sort(
-      (a, b) =>
-        Number(b.modulesCount === selection.modules) - Number(a.modulesCount === selection.modules) ||
-        a.ratedCurrentA - b.ratedCurrentA ||
-        a.typeCode.localeCompare(b.typeCode),
-    );
-}
-
-/**
- * Výchozí výběr pickeru z odhadu analýzy (detectedJson): výrobce přečtený u modulu, jinak převažující
- * výrobce rozváděče; u „Různí výrobci“ bez filtru (Všichni).
- */
-export function initialSelection(
-  detected: Partial<PickerSelection & { ratedCurrentA: number | null; trippingCurve: string | null }> | null,
-  dominant: string | null,
-  modules: number,
-): PickerSelection {
-  return {
-    category: detected?.category ?? null,
-    poles: detected?.poles ?? null,
-    curve: detected?.trippingCurve ?? null,
-    current: detected?.ratedCurrentA ?? null,
-    manufacturer: normalizeManufacturer(detected?.manufacturer) ?? (isMix(dominant) ? null : dominant),
-    modules,
-  };
 }

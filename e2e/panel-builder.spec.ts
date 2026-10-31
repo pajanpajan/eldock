@@ -42,66 +42,78 @@ test("katalog prvků: navigace, okamžité hledání, filtry a atomizace vzorov�
   await expect(result.getByText("Už v katalogu").first()).toBeVisible();
 });
 
-test("krok 1: fotka s rámečky, Smart Fallback Picker na 3 kliky a potvrzení návrhu AI", async ({ page }) => {
+test("krok 1: výrazný výběr, živá konfigurace prvku jedním klikem a potvrzení návrhu AI", async ({ page }) => {
   await page.goto("/panel-builder");
   await page.getByRole("link", { name: /PB-001/ }).click();
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Domovní / Podružný rozváděč PB-001");
   await expect(page.getByTestId("demo-ai-badge")).toContainText("Demo AI režim");
   await expect(page.getByTestId("count-VERIFIED")).toHaveText("Ověřeno: 11");
-  await expect(page.getByTestId("count-PARTIAL")).toHaveText("K potvrzení: 1");
-  await expect(page.getByTestId("count-UNRECOGNIZED")).toHaveText("Nerozpoznáno: 1");
   await expect(page.getByTestId("panel-photo").getByRole("button")).toHaveCount(13);
 
-  // Nerozpoznaný -F6: kategorie → póly a charakteristika → proud → přiřadit
+  // Výběr -F6 na fotce: jmenovka na fotce i štítek na liště
   await page.getByTestId("panel-photo").getByRole("button", { name: "-F6 – Nerozpoznáno" }).click();
-  const picker = page.getByTestId("smart-picker");
-  await expect(picker).toContainText("-F6");
-  await expect(picker.getByRole("button", { name: "ABB", pressed: true })).toBeVisible();
-  await picker.getByRole("button", { name: "Jistič", exact: true }).click();
-  await picker.getByRole("button", { name: "1P", exact: true }).click();
-  await picker.getByRole("button", { name: "Charakteristika B" }).click();
-  await picker.getByRole("button", { name: "10A" }).click();
-  await expect(picker.getByTestId("picker-candidates").locator("li").first()).toContainText("S201-B10");
-  await expect(picker.getByTestId("picker-candidates").locator("li").first()).toContainText("2,1 W");
-  await picker.getByRole("button", { name: "Přiřadit S201-B10" }).click();
-  await expect(page.getByTestId("count-VERIFIED")).toHaveText("Ověřeno: 12");
+  const configurator = page.getByTestId("item-configurator");
+  await expect(configurator).toContainText("-F6");
+  await expect(page.getByTestId("photo-selected-label")).toHaveText("-F6 · 1M");
+  await expect(page.getByTestId("rail-editing")).toHaveText("▼ UPRAVUJETE");
+  await expect(configurator.getByRole("button", { name: "ABB", pressed: true })).toBeVisible();
+  await expect(configurator.getByText("Odpovídající kusy z katalogu")).toHaveCount(0);
 
-  // Picker skočil na další nedořešený (-F9) – návrh AI stačí potvrdit
-  await expect(picker).toContainText("-F9");
-  await picker.getByRole("button", { name: "Potvrdit návrh" }).click();
+  // Jeden klik na kategorii = uložený a ověřený přístroj; další klik přenastaví proud
+  await configurator.getByRole("button", { name: "Jistič", exact: true }).click();
+  await expect(page.getByTestId("count-VERIFIED")).toHaveText("Ověřeno: 12");
+  await expect(page.getByTestId("assigned-device")).toContainText("ABB S201-B16");
+  await configurator.getByRole("button", { name: "10A", exact: true }).click();
+  await expect(page.getByTestId("assigned-device")).toContainText("S201-B10");
+  await expect(page.getByTestId("assigned-device")).toContainText("Šířka: 1M");
+  await expect(page.getByTestId("configurator-status")).toHaveText("Ověřeno");
+
+  // Chránič -F2: parametry chrániče, žádná charakteristika B/C/D
+  await page.getByTestId("din-rails").getByRole("button", { name: /^-F2 / }).click();
+  await expect(configurator.getByRole("button", { name: "Chránič", pressed: true })).toBeVisible();
+  await expect(configurator.getByRole("region", { name: "Typ chrániče" })).toBeVisible();
+  await expect(configurator.getByRole("region", { name: "Vypínací charakteristika" })).toHaveCount(0);
+
+  // Částečně rozpoznaný -F9: návrh AI stačí potvrdit
+  await page.getByTestId("din-rails").getByRole("button", { name: /^-F9 / }).click();
+  await configurator.getByRole("button", { name: "Potvrdit návrh" }).click();
   await expect(page.getByTestId("count-VERIFIED")).toHaveText("Ověřeno: 13");
-  await expect(page.getByTestId("picker-done")).toContainText("Všechny přístroje jsou ověřené");
 });
 
-test("nový projekt z ukázkové fotky a dohledání přístroje podle textu z čela", async ({ page }) => {
+test("nový projekt: sloučení 3× 1M → 3P, rozdělení zpět, filtr výrobce a dohledání exotického prvku", async ({ page }) => {
   await page.goto("/panel-builder");
   await page.getByRole("button", { name: "Nový projekt z fotky" }).click();
   await page.getByLabel("Název rozváděče").fill("Podružný rozváděč RP2 – dílna");
   await expect(page.getByLabel("Převažující výrobce (nápověda pro AI)")).toHaveValue("MIX");
-  await expect(page.getByLabel("Převažující výrobce (nápověda pro AI)").locator("option:checked")).toHaveText("⚡ Různí výrobci / Auto-detekce AI");
   await page.getByRole("button", { name: "Ukázková fotka" }).click();
   await page.getByRole("button", { name: "Založit a analyzovat fotku" }).click();
   await expect(page).toHaveURL(/\/panel-builder\/[^/]+$/, { timeout: 30_000 });
   await expect(page.getByRole("heading", { level: 1 })).toContainText("PB-002");
-  await expect(page.getByTestId("count-UNRECOGNIZED")).toHaveText("Nerozpoznáno: 1");
+  const photoButtons = page.getByTestId("panel-photo").getByRole("button");
+  await expect(photoButtons).toHaveCount(13);
 
-  const picker = page.getByTestId("smart-picker");
-  await expect(picker).toContainText("-F6");
-  // Různí výrobci → picker bez filtru značky; záložka EATON zúží nabídku jen pro tento modul
-  await expect(picker.getByRole("button", { name: "Všichni", pressed: true })).toBeVisible();
-  await picker.getByRole("button", { name: "1P", exact: true }).click();
-  await picker.getByRole("button", { name: "10A" }).click();
-  await expect(picker.getByTestId("picker-candidates")).toContainText("S201-B10");
-  await picker.getByRole("button", { name: "EATON" }).click();
-  await expect(picker.getByTestId("picker-candidates").locator("li")).toHaveCount(1);
-  await expect(picker.getByTestId("picker-candidates")).toContainText("PL7-B10/1");
-  await picker.getByRole("button", { name: "Všichni" }).click();
-  await picker.getByLabel("Text z čela přístroje").fill("S201 C13");
-  await picker.getByRole("button", { name: /Dohledat v datasheetech/ }).click();
-  await expect(picker.getByTestId("picker-candidates").locator("li").first()).toContainText("S201-C13");
-  await expect(picker.getByTestId("picker-candidates").locator("li").first()).toContainText("odhad Pv dle IEC");
-  await picker.getByRole("button", { name: "Přiřadit S201-C13" }).click();
-  await expect(page.getByTestId("count-UNRECOGNIZED")).toHaveText("Nerozpoznáno: 0");
+  // Sloučení -F5, -F6, -F7 (3× 1P B10) → jeden 3P jistič
+  await page.getByTestId("din-rails").getByRole("button", { name: /^-F5 / }).click();
+  const configurator = page.getByTestId("item-configurator");
+  await configurator.getByRole("button", { name: /Sloučit 3× 1M → 3P/ }).click();
+  await expect(photoButtons).toHaveCount(11);
+  await expect(page.getByTestId("photo-selected-label")).toHaveText("-F5 · 3M");
+  await expect(page.getByTestId("assigned-device")).toContainText("S203-B10");
+  await expect(page.getByTestId("din-rails").getByRole("button", { name: /^-F6 / })).toContainText("S201-B16");
+
+  // Rozdělení zpět na 1M moduly
+  await configurator.getByRole("button", { name: "Rozdělit na 1M moduly" }).click();
+  await expect(photoButtons).toHaveCount(13);
+  await expect(page.getByTestId("photo-selected-label")).toHaveText("-F5 · 1M");
+
+  // Filtr výrobce jen pro tento modul: Eaton 1P B10 6 kA → PL6
+  await configurator.getByRole("button", { name: "EATON" }).click();
+  await expect(page.getByTestId("assigned-device")).toContainText("Eaton PL6-B10/1");
+
+  // Exotický prvek přes dohledání (deterministicky bez klíče)
+  await configurator.getByLabel("Text z čela přístroje").fill("S203 D25");
+  await configurator.getByRole("button", { name: /Dohledat přes Gemini AI/ }).click();
+  await expect(page.getByTestId("assigned-device")).toContainText("S203-D25");
 });
 
 test("krok 2: AI návrh stromu, hlídač, Zpět/Vpřed, hromadné přiřazení a uložení", async ({ page }) => {

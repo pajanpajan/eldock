@@ -756,7 +756,13 @@ model CatalogComponent {
   trippingCurve      String? // "B" | "C" | "D"
   breakingCapacityKa Float? // Icn [kA]
   rcdSensitivityMa   Int? // IΔn [mA]
-  rcdType            String? // "AC" | "A" | "B" | "F"
+  rcdType            String? // "AC" | "A" | "B" | "F" | "G" | "S"
+  spdType            String? // "T1" | "T1+T2" | "T2" | "T2+T3" | "T3"
+  surgeCurrentKa     Float? // svodičový proud SPD [kA]
+  contactConfig      String? // stykač: "2NO" | "3NO" | "4NO" | "2NO+2NC"
+  coilVoltage        String? // stykač: "230V AC" | "24V AC/DC" | "12V DC"
+  relaySubtype       String? // "IMPULSE" | "TIMER" | "AUXILIARY" | "LEVEL" | "MONITORING" | "STAIRCASE" | "THERMOSTAT"
+  moduleSubtype      String? // zdroj / měření / jiné: "PSU_DC" | "BELL_TRANSFORMER" | "METER" | "PLC" | "MAIN_TERMINAL" | "FUSE_DISCONNECTOR"
   modulesCount       Float // šířka v modulech 18 mm
   widthMm            Float?
   heightMm           Float?
@@ -832,6 +838,10 @@ model PanelBoardItem {
   rawOcrText         String?
   /// Odhad z analýzy fotky (kategorie, póly, proud, charakteristika) – předvyplní picker.
   detectedJson       String?
+  /// Konfigurace z konfigurátoru (kategorie, výrobce, póly, In, char., typ chrániče …) – JSON.
+  configJson         String?
+  /// Ruční typové označení (přebije typ z katalogu v pracovní ploše i dokumentaci).
+  customTypeCode     String?
   designation        String // IEC značení "-Q1", "-F1" …
   circuitLabel       String            @default("") // „Tepelné čerpadlo“, „Zásuvky kuchyně“
   phaseAssignment    String? // "L1,L2,L3,N" | "L1,L2,L3" | "L1" | "L2" | "L3"

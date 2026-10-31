@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { REFERENCE_DIMS } from "./reference";
-import { demoDetections, designationsInOrder, initialSelection, matchDetection, pickerCandidates, type MatchableComponent } from "./matching";
+import { demoDetections, designationsInOrder, matchDetection, type MatchableComponent } from "./matching";
 
 const c = (id: string, manufacturer: string, typeCode: string, articleNumber: string, category: MatchableComponent["category"], poles: string, current: number, curve: string | null, modules = 1) => ({
   id,
@@ -67,25 +67,6 @@ describe("párování detekcí s katalogem", () => {
     // F3 začíná tam, kde na liště 2 začíná první modul; F4 hned za ním
     expect(detections[4].box![1]).toBeGreaterThan(detections[3].box![3] - 0.01);
     expect(detections.find((d) => d.designation === "-F6")).toMatchObject({ ratedCurrentA: null, manufacturer: null });
-  });
-});
-
-describe("Smart Fallback Picker", () => {
-  it("filtr podle kategorie, pólů, charakteristiky, proudu a výrobce (záložka jen pro tento modul)", () => {
-    const all = initialSelection({ category: "MCB", poles: "1P" }, "MIX", 1);
-    expect(all.manufacturer).toBeNull();
-    expect(pickerCandidates(CATALOG, all).map((x) => x.id)).toEqual(["oez-c16", "eaton-b16", "abb-b16"]);
-    expect(pickerCandidates(CATALOG, { ...all, manufacturer: "EATON" }).map((x) => x.id)).toEqual(["eaton-b16"]);
-    expect(pickerCandidates(CATALOG, { ...all, curve: "B", current: 16 }).map((x) => x.id)).toEqual(["eaton-b16", "abb-b16"]);
-    expect(pickerCandidates(CATALOG, { ...all, manufacturer: "Hager" })).toEqual([]);
-    expect(pickerCandidates(CATALOG, { ...all, category: null })).toEqual([]);
-    expect(pickerCandidates(CATALOG, { ...all, category: "MAIN_SWITCH", poles: "3P" }).map((x) => x.id)).toEqual(["abb-sd"]);
-  });
-
-  it("výchozí výrobce: přečtený u modulu > převažující výrobce rozváděče > Všichni", () => {
-    expect(initialSelection({ category: "MCB", manufacturer: "OEZ" }, "ABB", 1).manufacturer).toBe("OEZ");
-    expect(initialSelection({ category: "MCB" }, "ABB", 1).manufacturer).toBe("ABB");
-    expect(initialSelection(null, "MIX", 1).manufacturer).toBeNull();
   });
 });
 

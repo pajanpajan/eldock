@@ -22,6 +22,8 @@ export interface ThermalItemInput {
   parentItemId: string | null;
   phaseAssignment: string | null;
   operatingCurrentA: number | null;
+  /** Ruční typové označení z konfigurátoru (přebije katalogový typ). */
+  customTypeCode?: string | null;
   catalogComponent: { category: ComponentCategory; poles: string; ratedCurrentA: number; powerLossWatts: number; typeCode: string; description: string } | null;
 }
 
@@ -39,7 +41,7 @@ export const thermalDevices = (items: readonly ThermalItemInput[]): ThermalDevic
   items.map((item) => ({
     id: item.id,
     designation: item.designation,
-    typeCode: item.catalogComponent?.typeCode ?? "nerozpoznáno",
+    typeCode: item.customTypeCode ?? item.catalogComponent?.typeCode ?? "nerozpoznáno",
     description: item.catalogComponent?.description ?? item.circuitLabel,
     category: item.catalogComponent?.category ?? null,
     poles: item.catalogComponent?.poles ?? null,

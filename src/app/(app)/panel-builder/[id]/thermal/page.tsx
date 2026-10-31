@@ -44,6 +44,7 @@ export default async function PanelThermalPage({ params }: PageProps<"/panel-bui
           parentItemId: item.parentItemId,
           phaseAssignment: item.phaseAssignment,
           operatingCurrentA: item.operatingCurrentA,
+          customTypeCode: item.customTypeCode,
           catalogComponent: item.catalogComponent,
         }))}
       />

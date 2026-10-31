@@ -22,7 +22,7 @@ export default async function PanelTreePage({ params }: PageProps<"/panel-builde
   if (!project) notFound();
 
   const meta: Record<string, TreeMeta> = Object.fromEntries(
-    project.items.map((item) => [item.id, { typeCode: item.catalogComponent?.typeCode ?? (item.rawOcrText ? `? ${item.rawOcrText}` : "nerozpoznáno"), modulesWidth: item.modulesWidth }]),
+    project.items.map((item) => [item.id, { typeCode: item.customTypeCode ?? item.catalogComponent?.typeCode ?? (item.rawOcrText ? `? ${item.rawOcrText}` : "nerozpoznáno"), modulesWidth: item.modulesWidth }]),
   );
 
   return (

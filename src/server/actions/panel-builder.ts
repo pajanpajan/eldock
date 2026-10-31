@@ -10,7 +10,7 @@ import { WorkflowError } from "@/lib/workflow/state-machine";
 import { assertFeature } from "@/server/modules";
 import { analyzePanelPhoto, extractDatasheetComponents, lookupComponent, type AiMode } from "@/server/services/geminiPanelService";
 import { PHASE_OPTIONS, type TreeIssue } from "@/lib/panel-builder/tree";
-import { analyzeProject, assignCatalogComponent, createPanelProject, importDatasheet, lookupComponentForItem, releaseDocumentation, saveThermalInputs, saveTree, type ImportedComponent } from "@/server/services/panel-builder";
+import { analyzeProject, assignCatalogComponent, createPanelProject, importDatasheet, configureItem, lookupComponentForItem, mergeItems, releaseDocumentation, saveThermalInputs, saveTree, splitItem, updateItemText, type ImportedComponent } from "@/server/services/panel-builder";
 import { getCurrentAccount } from "@/server/session";
 import { readStoredFile } from "@/server/storage";
 
@@ -205,5 +205,79 @@ export async function releaseDocumentationAction(projectId: string, equipmentId:
     return { ok: true, data: { equipmentId: equipment.id, tag: equipment.tag } };
   } catch (error) {
     return failure(error, "Dokumentaci se nepodařilo propustit.");
+  }
+}
+
+const nullableText = (max: number) => z.string().max(max).nullable().optional();
+const configSchema = z.object({
+  category: z.enum(["MCB", "RCD", "RCBO", "MAIN_SWITCH", "SPD", "CONTACTOR", "RELAY", "OTHER"]),
+  manufacturer: z.string().trim().max(40).nullable(),
+  poles: z.string().max(8),
+  modules: z.number().positive().max(12),
+  ratedCurrentA: z.number().positive().max(6300).nullable(),
+  curve: nullableText(2),
+  breakingCapacityKa: z.number().positive().max(100).nullable().optional(),
+  rcdType: nullableText(3),
+  rcdSensitivityMa: z.number().int().positive().max(1000).nullable().optional(),
+  spdType: nullableText(8),
+  surgeCurrentKa: z.number().positive().max(200).nullable().optional(),
+  contactConfig: nullableText(10),
+  coilVoltage: nullableText(12),
+  relaySubtype: nullableText(20),
+  moduleSubtype: nullableText(24),
+  power: nullableText(12),
+});
+
+/** Živý konfigurátor: každý klik na dlaždici uloží prvek a přiřadí nejbližší přesný kus. */
+export async function configureItemAction(itemId: string, config: z.input<typeof configSchema>, mergeNeighbors = false): Promise<ActionResult<{ typeCode: string; estimated: boolean }>> {
+  const parsed = configSchema.safeParse(config);
+  if (!id.safeParse(itemId).success || !parsed.success) return { ok: false, error: "Neplatná konfigurace prvku." };
+  try {
+    await guard();
+    const result = await configureItem(prisma, itemId, parsed.data, { mergeNeighbors });
+    revalidatePath(`/panel-builder/${result.projectId}`, "layout");
+    return { ok: true, data: { typeCode: result.component.typeCode, estimated: result.estimated } };
+  } catch (error) {
+    return failure(error, "Prvek se nepodařilo nastavit.");
+  }
+}
+
+/** Geometrie na DIN liště: sloučit 2 / 3 / 4 sousední moduly. */
+export async function mergeItemsAction(itemId: string, count: number): Promise<ActionResult<{ width: number }>> {
+  if (!id.safeParse(itemId).success || ![2, 3, 4].includes(count)) return { ok: false, error: "Neplatné sloučení." };
+  try {
+    await guard();
+    const result = await mergeItems(prisma, itemId, count);
+    revalidatePath(`/panel-builder/${result.projectId}`, "layout");
+    return { ok: true, data: { width: result.width } };
+  } catch (error) {
+    return failure(error, "Moduly se nepodařilo sloučit.");
+  }
+}
+
+/** Geometrie na DIN liště: rozdělit vícemodulový přístroj na 1M moduly. */
+export async function splitItemAction(itemId: string): Promise<ActionResult<{ parts: number }>> {
+  if (!id.safeParse(itemId).success) return { ok: false, error: "Neplatný prvek." };
+  try {
+    await guard();
+    const result = await splitItem(prisma, itemId);
+    revalidatePath(`/panel-builder/${result.projectId}`, "layout");
+    return { ok: true, data: { parts: result.parts } };
+  } catch (error) {
+    return failure(error, "Přístroj se nepodařilo rozdělit.");
+  }
+}
+
+/** Karta „Přiřazený přístroj“: ruční typ a popis obvodu. */
+export async function updateItemTextAction(itemId: string, input: { customTypeCode: string | null; circuitLabel: string }): Promise<ActionResult> {
+  const parsed = z.object({ customTypeCode: z.string().max(80).nullable(), circuitLabel: z.string().max(80) }).safeParse(input);
+  if (!id.safeParse(itemId).success || !parsed.success) return { ok: false, error: "Neplatné údaje přístroje." };
+  try {
+    await guard();
+    const item = await updateItemText(prisma, itemId, parsed.data);
+    revalidatePath(`/panel-builder/${item.projectId}`, "layout");
+    return { ok: true, data: undefined };
+  } catch (error) {
+    return failure(error, "Údaje se nepodařilo uložit.");
   }
 }

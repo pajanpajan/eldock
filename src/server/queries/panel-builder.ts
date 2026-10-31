@@ -60,29 +60,6 @@ export const getPanelProject = cache((id: string) =>
 export type PanelProjectDetail = NonNullable<Awaited<ReturnType<typeof getPanelProject>>>;
 export type PanelItemDetail = PanelProjectDetail["items"][number];
 
-/** Kusy katalogu pro Smart Fallback Picker (bez skříní). */
-export const getPickerCatalog = cache(() =>
-  prisma.catalogComponent.findMany({
-    where: { category: { not: "ENCLOSURE" } },
-    select: {
-      id: true,
-      manufacturer: true,
-      typeCode: true,
-      articleNumber: true,
-      category: true,
-      poles: true,
-      ratedCurrentA: true,
-      trippingCurve: true,
-      modulesCount: true,
-      powerLossWatts: true,
-      description: true,
-    },
-    orderBy: [{ manufacturer: "asc" }, { typeCode: "asc" }],
-  }),
-);
-
-export type PickerComponent = Awaited<ReturnType<typeof getPickerCatalog>>[number];
-
 /** Rozváděče v závodech, ke kterým lze pasport propustit (výběr v kroku 4). */
 export const getReleaseTargets = cache(() =>
   prisma.equipment.findMany({
