@@ -30,6 +30,12 @@ export const LazyBomTable = dynamic(() => import("@/components/equipment/BomTabl
   loading: () => <Panel className="h-64" />,
 });
 
+// Produktové video (Remotion) – jen v prohlížeči, na serveru se vykreslí jen zástupný blok.
+export const LazyPromoVideo = dynamic(() => import("@/components/landing/PromoVideo").then((m) => m.PromoVideo), {
+  ssr: false,
+  loading: () => <Skeleton className="aspect-video w-full rounded-none" role="status" aria-label="Načítání videa" />,
+});
+
 export const LazyQrLabelCard = dynamic(() => import("@/components/equipment/QrLabelCard").then((m) => m.QrLabelCard), {
   loading: () => <Panel className="h-80" />,
 });

@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 
 import { ProductPreview } from "@/components/landing/ProductPreview";
+import { LazyPromoVideo } from "@/components/lazy";
 import { Logo } from "@/components/layout/Logo";
 import { Button } from "@/components/ui/button";
 import { BRAND } from "@/lib/brand";
@@ -164,6 +165,14 @@ export default async function LandingPage() {
             </dl>
           </div>
           <ProductPreview />
+          {/* Produktové video (45 s, bez zvuku) */}
+          <div className="relative lg:col-span-2" data-testid="promo-video">
+            <div aria-hidden className="pointer-events-none absolute -inset-4 rounded-[2rem] bg-primary/15 blur-3xl" />
+            <div className="relative overflow-hidden rounded-2xl border border-primary/30 bg-zinc-950 shadow-2xl ring-1 ring-primary/10">
+              <LazyPromoVideo />
+            </div>
+            <p className="mt-3 text-center font-mono text-xs text-muted-foreground">Eldock za 45 sekund – od QR kódu na rozváděči po protokol o revizi</p>
+          </div>
         </section>
 
         {/* PROBLÉM vs. ŘEŠENÍ */}

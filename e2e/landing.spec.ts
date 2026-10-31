@@ -12,6 +12,10 @@ test.describe("nepřihlášený návštěvník", () => {
     }
     await expect(page.getByText("Eldock s.r.o. (v založení)").first()).toBeVisible();
     await expect(page.getByRole("link", { name: "Domluvit nezávaznou ukázku" })).toHaveAttribute("href", "#kontakt");
+    // produktové video se líně načte a samo se rozběhne (scéna 2 začíná v 8. sekundě)
+    const video = page.getByTestId("promo-video");
+    await expect(video.getByText("Průmyslový dok dokumentace a revizí")).toBeAttached({ timeout: 30_000 });
+    await expect(video.getByText("RH1 · Hlavní rozváděč").first()).toBeAttached({ timeout: 20_000 });
 
     await page.goto("/app");
     await expect(page).toHaveURL(/\/login$/);
