@@ -143,7 +143,10 @@ Když uživatel řekne **„nasaď to na produkci“** nebo **„deploy“**:
 2. `git push` na GitHub (`origin main`).
 3. Spusť nasazení přes SSH:
    `ssh root@91.99.148.62 "cd /root/eldock && git pull && docker-compose up -d --build"`
-4. Ověř výsledek (výstup buildu, `docker-compose ps`, odpověď https://eldock.cz) a shrň ho.
+4. Po úspěšném nasazení ukliď nepoužívané obrazy (klasický Docker builder bez BuildKitu nechává po každém buildu 2–3 GB mezivrstev, jinak se zaplní disk):
+   `ssh root@91.99.148.62 "docker image prune -f && df -h /"`
+   Maže jen obrazy bez tagu, které nepoužívá žádný kontejner; běžící kontejnery, data ani `.env` neovlivní.
+5. Ověř výsledek (výstup buildu, `docker-compose ps`, odpověď https://eldock.cz, volné místo na disku) a shrň ho.
 
 **Pozor:** na serveru je v `/root/eldock` ručně vytvořený soubor `.env` s produkčními hesly – při nasazení na něj nikdy nesahej, nečti ho do výstupu, nepřepisuj ho a nedávej ho do Gitu. Na serveru nespouštěj nic jiného než výše uvedený příkaz a čtecí kontroly; cokoli dalšího (mazání, reset, změny konfigurace) jen po výslovném souhlasu.
 
