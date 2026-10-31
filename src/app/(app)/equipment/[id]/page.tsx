@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Cable, EyeOff, Inbox, QrCode, ShieldX } from "lucide-react";
+import { Cable, CircuitBoard, EyeOff, Inbox, QrCode, ShieldX } from "lucide-react";
 
 import { EmptyState } from "@/components/common/EmptyState";
 import { LocationBreadcrumb } from "@/components/common/LocationBreadcrumb";
@@ -37,6 +37,7 @@ import { hasPanelBook } from "@/lib/sheet-nav";
 import { buildLabelData } from "@/server/equipment-label";
 import { getEquipmentDetail, getLinkableEquipment, getPowerNodes, getRevisionBom, getSchematicReferences } from "@/server/queries/equipment";
 import { getFeatures } from "@/server/modules";
+import { getEquipmentPassports } from "@/server/queries/panel-builder";
 import { getCurrentAccount } from "@/server/session";
 
 type Props = PageProps<"/equipment/[id]">;
@@ -85,12 +86,13 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
   const canEditReferences = account.can("caeOffice") || account.can("studio");
   const withReferences = !!selected && !isLightCard(equipment.type) && modules.on("cae.hotspots");
   // Nezávislé dotazy po ověření přístupu najednou: napájení (LOTO), štítek, kusovník vybrané revize, reference.
-  const [powerNodes, label, bom, references, linkable] = await Promise.all([
+  const [powerNodes, label, bom, references, linkable, passports] = await Promise.all([
     getPowerNodes(plantId),
     buildLabelData(equipment, inspection),
     selected ? getRevisionBom(selected.id) : Promise.resolve([]),
     withReferences ? getSchematicReferences(selected.id, now) : Promise.resolve([]),
     withReferences && canEditReferences ? getLinkableEquipment(plantId) : Promise.resolve([]),
+    equipment.type === "SWITCHBOARD" ? getEquipmentPassports(equipment.id) : Promise.resolve([]),
   ]);
   const today = pragueToday(now);
   // Spotřebiče, nářadí a bezpečnostní zařízení: lehká karta jen s revizemi a měřením.
@@ -143,6 +145,23 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
         canEdit={canEditCard}
       />
       <LazyQrLabelCard label={label} printHref={`${basePath}/label`} canEdit={canEditCard} />
+      {/* Pasport z AI Panel Builderu (propuštěná dokumentace rozváděče) */}
+      {passports.map((passport) => (
+        <div key={passport.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-4 lg:col-span-2" data-testid="panel-passport">
+          <CircuitBoard className="size-5 text-primary" aria-hidden />
+          <div className="min-w-0 flex-1">
+            <p className="font-medium">
+              Pasport rozváděče <span className="font-mono">{passport.code}</span> – {passport.name}
+            </p>
+            <p className="text-xs text-muted-foreground">Výkres osazení, 1P schéma, kusovník, oteplení, prohlášení o shodě a CE štítek{passport.releasedAt ? ` · propuštěno ${formatDate(passport.releasedAt)}` : ""}</p>
+          </div>
+          {account.can("panelBuilder") && modules.on("enterprise.ai_panel_builder") ? (
+            <Button asChild variant="outline" className="touch-target">
+              <Link href={`/panel-builder/${passport.id}/documentation`}>Otevřít dokumentaci</Link>
+            </Button>
+          ) : null}
+        </div>
+      ))}
     </div>
   );
 

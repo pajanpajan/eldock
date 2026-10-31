@@ -5,7 +5,10 @@ import { extractComponents, type ExtractedComponent } from "@/lib/panel-builder/
 import type { EnclosureDims } from "@/lib/panel-builder/layout";
 import { compact, designationsInOrder, dominantManufacturer, matchDetection, type Detection } from "@/lib/panel-builder/matching";
 import { nextProjectCode, type ManufacturerInfo } from "@/lib/panel-builder/project";
+import { releaseBlockers, type DocItem } from "@/lib/panel-builder/documentation";
+import { thermalDevices, thermalEnclosure, type ThermalItemInput } from "@/lib/panel-builder/thermal-input";
 import { ancestors, isConnected, isPhaseAssignment, treeNodeFrom, validateTree, type TreeAssignment } from "@/lib/panel-builder/tree";
+import { calculateThermal } from "@/lib/thermalCalculation";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 
 import type { AiMode, analyzePanelPhoto, lookupComponent } from "./geminiPanelService";
@@ -308,4 +311,67 @@ export async function saveThermalInputs(prisma: PrismaClient, projectId: string,
     prisma.panelBoardProject.update({ where: { id: projectId }, data: { ...enclosure, ipRating: enclosure.ipRating.trim().slice(0, 12) || "IP 41" } }),
     ...operatingCurrents.map((entry) => prisma.panelBoardItem.update({ where: { id: entry.itemId }, data: { operatingCurrentA: entry.value } })),
   ]);
+}
+
+// ---------------------------------------------------------------------------
+//  Výstupní dokumentace (krok 4) – propuštění do provozu
+// ---------------------------------------------------------------------------
+
+/** Stav projektu pro dokumentaci: výpočet oteplení, zapojení a překážky propuštění. */
+export function documentationState(project: {
+  heightMm: number;
+  widthMm: number;
+  depthMm: number;
+  enclosureType: EnclosureType;
+  ambientTempC: number;
+  simultaneityFactor: number;
+  internalWiringLossW: number;
+  items: (ThermalItemInput & DocItemSource)[];
+}) {
+  const nodes = project.items.map(treeNodeFrom);
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const connected = nodes.every((node) => isConnected(node.id, byId));
+  const thermal = calculateThermal(thermalDevices(project.items), thermalEnclosure(project));
+  const docItems = project.items.map(toDocItem);
+  const blockers = releaseBlockers({ items: docItems.map((item, index) => ({ ...item, recognitionStatus: project.items[index].recognitionStatus })), connected, thermalOk: thermal.ok });
+  return { thermal, connected, docItems, blockers };
+}
+
+type DocItemSource = {
+  dinRailIndex: number;
+  positionOnRail: number;
+  fedFromIncomer: boolean;
+  recognitionStatus: string;
+  catalogComponent: (ThermalItemInput["catalogComponent"] & { articleNumber: string; manufacturer: string }) | null;
+};
+
+export const toDocItem = (item: ThermalItemInput & DocItemSource): DocItem => ({
+  id: item.id,
+  designation: item.designation,
+  circuitLabel: item.circuitLabel,
+  dinRailIndex: item.dinRailIndex,
+  positionOnRail: item.positionOnRail,
+  parentItemId: item.parentItemId,
+  fedFromIncomer: item.fedFromIncomer,
+  component: item.catalogComponent
+    ? { articleNumber: item.catalogComponent.articleNumber, typeCode: item.catalogComponent.typeCode, manufacturer: item.catalogComponent.manufacturer, description: item.catalogComponent.description, category: item.catalogComponent.category }
+    : null,
+});
+
+/**
+ * „Propustit dokumentaci do provozu“: pasport se přiřadí ke kartě rozváděče v Eldocku a projekt se
+ * uzavře (COMPLETED). Jen s potvrzenými přístroji, kompletním stromem a vyhovujícím oteplením.
+ */
+export async function releaseDocumentation(prisma: PrismaClient, projectId: string, equipmentId: string, now = new Date()) {
+  const [project, equipment] = await Promise.all([
+    prisma.panelBoardProject.findUnique({ where: { id: projectId }, include: { items: { include: { catalogComponent: true } } } }),
+    prisma.equipment.findUnique({ where: { id: equipmentId }, select: { id: true, type: true, tag: true } }),
+  ]);
+  if (!project) throw new WorkflowError("NOT_FOUND", "Projekt rozváděče neexistuje.");
+  if (!equipment) throw new WorkflowError("NOT_FOUND", "Zařízení neexistuje.");
+  if (equipment.type !== "SWITCHBOARD") throw new WorkflowError("VALIDATION", `${equipment.tag} není rozváděč – pasport lze přiřadit jen ke kartě rozváděče.`);
+  const { blockers } = documentationState(project);
+  if (blockers.length) throw new WorkflowError("VALIDATION", `Dokumentaci zatím nelze propustit: ${blockers.join(" ")}`);
+  await prisma.panelBoardProject.update({ where: { id: projectId }, data: { equipmentId, status: "COMPLETED", releasedAt: now } });
+  return equipment;
 }

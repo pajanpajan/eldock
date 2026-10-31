@@ -10,7 +10,7 @@ import { WorkflowError } from "@/lib/workflow/state-machine";
 import { assertFeature } from "@/server/modules";
 import { analyzePanelPhoto, extractDatasheetComponents, lookupComponent, type AiMode } from "@/server/services/geminiPanelService";
 import { PHASE_OPTIONS, type TreeIssue } from "@/lib/panel-builder/tree";
-import { analyzeProject, assignCatalogComponent, createPanelProject, importDatasheet, lookupComponentForItem, saveThermalInputs, saveTree, type ImportedComponent } from "@/server/services/panel-builder";
+import { analyzeProject, assignCatalogComponent, createPanelProject, importDatasheet, lookupComponentForItem, releaseDocumentation, saveThermalInputs, saveTree, type ImportedComponent } from "@/server/services/panel-builder";
 import { getCurrentAccount } from "@/server/session";
 import { readStoredFile } from "@/server/storage";
 
@@ -191,5 +191,19 @@ export async function saveThermalInputsAction(input: z.input<typeof thermalSchem
     return { ok: true, data: undefined };
   } catch (error) {
     return failure(error, "Parametry se nepodařilo uložit.");
+  }
+}
+
+/** Krok 4: „Propustit dokumentaci do provozu“ – přiřazení pasportu ke kartě rozváděče. */
+export async function releaseDocumentationAction(projectId: string, equipmentId: string): Promise<ActionResult<{ equipmentId: string; tag: string }>> {
+  if (!id.safeParse(projectId).success || !id.safeParse(equipmentId).success) return { ok: false, error: "Vyberte rozváděč v Eldocku." };
+  try {
+    await guard();
+    const equipment = await releaseDocumentation(prisma, projectId, equipmentId);
+    revalidatePath(`/panel-builder/${projectId}`, "layout");
+    revalidatePath(`/equipment/${equipment.id}`);
+    return { ok: true, data: { equipmentId: equipment.id, tag: equipment.tag } };
+  } catch (error) {
+    return failure(error, "Dokumentaci se nepodařilo propustit.");
   }
 }

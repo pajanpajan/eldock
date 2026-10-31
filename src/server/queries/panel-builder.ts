@@ -82,3 +82,29 @@ export const getPickerCatalog = cache(() =>
 );
 
 export type PickerComponent = Awaited<ReturnType<typeof getPickerCatalog>>[number];
+
+/** Rozváděče v závodech, ke kterým lze pasport propustit (výběr v kroku 4). */
+export const getReleaseTargets = cache(() =>
+  prisma.equipment.findMany({
+    where: { type: "SWITCHBOARD" },
+    select: { id: true, tag: true, name: true, floor: { select: { name: true, building: { select: { name: true, plant: { select: { name: true } } } } } } },
+    orderBy: [{ tag: "asc" }],
+  }),
+);
+
+/** Propuštěné pasporty rozváděče (karta zařízení). */
+export const getEquipmentPassports = cache((equipmentId: string) =>
+  prisma.panelBoardProject.findMany({
+    where: { equipmentId, status: "COMPLETED" },
+    select: { id: true, code: true, name: true, releasedAt: true },
+    orderBy: { releasedAt: "desc" },
+  }),
+);
+
+/** Katalogová skříň projektu podle modelu (např. „ABB MISTRAL41W, 36M 3R“ → řada MISTRAL41W). */
+export const getEnclosureComponent = cache(async (enclosureModel: string) => {
+  if (!enclosureModel.trim()) return null;
+  const enclosures = await prisma.catalogComponent.findMany({ where: { category: "ENCLOSURE" } });
+  const model = enclosureModel.toLowerCase();
+  return enclosures.find((row) => model.includes(row.series.toLowerCase()) || model.includes(row.typeCode.toLowerCase())) ?? null;
+});

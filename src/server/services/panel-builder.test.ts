@@ -6,8 +6,8 @@ import { WorkflowError } from "@/lib/workflow/state-machine";
 
 import { CATALOG, seedPanelBuilder } from "../../../prisma/seed-panel-builder";
 import { analyzePanelPhoto, lookupComponent } from "./geminiPanelService";
-import { analyzeProject, assignCatalogComponent, createPanelProject, importDatasheet, lookupComponentForItem, saveTree } from "./panel-builder";
-import { createTestDb } from "./test-db";
+import { analyzeProject, assignCatalogComponent, createPanelProject, importDatasheet, lookupComponentForItem, releaseDocumentation, saveTree } from "./panel-builder";
+import { createTestDb, seedMinimal } from "./test-db";
 
 let db: Awaited<ReturnType<typeof createTestDb>>;
 let prisma: PrismaClient;
@@ -127,5 +127,25 @@ describe("AI Panel Builder – strom zapojení", () => {
     const result = await saveTree(prisma, project.id, assignments(nodes.map((node) => (node.designation === "-F12" ? { ...node, parentItemId: null, fedFromIncomer: false } : node))));
     expect(result).toMatchObject({ status: "RECOGNIZED", connected: false });
     expect(result.issues[0].message).toBe("-F12 není zapojen – vyberte, odkud je napájen.");
+  });
+
+  it("propuštění dokumentace: jen kompletní projekt a jen ke kartě rozváděče", async () => {
+    await seedMinimal(prisma);
+    const { project, nodes } = await pb001();
+    await saveTree(prisma, project.id, assignments(nodes));
+    await expect(releaseDocumentation(prisma, project.id, "eq-R-LIS-01")).rejects.toThrow("Nepotvrzené přístroje (krok 1): -F6, -F9.");
+
+    for (const item of await prisma.panelBoardItem.findMany({ where: { projectId: project.id, recognitionStatus: { not: "VERIFIED" } } })) {
+      const component = await prisma.catalogComponent.findUniqueOrThrow({ where: { articleNumber: item.designation === "-F6" ? "2CDS251001R0105" : "2CDS251001R1165" } });
+      await assignCatalogComponent(prisma, item.id, component.id);
+    }
+    await prisma.equipment.update({ where: { id: "eq-R-CNC-04" }, data: { type: "CNC_MACHINE" } });
+    await expect(releaseDocumentation(prisma, project.id, "eq-R-CNC-04")).rejects.toThrow("není rozváděč");
+
+    const now = new Date("2026-10-31T12:00:00Z");
+    expect(await releaseDocumentation(prisma, project.id, "eq-R-LIS-01", now)).toMatchObject({ tag: "R-LIS-01" });
+    expect(await prisma.panelBoardProject.findUniqueOrThrow({ where: { id: project.id } })).toMatchObject({ status: "COMPLETED", equipmentId: "eq-R-LIS-01", releasedAt: now });
+    // uzavřený projekt zůstává COMPLETED i po další úpravě stromu
+    expect((await saveTree(prisma, project.id, assignments(nodes))).status).toBe("COMPLETED");
   });
 });

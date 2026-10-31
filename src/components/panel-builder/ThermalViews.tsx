@@ -101,10 +101,10 @@ export function PhaseBalance({ result, print = false }: { result: ThermalResult;
 
 /** Inženýrská tabulka (Přístroj, Typ, Popis, In, Pn, L1–N, Pv, Pv × SF², Imax × SF). */
 export function ThermalTable({ result, print = false, renderIb }: { result: ThermalResult; print?: boolean; renderIb?: (row: ThermalRow) => ReactNode }) {
-  const th = cn("px-2 py-1.5 text-right font-medium whitespace-nowrap", print ? "border border-zinc-400" : "border-b border-border text-muted-foreground");
-  const td = cn("px-2 py-1 text-right font-mono whitespace-nowrap", print ? "border border-zinc-300" : "border-b border-border/60");
+  const th = cn("text-right font-medium whitespace-nowrap", print ? "border border-zinc-400 px-0.5 py-1" : "border-b border-border px-2 py-1.5 text-muted-foreground");
+  const td = cn("text-right font-mono whitespace-nowrap", print ? "border border-zinc-300 px-0.5 py-0.5" : "border-b border-border/60 px-2 py-1");
   return (
-    <table className={cn("w-full border-collapse text-xs", print && "text-[9px]")} data-testid="thermal-table">
+    <table className={cn("w-full border-collapse", print ? "text-[6.5pt]" : "text-xs")} data-testid="thermal-table">
       <thead>
         <tr>
           <th className={cn(th, "text-left")}>Přístroj</th>
@@ -137,8 +137,8 @@ export function ThermalTable({ result, print = false, renderIb }: { result: Ther
         {result.rows.map((row) => (
           <tr key={row.id} data-testid={`thermal-row-${row.designation}`}>
             <td className={cn(td, "text-left font-sans font-semibold")}>{row.designation}</td>
-            <td className={cn(td, "text-left font-sans")}>{row.typeCode}</td>
-            <td className={cn(td, "max-w-48 truncate text-left font-sans")} title={row.description}>
+            <td className={cn(td, "text-left font-sans", print && "w-[24mm] whitespace-normal")}>{row.typeCode}</td>
+            <td className={cn(td, "text-left font-sans", print ? "w-[34mm] whitespace-normal" : "max-w-48 truncate")} title={row.description}>
               {row.description}
             </td>
             <td className={td}>{dash(row.ratedCurrentA, 0)}</td>

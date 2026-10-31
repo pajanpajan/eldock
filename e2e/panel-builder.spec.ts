@@ -175,3 +175,35 @@ test("krok 3: výpočet oteplení referenčního rozváděče, živý přepočet
   await expect(page.getByTestId("thermal-verdict")).toContainText("42,4 °C");
   await expect(page.getByTestId("thermal-save-state")).toHaveText("Uloženo");
 });
+
+test("krok 4: 6 listů dokumentace, tiskový režim a propuštění pasportu ke kartě rozváděče", async ({ page }) => {
+  await page.goto("/panel-builder");
+  await page.getByRole("link", { name: /PB-001/ }).click();
+  await page.getByRole("link", { name: "4. Výstupní dokumentace a PDF export" }).click();
+  for (const sheet of [1, 2, 3, 4, 5, 6]) await expect(page.getByTestId(`doc-sheet-${sheet}`)).toBeVisible();
+  await expect(page.getByTestId("doc-functions")).toContainText("Zásuvky kuchyně");
+  await expect(page.getByTestId("doc-parts").getByRole("row", { name: /2CDS251001R1165/ })).toContainText("5");
+  await expect(page.getByTestId("doc-components")).toContainText("-A1");
+  await expect(page.getByTestId("doc-verdict")).toContainText("VYHOVUJE dle ČSN EN 61439");
+  await expect(page.getByTestId("doc-declaration")).toContainText("LVD 2014/35/EU");
+  await expect(page.getByTestId("ce-label").locator("svg")).toHaveCount(2);
+
+  // Tisk: bez hlavičky aplikace, kroků a tlačítek
+  await page.emulateMedia({ media: "print" });
+  await expect(page.getByRole("navigation", { name: "Kroky projektu" })).toBeHidden();
+  await expect(page.getByRole("button", { name: /Vytisknout \/ Exportovat/ })).toBeHidden();
+  await expect(page.getByTestId("doc-sheet-6")).toBeVisible();
+  await page.emulateMedia({ media: "screen" });
+
+  // Propuštění do provozu → karta rozváděče RH1
+  await page.getByRole("button", { name: /Propustit dokumentaci do provozu/ }).click();
+  const target = page.getByLabel("Rozváděč v Eldocku");
+  await target.selectOption((await target.locator("option", { hasText: "RH1 - Hlavní areálový rozváděč" }).getAttribute("value"))!);
+  await page.getByRole("button", { name: "Propustit do provozu" }).click();
+  await expect(page.getByTestId("released")).toContainText("RH1 - Hlavní areálový rozváděč");
+  await expect(page.getByText("Propuštěno do provozu").first()).toBeVisible();
+  await page.getByTestId("released").getByRole("link").click();
+  await expect(page.getByTestId("panel-passport")).toContainText("Pasport rozváděče PB-001");
+  await page.getByTestId("panel-passport").getByRole("link", { name: "Otevřít dokumentaci" }).click();
+  await expect(page.getByTestId("doc-sheet-1")).toBeVisible();
+});
