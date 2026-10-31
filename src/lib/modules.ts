@@ -111,9 +111,9 @@ export const FEATURES: Record<FeatureKey, FeatureDefinition> = {
   },
   "enterprise.ai_panel_builder": {
     module: "ENTERPRISE_TOOLS",
-    label: "AI pasportizace rozváděčů z fotky",
-    benefit: "Fotka dvířek rozváděče → návrh kusovníku, pasportu a výpočtu oteplení. Připravujeme.",
-    labs: true,
+    label: "AI Panel Builder – pasportizace rozváděčů z fotky",
+    benefit: "Fotka otevřeného rozváděče → rozpoznané přístroje, strom zapojení, výpočet oteplení a kompletní dokumentace s CE štítkem.",
+    routes: ["/panel-builder"],
   },
 };
 
@@ -284,6 +284,7 @@ const TOOLS: Tool[] = [
   { label: "Prokliky ve schématu", feature: "cae.hotspots" },
   { label: "Import z Excelu / CSV", anyOf: ["recordInspection", "studio"], feature: "enterprise.csv_import" },
   { label: "Studio výstavby závodu", anyOf: ["studio"], feature: "enterprise.studio" },
+  { label: "AI Panel Builder", anyOf: ["panelBuilder"], feature: "enterprise.ai_panel_builder" },
 ];
 
 export interface RoleImpact {

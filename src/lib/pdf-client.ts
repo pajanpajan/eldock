@@ -60,3 +60,29 @@ export function renderPdfPage(url: string, pageNumber: number, width = 1600): Pr
   }
   return rendered;
 }
+
+/**
+ * Text PDF po stránkách a řádcích (útržky se stejnou svislou polohou = jeden řádek) – podklad pro
+ * atomizaci datasheetů a kusovníků. Nejvýše `maxPages` stran.
+ */
+export async function extractPdfText(url: string, maxPages = 80): Promise<string[][]> {
+  const doc = await loadPdf(url);
+  const result: string[][] = [];
+  for (let number = 1; number <= Math.min(doc.numPages, maxPages); number++) {
+    const content = await (await doc.getPage(number)).getTextContent();
+    const lines = new Map<number, string>();
+    for (const item of content.items) {
+      if (!("str" in item) || !item.str.trim()) continue;
+      const y = Math.round(item.transform[5]);
+      lines.set(y, `${lines.get(y) ?? ""} ${item.str}`);
+    }
+    result.push(
+      [...lines]
+        .sort((a, b) => b[0] - a[0])
+        .map(([, text]) => text.replace(/\s+/g, " ").trim().slice(0, 2000))
+        .filter(Boolean)
+        .slice(0, 400),
+    );
+  }
+  return result;
+}

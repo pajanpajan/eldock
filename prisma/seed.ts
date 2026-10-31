@@ -31,6 +31,7 @@ import {
 import { defectDeadline, severityForResult, splitDefects } from "../src/lib/defects";
 import { ACCOUNTS } from "./seed-accounts";
 import { seedDemoDocs } from "./seed-demo-docs";
+import { seedPanelBuilder } from "./seed-panel-builder";
 import { LIGHT_EQUIPMENT } from "./seed-appliances";
 import { TEMPORARY_MODS } from "./seed-temporary-mods";
 import { FEEDS, INSPECTORS, type DefectSeed, complianceFor, externalInfluencesFor, inspectionsFor, intervalFor } from "./seed-compliance";
@@ -69,6 +70,9 @@ function circleMarkup(designation: string): string {
 
 async function wipe() {
   // Pořadí podle cizích klíčů (děti před rodiči).
+  await prisma.panelBoardItem.deleteMany();
+  await prisma.panelBoardProject.deleteMany();
+  await prisma.catalogComponent.deleteMany();
   await prisma.temporaryModification.deleteMany();
   await prisma.inspectionDefect.deleteMany();
   await prisma.changeRequestEvent.deleteMany();
@@ -432,6 +436,7 @@ async function main() {
 
   // Reálné projekty PCSCHEMATIC (PDF v public/demo-docs), fotografie a další spotřebiče
   await seedDemoDocs(prisma);
+  await seedPanelBuilder(prisma);
   // Kódy QR štítků (stejně jako migrace 20261030190000)
   await prisma.$executeRaw`UPDATE "Equipment" SET "qrToken" = upper(hex(randomblob(5))) WHERE "qrToken" IS NULL`;
 

@@ -21,6 +21,7 @@ export type Permission =
   | "inspections" // přehled revizí a hlídač lhůt
   | "planner" // plánovač revizí
   | "rapid" // rychlá revize spotřebičů
+  | "panelBuilder" // AI Panel Builder (/panel-builder)
   | "caeOffice"; // CAE Back-Office
 
 export interface AccountDefinition {
@@ -67,6 +68,7 @@ export const ACCOUNT_TYPES: Record<AccountType, AccountDefinition> = {
       "inspections",
       "planner",
       "rapid",
+      "panelBuilder",
     ],
     workflowRole: "MAINTENANCE",
     showInspections: true,
@@ -77,7 +79,7 @@ export const ACCOUNT_TYPES: Record<AccountType, AccountDefinition> = {
     label: "Vedoucí údržby",
     scopeDescription: "Všechna zařízení – schvaluje CAE revize, řídí LOTO, provizoria a odstraňování závad.",
     layers: ALL,
-    permissions: ["manageModules", "studio", "audit", "kpi", "approveRevision", "submitChange", "temporaryMods", "resolveDefects", "recordInspection", "inspections", "planner", "rapid"],
+    permissions: ["manageModules", "studio", "audit", "kpi", "approveRevision", "submitChange", "temporaryMods", "resolveDefects", "recordInspection", "inspections", "planner", "rapid", "panelBuilder"],
     workflowRole: "MAINTENANCE",
     showInspections: true,
     badge: "border-emerald-500/50 bg-emerald-500/15 text-emerald-300",
@@ -118,7 +120,7 @@ export const ACCOUNT_TYPES: Record<AccountType, AccountDefinition> = {
     label: "CAE projektant",
     scopeDescription: "Zařízení s výkresovou dokumentací a požadavky na změnu – bez lhůtníku revizí.",
     layers: FIXED,
-    permissions: ["caeOffice"],
+    permissions: ["caeOffice", "panelBuilder"],
     workflowRole: "CAE_ENGINEER",
     showInspections: false,
     badge: "border-violet-500/50 bg-violet-500/15 text-violet-300",
@@ -143,6 +145,7 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   planner: "Plánovač",
   rapid: "Rychlá revize",
   caeOffice: "CAE Back-Office",
+  panelBuilder: "AI Panel Builder",
 };
 
 /** Účet = typ + případný vlastní výřez kategorií (podúčet ze správy uživatelů). */

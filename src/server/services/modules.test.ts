@@ -21,14 +21,14 @@ describe("konfigurace modulů a tarifů", () => {
     expect(await loadModuleConfig(prisma)).toEqual(DEFAULT_MODULE_CONFIG);
   });
 
-  it("modul, podfunkce a režim; Core ani připravovanou funkci zapnout / vypnout nejde", async () => {
+  it("modul, podfunkce a režim; Core ani neznámou funkci zapnout / vypnout nejde", async () => {
     expect((await setModuleEnabled(prisma, "CAE_ADVANCED", false, "u")).modules.CAE_ADVANCED).toBe(false);
     const config = await setFeatureEnabled(prisma, "inspections.alerts", false, "u");
     expect(effectiveFeatures(config)["inspections.alerts"]).toBe(false);
     expect(effectiveFeatures(config)["inspections.planner"]).toBe(true);
     expect((await setDisplayMode(prisma, "CLEAN", "u")).displayMode).toBe("CLEAN");
     await expect(setModuleEnabled(prisma, "CORE", false, "u")).rejects.toBeInstanceOf(WorkflowError);
-    await expect(setFeatureEnabled(prisma, "enterprise.ai_panel_builder", true, "u")).rejects.toBeInstanceOf(WorkflowError);
+    expect(effectiveFeatures(await setFeatureEnabled(prisma, "enterprise.ai_panel_builder", false, "u"))["enterprise.ai_panel_builder"]).toBe(false);
     await expect(setFeatureEnabled(prisma, "neznama", true, "u")).rejects.toBeInstanceOf(WorkflowError);
   });
 

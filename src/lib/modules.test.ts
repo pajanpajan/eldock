@@ -15,17 +15,17 @@ import {
 const all = effectiveFeatures(DEFAULT_MODULE_CONFIG);
 
 describe("registr modulů a podfunkcí", () => {
-  it("výchozí stav: vše zapnuté kromě připravované AI funkce, režim obchodní demo", () => {
+  it("výchozí stav: vše zapnuté vč. AI Panel Builderu, režim obchodní demo", () => {
     expect(moduleConfigFrom([], [], null)).toEqual(DEFAULT_MODULE_CONFIG);
     expect(all["cae.visual_diff"]).toBe(true);
-    expect(all["enterprise.ai_panel_builder"]).toBe(false);
+    expect(all["enterprise.ai_panel_builder"]).toBe(true);
     expect(DEFAULT_MODULE_CONFIG.displayMode).toBe("UPSELL");
   });
 
-  it("podfunkce je účinná jen se zapnutým modulem; neznámé klíče a labs se ignorují", () => {
+  it("podfunkce je účinná jen se zapnutým modulem; neznámé klíče se ignorují", () => {
     const config = moduleConfigFrom(
       [{ key: "CAE_ADVANCED", enabled: false }, { key: "NEZNAMY", enabled: false }],
-      [{ key: "inspections.alerts", enabled: false }, { key: "enterprise.ai_panel_builder", enabled: true }],
+      [{ key: "inspections.alerts", enabled: false }, { key: "enterprise.ai_panel_builder", enabled: false }],
       "CLEAN",
     );
     const flags = effectiveFeatures(config);
@@ -55,6 +55,7 @@ describe("registr modulů a podfunkcí", () => {
     expect(featureForPath("/api/cron/inspection-alerts")).toBe("inspections.alerts");
     expect(featureForPath("/cae/tickets/x")).toBe("cae.ticketing");
     expect(featureForPath("/studio")).toBe("enterprise.studio");
+    expect(featureForPath("/panel-builder/catalog")).toBe("enterprise.ai_panel_builder");
     expect(featureForPath("/inspections")).toBeNull();
   });
 
@@ -72,6 +73,7 @@ describe("registr modulů a podfunkcí", () => {
     expect(impact.MAINTENANCE_TECH.hidden).toEqual(["Kreslení do fotek"]);
     expect(impact.MAINTENANCE_TECH.available).toContain("Hlášení změny (červenka)");
     expect(impact.CAE_ENGINEER.available).toContain("CAE back-office (tickety)");
+    expect(impact.CAE_ENGINEER.hidden).toContain("AI Panel Builder");
     expect(impact.CAE_ENGINEER.available).not.toContain("Hlášení změny (červenka)");
     expect(roleImpact(all)).toHaveLength(6);
   });

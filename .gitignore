@@ -50,3 +50,6 @@ npm-debug.log*
 
 # lokální oprávnění Claude Code
 .claude/settings.local.json
+
+# promo video (npm run video:render)
+public/*.mp4

@@ -17,6 +17,7 @@
     "db:reset": "prisma migrate reset --force && prisma generate && prisma db seed",
     "db:studio": "prisma studio",
     "db:demo-docs": "tsx prisma/demo-docs.ts",
+    "db:panel-builder": "tsx prisma/panel-builder.ts",
     "video:preview": "remotion studio src/remotion/index.ts",
     "video:render": "remotion render src/remotion/index.ts EldockPromo public/eldock-promo.mp4",
     "smoke": "tsx scripts/smoke-workflow.ts",

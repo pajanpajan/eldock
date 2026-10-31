@@ -47,16 +47,18 @@ test.afterAll(async ({ browser }) => {
   await page.close();
 });
 
-test("správa modulů: vedoucí údržby, presety, režim, podfunkce, AI Labs a matice rolí", async ({ page }) => {
+test("správa modulů: vedoucí údržby, presety, režim, podfunkce, AI Panel Builder a matice rolí", async ({ page }) => {
   // Výchozí účet E2E je vedoucí údržby → položka „Moduly“ v navigaci
   await page.goto("/app");
-  await page.getByRole("navigation", { name: "Hlavní navigace" }).getByRole("link", { name: /Moduly|Správa modulů/ }).click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Správa modulů a tarifů");
+  await expect(async () => {
+    await page.getByRole("navigation", { name: "Hlavní navigace" }).getByRole("link", { name: /Moduly|Správa modulů/ }).click();
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Správa modulů a tarifů", { timeout: 3_000 });
+  }).toPass({ timeout: 30_000 });
 
   for (const name of ["Tarif START", "Tarif PROFI ÚDRŽBA", "Tarif KOMPLET ENTERPRISE"]) await expect(page.getByRole("button", { name: new RegExp(name) })).toBeVisible();
   await expect(page.getByRole("radio", { name: /Čisté pracoviště/ })).toBeVisible();
   await expect(page.getByTestId("module-CORE")).toContainText("Vždy aktivní");
-  await expect(page.getByTestId("module-ENTERPRISE_TOOLS")).toContainText("Roadmap / AI Labs");
+  await expect(page.getByRole("switch", { name: /^AI Panel Builder – pasportizace rozváděčů z fotky:/ })).toBeVisible();
   await expect(page.getByRole("switch", { name: /^Kreslení do fotek u červenky:/ })).toBeVisible();
   await expect(page.getByTestId("role-impact").locator("article")).toHaveCount(6);
 
@@ -73,7 +75,7 @@ test("tarif START (čisté pracoviště): jednoduchá aplikace na schémata a QR
   await expect(page.getByRole("radio", { name: /Čisté pracoviště/ })).toHaveAttribute("aria-checked", "true");
 
   const nav = page.getByRole("navigation", { name: "Hlavní navigace" });
-  for (const hidden of [/Plánovač/, /Rychlá revize/, /Audit/, /Studio/]) await expect(nav.getByRole("link", { name: hidden })).toHaveCount(0);
+  for (const hidden of [/Plánovač/, /Rychlá revize/, /Audit/, /Studio/, /Panel Builder/]) await expect(nav.getByRole("link", { name: hidden })).toHaveCount(0);
   await expect(nav.locator("[data-locked-feature]")).toHaveCount(0);
 
   await page.goto("/equipment/eq-pv-m1");

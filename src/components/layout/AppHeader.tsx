@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Blocks, CalendarCheck, CalendarRange, FileCheck2, Inbox, PencilRuler, ScanLine, UsersRound, type LucideIcon } from "lucide-react";
+import { Blocks, CalendarCheck, CalendarRange, CircuitBoard, FileCheck2, Inbox, PencilRuler, ScanLine, UsersRound, type LucideIcon } from "lucide-react";
 
 import type { Permission } from "@/lib/accounts";
 import { LockedNavItem } from "@/components/modules/Upsell";
@@ -22,6 +22,7 @@ const NAV: { href: string; label: string; srLabel: string; icon: LucideIcon; per
   { href: rapidInspectionHref, label: "Rychlá revize", srLabel: "Rychlá revize", icon: ScanLine, permission: "rapid", feature: "inspections.planner" },
   { href: auditReportHref, label: "Audit", srLabel: "Auditní report", icon: FileCheck2, permission: "audit", feature: "inspections.audit" },
   { href: "/studio", label: "Studio", srLabel: "Studio výstavby závodu", icon: PencilRuler, permission: "studio", feature: "enterprise.studio" },
+  { href: "/panel-builder", label: "Panel Builder", srLabel: "AI Panel Builder", icon: CircuitBoard, permission: "panelBuilder", feature: "enterprise.ai_panel_builder" },
   { href: "/admin/modules", label: "Moduly", srLabel: "Správa modulů a tarifů", icon: Blocks, permission: "manageModules" },
   { href: "/admin/users", label: "Účty", srLabel: "Správa podúčtů", icon: UsersRound, permission: "manageUsers" },
 ];
