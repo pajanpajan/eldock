@@ -7,6 +7,9 @@ const nextConfig: NextConfig = {
   // Produkční Docker obraz (viz Dockerfile): `.next/standalone` obsahuje server.js a jen nutné node_modules.
   output: "standalone",
   // Nahrané soubory a zdrojáky (trasované kvůli cestám přes process.cwd()) do obrazu nepatří – data jsou ve svazku.
+  // Docker build na serveru (2 GB RAM) kontrolu typů vynechává – padala na nedostatek paměti. Typy hlídá
+  // `npm run verify` (typecheck) před každým nasazením; lokální `next build` je kontroluje dál.
+  typescript: { ignoreBuildErrors: process.env.ELDOCK_SKIP_BUILD_TYPECHECK === "1" },
   outputFileTracingExcludes: { "*": ["storage/**", "src/**", "e2e/**", "*.db", "*.db-journal", "*.db-wal", "*.db-shm"] },
   turbopack: {
     rules: {
