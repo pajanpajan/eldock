@@ -1,4 +1,4 @@
-✅ ||✅ ||✅ ||✅ ||✅ |# Digitry MVP – implementační plán
+# Digitry MVP – implementační plán
 
 Plán pro realizaci specifikace z `CLAUDE.md` v Claude Code. Dělá se **fázi po fázi**: jedna fáze = jedna úloha (`/faze N`) = jeden commit. Po každé fázi se práce zastaví, ověří a shrne.
 
@@ -43,11 +43,11 @@ Claude Code po každé fázi: odškrtne úkoly, nastaví stav v tabulce níže, 
 | 24 | Optimalizace výkonu: SQLite PRAGMA a indexy, lazy loading těžkých komponent, paralelní dotazy, cache souborů, Docker build | ✅ |
 | 25 | Správa modulů a tarifů: podfunkce, režim Čisté pracoviště / Obchodní demo, presety tarifů a matice dopadu na role | ✅ |
 | 26 | Produktové video v Remotionu (45 s, 5 scén) a líně načítaný přehrávač na úvodní stránce | ✅ |
-| 27 | AI Panel Builder I: atomická databáze prvků, schéma projektů rozváděčů, katalog a těžba PDF datasheetů | 🟨 |
-| 28 | AI Panel Builder II: servisní vrstva Gemini s demo režimem, analýza fotky rozváděče a Smart Fallback Picker | ⬜ |
-| 29 | AI Panel Builder III: hierarchický strom zapojení, hromadné přiřazení, undo/redo a elektrotechnický hlídač | ⬜ |
-| 30 | AI Panel Builder IV: výpočet oteplení (ČSN EN 61439, IEC TR 60890) a fázová bilance | ⬜ |
-| 31 | AI Panel Builder V: generátor dokumentace rozváděče (1P schéma, osazení, kusovník, oteplení, CE štítek, prohlášení o shodě) | ⬜ |
+| 27 | AI Panel Builder I: atomická databáze prvků, schéma projektů rozváděčů, katalog a těžba PDF datasheetů | ✅ |
+| 28 | AI Panel Builder II: servisní vrstva Gemini s demo režimem, analýza fotky rozváděče a Smart Fallback Picker | ✅ |
+| 29 | AI Panel Builder III: hierarchický strom zapojení, hromadné přiřazení, undo/redo a elektrotechnický hlídač | ✅ |
+| 30 | AI Panel Builder IV: výpočet oteplení (ČSN EN 61439, IEC TR 60890) a fázová bilance | ✅ |
+| 31 | AI Panel Builder V: generátor dokumentace rozváděče (1P schéma, osazení, kusovník, oteplení, CE štítek, prohlášení o shodě) | ✅ |
 
 Legenda: ⬜ nezahájeno · 🟨 rozpracováno · ✅ hotovo
 
