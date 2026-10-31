@@ -3,7 +3,7 @@
 // doplní / aktualizuje podle objednacího čísla (upsert), projekt PB-001 založí jen pokud chybí.
 //
 // Prvky referenčního rozváděče (ABB) odpovídají kusovníku public/demo-docs/domovni-rozvadec-rh1.pdf.
-// Objednací čísla a ztráty ostatních řad jsou orientační ukázková data – před objednáním ověřit
+// Objednací čísla a ztráty ostatních řad (Eaton, OEZ, Schneider, Hager, Saltek, Finder) jsou orientační ukázková data – před objednáním ověřit
 // v aktuálním katalogu výrobce.
 
 import { mkdir, writeFile } from "node:fs/promises";
@@ -215,6 +215,18 @@ export const CATALOG: SeedComponent[] = [
   { manufacturer: "Schneider", series: "Acti9 iSW", typeCode: "iSW 3P 40A", articleNumber: "A9S60340", category: "MAIN_SWITCH", poles: "3P", ratedCurrentA: 40, modulesCount: 2, powerLossWatts: 6.2, description: "Vypínač 3P, 40 A" },
   { manufacturer: "Schneider", series: "Acti9 iPRD", typeCode: "iPRD40r 3P+N", articleNumber: "A9L40601", category: "SPD", poles: "3P+N", ratedCurrentA: 40, modulesCount: 4, powerLossWatts: 0.05, description: "Přepěťová ochrana T2, 3P+N, Imax 40 kA, výměnné moduly" },
   { manufacturer: "Schneider", series: "Acti9 iCT", typeCode: "iCT 25A 2NO", articleNumber: "A9C20732", category: "CONTACTOR", poles: "2P", ratedCurrentA: 25, modulesCount: 1, powerLossWatts: 2.4, description: "Instalační stykač 25 A, 2 NO, cívka 230 V" },
+  // --- Hager (objednací číslo = typ) ---
+  mcb("Hager", "MBN", "MBN110", "MBN110", "1P", "B", 10, 6, 2.1),
+  mcb("Hager", "MBN", "MBN116", "MBN116", "1P", "B", 16, 6, 2.2),
+  mcb("Hager", "MBN", "MBN316", "MBN316", "3P", "B", 16, 6, 2.2),
+  { manufacturer: "Hager", series: "CDA", typeCode: "CDA440D", articleNumber: "CDA440D", category: "RCD", poles: "4P", ratedCurrentA: 40, rcdSensitivityMa: 30, rcdType: "A", modulesCount: 4, powerLossWatts: 3.3, description: "Proudový chránič 4P, 40 A / 30 mA, typ A" },
+  { manufacturer: "Hager", series: "SBN", typeCode: "SBN340", articleNumber: "SBN340", category: "MAIN_SWITCH", poles: "3P", ratedCurrentA: 40, modulesCount: 3, powerLossWatts: 6.5, description: "Vypínač 3P, 40 A" },
+  // --- Saltek (přepěťové ochrany) ---
+  { manufacturer: "Saltek", series: "SLP", typeCode: "SLP-275 V/3+1", articleNumber: "SLP-275-V-3+1", category: "SPD", poles: "3P+N", ratedCurrentA: 40, modulesCount: 4, powerLossWatts: 0.04, description: "Přepěťová ochrana T2, 3+1, Uc 275 V, Imax 40 kA" },
+  { manufacturer: "Saltek", series: "FLP", typeCode: "FLP-B+C MAXI V/3+1", articleNumber: "FLP-BC-MAXI-V-3+1", category: "SPD", poles: "3P+N", ratedCurrentA: 63, modulesCount: 4, powerLossWatts: 0.05, description: "Svodič bleskových proudů a přepětí T1+T2, 3+1" },
+  // --- Finder (modulární stykače a relé) ---
+  { manufacturer: "Finder", series: "22.32", typeCode: "22.32.0.230.4340", articleNumber: "223202304340", category: "CONTACTOR", poles: "2P", ratedCurrentA: 25, modulesCount: 1, powerLossWatts: 2.2, description: "Modulární stykač 25 A, 2 NO, cívka 230 V AC" },
+  { manufacturer: "Finder", series: "40.52", typeCode: "40.52.8.230.0000", articleNumber: "405282300000", category: "RELAY", poles: "2P", ratedCurrentA: 8, modulesCount: 1, powerLossWatts: 0.6, description: "Relé 2 přepínací kontakty 8 A, cívka 230 V AC" },
 ];
 
 // ---------------------------------------------------------------------------

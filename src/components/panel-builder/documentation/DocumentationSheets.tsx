@@ -194,6 +194,7 @@ export function DocumentationSheets({ data }: { data: DocumentationData }) {
               <th className={cell}>Značení</th>
               <th className={cell}>Objednací číslo</th>
               <th className={cell}>Typ</th>
+              <th className={cell}>Výrobce</th>
               <th className={cell}>Popis</th>
               <th className={cell}>Pozice</th>
               <th className={cell}>Funkce</th>
@@ -205,6 +206,7 @@ export function DocumentationSheets({ data }: { data: DocumentationData }) {
                 <td className={`${cell} font-mono font-semibold`}>{row.designation}</td>
                 <td className={`${cell} font-mono`}>{row.articleNumber}</td>
                 <td className={cell}>{row.typeCode}</td>
+                <td className={cell}>{row.manufacturer}</td>
                 <td className={cell}>{row.description}</td>
                 <td className={`${cell} font-mono`}>{row.position}</td>
                 <td className={cell}>{row.function}</td>

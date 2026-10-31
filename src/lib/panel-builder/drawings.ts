@@ -11,6 +11,8 @@ export interface DrawingItem {
   id: string;
   designation: string;
   typeCode: string;
+  /** Výrobce z katalogu (rozváděč může kombinovat více značek). */
+  manufacturer?: string | null;
   category: ComponentCategory | null;
   poles: string | null;
   dinRailIndex: number;
@@ -187,6 +189,7 @@ export function renderSingleLineDiagramSvg(items: readonly DrawingItem[], option
     out.push(symbol(item.category, cx, y + 14));
     out.push(`<text x="${cx + 9}" y="${y + 34}" font-size="9" font-weight="700">${esc(item.designation)}</text>`);
     out.push(`<text x="${cx + 9}" y="${y + 44}" font-size="6.5" fill="#374151">${esc(item.typeCode.length > 16 ? `${item.typeCode.slice(0, 15)}…` : item.typeCode)}</text>`);
+    if (item.manufacturer) out.push(`<text x="${cx + 9}" y="${y + 52}" font-size="6" fill="#6b7280">${esc(item.manufacturer)}</text>`);
     const outY = y + 58;
     if (kids.length) {
       const busY = y + LEVEL - 8;

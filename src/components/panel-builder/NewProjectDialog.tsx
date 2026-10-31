@@ -9,12 +9,12 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MANUFACTURER_OPTIONS, MIX } from "@/lib/panel-builder/catalog";
 import { resizeImage, uploadFile } from "@/lib/upload-client";
 import { cn } from "@/lib/utils";
 import { createPanelProjectAction } from "@/server/actions/panel-builder";
 
 const selectClass = "h-10 rounded-md border border-input bg-transparent px-2 text-sm dark:bg-input/30";
-const MANUFACTURERS = ["ABB", "Eaton", "OEZ", "Schneider", "Hager"];
 /** Ukázková fotka referenčního rozváděče (seed PB-001). */
 export const SAMPLE_PHOTO = "/api/files/photos/seed/panel-pb-001.svg";
 
@@ -45,7 +45,7 @@ export function NewProjectDialog() {
         name: String(form.get("name") ?? ""),
         customerName: String(form.get("customer") ?? "") || null,
         photoUrl: photo?.url ?? null,
-        dominantManufacturer: String(form.get("manufacturer") ?? "ABB"),
+        dominantManufacturer: String(form.get("manufacturer") ?? MIX),
         dinRailsCount: Number(form.get("rails")),
         modulesPerRail: Number(form.get("modules")),
       });
@@ -78,15 +78,20 @@ export function NewProjectDialog() {
             <Label htmlFor="pb-customer">Zákazník / objekt</Label>
             <Input id="pb-customer" name="customer" maxLength={120} placeholder="nepovinné" />
           </div>
-          <div className="grid grid-cols-3 gap-3">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="pb-manufacturer">Výrobce přístrojů</Label>
-              <select id="pb-manufacturer" name="manufacturer" className={selectClass} defaultValue="ABB">
-                {MANUFACTURERS.map((name) => (
-                  <option key={name}>{name}</option>
-                ))}
-              </select>
-            </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="pb-manufacturer">Převažující výrobce (nápověda pro AI)</Label>
+            <select id="pb-manufacturer" name="manufacturer" className={selectClass} defaultValue={MIX} aria-describedby="pb-manufacturer-hint">
+              {MANUFACTURER_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <p id="pb-manufacturer-hint" className="text-xs text-muted-foreground">
+              Ponechte „Různí výrobci“, pokud jsou v rozváděči přístroje od více značek. Výběrem konkrétní značky pomůžete AI upřednostnit její katalog při horší čitelnosti.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="pb-rails">DIN lišt</Label>
               <Input id="pb-rails" name="rails" type="number" min={1} max={12} defaultValue={3} />

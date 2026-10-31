@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { REFERENCE_DIMS } from "@/lib/panel-builder/reference";
 
-import { abbS200Article, analyzePanelPhoto, extractDatasheetComponents, isGeminiConfigured, lookupComponent, toDetections, toExtracted } from "./geminiPanelService";
+import { normalizeManufacturer } from "@/lib/panel-builder/catalog";
+
+import { abbS200Article, analyzePanelPhoto, photoPrompt, extractDatasheetComponents, isGeminiConfigured, lookupComponent, toDetections, toExtracted } from "./geminiPanelService";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -64,5 +66,32 @@ describe("Gemini – demo režim bez GEMINI_API_KEY", () => {
     expect(toDetections([{ rail: 1, position: 1, box_2d: [1], text: "x", modules: 0, confidence: 2 }])[0]).toMatchObject({ box: null, modules: 1, confidence: 1 });
     expect(toExtracted({ manufacturer: "ABB", typeCode: "S201-B16", articleNumber: "X1", category: "MCB", ratedCurrentA: 16 })).toMatchObject({ powerLossWatts: 2.5, powerLossEstimated: true, modulesCount: 1 });
     expect(toExtracted({ manufacturer: "ABB", typeCode: "S201-B16", category: "MCB" })).toBeNull();
+  });
+});
+
+describe("Gemini – mix výrobců", () => {
+  it("prompt bez nápovědy neomezuje značku, se značkou ji jen upřednostní", () => {
+    expect(photoPrompt(null)).toContain("RŮZNÝCH výrobců");
+    expect(photoPrompt("MIX")).toContain("u KAŽDÉHO modulu samostatně");
+    expect(photoPrompt("Eaton")).toContain("pravděpodobně Eaton");
+    expect(photoPrompt("Eaton")).not.toContain("RŮZNÝCH");
+  });
+
+  it("nápověda projektu jde do promptu, výrobci z odpovědi se sjednotí", async () => {
+    vi.stubEnv("GEMINI_API_KEY", "test-key");
+    const devices = [
+      { rail: 1, position: 1, box_2d: [100, 100, 200, 200], text: "MSO-40-3", category: "MAIN_SWITCH", modules: 3, manufacturer: "OEZ a.s.", confidence: 0.9 },
+      { rail: 1, position: 2, box_2d: [100, 200, 200, 300], text: "SLP-275", category: "SPD", modules: 4, manufacturer: "SALTEK", confidence: 0.9 },
+      { rail: 2, position: 1, box_2d: [300, 100, 400, 140], text: "iC60N", category: "MCB", modules: 1, manufacturer: "Schneider Electric", confidence: 0.9 },
+    ];
+    const fetchMock = vi.fn<(url: string, init: RequestInit) => Promise<Response>>(async () => Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({ dominantManufacturer: "MIX", devices }) }] } }] }));
+    vi.stubGlobal("fetch", fetchMock);
+    const result = await analyzePanelPhoto({ image: { bytes: Buffer.from("x"), mimeType: "image/jpeg" }, dims: REFERENCE_DIMS, manufacturerHint: null });
+    expect(result.detections.map((d) => d.manufacturer)).toEqual(["OEZ", "Saltek", "Schneider"]);
+    expect(result.dominantManufacturer).toBeNull();
+    expect(String(fetchMock.mock.calls[0][1].body)).toContain("RŮZNÝCH výrobců");
+    expect(normalizeManufacturer("MOELLER")).toBe("Eaton");
+    expect(normalizeManufacturer("Legrand SNC")).toBe("Legrand");
+    expect(normalizeManufacturer("Neznámá s.r.o.")).toBe("Neznámá s.r.o.");
   });
 });

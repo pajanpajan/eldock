@@ -7,8 +7,8 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { CATEGORY_LABELS, formatWatts } from "@/lib/panel-builder/catalog";
-import { PICKER_CATEGORIES, PICKER_CURRENTS, PICKER_CURVES, PICKER_POLES, initialSelection, pickerCandidates, type PickerSelection } from "@/lib/panel-builder/matching";
+import { CATEGORY_LABELS, PICKER_MANUFACTURERS, formatWatts } from "@/lib/panel-builder/catalog";
+import { PICKER_CATEGORIES, PICKER_CURRENTS, PICKER_CURVES, PICKER_POLES, initialSelection, pickerCandidates, sameManufacturer, type PickerSelection } from "@/lib/panel-builder/matching";
 import { RECOGNITION } from "@/lib/panel-builder/project";
 import { cn } from "@/lib/utils";
 import { assignComponentAction, lookupComponentAction } from "@/server/actions/panel-builder";
@@ -35,7 +35,7 @@ function Tile({ active, onClick, children, label }: { active: boolean; onClick: 
 }
 
 /** „Bleskový identifikátor nerozpoznaných prvků“ – kategorie → póly a charakteristika → proud → kus z katalogu. */
-export function SmartFallbackPicker({ item, catalog, manufacturers, dominant, onAssigned }: { item: WorkspaceItem; catalog: PickerComponent[]; manufacturers: string[]; dominant: string; onAssigned: () => void }) {
+export function SmartFallbackPicker({ item, catalog, dominant, onAssigned }: { item: WorkspaceItem; catalog: PickerComponent[]; dominant: string; onAssigned: () => void }) {
   const [selection, setSelection] = useState<PickerSelection>(() => initialSelection(item.detected, dominant, item.modulesWidth));
   const [text, setText] = useState(item.rawOcrText?.replace(/[?б]/g, "") ?? "");
   const [found, setFound] = useState<{ component: ImportedComponent; mode: string } | null>(null);
@@ -99,19 +99,23 @@ export function SmartFallbackPicker({ item, catalog, manufacturers, dominant, on
         </div>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-        Výrobce rozváděče:
-        {manufacturers.map((name) => (
-          <button
-            key={name}
-            type="button"
-            aria-pressed={selection.manufacturer === name}
-            onClick={() => set({ manufacturer: name })}
-            className={cn("rounded-full border px-2.5 py-1", selection.manufacturer === name ? "border-primary text-primary" : "border-border hover:text-foreground")}
-          >
-            {name}
-          </button>
-        ))}
+      {/* Výrobce jen pro tento modul – ostatní přístroje v rozváděči se nemění */}
+      <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground" role="group" aria-label="Výrobce přístroje">
+        <span className="mr-1">Výrobce:</span>
+        {PICKER_MANUFACTURERS.map((option) => {
+          const active = option.value === null ? selection.manufacturer === null : sameManufacturer(selection.manufacturer, option.value);
+          return (
+            <button
+              key={option.label}
+              type="button"
+              aria-pressed={active}
+              onClick={() => set({ manufacturer: option.value })}
+              className={cn("min-h-8 rounded-md border px-2.5 font-semibold tracking-wide", active ? "border-primary bg-primary text-primary-foreground" : "border-border hover:text-foreground")}
+            >
+              {option.label}
+            </button>
+          );
+        })}
         <span className="ml-auto">Šířka: {item.modulesWidth} M</span>
       </div>
 

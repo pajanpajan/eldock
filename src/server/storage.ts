@@ -26,7 +26,8 @@ export async function readStoredFile(url: string): Promise<{ bytes: Buffer; mime
   else if (/^\/demo-docs\/[\w.-]+\.pdf$/.test(url)) filePath = path.join(process.cwd(), "public", url);
   if (!filePath) return null;
   try {
-    return { bytes: await readFile(filePath), mimeType: contentTypeFor(filePath) };
+    // Cesta je známá až za běhu – nepatří do trasování buildu (jinak Turbopack přibalí celý projekt).
+    return { bytes: await readFile(/* turbopackIgnore: true */ filePath), mimeType: contentTypeFor(filePath) };
   } catch {
     return null;
   }

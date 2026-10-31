@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
@@ -27,7 +27,7 @@ export interface WorkspaceItem {
   recognitionStatus: RecognitionStatus;
   confidence: number;
   rawOcrText: string | null;
-  detected: { category?: ComponentCategory | null; poles?: string | null; ratedCurrentA?: number | null; trippingCurve?: string | null } | null;
+  detected: { category?: ComponentCategory | null; poles?: string | null; ratedCurrentA?: number | null; trippingCurve?: string | null; manufacturer?: string | null } | null;
   component: Pick<PickerComponent, "id" | "manufacturer" | "typeCode" | "category" | "powerLossWatts"> | null;
 }
 
@@ -60,11 +60,6 @@ export function RecognitionWorkspace({
   const [selectedId, setSelectedId] = useState<string | null>(unresolved[0]?.id ?? null);
   const [analyzing, startAnalyze] = useTransition();
   const selected = items.find((item) => item.id === selectedId) ?? null;
-  // Výrobci modulových přístrojů (bez obecných položek z importovaných kusovníků)
-  const manufacturers = useMemo(
-    () => [...new Set([dominant, ...catalog.filter((component) => ["MCB", "RCD", "RCBO", "MAIN_SWITCH"].includes(component.category) && !component.manufacturer.includes("(")).map((component) => component.manufacturer)])].slice(0, 6),
-    [catalog, dominant],
-  );
 
   function nextUnresolved(afterId: string | null) {
     const order = items.filter((item) => item.recognitionStatus !== "VERIFIED" && item.id !== afterId);
@@ -146,7 +141,6 @@ export function RecognitionWorkspace({
             key={selected.id}
             item={selected}
             catalog={catalog}
-            manufacturers={manufacturers}
             dominant={dominant}
             onAssigned={() => {
               nextUnresolved(selected.id);

@@ -3,7 +3,7 @@
 // demo režim – služba nikdy nespadne, jen vrátí `mode: "DEMO"` (UI zobrazí štítek Demo AI režimu).
 
 import type { ComponentCategory } from "@/generated/prisma/enums";
-import { COMPONENT_CATEGORIES, estimateModules, estimatePowerLoss, iecSymbolFor, isPoles } from "@/lib/panel-builder/catalog";
+import { COMPONENT_CATEGORIES, estimateModules, estimatePowerLoss, iecSymbolFor, isMix, isPoles, normalizeManufacturer } from "@/lib/panel-builder/catalog";
 import { extractComponents, parseComponent, type ExtractedComponent } from "@/lib/panel-builder/datasheet-extract";
 import type { EnclosureDims } from "@/lib/panel-builder/layout";
 import { demoDetections, type Detection } from "@/lib/panel-builder/matching";
@@ -54,12 +54,26 @@ const category = (value: unknown): ComponentCategory | null => ((COMPONENT_CATEG
 //  Analýza fotky rozváděče (GEMINI_VISION_MODEL)
 // ---------------------------------------------------------------------------
 
-const PHOTO_PROMPT = `Jsi zkušený elektrotechnik. Na fotce je otevřený rozváděč s modulovými přístroji na DIN lištách.
+/**
+ * Prompt pro analýzu fotky. Bez nápovědy (projekt „Různí výrobci“) model nesmí předpokládat jednu
+ * značku – výrobce určí u každého modulu zvlášť. Se značkou ji jen upřednostní při horší čitelnosti.
+ */
+export function photoPrompt(manufacturerHint: string | null): string {
+  const brand = isMix(manufacturerHint)
+    ? `V rozváděči mohou být přístroje RŮZNÝCH výrobců (např. OEZ odpínač, Saltek přepěťová ochrana, Eaton jističe).
+Nepředpokládej jednu značku: výrobce urči u KAŽDÉHO modulu samostatně podle loga, barvy a tvaru páček
+a formátu typového kódu (ABB S201-B16, Eaton PL7-B16/1, OEZ LTN-16B-1, Schneider iC60N, Hager MBN116 …).`
+    : `Převažující výrobce přístrojů je pravděpodobně ${manufacturerHint} – při horší čitelnosti ho upřednostni,
+ale u každého modulu výrobce ověř podle loga a typového kódu (rozváděč může obsahovat i jiné značky).`;
+  return `Jsi zkušený elektrotechnik. Na fotce je otevřený rozváděč s modulovými přístroji na DIN lištách.
 Najdi všechny DIN lišty (shora dolů, číslováno od 1) a na každé všechny přístroje zleva doprava.
+${brand}
 Pro každý přístroj vrať: rail, position (od 1 zleva), box_2d [ymin, xmin, ymax, xmax] v rozsahu 0–1000,
 text (vše čitelné z čela: výrobce, typ, objednací číslo), category, poles (1P, 1P+N, 2P, 3P, 3P+N, 4P),
-ratedCurrentA, trippingCurve (B/C/D), modules (šířka v modulech 18 mm), manufacturer, label (ručně psaný
-popis obvodu pod přístrojem, je-li čitelný) a confidence 0–1. Neznámé hodnoty vynech. Urči i dominantního výrobce.`;
+ratedCurrentA, trippingCurve (B/C/D), modules (šířka v modulech 18 mm), manufacturer (výrobce tohoto modulu),
+label (ručně psaný popis obvodu pod přístrojem, je-li čitelný) a confidence 0–1. Neznámé hodnoty vynech.
+Urči i dominantního výrobce (nebo „MIX“, je-li značek více).`;
+}
 
 const PHOTO_SCHEMA = {
   type: "OBJECT",
@@ -124,7 +138,7 @@ export function toDetections(devices: readonly GeminiDevice[]): Detection[] {
         poles: poles && isPoles(poles) ? poles : null,
         ratedCurrentA: num(device.ratedCurrentA),
         trippingCurve: curve && ["B", "C", "D"].includes(curve) ? curve : null,
-        manufacturer: str(device.manufacturer),
+        manufacturer: normalizeManufacturer(device.manufacturer),
         confidence: Math.min(1, Math.max(0, Number(device.confidence) || 0.5)),
         circuitLabel: str(device.label)?.slice(0, 80),
       };
@@ -134,17 +148,17 @@ export function toDetections(devices: readonly GeminiDevice[]): Detection[] {
 /** Fotky, které Gemini umí přečíst (SVG ukázky jdou do demo režimu). */
 export const GEMINI_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
-export async function analyzePanelPhoto(input: { image: { bytes: Buffer; mimeType: string } | null; dims: EnclosureDims }): Promise<{ mode: AiMode; detections: Detection[]; dominantManufacturer: string | null; warning?: string }> {
+export async function analyzePanelPhoto(input: { image: { bytes: Buffer; mimeType: string } | null; dims: EnclosureDims; manufacturerHint?: string | null }): Promise<{ mode: AiMode; detections: Detection[]; dominantManufacturer: string | null; warning?: string }> {
   const { visionModel, apiKey } = geminiConfig();
   if (apiKey && input.image && GEMINI_IMAGE_TYPES.includes(input.image.mimeType)) {
     try {
       const result = await generateJson<{ dominantManufacturer?: string; devices: GeminiDevice[] }>(
         visionModel,
-        [{ text: PHOTO_PROMPT }, { inline_data: { mime_type: input.image.mimeType, data: input.image.bytes.toString("base64") } }],
+        [{ text: photoPrompt(input.manufacturerHint ?? null) }, { inline_data: { mime_type: input.image.mimeType, data: input.image.bytes.toString("base64") } }],
         PHOTO_SCHEMA,
       );
       const detections = toDetections(result.devices ?? []);
-      if (detections.length) return { mode: "GEMINI", detections, dominantManufacturer: str(result.dominantManufacturer) };
+      if (detections.length) return { mode: "GEMINI", detections, dominantManufacturer: normalizeManufacturer(result.dominantManufacturer) };
       return { mode: "DEMO", detections: demoDetections(input.dims), dominantManufacturer: "ABB", warning: "Gemini na fotce nenašel žádný přístroj – zobrazena ukázková detekce." };
     } catch (error) {
       console.error("[gemini] analýza fotky selhala:", error);

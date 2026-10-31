@@ -1,9 +1,9 @@
 import type { PrismaClient } from "@/generated/prisma/client";
 import type { EnclosureMaterial, EnclosureType } from "@/generated/prisma/enums";
-import { buildSearchText } from "@/lib/panel-builder/catalog";
+import { buildSearchText, isMix } from "@/lib/panel-builder/catalog";
 import { extractComponents, type ExtractedComponent } from "@/lib/panel-builder/datasheet-extract";
 import type { EnclosureDims } from "@/lib/panel-builder/layout";
-import { compact, designationsInOrder, dominantManufacturer, matchDetection, type Detection } from "@/lib/panel-builder/matching";
+import { compact, designationsInOrder, matchDetection, type Detection } from "@/lib/panel-builder/matching";
 import { nextProjectCode, type ManufacturerInfo } from "@/lib/panel-builder/project";
 import { releaseBlockers, type DocItem } from "@/lib/panel-builder/documentation";
 import { thermalDevices, thermalEnclosure, type ThermalItemInput } from "@/lib/panel-builder/thermal-input";
@@ -128,7 +128,8 @@ export async function applyDetections(prisma: PrismaClient, projectId: string, d
     where: { category: { not: "ENCLOSURE" } },
     select: { id: true, manufacturer: true, typeCode: true, articleNumber: true, category: true, poles: true, ratedCurrentA: true, trippingCurve: true, modulesCount: true },
   });
-  const manufacturer = dominant ?? dominantManufacturer(detections);
+  // „Různí výrobci“ (null): bez preference – každý modul se páruje podle vlastního výrobce.
+  const manufacturer = isMix(dominant) ? null : dominant;
   const matches = detections.map((detection) => matchDetection(detection, catalog, manufacturer));
   const byId = new Map(catalog.map((component) => [component.id, component]));
   const designations = designationsInOrder(detections.map((detection, index) => byId.get(matches[index].componentId ?? "")?.category ?? detection.category));
@@ -167,7 +168,7 @@ export async function applyDetections(prisma: PrismaClient, projectId: string, d
     const project = await tx.panelBoardProject.findUniqueOrThrow({ where: { id: projectId }, select: { dinRailsCount: true } });
     await tx.panelBoardProject.update({
       where: { id: projectId },
-      data: { status: "RECOGNIZED", analysisMode: mode, dominantManufacturer: manufacturer, dinRailsCount: Math.max(project.dinRailsCount, rails) },
+      data: { status: "RECOGNIZED", analysisMode: mode, dinRailsCount: Math.max(project.dinRailsCount, rails) },
     });
   });
   return { mode, total: detections.length, unresolved: matches.filter((match) => match.status !== "VERIFIED").length };
@@ -180,8 +181,9 @@ export async function analyzeProject(prisma: PrismaClient, projectId: string, de
   const project = await prisma.panelBoardProject.findUnique({ where: { id: projectId } });
   if (!project) throw new WorkflowError("NOT_FOUND", "Projekt rozváděče neexistuje.");
   const image = project.photoUrl ? await deps.readPhoto(project.photoUrl) : null;
-  const result = await deps.analyze({ image, dims: project });
-  const saved = await applyDetections(prisma, projectId, result.detections, result.mode, result.dominantManufacturer ?? project.dominantManufacturer);
+  const hint = isMix(project.dominantManufacturer) ? null : project.dominantManufacturer;
+  const result = await deps.analyze({ image, dims: project, manufacturerHint: hint });
+  const saved = await applyDetections(prisma, projectId, result.detections, result.mode, hint);
   return { ...saved, warning: result.warning };
 }
 

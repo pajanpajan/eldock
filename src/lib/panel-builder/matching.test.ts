@@ -71,11 +71,30 @@ describe("párování detekcí s katalogem", () => {
 });
 
 describe("Smart Fallback Picker", () => {
-  it("filtr podle kategorie, pólů, charakteristiky a proudu; dominantní výrobce napřed", () => {
-    const selection = initialSelection({ category: "MCB", poles: "1P" }, "Eaton", 1);
-    expect(pickerCandidates(CATALOG, selection).map((x) => x.id)).toEqual(["eaton-b16", "oez-c16", "abb-b16"]);
-    expect(pickerCandidates(CATALOG, { ...selection, curve: "B", current: 16, manufacturer: "ABB" }).map((x) => x.id)).toEqual(["abb-b16", "eaton-b16"]);
-    expect(pickerCandidates(CATALOG, { ...selection, category: null })).toEqual([]);
-    expect(pickerCandidates(CATALOG, { ...selection, category: "MAIN_SWITCH", poles: "3P" }).map((x) => x.id)).toEqual(["abb-sd"]);
+  it("filtr podle kategorie, pólů, charakteristiky, proudu a výrobce (záložka jen pro tento modul)", () => {
+    const all = initialSelection({ category: "MCB", poles: "1P" }, "MIX", 1);
+    expect(all.manufacturer).toBeNull();
+    expect(pickerCandidates(CATALOG, all).map((x) => x.id)).toEqual(["oez-c16", "eaton-b16", "abb-b16"]);
+    expect(pickerCandidates(CATALOG, { ...all, manufacturer: "EATON" }).map((x) => x.id)).toEqual(["eaton-b16"]);
+    expect(pickerCandidates(CATALOG, { ...all, curve: "B", current: 16 }).map((x) => x.id)).toEqual(["eaton-b16", "abb-b16"]);
+    expect(pickerCandidates(CATALOG, { ...all, manufacturer: "Hager" })).toEqual([]);
+    expect(pickerCandidates(CATALOG, { ...all, category: null })).toEqual([]);
+    expect(pickerCandidates(CATALOG, { ...all, category: "MAIN_SWITCH", poles: "3P" }).map((x) => x.id)).toEqual(["abb-sd"]);
+  });
+
+  it("výchozí výrobce: přečtený u modulu > převažující výrobce rozváděče > Všichni", () => {
+    expect(initialSelection({ category: "MCB", manufacturer: "OEZ" }, "ABB", 1).manufacturer).toBe("OEZ");
+    expect(initialSelection({ category: "MCB" }, "ABB", 1).manufacturer).toBe("ABB");
+    expect(initialSelection(null, "MIX", 1).manufacturer).toBeNull();
+  });
+});
+
+describe("mix výrobců v jednom rozváděči", () => {
+  it("výrobce přečtený u modulu má přednost; bez preference se páruje napříč katalogem", () => {
+    const params = { category: "MCB" as const, poles: "1P", ratedCurrentA: 16, trippingCurve: "B" };
+    expect(matchDetection(detection({ ...params, manufacturer: "EATON" }), CATALOG, "ABB")).toMatchObject({ componentId: "eaton-b16", status: "PARTIAL" });
+    expect(matchDetection(detection({ ...params, manufacturer: "Hager" }), CATALOG, "ABB")).toMatchObject({ componentId: null, status: "UNRECOGNIZED" });
+    expect(matchDetection(detection(params), CATALOG, null)).toMatchObject({ componentId: expect.stringMatching(/b16$/), status: "PARTIAL" });
+    expect(matchDetection(detection({ rawOcrText: "OEZ LTN-16C-1" }), CATALOG, "ABB")).toMatchObject({ componentId: "oez-c16", status: "VERIFIED" });
   });
 });

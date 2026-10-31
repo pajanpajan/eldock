@@ -77,6 +77,8 @@ test("nový projekt z ukázkové fotky a dohledání přístroje podle textu z �
   await page.goto("/panel-builder");
   await page.getByRole("button", { name: "Nový projekt z fotky" }).click();
   await page.getByLabel("Název rozváděče").fill("Podružný rozváděč RP2 – dílna");
+  await expect(page.getByLabel("Převažující výrobce (nápověda pro AI)")).toHaveValue("MIX");
+  await expect(page.getByLabel("Převažující výrobce (nápověda pro AI)").locator("option:checked")).toHaveText("⚡ Různí výrobci / Auto-detekce AI");
   await page.getByRole("button", { name: "Ukázková fotka" }).click();
   await page.getByRole("button", { name: "Založit a analyzovat fotku" }).click();
   await expect(page).toHaveURL(/\/panel-builder\/[^/]+$/, { timeout: 30_000 });
@@ -85,6 +87,15 @@ test("nový projekt z ukázkové fotky a dohledání přístroje podle textu z �
 
   const picker = page.getByTestId("smart-picker");
   await expect(picker).toContainText("-F6");
+  // Různí výrobci → picker bez filtru značky; záložka EATON zúží nabídku jen pro tento modul
+  await expect(picker.getByRole("button", { name: "Všichni", pressed: true })).toBeVisible();
+  await picker.getByRole("button", { name: "1P", exact: true }).click();
+  await picker.getByRole("button", { name: "10A" }).click();
+  await expect(picker.getByTestId("picker-candidates")).toContainText("S201-B10");
+  await picker.getByRole("button", { name: "EATON" }).click();
+  await expect(picker.getByTestId("picker-candidates").locator("li")).toHaveCount(1);
+  await expect(picker.getByTestId("picker-candidates")).toContainText("PL7-B10/1");
+  await picker.getByRole("button", { name: "Všichni" }).click();
   await picker.getByLabel("Text z čela přístroje").fill("S201 C13");
   await picker.getByRole("button", { name: /Dohledat v datasheetech/ }).click();
   await expect(picker.getByTestId("picker-candidates").locator("li").first()).toContainText("S201-C13");

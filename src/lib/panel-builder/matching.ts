@@ -3,6 +3,7 @@
 
 import type { ComponentCategory, RecognitionStatus } from "@/generated/prisma/enums";
 
+import { isMix, normalizeManufacturer } from "./catalog";
 import { slotBoxes, type BoundingBox, type EnclosureDims } from "./layout";
 import { REFERENCE_DEVICES, withPositions } from "./reference";
 
@@ -45,12 +46,20 @@ export interface MatchResult {
 /** Jen písmena a číslice malými – „S201-B16“ i „s201 b16“ → „s201b16“. */
 export const compact = (text: string) => text.toLowerCase().replace(/[^a-z0-9]/g, "");
 
-const byPreference = (dominant: string | null) => (a: MatchableComponent, b: MatchableComponent) =>
-  Number(b.manufacturer === dominant) - Number(a.manufacturer === dominant) || a.typeCode.localeCompare(b.typeCode);
+/** Stejný výrobce bez ohledu na zápis („EATON“ = „Eaton“, „Schneider Electric“ = „Schneider“). */
+export const sameManufacturer = (a: string | null | undefined, b: string | null | undefined) => {
+  const left = normalizeManufacturer(a);
+  return left !== null && left === normalizeManufacturer(b);
+};
+
+const byPreference = (preferred: string | null) => (a: MatchableComponent, b: MatchableComponent) =>
+  Number(sameManufacturer(b.manufacturer, preferred)) - Number(sameManufacturer(a.manufacturer, preferred)) || a.typeCode.localeCompare(b.typeCode);
 
 /**
  * Detekce → katalog: přečtené objednací číslo nebo typ = VERIFIED; shoda parametrů (kategorie,
- * póly, proud, charakteristika) = PARTIAL k potvrzení; jinak UNRECOGNIZED.
+ * póly, proud, charakteristika) = PARTIAL k potvrzení; jinak UNRECOGNIZED. Hledá se napříč všemi
+ * výrobci; výrobce přečtený u modulu má přednost před převažujícím výrobcem rozváděče
+ * (`dominantManufacturer` null = „Různí výrobci“, bez preference).
  */
 export function matchDetection(detection: Detection, catalog: readonly MatchableComponent[], dominantManufacturer: string | null): MatchResult {
   const ocr = compact(detection.rawOcrText);
@@ -69,19 +78,12 @@ export function matchDetection(detection: Detection, catalog: readonly Matchable
           component.ratedCurrentA === detection.ratedCurrentA &&
           (!detection.poles || component.poles === detection.poles) &&
           (!detection.trippingCurve || component.trippingCurve === detection.trippingCurve) &&
-          (!detection.manufacturer || component.manufacturer === detection.manufacturer || component.manufacturer === dominantManufacturer),
+          (!detection.manufacturer || sameManufacturer(component.manufacturer, detection.manufacturer)),
       )
       .sort(byPreference(detection.manufacturer ?? dominantManufacturer));
     if (candidates[0]) return { componentId: candidates[0].id, status: "PARTIAL", confidence: Math.min(detection.confidence, 0.7) };
   }
   return { componentId: null, status: "UNRECOGNIZED", confidence: Math.min(detection.confidence, 0.3) };
-}
-
-/** Nejčastější výrobce mezi detekcemi (předvolba pickeru). */
-export function dominantManufacturer(detections: readonly { manufacturer: string | null }[], fallback = "ABB"): string {
-  const counts = new Map<string, number>();
-  for (const { manufacturer } of detections) if (manufacturer) counts.set(manufacturer, (counts.get(manufacturer) ?? 0) + 1);
-  return [...counts].sort((a, b) => b[1] - a[1])[0]?.[0] ?? fallback;
 }
 
 // ---------------------------------------------------------------------------
@@ -170,7 +172,7 @@ export const PICKER_POLES = ["1P", "1P+N", "3P", "3P+N", "4P"] as const;
 export const PICKER_CURVES = ["B", "C", "D"] as const;
 export const PICKER_CURRENTS = [6, 10, 16, 20, 25, 32, 40, 63] as const;
 
-/** Kusy z katalogu pro výběr v pickeru: dominantní výrobce a stejná šířka napřed. */
+/** Kusy z katalogu pro výběr v pickeru: jen zvolený výrobce (null = všichni), stejná šířka napřed. */
 export function pickerCandidates<T extends MatchableComponent & { powerLossWatts: number }>(catalog: readonly T[], selection: PickerSelection): T[] {
   if (!selection.category) return [];
   const others = selection.category === "OTHER";
@@ -180,25 +182,32 @@ export function pickerCandidates<T extends MatchableComponent & { powerLossWatts
         (others ? !["MCB", "RCD", "RCBO", "MAIN_SWITCH", "SPD", "CONTACTOR", "ENCLOSURE"].includes(component.category) : component.category === selection.category) &&
         (!selection.poles || component.poles === selection.poles) &&
         (!selection.curve || !component.trippingCurve || component.trippingCurve === selection.curve) &&
-        (!selection.current || component.ratedCurrentA === selection.current),
+        (!selection.current || component.ratedCurrentA === selection.current) &&
+        (!selection.manufacturer || sameManufacturer(component.manufacturer, selection.manufacturer)),
     )
     .sort(
       (a, b) =>
-        Number(b.manufacturer === selection.manufacturer) - Number(a.manufacturer === selection.manufacturer) ||
         Number(b.modulesCount === selection.modules) - Number(a.modulesCount === selection.modules) ||
         a.ratedCurrentA - b.ratedCurrentA ||
         a.typeCode.localeCompare(b.typeCode),
     );
 }
 
-/** Výchozí výběr pickeru z odhadu analýzy (detectedJson) a dominantního výrobce. */
-export function initialSelection(detected: Partial<PickerSelection & { ratedCurrentA: number | null; trippingCurve: string | null }> | null, dominant: string, modules: number): PickerSelection {
+/**
+ * Výchozí výběr pickeru z odhadu analýzy (detectedJson): výrobce přečtený u modulu, jinak převažující
+ * výrobce rozváděče; u „Různí výrobci“ bez filtru (Všichni).
+ */
+export function initialSelection(
+  detected: Partial<PickerSelection & { ratedCurrentA: number | null; trippingCurve: string | null }> | null,
+  dominant: string | null,
+  modules: number,
+): PickerSelection {
   return {
     category: detected?.category ?? null,
     poles: detected?.poles ?? null,
     curve: detected?.trippingCurve ?? null,
     current: detected?.ratedCurrentA ?? null,
-    manufacturer: dominant,
+    manufacturer: normalizeManufacturer(detected?.manufacturer) ?? (isMix(dominant) ? null : dominant),
     modules,
   };
 }

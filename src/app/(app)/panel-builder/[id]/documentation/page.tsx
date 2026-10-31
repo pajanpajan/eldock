@@ -8,6 +8,7 @@ import { DocumentationSheets, type DocumentationData } from "@/components/panel-
 import { PanelSteps } from "@/components/panel-builder/PanelSteps";
 import { ProjectHeader } from "@/components/panel-builder/ProjectHeader";
 import { formatDate } from "@/lib/format";
+import { isMix } from "@/lib/panel-builder/catalog";
 import { componentsList, partsList, technicalData } from "@/lib/panel-builder/documentation";
 import { renderPanelDrawingSvg, renderSingleLineDiagramSvg, type DrawingItem } from "@/lib/panel-builder/drawings";
 import { parseManufacturerInfo } from "@/lib/panel-builder/project";
@@ -40,6 +41,7 @@ export default async function PanelDocumentationPage({ params }: PageProps<"/pan
     id: item.id,
     designation: item.designation,
     typeCode: item.catalogComponent?.typeCode ?? "?",
+    manufacturer: item.catalogComponent?.manufacturer ?? null,
     category: item.catalogComponent?.category ?? null,
     poles: item.catalogComponent?.poles ?? null,
     dinRailIndex: item.dinRailIndex,
@@ -79,7 +81,7 @@ export default async function PanelDocumentationPage({ params }: PageProps<"/pan
       ipRating: project.ipRating,
       mainBreaker: main ? `${n(main.ratedCurrentA, 0)} A` : "–",
       type: enclosure?.typeCode ?? (project.enclosureModel || "–"),
-      deviceManufacturer: manufacturers.join(", ") || project.dominantManufacturer,
+      deviceManufacturer: manufacturers.join(", ") || (isMix(project.dominantManufacturer) ? "Různí výrobci" : project.dominantManufacturer),
     },
     qrUrl: project.equipmentId ? `${origin}${equipmentHref(project.equipmentId)}` : `${origin}/panel-builder/${project.id}/documentation`,
   };

@@ -48,6 +48,19 @@ describe("kusovník a seznam komponent (referenční PDF)", () => {
     expect(rows.find((row) => row.designation === "-Q1")?.position).toBe("/3.1");
   });
 
+  it("mix výrobců: kusovník i seznam komponent uvádějí skutečného výrobce každého prvku", () => {
+    const swap = (designation: string, component: DocItem["component"]) => (item: DocItem) => (item.designation === designation ? { ...item, component } : item);
+    const mixed = docItems
+      .map(swap("-Q1", { articleNumber: "43345", typeCode: "MSO-40-3", manufacturer: "OEZ", description: "Vypínač 3P, 40 A", category: "MAIN_SWITCH" }))
+      .map(swap("-F1", { articleNumber: "SLP-275-V-3+1", typeCode: "SLP-275 V/3+1", manufacturer: "Saltek", description: "SPD T2", category: "SPD" }))
+      .map(swap("-F5", { articleNumber: "262704", typeCode: "PL7-B10/1", manufacturer: "Eaton", description: "Jistič 1P B10", category: "MCB" }));
+    expect(new Set(partsList(mixed, null).map((row) => row.manufacturer))).toEqual(new Set(["OEZ", "Saltek", "Eaton", "ABB"]));
+    const rows = Object.fromEntries(componentsList(mixed, null).map((row) => [row.designation, row.manufacturer]));
+    expect(rows).toMatchObject({ "-Q1": "OEZ", "-F1": "Saltek", "-F5": "Eaton", "-F6": "ABB" });
+    const sld = renderSingleLineDiagramSvg(drawing.map((item) => ({ ...item, manufacturer: item.designation === "-Q1" ? "OEZ" : "ABB" })), { incomer: "L1,L2,L3,N", network: "" });
+    expect(sld).toContain(">OEZ</text>");
+  });
+
   it("překážky propuštění", () => {
     const ready = docItems.map((item) => ({ ...item, recognitionStatus: "VERIFIED" }));
     expect(releaseBlockers({ items: ready, connected: true, thermalOk: true })).toEqual([]);

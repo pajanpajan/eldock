@@ -63,6 +63,34 @@ describe("AI Panel Builder – katalog a seed", () => {
 describe("AI Panel Builder – projekt a analýza fotky", () => {
   const demo = { analyze: analyzePanelPhoto, readPhoto: async () => null };
 
+  it("projekt „Různí výrobci“: AI dostane prázdnou nápovědu a každý modul se páruje podle své značky", async () => {
+    await seedPanelBuilder(prisma);
+    const project = await createPanelProject(prisma, { name: "Smíšený rozváděč", customerName: null, photoUrl: null, dominantManufacturer: "MIX" });
+    const hints: (string | null | undefined)[] = [];
+    const base = { dinRailIndex: 1, modules: 1, box: null, rawOcrText: "", poles: null, trippingCurve: null, confidence: 0.8 };
+    const analyze: typeof analyzePanelPhoto = async (input) => {
+      hints.push(input.manufacturerHint);
+      return {
+        mode: "GEMINI",
+        dominantManufacturer: null,
+        detections: [
+          { ...base, positionOnRail: 1, modules: 3, rawOcrText: "OEZ MSO-40-3", category: "MAIN_SWITCH", ratedCurrentA: 40, manufacturer: "OEZ" },
+          { ...base, positionOnRail: 2, modules: 4, rawOcrText: "SLP-275 V/3+1", category: "SPD", ratedCurrentA: 40, manufacturer: "Saltek" },
+          { ...base, positionOnRail: 3, rawOcrText: "EATON", category: "MCB", poles: "1P", ratedCurrentA: 16, trippingCurve: "B", manufacturer: "Eaton" },
+        ],
+      };
+    };
+    await analyzeProject(prisma, project.id, { analyze, readPhoto: async () => null });
+    expect(hints).toEqual([null]);
+    const saved = await prisma.panelBoardProject.findUniqueOrThrow({ where: { id: project.id }, include: { items: { include: { catalogComponent: true }, orderBy: { positionOnRail: "asc" } } } });
+    expect(saved.dominantManufacturer).toBe("MIX");
+    expect(saved.items.map((item) => [item.designation, item.catalogComponent?.manufacturer, item.recognitionStatus])).toEqual([
+      ["-Q1", "OEZ", "VERIFIED"],
+      ["-F1", "Saltek", "VERIFIED"],
+      ["-F2", "Eaton", "PARTIAL"],
+    ]);
+  });
+
   it("nový projekt dostane další kód a demo analýza rozpozná 13 přístrojů s IEC značením", async () => {
     vi.stubEnv("GEMINI_API_KEY", "");
     await seedPanelBuilder(prisma);

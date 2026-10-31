@@ -40,6 +40,58 @@ export const DATA_SOURCE_LABELS: Record<ComponentDataSource, string> = {
   IEC_ESTIMATE: "PDF + odhad Pv (IEC)",
 };
 
+/** „Různí výrobci / Auto-detekce AI“ – rozváděč s přístroji více značek (bez preference). */
+export const MIX = "MIX";
+export const isMix = (manufacturer: string | null | undefined) => !manufacturer?.trim() || manufacturer === MIX;
+
+/** Značky v nabídce nového projektu: hodnota = název v katalogu, popisek = obchodní název. */
+export const MANUFACTURER_OPTIONS = [
+  { value: MIX, label: "⚡ Různí výrobci / Auto-detekce AI" },
+  { value: "ABB", label: "ABB" },
+  { value: "Eaton", label: "Eaton" },
+  { value: "OEZ", label: "OEZ" },
+  { value: "Schneider", label: "Schneider Electric" },
+  { value: "Hager", label: "Hager" },
+  { value: "Noark", label: "Noark" },
+  { value: "Schrack", label: "Schrack" },
+  { value: "Saltek", label: "Saltek" },
+  { value: "Finder", label: "Finder" },
+] as const;
+
+/** Rychlé záložky výrobce v Smart Fallback Pickeru (null = všichni). */
+export const PICKER_MANUFACTURERS = [
+  { value: null, label: "Všichni" },
+  { value: "ABB", label: "ABB" },
+  { value: "Eaton", label: "EATON" },
+  { value: "OEZ", label: "OEZ" },
+  { value: "Schneider", label: "SCHNEIDER" },
+  { value: "Hager", label: "HAGER" },
+  { value: "Saltek", label: "SALTEK" },
+  { value: "Finder", label: "FINDER" },
+] as const;
+
+const MANUFACTURER_ALIASES: [RegExp, string][] = [
+  [/^abb\b/, "ABB"],
+  [/^(eaton|moeller)\b/, "Eaton"],
+  [/^oez\b/, "OEZ"],
+  [/^(schneider|telemecanique|merlin gerin)\b/, "Schneider"],
+  [/^hager\b/, "Hager"],
+  [/^noark\b/, "Noark"],
+  [/^schrack\b/, "Schrack"],
+  [/^saltek\b/, "Saltek"],
+  [/^finder\b/, "Finder"],
+  [/^siemens\b/, "Siemens"],
+  [/^legrand\b/, "Legrand"],
+];
+
+/** Jednotný název výrobce (odpověď AI „SCHNEIDER ELECTRIC“ → katalogový „Schneider“). */
+export function normalizeManufacturer(name: string | null | undefined): string | null {
+  const trimmed = name?.trim();
+  if (!trimmed || trimmed === MIX) return null;
+  const lower = normalizeSearch(trimmed);
+  return MANUFACTURER_ALIASES.find(([pattern]) => pattern.test(lower))?.[1] ?? trimmed;
+}
+
 export const POLES = ["1P", "1P+N", "2P", "3P", "3P+N", "4P"] as const;
 export type Poles = (typeof POLES)[number];
 export const CURVES = ["B", "C", "D"] as const;
