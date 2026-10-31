@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@/generated/prisma/client";
+import type { EnclosureMaterial, EnclosureType } from "@/generated/prisma/enums";
 import { buildSearchText } from "@/lib/panel-builder/catalog";
 import { extractComponents, type ExtractedComponent } from "@/lib/panel-builder/datasheet-extract";
 import type { EnclosureDims } from "@/lib/panel-builder/layout";
@@ -276,4 +277,35 @@ export async function saveTree(prisma: PrismaClient, projectId: string, assignme
     prisma.panelBoardProject.update({ where: { id: projectId }, data: { status } }),
   ]);
   return { status, connected, issues: validateTree(nodes, project.simultaneityFactor) };
+}
+
+// ---------------------------------------------------------------------------
+//  Výpočet oteplení (krok 3) – vstupy skříně a výpočtové proudy vývodů
+// ---------------------------------------------------------------------------
+
+export interface ThermalInputs {
+  heightMm: number;
+  widthMm: number;
+  depthMm: number;
+  enclosureType: EnclosureType;
+  enclosureMaterial: EnclosureMaterial;
+  ipRating: string;
+  ambientTempC: number;
+  simultaneityFactor: number;
+  internalWiringLossW: number;
+  /** Výpočtový proud Ib vývodu (null = In snížené na vnitřní teplotu). */
+  operatingCurrents: { itemId: string; value: number | null }[];
+}
+
+export async function saveThermalInputs(prisma: PrismaClient, projectId: string, input: ThermalInputs) {
+  const project = await prisma.panelBoardProject.findUnique({ where: { id: projectId }, select: { id: true, items: { select: { id: true } } } });
+  if (!project) throw new WorkflowError("NOT_FOUND", "Projekt rozváděče neexistuje.");
+  const ids = new Set(project.items.map((item) => item.id));
+  if (input.operatingCurrents.some((entry) => !ids.has(entry.itemId))) throw new WorkflowError("VALIDATION", "Výpočtový proud patří prvku jiného projektu.");
+  if (input.simultaneityFactor <= 0 || input.simultaneityFactor > 1) throw new WorkflowError("VALIDATION", "Koeficient soudobosti musí být v rozsahu 0–1.");
+  const { operatingCurrents, ...enclosure } = input;
+  await prisma.$transaction([
+    prisma.panelBoardProject.update({ where: { id: projectId }, data: { ...enclosure, ipRating: enclosure.ipRating.trim().slice(0, 12) || "IP 41" } }),
+    ...operatingCurrents.map((entry) => prisma.panelBoardItem.update({ where: { id: entry.itemId }, data: { operatingCurrentA: entry.value } })),
+  ]);
 }

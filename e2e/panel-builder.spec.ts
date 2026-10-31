@@ -142,3 +142,36 @@ test("krok 2: AI návrh stromu, hlídač, Zpět/Vpřed, hromadné přiřazení a
   await expect(page.getByLabel("-F4 název obvodu")).toHaveValue("Sporák + trouba");
   await expect(page.getByText("Strom zapojení hotov")).toBeVisible();
 });
+
+test("krok 3: výpočet oteplení referenčního rozváděče, živý přepočet a uložení vstupů", async ({ page }) => {
+  await page.goto("/panel-builder");
+  await page.getByRole("link", { name: /PB-001/ }).click();
+  await page.getByRole("link", { name: "3. Výpočet oteplení a bilance" }).click();
+  const verdict = page.getByTestId("thermal-verdict");
+  await expect(verdict).toContainText("VYHOVUJE dle ČSN EN 61439 – Vypočítaná teplota 42,4 °C");
+  await expect(verdict).toContainText("pod limitem 70 °C");
+  await expect(page.getByTestId("thermal-row--F2")).toContainText("20,80");
+  await expect(page.getByTestId("phase-balance")).toContainText("L3");
+  await expect(page.getByTestId("thermal-curve")).toBeVisible();
+
+  // Horké okolí a plná soudobost → nevyhovuje (živý přepočet), uloží se a vydrží reload
+  await expect(async () => {
+    await page.getByLabel("Teplota okolí [°C]").fill("55");
+    await expect(page.getByLabel("Teplota okolí [°C]")).toHaveValue("55", { timeout: 1_000 });
+  }).toPass({ timeout: 20_000 });
+  await page.getByLabel("Koeficient soudobosti SF").fill("1");
+  await expect(verdict).toContainText("NEVYHOVUJE");
+  await expect(page.getByTestId("thermal-save-state")).toHaveText("Uloženo");
+  await page.reload();
+  await expect(page.getByTestId("thermal-verdict")).toContainText("NEVYHOVUJE");
+
+  // Zpět na referenční vstupy; výpočtový proud Ib vývodu sníží ztráty
+  await page.getByLabel("Teplota okolí [°C]").fill("30");
+  await page.getByLabel("Koeficient soudobosti SF").fill("0.5");
+  await expect(page.getByTestId("thermal-verdict")).toContainText("42,4 °C");
+  await page.getByLabel("-F3 výpočtový proud Ib").fill("4");
+  await expect(page.getByTestId("thermal-verdict")).not.toContainText("42,4 °C");
+  await page.getByLabel("-F3 výpočtový proud Ib").fill("");
+  await expect(page.getByTestId("thermal-verdict")).toContainText("42,4 °C");
+  await expect(page.getByTestId("thermal-save-state")).toHaveText("Uloženo");
+});

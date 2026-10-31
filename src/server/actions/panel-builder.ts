@@ -10,7 +10,7 @@ import { WorkflowError } from "@/lib/workflow/state-machine";
 import { assertFeature } from "@/server/modules";
 import { analyzePanelPhoto, extractDatasheetComponents, lookupComponent, type AiMode } from "@/server/services/geminiPanelService";
 import { PHASE_OPTIONS, type TreeIssue } from "@/lib/panel-builder/tree";
-import { analyzeProject, assignCatalogComponent, createPanelProject, importDatasheet, lookupComponentForItem, saveTree, type ImportedComponent } from "@/server/services/panel-builder";
+import { analyzeProject, assignCatalogComponent, createPanelProject, importDatasheet, lookupComponentForItem, saveThermalInputs, saveTree, type ImportedComponent } from "@/server/services/panel-builder";
 import { getCurrentAccount } from "@/server/session";
 import { readStoredFile } from "@/server/storage";
 
@@ -162,5 +162,34 @@ export async function saveTreeAction(input: z.input<typeof treeSchema>): Promise
     return { ok: true, data: result };
   } catch (error) {
     return failure(error, "Strom se nepodařilo uložit.");
+  }
+}
+
+const thermalSchema = z.object({
+  projectId: id,
+  heightMm: z.number().int().min(100).max(3000),
+  widthMm: z.number().int().min(100).max(3000),
+  depthMm: z.number().int().min(50).max(1500),
+  enclosureType: z.enum(["WALL_MOUNTED", "FLUSH_MOUNTED", "FREE_STANDING"]),
+  enclosureMaterial: z.enum(["PLASTIC", "PAINTED_STEEL", "STAINLESS_STEEL"]),
+  ipRating: z.string().max(12),
+  ambientTempC: z.number().min(-25).max(60),
+  simultaneityFactor: z.number().gt(0).max(1),
+  internalWiringLossW: z.number().min(0).max(2000),
+  operatingCurrents: z.array(z.object({ itemId: id, value: z.number().positive().max(6300).nullable() })).max(300),
+});
+
+/** Krok 3: parametry skříně a výpočtové proudy (autosave). */
+export async function saveThermalInputsAction(input: z.input<typeof thermalSchema>): Promise<ActionResult> {
+  const parsed = thermalSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Zkontrolujte parametry skříně (rozměry, teplota, soudobost 0–1)." };
+  try {
+    await guard();
+    const { projectId, ...inputs } = parsed.data;
+    await saveThermalInputs(prisma, projectId, inputs);
+    revalidatePath(`/panel-builder/${projectId}`, "layout");
+    return { ok: true, data: undefined };
+  } catch (error) {
+    return failure(error, "Parametry se nepodařilo uložit.");
   }
 }

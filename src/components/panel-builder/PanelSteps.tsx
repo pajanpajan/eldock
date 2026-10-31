@@ -2,11 +2,12 @@ import Link from "next/link";
 
 import { cn } from "@/lib/utils";
 
-export type PanelStep = "recognition" | "tree";
+export type PanelStep = "recognition" | "tree" | "thermal";
 
 const STEPS: { key: PanelStep; label: string; href: (id: string) => string }[] = [
   { key: "recognition", label: "1. Analýza fotky", href: (id) => `/panel-builder/${id}` },
   { key: "tree", label: "2. Hierarchický strom a zapojení", href: (id) => `/panel-builder/${id}/tree` },
+  { key: "thermal", label: "3. Výpočet oteplení a bilance", href: (id) => `/panel-builder/${id}/thermal` },
 ];
 
 /** Kroky pracovní plochy projektu rozváděče. */
