@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { Plus, Trash2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -27,6 +28,10 @@ export function DinRails<T extends RailItem>({
   onSelect,
   tone,
   badge,
+  onAddModule,
+  onDeleteRail,
+  onAddRail,
+  busy,
 }: {
   items: readonly T[];
   rails: number;
@@ -37,6 +42,11 @@ export function DinRails<T extends RailItem>({
   onSelect?: (item: T) => void;
   tone: (item: T) => string;
   badge?: (item: T) => ReactNode;
+  /** Správa lišt (krok 1): „+ Přidat modul“, „Smazat celou lištu“, „+ Přidat DIN lištu“. */
+  onAddModule?: (rail: number) => void;
+  onDeleteRail?: (rail: number) => void;
+  onAddRail?: () => void;
+  busy?: boolean;
 }) {
   return (
     <div className="flex flex-col gap-3" data-testid="din-rails">
@@ -52,6 +62,18 @@ export function DinRails<T extends RailItem>({
               <span className={cn(used > modulesPerRail && "text-red-400")}>
                 {used}/{modulesPerRail} M
               </span>
+              {onDeleteRail ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => onDeleteRail(rail)}
+                  aria-label={`Smazat celou lištu ${rail}`}
+                  title="Smazat celou lištu"
+                  className="mt-1 flex w-fit items-center gap-0.5 rounded px-1 text-[10px] text-red-300 hover:bg-red-500/15 disabled:opacity-50"
+                >
+                  <Trash2 className="size-3" aria-hidden /> lišta
+                </button>
+              ) : null}
             </span>
             <div
               className={cn("relative flex h-16 flex-1 rounded-md border border-border bg-muted/30", selectedVariant === "pick" && "overflow-hidden")}
@@ -90,9 +112,31 @@ export function DinRails<T extends RailItem>({
                 );
               })}
             </div>
+            {onAddModule ? (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => onAddModule(rail)}
+                aria-label={`Přidat modul na lištu ${rail}`}
+                title="Přidat modul na konec lišty"
+                className="flex w-11 shrink-0 flex-col items-center justify-center rounded-md border-2 border-dashed border-border text-[10px] text-muted-foreground hover:border-primary hover:text-foreground disabled:opacity-50"
+              >
+                <Plus className="size-4" aria-hidden /> modul
+              </button>
+            ) : null}
           </div>
         );
       })}
+      {onAddRail ? (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onAddRail}
+          className="touch-target ml-16 flex items-center justify-center gap-1.5 rounded-md border-2 border-dashed border-border text-xs text-muted-foreground hover:border-primary hover:text-foreground disabled:opacity-50"
+        >
+          <Plus className="size-4" aria-hidden /> Přidat DIN lištu
+        </button>
+      ) : null}
     </div>
   );
 }

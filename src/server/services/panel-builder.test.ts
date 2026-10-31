@@ -7,7 +7,7 @@ import { WorkflowError } from "@/lib/workflow/state-machine";
 
 import { CATALOG, seedPanelBuilder } from "../../../prisma/seed-panel-builder";
 import { analyzePanelPhoto, lookupComponent } from "./geminiPanelService";
-import { analyzeProject, assignCatalogComponent, createPanelProject, importDatasheet, lookupComponentForItem, configureItem, mergeItems, releaseDocumentation, saveTree, splitItem, updateItemText } from "./panel-builder";
+import { analyzeProject, assignCatalogComponent, createPanelProject, importDatasheet, lookupComponentForItem, addModule, addRail, configureItem, deleteItem, deleteRail, mergeItems, releaseDocumentation, saveTree, splitItem, updateItemText } from "./panel-builder";
 import { createTestDb, seedMinimal } from "./test-db";
 
 let db: Awaited<ReturnType<typeof createTestDb>>;
@@ -246,5 +246,73 @@ describe("AI Panel Builder – živý konfigurátor a geometrie DIN lišty", () 
     expect(rail3[0].catalogComponent?.typeCode).toBe("S203-B16");
     expect(await updateItemText(prisma, f11.id, { customTypeCode: " S203-B16 (výměna 2026) ", circuitLabel: "Tepelné čerpadlo 2" })).toBeTruthy();
     expect(await prisma.panelBoardItem.findUniqueOrThrow({ where: { id: f11.id } })).toMatchObject({ customTypeCode: "S203-B16 (výměna 2026)", circuitLabel: "Tepelné čerpadlo 2" });
+  });
+});
+
+describe("AI Panel Builder – Vision Analyzer 2.0 a správa lišt", () => {
+  async function pb001() {
+    await seedPanelBuilder(prisma);
+    const project = await prisma.panelBoardProject.findUniqueOrThrow({ where: { code: "PB-001" } });
+    const items = () => prisma.panelBoardItem.findMany({ where: { projectId: project.id }, orderBy: [{ dinRailIndex: "asc" }, { positionOnRail: "asc" }], include: { catalogComponent: true } });
+    return { project, items };
+  }
+
+  it("analýza nastaví počet lišt podle fotky a stav zakrytování; režim se předá analyzátoru", async () => {
+    const { project, items } = await pb001();
+    const modes: (string | undefined)[] = [];
+    const base = { modules: 1, box: null, rawOcrText: "", category: "MCB" as const, poles: "1P", ratedCurrentA: 16, trippingCurve: "B", manufacturer: "ABB", confidence: 0.8 };
+    const analyze: typeof analyzePanelPhoto = async (input) => {
+      modes.push(input.mode);
+      return { mode: "GEMINI", dominantManufacturer: "ABB", railCount: 2, coverState: "UNCOVERED", detections: [{ ...base, dinRailIndex: 1, positionOnRail: 1 }, { ...base, dinRailIndex: 2, positionOnRail: 1, modules: 2, poles: "3P" }] };
+    };
+    await analyzeProject(prisma, project.id, { analyze, readPhoto: async () => null, mode: "UNCOVERED" });
+    expect(modes).toEqual(["UNCOVERED"]);
+    expect(await prisma.panelBoardProject.findUniqueOrThrow({ where: { id: project.id } })).toMatchObject({ dinRailsCount: 2, coverState: "UNCOVERED" });
+    // fyzická šířka z fotky (kompaktní 3P ve 2M) má přednost před šířkou katalogového kusu
+    expect((await items())[1]).toMatchObject({ dinRailIndex: 2, modulesWidth: 2 });
+  });
+
+  it("přidat modul (rámeček vpravo), smazat prvek, smazat lištu a přidat lištu – vše přečísluje", async () => {
+    const { project, items } = await pb001();
+    const f12 = (await items()).find((item) => item.designation === "-F12")!;
+    const f12Box = JSON.parse(f12.boundingBoxJson!) as number[];
+    const added = await addModule(prisma, project.id, 3);
+    expect(added).toMatchObject({ dinRailIndex: 3, positionOnRail: 3, recognitionStatus: "UNRECOGNIZED" });
+    const addedBox = JSON.parse((await prisma.panelBoardItem.findUniqueOrThrow({ where: { id: added.id } })).boundingBoxJson!) as number[];
+    expect(addedBox[1]).toBeCloseTo(f12Box[3], 2);
+    expect(addedBox[3] - addedBox[1]).toBeCloseTo(f12Box[3] - f12Box[1], 1);
+    expect((await items()).map((item) => item.designation).slice(-1)).toEqual(["-F13"]);
+
+    // smazání -F3 (rail 2): pozice na liště 2 se posunou, značení se přečísluje
+    const f3 = (await items()).find((item) => item.designation === "-F3")!;
+    await deleteItem(prisma, f3.id);
+    const afterDelete = await items();
+    expect(afterDelete).toHaveLength(13);
+    expect(afterDelete.filter((item) => item.dinRailIndex === 2).map((item) => item.positionOnRail)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(afterDelete.map((item) => item.designation)).toContain("-F12");
+
+    // smazání lišty 1 (-Q1, -F1, -F2): lišty 2 a 3 se posunou na 1 a 2
+    expect(await deleteRail(prisma, project.id, 1)).toEqual({ removed: 3 });
+    const afterRail = await items();
+    expect(new Set(afterRail.map((item) => item.dinRailIndex))).toEqual(new Set([1, 2]));
+    expect(afterRail[0].designation).toBe("-F1");
+    expect((await prisma.panelBoardProject.findUniqueOrThrow({ where: { id: project.id } })).dinRailsCount).toBe(2);
+    expect(await addRail(prisma, project.id)).toEqual({ dinRailsCount: 3 });
+    const onEmpty = await addModule(prisma, project.id, 3);
+    expect(onEmpty.boundingBoxJson).not.toBeNull();
+  });
+
+  it("kompaktní 2×1P v 1M: konfigurace z katalogu a rozdělení na 2 obvodové větve", async () => {
+    const { items } = await pb001();
+    const f6 = (await items()).find((item) => item.designation === "-F6")!;
+    const result = await configureItem(prisma, f6.id, { ...defaultConfig("MCB", { manufacturer: "Hager", modules: 1 }), poles: "2x1P", modules: 1, ratedCurrentA: 16 });
+    expect(result.component.typeCode).toBe("MBN 2x1P B16 kompakt");
+    expect(await splitItem(prisma, f6.id)).toEqual(expect.objectContaining({ parts: 2 }));
+    const halves = (await items()).filter((item) => item.dinRailIndex === 2 && item.positionOnRail >= 4 && item.positionOnRail <= 5);
+    expect(halves.map((item) => [item.modulesWidth, item.catalogComponent?.poles, item.recognitionStatus])).toEqual([
+      [0.5, "1P", "VERIFIED"],
+      [0.5, "1P", "VERIFIED"],
+    ]);
+    expect((await items()).filter((item) => item.dinRailIndex === 2).reduce((sum, item) => sum + item.modulesWidth, 0)).toBe(12);
   });
 });

@@ -241,9 +241,9 @@ export const PB001 = {
   photoFile: "panel-pb-001.svg",
 };
 
-/** Upsert katalogu podle objednacího čísla. Vrací počet prvků v seed katalogu. */
+/** Upsert katalogu podle objednacího čísla (jedna transakce – rychlý start kontejneru). Vrací počet prvků. */
 export async function seedCatalog(prisma: PrismaClient) {
-  for (const component of CATALOG) {
+  const upserts = CATALOG.map((component) => {
     const [widthMm, heightMm, depthMm] = component.dims ?? [component.modulesCount * 17.5 || null, component.modulesCount ? 85 : null, component.modulesCount ? 69 : null];
     const data = {
       manufacturer: component.manufacturer,
@@ -272,8 +272,9 @@ export async function seedCatalog(prisma: PrismaClient) {
       dataSource: "SEED_CATALOG" as const,
       searchText: buildSearchText(component),
     };
-    await prisma.catalogComponent.upsert({ where: { articleNumber: component.articleNumber }, create: { articleNumber: component.articleNumber, ...data }, update: data });
-  }
+    return prisma.catalogComponent.upsert({ where: { articleNumber: component.articleNumber }, create: { articleNumber: component.articleNumber, ...data }, update: data });
+  });
+  await prisma.$transaction(upserts);
   return CATALOG.length;
 }
 

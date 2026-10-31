@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Check, Link2, Loader2, Scissors, Sparkles } from "lucide-react";
+import { Check, Link2, Loader2, Scissors, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -12,7 +12,7 @@ import { CONFIG_CATEGORIES, CONFIG_FIELDS, defaultConfig, isOptionActive, type C
 import { sameManufacturer } from "@/lib/panel-builder/matching";
 import { RECOGNITION } from "@/lib/panel-builder/project";
 import { cn } from "@/lib/utils";
-import { assignComponentAction, configureItemAction, lookupComponentAction, mergeItemsAction, splitItemAction, updateItemTextAction } from "@/server/actions/panel-builder";
+import { assignComponentAction, configureItemAction, deleteItemAction, lookupComponentAction, mergeItemsAction, splitItemAction, updateItemTextAction } from "@/server/actions/panel-builder";
 
 import type { WorkspaceItem } from "./RecognitionWorkspace";
 
@@ -39,7 +39,7 @@ function Tile({ active, onClick, children, label, disabled }: { active: boolean;
  * přiřadí nejbližší přesný kus z katalogu a označí ho jako ověřený. Nahoře geometrie na DIN liště
  * (sloučení / rozdělení), dole karta přiřazeného přístroje.
  */
-export function ItemConfigurator({ item, dominant, rightNeighbors, onChanged }: { item: WorkspaceItem; dominant: string; rightNeighbors: number; onChanged: () => void }) {
+export function ItemConfigurator({ item, dominant, rightNeighbors, onChanged, onDeleted }: { item: WorkspaceItem; dominant: string; rightNeighbors: number; onChanged: () => void; onDeleted: () => void }) {
   const initialManufacturer = item.config?.manufacturer ?? item.component?.manufacturer ?? item.detected?.manufacturer ?? (isMix(dominant) ? null : dominant);
   const [config, setConfig] = useState<ItemConfig | null>(item.config);
   const [manufacturer, setManufacturer] = useState<string | null>(initialManufacturer);
@@ -117,6 +117,23 @@ export function ItemConfigurator({ item, dominant, rightNeighbors, onChanged }: 
         <span className="ml-auto font-mono text-xs text-muted-foreground">
           OCR: {item.rawOcrText || "–"} · jistota {Math.round(item.confidence * 100)} %
         </span>
+        <Button
+          size="sm"
+          variant="outline"
+          className="touch-target gap-1.5 border-red-500/50 text-red-300 hover:bg-red-500/15"
+          disabled={pending}
+          onClick={() => {
+            if (!window.confirm(`Smazat prvek ${item.designation}? Ostatní prvky se přečíslují.`)) return;
+            startTransition(async () => {
+              const result = await deleteItemAction(item.id);
+              if (!result.ok) return void toast.error(result.error);
+              toast.success(`${item.designation} smazán.`);
+              onDeleted();
+            });
+          }}
+        >
+          <Trash2 className="size-3.5" aria-hidden /> Smazat prvek
+        </Button>
       </div>
 
       {/* Geometrie na DIN liště */}
@@ -137,7 +154,11 @@ export function ItemConfigurator({ item, dominant, rightNeighbors, onChanged }: 
           <Button size="sm" variant="outline" className="touch-target gap-1.5" disabled={pending || rightNeighbors < 3} onClick={() => geometry(() => mergeItemsAction(item.id, 4), "Sloučeno: 4 sousední moduly.")}>
             <Link2 className="size-3.5" aria-hidden /> Sloučit 4 sousední (4M)
           </Button>
-          {item.modulesWidth >= 2 ? (
+          {item.config?.poles === "2x1P" ? (
+            <Button size="sm" variant="outline" className="touch-target gap-1.5" disabled={pending} onClick={() => geometry(() => splitItemAction(item.id), "Rozděleno na 2 obvodové větve.")}>
+              <Scissors className="size-3.5" aria-hidden /> Rozdělit na 2 obvodové větve (2×1P)
+            </Button>
+          ) : item.modulesWidth >= 2 ? (
             <Button size="sm" variant="outline" className="touch-target gap-1.5" disabled={pending} onClick={() => geometry(() => splitItemAction(item.id), "Rozděleno na 1M moduly.")}>
               <Scissors className="size-3.5" aria-hidden /> Rozdělit na 1M moduly
             </Button>

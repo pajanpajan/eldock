@@ -116,6 +116,45 @@ test("nový projekt: sloučení 3× 1M → 3P, rozdělení zpět, filtr výrobce
   await expect(page.getByTestId("assigned-device")).toContainText("S203-D25");
 });
 
+test("Vision Analyzer 2.0: režim analýzy, 1M dělení, přidání a smazání modulu i lišty, kompaktní 2×1P", async ({ page }) => {
+  page.on("dialog", (dialog) => void dialog.accept());
+  await page.goto("/panel-builder");
+  await page.getByRole("link", { name: /PB-002/ }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("PB-002");
+  const photoButtons = page.getByTestId("panel-photo").getByRole("button");
+  await expect(photoButtons).toHaveCount(13);
+
+  // Přepínač režimu analýzy a tečkované dělení po 1M ve vícemodulových rámečcích
+  await page.getByRole("button", { name: "🛡️ Zakrytovaný" }).click();
+  await expect(page.getByRole("button", { name: "🛡️ Zakrytovaný", pressed: true })).toBeVisible();
+  await expect(page.locator("[data-module-divider]").first()).toBeAttached();
+
+  // + Přidat modul na lištu 3 → nový nerozpoznaný -F13 s rámečkem na fotce
+  await page.getByRole("button", { name: "Přidat modul na lištu 3" }).click();
+  await expect(photoButtons).toHaveCount(14);
+  await expect(page.getByTestId("photo-selected-label")).toHaveText("-F13 · 1M");
+
+  // Kompaktní dvojitý jistič 2×1P v 1M a rozdělení na 2 obvodové větve
+  const configurator = page.getByTestId("item-configurator");
+  await configurator.getByRole("button", { name: "Jistič", exact: true }).click();
+  await configurator.getByRole("button", { name: "⚡ 2×1P Duální (1M)" }).click();
+  await expect(page.getByTestId("assigned-device")).toContainText("2x1P B16 kompakt");
+  await configurator.getByRole("button", { name: /Rozdělit na 2 obvodové větve/ }).click();
+  await expect(photoButtons).toHaveCount(15);
+
+  // Smazat prvek
+  await page.getByTestId("panel-photo").getByRole("button", { name: /^-F14 / }).click();
+  await page.getByTestId("item-configurator").getByRole("button", { name: "Smazat prvek" }).click();
+  await expect(photoButtons).toHaveCount(14);
+
+  // Smazat celou lištu 3 a přidat novou
+  await page.getByRole("button", { name: "Smazat celou lištu 3" }).click();
+  await expect(photoButtons).toHaveCount(11); // lišta 3 měla -F11, -F12 a jednu větev 2×1P
+  await expect(page.getByRole("button", { name: "Přidat modul na lištu 3" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Přidat DIN lištu" }).click();
+  await expect(page.getByRole("button", { name: "Přidat modul na lištu 3" })).toBeVisible();
+});
+
 test("krok 2: AI návrh stromu, hlídač, Zpět/Vpřed, hromadné přiřazení a uložení", async ({ page }) => {
   await page.goto("/panel-builder");
   await page.getByRole("link", { name: /PB-001/ }).click();

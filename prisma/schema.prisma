@@ -812,6 +812,8 @@ model PanelBoardProject {
   dominantManufacturer String            @default("ABB")
   /// Režim poslední analýzy fotky: "GEMINI" | "DEMO" (null = zatím neanalyzováno).
   analysisMode         String?
+  /// Stav zakrytování z poslední analýzy: "UNCOVERED" (vidět šroubky svorek) | "COVERED" (čelní maska).
+  coverState           String?
 
   createdById String?
   releasedAt  DateTime? // propuštění dokumentace do provozu

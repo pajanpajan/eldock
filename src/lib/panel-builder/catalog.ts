@@ -106,7 +106,8 @@ export function normalizeManufacturer(name: string | null | undefined): string |
   return MANUFACTURER_ALIASES.find(([pattern]) => pattern.test(lower))?.[1] ?? trimmed;
 }
 
-export const POLES = ["1P", "1P+N", "2P", "3P", "3P+N", "4P"] as const;
+/** Elektrické póly; „2x1P“ = dvojitý (duplexní) jistič – dva nezávislé 1P vývody v jednom modulu. */
+export const POLES = ["1P", "1P+N", "2P", "3P", "3P+N", "4P", "2x1P"] as const;
 export type Poles = (typeof POLES)[number];
 export const CURVES = ["B", "C", "D"] as const;
 export const RATED_CURRENTS = [6, 10, 13, 16, 20, 25, 32, 40, 50, 63] as const;
@@ -114,10 +115,10 @@ export const RATED_CURRENTS = [6, 10, 13, 16, 20, 25, 32, 40, 50, 63] as const;
 export const isPoles = (value: string): value is Poles => (POLES as readonly string[]).includes(value);
 
 /** Počet proudovodných pólů (1P+N = 2, 3P+N = 4). */
-export const poleCount = (poles: string) => ({ "1P": 1, "1P+N": 2, "2P": 2, "3P": 3, "3P+N": 4, "4P": 4 })[poles] ?? 1;
+export const poleCount = (poles: string) => ({ "1P": 1, "1P+N": 2, "2P": 2, "3P": 3, "3P+N": 4, "4P": 4, "2x1P": 2 })[poles] ?? 1;
 
 /** Počet fázových pólů (bez N): 1P, 1P+N, 2P → 1; 3P, 3P+N, 4P → 3. */
-export const phaseCount = (poles: string) => (poleCount(poles) >= 3 ? 3 : 1);
+export const phaseCount = (poles: string) => (poles !== "2x1P" && poleCount(poles) >= 3 ? 3 : 1);
 
 /** Lowercase bez diakritiky a nadbytečných mezer – hledání „jistic b16“ najde „Jistič … B16“. */
 export function normalizeSearch(text: string): string {

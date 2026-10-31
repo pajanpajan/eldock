@@ -70,6 +70,7 @@ export default async function PanelProjectPage({ params }: PageProps<"/panel-bui
         rails={project.dinRailsCount}
         modulesPerRail={project.modulesPerRail}
         dominant={project.dominantManufacturer}
+        coverState={project.coverState}
       />
     </PageTransition>
   );

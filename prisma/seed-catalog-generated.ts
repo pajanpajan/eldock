@@ -355,4 +355,41 @@ other("OEZ", "OPV", "OPV10-3", "OTHER", "FUSE_DISCONNECTOR", 3, 7.5, "Pojistkov�
 other("OEZ", "OPV", "OPV14-1", "OTHER", "FUSE_DISCONNECTOR", 1, 3.5, "Pojistkový odpínač 14×51, 1P, 50 A", 50);
 other("Finder", "7S", "7S.12.9.024.5110", "PLC", "PLC", 1, 1, "Bezpečnostní relé / smart modul 24 V DC", 6, "7S129024511");
 
+// ---------------------------------------------------------------------------
+//  Kompaktní přístroje (póly ≠ šířka): 1P+N v 1M, 2×1P v 1M, 3P ve 2M (fáze 34)
+// ---------------------------------------------------------------------------
+
+function compact(opts: { manufacturer: string; series: string; typeCode: string; category: "MCB" | "RCBO"; poles: string; modules: number; curve: string; current: number; ka?: number; rcd?: { type: string; ma: number } }) {
+  const loss = estimatePowerLoss(opts.category, opts.poles === "2x1P" ? "1P" : opts.poles, opts.current) * (opts.poles === "2x1P" ? 2 : 1);
+  const kind = opts.category === "RCBO" ? "Jističochránič" : "Jistič";
+  const poles = opts.poles === "2x1P" ? "2×1P" : opts.poles;
+  out.push({
+    manufacturer: opts.manufacturer,
+    series: opts.series,
+    typeCode: opts.typeCode,
+    articleNumber: opts.typeCode,
+    category: opts.category,
+    poles: opts.poles,
+    ratedCurrentA: opts.current,
+    trippingCurve: opts.curve,
+    breakingCapacityKa: opts.ka ?? 6,
+    rcdSensitivityMa: opts.rcd?.ma,
+    rcdType: opts.rcd?.type,
+    modulesCount: opts.modules,
+    powerLossWatts: r2(loss),
+    description: `${kind} ${poles} kompakt (${String(opts.modules).replace(".", ",")}M), ${opts.current} A, char. ${opts.curve}${opts.rcd ? `, ${opts.rcd.ma} mA typ ${opts.rcd.type}` : ""}`,
+  });
+}
+for (const [curve, current] of [["C", 10], ["C", 16], ["B", 16]] as const) compact({ manufacturer: "ABB", series: "SN201", typeCode: `SN201 L ${curve}${current}`, category: "MCB", poles: "1P+N", modules: 1, curve, current, ka: 4.5 });
+for (const [curve, current] of [["B", 16], ["C", 16]] as const) compact({ manufacturer: "ABB", series: "DSN201", typeCode: `DSN201 M ${curve}${current} A30`, category: "RCBO", poles: "1P+N", modules: 1, curve, current, rcd: { type: "A", ma: 30 } });
+for (const [curve, current] of [["B", 10], ["B", 16], ["C", 16]] as const) compact({ manufacturer: "Eaton", series: "PLN6", typeCode: `PLN6-${curve}${current}/1N`, category: "MCB", poles: "1P+N", modules: 1, curve, current });
+for (const [curve, current] of [["B", 16], ["C", 16]] as const) compact({ manufacturer: "OEZ", series: "Minia OLI", typeCode: `OLI-${current}${curve}-1N-030A`, category: "RCBO", poles: "1P+N", modules: 1, curve, current, rcd: { type: "A", ma: 30 } });
+for (const current of [10, 16]) {
+  compact({ manufacturer: "Hager", series: "MBN kompakt", typeCode: `MBN 2x1P B${current} kompakt`, category: "MCB", poles: "2x1P", modules: 1, curve: "B", current });
+  compact({ manufacturer: "Schrack", series: "BM kompakt", typeCode: `BM 2x1P B${current} kompakt`, category: "MCB", poles: "2x1P", modules: 1, curve: "B", current });
+}
+compact({ manufacturer: "Hager", series: "MBN kompakt", typeCode: "MBN 3P B16 kompakt 2M", category: "MCB", poles: "3P", modules: 2, curve: "B", current: 16 });
+compact({ manufacturer: "Schrack", series: "BM kompakt", typeCode: "BM 3P C16 kompakt 2M", category: "MCB", poles: "3P", modules: 2, curve: "C", current: 16 });
+compact({ manufacturer: "Noark", series: "Ex9BN kompakt", typeCode: "Ex9BN 3P C16 kompakt 2M", category: "MCB", poles: "3P", modules: 2, curve: "C", current: 16 });
+
 export const GENERATED_CATALOG: SeedComponent[] = out;

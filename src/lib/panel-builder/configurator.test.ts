@@ -38,8 +38,8 @@ describe("katalog 220+ přístrojů", () => {
 
 describe("konfigurátor – parametry podle kategorie", () => {
   it("chránič ani odpínač nemají charakteristiku B/C/D, relé má vlastní dlaždici", () => {
-    expect(CONFIG_FIELDS.RCD.map((f) => f.key)).toEqual(["poles", "rcdType", "rcdSensitivityMa", "ratedCurrentA"]);
-    expect(CONFIG_FIELDS.MAIN_SWITCH.map((f) => f.key)).toEqual(["poles", "ratedCurrentA"]);
+    expect(CONFIG_FIELDS.RCD.map((f) => f.key)).toEqual(["poles", "rcdType", "rcdSensitivityMa", "ratedCurrentA", "width"]);
+    expect(CONFIG_FIELDS.MAIN_SWITCH.map((f) => f.key)).toEqual(["poles", "ratedCurrentA", "width"]);
     expect(CONFIG_FIELDS.MCB.find((f) => f.key === "curve")?.options.map((o) => o.label)).toEqual(["B", "C", "D", "K", "Z"]);
     expect(CONFIG_FIELDS.RCD.find((f) => f.key === "rcdType")?.options.map((o) => o.value)).toEqual(["AC", "A", "B", "F", "G", "S"]);
     expect(CONFIG_CATEGORIES.map((c) => c.label)).toContain("Relé");

@@ -4,7 +4,9 @@ import { REFERENCE_DIMS } from "@/lib/panel-builder/reference";
 
 import { normalizeManufacturer } from "@/lib/panel-builder/catalog";
 
-import { abbS200Article, analyzePanelPhoto, photoPrompt, extractDatasheetComponents, isGeminiConfigured, lookupComponent, toDetections, toExtracted } from "./geminiPanelService";
+import sharp from "sharp";
+
+import { RAILS_PROMPT, abbS200Article, analyzePanelPhoto, cropRegionFor, photoPrompt, railPrompt, toPhotoBox, toRailDetections, extractDatasheetComponents, isGeminiConfigured, lookupComponent, toDetections, toExtracted } from "./geminiPanelService";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -89,9 +91,72 @@ describe("Gemini – mix výrobců", () => {
     const result = await analyzePanelPhoto({ image: { bytes: Buffer.from("x"), mimeType: "image/jpeg" }, dims: REFERENCE_DIMS, manufacturerHint: null });
     expect(result.detections.map((d) => d.manufacturer)).toEqual(["OEZ", "Saltek", "Schneider"]);
     expect(result.dominantManufacturer).toBeNull();
-    expect(String(fetchMock.mock.calls[0][1].body)).toContain("RŮZNÝCH výrobců");
+    // 1. volání = fáze A (lišty), bez lišt následuje analýza celé fotky s promptem pro mix výrobců
+    expect(String(fetchMock.mock.calls[0][1].body)).toContain("svorkovnice PE/N");
+    expect(String(fetchMock.mock.calls[1][1].body)).toContain("RŮZNÝCH výrobců");
     expect(normalizeManufacturer("MOELLER")).toBe("Eaton");
     expect(normalizeManufacturer("Legrand SNC")).toBe("Legrand");
     expect(normalizeManufacturer("Neznámá s.r.o.")).toBe("Neznámá s.r.o.");
+  });
+});
+
+describe("Vision Analyzer 2.0 – analýza po DIN lištách", () => {
+  it("výřez lišty s přesahem a přepočet souřadnic zpět do celé fotky", () => {
+    const region = cropRegionFor([400, 100, 500, 900], 1000, 2000);
+    // lišta 800–1000 px, přesah max(15 % z 200 px, 4 % z 2000 px) = 80 px
+    expect(region).toEqual({ left: 80, top: 720, width: 840, height: 360, imageWidth: 1000, imageHeight: 2000 });
+    expect(toPhotoBox([0, 0, 1000, 1000], region)).toEqual([36, 8, 54, 92]);
+    expect(toPhotoBox([500, 500, 500, 500], region)).toEqual([45, 50, 45, 50]);
+  });
+
+  it("přístroje lišty → detekce; vynechaný konec řady se doplní do totalModules", () => {
+    const region = { left: 0, top: 0, width: 1000, height: 1000, imageWidth: 1000, imageHeight: 1000 };
+    const devices = [
+      { position: 2, box_2d: [100, 300, 900, 600], text: "S203-B16", category: "MCB", poles: "3P", modulesWidth: 3, confidence: 0.9 },
+      { position: 1, box_2d: [100, 200, 900, 300], text: "S201-B10", category: "MCB", poles: "1P", modulesWidth: 1, confidence: 0.9 },
+      { position: 3, box_2d: [100, 600, 900, 700], text: "x", poles: "2x1P", modulesWidth: 1, confidence: 0.5 },
+    ];
+    const detections = toRailDetections(devices, 2, region, 7);
+    expect(detections.map((d) => [d.positionOnRail, d.modules, d.poles, d.dinRailIndex])).toEqual([
+      [1, 1, "1P", 2],
+      [2, 3, "3P", 2],
+      [3, 1, "2x1P", 2],
+      [4, 1, null, 2],
+      [5, 1, null, 2],
+    ]);
+    expect(detections[3]).toMatchObject({ box: [10, 70, 90, 80], rawOcrText: "(doplněno – AI modul vynechala)", confidence: 0.2 });
+  });
+
+  it("prompty: lišty bez PE/N svorkovnic, šroubky vs. páčky a kompaktní přístroje", () => {
+    expect(RAILS_PROMPT).toContain("NIKDY neoznačuj jako DIN lištu holé mosazné svorkovnice PE/N");
+    expect(railPrompt("UNCOVERED", "ABB")).toContain("spočítej všechny šroubky");
+    expect(railPrompt("UNCOVERED", "ABB")).toContain('poles "3P", modulesWidth 3');
+    expect(railPrompt("COVERED", null)).toContain("w_1M");
+    expect(railPrompt("COVERED", null)).toContain('poles "2x1P", modulesWidth 1');
+  });
+
+  it("dvoufázová analýza: fáze A najde 2 lišty, fáze B každý výřez zvlášť, souřadnice v celé fotce", async () => {
+    vi.stubEnv("GEMINI_API_KEY", "test-key");
+    const photo = await sharp({ create: { width: 800, height: 1000, channels: 3, background: "#888" } }).jpeg().toBuffer();
+    const reply = (body: unknown) => Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify(body) }] } }] });
+    const fetchMock = vi.fn<(url: string, init: RequestInit) => Promise<Response>>();
+    fetchMock
+      .mockResolvedValueOnce(reply({ coverState: "COVERED", dominantManufacturer: "OEZ", rails: [{ box_2d: [600, 100, 700, 900] }, { box_2d: [200, 100, 300, 900] }] }))
+      .mockResolvedValueOnce(reply({ totalModules: 4, devices: [{ position: 1, box_2d: [100, 0, 900, 750], poles: "3P", modulesWidth: 3, category: "MCB", confidence: 0.9 }] }))
+      .mockResolvedValueOnce(reply({ totalModules: 1, devices: [{ position: 1, box_2d: [100, 0, 900, 500], poles: "1P", modulesWidth: 1, category: "MCB", confidence: 0.9 }] }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await analyzePanelPhoto({ image: { bytes: photo, mimeType: "image/jpeg" }, dims: REFERENCE_DIMS, manufacturerHint: null, mode: "UNCOVERED" });
+    expect(result).toMatchObject({ mode: "GEMINI", railCount: 2, coverState: "UNCOVERED", dominantManufacturer: "OEZ" });
+    // horní lišta (ymin 200) je Lišta 1 – 3P + doplněný 1M modul do totalModules 4
+    expect(result.detections.map((d) => [d.dinRailIndex, d.positionOnRail, d.modules])).toEqual([
+      [1, 1, 3],
+      [1, 2, 1],
+      [2, 1, 1],
+    ]);
+    // výřez lišty 1: y 200–300 ‰ → 200–300 px ± max(15 px, 40 px) = 160–340 px, x 64–736 px; přístroj 100–900 ‰ výřezu
+    expect(result.detections[0].box).toEqual([17.8, 8, 32.2, 71]);
+    expect(String(fetchMock.mock.calls[1][1].body)).toContain("ODKRYTOVANÝ");
+    expect(String(fetchMock.mock.calls[1][1].body)).toContain('"mime_type":"image/jpeg"');
   });
 });

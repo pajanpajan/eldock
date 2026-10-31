@@ -8,9 +8,9 @@ import { COMPONENT_CATEGORIES } from "@/lib/panel-builder/catalog";
 import { prisma } from "@/lib/prisma";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 import { assertFeature } from "@/server/modules";
-import { analyzePanelPhoto, extractDatasheetComponents, lookupComponent, type AiMode } from "@/server/services/geminiPanelService";
+import { analyzePanelPhoto, extractDatasheetComponents, lookupComponent, type AiMode, type AnalysisMode } from "@/server/services/geminiPanelService";
 import { PHASE_OPTIONS, type TreeIssue } from "@/lib/panel-builder/tree";
-import { analyzeProject, assignCatalogComponent, createPanelProject, importDatasheet, configureItem, lookupComponentForItem, mergeItems, releaseDocumentation, saveThermalInputs, saveTree, splitItem, updateItemText, type ImportedComponent } from "@/server/services/panel-builder";
+import { analyzeProject, assignCatalogComponent, createPanelProject, importDatasheet, addModule, addRail, configureItem, deleteItem, deleteRail, lookupComponentForItem, mergeItems, releaseDocumentation, saveThermalInputs, saveTree, splitItem, updateItemText, type ImportedComponent } from "@/server/services/panel-builder";
 import { getCurrentAccount } from "@/server/session";
 import { readStoredFile } from "@/server/storage";
 
@@ -83,12 +83,12 @@ export async function createPanelProjectAction(input: z.input<typeof createSchem
   }
 }
 
-/** Znovu analyzovat fotku (nahradí prvky projektu). */
-export async function analyzePanelProjectAction(projectId: string): Promise<ActionResult<{ mode: AiMode; total: number; unresolved: number; warning?: string }>> {
-  if (!id.safeParse(projectId).success) return { ok: false, error: "Neplatný projekt." };
+/** Znovu analyzovat fotku (nahradí prvky projektu) v režimu Auto / Odkrytovaný / Zakrytovaný. */
+export async function analyzePanelProjectAction(projectId: string, mode: AnalysisMode = "AUTO"): Promise<ActionResult<{ mode: AiMode; total: number; unresolved: number; warning?: string }>> {
+  if (!id.safeParse(projectId).success || !["AUTO", "UNCOVERED", "COVERED"].includes(mode)) return { ok: false, error: "Neplatný projekt." };
   try {
     await guard();
-    const result = await analyzeProject(prisma, projectId, { analyze: analyzePanelPhoto, readPhoto });
+    const result = await analyzeProject(prisma, projectId, { analyze: analyzePanelPhoto, readPhoto, mode });
     revalidatePath(`/panel-builder/${projectId}`);
     return { ok: true, data: result };
   } catch (error) {
@@ -279,5 +279,59 @@ export async function updateItemTextAction(itemId: string, input: { customTypeCo
     return { ok: true, data: undefined };
   } catch (error) {
     return failure(error, "Údaje se nepodařilo uložit.");
+  }
+}
+
+const rail = z.number().int().min(1).max(12);
+
+/** „+ Přidat modul“ na konec DIN lišty. */
+export async function addModuleAction(projectId: string, railIndex: number): Promise<ActionResult<{ id: string }>> {
+  if (!id.safeParse(projectId).success || !rail.safeParse(railIndex).success) return { ok: false, error: "Neplatná DIN lišta." };
+  try {
+    await guard();
+    const item = await addModule(prisma, projectId, railIndex);
+    revalidatePath(`/panel-builder/${projectId}`, "layout");
+    return { ok: true, data: { id: item.id } };
+  } catch (error) {
+    return failure(error, "Modul se nepodařilo přidat.");
+  }
+}
+
+/** „Smazat prvek“ (chybně detekovaný modul). */
+export async function deleteItemAction(itemId: string): Promise<ActionResult> {
+  if (!id.safeParse(itemId).success) return { ok: false, error: "Neplatný prvek." };
+  try {
+    await guard();
+    const result = await deleteItem(prisma, itemId);
+    revalidatePath(`/panel-builder/${result.projectId}`, "layout");
+    return { ok: true, data: undefined };
+  } catch (error) {
+    return failure(error, "Prvek se nepodařilo smazat.");
+  }
+}
+
+/** „Smazat celou lištu“ (falešně detekovaná lišta, např. svorkovnice PE/N). */
+export async function deleteRailAction(projectId: string, railIndex: number): Promise<ActionResult<{ removed: number }>> {
+  if (!id.safeParse(projectId).success || !rail.safeParse(railIndex).success) return { ok: false, error: "Neplatná DIN lišta." };
+  try {
+    await guard();
+    const result = await deleteRail(prisma, projectId, railIndex);
+    revalidatePath(`/panel-builder/${projectId}`, "layout");
+    return { ok: true, data: result };
+  } catch (error) {
+    return failure(error, "Lištu se nepodařilo smazat.");
+  }
+}
+
+/** „+ Přidat DIN lištu“. */
+export async function addRailAction(projectId: string): Promise<ActionResult<{ dinRailsCount: number }>> {
+  if (!id.safeParse(projectId).success) return { ok: false, error: "Neplatný projekt." };
+  try {
+    await guard();
+    const result = await addRail(prisma, projectId);
+    revalidatePath(`/panel-builder/${projectId}`, "layout");
+    return { ok: true, data: result };
+  } catch (error) {
+    return failure(error, "Lištu se nepodařilo přidat.");
   }
 }

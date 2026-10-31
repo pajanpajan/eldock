@@ -4,7 +4,7 @@ import { buildSearchText, isMix } from "@/lib/panel-builder/catalog";
 import { extractComponents, type ExtractedComponent } from "@/lib/panel-builder/datasheet-extract";
 import type { EnclosureDims } from "@/lib/panel-builder/layout";
 import { catalogCategory, configFromComponent, defaultConfig, matchConfig, parseConfig, polesForWidth, synthesizeComponent, type ItemConfig } from "@/lib/panel-builder/configurator";
-import { parseBox, type BoundingBox } from "@/lib/panel-builder/layout";
+import { parseBox, slotBoxes, type BoundingBox } from "@/lib/panel-builder/layout";
 import { DESIGNATION_PREFIX, compact, designationsInOrder, matchDetection, type Detection } from "@/lib/panel-builder/matching";
 import { nextProjectCode, type ManufacturerInfo } from "@/lib/panel-builder/project";
 import { releaseBlockers, type DocItem } from "@/lib/panel-builder/documentation";
@@ -13,7 +13,7 @@ import { ancestors, isConnected, isPhaseAssignment, renumber, treeNodeFrom, vali
 import { calculateThermal } from "@/lib/thermalCalculation";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 
-import type { AiMode, analyzePanelPhoto, lookupComponent } from "./geminiPanelService";
+import type { AiMode, AnalysisMode, analyzePanelPhoto, lookupComponent } from "./geminiPanelService";
 
 // AI Panel Builder – zápisy: katalog prvků (atomizace PDF datasheetů), projekty rozváděčů,
 // výsledek analýzy fotky a přiřazení katalogových kusů (Smart Fallback Picker).
@@ -148,7 +148,8 @@ export async function applyDetections(prisma: PrismaClient, projectId: string, d
           catalogComponentId: match.componentId,
           dinRailIndex: detection.dinRailIndex,
           positionOnRail: detection.positionOnRail,
-          modulesWidth: component?.modulesCount || detection.modules,
+          // Fyzická šířka z fotky má přednost (kompaktní 3P ve 2M, 2×1P v 1M …), jinak šířka z katalogu.
+          modulesWidth: detection.modules || component?.modulesCount || 1,
           boundingBoxJson: detection.box ? JSON.stringify(detection.box) : null,
           recognitionStatus: match.status,
           confidence: Math.round(match.confidence * 100) / 100,
@@ -179,13 +180,17 @@ export async function applyDetections(prisma: PrismaClient, projectId: string, d
 export type PhotoReader = (photoUrl: string) => Promise<{ bytes: Buffer; mimeType: string } | null>;
 
 /** Krok 1: analýza fotky (Gemini nebo demo) a uložení rozpoznaných prvků. */
-export async function analyzeProject(prisma: PrismaClient, projectId: string, deps: { analyze: typeof analyzePanelPhoto; readPhoto: PhotoReader }) {
+export async function analyzeProject(prisma: PrismaClient, projectId: string, deps: { analyze: typeof analyzePanelPhoto; readPhoto: PhotoReader; mode?: AnalysisMode }) {
   const project = await prisma.panelBoardProject.findUnique({ where: { id: projectId } });
   if (!project) throw new WorkflowError("NOT_FOUND", "Projekt rozváděče neexistuje.");
   const image = project.photoUrl ? await deps.readPhoto(project.photoUrl) : null;
   const hint = isMix(project.dominantManufacturer) ? null : project.dominantManufacturer;
-  const result = await deps.analyze({ image, dims: project, manufacturerHint: hint });
+  const result = await deps.analyze({ image, dims: project, manufacturerHint: hint, mode: deps.mode ?? "AUTO" });
   const saved = await applyDetections(prisma, projectId, result.detections, result.mode, hint);
+  // Počet lišt podle skutečně nalezených lišt na fotce (fáze A), ne podle odhadu z dřívějška.
+  if (result.railCount || result.coverState) {
+    await prisma.panelBoardProject.update({ where: { id: projectId }, data: { ...(result.railCount ? { dinRailsCount: result.railCount } : {}), coverState: result.coverState ?? null } });
+  }
   return { ...saved, warning: result.warning };
 }
 
@@ -489,11 +494,17 @@ export async function mergeItems(prisma: PrismaClient, itemId: string, count: nu
   return { projectId: item.projectId, width, removed: ids.length };
 }
 
-/** Rozdělí vícemodulový přístroj na jednotlivé 1M moduly (rámeček na fotce poměrně podle šířky). */
+/**
+ * Rozdělí vícemodulový přístroj na jednotlivé 1M moduly (rámeček na fotce poměrně podle šířky);
+ * dvojitý jistič 2×1P rozdělí na 2 obvodové větve se společnou pozicí na liště (2× poloviční šířka).
+ */
 export async function splitItem(prisma: PrismaClient, itemId: string) {
   const item = await prisma.panelBoardItem.findUnique({ where: { id: itemId }, include: { catalogComponent: true } });
   if (!item) throw new WorkflowError("NOT_FOUND", "Prvek rozváděče neexistuje.");
-  const parts = Math.round(item.modulesWidth);
+  const base = parseConfig(item.configJson) ?? (item.catalogComponent ? configFromComponent(item.catalogComponent) : null);
+  const dual = base?.poles === "2x1P";
+  const parts = dual ? 2 : Math.round(item.modulesWidth);
+  const pieceWidth = dual ? item.modulesWidth / 2 : 1;
   if (parts < 2) throw new WorkflowError("VALIDATION", `${item.designation} má šířku 1 modul – není co rozdělit.`);
   const box = parseBox(item.boundingBoxJson);
   const slice = (index: number): string | null => {
@@ -502,18 +513,17 @@ export async function splitItem(prisma: PrismaClient, itemId: string) {
     const step = (xmax - xmin) / parts;
     return JSON.stringify([ymin, Math.round((xmin + step * index) * 100) / 100, ymax, Math.round((xmin + step * (index + 1)) * 100) / 100]);
   };
-  const base = parseConfig(item.configJson) ?? (item.catalogComponent ? configFromComponent(item.catalogComponent) : null);
   // Za přístrojem se pozice posunou, nové moduly vloží hned za něj.
   const after = await prisma.panelBoardItem.findMany({ where: { projectId: item.projectId, dinRailIndex: item.dinRailIndex, positionOnRail: { gt: item.positionOnRail } } });
   await prisma.$transaction([
     ...after.map((entry) => prisma.panelBoardItem.update({ where: { id: entry.id }, data: { positionOnRail: entry.positionOnRail + parts - 1 } })),
-    prisma.panelBoardItem.update({ where: { id: item.id }, data: { modulesWidth: 1, boundingBoxJson: slice(0), recognitionStatus: "PARTIAL", catalogComponentId: null } }),
+    prisma.panelBoardItem.update({ where: { id: item.id }, data: { modulesWidth: pieceWidth, boundingBoxJson: slice(0), recognitionStatus: "PARTIAL", catalogComponentId: null, configJson: null } }),
     prisma.panelBoardItem.createMany({
       data: Array.from({ length: parts - 1 }, (_, index) => ({
         projectId: item.projectId,
         dinRailIndex: item.dinRailIndex,
         positionOnRail: item.positionOnRail + index + 1,
-        modulesWidth: 1,
+        modulesWidth: pieceWidth,
         boundingBoxJson: slice(index + 1),
         recognitionStatus: "UNRECOGNIZED" as const,
         confidence: 0.3,
@@ -531,7 +541,8 @@ export async function splitItem(prisma: PrismaClient, itemId: string) {
       where: { projectId: item.projectId, dinRailIndex: item.dinRailIndex, positionOnRail: { gte: item.positionOnRail, lt: item.positionOnRail + parts } },
     });
     for (const piece of pieces) {
-      await configureItem(prisma, piece.id, { ...defaultConfig(base.category, { manufacturer: base.manufacturer, modules: 1, ratedCurrentA: base.ratedCurrentA, curve: base.curve }), ...(base.category === "MCB" ? { breakingCapacityKa: base.breakingCapacityKa ?? 6 } : {}) });
+      const config = { ...defaultConfig(base.category, { manufacturer: base.manufacturer, modules: 1, ratedCurrentA: base.ratedCurrentA, curve: base.curve }), ...(base.category === "MCB" ? { breakingCapacityKa: base.breakingCapacityKa ?? 6 } : {}) };
+      await configureItem(prisma, piece.id, dual ? { ...config, poles: "1P", modules: pieceWidth } : config);
     }
   }
   await renumberProject(prisma, item.projectId);
@@ -547,4 +558,82 @@ export async function updateItemText(prisma: PrismaClient, itemId: string, input
     data: { customTypeCode: input.customTypeCode?.trim().slice(0, 80) || null, circuitLabel: input.circuitLabel.trim().slice(0, 80) },
     select: { id: true, projectId: true },
   });
+}
+
+// ---------------------------------------------------------------------------
+//  Správa DIN lišt a modulů (oprava detekce do 5 vteřin)
+// ---------------------------------------------------------------------------
+
+/** „+ Přidat modul“ na konec lišty – rámeček na fotce navazuje vpravo na poslední přístroj. */
+export async function addModule(prisma: PrismaClient, projectId: string, rail: number) {
+  const project = await prisma.panelBoardProject.findUnique({ where: { id: projectId }, include: { items: { orderBy: [{ dinRailIndex: "asc" }, { positionOnRail: "asc" }] } } });
+  if (!project) throw new WorkflowError("NOT_FOUND", "Projekt rozváděče neexistuje.");
+  if (rail < 1 || rail > Math.max(project.dinRailsCount, 1) + 1) throw new WorkflowError("VALIDATION", "Neplatná DIN lišta.");
+  const onRail = project.items.filter((item) => item.dinRailIndex === rail);
+  const last = onRail[onRail.length - 1];
+  const lastBox = last ? parseBox(last.boundingBoxJson) : null;
+  let box: BoundingBox | null = null;
+  if (lastBox && last) {
+    const perModule = (lastBox[3] - lastBox[1]) / Math.max(last.modulesWidth, 0.5);
+    box = [lastBox[0], lastBox[3], lastBox[2], Math.min(100, Math.round((lastBox[3] + perModule) * 100) / 100)];
+  } else {
+    // Prázdná lišta: rámeček z geometrie skříně (stejně jako u demo fotky)
+    const slots = [...onRail.map((item) => ({ dinRailIndex: rail, positionOnRail: item.positionOnRail, modulesWidth: item.modulesWidth })), { dinRailIndex: rail, positionOnRail: onRail.length + 1, modulesWidth: 1 }];
+    box = slotBoxes({ ...project, dinRailsCount: Math.max(project.dinRailsCount, rail) }, slots).get(slots[slots.length - 1]) ?? null;
+  }
+  const created = await prisma.panelBoardItem.create({
+    data: {
+      projectId,
+      dinRailIndex: rail,
+      positionOnRail: onRail.length + 1,
+      modulesWidth: 1,
+      boundingBoxJson: box ? JSON.stringify(box) : null,
+      recognitionStatus: "UNRECOGNIZED",
+      confidence: 0,
+      designation: "-F99",
+      sortOrder: rail * 100 + onRail.length,
+    },
+  });
+  if (rail > project.dinRailsCount) await prisma.panelBoardProject.update({ where: { id: projectId }, data: { dinRailsCount: rail } });
+  await renumberProject(prisma, projectId);
+  return created;
+}
+
+/** „Smazat prvek“: potomci ve stromu přejdou na jeho rodiče, zbytek lišty se posune a přečísluje. */
+export async function deleteItem(prisma: PrismaClient, itemId: string) {
+  const item = await prisma.panelBoardItem.findUnique({ where: { id: itemId } });
+  if (!item) throw new WorkflowError("NOT_FOUND", "Prvek rozváděče neexistuje.");
+  await prisma.$transaction([
+    prisma.panelBoardItem.updateMany({ where: { parentItemId: item.id }, data: { parentItemId: item.parentItemId, fedFromIncomer: !item.parentItemId && item.fedFromIncomer } }),
+    prisma.panelBoardItem.delete({ where: { id: item.id } }),
+  ]);
+  await resequenceRail(prisma, item.projectId, item.dinRailIndex);
+  await renumberProject(prisma, item.projectId);
+  return { projectId: item.projectId };
+}
+
+/** „Smazat celou lištu“ (např. svorkovnice PE/N chybně označená jako lišta); lišty pod ní se posunou nahoru. */
+export async function deleteRail(prisma: PrismaClient, projectId: string, rail: number) {
+  const project = await prisma.panelBoardProject.findUnique({ where: { id: projectId }, include: { items: true } });
+  if (!project) throw new WorkflowError("NOT_FOUND", "Projekt rozváděče neexistuje.");
+  if (rail < 1 || rail > project.dinRailsCount) throw new WorkflowError("VALIDATION", "Neplatná DIN lišta.");
+  const removed = project.items.filter((item) => item.dinRailIndex === rail).map((item) => item.id);
+  await prisma.$transaction([
+    prisma.panelBoardItem.updateMany({ where: { parentItemId: { in: removed } }, data: { parentItemId: null, fedFromIncomer: false } }),
+    prisma.panelBoardItem.deleteMany({ where: { id: { in: removed } } }),
+    ...project.items
+      .filter((item) => item.dinRailIndex > rail)
+      .map((item) => prisma.panelBoardItem.update({ where: { id: item.id }, data: { dinRailIndex: item.dinRailIndex - 1 } })),
+    prisma.panelBoardProject.update({ where: { id: projectId }, data: { dinRailsCount: Math.max(1, project.dinRailsCount - 1) } }),
+  ]);
+  await renumberProject(prisma, projectId);
+  return { removed: removed.length };
+}
+
+/** „+ Přidat DIN lištu“ pod stávající lišty. */
+export async function addRail(prisma: PrismaClient, projectId: string) {
+  const project = await prisma.panelBoardProject.findUnique({ where: { id: projectId }, select: { dinRailsCount: true } });
+  if (!project) throw new WorkflowError("NOT_FOUND", "Projekt rozváděče neexistuje.");
+  if (project.dinRailsCount >= 12) throw new WorkflowError("VALIDATION", "Rozváděč může mít nejvýše 12 DIN lišt.");
+  return prisma.panelBoardProject.update({ where: { id: projectId }, data: { dinRailsCount: project.dinRailsCount + 1 }, select: { dinRailsCount: true } });
 }

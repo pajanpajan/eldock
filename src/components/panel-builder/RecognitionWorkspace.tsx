@@ -11,7 +11,8 @@ import type { ItemConfig } from "@/lib/panel-builder/configurator";
 import type { BoundingBox } from "@/lib/panel-builder/layout";
 import { RECOGNITION } from "@/lib/panel-builder/project";
 import { cn } from "@/lib/utils";
-import { analyzePanelProjectAction } from "@/server/actions/panel-builder";
+import { addModuleAction, addRailAction, analyzePanelProjectAction, deleteRailAction } from "@/server/actions/panel-builder";
+import type { AnalysisMode } from "@/server/services/geminiPanelService";
 
 import { DinRails } from "./DinRails";
 import { ItemConfigurator } from "./ItemConfigurator";
@@ -41,6 +42,12 @@ const TONE: Record<RecognitionStatus, string> = {
 
 const SELECTED = "#fbbf24";
 
+const ANALYSIS_MODES: { value: AnalysisMode; label: string; hint: string }[] = [
+  { value: "AUTO", label: "🔍 Auto-detekce", hint: "AI sama pozná, zda je rozváděč zakrytovaný" },
+  { value: "UNCOVERED", label: "🔩 Odkrytovaný", hint: "počítání podle šroubků svorek" },
+  { value: "COVERED", label: "🛡️ Zakrytovaný", hint: "podle páček a kalibrace šířky 1M" },
+];
+
 /** Krok 1: fotka s rámečky rozpoznání, DIN lišty v měřítku a živý konfigurátor vybraného modulu. */
 export function RecognitionWorkspace({
   projectId,
@@ -49,6 +56,7 @@ export function RecognitionWorkspace({
   rails,
   modulesPerRail,
   dominant,
+  coverState,
 }: {
   projectId: string;
   photoUrl: string | null;
@@ -56,8 +64,11 @@ export function RecognitionWorkspace({
   rails: number;
   modulesPerRail: number;
   dominant: string;
+  coverState: string | null;
 }) {
   const router = useRouter();
+  const [analysisMode, setAnalysisMode] = useState<AnalysisMode>(coverState === "UNCOVERED" || coverState === "COVERED" ? coverState : "AUTO");
+  const [editing, startEditing] = useTransition();
   const unresolved = items.filter((item) => item.recognitionStatus !== "VERIFIED");
   const [selectedId, setSelectedId] = useState<string | null>(unresolved[0]?.id ?? null);
   const [analyzing, startAnalyze] = useTransition();
@@ -73,10 +84,20 @@ export function RecognitionWorkspace({
   function reanalyze() {
     if (!window.confirm("Znovu analyzovat fotku? Rozpoznané prvky a ruční nastavení se nahradí.")) return;
     startAnalyze(async () => {
-      const result = await analyzePanelProjectAction(projectId);
+      const result = await analyzePanelProjectAction(projectId, analysisMode);
       if (!result.ok) return void toast.error(result.error);
       toast.success(`Rozpoznáno ${result.data.total} přístrojů, k dořešení ${result.data.unresolved}.`);
       if (result.data.warning) toast.warning(result.data.warning);
+      router.refresh();
+    });
+  }
+
+  function railAction(run: () => Promise<{ ok: true; data: unknown } | { ok: false; error: string }>, success: string, after?: (data: unknown) => void) {
+    startEditing(async () => {
+      const result = await run();
+      if (!result.ok) return void toast.error(result.error);
+      toast.success(success);
+      after?.(result.data);
       router.refresh();
     });
   }
@@ -96,6 +117,23 @@ export function RecognitionWorkspace({
           <Button variant="outline" size="sm" className="touch-target ml-auto gap-2" onClick={reanalyze} disabled={analyzing}>
             {analyzing ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <RefreshCw className="size-4" aria-hidden />} Znovu analyzovat fotku
           </Button>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground" role="group" aria-label="Režim analýzy fotky">
+          <span className="mr-1">Režim analýzy:</span>
+          {ANALYSIS_MODES.map((mode) => (
+            <button
+              key={mode.value}
+              type="button"
+              aria-pressed={analysisMode === mode.value}
+              title={mode.hint}
+              onClick={() => setAnalysisMode(mode.value)}
+              className={cn("min-h-8 rounded-md border px-2.5 font-semibold", analysisMode === mode.value ? "border-primary bg-primary text-primary-foreground" : "border-border hover:text-foreground")}
+            >
+              {mode.label}
+            </button>
+          ))}
+          {coverState ? <span className="ml-auto">Poslední analýza: {coverState === "UNCOVERED" ? "odkrytovaný" : "zakrytovaný"}</span> : null}
         </div>
 
         {photoUrl ? (
@@ -131,6 +169,13 @@ export function RecognitionWorkspace({
                       vectorEffect="non-scaling-stroke"
                       style={{ strokeWidth: active ? 3 : 2, filter: active ? "drop-shadow(0 0 4px rgba(251,191,36,0.9))" : undefined }}
                     />
+                    {/* Tečkované dělení po 1M uvnitř vícemodulových přístrojů – kontrola šířky proti šroubkům a spárám */}
+                    {item.modulesWidth > 1
+                      ? Array.from({ length: Math.ceil(item.modulesWidth) - 1 }, (_, index) => {
+                          const x = xmin + ((xmax - xmin) / item.modulesWidth) * (index + 1);
+                          return <line key={index} x1={x} x2={x} y1={ymin} y2={ymax} stroke={active ? SELECTED : style.stroke} strokeDasharray="1.5 1.5" vectorEffect="non-scaling-stroke" style={{ strokeWidth: 1 }} opacity={0.9} data-module-divider="" />;
+                        })
+                      : null}
                     {item.recognitionStatus === "UNRECOGNIZED" && !active ? (
                       <text x={(xmin + xmax) / 2} y={(ymin + ymax) / 2} fontSize={4} fontWeight={800} fill="#fff" textAnchor="middle" dominantBaseline="middle" style={{ paintOrder: "stroke", stroke: "#ef4444", strokeWidth: 0.8 }}>
                         ?
@@ -163,6 +208,13 @@ export function RecognitionWorkspace({
           selectedVariant="edit"
           onSelect={(item) => setSelectedId(item.id)}
           tone={(item) => TONE[item.recognitionStatus]}
+          busy={editing}
+          onAddModule={(rail) => railAction(() => addModuleAction(projectId, rail), `Modul přidán na lištu ${rail}.`, (data) => setSelectedId((data as { id: string }).id))}
+          onDeleteRail={(rail) => {
+            if (!window.confirm(`Smazat celou lištu ${rail} se všemi jejími prvky? Lišty pod ní se posunou nahoru.`)) return;
+            railAction(() => deleteRailAction(projectId, rail), `Lišta ${rail} smazána.`);
+          }}
+          onAddRail={() => railAction(() => addRailAction(projectId), "DIN lišta přidána.")}
         />
       </section>
 
@@ -173,7 +225,13 @@ export function RecognitionWorkspace({
         </div>
         {selected ? (
           <>
-            <ItemConfigurator key={`${selected.id}:${selected.modulesWidth}:${selected.component?.id ?? "-"}`} item={selected} dominant={dominant} rightNeighbors={rightNeighbors} onChanged={() => router.refresh()} />
+            <ItemConfigurator key={`${selected.id}:${selected.modulesWidth}:${selected.component?.id ?? "-"}`} item={selected} dominant={dominant} rightNeighbors={rightNeighbors}
+              onChanged={() => router.refresh()}
+              onDeleted={() => {
+                setSelectedId(null);
+                router.refresh();
+              }}
+            />
             {unresolved.some((item) => item.id !== selected.id) ? (
               <Button variant="outline" className="touch-target gap-2 self-start" onClick={nextUnresolved}>
                 Další nedořešený prvek <ArrowRight className="size-4" aria-hidden />

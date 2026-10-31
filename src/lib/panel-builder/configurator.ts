@@ -78,21 +78,41 @@ const opts = <K extends keyof ItemConfig>(key: K, values: readonly ItemConfig[K]
   values.map((value) => ({ value: String(value), label: label(value), patch: { [key]: value } as Partial<ItemConfig> }));
 const amps = (values: number[]) => opts("ratedCurrentA", values, (value) => `${value}A`);
 const ma = (values: number[]) => opts("rcdSensitivityMa", values, (value) => `${value} mA`);
-const modulesOnly = (values: number[]) => values.map((modules) => ({ value: String(modules), label: `${modules}M`, patch: { modules } }));
+const modulesOnly = (values: number[]) => values.map((modules) => ({ value: String(modules), label: `${String(modules).replace(".", ",")}M`, patch: { modules } }));
+/** Kompaktní přístroje: póly ≠ šířka na liště. */
+const compact = (poles: string, modules: number, label: string): ConfigOption => ({ value: `${poles}|${modules}|compact`, label, patch: { poles, modules } });
+/** Ruční šířka v modulech nezávisle na pólech (0,5M … 6M). */
+const widthField: ConfigField = { key: "width", label: "Šířka v modulech (ručně)", options: modulesOnly([0.5, 1, 1.5, 2, 3, 4, 6]) };
 
 /** Řádky dlaždic podle kategorie (zadání fáze 33). */
 export const CONFIG_FIELDS: Record<ConfigCategory, ConfigField[]> = {
   MCB: [
-    { key: "poles", label: "Póly & šířka", options: [poleWidth("1P", 1), poleWidth("1P+N", 2), poleWidth("2P", 2), poleWidth("3P", 3), poleWidth("3P+N", 4), poleWidth("4P", 4)] },
+    {
+      key: "poles",
+      label: "Póly & šířka",
+      options: [
+        poleWidth("1P", 1),
+        poleWidth("1P+N", 2),
+        poleWidth("2P", 2),
+        poleWidth("3P", 3),
+        poleWidth("3P+N", 4),
+        poleWidth("4P", 4),
+        compact("2x1P", 1, "⚡ 2×1P Duální (1M)"),
+        compact("1P+N", 1, "⚡ 1P+N Kompakt (1M)"),
+        compact("3P", 2, "⚡ 3P Kompakt (2M)"),
+      ],
+    },
     { key: "curve", label: "Vypínací charakteristika", options: opts("curve", ["B", "C", "D", "K", "Z"], (value) => String(value)) },
     { key: "ratedCurrentA", label: "Jmenovitý proud In", options: amps([2, 4, 6, 10, 13, 16, 20, 25, 32, 40, 50, 63]) },
     { key: "breakingCapacityKa", label: "Zkratová odolnost", options: opts("breakingCapacityKa", [6, 10], (value) => `${value} kA`) },
+    widthField,
   ],
   RCD: [
     { key: "poles", label: "Póly & šířka", options: [poleWidth("2P", 2), poleWidth("4P", 4)] },
     { key: "rcdType", label: "Typ chrániče", options: opts("rcdType", ["AC", "A", "B", "F", "G", "S"], (value) => RCD_TYPES[String(value)]) },
     { key: "rcdSensitivityMa", label: "Citlivost (IΔn)", options: ma([10, 30, 100, 300, 500]) },
     { key: "ratedCurrentA", label: "Jmenovitý proud In", options: amps([16, 25, 40, 63, 80, 100]) },
+    widthField,
   ],
   RCBO: [
     { key: "poles", label: "Póly & šířka", options: [poleWidth("1P+N", 1), poleWidth("1P+N", 2), poleWidth("2P", 2), poleWidth("3P+N", 4), poleWidth("4P", 4)] },
@@ -100,15 +120,18 @@ export const CONFIG_FIELDS: Record<ConfigCategory, ConfigField[]> = {
     { key: "rcdType", label: "Typ chrániče", options: opts("rcdType", ["A", "AC"], (value) => String(value)) },
     { key: "rcdSensitivityMa", label: "Citlivost (IΔn)", options: ma([10, 30, 100, 300]) },
     { key: "ratedCurrentA", label: "Jmenovitý proud In", options: amps([6, 10, 13, 16, 20, 25, 32, 40]) },
+    widthField,
   ],
   MAIN_SWITCH: [
     { key: "poles", label: "Póly & šířka", options: [poleWidth("1P", 1), poleWidth("2P", 2), poleWidth("3P", 3), poleWidth("3P+N", 4), poleWidth("4P", 4)] },
     { key: "ratedCurrentA", label: "Jmenovitý proud In", options: amps([16, 25, 32, 40, 63, 80, 100, 125]) },
+    widthField,
   ],
   SPD: [
     { key: "spdType", label: "Typ svodiče", options: opts("spdType", ["T1", "T1+T2", "T2", "T2+T3", "T3"], (value) => String(value)) },
     { key: "poles", label: "Konfigurace / póly", options: [poleWidth("1P+N", 2), poleWidth("3P", 3), poleWidth("3P+N", 4), poleWidth("4P", 4)] },
     { key: "surgeCurrentKa", label: "Svodičový proud", options: opts("surgeCurrentKa", [12.5, 15, 20, 25, 40], (value) => `${String(value).replace(".", ",")} kA`) },
+    widthField,
   ],
   CONTACTOR: [
     {
@@ -130,6 +153,7 @@ export const CONFIG_FIELDS: Record<ConfigCategory, ConfigField[]> = {
     },
     { key: "ratedCurrentA", label: "Jmenovitý proud", options: amps([16, 20, 25, 40, 63]) },
     { key: "coilVoltage", label: "Ovládací napětí cívky", options: opts("coilVoltage", ["230V AC", "24V AC/DC", "12V DC"], (value) => String(value)) },
+    widthField,
   ],
   RELAY: [
     { key: "relaySubtype", label: "Podtyp relé", options: Object.entries(RELAY_SUBTYPES).map(([value, label]) => ({ value, label, patch: { relaySubtype: value } })) },
@@ -324,7 +348,7 @@ export function describeConfig(config: ItemConfig): string {
   const n = (value: number) => String(value).replace(".", ",");
   switch (config.category) {
     case "MCB":
-      return `Jistič ${config.poles} ${config.curve ?? ""}${config.ratedCurrentA ?? ""}${config.breakingCapacityKa ? ` ${n(config.breakingCapacityKa)} kA` : ""}`.replace(/\s+/g, " ").trim();
+      return `Jistič ${config.poles === "2x1P" ? "2×1P" : config.poles} ${config.curve ?? ""}${config.ratedCurrentA ?? ""}${config.breakingCapacityKa ? ` ${n(config.breakingCapacityKa)} kA` : ""}`.replace(/\s+/g, " ").trim();
     case "RCD":
       return `Chránič ${config.poles} ${config.ratedCurrentA ?? ""} A / ${config.rcdSensitivityMa ?? 30} mA typ ${config.rcdType ?? "A"}`;
     case "RCBO":
