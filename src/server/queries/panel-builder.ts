@@ -45,3 +45,40 @@ export const getPanelProjects = cache(() =>
     },
   }),
 );
+
+/** Detail projektu: prvky v pořadí lišta → pozice, s katalogovými kusy a vazbou na zařízení. */
+export const getPanelProject = cache((id: string) =>
+  prisma.panelBoardProject.findUnique({
+    where: { id },
+    include: {
+      equipment: { select: { id: true, tag: true, name: true } },
+      items: { orderBy: [{ dinRailIndex: "asc" }, { positionOnRail: "asc" }], include: { catalogComponent: true } },
+    },
+  }),
+);
+
+export type PanelProjectDetail = NonNullable<Awaited<ReturnType<typeof getPanelProject>>>;
+export type PanelItemDetail = PanelProjectDetail["items"][number];
+
+/** Kusy katalogu pro Smart Fallback Picker (bez skříní). */
+export const getPickerCatalog = cache(() =>
+  prisma.catalogComponent.findMany({
+    where: { category: { not: "ENCLOSURE" } },
+    select: {
+      id: true,
+      manufacturer: true,
+      typeCode: true,
+      articleNumber: true,
+      category: true,
+      poles: true,
+      ratedCurrentA: true,
+      trippingCurve: true,
+      modulesCount: true,
+      powerLossWatts: true,
+      description: true,
+    },
+    orderBy: [{ manufacturer: "asc" }, { typeCode: "asc" }],
+  }),
+);
+
+export type PickerComponent = Awaited<ReturnType<typeof getPickerCatalog>>[number];

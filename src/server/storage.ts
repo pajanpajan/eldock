@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import type { UploadKind } from "@/lib/files";
+import { contentTypeFor, resolveUploadPath, type UploadKind } from "@/lib/files";
 
 // Zápis souborů do `storage/uploads` (servíruje je `GET /api/files/...`).
 
@@ -14,4 +14,20 @@ export async function saveUpload(dir: UploadKind, extension: string, data: Buffe
   await mkdir(path.join(UPLOAD_ROOT, dir), { recursive: true });
   await writeFile(path.join(UPLOAD_ROOT, dir, storedName), data);
   return { url: `/api/files/${dir}/${storedName}`, storedName };
+}
+
+/**
+ * Obsah uloženého souboru podle URL aplikace: `/api/files/…` (storage/uploads) nebo vzorové PDF
+ * `/demo-docs/<soubor>.pdf` (public). Cokoli jiného nebo neexistující soubor → null.
+ */
+export async function readStoredFile(url: string): Promise<{ bytes: Buffer; mimeType: string } | null> {
+  let filePath: string | null = null;
+  if (url.startsWith("/api/files/")) filePath = resolveUploadPath(UPLOAD_ROOT, url.slice("/api/files/".length).split("/").map(decodeURIComponent));
+  else if (/^\/demo-docs\/[\w.-]+\.pdf$/.test(url)) filePath = path.join(process.cwd(), "public", url);
+  if (!filePath) return null;
+  try {
+    return { bytes: await readFile(filePath), mimeType: contentTypeFor(filePath) };
+  } catch {
+    return null;
+  }
 }

@@ -11,10 +11,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { PrismaClient } from "../src/generated/prisma/client";
-import type { ComponentCategory, RecognitionStatus } from "../src/generated/prisma/enums";
+import type { ComponentCategory } from "../src/generated/prisma/enums";
 import { renderPanelPhotoSvg } from "../src/lib/mock-graphics/panel-photo";
 import { buildSearchText, iecSymbolFor } from "../src/lib/panel-builder/catalog";
-import { slotBoxes } from "../src/lib/panel-builder/layout";
+import { demoDetections } from "../src/lib/panel-builder/matching";
+import { REFERENCE_DEVICES, REFERENCE_DIMS, withPositions } from "../src/lib/panel-builder/reference";
+import { applyDetections } from "../src/server/services/panel-builder";
 
 const UPLOADS = fileURLToPath(new URL("../storage/uploads", import.meta.url));
 
@@ -225,37 +227,9 @@ export const PB001 = {
   customerName: "Závod Jablonec – Energetika",
   manufacturerInfo: { name: "ELMONT Plzeň s.r.o.", address: "Pilsner 12", city: "301 00 Plzeň", phone: "+420 666 666 666" },
   enclosureModel: "ABB MISTRAL41W, 36M 3R",
-  dims: { widthMm: 292, heightMm: 507, depthMm: 120, dinRailsCount: 3, modulesPerRail: 12 },
+  dims: REFERENCE_DIMS,
   photoFile: "panel-pb-001.svg",
 };
-
-interface SeedItem {
-  designation: string;
-  article: string;
-  rail: number;
-  label: string;
-  status?: RecognitionStatus;
-  confidence?: number;
-  ocr?: string;
-  glare?: boolean;
-}
-
-/** 13 přístrojů (-Q1, -F1 až -F12) na 3 lištách; -F6 je pod odleskem (nerozpoznáno), -F9 jen částečně přečten. */
-export const PB001_ITEMS: SeedItem[] = [
-  { designation: "-Q1", article: "2CDD283101R0040", rail: 1, label: "Odpínač" },
-  { designation: "-F1", article: "2CTB803973R1200", rail: 1, label: "Přepěťová ochrana (SPD)" },
-  { designation: "-F2", article: "2CSF204102R1400", rail: 1, label: "Proudový chránič (RCD)" },
-  { designation: "-F3", article: "2CDS253001R0165", rail: 2, label: "Tepelné čerpadlo" },
-  { designation: "-F4", article: "2CDS253001R0165", rail: 2, label: "Sporák" },
-  { designation: "-F5", article: "2CDS251001R0105", rail: 2, label: "Světla chodby" },
-  { designation: "-F6", article: "2CDS251001R0105", rail: 2, label: "Světla obytné místnosti", status: "UNRECOGNIZED", confidence: 0.18, ocr: "S2?? -B1?", glare: true },
-  { designation: "-F7", article: "2CDS251001R0105", rail: 2, label: "Světla koupelny + venkovní" },
-  { designation: "-F8", article: "2CDS251001R1165", rail: 2, label: "Zásuvky kuchyně" },
-  { designation: "-F9", article: "2CDS251001R1165", rail: 2, label: "Zásuvky obývák", status: "PARTIAL", confidence: 0.64, ocr: "S201-B1б" },
-  { designation: "-F10", article: "2CDS251001R1165", rail: 2, label: "Zásuvky obývák + chodba" },
-  { designation: "-F11", article: "2CDS251001R1165", rail: 3, label: "Zásuvky ložnice + koupelna" },
-  { designation: "-F12", article: "2CDS251001R1165", rail: 3, label: "Zásuvky pokoje + koupelna" },
-];
 
 /** Upsert katalogu podle objednacího čísla. Vrací počet prvků v seed katalogu. */
 export async function seedCatalog(prisma: PrismaClient) {
@@ -290,57 +264,25 @@ export async function seedCatalog(prisma: PrismaClient) {
 /** Vzorový projekt PB-001 – jen pokud ještě neexistuje (uživatelské úpravy se nepřepisují). */
 export async function seedPanelProject(prisma: PrismaClient): Promise<boolean> {
   if (await prisma.panelBoardProject.findUnique({ where: { code: PB001.code }, select: { id: true } })) return false;
-  const catalog = new Map((await prisma.catalogComponent.findMany({ where: { articleNumber: { in: PB001_ITEMS.map((item) => item.article) } } })).map((c) => [c.articleNumber, c]));
 
-  const placed = PB001_ITEMS.map((item, index) => {
-    const component = catalog.get(item.article);
-    if (!component) throw new Error(`Katalog neobsahuje ${item.article}`);
-    const positionOnRail = PB001_ITEMS.slice(0, index).filter((other) => other.rail === item.rail).length + 1;
-    return { ...item, component, dinRailIndex: item.rail, positionOnRail, modulesWidth: component.modulesCount };
-  });
-  const boxes = slotBoxes(PB001.dims, placed);
-
-  const svg = renderPanelPhotoSvg(
-    PB001.dims,
-    placed.map((item) => ({ ...item, category: item.component.category, typeCode: item.component.typeCode, manufacturer: item.component.manufacturer, label: item.label })),
-  );
+  // „Fotka“ rozváděče v geometrii DIN lišt – rámečky demo detekce na ni přesně lícují.
+  const devices = withPositions(REFERENCE_DEVICES).map((device) => ({ ...device, modulesWidth: device.modules }));
   const dir = path.join(UPLOADS, "photos", "seed");
   await mkdir(dir, { recursive: true });
-  await writeFile(path.join(dir, PB001.photoFile), svg, "utf8");
+  await writeFile(path.join(dir, PB001.photoFile), renderPanelPhotoSvg(PB001.dims, devices), "utf8");
 
-  await prisma.panelBoardProject.create({
+  const project = await prisma.panelBoardProject.create({
     data: {
       code: PB001.code,
       name: PB001.name,
       customerName: PB001.customerName,
       manufacturerInfoJson: JSON.stringify(PB001.manufacturerInfo),
-      status: "RECOGNIZED",
       enclosureModel: PB001.enclosureModel,
       ...PB001.dims,
       photoUrl: `/api/files/photos/seed/${PB001.photoFile}`,
-      analysisMode: "DEMO",
-      items: {
-        create: placed.map((item, index) => {
-          const status = item.status ?? "VERIFIED";
-          const detected = { category: item.component.category, poles: item.component.poles, ratedCurrentA: item.component.ratedCurrentA, trippingCurve: item.component.trippingCurve, modules: item.modulesWidth };
-          return {
-            catalogComponentId: status === "UNRECOGNIZED" ? null : item.component.id,
-            dinRailIndex: item.dinRailIndex,
-            positionOnRail: item.positionOnRail,
-            modulesWidth: item.modulesWidth,
-            boundingBoxJson: JSON.stringify(boxes.get(item)),
-            recognitionStatus: status,
-            confidence: item.confidence ?? 0.9 + ((index * 7) % 9) / 100,
-            rawOcrText: item.ocr ?? `${item.component.manufacturer} ${item.component.typeCode}`,
-            detectedJson: JSON.stringify(status === "UNRECOGNIZED" ? { category: "MCB", modules: 1 } : detected),
-            designation: item.designation,
-            circuitLabel: item.label,
-            sortOrder: index,
-          };
-        }),
-      },
     },
   });
+  await applyDetections(prisma, project.id, demoDetections(PB001.dims), "DEMO", "ABB");
   return true;
 }
 

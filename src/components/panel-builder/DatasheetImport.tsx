@@ -34,7 +34,7 @@ export function DatasheetImport() {
       setPhase({ step: "working", message: "Čtu text stránek…" });
       const pages = await extractPdfText(url);
       setPhase({ step: "working", message: "Rozpadám PDF na jednotlivé přístroje…" });
-      const result = await importDatasheetAction({ fileName, pages });
+      const result = await importDatasheetAction({ fileName, fileUrl: url, pages });
       if (!result.ok) return setPhase({ step: "error", message: result.error });
       setPhase({ step: "done", fileName, ...result.data });
       router.refresh();

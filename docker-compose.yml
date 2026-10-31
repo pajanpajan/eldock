@@ -29,6 +29,10 @@ services:
       ELDOCK_MAIL_FROM: ${ELDOCK_MAIL_FROM:-Eldock <noreply@eldock.cz>}
       ELDOCK_CRON_SECRET: ${ELDOCK_CRON_SECRET:-}
       ELDOCK_PUBLIC_URL: ${ELDOCK_PUBLIC_URL:-https://eldock.cz}
+      # AI Panel Builder: bez klíče běží deterministický demo režim
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_VISION_MODEL: ${GEMINI_VISION_MODEL:-gemini-2.5-pro}
+      GEMINI_DATASHEET_MODEL: ${GEMINI_DATASHEET_MODEL:-gemini-2.5-flash}
     volumes:
       - ./data/db:/app/data/db
       - ./data/storage:/app/storage

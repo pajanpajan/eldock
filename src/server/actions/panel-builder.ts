@@ -4,11 +4,14 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { PERMISSION_LABELS } from "@/lib/accounts";
+import { COMPONENT_CATEGORIES } from "@/lib/panel-builder/catalog";
 import { prisma } from "@/lib/prisma";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 import { assertFeature } from "@/server/modules";
-import { importDatasheet, type ImportedComponent } from "@/server/services/panel-builder";
+import { analyzePanelPhoto, extractDatasheetComponents, lookupComponent, type AiMode } from "@/server/services/geminiPanelService";
+import { analyzeProject, assignCatalogComponent, createPanelProject, importDatasheet, lookupComponentForItem, type ImportedComponent } from "@/server/services/panel-builder";
 import { getCurrentAccount } from "@/server/session";
+import { readStoredFile } from "@/server/storage";
 
 import type { ActionResult } from "./workflow";
 
@@ -25,21 +28,108 @@ function failure(error: unknown, fallback: string): { ok: false; error: string }
   return { ok: false, error: fallback };
 }
 
+const id = z.string().min(1).max(64);
+const fileUrl = z
+  .string()
+  .max(300)
+  .regex(/^(\/api\/files\/(photos|documents)\/[\w./-]+|\/demo-docs\/[\w.-]+\.pdf)$/);
+
 const datasheetSchema = z.object({
   fileName: z.string().trim().min(1).max(200),
+  fileUrl: fileUrl.nullable().optional(),
   pages: z.array(z.array(z.string().max(2000)).max(400)).min(1).max(80),
 });
 
-/** Atomizace PDF datasheetu do katalogu prvků. */
-export async function importDatasheetAction(input: z.input<typeof datasheetSchema>): Promise<ActionResult<{ mode: "GEMINI" | "DEMO"; components: ImportedComponent[] }>> {
+/** Atomizace PDF datasheetu do katalogu prvků (Gemini z PDF, jinak deterministicky z textu). */
+export async function importDatasheetAction(input: z.input<typeof datasheetSchema>): Promise<ActionResult<{ mode: AiMode; components: ImportedComponent[] }>> {
   const parsed = datasheetSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "PDF se nepodařilo přečíst (příliš velký nebo prázdný soubor)." };
   try {
     await guard();
-    const result = await importDatasheet(prisma, parsed.data);
+    const pdf = parsed.data.fileUrl ? await readStoredFile(parsed.data.fileUrl) : null;
+    const result = await importDatasheet(prisma, parsed.data, (input) => extractDatasheetComponents({ pages: input.pages, pdf: pdf?.mimeType === "application/pdf" ? pdf.bytes : null }));
     revalidatePath("/panel-builder", "layout");
     return { ok: true, data: result };
   } catch (error) {
     return failure(error, "Import datasheetu se nepodařil. Zkuste to prosím znovu.");
+  }
+}
+
+const createSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  customerName: z.string().trim().max(120).nullable(),
+  photoUrl: fileUrl.nullable(),
+  dominantManufacturer: z.string().trim().min(1).max(40),
+  dinRailsCount: z.number().int().min(1).max(12),
+  modulesPerRail: z.number().int().min(4).max(48),
+});
+
+const readPhoto = (url: string) => readStoredFile(url);
+
+/** Nový projekt z fotky + okamžitá analýza (krok 1). */
+export async function createPanelProjectAction(input: z.input<typeof createSchema>): Promise<ActionResult<{ id: string; mode: AiMode; warning?: string }>> {
+  const parsed = createSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Zkontrolujte název rozváděče a parametry skříně." };
+  try {
+    const account = await guard();
+    const { dinRailsCount, modulesPerRail, ...rest } = parsed.data;
+    const project = await createPanelProject(prisma, { ...rest, dims: { dinRailsCount, modulesPerRail }, createdById: account.user.id });
+    const result = await analyzeProject(prisma, project.id, { analyze: analyzePanelPhoto, readPhoto });
+    revalidatePath("/panel-builder", "layout");
+    return { ok: true, data: { id: project.id, mode: result.mode, warning: result.warning } };
+  } catch (error) {
+    return failure(error, "Projekt se nepodařilo založit.");
+  }
+}
+
+/** Znovu analyzovat fotku (nahradí prvky projektu). */
+export async function analyzePanelProjectAction(projectId: string): Promise<ActionResult<{ mode: AiMode; total: number; unresolved: number; warning?: string }>> {
+  if (!id.safeParse(projectId).success) return { ok: false, error: "Neplatný projekt." };
+  try {
+    await guard();
+    const result = await analyzeProject(prisma, projectId, { analyze: analyzePanelPhoto, readPhoto });
+    revalidatePath(`/panel-builder/${projectId}`);
+    return { ok: true, data: result };
+  } catch (error) {
+    return failure(error, "Analýza fotky se nepodařila.");
+  }
+}
+
+/** Smart Fallback Picker: přiřadit katalogový kus jedním klikem. */
+export async function assignComponentAction(itemId: string, componentId: string): Promise<ActionResult> {
+  if (!id.safeParse(itemId).success || !id.safeParse(componentId).success) return { ok: false, error: "Neplatný výběr." };
+  try {
+    await guard();
+    const item = await assignCatalogComponent(prisma, itemId, componentId);
+    revalidatePath(`/panel-builder/${item.projectId}`);
+    return { ok: true, data: undefined };
+  } catch (error) {
+    return failure(error, "Přiřazení se nepodařilo.");
+  }
+}
+
+const lookupSchema = z.object({
+  itemId: id,
+  text: z.string().trim().min(1).max(120),
+  hints: z.object({
+    category: z.enum(COMPONENT_CATEGORIES).nullable(),
+    poles: z.string().max(8).nullable(),
+    current: z.number().positive().max(6300).nullable(),
+    curve: z.string().max(2).nullable(),
+    manufacturer: z.string().max(40).nullable(),
+  }),
+});
+
+/** „Dohledat v datasheetech přes Gemini AI“ podle textu z čela přístroje. */
+export async function lookupComponentAction(input: z.input<typeof lookupSchema>): Promise<ActionResult<{ mode: AiMode | "CATALOG"; component: ImportedComponent | null }>> {
+  const parsed = lookupSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Opište alespoň část typového označení z čela přístroje." };
+  try {
+    await guard();
+    const result = await lookupComponentForItem(prisma, parsed.data, lookupComponent);
+    if (result.component?.status === "created") revalidatePath("/panel-builder", "layout");
+    return { ok: true, data: result };
+  } catch (error) {
+    return failure(error, "Dohledání přístroje se nepodařilo.");
   }
 }

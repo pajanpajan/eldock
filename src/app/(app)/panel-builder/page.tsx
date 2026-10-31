@@ -6,6 +6,7 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { PageHeader } from "@/components/common/PageHeader";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { panelBuilderGuard } from "@/components/panel-builder/access";
+import { NewProjectDialog } from "@/components/panel-builder/NewProjectDialog";
 import { Button } from "@/components/ui/button";
 import { PROJECT_STATUS, RECOGNITION } from "@/lib/panel-builder/project";
 import { cn } from "@/lib/utils";
@@ -25,11 +26,14 @@ export default async function PanelBuilderPage() {
         title="AI Panel Builder"
         description="Pasportizace a projekce rozváděčů z fotky: rozpoznání přístrojů, strom zapojení, výpočet oteplení dle ČSN EN 61439 a kompletní dokumentace s CE štítkem."
         actions={
-          <Button asChild variant="outline" className="touch-target gap-2">
-            <Link href="/panel-builder/catalog">
-              <Library className="size-4" aria-hidden /> Katalog prvků
-            </Link>
-          </Button>
+          <>
+            <Button asChild variant="outline" className="touch-target gap-2">
+              <Link href="/panel-builder/catalog">
+                <Library className="size-4" aria-hidden /> Katalog prvků
+              </Link>
+            </Button>
+            <NewProjectDialog />
+          </>
         }
       />
       {projects.length ? (
