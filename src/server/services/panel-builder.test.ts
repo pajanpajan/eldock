@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { PrismaClient } from "@/generated/prisma/client";
+import { proposeTree, treeNodeFrom, type TreeNode } from "@/lib/panel-builder/tree";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 
 import { CATALOG, seedPanelBuilder } from "../../../prisma/seed-panel-builder";
 import { analyzePanelPhoto, lookupComponent } from "./geminiPanelService";
-import { analyzeProject, assignCatalogComponent, createPanelProject, importDatasheet, lookupComponentForItem } from "./panel-builder";
+import { analyzeProject, assignCatalogComponent, createPanelProject, importDatasheet, lookupComponentForItem, saveTree } from "./panel-builder";
 import { createTestDb } from "./test-db";
 
 let db: Awaited<ReturnType<typeof createTestDb>>;
@@ -93,5 +94,38 @@ describe("AI Panel Builder – projekt a analýza fotky", () => {
 
     await assignCatalogComponent(prisma, f6.id, s201b10.id);
     expect(await prisma.panelBoardItem.findUniqueOrThrow({ where: { id: f6.id } })).toMatchObject({ recognitionStatus: "VERIFIED", catalogComponentId: s201b10.id, confidence: 1 });
+  });
+});
+
+describe("AI Panel Builder – strom zapojení", () => {
+  async function pb001() {
+    await seedPanelBuilder(prisma);
+    const project = await prisma.panelBoardProject.findUniqueOrThrow({ where: { code: "PB-001" }, include: { items: { include: { catalogComponent: true } } } });
+    const nodes = project.items.map(treeNodeFrom);
+    const proposal = proposeTree(nodes);
+    return { project, nodes: nodes.map((node) => ({ ...node, ...proposal.get(node.id)! })) };
+  }
+  const assignments = (nodes: TreeNode[]) => nodes.map(({ id, parentItemId, fedFromIncomer, phaseAssignment, circuitLabel, designation }) => ({ id, parentItemId, fedFromIncomer, phaseAssignment, circuitLabel, designation }));
+
+  it("navržený strom se uloží, plně zapojený projekt přejde do TREE_BUILT", async () => {
+    const { project, nodes } = await pb001();
+    const result = await saveTree(prisma, project.id, assignments(nodes));
+    expect(result).toMatchObject({ status: "TREE_BUILT", connected: true });
+    // i nerozpoznaný -F6 (bez katalogového kusu) dostane jističový vývod a fázi → hlídač je čistý
+    expect(result.issues.map((issue) => issue.message)).toEqual([]);
+    const f3 = await prisma.panelBoardItem.findFirstOrThrow({ where: { projectId: project.id, designation: "-F3" }, include: { parent: true } });
+    expect(f3.parent?.designation).toBe("-F2");
+    expect(f3.phaseAssignment).toBe("L1,L2,L3");
+  });
+
+  it("cyklus a duplicitní značení se odmítnou, odpojený prvek vrátí stav RECOGNIZED", async () => {
+    const { project, nodes } = await pb001();
+    const q1 = nodes.find((node) => node.designation === "-Q1")!;
+    const f2 = nodes.find((node) => node.designation === "-F2")!;
+    await expect(saveTree(prisma, project.id, assignments(nodes.map((node) => (node.id === q1.id ? { ...node, parentItemId: f2.id, fedFromIncomer: false } : node))))).rejects.toThrow("cyklus");
+    await expect(saveTree(prisma, project.id, assignments(nodes.map((node) => (node.designation === "-F4" ? { ...node, designation: "-F3" } : node))))).rejects.toThrow("Značení -F3 je použito dvakrát");
+    const result = await saveTree(prisma, project.id, assignments(nodes.map((node) => (node.designation === "-F12" ? { ...node, parentItemId: null, fedFromIncomer: false } : node))));
+    expect(result).toMatchObject({ status: "RECOGNIZED", connected: false });
+    expect(result.issues[0].message).toBe("-F12 není zapojen – vyberte, odkud je napájen.");
   });
 });

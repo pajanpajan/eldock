@@ -4,6 +4,7 @@ import { extractComponents, type ExtractedComponent } from "@/lib/panel-builder/
 import type { EnclosureDims } from "@/lib/panel-builder/layout";
 import { compact, designationsInOrder, dominantManufacturer, matchDetection, type Detection } from "@/lib/panel-builder/matching";
 import { nextProjectCode, type ManufacturerInfo } from "@/lib/panel-builder/project";
+import { ancestors, isConnected, isPhaseAssignment, treeNodeFrom, validateTree, type TreeAssignment } from "@/lib/panel-builder/tree";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 
 import type { AiMode, analyzePanelPhoto, lookupComponent } from "./geminiPanelService";
@@ -227,4 +228,52 @@ export async function lookupComponentForItem(
     },
   });
   return { mode, component: summary(created, "created") };
+}
+
+// ---------------------------------------------------------------------------
+//  Strom zapojení (krok 2)
+// ---------------------------------------------------------------------------
+
+const DESIGNATION = /^-[A-Z]{1,3}\d{1,3}$/;
+
+/**
+ * Uloží celý strom z editoru (rodič, napájení ze vstupu, fáze, popis obvodu, značení). Cykly a
+ * duplicitní značení odmítne; ostatní nálezy hlídače jen vrátí. Plně zapojený strom = TREE_BUILT.
+ */
+export async function saveTree(prisma: PrismaClient, projectId: string, assignments: readonly TreeAssignment[]) {
+  const project = await prisma.panelBoardProject.findUnique({ where: { id: projectId }, include: { items: { include: { catalogComponent: true } } } });
+  if (!project) throw new WorkflowError("NOT_FOUND", "Projekt rozváděče neexistuje.");
+  const ids = new Set(project.items.map((item) => item.id));
+  const byAssignment = new Map(assignments.map((assignment) => [assignment.id, assignment]));
+  for (const assignment of assignments) {
+    if (!ids.has(assignment.id)) throw new WorkflowError("VALIDATION", "Strom obsahuje prvek jiného projektu.");
+    if (assignment.parentItemId && (!ids.has(assignment.parentItemId) || assignment.parentItemId === assignment.id)) throw new WorkflowError("VALIDATION", "Neplatný nadřazený prvek.");
+    if (assignment.phaseAssignment && !isPhaseAssignment(assignment.phaseAssignment)) throw new WorkflowError("VALIDATION", "Neplatné přiřazení fáze.");
+    if (!DESIGNATION.test(assignment.designation)) throw new WorkflowError("VALIDATION", `Neplatné značení „${assignment.designation}“ (např. -F3).`);
+  }
+  const nodes = project.items.map((item) => {
+    const assignment = byAssignment.get(item.id);
+    return treeNodeFrom(assignment ? { ...item, ...assignment, parentItemId: assignment.parentItemId, fedFromIncomer: assignment.parentItemId ? false : assignment.fedFromIncomer } : item);
+  });
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const cyclic = nodes.find((node) => ancestors(node.id, byId) === null);
+  if (cyclic) throw new WorkflowError("VALIDATION", `${cyclic.designation} by napájel sám sebe (cyklus ve stromu).`);
+  const seen = new Map<string, string>();
+  for (const node of nodes) {
+    if (seen.has(node.designation)) throw new WorkflowError("VALIDATION", `Značení ${node.designation} je použito dvakrát – přečíslujte prvky.`);
+    seen.set(node.designation, node.id);
+  }
+
+  const connected = nodes.every((node) => isConnected(node.id, byId));
+  const status = project.status === "COMPLETED" ? "COMPLETED" : connected ? "TREE_BUILT" : project.status === "DRAFT" ? "DRAFT" : "RECOGNIZED";
+  await prisma.$transaction([
+    ...nodes.map((node) =>
+      prisma.panelBoardItem.update({
+        where: { id: node.id },
+        data: { parentItemId: node.parentItemId, fedFromIncomer: node.fedFromIncomer, phaseAssignment: node.phaseAssignment, circuitLabel: node.circuitLabel.slice(0, 80), designation: node.designation },
+      }),
+    ),
+    prisma.panelBoardProject.update({ where: { id: projectId }, data: { status } }),
+  ]);
+  return { status, connected, issues: validateTree(nodes, project.simultaneityFactor) };
 }

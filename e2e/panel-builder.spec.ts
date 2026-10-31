@@ -92,3 +92,53 @@ test("nový projekt z ukázkové fotky a dohledání přístroje podle textu z �
   await picker.getByRole("button", { name: "Přiřadit S201-C13" }).click();
   await expect(page.getByTestId("count-UNRECOGNIZED")).toHaveText("Nerozpoznáno: 0");
 });
+
+test("krok 2: AI návrh stromu, hlídač, Zpět/Vpřed, hromadné přiřazení a uložení", async ({ page }) => {
+  await page.goto("/panel-builder");
+  await page.getByRole("link", { name: /PB-001/ }).click();
+  await page.getByRole("link", { name: "2. Hierarchický strom a zapojení" }).click();
+  const summary = page.getByTestId("tree-summary");
+  await expect(summary).toContainText("Zapojeno 0/13");
+  await expect(page.getByTestId("tree-loose")).toBeVisible();
+
+  await expect(async () => {
+    await page.getByRole("button", { name: "AI návrh stromu na 1 klik" }).click();
+    await expect(summary).toContainText("Zapojeno 13/13", { timeout: 2_000 });
+  }).toPass({ timeout: 20_000 });
+  await expect(summary).toContainText("Chyby: 0");
+  await expect(page.getByLabel("-F9 fáze")).toHaveValue("L2");
+  await expect(page.getByTestId("tree-save-state")).toHaveText("Uloženo");
+
+  // Chyba: 3P jistič pod jednofázovým -F5 → hlídač; Zpět / Vpřed
+  await page.getByLabel("-F3 napájeno z").selectOption({ label: "-F5 · Světla chodby" });
+  await expect(page.getByTestId("tree-row--F3")).toContainText("3P přístroj -F3 nemůže být napájen z jednofázového uzlu -F5");
+  await expect(summary).toContainText("Chyby: 1");
+  await page.getByRole("button", { name: "Zpět" }).click();
+  await expect(summary).toContainText("Chyby: 0");
+  await page.getByRole("button", { name: "Vpřed" }).click();
+  await expect(summary).toContainText("Chyby: 1");
+  await page.getByRole("button", { name: "Zpět" }).click();
+  await expect(summary).toContainText("Chyby: 0");
+
+  // Hromadné přiřazení: -F11 a -F12 pod -Q1 a zpět pod chránič -F2
+  await page.getByLabel("Vybrat -F11").check();
+  await page.getByLabel("Vybrat -F12").check();
+  await page.getByLabel("Hromadně zapojit pod").selectOption({ label: "-Q1 · Odpínač" });
+  await page.getByRole("button", { name: "Zapojit (2)" }).click();
+  await expect(page.getByLabel("-F12 napájeno z")).toHaveValue(/.+/);
+  await expect(page.getByLabel("-F12 napájeno z").locator("option:checked")).toHaveText("-Q1 · Odpínač");
+  await page.getByLabel("Vybrat -F11").check();
+  await page.getByLabel("Vybrat -F12").check();
+  await page.getByLabel("Hromadně zapojit pod").selectOption({ label: "-F2 · Proudový chránič (RCD)" });
+  await page.getByRole("button", { name: "Zapojit (2)" }).click();
+  await expect(page.getByLabel("-F12 napájeno z").locator("option:checked")).toHaveText("-F2 · Proudový chránič (RCD)");
+
+  // Název obvodu inline a uložení
+  await page.getByLabel("-F4 název obvodu").fill("Sporák + trouba");
+  await page.getByLabel("-F4 název obvodu").blur();
+  await expect(page.getByTestId("tree-save-state")).toHaveText("Uloženo");
+  await page.reload();
+  await expect(page.getByTestId("tree-summary")).toContainText("Zapojeno 13/13");
+  await expect(page.getByLabel("-F4 název obvodu")).toHaveValue("Sporák + trouba");
+  await expect(page.getByText("Strom zapojení hotov")).toBeVisible();
+});

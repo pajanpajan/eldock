@@ -9,7 +9,8 @@ import { prisma } from "@/lib/prisma";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 import { assertFeature } from "@/server/modules";
 import { analyzePanelPhoto, extractDatasheetComponents, lookupComponent, type AiMode } from "@/server/services/geminiPanelService";
-import { analyzeProject, assignCatalogComponent, createPanelProject, importDatasheet, lookupComponentForItem, type ImportedComponent } from "@/server/services/panel-builder";
+import { PHASE_OPTIONS, type TreeIssue } from "@/lib/panel-builder/tree";
+import { analyzeProject, assignCatalogComponent, createPanelProject, importDatasheet, lookupComponentForItem, saveTree, type ImportedComponent } from "@/server/services/panel-builder";
 import { getCurrentAccount } from "@/server/session";
 import { readStoredFile } from "@/server/storage";
 
@@ -131,5 +132,35 @@ export async function lookupComponentAction(input: z.input<typeof lookupSchema>)
     return { ok: true, data: result };
   } catch (error) {
     return failure(error, "Dohledání přístroje se nepodařilo.");
+  }
+}
+
+const treeSchema = z.object({
+  projectId: id,
+  assignments: z
+    .array(
+      z.object({
+        id,
+        parentItemId: id.nullable(),
+        fedFromIncomer: z.boolean(),
+        phaseAssignment: z.enum(PHASE_OPTIONS).nullable(),
+        circuitLabel: z.string().max(80),
+        designation: z.string().max(8),
+      }),
+    )
+    .max(300),
+});
+
+/** Krok 2: uložení stromu zapojení z editoru (autosave). */
+export async function saveTreeAction(input: z.input<typeof treeSchema>): Promise<ActionResult<{ status: string; connected: boolean; issues: TreeIssue[] }>> {
+  const parsed = treeSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Neplatná data stromu zapojení." };
+  try {
+    await guard();
+    const result = await saveTree(prisma, parsed.data.projectId, parsed.data.assignments);
+    revalidatePath(`/panel-builder/${parsed.data.projectId}`, "layout");
+    return { ok: true, data: result };
+  } catch (error) {
+    return failure(error, "Strom se nepodařilo uložit.");
   }
 }
