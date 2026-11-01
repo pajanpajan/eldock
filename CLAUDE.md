@@ -53,7 +53,8 @@ Server je hlídá přes `assertFeature`, správa je na `/admin/modules`.
 ## 5. Gemini (AI Panel Builder)
 
 - Proměnné prostředí: `GEMINI_API_KEY`, `GEMINI_VISION_MODEL` (výchozí `gemini-2.5-pro`, analýza fotky po DIN lištách) a `GEMINI_DATASHEET_MODEL` (výchozí `gemini-2.5-flash`, datasheety a parametry). Čte je `src/server/services/geminiPanelService.ts`, v produkci přicházejí přes `docker-compose.yml`.
-- **Bez klíče** běží deterministický demo režim (mock analýza a Smart Fallback Picker), takže aplikace i testy fungují offline. E2E běží vždy s prázdným klíčem.
+- **Stav (ověřeno 2026-11-01):** klíč je nastavený lokálně v `.env` i na produkci (kontejner `eldock-app`), takže **AI běží naostro přes Gemini**.
+- Demo režim (deterministická analýza a Smart Fallback Picker) je jen záložní: zapne se bez klíče, u SVG ukázek nebo při chybě volání (klíč, kvóta, výpadek); UI pak ukáže štítek „Demo AI režim“. E2E testy běží záměrně s prázdným klíčem.
 - Klíč nikdy nevypisuj do výstupu a nedávej ho do Gitu.
 
 ## 6. Pracovní postup
