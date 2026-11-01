@@ -1,153 +1,80 @@
-\# Project Specification: Industrial Electrical Documentation \& Maintenance Twin Platform (MVP)
-
-
-
-\## 1. Project Overview \& Core Value Proposition
-
-We are building a B2B web \& mobile-ready (PWA) platform for manufacturing plants to manage electrical documentation (schematics, layouts, BOMs) and streamline the "As-Built" change request workflow between on-site Maintenance Technicians and our external Back-Office CAE Engineers.
-
-
-
-\## 2. Tech Stack Requirements
-
-\- \*\*Framework:\*\* Next.js (App Router, TypeScript)
-
-\- \*\*Styling \& UI:\*\* Tailwind CSS, shadcn/ui components, Lucide React icons, Framer Motion (for smooth transitions between map levels)
-
-\- \*\*Database \& ORM:\*\* SQLite with Prisma ORM (for zero-config local development and easy migration to PostgreSQL later)
-
-\- \*\*Interactive Maps \& Canvas:\*\* 
-
-&#x20; - `react-zoom-pan-pinch` for interactive floorplan zooming/panning
-
-&#x20; - HTML5 Canvas / SVG overlays for 1) Building 45° isometric floor selection, 2) Equipment pin placement, and 3) Redlining (drawing annotations directly over schematic images/PDF previews).
-
-
-
-\## 3. Core User Flows \& Architecture
-
-
-
-\### A. 3-Tier Visual Navigation (The Map Engine)
-
-1\. \*\*Level 1: Plant Campus View (Půdorys areálu)\*\*
-
-&#x20;  - Displays an interactive SVG/image map of the entire factory complex.
-
-&#x20;  - Highlights clickable buildings (e.g., "Hala A - Lisovna", "Hala B - Montáž", "Energetika") with badge indicators showing total equipment count and active change requests.
-
-2\. \*\*Level 2: 45° Isometric Building View (Výběr patra)\*\*
-
-&#x20;  - When a multi-story building is clicked, transition smoothly into a 45° isometric visual representation of the building.
-
-&#x20;  - Users can hover and click individual floors (e.g., "1. PP - Rozvodny", "1. NP - Hlavní výroba", "2. NP - Vzduchotechnika").
-
-3\. \*\*Level 3: Interactive Floorplan (Půdorys patra a zařízení)\*\*
-
-&#x20;  - Zoomable, pannable 2D floorplan of the selected floor.
-
-&#x20;  - Displays interactive pins for electrical assets (Switchboards/Rozváděče, CNC machines, Production lines).
-
-&#x20;  - \*\*Pin Color Coding:\*\*
-
-&#x20;    - 🟢 Green (`ACTIVE`): Documentation is 100% up-to-date.
-
-&#x20;    - 🟠 Orange (`PENDING\_UPDATE`): A change was reported from the floor; CAE engineer is working on it (Warning state for other shifts!).
-
-&#x20;    - 🔵 Blue (`WAITING\_APPROVAL`): CAE engineer uploaded the new revision; waiting for the maintenance technician to confirm it.
-
-
-
-\### B. Equipment Detail \& Documentation Hub
-
-Clicking an equipment pin (or scanning its direct QR code URL `/equipment/\[id]`) opens the Asset Drawer/Page:
-
-\- \*\*Header:\*\* Asset Name, ID, Location breadcrumb, QR Code modal button, Status Badge.
-
-\- \*\*Safety Banner:\*\* If status is `PENDING\_UPDATE`, display a prominent orange alert showing the raw photo, voice note transcript, and markup submitted by the previous shift so technicians aren't working blind before the official CAE drawing is finished.
-
-\- \*\*Active Documentation:\*\* Viewer for the current valid electrical schematic (PDF/SVG preview), BOM list, and 3D cabinet preview.
-
-\- \*\*Revision Archive (Historie změn):\*\* Timeline of all past versions (v1.0, v1.1, v2.0) with date, author, approver, and downloadable files.
-
-\- \*\*Primary CTA Button:\*\* "Zadat změnu" (Submit Change Request).
-
-
-
-\### C. "Zero-Typing" Change Request Wizard (Zadat změnu)
-
-Designed for maintenance technicians with dirty hands on mobile devices:
-
-1\. \*\*Step 1 (Visual Markup / Redlining):\*\* Loads the current schematic sheet on an interactive canvas. The technician can draw with a finger/stylus (red pen) to circle the modified area.
-
-2\. \*\*Step 2 (Photo Evidence):\*\* Upload/take photos of the physical switchboard wiring or new component label.
-
-3\. \*\*Step 3 (Voice / Quick Note):\*\* Simulated voice-to-text recorder (or quick text input) describing the change (e.g., "Vyměněn stykač K4 za jiný typ, přepojena svorka A2").
-
-4\. Submitting changes the asset status to `PENDING\_UPDATE` and creates a ticket in the CAE Back-Office.
-
-
-
-\### D. CAE Engineer Back-Office \& Approval Loop
-
-Create a dedicated Role Switcher in the top navbar (`\[Pohled: Údržba v hale]` vs `\[Pohled: CAE Projektant]`) to demonstrate the full loop:
-
-1\. \*\*CAE Engineer View:\*\*
-
-&#x20;  - Dashboard of all `PENDING\_UPDATE` tickets across client plants.
-
-&#x20;  - Engineer inspects the technician's redline markup, photos, and notes.
-
-&#x20;  - Engineer uploads a "New Revision" (v1.2) + adds technical summary -> status changes to `WAITING\_APPROVAL`.
-
-2\. \*\*Maintenance Confirmation (Back in Plant View):\*\*
-
-&#x20;  - The technician sees the asset in Blue (`WAITING\_APPROVAL`), compares the old vs. new revision, and clicks \*\*"Potvrdit a propsat do systému"\*\* (Approve \& Publish) or \*\*"Vrátit k přepracování"\*\* (Reject with comment).
-
-&#x20;  - Once approved, the new revision becomes the official active document, the previous one moves to the Archive, and the pin turns Green (`ACTIVE`).
-
-
-
-\## 4. Implementation Steps for Claude
-
-1\. Initialize the Next.js TypeScript project with Tailwind CSS and Prisma (SQLite).
-
-2\. Create the Prisma schema (`Plant`, `Building`, `Floor`, `Equipment`, `DocumentRevision`, `ChangeRequest`) and a rich `seed.ts` script containing realistic Czech industrial data (e.g., "Závod Jablonec", "Hala A - Lisovna", rozváděče "RM1 - Hlavní rozváděč", "R-CNC-04", realistic revision history, and 2 active change requests).
-
-3\. Build clean, industrial-grade SVG mock graphics for the Campus View, the 45° Isometric Building View (interactive stacked floor polygons), and the 2D Floorplan so the app works visually out-of-the-box without needing external image assets.
-
-4\. Implement the full state-machine workflow (Submit Change with Canvas drawing -> CAE Back-Office Processing -> Maintenance Approval -> Archive).
-
-5\. Ensure the UI is fully localized in Czech (česky) with a sleek, dark/high-contrast industrial UI aesthetic suitable for tablets and desktop monitors.
-
-
-
-Start by setting up the project structure, database schema, and seeding the realistic demo data, then build the interactive views step-by-step.
-
-## 5. Pracovní postup pro Claude Code
-
-- Implementace probíhá podle `docs/PLAN.md`, **fázi po fázi** (`/faze` = další nedokončená fáze, `/faze 3` = konkrétní fáze). Jedna fáze = jeden commit, pak se zastav a shrň. `/overit` = kompletní kontrola.
-- Sekce A–C v `docs/PLAN.md` (technická rozhodnutí, stavový automat, demo data) jsou závazné. Odchylky zapiš do Deníku v plánu.
-- **Next.js 16:** před psaním kódu s Next API čti návody v `node_modules/next/dist/docs/` (viz `AGENTS.md`, vytvoří ho fáze 0). `params`/`searchParams`/`cookies()`/`headers()` jsou async, Cache Components jsou vypnuté.
-- **Prisma 7:** balíčky vždy `@7` (ne `latest`, to je 8.0 RC). Klient se importuje z `@/generated/prisma/client` a v aplikaci jen přes `src/lib/prisma.ts`. Po změně schématu: `npx prisma migrate dev --name <popis>` a pak `npx prisma generate`; seed se spouští ručně (`npm run db:seed` / `npm run db:reset`).
-- **Architektura:** čtení dat v `src/server/queries`, business logika ve `src/server/services` (dostává `prisma` a `actor`), Server Actions v `src/server/actions` jsou tenké, pravidla přechodů v `src/lib/workflow`. Soubory jen ve `storage/uploads` přes `/api/uploads` a `/api/files`.
-- **UI:** výhradně česky, kód anglicky. Stavové barvy a popisky jen ze `src/lib/status.ts`. Žádné externí obrázky ani CDN – grafika je SVG/CSS generovaná kódem.
-- **Ověření:** `npm run verify` (typecheck, lint, test, build) musí projít před každým commitem (ve fázích 0–1 stačí `npm run typecheck` a `npm run lint`).
-- **Prostředí:** Windows – používej npm skripty a Node/TS skripty místo bash-only příkazů. `git push` dělej jen při nasazení (viz níže), jinak nikdy. Na mazání mimo projekt a nevratné operace se nejdřív zeptej.
-
-## 6. Nasazení na produkci (Hetzner, https://eldock.cz)
+# ELDOCK – trvalá paměť projektu
+
+B2B webová aplikace a PWA pro výrobní závody: elektro dokumentace (schémata, kusovníky, půdorysy),
+revize VTZ, změny skutečného provedení mezi údržbou v hale a externími CAE projektanty a AI pasportizace
+rozváděčů. Pracovní název byl Digitry, od fáze 20 je to **ELDOCK**. Produkce běží na https://eldock.cz.
+Původní zadání MVP je v `docs/archiv/SPECIFIKACE-MVP.md`, celá historie fází 0–35 v `docs/archiv/PLAN-faze-00-35.md`.
+
+## 1. Milníky (fáze 0–35 hotové a nasazené)
+
+| Fáze | Milník |
+|---|---|
+| 0–12 | Core: mapa areálu → izometrie budovy → půdorys s piny, detail zařízení (QR, schéma, kusovník, 3D skříň, historie revizí), průvodce „Zadat změnu“ (redlining, fotky, hlas), CAE back-office, schválení údržbou, PWA, E2E |
+| 13–16 | Revize VTZ: pasport rozváděče (ČSN EN 61439), lhůtník (ČSN 33 1500), spotřebiče a nářadí, rychlá revize, plánovač s hlasovým dispečerem, provizoria, závady, LOTO, auditní report |
+| 17–19 | Účty a výřezy dat (RBAC, 6 typů účtů), Studio výstavby závodu, nový závod od nuly, kniha PCSCHEMATIC, diagnostika spojů, přihlašovací brána `/login` |
+| 20–25 | Rebranding na ELDOCK a Docker, PDF protokoly, hlídač lhůt e-mailem, import CSV, visual diff revizí, prokliky ve schématu, licenční moduly a tarify, výkon (SQLite PRAGMA, lazy loading) |
+| 26 | Produktové video v Remotionu (`npm run video:render`) |
+| 27–34 | AI Panel Builder: katalog prvků a těžba datasheetů, analýza fotky přes Gemini, strom zapojení s hlídačem, oteplení (IEC TR 60890), dokumentace a CE, mix výrobců, živý konfigurátor, Vision Analyzer 2.0 |
+| 35 | Revize Studia: rozměr areálu X × Y, funkční měřítko, živé kóty, tažení stěn, 7 typů zón, vrata, banery a barvy zařízení, jemný rastr 1 m, spotřebiče do místností |
+
+## 2. Moduly a klíčová místa v kódu
+
+Licenční moduly a podfunkce definuje `src/lib/modules.ts` (moduly Core, Revize & Legislativa VTZ, CAE Projekce & Verzování
+a Enterprise & Onboarding; tarify START / PROFI ÚDRŽBA / KOMPLET ENTERPRISE; režimy Čisté pracoviště / Obchodní demo).
+Server je hlídá přes `assertFeature`, správa je na `/admin/modules`.
+
+| Oblast | Trasy | Kód |
+|---|---|---|
+| Mapy a zařízení | `/plant/...`, `/equipment/[id]` | `components/map/*`, `server/queries/*`, `lib/mock-graphics/*` |
+| CAE workflow | `/cae`, `/equipment/[id]/change-request` | `lib/workflow/state-machine.ts`, `server/services/workflow.ts` |
+| Revize VTZ | `/inspections/*` (plánovač, rychlá revize, audit) | `server/services/inspection.ts`, `lib/inspection-rules.ts` |
+| Studio | `/studio` | `components/studio/*`, `lib/cad-grid.ts`, `lib/campus-layout.ts`, `lib/equipment-categories.ts`, `server/services/studio.ts` |
+| AI Panel Builder | `/panel-builder` | `lib/panel-builder/*`, `server/services/{panel-builder,geminiPanelService}.ts` |
+| Účty a přístup | `/admin/users`, `/login` | `lib/accounts.ts`, `server/permissions.ts`, `src/proxy.ts` |
+
+## 3. Architektonické mantinely (závazné)
+
+- **Next.js 16.4** (App Router, Turbopack, React 19; lint hlídá i pravidla React Compileru). `params`, `searchParams`, `cookies()` a `headers()` jsou async a Cache Components jsou vypnuté. Před psaním kódu s Next API čti návod v `node_modules/next/dist/docs/` (viz `AGENTS.md`). Lint = `eslint .`.
+- **UI:** Tailwind CSS 4 (loader `@tailwindcss/turbopack`), shadcn/ui, `lucide-react`, `motion/react`, `sonner`. Výhradně česky, kód anglicky. Tmavý průmyslový vzhled. Stavové barvy a popisky jsou jen v `src/lib/status.ts`. Grafika je SVG/CSS generovaná kódem, bez externích obrázků a CDN.
+- **Prisma 7.10:** balíčky vždy `@7` (tag `latest` je 8.0 RC). Klient se importuje z `@/generated/prisma/client` a v aplikaci jen přes `src/lib/prisma.ts`. Adaptér `@prisma/adapter-better-sqlite3`; `DATABASE_URL` je v `prisma.config.ts`.
+- **SQLite:** za běhu produkce `journal_mode=WAL`, `synchronous=NORMAL`, `busy_timeout=5000` a `foreign_keys=ON` (`SQLITE_PRAGMAS` v `src/lib/prisma.ts`). V dev režimu je `DELETE`.
+- **Vrstvy:** čtení dat v `src/server/queries` (`server-only`), business logika ve `src/server/services` (dostává `prisma` a `actor`, testuje se nad SQLite přes `test-db.ts`), tenké Server Actions v `src/server/actions` (zod → služba → `revalidatePath`), čisté funkce v `src/lib`.
+- **Soubory:** jen ve `storage/uploads`. Upload přes `POST /api/uploads`, čtení přes `GET /api/files/[...path]`. SVG se v UI zobrazuje přes `<img>`; výjimka jsou půdorysy generované aplikací.
+- **Workflow (CAE):** požadavek prochází `SUBMITTED → IN_PROGRESS → WAITING_APPROVAL → APPROVED`. Zamítnutá revize (`REJECTED`, komentář povinný) vrací požadavek do `IN_PROGRESS`; CAE může požadavek zrušit (`CANCELLED`). Každý přechod probíhá v `$transaction` se záznamem `ChangeRequestEvent`. Zařízení má max. 1 otevřený požadavek a 1 aktivní revizi. Stav zařízení se odvozuje přes `deriveEquipmentStatus`. Úplná tabulka přechodů je v archivu plánu, sekce B.
+- **Studio:** souřadnice v metrech od osy A1. Nová patra mají jednotné měřítko (`planFrame`), stávající `EXISTING_FLOOR_FRAME` (66 × 42 m).
+
+## 4. Databáze – bezpečnostní pravidla
+
+- **Na produkci NIKDY** nespouštěj `db:reset`, `prisma migrate reset`, `prisma db push` ani `npm run db:seed` nad daty. Seed nejdřív maže tabulky a je určený jen pro prázdnou databázi.
+- Změna schématu = vždy čistá přírůstková migrace: `npx prisma migrate dev --name <popis>`, pak `npx prisma generate`. Migrace musí projít nad existujícími daty (výchozí hodnoty, žádné destruktivní přejmenování). Kontejner je při startu aplikuje přes `prisma migrate deploy`.
+- Nová demo nebo katalogová data patří do přírůstkových skriptů (`upsert`, nic nemazat), stejně jako `db:demo-docs` a `db:panel-builder`, které entrypoint pouští nad neprázdnou DB. `ELDOCK_SEED_DEMO=1` plní demo daty jen prázdnou databázi.
+- Lokálně: seed se spouští ručně (`npm run db:seed`). `db:reset` (smaže `dev.db`) jen po výslovném souhlasu uživatele.
+
+## 5. Gemini (AI Panel Builder)
+
+- Proměnné prostředí: `GEMINI_API_KEY`, `GEMINI_VISION_MODEL` (výchozí `gemini-2.5-pro`, analýza fotky po DIN lištách) a `GEMINI_DATASHEET_MODEL` (výchozí `gemini-2.5-flash`, datasheety a parametry). Čte je `src/server/services/geminiPanelService.ts`, v produkci přicházejí přes `docker-compose.yml`.
+- **Bez klíče** běží deterministický demo režim (mock analýza a Smart Fallback Picker), takže aplikace i testy fungují offline. E2E běží vždy s prázdným klíčem.
+- Klíč nikdy nevypisuj do výstupu a nedávej ho do Gitu.
+
+## 6. Pracovní postup
+
+- Plán je v `docs/PLAN.md` (rotující: hotové fáze jednořádkově, podrobně jen otevřená fáze). `/faze` = další otevřená fáze, `/faze N` = konkrétní fáze. Jedna fáze = jeden commit, pak se zastav a shrň. `/overit` = kompletní kontrola.
+- Uživatel občas vloží nové zadání místo obsahu `docs/PLAN.md`. Plán pak obnov z gitu a zadání doplň jako novou fázi. **Čísla fází v zadání ověř proti `git log`**, zadání někdy uvádí zastaralé číslo.
+- Před každým commitem musí projít `npm run verify` (typecheck, lint, vitest, build). U UI změn spusť i dotčené E2E (`npx playwright test e2e/<soubor>`; vlastní server na portu 3200 s `e2e.db` a `.next-e2e`). Ruční dev server při testování spouštěj s jiným `NEXT_DIST_DIR` (např. `.next/shots`). Dva servery se sdíleným `.next-e2e` si rozbijí cache a stránky se pak přenačítají dokola.
+- Prostředí je Windows: používej npm a Node/TS skripty. Pozor na CRLF po `git stash`. `git push` dělej jen při nasazení. Na mazání mimo projekt a nevratné operace se nejdřív zeptej.
+- Známý problém: E2E test „revizní technik VTZ…“ (`e2e/accounts-studio.spec.ts`) padá i na čistém `main` kvůli datu revizí v seedu.
+
+## 7. Nasazení na produkci (Hetzner, https://eldock.cz)
 
 Když uživatel řekne **„nasaď to na produkci“** nebo **„deploy“**:
 
 1. Ověř změny (`npm run verify`) a commitni je (`git add -A`, commit s výstižnou zprávou).
 2. `git push` na GitHub (`origin main`).
-3. Spusť nasazení přes SSH:
-   `ssh root@91.99.148.62 "cd /root/eldock && git pull && docker-compose up -d --build"`
-4. Po úspěšném nasazení ukliď nepoužívané obrazy (klasický Docker builder bez BuildKitu nechává po každém buildu 2–3 GB mezivrstev, jinak se zaplní disk):
-   `ssh root@91.99.148.62 "docker image prune -f && df -h /"`
-   Maže jen obrazy bez tagu, které nepoužívá žádný kontejner; běžící kontejnery, data ani `.env` neovlivní.
-5. Ověř výsledek (výstup buildu, `docker-compose ps`, odpověď https://eldock.cz, volné místo na disku) a shrň ho.
+3. `ssh root@91.99.148.62 "cd /root/eldock && git pull && docker-compose up -d --build"`. Build na serveru s 2 GB RAM trvá přes 10 minut, proto ho pouštěj na pozadí. Docker build vynechává kontrolu typů (`ELDOCK_SKIP_BUILD_TYPECHECK=1`), typy hlídá `verify`.
+4. Pokaždé po nasazení ukliď mezivrstvy: `ssh root@91.99.148.62 "docker image prune -f && df -h /"`. Maže jen obrazy bez tagu, kontejnery, data ani `.env` neovlivní.
+5. Ověř výsledek: výstup buildu, `docker-compose ps` (`healthy`), odpověď https://eldock.cz (hned po startu chvíli vrací 503) a volné místo na disku. Pak ho shrň.
 
-**Pozor:** na serveru je v `/root/eldock` ručně vytvořený soubor `.env` s produkčními hesly – při nasazení na něj nikdy nesahej, nečti ho do výstupu, nepřepisuj ho a nedávej ho do Gitu. Na serveru nespouštěj nic jiného než výše uvedený příkaz a čtecí kontroly; cokoli dalšího (mazání, reset, změny konfigurace) jen po výslovném souhlasu.
+**Pozor:** na serveru je v `/root/eldock` ručně vytvořený `.env` s produkčními hesly. Nikdy ho nečti do výstupu, nepřepisuj a nedávej do Gitu. Na serveru nespouštěj nic jiného než výše uvedené příkazy a čtecí kontroly; cokoli dalšího (mazání, reset, změny konfigurace) jen po výslovném souhlasu.
+Data na serveru: `./data/db` (SQLite) a `./data/storage` (soubory) jako svazky a `./data/caddy` (certifikáty). Caddy publikuje porty 80 a 443.
 
 @AGENTS.md

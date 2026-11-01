@@ -100,11 +100,12 @@ prisma/                   schema.prisma, migrace, seed.ts + seed-data.ts (realis
 storage/uploads/          nahrané soubory (fotky, revize, zákresy) – mimo public/, servíruje /api/files
 e2e/                      Playwright testy, příprava DB, fixture
 scripts/smoke-workflow.ts smoke test celé smyčky nad kopií DB
-docs/PLAN.md              implementační plán, stavový automat, demo data a deník fází
+docs/PLAN.md              rotující plán (hotové fáze, otevřená fáze, deník)
+docs/archiv/              úplný plán fází 0–35 a původní specifikace MVP
 ```
 
 - **Stack:** Next.js 16.4 (App Router, Turbopack, React 19), TypeScript, Tailwind CSS 4, shadcn/ui, lucide-react, `motion`, sonner, zod, react-zoom-pan-pinch, qrcode.react; Prisma 7.10 + SQLite (`@prisma/adapter-better-sqlite3`); Vitest, Playwright.
-- **Stavový automat** (`src/lib/workflow/state-machine.ts`, viz `docs/PLAN.md` sekce B): `SUBMITTED → IN_PROGRESS → WAITING_APPROVAL → APPROVED`, vrácení `WAITING_APPROVAL → IN_PROGRESS`, storno. Stav zařízení se vždy odvozuje z otevřeného požadavku; služby hlídají invarianty (max. 1 platná revize a 1 otevřený požadavek na zařízení).
+- **Stavový automat** (`src/lib/workflow/state-machine.ts`, viz `docs/archiv/PLAN-faze-00-35.md` sekce B): `SUBMITTED → IN_PROGRESS → WAITING_APPROVAL → APPROVED`, vrácení `WAITING_APPROVAL → IN_PROGRESS`, storno. Stav zařízení se vždy odvozuje z otevřeného požadavku; služby hlídají invarianty (max. 1 platná revize a 1 otevřený požadavek na zařízení).
 - **Soubory:** upload přes `POST /api/uploads` (Route Handler, ne Server Action kvůli limitu 1 MB), do DB se ukládá URL `/api/files/...`. SVG se zobrazují přes `<img>` (nespustí skripty) a `/api/files` posílá `Content-Security-Policy: sandbox`.
 - **Grafika** (areál, izometrie, půdorysy, schémata, „fotky“ v seedu, 3D skříň) je generovaná kódem – žádné externí obrázky ani CDN.
 
@@ -115,7 +116,7 @@ docs/PLAN.md              implementační plán, stavový automat, demo data a d
 - Redlining jen nad SVG/obrázkem schématu (ne nad PDF), schémata v seedu mají 1 list.
 - „Vygenerovat upravené schéma“ umí vykreslit jen prvky mock schématu (Q1, F1–F6, K1–K4, T1, A1, X1, X2).
 - PWA bez service workeru – žádný offline režim.
-- Další náměty (notifikace, import z EPLAN, elektronický podpis, multi-tenant…) viz `docs/PLAN.md` sekce F.
+- Další náměty (notifikace, import z EPLAN, elektronický podpis, multi-tenant…) viz `docs/PLAN.md` sekce D a `docs/archiv/PLAN-faze-00-35.md` sekce F.
 
 ## Přechod na PostgreSQL
 
