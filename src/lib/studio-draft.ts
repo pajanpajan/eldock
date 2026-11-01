@@ -19,8 +19,10 @@ export interface StudioEquipmentDraft {
   key: string;
   /** Patro konceptu (`StudioFloorDraft.key`) nebo existující patro (`floorId`). */
   floor: { kind: "draft"; key: string } | { kind: "existing"; id: string };
-  /** Průsečík rastru, např. „B11“. */
-  at: string;
+  /** Poloha v metrech od osy A1 (jemný rastr 1 m); u spotřebičů a nářadí kotva v rohu místnosti. */
+  pos: { x: number; y: number };
+  /** Spotřebič / nářadí přiřazené k místnosti (klíč zóny konceptu nebo „ex:<index>“ u stávajícího patra). */
+  roomKey: string | null;
   tag: string;
   name: string;
   type: EquipmentType;
@@ -41,6 +43,10 @@ export interface StudioNewPlantDraft {
   code: string;
   /** „Ulice 12, Město“ nebo jen město. */
   location: string;
+}
+
+/** Rozměr areálu v metrech (osa X × osa Y). */
+export interface StudioCampusDraft {
   widthM: number;
   depthM: number;
 }
@@ -49,6 +55,8 @@ export interface StudioDraft {
   /** Stávající závod; při `newPlant` se ignoruje. */
   plantId: string;
   newPlant?: StudioNewPlantDraft | null;
+  /** Rozměr areálu; u stávajícího závodu se při změně přepočítají polohy budov. */
+  campus?: StudioCampusDraft | null;
   grid: GridSpec;
   building: StudioBuildingDraft;
   floors: StudioFloorDraft[];

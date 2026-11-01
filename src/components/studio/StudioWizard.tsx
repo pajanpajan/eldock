@@ -2,42 +2,32 @@
 
 import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, Building2, DoorOpen, Factory, Loader2, Plug, Plus, Save, Shapes, SquareDashedMousePointer, Trash2, Wand2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Building2, Factory, Loader2, Plug, Plus, Save, Shapes, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
-import { PowerSpiderOverlay } from "@/components/map/floorplan/PowerSpiderOverlay";
 import { IsometricBuilding } from "@/components/map/isometric/IsometricBuilding";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { BuildingType, EquipmentType } from "@/generated/prisma/enums";
+import type { BuildingType } from "@/generated/prisma/enums";
+import { DEFAULT_GRID, FLOOR_VIEWBOX, GRID_LIMITS, SCALES, clampGrid, fmtM, gridDimensions, planFrame, renderGridFloorplanSvg, zoneToRoom, type DrawingScale, type GridSpec } from "@/lib/cad-grid";
 import {
-  DEFAULT_GRID,
-  FLOOR_TEMPLATES,
-  FLOOR_VIEWBOX,
-  GRID_LIMITS,
-  SCALES,
-  ZONE_KINDS,
-  clampGrid,
-  floorTemplate,
-  gateToFloorplan,
-  gridDimensions,
-  gridToPercent,
-  parseGridRef,
-  renderGridFloorplanSvg,
-  zoneAt,
-  zoneToRoom,
-  type DrawingScale,
-  type GridSpec,
-  type ZoneKind,
-} from "@/lib/cad-grid";
-import { CAMPUS_LIMITS, clampRect, findFreeSpot, metersToRect, polygonBounds, type CampusSize } from "@/lib/campus-layout";
-import { EQUIPMENT_TYPE_ICONS } from "@/lib/equipment-icons";
-import { BUILDING_TYPE_LABELS, EQUIPMENT_TYPE_LABELS } from "@/lib/format";
+  CAMPUS_LIMITS,
+  CAMPUS_PRESETS,
+  campusSizeValid,
+  clampRect,
+  findFreeSpot,
+  metersToRect,
+  polygonBounds,
+  rectToMeters,
+  rescalePolygon,
+  rescaleRect,
+  type CampusRect,
+  type CampusSize,
+} from "@/lib/campus-layout";
+import { BUILDING_TYPE_LABELS } from "@/lib/format";
 import { extractFloorplanRooms } from "@/lib/mock-graphics/floorplan";
-import { POWER_ROLE_HINTS, powerRole, suggestCircuit, validatePlacement } from "@/lib/power-hierarchy";
-import type { SpiderItem } from "@/lib/power-tree";
-import { bestParent, nextTag, suggestName, type AutopilotSource } from "@/lib/studio-autopilot";
+import type { AutopilotSource } from "@/lib/studio-autopilot";
 import { floorLabel, floorName, type StudioBuildingDraft, type StudioEquipmentDraft, type StudioFloorDraft, type StudioNewPlantDraft } from "@/lib/studio-draft";
 import { cn } from "@/lib/utils";
 import { saveStudioAction } from "@/server/actions/studio";
@@ -45,7 +35,10 @@ import type { FloorOverview } from "@/server/queries/building";
 import type { StudioData } from "@/server/queries/studio";
 
 import { CampusPlacementMap } from "./CampusPlacementMap";
-import { GridCanvas } from "./GridCanvas";
+import { PlacementStep, type FloorRef } from "./PlacementStep";
+import type { ViewZoom } from "./PlanViewport";
+import { ChoiceButton, NumberField, selectClass } from "./studio-ui";
+import { ZoneStep } from "./ZoneStep";
 
 const STEPS = [
   { n: 1, title: "Budova, umístění a podlaží", icon: Building2 },
@@ -81,30 +74,12 @@ const PRESETS: { key: string; label: string; name: string; type: BuildingType; g
   { key: "warehouse", label: "📦 Sklad / Expedice (48 × 30 m)", name: "Sklad", type: "WAREHOUSE", grid: { cols: 9, rows: 6, stepMeters: 6 }, floors: [{ level: 0, usage: "Expediční sklad" }] },
 ];
 
-const PLACEABLE: EquipmentType[] = [
-  "SWITCHBOARD",
-  "TRANSFORMER",
-  "PRODUCTION_LINE",
-  "MACHINE",
-  "CNC_MACHINE",
-  "ROBOT_CELL",
-  "COMPRESSOR",
-  "HVAC_UNIT",
-  "APPLIANCE",
-  "POWER_TOOL",
-  "WELDER",
-  "EXTENSION_CORD",
-  "EMERGENCY_LIGHTING",
-  "LIGHTNING_ROD",
-];
-
 const BUILDING_TYPES = Object.keys(BUILDING_TYPE_LABELS) as BuildingType[];
-const selectClass = "h-11 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50";
 
-type FloorRef = { kind: "draft"; key: string } | { kind: "existing"; id: string };
 type PlantMode = "existing" | "new";
 
-const NEW_PLANT_DEFAULT: StudioNewPlantDraft = { name: "", code: "", location: "", widthM: 300, depthM: 200 };
+const NEW_PLANT_DEFAULT: StudioNewPlantDraft = { name: "", code: "", location: "" };
+const NEW_CAMPUS_DEFAULT: CampusSize = { width: 300, height: 200 };
 
 /** První volné písmeno kódu budovy v závodě. */
 function freeBuildingCode(buildings: { code: string }[]) {
@@ -114,7 +89,6 @@ function freeBuildingCode(buildings: { code: string }[]) {
 
 /** Nový závod od nuly: čistá mapa bez budov a bez zdrojů napájení. */
 const cleanScene = (data: StudioData): StudioData => ({ ...data, plant: { ...data.plant, buildings: [] }, equipment: [] });
-const floorRefKey = (ref: FloorRef) => (ref.kind === "draft" ? `draft:${ref.key}` : ref.id);
 
 /** Studio výstavby závodu – 3 kroky bez ručních souřadnic, uložení v jedné transakci. */
 export function StudioWizard({ data: source, startNewPlant = false }: { data: StudioData; startNewPlant?: boolean }) {
@@ -122,27 +96,52 @@ export function StudioWizard({ data: source, startNewPlant = false }: { data: St
   // Režim závodu: budova do stávajícího závodu, nebo úplně nový závod od nuly (čistá mapa areálu).
   const [plantMode, setPlantMode] = useState<PlantMode>(startNewPlant ? "new" : "existing");
   const [newPlant, setNewPlant] = useState<StudioNewPlantDraft>(NEW_PLANT_DEFAULT);
-  const data = useMemo(() => (plantMode === "new" ? cleanScene(source) : source), [plantMode, source]);
-  const campusFor = (mode: PlantMode, plant = newPlant): CampusSize =>
-    mode === "new" ? { width: plant.widthM, height: plant.depthM } : { width: source.plant.campusWidthM, height: source.plant.campusDepthM };
-  const campus = campusFor(plantMode);
+  const plantCampus: CampusSize = { width: source.plant.campusWidthM, height: source.plant.campusDepthM };
+  // Rozměr areálu (osa X × osa Y) – editovatelný v obou režimech; vstupy se ověřují až při použití.
+  const [campusInput, setCampusInput] = useState<CampusSize>(startNewPlant ? NEW_CAMPUS_DEFAULT : plantCampus);
+  const [campus, setCampus] = useState<CampusSize>(startNewPlant ? NEW_CAMPUS_DEFAULT : plantCampus);
+  const [campusZoom, setCampusZoom] = useState<ViewZoom>("fit");
+  // Zoom půdorysu (kroky 2 a 3): „Celé“, nebo skutečné měřítko výkresu z přepínače Měřítko
+  const [floorZoom, setFloorZoom] = useState<ViewZoom>("fit");
+  const baseData = useMemo(() => (plantMode === "new" ? cleanScene(source) : source), [plantMode, source]);
+  // Stávající budovy přepočtené na aktuální rozměr areálu (stejná poloha v metrech).
+  const data = useMemo<StudioData>(() => {
+    if (campus.width === plantCampus.width && campus.height === plantCampus.height) return baseData;
+    return {
+      ...baseData,
+      plant: {
+        ...baseData.plant,
+        buildings: baseData.plant.buildings.map((building) => ({
+          ...building,
+          mapPolygon: rescalePolygon(building.mapPolygon, plantCampus, campus),
+          labelX: (building.labelX * plantCampus.width) / campus.width,
+          labelY: (building.labelY * plantCampus.height) / campus.height,
+        })),
+      },
+    };
+    // plantCampus je odvozený ze `source`
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [baseData, campus, source.plant.campusWidthM, source.plant.campusDepthM]);
   const counter = useRef(1);
   const nextKey = (prefix: string) => `${prefix}${counter.current++}`;
   const [step, setStep] = useState(1);
   const [pending, startTransition] = useTransition();
 
-  const obstacles = useMemo(() => data.plant.buildings.map((building) => polygonBounds(building.mapPolygon)), [data.plant.buildings]);
   const freeCode = useMemo(() => freeBuildingCode(data.plant.buildings), [data.plant.buildings]);
 
   // Krok 1 – budova, umístění, rastr a patra
   const [grid, setGrid] = useState<GridSpec>(DEFAULT_GRID);
   const dims = gridDimensions(grid);
+  const frame = useMemo(() => planFrame(grid), [grid]);
   const [building, setBuilding] = useState<StudioBuildingDraft>(() => ({
     mode: "new",
     code: freeCode,
     name: `Hala ${freeCode} - Výroba`,
     type: "PRODUCTION",
-    map: findFreeSpot(metersToRect(66, 42, campus), obstacles),
+    map: findFreeSpot(
+      metersToRect(66, 42, campus),
+      data.plant.buildings.map((entry) => polygonBounds(entry.mapPolygon)),
+    ),
   }));
   const [floors, setFloors] = useState<StudioFloorDraft[]>([{ key: "f0", level: 0, usage: "Hlavní výroba", zones: [], gates: [] }]);
   const existingBuilding = building.mode === "existing" ? data.plant.buildings.find((entry) => entry.id === building.id) : undefined;
@@ -183,17 +182,40 @@ export function StudioWizard({ data: source, startNewPlant = false }: { data: St
   function switchPlantMode(mode: PlantMode) {
     if (mode === plantMode) return;
     setPlantMode(mode);
-    applyPreset(PRESETS[0], { buildings: mode === "new" ? [] : source.plant.buildings, campus: campusFor(mode) });
+    const nextCampus = mode === "new" ? NEW_CAMPUS_DEFAULT : plantCampus;
+    setCampus(nextCampus);
+    setCampusInput(nextCampus);
+    applyPreset(PRESETS[0], { buildings: mode === "new" ? [] : source.plant.buildings, campus: nextCampus });
   }
 
-  /** Změna rozměru pozemku nového závodu: budova si zachová rozměr v metrech. */
-  function updateCampus(patch: Partial<Pick<StudioNewPlantDraft, "widthM" | "depthM">>) {
-    const next = { ...newPlant, ...patch };
-    setNewPlant(next);
-    const valid = [next.widthM, next.depthM].every((value) => value >= CAMPUS_LIMITS.min && value <= CAMPUS_LIMITS.max);
-    if (valid && building.mode === "new") {
-      setBuilding({ ...building, map: clampRect({ ...building.map, ...metersToRect(dims.widthM, dims.depthM, campusFor("new", next)) }) });
+  /** Nový rozměr areálu: nová budova si zachová polohu i rozměr v metrech a zůstane uvnitř pozemku. */
+  function updateCampus(patch: Partial<CampusSize>) {
+    const next = { ...campusInput, ...patch };
+    setCampusInput(next);
+    if (!campusSizeValid(next)) return;
+    if (building.mode === "new") setBuilding({ ...building, map: clampRect(rescaleRect(building.map, campus, next)) });
+    setCampus(next);
+  }
+
+  /** Změna rastru: obrys nové budovy v areálu odpovídá rozměru haly. */
+  function updateGrid(patch: Partial<GridSpec>) {
+    const next = clampGrid({ ...grid, ...patch });
+    setGrid(next);
+    if (building.mode === "new") {
+      const size = metersToRect(gridDimensions(next).widthM, gridDimensions(next).depthM, campus);
+      setBuilding({ ...building, map: clampRect({ ...building.map, ...size }) });
     }
+  }
+
+  /** Posun / změna velikosti budovy v areálu; velikost se přichytí na rozteč sloupů (počet os). */
+  function onCampusRect(rect: CampusRect, kind: "move" | "resize") {
+    if (building.mode !== "new") return;
+    if (kind === "move") return setBuilding({ ...building, map: rect });
+    const meters = rectToMeters(rect, campus);
+    const next = clampGrid({ ...grid, cols: Math.round(meters.w / grid.stepMeters) + 1, rows: Math.round(meters.h / grid.stepMeters) + 1 });
+    setGrid(next);
+    const size = metersToRect(gridDimensions(next).widthM, gridDimensions(next).depthM, campus);
+    setBuilding({ ...building, map: clampRect({ ...rect, ...size }) });
   }
 
   function discardBuilding() {
@@ -228,7 +250,13 @@ export function StudioWizard({ data: source, startNewPlant = false }: { data: St
     setEquipment((current) => current.filter((item) => !(item.floor.kind === "draft" && item.floor.key === key)));
   }
 
-  const floorSvg = (floor: StudioFloorDraft) => renderGridFloorplanSvg({ floorName: floorName(floor.level, floor.usage), spec: grid, zones: floor.zones, gates: floor.gates });
+  // Plátno Studia s jemným pod-rastrem po 1 m (uložený půdorys ho nemá)
+  const floorSvg = (floor: StudioFloorDraft) => renderGridFloorplanSvg({ floorName: floorName(floor.level, floor.usage), spec: grid, zones: floor.zones, gates: floor.gates, fineGrid: true });
+  const setScale = (scale: DrawingScale) => {
+    setGrid((current) => ({ ...current, scale }));
+    setFloorZoom(scale);
+  };
+  const zoomFloor = (zoom: ViewZoom) => (zoom === "fit" ? setFloorZoom("fit") : setScale(zoom));
 
   // Zdroje napájení pro autopilota: rozváděče a trafa závodu + rozváděče konceptu
   const buildingFloorIds = new Set(existingFloors.map((floor) => floor.id));
@@ -254,7 +282,15 @@ export function StudioWizard({ data: source, startNewPlant = false }: { data: St
 
   function save() {
     startTransition(async () => {
-      const result = await saveStudioAction({ plantId: source.plant.id, newPlant: plantMode === "new" ? newPlant : null, grid, building, floors, equipment });
+      const result = await saveStudioAction({
+        plantId: source.plant.id,
+        newPlant: plantMode === "new" ? newPlant : null,
+        campus: { widthM: campus.width, depthM: campus.height },
+        grid,
+        building,
+        floors,
+        equipment,
+      });
       if (!result.ok) return void toast.error(result.error);
       toast.success(result.data.plantCreated ? `Závod ${newPlant.name.trim()} založen.` : "Budova uložena do závodu.", {
         description: `${result.data.plantCreated ? "První budova uložena · " : ""}Pater: ${result.data.floors} · zařízení: ${result.data.equipment}.`,
@@ -281,9 +317,71 @@ export function StudioWizard({ data: source, startNewPlant = false }: { data: St
     });
     return [
       ...existingFloors.map((floor) => overview(floor.id, floor.level, floor.name, extractFloorplanRooms(floor.floorplanSvg ?? ""))),
-      ...floors.map((floor) => overview(`draft:${floor.key}`, floor.level, floorName(floor.level, floor.usage), floor.zones.map((zone) => zoneToRoom(zone, grid)).filter((room) => room !== null))),
+      ...floors.map((floor) => overview(`draft:${floor.key}`, floor.level, floorName(floor.level, floor.usage), floor.zones.map((zone) => zoneToRoom(zone, frame)).filter((room) => room !== null))),
     ].sort((a, b) => a.level - b.level);
-  }, [existingFloors, floors, grid]);
+  }, [existingFloors, floors, frame]);
+
+  const campusInvalid = !campusSizeValid(campusInput);
+  const campusToolbar = (
+    <div className="flex flex-wrap items-end gap-2" data-testid="campus-settings">
+      <div className="space-y-1">
+        <Label htmlFor="campus-width" className="text-[11px]">
+          Šířka areálu – osa X [m]
+        </Label>
+        <Input
+          id="campus-width"
+          type="number"
+          inputMode="numeric"
+          min={CAMPUS_LIMITS.min}
+          max={CAMPUS_LIMITS.max}
+          value={campusInput.width}
+          onChange={(event) => updateCampus({ width: Number(event.target.value) })}
+          aria-invalid={campusInvalid}
+          className="h-9 w-28 font-mono"
+        />
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor="campus-depth" className="text-[11px]">
+          Hloubka areálu – osa Y [m]
+        </Label>
+        <Input
+          id="campus-depth"
+          type="number"
+          inputMode="numeric"
+          min={CAMPUS_LIMITS.min}
+          max={CAMPUS_LIMITS.max}
+          value={campusInput.height}
+          onChange={(event) => updateCampus({ height: Number(event.target.value) })}
+          aria-invalid={campusInvalid}
+          className="h-9 w-28 font-mono"
+        />
+      </div>
+      <div className="flex flex-wrap gap-1" aria-label="Předvolby rozměru areálu">
+        {CAMPUS_PRESETS.map((preset) => {
+          const activePreset = preset.width === campus.width && preset.height === campus.height;
+          return (
+            <button
+              key={`${preset.width}x${preset.height}`}
+              type="button"
+              onClick={() => updateCampus(preset)}
+              aria-pressed={activePreset}
+              className={cn(
+                "h-9 rounded-md border px-2 font-mono text-xs",
+                activePreset ? "border-primary bg-primary/15 text-primary" : "border-border text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {preset.width}×{preset.height} m
+            </button>
+          );
+        })}
+      </div>
+      {campusInvalid ? (
+        <p className="w-full text-xs text-amber-300">
+          Rozsah {CAMPUS_LIMITS.min}–{CAMPUS_LIMITS.max} m na každou osu – mapa zatím zůstává {campus.width} × {campus.height} m.
+        </p>
+      ) : null}
+    </div>
+  );
 
   return (
     <div className="space-y-6 pb-8">
@@ -324,7 +422,7 @@ export function StudioWizard({ data: source, startNewPlant = false }: { data: St
               </ChoiceButton>
             </div>
             {plantMode === "new" ? (
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,2fr)_7rem_minmax(0,2fr)_8rem_8rem]" data-testid="new-plant-fields">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,2fr)_7rem_minmax(0,2fr)]" data-testid="new-plant-fields">
                 <div className="space-y-1.5">
                   <Label htmlFor="plant-name">Název závodu</Label>
                   <Input id="plant-name" value={newPlant.name} maxLength={120} placeholder="Závod Turnov – Optika" onChange={(event) => setNewPlant({ ...newPlant, name: event.target.value })} className="h-11" />
@@ -337,17 +435,9 @@ export function StudioWizard({ data: source, startNewPlant = false }: { data: St
                   <Label htmlFor="plant-location">Město / adresa</Label>
                   <Input id="plant-location" value={newPlant.location} maxLength={200} placeholder="Nádražní 15, Turnov" onChange={(event) => setNewPlant({ ...newPlant, location: event.target.value })} className="h-11" />
                 </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="plant-width">Šířka areálu [m]</Label>
-                  <Input id="plant-width" type="number" inputMode="numeric" min={CAMPUS_LIMITS.min} max={CAMPUS_LIMITS.max} value={newPlant.widthM} onChange={(event) => updateCampus({ widthM: Number(event.target.value) })} className="h-11 font-mono" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="plant-depth">Hloubka areálu [m]</Label>
-                  <Input id="plant-depth" type="number" inputMode="numeric" min={CAMPUS_LIMITS.min} max={CAMPUS_LIMITS.max} value={newPlant.depthM} onChange={(event) => updateCampus({ depthM: Number(event.target.value) })} className="h-11 font-mono" />
-                </div>
-                <p className="flex items-center gap-2 text-xs text-muted-foreground sm:col-span-2 lg:col-span-5">
+                <p className="flex items-center gap-2 text-xs text-muted-foreground sm:col-span-2 lg:col-span-3">
                   <Factory className="size-4 shrink-0" aria-hidden />
-                  Mapa začíná jako prázdný oplocený pozemek s vrátnicí. Závod, budova, patra i zařízení se uloží najednou a aplikace se do nového závodu přepne.
+                  Mapa začíná jako prázdný oplocený pozemek s vrátnicí; rozměr areálu nastavíte nad mapou. Závod, budova, patra i zařízení se uloží najednou a aplikace se do nového závodu přepne.
                 </p>
               </div>
             ) : null}
@@ -442,14 +532,15 @@ export function StudioWizard({ data: source, startNewPlant = false }: { data: St
                       ),
                     )}
                 </ul>
-                <div className="flex flex-wrap gap-2">
-                  <Button variant="outline" className="touch-target gap-2" onClick={() => addFloor("down")}>
-                    <Plus className="size-4" aria-hidden />
-                    Přidat podzemní patro (PP)
-                  </Button>
-                  <Button variant="outline" className="touch-target gap-2" onClick={() => addFloor("up")}>
+                {/* Nadzemní patro nahoře, podzemní pod ním – stejně jako pořadí pater v seznamu */}
+                <div className="flex flex-col gap-2" data-testid="floor-add-buttons">
+                  <Button variant="outline" className="touch-target justify-start gap-2" onClick={() => addFloor("up")}>
                     <Plus className="size-4" aria-hidden />
                     Přidat nadzemní patro (NP)
+                  </Button>
+                  <Button variant="outline" className="touch-target justify-start gap-2" onClick={() => addFloor("down")}>
+                    <Plus className="size-4" aria-hidden />
+                    Přidat podzemní patro (PP)
                   </Button>
                   {building.mode === "existing" ? (
                     <Button variant="ghost" className="touch-target gap-2" onClick={() => setStep(3)}>
@@ -463,19 +554,14 @@ export function StudioWizard({ data: source, startNewPlant = false }: { data: St
               <div className="space-y-3 rounded-lg border border-border bg-background/50 p-3">
                 <p className="text-sm font-medium">Konstrukční rastr{building.mode === "existing" ? " nových pater" : ""}</p>
                 <div className="grid grid-cols-2 gap-2">
-                  <NumberField id="grid-cols" label={`Osy 1…N (${GRID_LIMITS.cols.min}–${GRID_LIMITS.cols.max})`} value={grid.cols} onChange={(cols) => setGrid((current) => clampGrid({ ...current, cols }))} />
-                  <NumberField id="grid-rows" label={`Osy A…Z (${GRID_LIMITS.rows.min}–${GRID_LIMITS.rows.max})`} value={grid.rows} onChange={(rows) => setGrid((current) => clampGrid({ ...current, rows }))} />
-                  <NumberField id="grid-step" label="Rozteč sloupů [m]" value={grid.stepMeters} step={0.5} onChange={(stepMeters) => setGrid((current) => clampGrid({ ...current, stepMeters }))} />
+                  <NumberField id="grid-cols" label={`Osa X: počet os 1…N (${GRID_LIMITS.cols.min}–${GRID_LIMITS.cols.max})`} value={grid.cols} onChange={(cols) => updateGrid({ cols })} />
+                  <NumberField id="grid-rows" label={`Osa Y: počet os A…Z (${GRID_LIMITS.rows.min}–${GRID_LIMITS.rows.max})`} value={grid.rows} onChange={(rows) => updateGrid({ rows })} />
+                  <NumberField id="grid-step" label="Rozteč sloupů [m]" value={grid.stepMeters} step={0.5} onChange={(stepMeters) => updateGrid({ stepMeters })} />
                   <div className="space-y-1.5">
                     <Label htmlFor="grid-scale" className="text-xs">
-                      Měřítko
+                      Měřítko výkresu
                     </Label>
-                    <select
-                      id="grid-scale"
-                      value={grid.scale}
-                      onChange={(event) => setGrid((current) => ({ ...current, scale: event.target.value as DrawingScale }))}
-                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                    >
+                    <select id="grid-scale" value={grid.scale} onChange={(event) => setScale(event.target.value as DrawingScale)} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
                       {SCALES.map((scale) => (
                         <option key={scale} value={scale}>
                           {scale}
@@ -485,9 +571,11 @@ export function StudioWizard({ data: source, startNewPlant = false }: { data: St
                   </div>
                 </div>
                 <p className="text-sm">
-                  Rozměr: <span className="font-mono text-lg font-semibold" data-testid="grid-dimensions">{dims.label}</span>
+                  <span className="font-mono font-semibold" data-testid="grid-axes">
+                    Osa X (šířka): {fmtM(dims.widthM)} m × Osa Y (hloubka): {fmtM(dims.depthM)} m
+                  </span>
                   <span className="block text-xs text-muted-foreground">
-                    Osy 1–{grid.cols} × A–{String.fromCharCode(64 + grid.rows)}, sloupy v průsečících, M {grid.scale}
+                    Rozměr <span data-testid="grid-dimensions">{dims.label}</span> · {Math.round(dims.widthM * dims.depthM).toLocaleString("cs-CZ")} m² · osy 1–{grid.cols} × A–{String.fromCharCode(64 + grid.rows)}, M {grid.scale}
                   </span>
                 </p>
               </div>
@@ -497,11 +585,14 @@ export function StudioWizard({ data: source, startNewPlant = false }: { data: St
               <CampusPlacementMap
                 buildings={data.plant.buildings}
                 rect={building.mode === "new" ? building.map : null}
-                onChange={building.mode === "new" ? (map) => setBuilding({ ...building, map }) : undefined}
+                onChange={building.mode === "new" ? onCampusRect : undefined}
                 highlightId={building.mode === "existing" ? building.id : null}
                 newLabel={building.mode === "new" ? building.name.split(" - ")[0] : undefined}
                 plantCode={plantMode === "new" ? "" : source.plant.code}
                 campus={campus}
+                zoom={campusZoom}
+                onZoom={setCampusZoom}
+                toolbar={campusToolbar}
                 label="Mapa areálu – umístění budovy"
               />
               <div className="rounded-xl border border-border bg-card p-2">
@@ -516,11 +607,26 @@ export function StudioWizard({ data: source, startNewPlant = false }: { data: St
         </section>
       ) : null}
 
-      {step === 2 ? <ZoneStep floors={floors} activeKey={zoneFloorKey} onActive={setZoneFloorKey} grid={grid} svgFor={floorSvg} onChange={(key, patch) => updateFloor(key, patch)} /> : null}
+      {step === 2 ? (
+        <ZoneStep
+          floors={floors}
+          activeKey={zoneFloorKey}
+          onActive={setZoneFloorKey}
+          grid={grid}
+          frame={frame}
+          svgFor={floorSvg}
+          onChange={(key, patch) => updateFloor(key, patch)}
+          zoom={floorZoom}
+          onZoom={zoomFloor}
+          newKey={() => nextKey("z")}
+        />
+      ) : null}
 
       {step === 3 ? (
         <PlacementStep
-          grid={grid}
+          frame={frame}
+          zoom={floorZoom}
+          onZoom={zoomFloor}
           floors={floors}
           existingFloors={existingFloors}
           active={placeFloor}
@@ -557,494 +663,5 @@ export function StudioWizard({ data: source, startNewPlant = false }: { data: St
         )}
       </div>
     </div>
-  );
-}
-
-function NumberField({ id, label, value, onChange, step = 1 }: { id: string; label: string; value: number; onChange: (value: number) => void; step?: number }) {
-  return (
-    <div className="space-y-1.5">
-      <Label htmlFor={id} className="text-xs">
-        {label}
-      </Label>
-      <Input id={id} type="number" inputMode="decimal" step={step} value={value} onChange={(event) => event.target.value !== "" && onChange(Number(event.target.value))} className="h-10 font-mono" />
-    </div>
-  );
-}
-
-function ChoiceButton({ active, onClick, disabled = false, children }: { active: boolean; onClick: () => void; disabled?: boolean; children: React.ReactNode }) {
-  return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={active}
-      disabled={disabled}
-      onClick={onClick}
-      className={cn(
-        "touch-target rounded-lg border px-4 text-sm font-medium transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50",
-        active ? "border-primary bg-primary/15 text-primary" : "border-border bg-card text-muted-foreground hover:text-foreground",
-      )}
-    >
-      {children}
-    </button>
-  );
-}
-
-function FloorTabs({ items, active, onActive }: { items: { id: string; label: string; isNew?: boolean }[]; active: string; onActive: (id: string) => void }) {
-  return (
-    <div className="flex flex-wrap gap-1 rounded-lg border border-border bg-background p-1" role="tablist" aria-label="Patro">
-      {items.map((item) => (
-        <button
-          key={item.id}
-          type="button"
-          role="tab"
-          aria-selected={item.id === active}
-          onClick={() => onActive(item.id)}
-          title={item.isNew ? "Nové patro" : undefined}
-          className={cn("flex h-9 items-center gap-1.5 rounded-md px-3 font-mono text-sm", item.id === active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted")}
-        >
-          {item.label}
-          {item.isNew ? <span className="size-1.5 rounded-full bg-current opacity-70" aria-hidden /> : null}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function ZoneStep({
-  floors,
-  activeKey,
-  onActive,
-  grid,
-  svgFor,
-  onChange,
-}: {
-  floors: StudioFloorDraft[];
-  activeKey: string;
-  onActive: (key: string) => void;
-  grid: GridSpec;
-  svgFor: (floor: StudioFloorDraft) => string;
-  onChange: (key: string, patch: Partial<StudioFloorDraft>) => void;
-}) {
-  const floor = floors.find((entry) => entry.key === activeKey) ?? floors[0];
-  const [mode, setMode] = useState<"cells" | "wall">("cells");
-  const [kind, setKind] = useState<ZoneKind>("PRODUCTION");
-  const [from, setFrom] = useState("B2");
-  const [to, setTo] = useState("B5");
-
-  if (!floor) {
-    return (
-      <p className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-        Rozvržení stávajících pater se ve Studiu nemění. Přidejte v kroku 1 nové patro, nebo pokračujte na osazení zařízení.
-      </p>
-    );
-  }
-
-  const addZone = (zoneFrom: string, zoneTo: string) => {
-    const number = floor.zones.length + 1;
-    const name = kind === "PRODUCTION" ? `Výrobní zóna ${number}` : kind === "HAZARD" ? `Rozvodna ${number}` : `Místnost ${number}`;
-    const zone = { from: zoneFrom, to: zoneTo, name, kind };
-    if (zoneToRoom(zone, grid)) onChange(floor.key, { zones: [...floor.zones, zone] });
-  };
-  const addGate = (at: string) => {
-    const gate = { at, label: `Vrata ${floor.gates.length + 1}` };
-    if (gateToFloorplan(gate, grid)) onChange(floor.key, { gates: [...floor.gates, gate] });
-  };
-  const updateZone = (index: number, name: string) => onChange(floor.key, { zones: floor.zones.map((zone, i) => (i === index ? { ...zone, name } : zone)) });
-
-  return (
-    <section aria-labelledby="step-2" className="grid gap-6 xl:grid-cols-[24rem_minmax(0,1fr)]">
-      <div className="space-y-4 rounded-xl border border-border bg-card p-4">
-        <h2 id="step-2" className="text-lg font-semibold">
-          Místnosti, zóny a vrata
-        </h2>
-        <FloorTabs items={floors.map((entry) => ({ id: entry.key, label: floorLabel(entry.level).short }))} active={floor.key} onActive={onActive} />
-        <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Nástroj">
-          <ChoiceButton active={mode === "cells"} onClick={() => setMode("cells")}>
-            <span className="flex items-center justify-center gap-2">
-              <SquareDashedMousePointer className="size-4" aria-hidden />
-              Kreslit místnosti
-            </span>
-          </ChoiceButton>
-          <ChoiceButton active={mode === "wall"} onClick={() => setMode("wall")}>
-            <span className="flex items-center justify-center gap-2">
-              <DoorOpen className="size-4" aria-hidden />
-              Umístit vrata
-            </span>
-          </ChoiceButton>
-        </div>
-        {mode === "cells" ? (
-          <>
-            <p className="text-sm text-muted-foreground">Stiskněte myš na poli rastru, táhněte na cílové pole a pusťte – místnost se přidá. I jediné pole nebo pás v jedné řadě je platná místnost.</p>
-            <div className="space-y-1.5">
-              <Label htmlFor="zone-kind" className="text-xs">
-                Typ kreslené zóny
-              </Label>
-              <select id="zone-kind" value={kind} onChange={(event) => setKind(event.target.value as ZoneKind)} className={selectClass}>
-                {(Object.keys(ZONE_KINDS) as ZoneKind[]).map((value) => (
-                  <option key={value} value={value}>
-                    {ZONE_KINDS[value].label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <details className="rounded-lg border border-border p-2 text-sm">
-              <summary className="cursor-pointer text-muted-foreground">Zadat pole ručně</summary>
-              <div className="mt-2 grid grid-cols-[1fr_1fr_auto] gap-2">
-                <Input value={from} onChange={(event) => setFrom(event.target.value.toUpperCase())} aria-label="Od pole" className="h-10 font-mono" />
-                <Input value={to} onChange={(event) => setTo(event.target.value.toUpperCase())} aria-label="Do pole" className="h-10 font-mono" />
-                <Button variant="outline" className="h-10" onClick={() => addZone(from, to)} disabled={!zoneToRoom({ from, to, name: "x", kind }, grid)}>
-                  Přidat
-                </Button>
-              </div>
-            </details>
-            <div className="space-y-2">
-              <p className="flex items-center gap-1.5 text-sm font-medium">
-                <Wand2 className="size-4 text-primary" aria-hidden />
-                Rozdělit patro šablonou
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {FLOOR_TEMPLATES.map((template) => (
-                  <Button key={template.key} variant="outline" size="sm" className="h-10" onClick={() => onChange(floor.key, { zones: floorTemplate(template.key, grid) })}>
-                    {template.label}
-                  </Button>
-                ))}
-              </div>
-            </div>
-          </>
-        ) : (
-          <p className="text-sm text-muted-foreground">Klikněte do rastru blízko obvodové zdi – vrata se umístí na nejbližší osu stěny.</p>
-        )}
-
-        <ul className="space-y-1.5 text-sm" aria-label="Místnosti a vrata patra">
-          {floor.zones.map((zone, index) => (
-            <li key={`z${index}`} className="flex items-center gap-2 rounded-md bg-muted/40 px-2 py-1">
-              <span className="w-16 shrink-0 font-mono text-xs">
-                {zone.from}–{zone.to}
-              </span>
-              <Input value={zone.name} onChange={(event) => updateZone(index, event.target.value)} aria-label={`Název místnosti ${index + 1}`} maxLength={80} className="h-8" />
-              <Button variant="ghost" size="icon" className="size-8" onClick={() => onChange(floor.key, { zones: floor.zones.filter((_, i) => i !== index) })} aria-label={`Odebrat ${zone.name}`}>
-                <Trash2 className="size-3.5" />
-              </Button>
-            </li>
-          ))}
-          {floor.gates.map((gate, index) => (
-            <li key={`g${index}`} className="flex items-center gap-2 rounded-md bg-muted/40 px-2 py-1">
-              <DoorOpen className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-              <span className="w-10 shrink-0 font-mono text-xs">{gate.at}</span>
-              <Input
-                value={gate.label}
-                onChange={(event) => onChange(floor.key, { gates: floor.gates.map((entry, i) => (i === index ? { ...entry, label: event.target.value } : entry)) })}
-                aria-label={`Popis vrat ${index + 1}`}
-                maxLength={60}
-                className="h-8"
-              />
-              <Button variant="ghost" size="icon" className="size-8" onClick={() => onChange(floor.key, { gates: floor.gates.filter((_, i) => i !== index) })} aria-label={`Odebrat ${gate.label}`}>
-                <Trash2 className="size-3.5" />
-              </Button>
-            </li>
-          ))}
-        </ul>
-      </div>
-      <GridCanvas
-        svg={svgFor(floor)}
-        spec={grid}
-        mode={mode}
-        onCells={addZone}
-        onPick={addGate}
-        label={mode === "cells" ? `Půdorys ${floorLabel(floor.level).short} – tažením myši nakreslete místnost` : `Půdorys ${floorLabel(floor.level).short} – kliknutím u zdi umístíte vrata`}
-      />
-    </section>
-  );
-}
-
-function PlacementStep({
-  grid,
-  floors,
-  existingFloors,
-  active,
-  onActive,
-  svgFor,
-  data,
-  equipment,
-  sources,
-  buildingCode,
-  buildingTitle,
-  onAdd,
-  onRemove,
-}: {
-  grid: GridSpec;
-  floors: StudioFloorDraft[];
-  existingFloors: StudioData["plant"]["buildings"][number]["floors"];
-  active: FloorRef;
-  onActive: (ref: FloorRef) => void;
-  svgFor: (floor: StudioFloorDraft) => string;
-  data: StudioData;
-  equipment: StudioEquipmentDraft[];
-  sources: AutopilotSource[];
-  buildingCode: string;
-  buildingTitle: string;
-  onAdd: (item: Omit<StudioEquipmentDraft, "key">) => void;
-  onRemove: (key: string) => void;
-}) {
-  const draftFloor = active.kind === "draft" ? floors.find((floor) => floor.key === active.key) : undefined;
-  const existingFloor = active.kind === "existing" ? existingFloors.find((floor) => floor.id === active.id) : undefined;
-  const spec = draftFloor ? grid : DEFAULT_GRID;
-  const svg = draftFloor ? svgFor(draftFloor) : (existingFloor?.floorplanSvg ?? "");
-  const activeId = floorRefKey(active);
-
-  const [at, setAt] = useState("");
-  const [type, setType] = useState<EquipmentType>("SWITCHBOARD");
-  const [tag, setTag] = useState("");
-  const [name, setName] = useState("");
-  const [isRoot, setIsRoot] = useState(false);
-  const [parentId, setParentId] = useState("");
-  const [circuit, setCircuit] = useState("");
-  const [zone, setZone] = useState("");
-
-  const allTags = [...data.equipment.map((item) => item.tag), ...equipment.map((item) => item.tag)];
-  const boardsInBuilding =
-    data.equipment.filter((item) => item.type === "SWITCHBOARD" && existingFloors.some((floor) => floor.id === item.floorId)).length +
-    equipment.filter((item) => item.type === "SWITCHBOARD").length;
-  const siblings = (id: string) =>
-    data.equipment.filter((item) => item.fedFromEquipmentId === id).length + equipment.filter((item) => item.parent && (item.parent.kind === "draft" ? `draft:${item.parent.key}` : item.parent.id) === id).length;
-
-  /** Autopilot: tag, název, napájení, vývod a místnost podle typu a bodu v rastru. */
-  function autopilot(nextType: EquipmentType, ref: string) {
-    const point = parseGridRef(ref, spec);
-    const roomName = draftFloor && point ? (zoneAt(draftFloor.zones, point, spec)?.name ?? null) : null;
-    const nextTagValue = nextTag(nextType, { buildingCode, tags: allTags });
-    const parent = nextType === "TRANSFORMER" ? null : bestParent(nextType, sources, activeId);
-    const root = nextType === "TRANSFORMER" || (nextType === "SWITCHBOARD" && !parent);
-    setTag(nextTagValue);
-    setName(suggestName(nextType, { tag: nextTagValue, zone: roomName, buildingName: buildingTitle, boardsInBuilding }));
-    setIsRoot(root);
-    setParentId(root || !parent ? "" : parent.id);
-    setCircuit(root || !parent ? "" : suggestCircuit(nextType, parent, siblings(parent.id)));
-    const outlet = powerRole(nextType) === "OUTLET";
-    setZone(roomName ?? (outlet ? (draftFloor ? floorName(draftFloor.level, draftFloor.usage) : (existingFloor?.name ?? "")) : ""));
-  }
-
-  function pick(ref: string) {
-    setAt(ref);
-    autopilot(type, ref);
-  }
-
-  const role = powerRole(type, isRoot);
-  const parents = role === "SOURCE" ? [] : sources.filter((source) => (type === "SWITCHBOARD" ? source.type === "SWITCHBOARD" || source.type === "TRANSFORMER" : source.type === "SWITCHBOARD"));
-  const parentRef = parentId ? (parentId.startsWith("draft:") ? { kind: "draft" as const, key: parentId.slice(6) } : { kind: "existing" as const, id: parentId }) : null;
-  const errors = at
-    ? [...(parseGridRef(at, spec) ? [] : [`Bod ${at} leží mimo rastr.`]), ...validatePlacement({ type, tag, parentId: parentId || null, circuit, zone, isRoot }, sources)]
-    : ["Klikněte do rastru na místo zařízení."];
-
-  function add() {
-    if (errors.length || (!draftFloor && !existingFloor)) return;
-    onAdd({
-      floor: active.kind === "draft" ? { kind: "draft", key: active.key } : { kind: "existing", id: active.id },
-      at,
-      tag: tag.trim().toUpperCase(),
-      name,
-      type,
-      parent: role === "SOURCE" ? null : parentRef,
-      circuit: role === "SOURCE" ? null : circuit,
-      zone: zone || null,
-      isRoot: role === "SOURCE",
-    });
-    setAt("");
-  }
-
-  const tagOf = (id: string) => sources.find((source) => source.id === id)?.tag ?? data.equipment.find((item) => item.id === id)?.tag ?? "?";
-  const pins: (SpiderItem & { type: EquipmentType; draft: boolean })[] = [
-    ...(existingFloor
-      ? data.equipment
-          .filter((item) => item.floorId === existingFloor.id)
-          .map((item) => ({ id: item.id, tag: item.tag, type: item.type, pinX: item.pinX, pinY: item.pinY, fedFromEquipmentId: item.fedFromEquipmentId, fedFromCircuit: item.fedFromCircuit, fedFrom: item.fedFrom, draft: false }))
-      : []),
-    ...equipment
-      .filter((item) => floorRefKey(item.floor) === activeId)
-      .map((item) => {
-        const pin = gridToPercent(parseGridRef(item.at, spec) ?? { col: 0, row: 0 }, spec);
-        const parent = item.parent ? (item.parent.kind === "draft" ? `draft:${item.parent.key}` : item.parent.id) : null;
-        return { id: `draft:${item.key}`, tag: item.tag, type: item.type, ...pin, fedFromEquipmentId: parent, fedFromCircuit: item.circuit, fedFrom: parent ? { id: parent, tag: tagOf(parent) } : null, draft: true };
-      }),
-  ];
-  const selected = at ? parseGridRef(at, spec) : null;
-  const selectedPin = selected ? gridToPercent(selected, spec) : null;
-
-  // Jedna lišta pater: stávající i nová, seřazená podle podlaží, bez duplicit
-  const floorItems = [
-    ...existingFloors.map((floor) => ({ id: floor.id, level: floor.level, label: floorLabel(floor.level).short, isNew: false })),
-    ...floors.map((floor) => ({ id: `draft:${floor.key}`, level: floor.level, label: floorLabel(floor.level).short, isNew: true })),
-  ].sort((a, b) => a.level - b.level);
-
-  return (
-    <section aria-labelledby="step-3" className="grid gap-6 xl:grid-cols-[24rem_minmax(0,1fr)]">
-      <div className="space-y-4 rounded-xl border border-border bg-card p-4">
-        <h2 id="step-3" className="text-lg font-semibold">
-          Osazení zařízení a napájení
-        </h2>
-        <FloorTabs
-          items={floorItems}
-          active={activeId}
-          onActive={(id) => {
-            onActive(id.startsWith("draft:") ? { kind: "draft", key: id.slice(6) } : { kind: "existing", id });
-            setAt("");
-          }}
-        />
-        <div className="space-y-1.5">
-          <Label htmlFor="eq-type" className="text-xs">
-            Typ zařízení
-          </Label>
-          <select
-            id="eq-type"
-            value={type}
-            onChange={(event) => {
-              const next = event.target.value as EquipmentType;
-              setType(next);
-              if (at) autopilot(next, at);
-            }}
-            className={selectClass}
-          >
-            {PLACEABLE.map((value) => (
-              <option key={value} value={value}>
-                {EQUIPMENT_TYPE_LABELS[value]}
-              </option>
-            ))}
-          </select>
-        </div>
-        <p className="rounded-lg border border-primary/40 bg-primary/10 p-2 text-sm">
-          {at ? (
-            <>
-              Bod <span className="font-mono font-semibold" data-testid="placement-point">{at}</span> – autopilot předvyplnil tag, název, napájení a místnost.
-            </>
-          ) : (
-            "Vyberte typ a klikněte do rastru – zbytek předvyplní autopilot."
-          )}
-        </p>
-        {at ? (
-          <>
-            <div className="grid grid-cols-[7rem_minmax(0,1fr)] gap-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="eq-tag" className="text-xs">
-                  Tag
-                </Label>
-                <Input id="eq-tag" value={tag} onChange={(event) => setTag(event.target.value.toUpperCase())} maxLength={24} className="h-10 font-mono" />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="eq-name" className="text-xs">
-                  Název
-                </Label>
-                <Input id="eq-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={120} className="h-10" />
-              </div>
-            </div>
-            {type === "SWITCHBOARD" ? (
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" className="size-4 accent-primary" checked={isRoot} onChange={(event) => setIsRoot(event.target.checked)} />
-                Hlavní rozváděč (kořenový zdroj, bez nadřazeného)
-              </label>
-            ) : null}
-            <p className="text-xs text-muted-foreground">{POWER_ROLE_HINTS[role]}</p>
-            {role !== "SOURCE" ? (
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor="eq-parent" className="text-xs">
-                    Napájeno z
-                  </Label>
-                  <select
-                    id="eq-parent"
-                    value={parentId}
-                    onChange={(event) => {
-                      setParentId(event.target.value);
-                      const parent = sources.find((source) => source.id === event.target.value);
-                      if (parent) setCircuit(suggestCircuit(type, parent, siblings(parent.id)));
-                    }}
-                    className={selectClass}
-                  >
-                    <option value="">– vyberte –</option>
-                    {parents.map((source) => (
-                      <option key={source.id} value={source.id}>
-                        {source.tag}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="eq-circuit" className="text-xs">
-                    Vývod / okruh
-                  </Label>
-                  <Input id="eq-circuit" value={circuit} onChange={(event) => setCircuit(event.target.value)} maxLength={80} className="h-10" />
-                </div>
-              </div>
-            ) : null}
-            <div className="space-y-1.5">
-              <Label htmlFor="eq-zone" className="text-xs">
-                Místnost / zóna
-              </Label>
-              <Input id="eq-zone" value={zone} onChange={(event) => setZone(event.target.value)} maxLength={80} placeholder={role === "OUTLET" ? "povinné" : "nepovinné"} className="h-10" />
-            </div>
-            {errors.length ? (
-              <ul className="space-y-0.5 text-xs text-amber-300">
-                {errors.map((error) => (
-                  <li key={error}>{error}</li>
-                ))}
-              </ul>
-            ) : null}
-            <Button className="touch-target w-full gap-2" onClick={add} disabled={errors.length > 0}>
-              <Plus className="size-4" aria-hidden />
-              Osadit {tag || "zařízení"}
-            </Button>
-          </>
-        ) : null}
-
-        <ul className="space-y-1 text-sm" aria-label="Osazená zařízení konceptu">
-          {equipment.map((item) => (
-            <li key={item.key} className="flex items-center gap-2 rounded-md bg-muted/40 px-2 py-1">
-              <span className="font-mono text-xs font-semibold">{item.tag}</span>
-              <span className="flex-1 truncate text-xs text-muted-foreground">
-                {item.at} · {item.parent ? `← ${tagOf(item.parent.kind === "draft" ? `draft:${item.parent.key}` : item.parent.id)} ${item.circuit ?? ""}` : "kořen"}
-                {item.zone ? ` · ${item.zone}` : ""}
-              </span>
-              <Button variant="ghost" size="icon" className="size-8" onClick={() => onRemove(item.key)} aria-label={`Odebrat ${item.tag}`}>
-                <Trash2 className="size-3.5" />
-              </Button>
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      <div className="space-y-2">
-        {svg ? (
-          <GridCanvas svg={svg} spec={spec} onPick={pick} label="Půdorys – kliknutím do rastru osadíte zařízení">
-            <PowerSpiderOverlay items={pins} viewBox={FLOOR_VIEWBOX} />
-            {pins.map((pin) => {
-              const Icon = EQUIPMENT_TYPE_ICONS[pin.type];
-              return (
-                <span
-                  key={pin.id}
-                  className={cn(
-                    "pointer-events-none absolute flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-full border px-1.5 py-0.5 font-mono text-[10px] font-semibold shadow",
-                    pin.draft ? "border-yellow-300 bg-yellow-400 text-yellow-950" : "border-zinc-600 bg-zinc-800 text-zinc-100",
-                  )}
-                  style={{ left: `${pin.pinX}%`, top: `${pin.pinY}%` }}
-                  data-testid={pin.draft ? "studio-draft-pin" : undefined}
-                >
-                  <Icon className="size-3" aria-hidden />
-                  {pin.tag}
-                </span>
-              );
-            })}
-            {selectedPin ? (
-              <span
-                className="pointer-events-none absolute size-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-primary ring-4 ring-primary/30"
-                style={{ left: `${selectedPin.pinX}%`, top: `${selectedPin.pinY}%` }}
-                aria-hidden
-              />
-            ) : null}
-          </GridCanvas>
-        ) : (
-          <p className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">Vyberte patro.</p>
-        )}
-        <p className="text-xs text-muted-foreground">⚡ Pavouk napájení: žlutě vývody z rozváděčů na patře, modře napájení z jiného patra. Žluté štítky = nová zařízení konceptu.</p>
-      </div>
-    </section>
   );
 }

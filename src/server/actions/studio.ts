@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { SCALES, ZONE_KIND_KEYS } from "@/lib/cad-grid";
 import { prisma } from "@/lib/prisma";
 import { PLANT_COOKIE } from "@/lib/roles";
 import { floorHref, plantHref } from "@/lib/routes";
@@ -16,6 +17,7 @@ import type { ActionResult } from "./workflow";
 
 const id = z.string().min(1).max(64);
 const ref = z.string().min(2).max(3);
+const meters = z.number().min(0).max(2000);
 const text = (max: number) => z.string().max(max);
 const equipmentType = z.enum([
   "SWITCHBOARD",
@@ -37,11 +39,9 @@ const equipmentType = z.enum([
 
 const draftSchema = z.object({
   plantId: id,
-  newPlant: z
-    .object({ name: text(120), code: text(6), location: text(200), widthM: z.number().int().min(1).max(5000), depthM: z.number().int().min(1).max(5000) })
-    .nullable()
-    .optional(),
-  grid: z.object({ cols: z.number().int(), rows: z.number().int(), stepMeters: z.number().positive().max(30), scale: z.enum(["1:100", "1:200", "1:500"]) }),
+  newPlant: z.object({ name: text(120), code: text(6), location: text(200) }).nullable().optional(),
+  campus: z.object({ widthM: z.number().int().min(1).max(5000), depthM: z.number().int().min(1).max(5000) }).nullable().optional(),
+  grid: z.object({ cols: z.number().int(), rows: z.number().int(), stepMeters: z.number().positive().max(30), scale: z.enum(SCALES) }),
   building: z.discriminatedUnion("mode", [
     z.object({
       mode: z.literal("new"),
@@ -58,7 +58,7 @@ const draftSchema = z.object({
         key: id,
         level: z.number().int().min(-5).max(20),
         usage: text(80),
-        zones: z.array(z.object({ from: ref, to: ref, name: text(80), kind: z.enum(["PRODUCTION", "STORAGE", "HAZARD"]) })).max(60),
+        zones: z.array(z.object({ key: id, x: meters, y: meters, w: meters, h: meters, name: text(80), kind: z.enum(ZONE_KIND_KEYS) })).max(80),
         gates: z.array(z.object({ at: ref, label: text(60) })).max(30),
       }),
     )
@@ -68,7 +68,8 @@ const draftSchema = z.object({
       z.object({
         key: id,
         floor: z.discriminatedUnion("kind", [z.object({ kind: z.literal("draft"), key: id }), z.object({ kind: z.literal("existing"), id })]),
-        at: ref,
+        pos: z.object({ x: meters, y: meters }),
+        roomKey: text(64).nullable(),
         tag: text(24),
         name: text(120),
         type: equipmentType,

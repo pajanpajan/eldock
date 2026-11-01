@@ -107,6 +107,22 @@ const GENERIC: SiteLayout = {
   scale: { x: 840, y: 26 },
 };
 
-export function getSiteLayout(plantCode: string): SiteLayout {
-  return { JBC, LBC }[plantCode] ?? GENERIC;
+/** Čistý pozemek pro mapu jiné výšky než 700 (poměr stran areálu ze Studia). */
+function genericFor(height: number): SiteLayout {
+  const s = height / 700;
+  return {
+    ...GENERIC,
+    fence: { x: FENCE.x, y: FENCE.y * s, w: FENCE.w, h: FENCE.h * s },
+    street: { y: height - 20 * s, name: "" },
+    gatehouse: { x: 526, y: 616 * s, w: 46, h: 34 * s },
+    compass: { x: 915, y: 100 * s },
+    scale: { x: 840, y: 26 * s },
+  };
+}
+
+/** Kulisy areálu; ručně kreslené kulisy (JBC, LBC) jen pro mapu 1000 × 700, jinak čistý pozemek. */
+export function getSiteLayout(plantCode: string, height = 700): SiteLayout {
+  const known = ({ JBC, LBC } as Record<string, SiteLayout>)[plantCode];
+  if (height === 700) return known ?? GENERIC;
+  return genericFor(height);
 }

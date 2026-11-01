@@ -37,7 +37,7 @@ function describeBuilding({ name, counts }: BuildingOverview): string {
 /** Level 1 – SVG mapa areálu s klikacími budovami a štítky. */
 export function CampusMap({ plantCode, viewBox, buildings, hoveredId, onHover }: Props) {
   const router = useRouter();
-  const layout = getSiteLayout(plantCode);
+  const layout = getSiteLayout(plantCode, viewBox.height);
   const { width, height } = viewBox;
 
   const shapes = useMemo(

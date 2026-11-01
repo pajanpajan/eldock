@@ -9,7 +9,8 @@ export interface CampusRect {
   h: number;
 }
 
-export const MIN_SIZE = 4;
+/** Nejmenší budova v procentech mapy (u velkých areálů jinak vycházely desítky metrů). */
+export const MIN_SIZE = 1;
 /** Výchozí rozměr areálu v metrech (závody ze seedu) pro převod rozměru budovy na procenta mapy. */
 export const CAMPUS_METERS = { width: 400, height: 280 } as const;
 
@@ -18,8 +19,52 @@ export interface CampusSize {
   height: number;
 }
 
-/** Povolený rozměr pozemku nového závodu v metrech. */
+/** Povolený rozměr pozemku v metrech (osa X i osa Y). */
 export const CAMPUS_LIMITS = { min: 50, max: 2000 } as const;
+
+/** Rychlé předvolby rozměru areálu (osa X × osa Y). */
+export const CAMPUS_PRESETS: readonly CampusSize[] = [
+  { width: 150, height: 100 },
+  { width: 300, height: 200 },
+  { width: 500, height: 350 },
+  { width: 1000, height: 600 },
+];
+
+export const campusSizeValid = (campus: CampusSize) =>
+  [campus.width, campus.height].every((value) => Number.isFinite(value) && value >= CAMPUS_LIMITS.min && value <= CAMPUS_LIMITS.max);
+
+/** ViewBox mapy areálu: šířka 1000 jednotek, výška v poměru stran pozemku (budovy se nedeformují). */
+export const campusViewBox = (campus: CampusSize) => ({ width: 1000, height: Math.round((1000 * campus.height) / campus.width) });
+
+/** Obdélník v procentech mapy → metry areálu. */
+export const rectToMeters = (rect: CampusRect, campus: CampusSize) => ({
+  x: (rect.x / 100) * campus.width,
+  y: (rect.y / 100) * campus.height,
+  w: (rect.w / 100) * campus.width,
+  h: (rect.h / 100) * campus.height,
+});
+
+/** Stejná poloha a velikost v metrech po změně rozměru areálu (procenta se přepočítají). */
+export function rescaleRect(rect: CampusRect, from: CampusSize, to: CampusSize): CampusRect {
+  const fx = from.width / to.width;
+  const fy = from.height / to.height;
+  return { x: round(rect.x * fx), y: round(rect.y * fy), w: round(rect.w * fx), h: round(rect.h * fy) };
+}
+
+/** Polygon budovy „x,y x,y …“ po změně rozměru areálu (zachová metry). */
+export function rescalePolygon(points: string, from: CampusSize, to: CampusSize): string {
+  return points
+    .trim()
+    .split(/\s+/)
+    .map((pair) => {
+      const [x, y] = pair.split(",").map(Number);
+      return `${round((x * from.width) / to.width)},${round((y * from.height) / to.height)}`;
+    })
+    .join(" ");
+}
+
+/** Leží obdélník celý v areálu (tolerance zaokrouhlení 0,2 %)? */
+export const rectInsideCampus = (rect: CampusRect) => rect.x >= -0.2 && rect.y >= -0.2 && rect.x + rect.w <= 100.2 && rect.y + rect.h <= 100.2;
 
 const round = (value: number) => Math.round(value * 10) / 10;
 

@@ -12,11 +12,13 @@ async function whenReady(action: () => Promise<void>, check: () => Promise<void>
   }).toPass({ timeout: 30_000 });
 }
 
-/** Průsečík os rastru 12 × 8 (viewBox 1200 × 800, okraj 70 px) → pozice v plátně v px. */
-async function gridPoint(page: Page, row: number, col: number) {
+/** Bod půdorysu v metrech (rastr 12 × 8 po 6 m, jednotné měřítko 15,909 px/m ve viewBoxu 1200 × 800) → px na obrazovce. */
+async function planPoint(page: Page, meters: { x: number; y: number }) {
+  await page.getByTestId("studio-grid").evaluate((element) => element.scrollIntoView({ block: "center" }));
   const box = (await page.getByTestId("studio-grid").boundingBox())!;
-  const x = 70 + col * (1050 / 11);
-  const y = 70 + row * (690 / 7);
+  const k = 1050 / 66;
+  const x = 70 + meters.x * k;
+  const y = 70 + (690 - 42 * k) / 2 + meters.y * k;
   return { x: box.x + (x / 1200) * box.width, y: box.y + (y / 800) * box.height };
 }
 
@@ -32,7 +34,7 @@ test("Studio: úplně nový závod od nuly – čistá mapa, uložení v jedné 
   await page.getByLabel("Název závodu").fill("Závod Mladá Boleslav – Lakovna");
   await page.getByLabel("Kód závodu").fill("mbl");
   await page.getByLabel("Město / adresa").fill("Průmyslová 3, Mladá Boleslav");
-  await page.getByLabel("Šířka areálu [m]").fill("360");
+  await page.getByLabel("Šířka areálu – osa X [m]").fill("360");
   await expect(page.getByTestId("campus-size")).toHaveText("Areál 360 × 200 m");
   // Čistý oplocený pozemek s vrátnicí – žádné budovy Jablonce
   await expect(page.getByTestId("campus-map")).toContainText("Vrátnice");
@@ -47,7 +49,8 @@ test("Studio: úplně nový závod od nuly – čistá mapa, uložení v jedné 
   await page.getByRole("button", { name: "Další krok" }).click();
 
   // První rozváděč nového závodu je kořenový (hlavní) – žádný zdroj napájení zatím neexistuje.
-  const at = await gridPoint(page, 1, 8);
+  await page.getByRole("radiogroup", { name: "Měřítko zobrazení" }).getByRole("radio", { name: "1:500" }).click();
+  const at = await planPoint(page, { x: 48, y: 6 });
   await page.mouse.click(at.x, at.y);
   await expect(page.getByLabel("Tag")).toHaveValue("R-A-01");
   await expect(page.getByRole("checkbox", { name: /Hlavní rozváděč/ })).toBeChecked();
