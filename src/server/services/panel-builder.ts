@@ -332,6 +332,7 @@ export function documentationState(project: {
   widthMm: number;
   depthMm: number;
   enclosureType: EnclosureType;
+  enclosureMaterial: EnclosureMaterial;
   ambientTempC: number;
   simultaneityFactor: number;
   internalWiringLossW: number;

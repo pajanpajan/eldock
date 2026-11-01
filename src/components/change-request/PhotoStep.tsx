@@ -38,7 +38,9 @@ export function PhotoStep({
 
   async function saveAnnotation(photo: WizardPhoto, file: File) {
     files.current.set(photo.key, file);
-    dispatch({ type: "updatePhoto", key: photo.key, patch: { previewUrl: URL.createObjectURL(file), url: null, progress: 0, error: null } });
+    // Originál zůstane uložený – i po opakovaném zákresu je to vždy fotka před prvním zákresem.
+    const originalUrl = photo.originalUrl ?? photo.url;
+    dispatch({ type: "updatePhoto", key: photo.key, patch: { previewUrl: URL.createObjectURL(file), url: null, progress: 0, error: null, originalUrl } });
     try {
       const result = await uploadFile("photo", file, (progress) => dispatch({ type: "updatePhoto", key: photo.key, patch: { progress } }));
       dispatch({

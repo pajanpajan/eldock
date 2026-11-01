@@ -27,7 +27,8 @@ export interface ThermalItemInput {
   catalogComponent: { category: ComponentCategory; poles: string; ratedCurrentA: number; powerLossWatts: number; typeCode: string; description: string } | null;
 }
 
-export const thermalEnclosure = (project: Omit<ThermalProjectInput, "enclosureMaterial" | "ipRating">): ThermalEnclosure => ({
+export const thermalEnclosure = (project: Omit<ThermalProjectInput, "ipRating">): ThermalEnclosure => ({
+  material: project.enclosureMaterial,
   heightMm: project.heightMm,
   widthMm: project.widthMm,
   depthMm: project.depthMm,

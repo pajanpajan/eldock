@@ -127,7 +127,7 @@ export default async function TicketDetailPage({ params }: Props) {
 
             <Section title={`Fotky z haly (${photos.length})`}>
               {photos.length ? (
-                <PhotoGallery photos={photos.map(({ id: photoId, url, caption }) => ({ id: photoId, url, caption }))} />
+                <PhotoGallery photos={photos.map(({ id: photoId, url, caption, originalUrl }) => ({ id: photoId, url, caption, originalUrl }))} />
               ) : (
                 <p className="text-sm text-muted-foreground">Bez fotek.</p>
               )}

@@ -6,7 +6,7 @@ import { normalizeManufacturer } from "@/lib/panel-builder/catalog";
 
 import sharp from "sharp";
 
-import { RAILS_PROMPT, abbS200Article, analyzePanelPhoto, cropRegionFor, photoPrompt, railPrompt, toPhotoBox, toRailDetections, extractDatasheetComponents, isGeminiConfigured, lookupComponent, toDetections, toExtracted } from "./geminiPanelService";
+import { RAILS_PROMPT, RAIL_CONCURRENCY, abbS200Article, mapWithConcurrency, analyzePanelPhoto, cropRegionFor, photoPrompt, railPrompt, toPhotoBox, toRailDetections, extractDatasheetComponents, isGeminiConfigured, lookupComponent, toDetections, toExtracted } from "./geminiPanelService";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -158,5 +158,24 @@ describe("Vision Analyzer 2.0 – analýza po DIN lištách", () => {
     expect(result.detections[0].box).toEqual([17.8, 8, 32.2, 71]);
     expect(String(fetchMock.mock.calls[1][1].body)).toContain("ODKRYTOVANÝ");
     expect(String(fetchMock.mock.calls[1][1].body)).toContain('"mime_type":"image/jpeg"');
+  });
+});
+
+describe("Vision Analyzer – paralelní fáze B", () => {
+  it("výřezy lišt běží souběžně nejvýš po 3, výsledky zůstanou v pořadí lišt", async () => {
+    expect(RAIL_CONCURRENCY).toBe(3);
+    let running = 0;
+    let peak = 0;
+    const delays = [40, 5, 25, 10, 30, 1, 15];
+    const results = await mapWithConcurrency(delays, RAIL_CONCURRENCY, async (delay, index) => {
+      running++;
+      peak = Math.max(peak, running);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      running--;
+      return index;
+    });
+    expect(results).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    expect(peak).toBe(3);
+    expect(await mapWithConcurrency([], 3, async () => 1)).toEqual([]);
   });
 });

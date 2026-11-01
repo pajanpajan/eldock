@@ -95,6 +95,23 @@ describe("výpočet oteplení – vstupy skříně", () => {
     expect(coolingSurfaces({ ...ENCLOSURE, installation: "FREE_STANDING" }).every((surface) => surface.factor >= 0.9)).toBe(true);
   });
 
+  it("materiál skříně koriguje přestup tepla v poměru ocel 1,0 : nerez 0,95 : plast 0,88; referenční plast beze změny", () => {
+    const devices = referenceDevices();
+    const reference = calculateThermal(devices, ENCLOSURE);
+    const plastic = calculateThermal(devices, { ...ENCLOSURE, material: "PLASTIC" });
+    const stainless = calculateThermal(devices, { ...ENCLOSURE, material: "STAINLESS_STEEL" });
+    const steel = calculateThermal(devices, { ...ENCLOSURE, material: "PAINTED_STEEL" });
+    // Kalibrace K_AE je na referenční plastovou skříň (PDF: 42,4 °C)
+    expect(plastic.internalTempC).toBe(reference.internalTempC);
+    expect(plastic.materialFactor).toBe(1);
+    expect(stainless.effectiveAreaM2 / steel.effectiveAreaM2).toBeCloseTo(0.95, 6);
+    expect(plastic.effectiveAreaM2 / steel.effectiveAreaM2).toBeCloseTo(0.88, 6);
+    expect(steel.internalTempC).toBeLessThan(stainless.internalTempC);
+    expect(stainless.internalTempC).toBeLessThan(plastic.internalTempC);
+    // Jemná korekce – kov odvede teplo o něco lépe, rozdíl jen jednotky stupňů
+    expect(plastic.internalTempC - steel.internalTempC).toBeLessThan(3);
+  });
+
   it("vyšší soudobost a horké okolí → nevyhovuje; derating; výpočtový proud Ib", () => {
     const hot = calculateThermal(referenceDevices(), { ...ENCLOSURE, ambientTempC: 55, simultaneityFactor: 1 });
     expect(hot.ok).toBe(false);

@@ -24,7 +24,7 @@ export async function getStudioData(plantId: string) {
             mapPolygon: true,
             labelX: true,
             labelY: true,
-            floors: { orderBy: { level: "asc" }, select: { id: true, level: true, code: true, name: true, floorplanSvg: true } },
+            floors: { orderBy: { level: "asc" }, select: { id: true, level: true, code: true, name: true, floorplanSvg: true, studioLayoutJson: true } },
           },
         },
       },

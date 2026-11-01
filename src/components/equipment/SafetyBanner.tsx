@@ -123,7 +123,7 @@ export function SafetyBanner({
           {photos.length ? (
             <div className="space-y-1.5">
               <div className="text-xs font-medium tracking-wide text-orange-200/90 uppercase">Fotky z haly ({photos.length})</div>
-              <PhotoGallery photos={photos.map(({ id, url, caption }) => ({ id, url, caption }))} />
+              <PhotoGallery photos={photos.map(({ id, url, caption, originalUrl }) => ({ id, url, caption, originalUrl }))} />
             </div>
           ) : null}
         </div>

@@ -64,11 +64,15 @@ describe("konfigurátor – parametry podle kategorie", () => {
     expect(matchConfig(catalog, { ...defaultConfig("RCD", { manufacturer: "ABB", modules: 4 }), rcdType: "B", ratedCurrentA: 40 })?.typeCode).toBe("F204 B-40/0,03");
     expect(matchConfig(catalog, { ...defaultConfig("RELAY", { manufacturer: "Elko EP", modules: 1 }), relaySubtype: "TIMER" })?.typeCode).toMatch(/^CRM-9/);
     expect(matchConfig(catalog, { ...defaultConfig("OTHER", { manufacturer: "Mean Well", modules: 2 }), power: "30W/24V" })?.manufacturer).toBe("Mean Well");
-    // Bonega jistič v katalogu není → odhad
+    // Bonega (fáze 36) má v katalogu řadu P-E-P 6 kA / 10 kA
     const bonega = { ...defaultConfig("MCB", { manufacturer: "Bonega", modules: 1 }), ratedCurrentA: 10 };
-    expect(matchConfig(catalog, bonega)).toBeNull();
-    expect(synthesizeComponent(bonega)).toMatchObject({ manufacturer: "Bonega", typeCode: "Jistič 1P B10 6 kA", category: "MCB", modulesCount: 1, powerLossWatts: 2.1 });
-    expect(synthesizeComponent(bonega).articleNumber).toBe("CFG-BONEGA-JISTIC-1P-B10-6-KA");
+    expect(matchConfig(catalog, bonega)?.typeCode).toBe("P-E-P6 1P B10");
+    expect(matchConfig(catalog, { ...bonega, breakingCapacityKa: 10, curve: "C", ratedCurrentA: 16 })?.typeCode).toBe("P-E-P10 1P C16");
+    // Značka bez katalogu → odhad IEC
+    const legrand = { ...defaultConfig("MCB", { manufacturer: "Legrand", modules: 1 }), ratedCurrentA: 10 };
+    expect(matchConfig(catalog, legrand)).toBeNull();
+    expect(synthesizeComponent(legrand)).toMatchObject({ manufacturer: "Legrand", typeCode: "Jistič 1P B10 6 kA", category: "MCB", modulesCount: 1, powerLossWatts: 2.1 });
+    expect(synthesizeComponent(legrand).articleNumber).toBe("CFG-LEGRAND-JISTIC-1P-B10-6-KA");
   });
 
   it("konfigurace z katalogového kusu a čitelný popis", () => {

@@ -31,6 +31,8 @@ export interface WizardPhoto {
   error: string | null;
   /** Fotka nese zákres (kreslení do fotky) – nahraná je už složená verze. */
   annotated?: boolean;
+  /** Nahraná původní fotka před prvním zákresem (CAE ji může zobrazit bez červené čáry). */
+  originalUrl?: string | null;
 }
 
 export interface WizardState {

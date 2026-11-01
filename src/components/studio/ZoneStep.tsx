@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, type PointerEvent } from "react";
-import { DoorOpen, SquareDashedMousePointer, Trash2, Wand2 } from "lucide-react";
+import { DoorOpen, Pencil, SquareDashedMousePointer, Trash2, Wand2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +20,7 @@ import {
   metersToPx,
   moveZone,
   nearestWallPoint,
+  planFrame,
   pxPerMeter,
   pxToMeters,
   rectFromPoints,
@@ -69,24 +70,31 @@ export function ZoneStep({
   floors,
   activeKey,
   onActive,
-  grid,
-  frame,
+  grid: conceptGrid,
   svgFor,
   onChange,
   zoom,
   onZoom,
   newKey,
+  existingFloors,
+  onEditExisting,
+  onDiscard,
 }: {
   floors: StudioFloorDraft[];
   activeKey: string;
   onActive: (key: string) => void;
+  /** Společný rastr nových pater (upravované stávající patro má vlastní `floor.grid`). */
   grid: GridSpec;
-  frame: PlanFrame;
   svgFor: (floor: StudioFloorDraft) => string;
   onChange: (key: string, patch: Partial<StudioFloorDraft>) => void;
   zoom: ViewZoom;
   onZoom: (zoom: ViewZoom) => void;
   newKey: () => string;
+  /** Stávající patra budovy, která lze otevřít k úpravě rozvržení. */
+  existingFloors: { id: string; level: number; name: string }[];
+  onEditExisting: (floorId: string) => void;
+  /** Zahodit úpravy stávajícího patra (koncept úprav). */
+  onDiscard: (key: string) => void;
 }) {
   const floor = floors.find((entry) => entry.key === activeKey) ?? floors[0];
   const [mode, setMode] = useState<"draw" | "wall">("draw");
@@ -97,13 +105,31 @@ export function ZoneStep({
   const [to, setTo] = useState("B5");
   const svgRef = useRef<SVGSVGElement>(null);
 
+  const editable = existingFloors.filter((entry) => !floors.some((draft) => draft.existingId === entry.id));
+  const editButtons = editable.length ? (
+    <div className="flex flex-wrap items-center gap-2 text-sm" data-testid="edit-existing-floors">
+      <span className="text-muted-foreground">Upravit rozvržení stávajícího patra:</span>
+      {editable.map((entry) => (
+        <Button key={entry.id} variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => onEditExisting(entry.id)}>
+          <Pencil className="size-3.5" aria-hidden />
+          {entry.name}
+        </Button>
+      ))}
+    </div>
+  ) : null;
+
   if (!floor) {
     return (
-      <p className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-        Rozvržení stávajících pater se ve Studiu nemění. Přidejte v kroku 1 nové patro, nebo pokračujte na osazení zařízení.
-      </p>
+      <div className="space-y-3 rounded-xl border border-dashed border-border p-6 text-sm text-muted-foreground">
+        <p>Budova zatím nemá žádné nové ani upravované patro. Přidejte v kroku 1 nové patro, otevřete k úpravě stávající patro, nebo pokračujte na osazení zařízení.</p>
+        {editButtons}
+      </div>
     );
   }
+
+  // Upravované stávající patro má svůj rastr (z uloženého JSON, u starších pater dopočtený ze SVG)
+  const grid = floor.grid ?? conceptGrid;
+  const frame = planFrame(grid);
 
   const zones = floor.zones;
   const setZones = (next: GridZone[]) => onChange(floor.key, { zones: next });
@@ -178,7 +204,16 @@ export function ZoneStep({
         <h2 id="step-2" className="text-lg font-semibold">
           Místnosti, zóny a vrata
         </h2>
-        <FloorTabs items={floors.map((entry) => ({ id: entry.key, label: floorLabel(entry.level).short }))} active={floor.key} onActive={onActive} />
+        <FloorTabs items={floors.map((entry) => ({ id: entry.key, label: `${floorLabel(entry.level).short}${entry.existingId ? " ✎" : ""}` }))} active={floor.key} onActive={onActive} />
+        {floor.existingId ? (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-sky-500/40 bg-sky-500/10 p-2 text-xs text-sky-100" data-testid="editing-existing-floor">
+            <span className="flex-1">Upravujete uložené patro – po uložení se přepíše jeho půdorys a zařízení zůstanou na svých místech.</span>
+            <Button variant="ghost" size="sm" className="h-8" onClick={() => onDiscard(floor.key)}>
+              Zahodit úpravy
+            </Button>
+          </div>
+        ) : null}
+        {editButtons}
         <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Nástroj">
           <ChoiceButton active={mode === "draw"} onClick={() => setMode("draw")}>
             <span className="flex items-center justify-center gap-2">

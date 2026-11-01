@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import type { PrismaClient } from "@/generated/prisma/client";
 import { DEFAULT_GRID } from "@/lib/cad-grid";
+import { parseLayout } from "@/lib/studio-layout";
 import type { StudioDraft } from "@/lib/studio-draft";
 
 import { saveStudioBuilding } from "./studio";
@@ -140,5 +141,57 @@ describe("saveStudioBuilding", () => {
     await expect(saveStudioBuilding(prisma, draft({ campus: { widthM: 300, depthM: 200 }, building: { mode: "new", code: "D", name: "Hala D", type: "PRODUCTION", map: { x: 1, y: 1, w: 10, h: 10 } } }))).rejects.toThrow(
       /Hala A by po změně rozměru ležela mimo areál 300 × 200 m/,
     );
+  });
+
+  it("nové patro uloží studioLayoutJson a stávající patro jde zpětně upravit (piny zůstanou na místě v metrech)", async () => {
+    const created = await saveStudioBuilding(prisma, draft());
+    const floor = await prisma.floor.findFirstOrThrow({ where: { buildingId: created.buildingId, level: 0 } });
+    expect(parseLayout(floor.studioLayoutJson)).toMatchObject({ grid: { cols: 10, rows: 6, stepMeters: 6 }, zones: [{ name: "Linka 1" }, { name: "Zázemí" }], gates: [{ at: "C10" }] });
+    const before = await prisma.equipment.findFirstOrThrow({ where: { tag: "SVL-01" } });
+
+    // Úprava: posun stěny Linky 1 a nová místnost, rastr zůstává z JSON
+    const layout = parseLayout(floor.studioLayoutJson)!;
+    const result = await saveStudioBuilding(
+      prisma,
+      draft({
+        building: { mode: "existing", id: created.buildingId },
+        floors: [{ key: "edit", existingId: floor.id, level: 0, usage: "", grid: layout.grid, zones: [{ ...layout.zones[0], w: 36 }, { key: "n", x: 42, y: 0, w: 12, h: 12, name: "Nová dílna", kind: "WORKSHOP" }], gates: layout.gates }],
+        equipment: [],
+      }),
+    );
+    expect(result).toMatchObject({ floors: 0, editedFloors: 1 });
+    const updated = await prisma.floor.findUniqueOrThrow({ where: { id: floor.id } });
+    expect(updated.floorplanSvg).toContain("Nová dílna");
+    expect(updated.floorplanSvg).toContain("36 m × 18 m");
+    expect(parseLayout(updated.studioLayoutJson)?.zones.map((zone) => zone.name)).toEqual(["Linka 1", "Nová dílna"]);
+    const after = await prisma.equipment.findFirstOrThrow({ where: { tag: "SVL-01" } });
+    expect(after.pinX).toBeCloseTo(before.pinX, 1);
+    expect(after.pinY).toBeCloseTo(before.pinY, 1);
+  });
+
+  it("starší patro bez JSON: rozvržení se dopočte ze SVG a piny se přepočítají do nového rámu", async () => {
+    // Patro „f“ ze seedMinimal: výchozí půdorys 12 × 8 (obvod 70/70/1050/690)
+    await prisma.equipment.update({ where: { id: "eq-R-LIS-01" }, data: { pinX: 5.8, pinY: 95 } }); // roh A12… = (0 m, 42 m)
+    await saveStudioBuilding(
+      prisma,
+      draft({
+        building: { mode: "existing", id: "b" },
+        floors: [{ key: "edit", existingId: "f", level: 0, usage: "", zones: [{ key: "a", x: 0, y: 0, w: 12, h: 12, name: "Rozvodna", kind: "ELECTRICAL" }], gates: [] }],
+        equipment: [],
+      }),
+    );
+    const moved = await prisma.equipment.findUniqueOrThrow({ where: { id: "eq-R-LIS-01" } });
+    // Nový jednotný rám 66 × 42 m: levý dolní roh obvodu
+    expect(moved.pinX).toBeCloseTo(5.8, 1);
+    expect(moved.pinY).toBeCloseTo(93.6, 1);
+    const floor = await prisma.floor.findUniqueOrThrow({ where: { id: "f" } });
+    expect(parseLayout(floor.studioLayoutJson)?.grid).toMatchObject({ cols: 12, rows: 8, stepMeters: 6 });
+  });
+
+  it("úprava patra cizí budovy neprojde", async () => {
+    const created = await saveStudioBuilding(prisma, draft());
+    await expect(
+      saveStudioBuilding(prisma, draft({ building: { mode: "existing", id: "b" }, floors: [{ key: "x", existingId: (await prisma.floor.findFirstOrThrow({ where: { buildingId: created.buildingId } })).id, level: 0, usage: "", zones: [], gates: [] }], equipment: [] })),
+    ).rejects.toThrow(/nepatří/);
   });
 });

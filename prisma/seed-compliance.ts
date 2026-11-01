@@ -3,6 +3,7 @@
 // aby stavy 🟢 / 🟡 / 🔴 vycházely vždy stejně.
 import type { ComplianceCategory, DefectSeverity, InspectionResult, InspectionType } from "../src/generated/prisma/enums";
 import { addMonths, pragueToday } from "../src/lib/inspection";
+import { addDaysIso, monthWindowOffsets } from "../src/lib/month-window";
 import { inspectionRuleFor, isPortable, measurementLimits } from "../src/lib/inspection-rules";
 
 import { day, daysAgo, type EquipmentSeed } from "./seed-data";
@@ -121,15 +122,14 @@ export interface DefectSeed {
 
 export const MEASURING_INSTRUMENT = "Metrel MI 3309 BT";
 
-/** Dny do konce aktuálního kalendářního měsíce (Europe/Prague) – plánovač potřebuje kusy „tento měsíc“. */
-function daysToMonthEnd(): number {
-  const [year, month, dayOfMonth] = pragueToday().split("-").map(Number);
-  return Math.round((Date.UTC(year, month, 0) - Date.UTC(year, month - 1, dayOfMonth)) / (24 * 3600 * 1000));
-}
-/** Konec platnosti uprostřed zbytku měsíce (poslední den měsíce = dnes). */
-const thisMonth = () => daysAgo(-Math.floor(daysToMonthEnd() / 2));
+/**
+ * Kusy „tento měsíc“ a „příští měsíc“ pro plánovač: posuny se počítají od pražského kalendářního dne
+ * (ne od UTC), takže vyjdou správně i kolem půlnoci, 1. a poslední den v měsíci (viz src/lib/month-window.ts).
+ */
+const pragueDay = (offset: number) => day(addDaysIso(pragueToday(), offset));
+const thisMonth = () => pragueDay(monthWindowOffsets(pragueToday()).thisMonth);
 /** 5. den příštího měsíce – do 45 dnů po konci měsíce (tip „přiberte při jedné cestě“). */
-const nextMonth = () => daysAgo(-(daysToMonthEnd() + 5));
+const nextMonth = () => pragueDay(monthWindowOffsets(pragueToday()).nextMonth);
 
 /** Závady R-ML-01: neodstraněné z poslední (propadlé) revize. */
 const R_ML_01_DEFECTS: DefectSeed[] = [

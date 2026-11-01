@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useCallback, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import type { ComponentCategory, RecognitionStatus } from "@/generated/prisma/enums";
-import type { ItemConfig } from "@/lib/panel-builder/configurator";
+import { describeConfig, type ItemConfig } from "@/lib/panel-builder/configurator";
 import type { BoundingBox } from "@/lib/panel-builder/layout";
 import { RECOGNITION } from "@/lib/panel-builder/project";
 import { cn } from "@/lib/utils";
@@ -72,6 +72,18 @@ export function RecognitionWorkspace({
   const unresolved = items.filter((item) => item.recognitionStatus !== "VERIFIED");
   const [selectedId, setSelectedId] = useState<string | null>(unresolved[0]?.id ?? null);
   const [analyzing, startAnalyze] = useTransition();
+  // Optimistický náhled konfigurace (prvek → rozklikaná konfigurace), než dorazí uložená data
+  const [previews, setPreviews] = useState<ReadonlyMap<string, ItemConfig>>(new Map());
+  const preview = useCallback(
+    (itemId: string, config: ItemConfig | null) =>
+      setPreviews((current) => {
+        const next = new Map(current);
+        if (config) next.set(itemId, config);
+        else next.delete(itemId);
+        return next;
+      }),
+    [],
+  );
   // Po sloučení zmizí sousední prvky – vybraný (sloučený) zůstává, smazaný výběr spadne na první prvek.
   const selected = items.find((item) => item.id === selectedId) ?? null;
   const rightNeighbors = selected ? items.filter((item) => item.dinRailIndex === selected.dinRailIndex && item.positionOnRail > selected.positionOnRail).length : 0;
@@ -201,7 +213,11 @@ export function RecognitionWorkspace({
         )}
 
         <DinRails
-          items={items.map((item) => ({ ...item, caption: item.customTypeCode || item.component?.typeCode || (item.recognitionStatus === "UNRECOGNIZED" ? "?" : (item.rawOcrText ?? "")) }))}
+          items={items.map((item) => {
+            const draft = previews.get(item.id);
+            if (draft) return { ...item, recognitionStatus: "VERIFIED" as const, caption: item.customTypeCode || describeConfig(draft) };
+            return { ...item, caption: item.customTypeCode || item.component?.typeCode || (item.recognitionStatus === "UNRECOGNIZED" ? "?" : (item.rawOcrText ?? "")) };
+          })}
           rails={rails}
           modulesPerRail={modulesPerRail}
           selectedIds={new Set(selectedId ? [selectedId] : [])}
@@ -225,7 +241,13 @@ export function RecognitionWorkspace({
         </div>
         {selected ? (
           <>
-            <ItemConfigurator key={`${selected.id}:${selected.modulesWidth}:${selected.component?.id ?? "-"}`} item={selected} dominant={dominant} rightNeighbors={rightNeighbors}
+            {/* Klíč bez katalogového kusu: uložení konfigurace prvek znovu nepřipojí (žádná ztráta stavu ani probliknutí) */}
+            <ItemConfigurator
+              key={`${selected.id}:${selected.modulesWidth}`}
+              item={selected}
+              dominant={dominant}
+              rightNeighbors={rightNeighbors}
+              onPreview={preview}
               onChanged={() => router.refresh()}
               onDeleted={() => {
                 setSelectedId(null);

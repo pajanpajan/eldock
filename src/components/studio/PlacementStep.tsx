@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { EquipmentType } from "@/generated/prisma/enums";
 import {
-  EXISTING_FLOOR_FRAME,
+  DEFAULT_GRID,
   FLOOR_VIEWBOX,
   fineStep,
   fmtM,
@@ -17,6 +17,7 @@ import {
   metersToPercent,
   metersToPx,
   pxPerMeter,
+  planFrame,
   pxToMeters,
   zoneAt,
   type MeterPoint,
@@ -25,10 +26,11 @@ import {
 import { EQUIPMENT_CATEGORIES, categoryByKey, categoryOf, roomInventoryLabel, type EquipmentCategoryKey } from "@/lib/equipment-categories";
 import { EQUIPMENT_TYPE_ICONS } from "@/lib/equipment-icons";
 import { EQUIPMENT_TYPE_LABELS } from "@/lib/format";
-import { GATE_COLOR, extractFloorplanRoomsWithLabels } from "@/lib/mock-graphics/floorplan";
+import { GATE_COLOR } from "@/lib/mock-graphics/floorplan";
 import { POWER_ROLE_HINTS, powerRole, suggestCircuit, validatePlacement } from "@/lib/power-hierarchy";
 import type { SpiderItem } from "@/lib/power-tree";
 import { bestParent, nextTag, suggestName, type AutopilotSource } from "@/lib/studio-autopilot";
+import { frameOfFloor, layoutOfFloor } from "@/lib/studio-layout";
 import { floorLabel, floorName, type StudioEquipmentDraft, type StudioFloorDraft } from "@/lib/studio-draft";
 import { cn } from "@/lib/utils";
 import type { StudioData } from "@/server/queries/studio";
@@ -93,10 +95,13 @@ export function PlacementStep({
   onAdd: (item: Omit<StudioEquipmentDraft, "key">) => void;
   onRemove: (key: string) => void;
 }) {
-  const draftFloor = active.kind === "draft" ? floors.find((floor) => floor.key === active.key) : undefined;
+  const draftFloor = active.kind === "draft" ? floors.find((floor) => floor.key === active.key && !floor.existingId) : undefined;
   const existingFloor = active.kind === "existing" ? existingFloors.find((floor) => floor.id === active.id) : undefined;
-  const frame = draftFloor ? draftFrame : EXISTING_FLOOR_FRAME;
-  const svg = draftFloor ? svgFor(draftFloor) : (existingFloor?.floorplanSvg ?? "");
+  // Stávající patro otevřené k úpravě v kroku 2: kreslí se koncept (nový rastr), piny se přepočítají
+  const editDraft = existingFloor ? floors.find((floor) => floor.existingId === existingFloor.id) : undefined;
+  const storedFrame = existingFloor ? frameOfFloor(existingFloor) : draftFrame;
+  const frame = draftFloor ? draftFrame : editDraft ? planFrame(editDraft.grid ?? DEFAULT_GRID) : storedFrame;
+  const svg = draftFloor ? svgFor(draftFloor) : editDraft ? svgFor(editDraft) : (existingFloor?.floorplanSvg ?? "");
   const activeId = floorRefKey(active);
   const floorTitle = draftFloor ? floorName(draftFloor.level, draftFloor.usage) : (existingFloor?.name ?? "");
   const step = fineStep(frame);
@@ -118,12 +123,10 @@ export function PlacementStep({
 
   // Místnosti patra v metrech: zóny konceptu, u stávajícího patra vytažené z uloženého půdorysu.
   const rooms: Room[] = (() => {
-    if (draftFloor) return draftFloor.zones.map((entry) => ({ key: entry.key, name: entry.name.trim() || "Místnost", x: entry.x, y: entry.y, w: entry.w, h: entry.h }));
-    return extractFloorplanRoomsWithLabels(existingFloor?.floorplanSvg ?? "").map((room, index) => {
-      const a = pxToMeters(EXISTING_FLOOR_FRAME, { x: room.x, y: room.y });
-      const b = pxToMeters(EXISTING_FLOOR_FRAME, { x: room.x + room.w, y: room.y + room.h });
-      return { key: `ex:${index}`, name: room.label, x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y };
-    });
+    const zones = draftFloor?.zones ?? editDraft?.zones;
+    if (zones) return zones.map((entry) => ({ key: entry.key, name: entry.name.trim() || "Místnost", x: entry.x, y: entry.y, w: entry.w, h: entry.h }));
+    // Stávající patro: rozvržení z JSON Studia, u starších pater dopočtené ze SVG
+    return existingFloor ? layoutOfFloor(existingFloor).zones.map((zone, index) => ({ key: `ex:${index}`, name: zone.name, x: zone.x, y: zone.y, w: zone.w, h: zone.h })) : [];
   })();
 
   const onFloor = equipment.filter((item) => floorRefKey(item.floor) === activeId);
@@ -136,7 +139,8 @@ export function PlacementStep({
     data.equipment.filter((item) => item.fedFromEquipmentId === id).length + equipment.filter((item) => item.parent && (item.parent.kind === "draft" ? `draft:${item.parent.key}` : item.parent.id) === id).length;
 
   // Stávající zařízení: procenta půdorysu → metry (seskupení spotřebičů do místností)
-  const existingMeters = (item: { pinX: number; pinY: number }) => pxToMeters(frame, { x: (item.pinX / 100) * FLOOR_VIEWBOX.width, y: (item.pinY / 100) * FLOOR_VIEWBOX.height });
+  // Uložené piny jsou v rámu uloženého půdorysu; při úpravě patra se zobrazí v novém rámu (stejné metry)
+  const existingMeters = (item: { pinX: number; pinY: number }) => pxToMeters(storedFrame, { x: (item.pinX / 100) * FLOOR_VIEWBOX.width, y: (item.pinY / 100) * FLOOR_VIEWBOX.height });
   const roomItems = new Map<string, { key: string; tag: string; type: EquipmentType; draft: boolean }[]>();
   for (const item of onFloor) {
     if (categoryOf(item.type).placement !== "room" || !item.roomKey) continue;
@@ -245,7 +249,7 @@ export function PlacementStep({
   const pins: (SpiderItem & { type: EquipmentType; draft: boolean })[] = [
     ...existingOnFloor
       .filter((item) => categoryOf(item.type).placement === "grid")
-      .map((item) => ({ id: item.id, tag: item.tag, type: item.type, pinX: item.pinX, pinY: item.pinY, fedFromEquipmentId: item.fedFromEquipmentId, fedFromCircuit: item.fedFromCircuit, fedFrom: item.fedFrom, draft: false })),
+      .map((item) => ({ id: item.id, tag: item.tag, type: item.type, ...metersToPercent(frame, existingMeters(item)), fedFromEquipmentId: item.fedFromEquipmentId, fedFromCircuit: item.fedFromCircuit, fedFrom: item.fedFrom, draft: false })),
     ...onFloor
       .filter((item) => categoryOf(item.type).placement === "grid")
       .map((item) => {
@@ -256,7 +260,7 @@ export function PlacementStep({
 
   const floorItems = [
     ...existingFloors.map((floor) => ({ id: floor.id, level: floor.level, label: floorLabel(floor.level).short, isNew: false })),
-    ...floors.map((floor) => ({ id: `draft:${floor.key}`, level: floor.level, label: floorLabel(floor.level).short, isNew: true })),
+    ...floors.filter((floor) => !floor.existingId).map((floor) => ({ id: `draft:${floor.key}`, level: floor.level, label: floorLabel(floor.level).short, isNew: true })),
   ].sort((a, b) => a.level - b.level);
   const Icon = EQUIPMENT_TYPE_ICONS[type];
   const hoverRoom = category.placement === "room" && hover ? zoneAt(rooms, hover) : null;
@@ -566,7 +570,7 @@ export function PlacementStep({
                 }}
                 onPointerLeave={() => setHover(null)}
               >
-                {!draftFloor && category.placement === "grid" ? (
+                {!draftFloor && !editDraft && category.placement === "grid" ? (
                   <>
                     <defs>
                       <pattern id="studio-fine" x={frame.x} y={frame.y} width={k.x * step} height={k.y * step} patternUnits="userSpaceOnUse">

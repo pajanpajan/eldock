@@ -11,6 +11,10 @@ export interface StudioFloorDraft {
   usage: string;
   zones: GridZone[];
   gates: GridGate[];
+  /** Úprava rozvržení stávajícího patra (Floor.id); bez něj jde o nové patro. */
+  existingId?: string;
+  /** Vlastní rastr upravovaného stávajícího patra (nová patra mají společný rastr konceptu). */
+  grid?: GridSpec;
 }
 
 export type StudioParentRef = { kind: "existing"; id: string } | { kind: "draft"; key: string };

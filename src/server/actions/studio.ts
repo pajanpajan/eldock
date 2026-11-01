@@ -18,6 +18,7 @@ import type { ActionResult } from "./workflow";
 const id = z.string().min(1).max(64);
 const ref = z.string().min(2).max(3);
 const meters = z.number().min(0).max(2000);
+const gridSchema = z.object({ cols: z.number().int(), rows: z.number().int(), stepMeters: z.number().positive().max(30), scale: z.enum(SCALES) });
 const text = (max: number) => z.string().max(max);
 const equipmentType = z.enum([
   "SWITCHBOARD",
@@ -41,7 +42,7 @@ const draftSchema = z.object({
   plantId: id,
   newPlant: z.object({ name: text(120), code: text(6), location: text(200) }).nullable().optional(),
   campus: z.object({ widthM: z.number().int().min(1).max(5000), depthM: z.number().int().min(1).max(5000) }).nullable().optional(),
-  grid: z.object({ cols: z.number().int(), rows: z.number().int(), stepMeters: z.number().positive().max(30), scale: z.enum(SCALES) }),
+  grid: gridSchema,
   building: z.discriminatedUnion("mode", [
     z.object({
       mode: z.literal("new"),
@@ -60,6 +61,8 @@ const draftSchema = z.object({
         usage: text(80),
         zones: z.array(z.object({ key: id, x: meters, y: meters, w: meters, h: meters, name: text(80), kind: z.enum(ZONE_KIND_KEYS) })).max(80),
         gates: z.array(z.object({ at: ref, label: text(60) })).max(30),
+        existingId: id.optional(),
+        grid: gridSchema.optional(),
       }),
     )
     .max(12),
@@ -83,7 +86,7 @@ const draftSchema = z.object({
 });
 
 /** Uloží budovu ze Studia (ředitel, vedoucí údržby) a vrátí odkaz na první patro; nový závod si zapamatuje jako aktuální. */
-export async function saveStudioAction(input: z.input<typeof draftSchema>): Promise<ActionResult<{ href: string; floors: number; equipment: number; plantCreated: boolean }>> {
+export async function saveStudioAction(input: z.input<typeof draftSchema>): Promise<ActionResult<{ href: string; floors: number; editedFloors: number; equipment: number; plantCreated: boolean }>> {
   const parsed = draftSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Neplatná data konceptu. Zkontrolujte vyplněné údaje." };
   try {
@@ -95,7 +98,7 @@ export async function saveStudioAction(input: z.input<typeof draftSchema>): Prom
     }
     revalidatePath("/", "layout");
     const href = result.firstFloorId ? floorHref(result.plantId, result.buildingId, result.firstFloorId) : plantHref(result.plantId);
-    return { ok: true, data: { href, floors: result.floors, equipment: result.equipment, plantCreated: result.plantCreated } };
+    return { ok: true, data: { href, floors: result.floors, editedFloors: result.editedFloors, equipment: result.equipment, plantCreated: result.plantCreated } };
   } catch (error) {
     if (error instanceof WorkflowError) return { ok: false, error: error.message };
     console.error(error);

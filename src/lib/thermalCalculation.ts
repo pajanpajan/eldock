@@ -9,10 +9,13 @@
 //  3. Účinná chladicí plocha Ae = Σ A0 · b (b: strop 1,4 / zakrytý 0,7, volné stěny 0,9,
 //     zakryté 0,5, podlaha 0). Δt0,5 = k · d · P^x (x = 0,804, d = 1), Δt1,0 = c · Δt0,5.
 //  4. Vnitřní teplota = okolí + Δt0,5 (výška přístrojů), pod stropem okolí + Δt1,0.
+//  5. Materiál skříně jemně koriguje přestup tepla stěnou: lakovaná ocel 1,0, nerez 0,95, plast 0,88
+//     (vyšší izolace = menší odvod tepla = vyšší oteplení). Konstanta k·Ae je kalibrovaná na referenční
+//     plastovou skříň, proto se Ae násobí poměrem m / m(plast) – reference zůstává 42,4 °C.
 // Konstanty k a c jsou aproximace křivek IEC TR 60890 kalibrované na referenční výpočet
 // (public/demo-docs/domovni-rozvadec-rh1.pdf: 30 + 12,4 = 42,4 °C, P = 17,75 W).
 
-import type { ComponentCategory, EnclosureType } from "@/generated/prisma/enums";
+import type { ComponentCategory, EnclosureMaterial, EnclosureType } from "@/generated/prisma/enums";
 
 export const DERATING_REFERENCE_C = 30;
 export const DEFAULT_LIMIT_C = 70;
@@ -23,7 +26,14 @@ const K_AE = 0.4498; // k · Ae (kalibrace na referenční rozváděč)
 const PHASES = ["L1", "L2", "L3"] as const;
 type Phase = (typeof PHASES)[number];
 
+/** Korekční koeficient přestupu tepla stěnou skříně podle materiálu. */
+export const MATERIAL_HEAT_TRANSFER: Record<EnclosureMaterial, number> = { PAINTED_STEEL: 1, STAINLESS_STEEL: 0.95, PLASTIC: 0.88 };
+/** Materiál referenční skříně, na kterou je kalibrovaná konstanta K_AE. */
+export const REFERENCE_MATERIAL: EnclosureMaterial = "PLASTIC";
+
 export interface ThermalEnclosure {
+  /** Materiál skříně (výchozí plast = kalibrovaná reference). */
+  material?: EnclosureMaterial;
   heightMm: number;
   widthMm: number;
   depthMm: number;
@@ -87,6 +97,8 @@ export interface ThermalResult {
   totalLossW: number;
   surfaces: Surface[];
   effectiveAreaM2: number;
+  /** Poměr přestupu tepla materiálu vůči referenční plastové skříni (násobí Ae). */
+  materialFactor: number;
   k: number;
   c: number;
   deltaT05: number;
@@ -233,7 +245,8 @@ function evaluate(devices: readonly ThermalDevice[], enclosure: ThermalEnclosure
 export function calculateThermal(devices: readonly ThermalDevice[], enclosure: ThermalEnclosure): ThermalResult {
   const limit = enclosure.limitTempC ?? DEFAULT_LIMIT_C;
   const surfaces = coolingSurfaces(enclosure);
-  const effectiveAreaM2 = surfaces.reduce((sum, surface) => sum + surface.areaM2 * surface.factor, 0);
+  const materialFactor = MATERIAL_HEAT_TRANSFER[enclosure.material ?? REFERENCE_MATERIAL] / MATERIAL_HEAT_TRANSFER[REFERENCE_MATERIAL];
+  const effectiveAreaM2 = surfaces.reduce((sum, surface) => sum + surface.areaM2 * surface.factor, 0) * materialFactor;
   const k = enclosureConstant(effectiveAreaM2);
   const c = temperatureDistribution(enclosure);
 
@@ -291,6 +304,7 @@ export function calculateThermal(devices: readonly ThermalDevice[], enclosure: T
     totalLossW,
     surfaces,
     effectiveAreaM2,
+    materialFactor,
     k,
     c,
     deltaT05,

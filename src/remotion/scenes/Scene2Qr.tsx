@@ -1,12 +1,12 @@
 import { QRCodeSVG } from "qrcode.react";
 import { useMemo } from "react";
-import { Img, interpolate, useCurrentFrame } from "remotion";
+import { interpolate, useCurrentFrame } from "remotion";
 
 import { LogoMark } from "@/components/layout/Logo";
 import { renderSchematicSvg } from "@/lib/mock-graphics/schematic";
 
-import { AppBar, Background, Badge, Caption, Scene, Tablet } from "../components";
-import { COLORS, MONO, SCENES, pop, progress, svgUri } from "../theme";
+import { AppBar, Background, Badge, Caption, InlineSvg, Scene, Tablet } from "../components";
+import { COLORS, MONO, SCENES, pop, progress } from "../theme";
 
 const SCAN_START = 24;
 const SCAN_END = 92;
@@ -34,7 +34,7 @@ export function Scene2Qr() {
   const frame = useCurrentFrame();
   const { duration } = SCENES.qr;
   const schematic = useMemo(
-    () => svgUri(renderSchematicSvg({ equipment: { tag: "RH1", name: "RH1 - Hlavní areálový rozváděč", ratedCurrent: "63 A" }, revision: { version: "v1.0", date: "29.10.2026", author: "Eldock CAE" } })),
+    () => renderSchematicSvg({ equipment: { tag: "RH1", name: "RH1 - Hlavní areálový rozváděč", ratedCurrent: "63 A" }, revision: { version: "v1.0", date: "29.10.2026", author: "Eldock CAE" } }),
     [],
   );
 
@@ -87,7 +87,7 @@ export function Scene2Qr() {
               <Badge color={COLORS.green}>Aktuální</Badge>
             </div>
             <div style={{ marginTop: 18, borderRadius: 16, overflow: "hidden", background: "#fff", border: `2px solid ${COLORS.panelBorder}` }}>
-              <Img src={schematic} style={{ width: "100%", display: "block" }} />
+              <InlineSvg svg={schematic} style={{ width: "100%" }} />
             </div>
           </div>
         </Tablet>

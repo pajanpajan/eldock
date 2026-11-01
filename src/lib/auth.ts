@@ -13,6 +13,12 @@ export function brandEnv(name: string): string | undefined {
   return process.env[`ELDOCK_${name}`] || process.env[`DIGITRY_${name}`] || undefined;
 }
 
+/**
+ * `ELDOCK_LOCK_ACCOUNT_SWITCHER=1`: produkční provoz bez přepínače účtů – uživatel zůstane v účtu,
+ * pod kterým se přihlásil na /login. Výchozí 0 = obchodní demo s přepínáním účtů v hlavičce.
+ */
+export const isAccountSwitcherLocked = () => brandEnv("LOCK_ACCOUNT_SWITCHER") === "1";
+
 export function accessPassword(): string {
   return brandEnv("ACCESS_PASSWORD") || DEFAULT_ACCESS_PASSWORD;
 }

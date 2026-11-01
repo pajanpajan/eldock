@@ -272,6 +272,8 @@ model Floor {
   floorplanSvg String? // inline SVG půdorysu (mock grafika bez externích assetů)
   viewBoxW     Int     @default(1200)
   viewBoxH     Int     @default(800)
+  /// Zdrojová definice patra ze Studia (JSON: rastr, zóny v metrech, vrata) – zpětná editace patra.
+  studioLayoutJson String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -539,6 +541,8 @@ model Attachment {
   mimeType        String?
   sizeBytes       Int?
   caption         String?
+  /// Původní fotka před zákresem (kreslení do fotky) – CAE si přečte i text pod červenou čarou.
+  originalUrl     String?
   uploadedById    String
   createdAt       DateTime       @default(now())
 

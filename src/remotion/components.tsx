@@ -78,3 +78,14 @@ export function Badge({ color, children, style }: { color: string; children: Rea
     </span>
   );
 }
+
+/**
+ * SVG generované aplikací vložené přímo do DOM (místo `<Img>` z Remotionu): nic se nedekóduje,
+ * takže nevzniká „EncodingError: The source image cannot be decoded“ ani čekání na `delayRender`.
+ * Zdrojem jsou výhradně naše generátory (`lib/mock-graphics`), proto je inline vložení bezpečné.
+ */
+export function InlineSvg({ svg, style }: { svg: string; style?: CSSProperties }) {
+  // Velikost přes atribut kořenového <svg> – Remotion render nemá Tailwind.
+  const sized = svg.replace(/<svg/, '<svg style="display:block;width:100%;height:100%"');
+  return <div aria-hidden style={{ lineHeight: 0, ...style }} dangerouslySetInnerHTML={{ __html: sized }} />;
+}

@@ -28,6 +28,7 @@ const attachment = z.object({
   mimeType: text(100),
   sizeBytes: z.number().int().nonnegative().optional().nullable(),
   caption: text(200),
+  originalUrl: fileUrl.optional().nullable(),
 });
 
 const submitSchema = z.object({

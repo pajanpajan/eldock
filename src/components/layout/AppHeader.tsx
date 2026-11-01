@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Blocks, CalendarCheck, CalendarRange, CircuitBoard, FileCheck2, Inbox, PencilRuler, ScanLine, UsersRound, type LucideIcon } from "lucide-react";
 
+import { isAccountSwitcherLocked } from "@/lib/auth";
 import type { Permission } from "@/lib/accounts";
 import { LockedNavItem } from "@/components/modules/Upsell";
 import type { FeatureKey } from "@/lib/modules";
@@ -85,6 +86,7 @@ export async function AppHeader() {
           <AccountSwitcher
             accounts={accounts.flatMap(({ id, name, title, accountType }) => (accountType ? [{ id, name, title, accountType }] : []))}
             currentId={account.user.id}
+            locked={isAccountSwitcherLocked()}
           />
           <LogoutButton />
         </div>

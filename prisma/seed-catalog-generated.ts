@@ -107,6 +107,14 @@ mcbSeries({ manufacturer: "Noark", series: "Ex9BN", poles: ["1P"], curves: ["B",
 mcbSeries({ manufacturer: "Noark", series: "Ex9BN", poles: ["3P"], curves: ["B"], currents: [16, 25], ka: 6, type: (p, c, i) => `Ex9BN 3P ${c}${i}` });
 mcbSeries({ manufacturer: "Schrack", series: "BM", poles: ["1P"], curves: ["B", "C"], currents: [10, 16], ka: 10, type: (p, c, i) => `BM-${c}${i}/1` });
 
+// Bonega (fáze 36): jističe P-E-P 6 kA a 10 kA. Typové označení je popisné (řada, póly, charakteristika,
+// proud) a slouží i jako objednací kód s prefixem BONEGA – přesný objednací kód ověřit u výrobce.
+const BONEGA_CURRENTS = [6, 10, 13, 16, 20, 25, 32, 40, 50, 63];
+for (const ka of [6, 10]) {
+  const bonegaType = (p: string, c: string, i: number) => `P-E-P${ka} ${p} ${c}${i}`;
+  mcbSeries({ manufacturer: "Bonega", series: `P-E-P ${ka} kA`, poles: ["1P", "3P"], curves: ["B", "C"], currents: BONEGA_CURRENTS, ka, type: bonegaType, article: (p, c, i) => `BONEGA ${bonegaType(p, c, i)}` });
+}
+
 // ---------------------------------------------------------------------------
 //  Proudové chrániče (RCD)
 // ---------------------------------------------------------------------------
@@ -148,6 +156,11 @@ for (const [poles, current] of [["2", 25], ["2", 40], ["4", 25], ["4", 40], ["4"
 rcd("OEZ", "Minia LFE", "LFE-25-2-030A", "2P", 25, 30, "A");
 rcd("OEZ", "Minia LFE", "LFE-63-4-030A", "4P", 63, 30, "A");
 rcd("OEZ", "Minia OFI", "OFI-40-4-030F", "4P", 40, 30, "F");
+// Bonega: proudové chrániče 2P a 4P, 30 mA, typ AC a A (popisné typové označení)
+for (const type of ["AC", "A"]) {
+  for (const current of [25, 40]) rcd("Bonega", "Chrániče PF", `BONEGA PF 2P ${current}A/30mA ${type}`, "2P", current, 30, type);
+  for (const current of [25, 40, 63]) rcd("Bonega", "Chrániče PF", `BONEGA PF 4P ${current}A/30mA ${type}`, "4P", current, 30, type);
+}
 for (const type of ["AC", "A"]) for (const [poles, current] of [["2P", 25], ["2P", 40], ["4P", 25], ["4P", 63]] as const) rcd("Schneider", "Acti9 iID", `iID ${poles} ${current}A 30mA ${type}`, poles, current, 30, type);
 rcd("Schneider", "Acti9 iID", "iID 4P 40A 30mA AC", "4P", 40, 30, "AC");
 rcd("Schneider", "Acti9 iID", "iID 4P 63A 300mA A-SI", "4P", 63, 300, "A");
@@ -185,7 +198,10 @@ for (const [curve, current] of RCBO_RATINGS) {
   rcbo("OEZ", "Minia OLE", `OLE-${current}${curve}-1N-030A`, curve, current, "A");
   rcbo("Schneider", "Acti9 iDPN N Vigi", `iDPN N Vigi ${curve}${current} 30mA A`, curve, current, "A");
   rcbo("Hager", "ADA", `ADA ${curve}${current} 30mA A`, curve, current, "A", 1);
+  rcbo("Bonega", "Jističochrániče PFL", `BONEGA PFL 1P+N ${curve}${current}/30mA A`, curve, current, "A");
 }
+// Bonega: další proudy jističochráničů (C25, C32)
+for (const current of [25, 32]) rcbo("Bonega", "Jističochrániče PFL", `BONEGA PFL 1P+N C${current}/30mA A`, "C", current, "A");
 rcbo("ABB", "DS203NC", "DS203NC C16 A30", "C", 16, "A", 2);
 
 // ---------------------------------------------------------------------------

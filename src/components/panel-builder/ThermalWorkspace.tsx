@@ -88,7 +88,7 @@ export function ThermalWorkspace({ projectId, initialProject, items }: { project
 
   const kpis = [
     { label: "Ztrátový výkon celkem", value: `${n(result.totalLossW)} W`, hint: `přístroje ${n(result.deviceLossW)} W + vodiče ${n(result.wiringLossW)} W` },
-    { label: "Účinná chladicí plocha Ae", value: `${n(result.effectiveAreaM2, 3)} m²`, hint: `k = ${n(result.k, 3)} · c = ${n(result.c)}` },
+    { label: "Účinná chladicí plocha Ae", value: `${n(result.effectiveAreaM2, 3)} m²`, hint: `k = ${n(result.k, 3)} · c = ${n(result.c)} · materiál × ${n(result.materialFactor, 2)}` },
     { label: "Oteplení Δt0,5 / Δt1,0", value: `${n(result.deltaT05, 1)} / ${n(result.deltaT10, 1)} K`, hint: `výpočet při ${n(result.internalTempC, 2)} °C, derating ${n(result.derating, 3)}` },
     { label: "Vnitřní teplota", value: `${n(result.internalTempC, 1)} °C`, hint: `${n(project.ambientTempC, 0)} + ${n(result.deltaT05, 1)} °C · pod stropem ${n(result.topTempC, 1)} °C` },
     { label: "Provozní proud", value: `${n(result.operatingCurrentA)} A`, hint: `soudobost SF ${n(project.simultaneityFactor)}` },

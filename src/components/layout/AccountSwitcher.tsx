@@ -2,7 +2,7 @@
 
 import { useTransition } from "react";
 import { usePathname } from "next/navigation";
-import { Check, ChevronDown, Loader2 } from "lucide-react";
+import { Check, ChevronDown, Loader2, LockKeyhole } from "lucide-react";
 import { toast } from "sonner";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -28,7 +28,7 @@ export interface SwitcherAccount {
 }
 
 /** Přepínač účtu: jméno, role, odznak oprávnění a výřez dat, který účet vidí. */
-export function AccountSwitcher({ accounts, currentId }: { accounts: SwitcherAccount[]; currentId: string }) {
+export function AccountSwitcher({ accounts, currentId, locked = false }: { accounts: SwitcherAccount[]; currentId: string; /** ELDOCK_LOCK_ACCOUNT_SWITCHER=1: jen jméno a role, bez přepínání. */ locked?: boolean }) {
   const pathname = usePathname();
   const [pending, startTransition] = useTransition();
   const current = accounts.find((account) => account.id === currentId) ?? accounts[0];
@@ -48,6 +48,26 @@ export function AccountSwitcher({ accounts, currentId }: { accounts: SwitcherAcc
 
   if (!current) return null;
   const definition = ACCOUNT_TYPES[current.accountType];
+
+  if (locked) {
+    return (
+      <div
+        className="flex items-center gap-2 rounded-lg border border-border bg-card/60 px-2 py-1"
+        title="Účet je uzamčen – pro jiný účet se odhlaste a přihlaste znovu."
+        aria-label={`Účet: ${current.name} – ${definition.label} (uzamčeno)`}
+        data-testid="account-locked"
+      >
+        <Avatar className="size-8">
+          <AvatarFallback className="bg-secondary text-xs font-semibold">{initials(current.name)}</AvatarFallback>
+        </Avatar>
+        <span className="hidden leading-tight sm:block">
+          <span className="block text-sm font-medium">{current.name}</span>
+          <span className={cn("mt-0.5 inline-block rounded-full border px-1.5 text-[11px] font-medium", definition.badge)}>{definition.label}</span>
+        </span>
+        <LockKeyhole className="size-4 text-muted-foreground" aria-hidden />
+      </div>
+    );
+  }
 
   return (
     <DropdownMenu>

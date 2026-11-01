@@ -50,21 +50,22 @@ a postup nasazení jsou v `CLAUDE.md`. Soubor drž pod 150 řádky.
 | 33 | AI Panel Builder: živý konfigurátor prvku, katalog 220+ přístrojů | ✅ |
 | 34 | AI Panel Builder: Vision Analyzer 2.0 (analýza po DIN lištách, kompaktní přístroje) | ✅ |
 | 35 | Revize Studia (10 bodů UX): rozměr areálu X × Y, funkční měřítko, kóty, tažení stěn, 7 typů zón, vrata, banery a barvy zařízení, jemný rastr 1 m, spotřebiče do místností | ✅ |
+| 36 | Konsolidace a technický dluh: stabilní E2E (zahřátí dev serveru, data plánovače podle pražského dne), optimistický konfigurátor, zpětná editace pater ve Studiu (`studioLayoutJson`), katalog Bonega, paralelní Vision Analyzer, originál fotky u zákresu, Remotion bez `<Img>`, materiál skříně v oteplení, `ELDOCK_LOCK_ACCOUNT_SWITCHER` | 🟦 |
 
 Fáze 35 je nasazená 2026-11-01 (commit `64079a6`).
 
 ## B. Otevřená fáze
 
-**Fáze 36 – zatím nezadaná** ⬜
+**Fáze 37 – zatím nezadaná** ⬜
 
-Šablona pro nové zadání:
+Šablona pro nové zadání (vložte sem, nepřepisujte celý soubor):
 
 ```
-### Fáze 36 – <název>
+### Fáze 37 – <název>
 **Cíl:** <jedna věta>
 - [ ] <úkol>
 **Hotovo když:** <ověřitelná kritéria> · `npm run verify` OK
-**Commit:** `feat(faze36): <popis>`
+**Commit:** `feat(faze37): <popis>`
 ```
 
 ## C. Deník (jen poslední záznamy, starší jsou v archivu)
@@ -72,10 +73,11 @@ Fáze 35 je nasazená 2026-11-01 (commit `64079a6`).
 | Fáze | Datum | Poznámky |
 |---|---|---|
 | 35 | 2026-11-01 | Model Studia v metrech: zóny `{x, y, w, h}`, zařízení `pos` + `roomKey`. Nová patra mají jednotné měřítko (`planFrame`), stávající `EXISTING_FLOOR_FRAME`. Měřítko = skutečný zoom 96 dpi + „Celé“. Rozměr areálu se ukládá i u stávajícího závodu (přepočet polygonů budov). Bez změny schématu DB. |
+| 36 | 2026-11-01 | **E2E VTZ:** příčinou nebyla data, ale studený dev server (stránka se při kompilaci přenačítala) → `e2e/global-setup.ts` nejdřív v prohlížeči zahřeje hlavní trasy. Data plánovače („tento / příští měsíc“) se počítají od pražského dne (`src/lib/month-window.ts`, test pro každý den 2 let) – dřív UTC den mohl kolem půlnoci posledního dne v měsíci spadnout do minulosti. **Konfigurátor:** bez `router.refresh` po kliku (akce sama revaliduje), klíč bez katalogového kusu, debounce 250 ms, optimistický náhled na DIN liště. **Studio:** migrace `floor_studio_layout`; stávající patro jde v kroku 2 upravit (JSON, u starších pater dopočet ze SVG v `src/lib/studio-layout.ts`), piny se přepočítají přes metry. **Bonega:** 97 položek, popisné typové kódy `BONEGA …` (objednací kódy ověřit u výrobce); testy chybějící značky používají Legrand. **Vision Analyzer:** fáze B přes `mapWithConcurrency` (3). **Červenka:** migrace `attachment_original_url` + „Zobrazit originál bez zákresu“. **Remotion:** `InlineSvg` místo `<Img>`. **Oteplení:** materiál násobí Ae v poměru ocel 1,0 : nerez 0,95 : plast 0,88, normováno na referenční plastovou skříň (kalibrace K_AE, PB-001 dál 42,4 °C; kovové skříně vycházejí o něco chladněji). **Zámek účtu:** `ELDOCK_LOCK_ACCOUNT_SWITCHER=1` – účet z podepsané přihlašovací cookie, přepnutí odmítne server, v hlavičce odznak 🔒. |
 | – | 2026-11-01 | Plán převeden na rotující. Původní plán archivován, trvalá paměť projektu konsolidována do `CLAUDE.md`. |
 
 ## D. Známé nedostatky a backlog
 
-- E2E „revizní technik VTZ…“ padá i na čistém `main` (datum revizí v seedu vs. dnešek) – opravit seed nebo test na relativní data.
+- E2E na čistém dev serveru: první minuta kompilace stránky přenačítá – řeší zahřátí v `e2e/global-setup.ts` (`E2E_SKIP_WARMUP=1` ho vypne).
 - Vrata v novém stylu se v patrech ze seedu projeví až po novém seedu (na produkci se seed nepouští, uložená SVG zůstávají).
 - Backlog z MVP: skutečný serverový přepis hlasu, redlining nad PDF (pdf.js), offline synchronizace, PostgreSQL, elektronický podpis schválení.

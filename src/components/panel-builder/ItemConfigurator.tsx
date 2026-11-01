@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { Check, Link2, Loader2, Scissors, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -15,6 +15,9 @@ import { cn } from "@/lib/utils";
 import { assignComponentAction, configureItemAction, deleteItemAction, lookupComponentAction, mergeItemsAction, splitItemAction, updateItemTextAction } from "@/server/actions/panel-builder";
 
 import type { WorkspaceItem } from "./RecognitionWorkspace";
+
+/** Prodleva uložení při rychlém klikání po dlaždicích parametrů (ms). */
+const CONFIGURE_DEBOUNCE_MS = 250;
 
 function Tile({ active, onClick, children, label, disabled }: { active: boolean; onClick: () => void; children: React.ReactNode; label?: string; disabled?: boolean }) {
   return (
@@ -39,7 +42,22 @@ function Tile({ active, onClick, children, label, disabled }: { active: boolean;
  * přiřadí nejbližší přesný kus z katalogu a označí ho jako ověřený. Nahoře geometrie na DIN liště
  * (sloučení / rozdělení), dole karta přiřazeného přístroje.
  */
-export function ItemConfigurator({ item, dominant, rightNeighbors, onChanged, onDeleted }: { item: WorkspaceItem; dominant: string; rightNeighbors: number; onChanged: () => void; onDeleted: () => void }) {
+export function ItemConfigurator({
+  item,
+  dominant,
+  rightNeighbors,
+  onChanged,
+  onDeleted,
+  onPreview,
+}: {
+  item: WorkspaceItem;
+  dominant: string;
+  rightNeighbors: number;
+  onChanged: () => void;
+  onDeleted: () => void;
+  /** Optimistický náhled na DIN liště (null = zrušit po uložení nebo chybě). */
+  onPreview: (itemId: string, config: ItemConfig | null) => void;
+}) {
   const initialManufacturer = item.config?.manufacturer ?? item.component?.manufacturer ?? item.detected?.manufacturer ?? (isMix(dominant) ? null : dominant);
   const [config, setConfig] = useState<ItemConfig | null>(item.config);
   const [manufacturer, setManufacturer] = useState<string | null>(initialManufacturer);
@@ -47,15 +65,53 @@ export function ItemConfigurator({ item, dominant, rightNeighbors, onChanged, on
   const [pending, startTransition] = useTransition();
   const [lookupText, setLookupText] = useState(item.rawOcrText?.replace(/[?б]/g, "") ?? "");
 
+  // Optimistické UI: dlaždice i modul na liště se překreslí hned, uložení (configureItem) běží na pozadí
+  // s debounce. Server Action sama obnoví data stránky (revalidatePath) – žádný router.refresh, žádné probliknutí.
+  const queued = useRef<{ config: ItemConfig; absorb: boolean } | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function save(job: { config: ItemConfig; absorb: boolean }) {
+    startTransition(async () => {
+      const result = await configureItemAction(item.id, job.config, job.absorb);
+      if (!result.ok) {
+        toast.error(result.error);
+        setConfig(item.config);
+      }
+      // Uložená data dorazí se stejnou odpovědí – náhled už není potřeba (pokud mezitím nepřišel další klik).
+      if (!queued.current) onPreview(item.id, null);
+    });
+  }
+
+  function flush() {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+    const job = queued.current;
+    queued.current = null;
+    if (job) save(job);
+  }
+
+  // Přepnutí na jiný prvek během debounce: rozklikaná konfigurace se uloží hned.
+  const itemId = item.id;
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+      const job = queued.current;
+      if (!job) return;
+      void configureItemAction(itemId, job.config, job.absorb).then((result) => (result.ok ? onPreview(itemId, null) : toast.error(result.error)));
+    },
+    [itemId, onPreview],
+  );
+
   function apply(next: ItemConfig) {
     setConfig(next);
+    onPreview(item.id, next);
     const absorb = mergeRight && next.modules > item.modulesWidth;
     if (next.modules > item.modulesWidth && !mergeRight) toast.warning(`Přístroj má ${next.modules}M, ale modul na liště jen ${item.modulesWidth}M – zapněte „Sloučit se sousedními moduly vpravo“.`);
-    startTransition(async () => {
-      const result = await configureItemAction(item.id, next, absorb);
-      if (!result.ok) return void toast.error(result.error);
-      onChanged();
-    });
+    queued.current = { config: next, absorb };
+    if (timer.current) clearTimeout(timer.current);
+    // Sloučení mění geometrii lišty – uložit hned; parametry s debounce.
+    if (absorb) return flush();
+    timer.current = setTimeout(flush, CONFIGURE_DEBOUNCE_MS);
   }
 
   function pickManufacturer(value: string | null) {
@@ -103,6 +159,8 @@ export function ItemConfigurator({ item, dominant, rightNeighbors, onChanged, on
     });
   }
 
+  // Rozklikaný (zatím neuložený) prvek je hned „ověřený“ – stejně jako po uložení konfigurace.
+  const shownStatus = config && config !== item.config ? "VERIFIED" : item.recognitionStatus;
   const suggested = item.recognitionStatus === "PARTIAL" ? item.component : null;
   const fields = config ? CONFIG_FIELDS[config.category] : [];
 
@@ -110,8 +168,8 @@ export function ItemConfigurator({ item, dominant, rightNeighbors, onChanged, on
     <div className="flex flex-col gap-4" data-testid="item-configurator">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-mono text-lg font-semibold">{item.designation}</span>
-        <span className={cn("rounded-full border px-2 py-0.5 text-xs", RECOGNITION[item.recognitionStatus].badge)} data-testid="configurator-status">
-          {RECOGNITION[item.recognitionStatus].label}
+        <span className={cn("rounded-full border px-2 py-0.5 text-xs", RECOGNITION[shownStatus].badge)} data-testid="configurator-status">
+          {RECOGNITION[shownStatus].label}
         </span>
         {pending ? <Loader2 className="size-4 animate-spin text-muted-foreground" aria-label="Ukládám" /> : null}
         <span className="ml-auto font-mono text-xs text-muted-foreground">

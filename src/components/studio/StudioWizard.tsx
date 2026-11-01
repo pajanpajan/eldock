@@ -28,6 +28,7 @@ import {
 import { BUILDING_TYPE_LABELS } from "@/lib/format";
 import { extractFloorplanRooms } from "@/lib/mock-graphics/floorplan";
 import type { AutopilotSource } from "@/lib/studio-autopilot";
+import { layoutOfFloor } from "@/lib/studio-layout";
 import { floorLabel, floorName, type StudioBuildingDraft, type StudioEquipmentDraft, type StudioFloorDraft, type StudioNewPlantDraft } from "@/lib/studio-draft";
 import { cn } from "@/lib/utils";
 import { saveStudioAction } from "@/server/actions/studio";
@@ -234,13 +235,35 @@ export function StudioWizard({ data: source, startNewPlant = false }: { data: St
     if (ground) setPlaceFloor({ kind: "existing", id: ground.id });
   }
 
-  const allLevels = [...existingFloors.map((floor) => floor.level), ...floors.map((floor) => floor.level)];
+  const newFloors = floors.filter((floor) => !floor.existingId);
+  const allLevels = [...existingFloors.map((floor) => floor.level), ...newFloors.map((floor) => floor.level)];
   function addFloor(direction: "up" | "down") {
     const level = direction === "up" ? (allLevels.length ? Math.max(...allLevels) + 1 : 0) : Math.min(0, ...allLevels) - 1;
     const key = nextKey("f");
     setFloors((current) => [...current, { key, level, usage: direction === "up" ? "" : "Technické zázemí", zones: [], gates: [] }].sort((a, b) => a.level - b.level));
     setZoneFloorKey(key);
-    if (!floors.length && !existingFloors.length) setPlaceFloor({ kind: "draft", key });
+    if (!newFloors.length && !existingFloors.length) setPlaceFloor({ kind: "draft", key });
+  }
+
+  /** Otevře uložené patro k úpravě: rozvržení z `studioLayoutJson`, u starších pater dopočtené ze SVG. */
+  function editExistingFloor(floorId: string) {
+    const target = existingFloors.find((floor) => floor.id === floorId);
+    if (!target || floors.some((floor) => floor.existingId === floorId)) return;
+    const layout = layoutOfFloor(target);
+    const key = nextKey("f");
+    setFloors((current) => [
+      ...current,
+      {
+        key,
+        existingId: target.id,
+        level: target.level,
+        usage: target.name.split(" - ").slice(1).join(" - "),
+        zones: layout.zones.map((zone) => ({ ...zone, key: nextKey("z") })),
+        gates: layout.gates,
+        grid: { ...layout.grid, scale: grid.scale },
+      },
+    ]);
+    setZoneFloorKey(key);
   }
 
   const updateFloor = (key: string, patch: Partial<StudioFloorDraft>) => setFloors((current) => current.map((floor) => (floor.key === key ? { ...floor, ...patch } : floor)));
@@ -251,7 +274,7 @@ export function StudioWizard({ data: source, startNewPlant = false }: { data: St
   }
 
   // Plátno Studia s jemným pod-rastrem po 1 m (uložený půdorys ho nemá)
-  const floorSvg = (floor: StudioFloorDraft) => renderGridFloorplanSvg({ floorName: floorName(floor.level, floor.usage), spec: grid, zones: floor.zones, gates: floor.gates, fineGrid: true });
+  const floorSvg = (floor: StudioFloorDraft) => renderGridFloorplanSvg({ floorName: floorName(floor.level, floor.usage), spec: floor.grid ? { ...floor.grid, scale: grid.scale } : grid, zones: floor.zones, gates: floor.gates, fineGrid: true });
   const setScale = (scale: DrawingScale) => {
     setGrid((current) => ({ ...current, scale }));
     setFloorZoom(scale);
@@ -293,7 +316,7 @@ export function StudioWizard({ data: source, startNewPlant = false }: { data: St
       });
       if (!result.ok) return void toast.error(result.error);
       toast.success(result.data.plantCreated ? `Závod ${newPlant.name.trim()} založen.` : "Budova uložena do závodu.", {
-        description: `${result.data.plantCreated ? "První budova uložena · " : ""}Pater: ${result.data.floors} · zařízení: ${result.data.equipment}.`,
+        description: `${result.data.plantCreated ? "První budova uložena · " : ""}Nových pater: ${result.data.floors}${result.data.editedFloors ? ` · upravených: ${result.data.editedFloors}` : ""} · zařízení: ${result.data.equipment}.`,
       });
       router.push(result.data.href);
     });
@@ -316,10 +339,14 @@ export function StudioWizard({ data: source, startNewPlant = false }: { data: St
       worstStatus: "ACTIVE",
     });
     return [
-      ...existingFloors.map((floor) => overview(floor.id, floor.level, floor.name, extractFloorplanRooms(floor.floorplanSvg ?? ""))),
-      ...floors.map((floor) => overview(`draft:${floor.key}`, floor.level, floorName(floor.level, floor.usage), floor.zones.map((zone) => zoneToRoom(zone, frame)).filter((room) => room !== null))),
+      ...existingFloors.map((floor) => {
+        const draft = floors.find((entry) => entry.existingId === floor.id);
+        const rooms = draft ? draft.zones.map((zone) => zoneToRoom(zone, planFrame(draft.grid ?? grid))).filter((room) => room !== null) : extractFloorplanRooms(floor.floorplanSvg ?? "");
+        return overview(floor.id, floor.level, floor.name, rooms);
+      }),
+      ...newFloors.map((floor) => overview(`draft:${floor.key}`, floor.level, floorName(floor.level, floor.usage), floor.zones.map((zone) => zoneToRoom(zone, frame)).filter((room) => room !== null))),
     ].sort((a, b) => a.level - b.level);
-  }, [existingFloors, floors, frame]);
+  }, [existingFloors, floors, newFloors, frame, grid]);
 
   const campusInvalid = !campusSizeValid(campusInput);
   const campusToolbar = (
@@ -505,7 +532,7 @@ export function StudioWizard({ data: source, startNewPlant = false }: { data: St
               <div className="space-y-2">
                 <p className="text-sm font-medium">Podlaží</p>
                 <ul className="space-y-2" aria-label="Podlaží budovy">
-                  {[...existingFloors.map((floor) => ({ kind: "existing" as const, floor })), ...floors.map((floor) => ({ kind: "draft" as const, floor }))]
+                  {[...existingFloors.map((floor) => ({ kind: "existing" as const, floor })), ...newFloors.map((floor) => ({ kind: "draft" as const, floor }))]
                     .sort((a, b) => b.floor.level - a.floor.level)
                     .map((entry) =>
                       entry.kind === "existing" ? (
@@ -613,8 +640,10 @@ export function StudioWizard({ data: source, startNewPlant = false }: { data: St
           activeKey={zoneFloorKey}
           onActive={setZoneFloorKey}
           grid={grid}
-          frame={frame}
           svgFor={floorSvg}
+          existingFloors={existingFloors}
+          onEditExisting={editExistingFloor}
+          onDiscard={removeFloor}
           onChange={(key, patch) => updateFloor(key, patch)}
           zoom={floorZoom}
           onZoom={zoomFloor}
@@ -648,7 +677,7 @@ export function StudioWizard({ data: source, startNewPlant = false }: { data: St
           Zpět
         </Button>
         <p className="text-sm text-muted-foreground">
-          Koncept: {floors.length} nových pater · {floors.reduce((sum, floor) => sum + floor.zones.length, 0)} místností · {equipment.length} zařízení
+          Koncept: {newFloors.length} nových pater{floors.length > newFloors.length ? ` · ${floors.length - newFloors.length} upravovaných` : ""} · {floors.reduce((sum, floor) => sum + floor.zones.length, 0)} místností · {equipment.length} zařízení
         </p>
         {step < 3 ? (
           <Button className="touch-target gap-2" onClick={() => setStep((value) => value + 1)}>

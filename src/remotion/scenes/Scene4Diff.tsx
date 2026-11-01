@@ -1,10 +1,10 @@
 import { useMemo } from "react";
-import { AbsoluteFill, Img, interpolate, useCurrentFrame } from "remotion";
+import { AbsoluteFill, interpolate, useCurrentFrame } from "remotion";
 
 import { renderSchematicSvg } from "@/lib/mock-graphics/schematic";
 
-import { Background, Badge, Caption, Scene } from "../components";
-import { COLORS, MONO, SCENES, pop, svgUri } from "../theme";
+import { Background, Badge, Caption, InlineSvg, Scene } from "../components";
+import { COLORS, MONO, SCENES, pop } from "../theme";
 
 const EQUIPMENT = { tag: "RH1", name: "RH1 - Hlavní areálový rozváděč", ratedCurrent: "63 A" };
 const SLIDE_START = 36;
@@ -15,9 +15,8 @@ export function Scene4Diff() {
   const { duration } = SCENES.diff;
   const [before, after] = useMemo(
     () => [
-      svgUri(renderSchematicSvg({ equipment: EQUIPMENT, revision: { version: "v1.2", date: "12.03.2026", author: "Ing. Lucie Marková" } })),
-      svgUri(
-        renderSchematicSvg({
+      renderSchematicSvg({ equipment: EQUIPMENT, revision: { version: "v1.2", date: "12.03.2026", author: "Ing. Lucie Marková" } }),
+      renderSchematicSvg({
           equipment: EQUIPMENT,
           revision: { version: "v1.3", date: "31.10.2026", author: "Ing. Lucie Marková" },
           variant: {
@@ -26,7 +25,6 @@ export function Scene4Diff() {
             changeNote: "Výměna stykače K2 za Siemens 3RT2026",
           },
         }),
-      ),
     ],
     [],
   );
@@ -52,12 +50,12 @@ export function Scene4Diff() {
           <div style={{ position: "relative", width: 1090, aspectRatio: "1190 / 842", borderRadius: 18, overflow: "hidden", background: "#fff", boxShadow: "0 30px 90px rgba(0,0,0,0.6)" }}>
             {/* stará revize s červeným nádechem */}
             <AbsoluteFill>
-              <Img src={before} style={{ width: "100%", height: "100%" }} />
+              <InlineSvg svg={before} style={{ width: "100%", height: "100%" }} />
               <AbsoluteFill style={{ background: "rgba(239,68,68,0.16)", mixBlendMode: "multiply" }} />
             </AbsoluteFill>
             {/* nová revize se zeleným nádechem – odkrývá ji posuvník zleva */}
             <AbsoluteFill style={{ clipPath: `inset(0 ${100 - slide}% 0 0)` }}>
-              <Img src={after} style={{ width: "100%", height: "100%" }} />
+              <InlineSvg svg={after} style={{ width: "100%", height: "100%" }} />
               <AbsoluteFill style={{ background: "rgba(34,197,94,0.14)", mixBlendMode: "multiply" }} />
             </AbsoluteFill>
             {/* lišta posuvníku */}

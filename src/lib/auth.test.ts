@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { accessPassword, checkAccessPassword, isAuthBypassed, safeNextPath, signAuthToken, verifyAuthToken } from "./auth";
+import { accessPassword, checkAccessPassword, isAccountSwitcherLocked, isAuthBypassed, safeNextPath, signAuthToken, verifyAuthToken } from "./auth";
 
 const secret = "test-secret";
 const now = Date.UTC(2026, 9, 29, 8, 0, 0);
@@ -44,5 +44,15 @@ describe("proměnné prostředí ELDOCK_* (fallback DIGITRY_*)", () => {
     expect(accessPassword()).toBe("nove-heslo");
     vi.stubEnv("DIGITRY_BYPASS_AUTH", "1");
     expect(isAuthBypassed()).toBe(true);
+  });
+
+  it("ELDOCK_LOCK_ACCOUNT_SWITCHER: výchozí 0 = obchodní demo s přepínačem, 1 = uzamčený účet", () => {
+    vi.stubEnv("ELDOCK_LOCK_ACCOUNT_SWITCHER", "");
+    vi.stubEnv("DIGITRY_LOCK_ACCOUNT_SWITCHER", "");
+    expect(isAccountSwitcherLocked()).toBe(false);
+    vi.stubEnv("ELDOCK_LOCK_ACCOUNT_SWITCHER", "0");
+    expect(isAccountSwitcherLocked()).toBe(false);
+    vi.stubEnv("ELDOCK_LOCK_ACCOUNT_SWITCHER", "1");
+    expect(isAccountSwitcherLocked()).toBe(true);
   });
 });

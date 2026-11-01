@@ -2,7 +2,21 @@
 // s hierarchií napájení) v jedné transakci. Záměrně bez `server-only` (testy nad SQLite).
 
 import type { PrismaClient } from "@/generated/prisma/client";
-import { EXISTING_FLOOR_FRAME, clampGrid, fmtM, insideFrame, metersToPercent, planFrame, renderGridFloorplanSvg, zoneFits, type GridSpec } from "@/lib/cad-grid";
+import {
+  EXISTING_FLOOR_FRAME,
+  FLOOR_VIEWBOX,
+  clampGrid,
+  fmtM,
+  insideFrame,
+  metersToPercent,
+  planFrame,
+  pxToMeters,
+  renderGridFloorplanSvg,
+  zoneFits,
+  type GridSpec,
+  type PlanFrame,
+} from "@/lib/cad-grid";
+import { frameOfFloor, layoutOfFloor, serializeLayout } from "@/lib/studio-layout";
 import { campusSizeValid, campusViewBox, polygonBounds, rectInsideCampus, rescalePolygon, type CampusSize } from "@/lib/campus-layout";
 import { placementOf } from "@/lib/equipment-categories";
 import { inspectionRuleFor, isPortable } from "@/lib/inspection-rules";
@@ -53,7 +67,10 @@ export async function saveStudioBuilding(prisma: PrismaClient, draft: StudioDraf
   // Existující budova a patra
   const existingBuilding =
     draft.building.mode === "existing"
-      ? await prisma.building.findFirst({ where: { id: draft.building.id, plantId: plant.id }, include: { floors: { select: { id: true, level: true, code: true } } } })
+      ? await prisma.building.findFirst({
+          where: { id: draft.building.id, plantId: plant.id },
+          include: { floors: { select: { id: true, level: true, code: true, name: true, floorplanSvg: true, studioLayoutJson: true } } },
+        })
       : null;
   if (draft.building.mode === "existing" && !existingBuilding) throw new WorkflowError("NOT_FOUND", "Budova nebyla nalezena.");
   if (draft.building.mode === "new") {
@@ -66,14 +83,31 @@ export async function saveStudioBuilding(prisma: PrismaClient, draft: StudioDraf
     }
   }
   const levels = new Set(existingBuilding?.floors.map((floor) => floor.level) ?? []);
+  // Upravovaná stávající patra: jejich vlastní rastr (uložený v JSON, u starších pater ze SVG)
+  const edited = new Map<string, { grid: GridSpec; frame: PlanFrame }>();
   for (const floor of draft.floors) {
-    if (levels.has(floor.level)) fail(`Patro ${floorLabel(floor.level).short} už v budově existuje.`);
-    levels.add(floor.level);
+    if (floor.existingId) {
+      const current = existingBuilding?.floors.find((entry) => entry.id === floor.existingId);
+      if (!current) fail("Upravované patro do budovy nepatří.");
+      if (edited.has(floor.existingId)) fail(`Patro ${floorLabel(current!.level).short} je v konceptu dvakrát.`);
+      const floorGrid = clampGrid(floor.grid ?? layoutOfFloor(current!).grid);
+      edited.set(floor.existingId, { grid: floorGrid, frame: planFrame(floorGrid) });
+    } else {
+      if (levels.has(floor.level)) fail(`Patro ${floorLabel(floor.level).short} už v budově existuje.`);
+      levels.add(floor.level);
+    }
+    const floorFrame = floor.existingId ? edited.get(floor.existingId)!.frame : frame;
     for (const zone of floor.zones) {
-      if (!zoneFits(zone, frame)) fail(`${zone.name || "Místnost"}: přesahuje obvod patra ${floorLabel(floor.level).short} (${fmtM(frame.widthM)} × ${fmtM(frame.depthM)} m).`);
+      if (!zoneFits(zone, floorFrame)) fail(`${zone.name || "Místnost"}: přesahuje obvod patra ${floorLabel(floor.level).short} (${fmtM(floorFrame.widthM)} × ${fmtM(floorFrame.depthM)} m).`);
     }
   }
-  if (!existingBuilding && draft.floors.length === 0) fail("Přidejte alespoň jedno patro.");
+  const newFloors = draft.floors.filter((floor) => !floor.existingId);
+  if (!existingBuilding && newFloors.length === 0) fail("Přidejte alespoň jedno patro.");
+  /** Rám, ve kterém se ukládá pin zařízení na stávajícím patře (po úpravě nový rastr, jinak uložený). */
+  const existingFrame = (floorId: string) => {
+    const current = existingBuilding?.floors.find((entry) => entry.id === floorId);
+    return edited.get(floorId)?.frame ?? (current ? frameOfFloor(current) : EXISTING_FLOOR_FRAME);
+  };
 
   // Zdroje napájení: rozváděče a trafa závodu + rozváděče konceptu
   const plantSources = newPlant
@@ -102,7 +136,7 @@ export async function saveStudioBuilding(prisma: PrismaClient, draft: StudioDraf
     if (tags.has(item.tag.trim().toUpperCase())) fail(`${item.tag}: označení se na patře opakuje.`);
     tags.add(item.tag.trim().toUpperCase());
     tagsByFloor.set(floorKey, tags);
-    const itemFrame = item.floor.kind === "draft" ? frame : EXISTING_FLOOR_FRAME;
+    const itemFrame = item.floor.kind === "draft" ? frame : existingFrame(item.floor.id);
     if (!insideFrame(itemFrame, item.pos)) fail(`${item.tag}: poloha X ${fmtM(item.pos.x)} m, Y ${fmtM(item.pos.y)} m leží mimo půdorys.`);
     // Pevná zařízení v jemném rastru: jeden bod = jedno zařízení (spotřebiče a nářadí se řadí v místnosti).
     if (placementOf(item.type) === "grid") {
@@ -151,7 +185,7 @@ export async function saveStudioBuilding(prisma: PrismaClient, draft: StudioDraf
     }
 
     const floorIds = new Map<string, string>();
-    for (const floor of draft.floors) {
+    for (const floor of newFloors) {
       const name = floorName(floor.level, floor.usage);
       const created = await tx.floor.create({
         data: {
@@ -161,15 +195,39 @@ export async function saveStudioBuilding(prisma: PrismaClient, draft: StudioDraf
           name,
           description: floor.usage.trim() || null,
           floorplanSvg: renderGridFloorplanSvg({ floorName: name, spec: grid, zones: floor.zones, gates: floor.gates }),
+          studioLayoutJson: serializeLayout({ grid, zones: floor.zones, gates: floor.gates }),
         },
       });
       floorIds.set(floor.key, created.id);
     }
 
+    // Úprava rozvržení stávajících pater: nový půdorys + JSON; piny zařízení se přepočítají přes metry
+    // ze starého rámu do nového, takže zůstanou na stejném místě v hale.
+    let editedFloors = 0;
+    for (const floor of draft.floors) {
+      if (!floor.existingId) continue;
+      const current = existingBuilding!.floors.find((entry) => entry.id === floor.existingId)!;
+      const target = edited.get(floor.existingId)!;
+      const oldFrame = frameOfFloor(current);
+      await tx.floor.update({
+        where: { id: current.id },
+        data: {
+          floorplanSvg: renderGridFloorplanSvg({ floorName: current.name, spec: target.grid, zones: floor.zones, gates: floor.gates }),
+          studioLayoutJson: serializeLayout({ grid: target.grid, zones: floor.zones, gates: floor.gates }),
+        },
+      });
+      const pins = await tx.equipment.findMany({ where: { floorId: current.id }, select: { id: true, pinX: true, pinY: true } });
+      for (const pin of pins) {
+        const meters = pxToMeters(oldFrame, { x: (pin.pinX / 100) * FLOOR_VIEWBOX.width, y: (pin.pinY / 100) * FLOOR_VIEWBOX.height });
+        await tx.equipment.update({ where: { id: pin.id }, data: metersToPercent(target.frame, meters) });
+      }
+      editedFloors++;
+    }
+
     const equipmentIds = new Map<string, string>();
     for (const item of draft.equipment) {
       const floorId = item.floor.kind === "draft" ? floorIds.get(item.floor.key)! : item.floor.id;
-      const pin = metersToPercent(item.floor.kind === "draft" ? frame : EXISTING_FLOOR_FRAME, item.pos);
+      const pin = metersToPercent(item.floor.kind === "draft" ? frame : existingFrame(item.floor.id), item.pos);
       const created = await tx.equipment.create({
         data: {
           floorId,
@@ -204,6 +262,7 @@ export async function saveStudioBuilding(prisma: PrismaClient, draft: StudioDraf
       (first ? (first.kind === "draft" ? floorIds.get(first.key) : first.id) : undefined) ??
       floorIds.get(draft.floors.find((floor) => floor.level === 0)?.key ?? "") ??
       floorIds.values().next().value ??
+      draft.floors.find((floor) => floor.existingId)?.existingId ??
       existingBuilding?.floors[0]?.id;
     return {
       plantId: plant.id,
@@ -212,6 +271,7 @@ export async function saveStudioBuilding(prisma: PrismaClient, draft: StudioDraf
       buildingId: buildingId!,
       firstFloorId: firstFloorId ?? null,
       floors: floorIds.size,
+      editedFloors,
       equipment: equipmentIds.size,
     };
   });

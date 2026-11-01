@@ -347,6 +347,23 @@ export function toRailDetections(devices: readonly GeminiRailDevice[], rail: num
 }
 
 /** Výřez pásu z fotky (sharp) jako JPEG. */
+/** Kolik výřezů DIN lišt se posílá do Gemini současně (kvóty API, paměť serveru 2 GB). */
+export const RAIL_CONCURRENCY = 3;
+
+/** `Promise.all` s omezeným počtem souběžných úloh; výsledky ve stejném pořadí jako vstup. */
+export async function mapWithConcurrency<T, R>(items: readonly T[], limit: number, task: (item: T, index: number) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const index = next++;
+      results[index] = await task(items[index], index);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(Math.max(1, limit), items.length) }, worker));
+  return results;
+}
+
 async function cropRail(image: { bytes: Buffer }, box: readonly number[]): Promise<{ bytes: Buffer; region: CropRegion }> {
   const sharp = (await import("sharp")).default;
   const meta = await sharp(image.bytes).rotate().metadata();
@@ -395,16 +412,17 @@ export async function analyzePanelPhoto(input: { image: { bytes: Buffer; mimeTyp
       return { mode: "GEMINI", detections, dominantManufacturer: normalizeManufacturer(phaseA.dominantManufacturer), railCount: null, coverState: cover, warning: "Lišty se nepodařilo vymezit – použita analýza celé fotky." };
     }
 
-    const detections: Detection[] = [];
-    for (const [index, box] of rails.entries()) {
+    // Fáze B paralelně (max. RAIL_CONCURRENCY dotazů najednou), výsledky v pořadí lišt shora dolů.
+    const perRail = await mapWithConcurrency(rails, RAIL_CONCURRENCY, async (box, index) => {
       const crop = await cropRail(image, box);
       const result = await generateJson<{ totalModules?: number; devices?: GeminiRailDevice[] }>(
         visionModel,
         [{ text: railPrompt(cover, hint) }, { inline_data: { mime_type: "image/jpeg", data: crop.bytes.toString("base64") } }],
         RAIL_SCHEMA,
       );
-      detections.push(...toRailDetections(result.devices ?? [], index + 1, crop.region, result.totalModules));
-    }
+      return toRailDetections(result.devices ?? [], index + 1, crop.region, result.totalModules);
+    });
+    const detections: Detection[] = perRail.flat();
     if (!detections.length) return demo("Gemini na lištách nenašel žádný přístroj – zobrazena ukázková detekce.");
     return { mode: "GEMINI", detections, dominantManufacturer: normalizeManufacturer(phaseA.dominantManufacturer), railCount: rails.length, coverState: cover };
   } catch (error) {

@@ -4,13 +4,19 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 
 import { ACCOUNT_TYPES, canSeeType, can, equipmentScope, visibleTypes, type Permission } from "@/lib/accounts";
-import { AUTH_COOKIE, isAuthBypassed, verifyAuthToken } from "@/lib/auth";
+import { AUTH_COOKIE, isAccountSwitcherLocked, isAuthBypassed, verifyAuthToken } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ACCOUNT_COOKIE, DEMO_USER_ID, PLANT_COOKIE, ROLE_COOKIE, parseRole, type AppRole } from "@/lib/roles";
 
 /** Uživatel aktuálního účtu: cookie účtu, jinak výchozí účet podle (starší) cookie role. */
 export const getCurrentUser = cache(async () => {
   const store = await cookies();
+  // Uzamčený přepínač: účet určuje jen podepsaná přihlašovací cookie (podvržená cookie účtu nic nezmění).
+  if (isAccountSwitcherLocked()) {
+    const session = await verifyAuthToken(store.get(AUTH_COOKIE)?.value);
+    const signedIn = session ? await prisma.user.findFirst({ where: { id: session.userId, accountType: { not: null } } }) : null;
+    if (signedIn) return signedIn;
+  }
   const accountId = store.get(ACCOUNT_COOKIE)?.value;
   if (accountId) {
     const user = await prisma.user.findFirst({ where: { id: accountId, accountType: { not: null } } });

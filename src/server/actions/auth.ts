@@ -8,7 +8,7 @@ import { AUTH_COOKIE, AUTH_TTL_SECONDS, brandEnv, checkAccessPassword, safeNextP
 import { prisma } from "@/lib/prisma";
 import { APP_HOME } from "@/lib/routes";
 
-import { setAccount } from "./session";
+import { applyAccount } from "@/server/account-switch";
 
 export interface LoginState {
   error?: string;
@@ -48,7 +48,8 @@ export async function login(_state: LoginState, formData: FormData): Promise<Log
     httpOnly: true,
     secure: process.env.NODE_ENV === "production" && brandEnv("INSECURE_COOKIE") !== "1",
   });
-  await setAccount(user.id, APP_HOME, safeNextPath(input.next) ?? APP_HOME);
+  // Přihlášení nastaví účet vždy (i při ELDOCK_LOCK_ACCOUNT_SWITCHER=1 – právě tím se účet uzamkne).
+  await applyAccount(user.id, APP_HOME, safeNextPath(input.next) ?? APP_HOME);
   return {};
 }
 

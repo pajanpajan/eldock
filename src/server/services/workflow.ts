@@ -38,6 +38,8 @@ export interface AttachmentInput {
   mimeType?: string | null;
   sizeBytes?: number | null;
   caption?: string | null;
+  /** Původní fotka před zákresem. */
+  originalUrl?: string | null;
 }
 
 export interface BomItemInput {
@@ -73,6 +75,7 @@ function attachmentRows(attachments: AttachmentInput[] | undefined, uploadedById
     mimeType: attachment.mimeType ?? null,
     sizeBytes: attachment.sizeBytes ?? null,
     caption: clean(attachment.caption),
+    originalUrl: attachment.originalUrl ?? null,
     uploadedById,
   }));
 }

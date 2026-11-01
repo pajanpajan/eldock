@@ -197,10 +197,10 @@ describe("AI Panel Builder – živý konfigurátor a geometrie DIN lišty", () 
     expect(await byDesignation("-F6")).toMatchObject({ recognitionStatus: "VERIFIED", confidence: 1, modulesWidth: 1 });
     expect(JSON.parse((await byDesignation("-F6")).configJson!)).toMatchObject({ manufacturer: "Eaton", ratedCurrentA: 10 });
 
-    const bonega = await configureItem(prisma, f6.id, { ...defaultConfig("MCB", { manufacturer: "Bonega", modules: 1 }), ratedCurrentA: 10 });
-    expect(bonega).toMatchObject({ estimated: true, component: { manufacturer: "Bonega", typeCode: "Jistič 1P B10 6 kA" } });
-    await configureItem(prisma, f6.id, { ...defaultConfig("MCB", { manufacturer: "Bonega", modules: 1 }), ratedCurrentA: 10 });
-    expect(await prisma.catalogComponent.count({ where: { manufacturer: "Bonega" } })).toBe(1);
+    const legrand = await configureItem(prisma, f6.id, { ...defaultConfig("MCB", { manufacturer: "Legrand", modules: 1 }), ratedCurrentA: 10 });
+    expect(legrand).toMatchObject({ estimated: true, component: { manufacturer: "Legrand", typeCode: "Jistič 1P B10 6 kA" } });
+    await configureItem(prisma, f6.id, { ...defaultConfig("MCB", { manufacturer: "Legrand", modules: 1 }), ratedCurrentA: 10 });
+    expect(await prisma.catalogComponent.count({ where: { manufacturer: "Legrand" } })).toBe(1);
 
     // změna kategorie (F → K) přečísluje značení
     const f8 = await byDesignation("-F8");

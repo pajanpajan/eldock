@@ -1,24 +1,10 @@
-"use client";
-
-import { useTransition } from "react";
-import { usePathname } from "next/navigation";
-import { HardHat, Loader2, PencilRuler } from "lucide-react";
-
-import { Button } from "@/components/ui/button";
 import type { AccountType } from "@/generated/prisma/enums";
-import { ACCOUNT_TYPES } from "@/lib/accounts";
-import { setAccountType } from "@/server/actions/session";
+import { isAccountSwitcherLocked } from "@/lib/auth";
 
-/** Výzva k přepnutí účtu – uživatel zůstane na stejné stránce. `role` = výchozí účet role. */
-export function SwitchRoleButton({ role, account }: { role?: "MAINTENANCE" | "CAE_ENGINEER"; account?: AccountType }) {
-  const pathname = usePathname();
-  const [pending, startTransition] = useTransition();
-  const target: AccountType = account ?? (role === "CAE_ENGINEER" ? "CAE_ENGINEER" : "MAINTENANCE_LEAD");
-  const Icon = target === "CAE_ENGINEER" ? PencilRuler : HardHat;
-  return (
-    <Button className="touch-target gap-2" disabled={pending} onClick={() => startTransition(() => setAccountType(target, pathname, pathname))}>
-      {pending ? <Loader2 className="size-4 animate-spin" /> : <Icon className="size-4" />}
-      Přepnout na účet {ACCOUNT_TYPES[target].label}
-    </Button>
-  );
+import { SwitchRoleButtonClient } from "./SwitchRoleButtonClient";
+
+/** Výzva „Přepnout na účet …“; při uzamčeném přepínači účtů (ELDOCK_LOCK_ACCOUNT_SWITCHER=1) se nezobrazí. */
+export function SwitchRoleButton(props: { role?: "MAINTENANCE" | "CAE_ENGINEER"; account?: AccountType }) {
+  if (isAccountSwitcherLocked()) return null;
+  return <SwitchRoleButtonClient {...props} />;
 }

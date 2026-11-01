@@ -11,13 +11,20 @@ export interface GalleryPhoto {
   id: string;
   url: string;
   caption: string | null;
+  /** Fotka před zákresem – lightbox nabídne „Zobrazit originál bez zákresu“. */
+  originalUrl?: string | null;
 }
 
 /** Náhledy fotek z haly + lightbox se zoomem a listováním. */
 export function PhotoGallery({ photos }: { photos: GalleryPhoto[] }) {
   const [index, setIndex] = useState<number | null>(null);
+  const [showOriginal, setShowOriginal] = useState(false);
   const current = index === null ? null : photos[index];
-  const step = (delta: number) => setIndex((i) => (i === null ? i : (i + delta + photos.length) % photos.length));
+  const step = (delta: number) => {
+    setShowOriginal(false);
+    setIndex((i) => (i === null ? i : (i + delta + photos.length) % photos.length));
+  };
+  const shownUrl = current ? (showOriginal && current.originalUrl ? current.originalUrl : current.url) : "";
 
   return (
     <>
@@ -26,8 +33,11 @@ export function PhotoGallery({ photos }: { photos: GalleryPhoto[] }) {
           <li key={photo.id}>
             <button
               type="button"
-              onClick={() => setIndex(i)}
-              className="group block overflow-hidden rounded-lg border border-border outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+              onClick={() => {
+                setShowOriginal(false);
+                setIndex(i);
+              }}
+              className="group relative block overflow-hidden rounded-lg border border-border outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
               aria-label={`Zobrazit fotku: ${photo.caption ?? `fotka ${i + 1}`}`}
             >
               {/* eslint-disable-next-line @next/next/no-img-element -- soubory z /api/files, SVG přes <img> (bezpečnost) */}
@@ -37,6 +47,9 @@ export function PhotoGallery({ photos }: { photos: GalleryPhoto[] }) {
                 className="h-24 w-32 object-cover transition-transform group-hover:scale-105 sm:h-28 sm:w-40"
                 loading="lazy"
               />
+              {photo.originalUrl ? (
+                <span className="absolute top-1 left-1 rounded bg-red-600/90 px-1.5 py-0.5 text-[10px] font-semibold text-white">Zákres</span>
+              ) : null}
             </button>
           </li>
         ))}
@@ -48,10 +61,10 @@ export function PhotoGallery({ photos }: { photos: GalleryPhoto[] }) {
           <DialogDescription className="sr-only">Kolečkem nebo dvěma prsty přiblížíte, tažením posunete.</DialogDescription>
           {current ? (
             <div className="relative overflow-hidden rounded-lg bg-black">
-              <TransformWrapper key={current.id} maxScale={6}>
+              <TransformWrapper key={`${current.id}:${showOriginal}`} maxScale={6}>
                 <TransformComponent wrapperClass="!w-full" contentClass="!w-full">
                   {/* eslint-disable-next-line @next/next/no-img-element -- viz výše */}
-                  <img src={current.url} alt={current.caption ?? "Fotka"} className="max-h-[75dvh] w-full object-contain" />
+                  <img src={shownUrl} alt={showOriginal ? "Originál fotky bez zákresu" : (current.caption ?? "Fotka")} className="max-h-[75dvh] w-full object-contain" />
                 </TransformComponent>
               </TransformWrapper>
               {photos.length > 1 ? (
@@ -65,6 +78,11 @@ export function PhotoGallery({ photos }: { photos: GalleryPhoto[] }) {
                 </>
               ) : null}
             </div>
+          ) : null}
+          {current?.originalUrl ? (
+            <Button variant="outline" className="touch-target self-start" aria-pressed={showOriginal} onClick={() => setShowOriginal((value) => !value)}>
+              {showOriginal ? "Zobrazit se zákresem" : "Zobrazit originál bez zákresu"}
+            </Button>
           ) : null}
           {photos.length > 1 && index !== null ? (
             <p className="text-center font-mono text-xs text-muted-foreground">

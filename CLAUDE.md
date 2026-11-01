@@ -5,7 +5,7 @@ revize VTZ, změny skutečného provedení mezi údržbou v hale a externími CA
 rozváděčů. Pracovní název byl Digitry, od fáze 20 je to **ELDOCK**. Produkce běží na https://eldock.cz.
 Původní zadání MVP je v `docs/archiv/SPECIFIKACE-MVP.md`, celá historie fází 0–35 v `docs/archiv/PLAN-faze-00-35.md`.
 
-## 1. Milníky (fáze 0–35 hotové a nasazené)
+## 1. Milníky (fáze 0–35 nasazené, 36 hotová k nasazení)
 
 | Fáze | Milník |
 |---|---|
@@ -16,6 +16,7 @@ Původní zadání MVP je v `docs/archiv/SPECIFIKACE-MVP.md`, celá historie fá
 | 26 | Produktové video v Remotionu (`npm run video:render`) |
 | 27–34 | AI Panel Builder: katalog prvků a těžba datasheetů, analýza fotky přes Gemini, strom zapojení s hlídačem, oteplení (IEC TR 60890), dokumentace a CE, mix výrobců, živý konfigurátor, Vision Analyzer 2.0 |
 | 35 | Revize Studia: rozměr areálu X × Y, funkční měřítko, živé kóty, tažení stěn, 7 typů zón, vrata, banery a barvy zařízení, jemný rastr 1 m, spotřebiče do místností |
+| 36 | Konsolidace: zpětná editace pater ve Studiu (`Floor.studioLayoutJson`), optimistický konfigurátor, katalog Bonega, paralelní Vision Analyzer, originál fotky u zákresu, materiál skříně v oteplení, `ELDOCK_LOCK_ACCOUNT_SWITCHER` |
 
 ## 2. Moduly a klíčová místa v kódu
 
@@ -39,9 +40,10 @@ Server je hlídá přes `assertFeature`, správa je na `/admin/modules`.
 - **Prisma 7.10:** balíčky vždy `@7` (tag `latest` je 8.0 RC). Klient se importuje z `@/generated/prisma/client` a v aplikaci jen přes `src/lib/prisma.ts`. Adaptér `@prisma/adapter-better-sqlite3`; `DATABASE_URL` je v `prisma.config.ts`.
 - **SQLite:** za běhu produkce `journal_mode=WAL`, `synchronous=NORMAL`, `busy_timeout=5000` a `foreign_keys=ON` (`SQLITE_PRAGMAS` v `src/lib/prisma.ts`). V dev režimu je `DELETE`.
 - **Vrstvy:** čtení dat v `src/server/queries` (`server-only`), business logika ve `src/server/services` (dostává `prisma` a `actor`, testuje se nad SQLite přes `test-db.ts`), tenké Server Actions v `src/server/actions` (zod → služba → `revalidatePath`), čisté funkce v `src/lib`.
+- **Účty:** `ELDOCK_LOCK_ACCOUNT_SWITCHER=1` (produkce bez dema) = účet určuje jen podepsaná přihlašovací cookie a server přepnutí odmítne; výchozí `0` = obchodní demo s přepínačem. Nastavení účtu bez kontroly je `applyAccount` v `src/server/account-switch.ts` (záměrně mimo `"use server"`).
 - **Soubory:** jen ve `storage/uploads`. Upload přes `POST /api/uploads`, čtení přes `GET /api/files/[...path]`. SVG se v UI zobrazuje přes `<img>`; výjimka jsou půdorysy generované aplikací.
 - **Workflow (CAE):** požadavek prochází `SUBMITTED → IN_PROGRESS → WAITING_APPROVAL → APPROVED`. Zamítnutá revize (`REJECTED`, komentář povinný) vrací požadavek do `IN_PROGRESS`; CAE může požadavek zrušit (`CANCELLED`). Každý přechod probíhá v `$transaction` se záznamem `ChangeRequestEvent`. Zařízení má max. 1 otevřený požadavek a 1 aktivní revizi. Stav zařízení se odvozuje přes `deriveEquipmentStatus`. Úplná tabulka přechodů je v archivu plánu, sekce B.
-- **Studio:** souřadnice v metrech od osy A1. Nová patra mají jednotné měřítko (`planFrame`), stávající `EXISTING_FLOOR_FRAME` (66 × 42 m).
+- **Studio:** souřadnice v metrech od osy A1, jednotné měřítko (`planFrame`). Každé uložené patro má `Floor.studioLayoutJson` (rastr, zóny, vrata) a jde znovu upravit; starší patra bez JSON se čtou ze SVG (`src/lib/studio-layout.ts`). Pin zařízení je vždy v rámu svého patra (`frameOfFloor`); při úpravě patra se piny přepočítají přes metry.
 
 ## 4. Databáze – bezpečnostní pravidla
 
@@ -63,7 +65,7 @@ Server je hlídá přes `assertFeature`, správa je na `/admin/modules`.
 - Uživatel občas vloží nové zadání místo obsahu `docs/PLAN.md`. Plán pak obnov z gitu a zadání doplň jako novou fázi. **Čísla fází v zadání ověř proti `git log`**, zadání někdy uvádí zastaralé číslo.
 - Před každým commitem musí projít `npm run verify` (typecheck, lint, vitest, build). U UI změn spusť i dotčené E2E (`npx playwright test e2e/<soubor>`; vlastní server na portu 3200 s `e2e.db` a `.next-e2e`). Ruční dev server při testování spouštěj s jiným `NEXT_DIST_DIR` (např. `.next/shots`). Dva servery se sdíleným `.next-e2e` si rozbijí cache a stránky se pak přenačítají dokola.
 - Prostředí je Windows: používej npm a Node/TS skripty. Pozor na CRLF po `git stash`. `git push` dělej jen při nasazení. Na mazání mimo projekt a nevratné operace se nejdřív zeptej.
-- Známý problém: E2E test „revizní technik VTZ…“ (`e2e/accounts-studio.spec.ts`) padá i na čistém `main` kvůli datu revizí v seedu.
+- E2E: `e2e/global-setup.ts` před testy v prohlížeči zahřeje hlavní trasy (studený dev server stránky během kompilace přenačítá, první testy pak náhodně padaly).
 
 ## 7. Nasazení na produkci (Hetzner, https://eldock.cz)
 

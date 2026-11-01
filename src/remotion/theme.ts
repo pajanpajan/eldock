@@ -46,5 +46,3 @@ export const progress = (frame: number, start: number, end: number) =>
 export const sceneFade = (frame: number, duration: number, edge = 12) =>
   interpolate(frame, [0, edge, duration - edge, duration], [0, 1, 1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
 
-/** SVG řetězec → data URI pro <Img>. */
-export const svgUri = (svg: string) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;

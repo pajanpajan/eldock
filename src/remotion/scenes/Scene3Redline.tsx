@@ -1,10 +1,10 @@
 import { useMemo } from "react";
-import { Img, interpolate, useCurrentFrame } from "remotion";
+import { interpolate, useCurrentFrame } from "remotion";
 
 import { renderEquipmentPhotoSvg } from "@/lib/mock-graphics/equipment-photo";
 
-import { AppBar, Background, Badge, Caption, Scene, Tablet } from "../components";
-import { COLORS, MONO, SCENES, pop, progress, svgUri } from "../theme";
+import { AppBar, Background, Badge, Caption, InlineSvg, Scene, Tablet } from "../components";
+import { COLORS, MONO, SCENES, pop, progress } from "../theme";
 
 // Kroužek kolem řady stykačů na „fotce“ rozváděče (souřadnice fotky 800 × 600).
 const RING = { cx: 372, cy: 216, rx: 92, ry: 52 };
@@ -14,7 +14,7 @@ const DRAW_END = 128;
 export function Scene3Redline() {
   const frame = useCurrentFrame();
   const { duration } = SCENES.redline;
-  const photo = useMemo(() => svgUri(renderEquipmentPhotoSvg("switchboard", "RH1")), []);
+  const photo = useMemo(() => renderEquipmentPhotoSvg("switchboard", "RH1"), []);
 
   const press = interpolate(frame, [14, 20, 28], [1, 0.9, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
   const editor = pop(frame, 26, 30, 16);
@@ -35,7 +35,7 @@ export function Scene3Redline() {
           <AppBar label="RH1 · Nahlásit změnu" />
           <div style={{ position: "absolute", inset: "64px 0 0 0", padding: 24 }}>
             <div style={{ position: "relative", width: "100%", aspectRatio: "800 / 600", maxHeight: 640, borderRadius: 16, overflow: "hidden", border: `2px solid ${COLORS.panelBorder}` }}>
-              <Img src={photo} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} />
+              <InlineSvg svg={photo} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} />
               <svg viewBox="0 0 800 600" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: editor }}>
                 <ellipse
                   cx={RING.cx}

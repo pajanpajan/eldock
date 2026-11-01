@@ -100,6 +100,7 @@ export function ChangeRequestWizard({ equipment, schematic, openChange, annotate
       mimeType: "image/jpeg",
       sizeBytes: photo.sizeBytes,
       caption: photo.caption || null,
+      originalUrl: photo.annotated ? (photo.originalUrl ?? null) : null,
     }));
     const text = state.text.trim() || null;
 
