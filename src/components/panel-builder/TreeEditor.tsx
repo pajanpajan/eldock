@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Check, CircleAlert, Info, ListOrdered, Loader2, Redo2, Sparkles, Undo2, Zap } from "lucide-react";
+import { AlertTriangle, Check, CircleAlert, Info, ListOrdered, Loader2, Redo2, ShieldCheck, Sparkles, Undo2, Zap } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { PHASE_OPTIONS, ancestors, flattenTree, isConnected, proposeTree, renumber, validateTree, type IssueSeverity, type TreeIssue, type TreeNode } from "@/lib/panel-builder/tree";
+import { phaseCount } from "@/lib/panel-builder/catalog";
+import { PHASE_OPTIONS, ancestors, groupLoad, isConnected, proposeTree, readingOrder, renumber, validateTree, type IssueSeverity, type TreeIssue, type TreeNode } from "@/lib/panel-builder/tree";
 import { cn } from "@/lib/utils";
 import { saveTreeAction } from "@/server/actions/panel-builder";
 
@@ -18,8 +19,6 @@ export interface TreeMeta {
   modulesWidth: number;
 }
 
-const INCOMER = "__incomer__";
-const selectClass = "h-9 rounded-md border border-input bg-transparent px-2 text-sm dark:bg-input/30";
 const SEVERITY: Record<IssueSeverity, { icon: typeof CircleAlert; className: string }> = {
   error: { icon: CircleAlert, className: "text-red-300" },
   warning: { icon: AlertTriangle, className: "text-yellow-300" },
@@ -27,10 +26,21 @@ const SEVERITY: Record<IssueSeverity, { icon: typeof CircleAlert; className: str
 };
 
 type SaveState = "saved" | "saving" | "error";
+const SINGLE = ["L1", "L2", "L3"] as const;
+const amps = (value: number) => `${value.toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} A`;
+
+/** Skupina = hlavní vypínač (nebo vstup napájení) a každý proudový chránič. */
+interface Group {
+  id: string | null;
+  head: TreeNode | null;
+  title: string;
+  short: string;
+}
 
 /**
- * Krok 2: DIN lišty se stavem zapojení (vlevo) a hierarchický strom (vpravo). Změny se drží
- * v historii (Zpět / Vpřed) a průběžně ukládají; hlídač vyhodnocuje strom při každé změně.
+ * Krok 2: zapojení po SKUPINÁCH – karta hlavního přívodu (pod -Q1) a karta každého chrániče se
+ * svými jističi. Fáze se přepínají tlačítky L1 / L2 / L3, skupina tlačítky „Napájeno z“. Změny se
+ * drží v historii (Zpět / Vpřed) a průběžně ukládají; hlídač hlásí jen skutečné chyby.
  */
 export function TreeEditor({
   projectId,
@@ -53,22 +63,18 @@ export function TreeEditor({
   const [nodes, setNodes] = useState(initial);
   const [past, setPast] = useState<TreeNode[][]>([]);
   const [future, setFuture] = useState<TreeNode[][]>([]);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [onlyUnassigned, setOnlyUnassigned] = useState(false);
-  const [bulkParent, setBulkParent] = useState("");
+  const [highlight, setHighlight] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const dirty = useRef(false);
 
   const byId = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
-  const issues = useMemo(() => validateTree(nodes, simultaneity), [nodes, simultaneity]);
+  const issues = useMemo(() => validateTree(nodes), [nodes]);
   const issuesById = useMemo(() => {
     const map = new Map<string, TreeIssue[]>();
     for (const issue of issues) map.set(issue.itemId, [...(map.get(issue.itemId) ?? []), issue]);
     return map;
   }, [issues]);
   const connected = useMemo(() => new Set(nodes.filter((node) => isConnected(node.id, byId)).map((node) => node.id)), [nodes, byId]);
-  const flat = useMemo(() => flattenTree(nodes), [nodes]);
-  const loose = nodes.filter((node) => !flat.some((entry) => entry.node.id === node.id));
 
   const apply = useCallback(
     (change: (current: TreeNode[]) => TreeNode[]) => {
@@ -144,104 +150,151 @@ export function TreeEditor({
 
   const update = (id: string, patch: Partial<TreeNode>) => apply((current) => current.map((node) => (node.id === id ? { ...node, ...patch } : node)));
 
-  /** Možní rodiče uzlu: ne on sám ani jeho potomci (cyklus). */
-  const parentOptions = (nodeId: string | null) =>
-    nodes.filter((candidate) => {
-      if (candidate.id === nodeId) return false;
-      if (!nodeId) return true;
-      const chain = ancestors(candidate.id, byId);
-      return chain !== null && !chain.includes(nodeId);
-    });
-
-  const setParent = (id: string, value: string) => update(id, value === INCOMER ? { parentItemId: null, fedFromIncomer: true } : value ? { parentItemId: value, fedFromIncomer: false } : { parentItemId: null, fedFromIncomer: false });
-
   function proposeAll() {
     const proposal = proposeTree(nodes);
     apply((current) => current.map((node) => ({ ...node, ...proposal.get(node.id) })));
-    setSelected(new Set());
-    toast.success("Strom navržen podle kategorií a pozic na DIN lištách, fáze rozvrženy.");
+    toast.success("Zapojení navrženo podle DIN lišt: chrániče napájí jističe napravo od sebe, ostatní hlavní vypínač; fáze se střídají.");
   }
 
   function renumberAll() {
     const designations = renumber(nodes);
     apply((current) => current.map((node) => ({ ...node, designation: designations.get(node.id) ?? node.designation })));
-    toast.success("IEC značení přečíslováno v pořadí lišt.");
+    toast.success("IEC značení přečíslováno v pořadí lišt (-Q, -FI, -FA, -FV, -F …).");
   }
 
-  function bulkAssign() {
-    if (!bulkParent || !selected.size) return;
-    const parent = bulkParent === INCOMER ? null : bulkParent;
-    apply((current) => current.map((node) => (selected.has(node.id) && node.id !== parent ? { ...node, parentItemId: parent, fedFromIncomer: parent === null } : node)));
-    toast.success(`${selected.size} prvků zapojeno pod ${parent ? byId.get(parent)?.designation : "vstup napájení"}.`);
-    setSelected(new Set());
-  }
-
-  const toggle = (id: string) =>
-    setSelected((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
+  // Skupiny: hlavní vypínač (jinak vstup napájení) a chrániče v pořadí lišt
+  const ordered = readingOrder(nodes);
+  const main = ordered.find((node) => node.category === "MAIN_SWITCH") ?? null;
+  const rcds = ordered.filter((node) => node.category === "RCD");
+  const groups: Group[] = [
+    main ? { id: main.id, head: main, title: `⚡ Hlavní přívod a přímé vývody (pod hlavním vypínačem ${main.designation})`, short: `${main.designation} Hlavní` } : { id: null, head: null, title: "⚡ Vstup napájení a přímé vývody", short: "Vstup" },
+    ...rcds.map((rcd) => ({
+      id: rcd.id,
+      head: rcd,
+      title: `🛡️ Skupina chrániče ${rcd.designation} (Lišta ${rcd.dinRailIndex}${meta[rcd.id]?.typeCode ? ` – ${meta[rcd.id].typeCode}` : ""})`,
+      short: `${rcd.designation} Chránič (Lišta ${rcd.dinRailIndex})`,
+    })),
+  ];
+  const groupIds = new Set(groups.map((group) => group.id));
+  const inGroup = (group: Group) =>
+    ordered.filter((node) => {
+      if (node.id === group.head?.id || node.category === "RCD") return false;
+      if (group.id === null) return node.fedFromIncomer && !node.parentItemId;
+      return node.parentItemId === group.id;
     });
+  // Chrániče se zobrazují jako hlavičky svých karet; mimo skupiny zůstanou jen zvláštní zapojení a nezapojené
+  const elsewhere = ordered.filter((node) => node.parentItemId && !groupIds.has(node.parentItemId) && node.category !== "RCD");
+  const loose = ordered.filter((node) => !node.parentItemId && !node.fedFromIncomer && node.id !== main?.id && node.category !== "RCD");
 
-  // Hromadné přiřazení: rodič nesmí být mezi vybranými ani pod nimi
-  const bulkOptions = nodes.filter((candidate) => !selected.has(candidate.id) && !(ancestors(candidate.id, byId) ?? []).some((id) => selected.has(id)));
-  const listed = (onlyUnassigned ? nodes.filter((node) => !connected.has(node.id)) : nodes).slice().sort((a, b) => a.dinRailIndex - b.dinRailIndex || a.positionOnRail - b.positionOnRail);
+  /** Přesun do skupiny (nebo na vstup napájení) – cyklus nedovolí. */
+  function moveTo(node: TreeNode, group: Group) {
+    if (group.id === null) return update(node.id, { parentItemId: null, fedFromIncomer: true });
+    if (group.id === node.id || (ancestors(group.id, byId) ?? []).includes(node.id)) return void toast.error("Prvek nemůže napájet sám sebe.");
+    // 1P vývod pod 2P chráničem převezme jeho fázi
+    const head = byId.get(group.id);
+    const headPhases = head?.phaseAssignment?.split(",").filter((phase) => phase !== "N") ?? [];
+    const keepPhase = phaseCount(node.poles ?? "1P") === 3 || headPhases.length !== 1 ? node.phaseAssignment : headPhases[0];
+    update(node.id, { parentItemId: group.id, fedFromIncomer: false, phaseAssignment: keepPhase });
+  }
+
   const counts = { error: 0, warning: 0, info: 0 };
   for (const issue of issues) counts[issue.severity]++;
 
-  function row(node: TreeNode, depth: number) {
-    const nodeIssues = issuesById.get(node.id) ?? [];
+  function phaseControl(node: TreeNode) {
+    if (node.category === "SPD") return <span className="text-xs text-muted-foreground">bez fáze (SPD)</span>;
+    if (phaseCount(node.poles ?? "1P") === 3) {
+      return (
+        <span className="rounded-md border border-border bg-muted/40 px-2 py-1 font-mono text-xs" data-testid={`phase-fixed-${node.designation}`}>
+          {(node.phaseAssignment ?? "L1,L2,L3").split(",").join(", ")}
+        </span>
+      );
+    }
+    const neutral = node.category === "RCD";
+    const current = node.phaseAssignment?.split(",")[0] ?? null;
+    return (
+      <span className="flex gap-1" role="group" aria-label={`${node.designation} fáze`}>
+        {SINGLE.map((phase) => (
+          <button
+            key={phase}
+            type="button"
+            aria-pressed={current === phase}
+            aria-label={`${node.designation} fáze ${phase}`}
+            onClick={() => update(node.id, { phaseAssignment: neutral ? `${phase},N` : phase })}
+            className={cn(
+              "h-8 min-w-10 rounded-md border px-2 font-mono text-xs font-semibold transition-colors",
+              current === phase ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card hover:border-primary/60",
+            )}
+          >
+            {phase}
+          </button>
+        ))}
+      </span>
+    );
+  }
+
+  function groupSwitch(node: TreeNode) {
+    const options = groups.filter((group) => group.id !== node.id);
+    return (
+      <span className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground" role="group" aria-label={`${node.designation} napájeno z`}>
+        Napájeno z:
+        {options.map((group) => {
+          const active = group.id === null ? node.fedFromIncomer && !node.parentItemId : node.parentItemId === group.id;
+          return (
+            <button
+              key={group.id ?? "incomer"}
+              type="button"
+              aria-pressed={active}
+              aria-label={`${node.designation} napájeno z ${group.short}`}
+              onClick={() => moveTo(node, group)}
+              className={cn(
+                "min-h-8 rounded-md border px-2 font-mono font-semibold transition-colors",
+                active ? "border-emerald-400 bg-emerald-500/20 text-emerald-100" : "border-border bg-card hover:border-primary/60",
+              )}
+            >
+              {group.short}
+            </button>
+          );
+        })}
+      </span>
+    );
+  }
+
+  function row(node: TreeNode, options: { head?: boolean } = {}) {
+    const nodeIssues = (issuesById.get(node.id) ?? []).filter((issue) => issue.severity !== "info" || !options.head);
     const worst = nodeIssues.find((issue) => issue.severity === "error") ?? nodeIssues.find((issue) => issue.severity === "warning");
     return (
-      <li key={node.id} className={cn("flex flex-col gap-1 border-b border-border py-2 last:border-b-0", worst?.severity === "error" && "bg-red-500/5", worst?.severity === "warning" && "bg-yellow-500/5")} data-testid={`tree-row-${node.designation}`}>
-        <div className="flex flex-wrap items-center gap-2" style={{ paddingLeft: `${Math.max(0, depth - 1) * 20}px` }}>
-          <span className="text-muted-foreground" aria-hidden>
-            {depth > 1 ? "└" : "●"}
-          </span>
-          <span className="w-12 font-mono font-semibold">{node.designation}</span>
+      <li
+        key={node.id}
+        className={cn(
+          "flex flex-col gap-2 border-b border-border px-3 py-2.5 last:border-b-0",
+          options.head && "bg-muted/30",
+          worst?.severity === "error" && "bg-red-500/10",
+          worst?.severity === "warning" && "bg-yellow-500/5",
+          highlight === node.id && "ring-2 ring-primary ring-inset",
+        )}
+        data-testid={`tree-row-${node.designation}`}
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="w-14 font-mono font-semibold">{node.designation}</span>
           <span className="w-36 truncate text-xs text-muted-foreground" title={meta[node.id]?.typeCode}>
-            {meta[node.id]?.typeCode ?? "?"}
+            {meta[node.id]?.typeCode ?? "?"} · Lišta {node.dinRailIndex}
           </span>
-          <label className="flex items-center gap-1 text-xs text-muted-foreground">
-            Napájeno z:
-            <select
-              aria-label={`${node.designation} napájeno z`}
-              className={selectClass}
-              value={node.parentItemId ?? (node.fedFromIncomer ? INCOMER : "")}
-              onChange={(event) => setParent(node.id, event.target.value)}
-            >
-              <option value="">– nezapojeno –</option>
-              <option value={INCOMER}>Vstup napájení</option>
-              {parentOptions(node.id).map((candidate) => (
-                <option key={candidate.id} value={candidate.id}>
-                  {candidate.designation} {candidate.circuitLabel ? `· ${candidate.circuitLabel}` : ""}
-                </option>
-              ))}
-            </select>
-          </label>
-          <select aria-label={`${node.designation} fáze`} className={cn(selectClass, "w-28")} value={node.phaseAssignment ?? ""} onChange={(event) => update(node.id, { phaseAssignment: event.target.value || null })}>
-            <option value="">fáze –</option>
-            {PHASE_OPTIONS.map((phase) => (
-              <option key={phase} value={phase}>
-                {phase}
-              </option>
-            ))}
-          </select>
           <Input
             aria-label={`${node.designation} název obvodu`}
             className="h-9 min-w-40 flex-1"
             defaultValue={node.circuitLabel}
             key={`${node.id}:${node.circuitLabel}`}
-            placeholder="Název obvodu"
+            placeholder="Funkce obvodu"
             maxLength={80}
             onBlur={(event) => event.target.value !== node.circuitLabel && update(node.id, { circuitLabel: event.target.value })}
           />
+          {phaseControl(node)}
         </div>
+        {node.id !== main?.id ? groupSwitch(node) : <span className="text-xs text-muted-foreground">Napájeno ze vstupu napájení ({networkSystem})</span>}
         {nodeIssues.map((issue) => {
           const { icon: Icon, className } = SEVERITY[issue.severity];
           return (
-            <p key={issue.message} className={cn("flex items-start gap-1.5 text-xs", className)} style={{ paddingLeft: `${Math.max(0, depth - 1) * 20 + 22}px` }}>
+            <p key={issue.message} className={cn("flex items-start gap-1.5 text-xs", className)}>
               <Icon className="mt-0.5 size-3.5 shrink-0" aria-hidden /> {issue.message}
             </p>
           );
@@ -250,11 +303,23 @@ export function TreeEditor({
     );
   }
 
+  function loadInfo(group: Group) {
+    if (!group.head) return null;
+    const load = groupLoad(group.head.id, nodes, simultaneity);
+    return (
+      <p className="flex items-center gap-1.5 text-xs text-sky-200" data-testid={`group-load-${group.head.designation}`}>
+        <Info className="size-3.5 shrink-0" aria-hidden />
+        Zatížení skupiny (Ib × SF {simultaneity.toLocaleString("cs-CZ")}): L1 {amps(load.L1)} · L2 {amps(load.L2)} · L3 {amps(load.L3)}
+        {group.head.ratedCurrentA ? ` · In ${amps(group.head.ratedCurrentA)}` : ""} – informace, ne chyba
+      </p>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-3">
         <Button className="touch-target gap-2" onClick={proposeAll}>
-          <Sparkles className="size-4" aria-hidden /> AI návrh stromu na 1 klik
+          <Sparkles className="size-4" aria-hidden /> AI návrh zapojení na 1 klik
         </Button>
         <Button variant="outline" className="touch-target gap-2" onClick={undo} disabled={!past.length} aria-label="Zpět">
           <Undo2 className="size-4" aria-hidden /> Zpět
@@ -263,7 +328,7 @@ export function TreeEditor({
           <Redo2 className="size-4" aria-hidden /> Vpřed
         </Button>
         <Button variant="outline" className="touch-target gap-2" onClick={renumberAll}>
-          <ListOrdered className="size-4" aria-hidden /> Automaticky přečíslovat IEC značení (-Q1, -F1, -F2…)
+          <ListOrdered className="size-4" aria-hidden /> Přečíslovat IEC značení (-Q, -FI, -F …)
         </Button>
         <span className="ml-auto flex flex-wrap items-center gap-3 text-xs" data-testid="tree-summary">
           <span className={counts.error ? "text-red-300" : "text-muted-foreground"}>Chyby: {counts.error}</span>
@@ -278,73 +343,65 @@ export function TreeEditor({
         </span>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
-        <section aria-label="DIN lišty a stav zapojení" className="flex flex-col gap-3">
-          <DinRails
-            items={nodes.map((node) => ({ ...node, modulesWidth: meta[node.id]?.modulesWidth ?? 1, caption: meta[node.id]?.typeCode ?? "?" }))}
-            rails={rails}
-            modulesPerRail={modulesPerRail}
-            selectedIds={selected}
-            onSelect={(item) => toggle(item.id)}
-            tone={(item) => (connected.has(item.id) ? "border-emerald-500/70 bg-emerald-500/10 text-emerald-100" : "border-yellow-500/80 bg-yellow-500/25 text-yellow-100")}
-            badge={(item) =>
-              connected.has(item.id) ? (
-                <span className="flex size-4 items-center justify-center rounded-full bg-emerald-500 text-black">
-                  <Check className="size-3" aria-label="zapojeno" />
-                </span>
-              ) : null
-            }
-          />
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={onlyUnassigned} onChange={(event) => setOnlyUnassigned(event.target.checked)} className="size-4 accent-primary" />
-              Jen nepřiřazené
-            </label>
-            <span className="text-xs text-muted-foreground">Vybráno: {selected.size}</span>
-          </div>
-          <ul className="max-h-80 overflow-y-auto rounded-lg border border-border" aria-label="Prvky k hromadnému zapojení">
-            {listed.map((node) => (
-              <li key={node.id} className="border-b border-border last:border-b-0">
-                <label className="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm hover:bg-muted/40">
-                  <input type="checkbox" className="size-4 accent-primary" checked={selected.has(node.id)} onChange={() => toggle(node.id)} aria-label={`Vybrat ${node.designation}`} />
-                  <span className="w-12 font-mono">{node.designation}</span>
-                  <span className="flex-1 truncate text-muted-foreground">{node.circuitLabel || meta[node.id]?.typeCode}</span>
-                  {connected.has(node.id) ? <Check className="size-4 text-emerald-400" aria-label="zapojeno" /> : <span className="text-xs text-yellow-300">nezapojeno</span>}
-                </label>
-              </li>
-            ))}
-            {!listed.length ? <li className="p-3 text-sm text-muted-foreground">Všechny prvky jsou zapojené.</li> : null}
-          </ul>
-          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-muted/30 p-3" data-testid="bulk-assign">
-            <span className="text-sm">Zapojit vybrané pod →</span>
-            <select aria-label="Hromadně zapojit pod" className={selectClass} value={bulkParent} onChange={(event) => setBulkParent(event.target.value)}>
-              <option value="">vyberte nadřazený prvek</option>
-              <option value={INCOMER}>Vstup napájení</option>
-              {bulkOptions.map((candidate) => (
-                <option key={candidate.id} value={candidate.id}>
-                  {candidate.designation} {candidate.circuitLabel ? `· ${candidate.circuitLabel}` : ""}
-                </option>
-              ))}
-            </select>
-            <Button className="touch-target" onClick={bulkAssign} disabled={!selected.size || !bulkParent}>
-              Zapojit ({selected.size})
-            </Button>
-          </div>
-        </section>
+      <section aria-label="DIN lišty a stav zapojení">
+        <DinRails
+          items={nodes.map((node) => ({ ...node, label: node.circuitLabel, modulesWidth: meta[node.id]?.modulesWidth ?? 1, caption: meta[node.id]?.typeCode ?? "?" }))}
+          rails={rails}
+          modulesPerRail={modulesPerRail}
+          selectedIds={new Set(highlight ? [highlight] : [])}
+          onSelect={(item) => {
+            setHighlight(item.id);
+            document.querySelector(`[data-testid="tree-row-${item.designation}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+          }}
+          tone={(item) => (connected.has(item.id) ? "border-emerald-500/70 bg-emerald-500/10 text-emerald-100" : "border-red-500/80 bg-red-500/20 text-red-100")}
+          badge={(item) =>
+            connected.has(item.id) ? (
+              <span className="flex size-4 items-center justify-center rounded-full bg-emerald-500 text-black">
+                <Check className="size-3" aria-label="zapojeno" />
+              </span>
+            ) : null
+          }
+        />
+      </section>
 
-        <section aria-label="Hierarchický strom zapojení" className="rounded-xl border border-border bg-card p-4">
-          <h2 className="mb-2 flex items-center gap-2 font-semibold">
-            <Zap className="size-4 text-primary" aria-hidden /> Vstup napájení
-            <span className="text-xs font-normal text-muted-foreground">{networkSystem}</span>
-          </h2>
-          <ul data-testid="tree">{flat.map(({ node, depth }) => row(node, depth))}</ul>
-          {loose.length ? (
-            <>
-              <h3 className="mt-4 mb-1 text-xs font-semibold text-yellow-300 uppercase">Nezapojené prvky ({loose.length})</h3>
-              <ul data-testid="tree-loose">{loose.map((node) => row(node, 1))}</ul>
-            </>
-          ) : null}
-        </section>
+      <div className="grid gap-4 xl:grid-cols-2" data-testid="tree">
+        {groups.map((group) => {
+          const members = inGroup(group);
+          return (
+            <section key={group.id ?? "incomer"} aria-label={group.title} className="rounded-xl border border-border bg-card" data-testid={`group-${group.head?.designation ?? "incomer"}`}>
+              <header className="flex flex-col gap-1 border-b border-border px-3 py-2.5">
+                <h2 className="flex items-center gap-2 font-semibold">
+                  {group.head?.category === "RCD" ? <ShieldCheck className="size-4 text-sky-300" aria-hidden /> : <Zap className="size-4 text-primary" aria-hidden />}
+                  {group.title}
+                </h2>
+                {loadInfo(group)}
+              </header>
+              <ul>
+                {group.head ? row(group.head, { head: true }) : null}
+                {members.map((node) => row(node))}
+                {!members.length ? <li className="px-3 py-3 text-sm text-muted-foreground">Ve skupině zatím nejsou žádné vývody.</li> : null}
+              </ul>
+            </section>
+          );
+        })}
+        {elsewhere.length ? (
+          <section aria-label="Jiné zapojení" className="rounded-xl border border-border bg-card" data-testid="group-elsewhere">
+            <header className="border-b border-border px-3 py-2.5">
+              <h2 className="font-semibold">↳ Jiné zapojení (pod jističem / jističochráničem)</h2>
+              <p className="text-xs text-muted-foreground">Přesuňte do skupiny tlačítkem „Napájeno z“.</p>
+            </header>
+            <ul>{elsewhere.map((node) => row(node))}</ul>
+          </section>
+        ) : null}
+        {loose.length ? (
+          <section aria-label="Nezapojené prvky" className="rounded-xl border border-red-500/50 bg-red-500/5" data-testid="tree-loose">
+            <header className="border-b border-border px-3 py-2.5">
+              <h2 className="font-semibold text-red-200">Nezapojené prvky ({loose.length})</h2>
+              <p className="text-xs text-muted-foreground">Klikněte na „AI návrh zapojení“, nebo zvolte skupinu u každého prvku.</p>
+            </header>
+            <ul>{loose.map((node) => row(node))}</ul>
+          </section>
+        ) : null}
       </div>
     </div>
   );

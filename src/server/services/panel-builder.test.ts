@@ -7,7 +7,7 @@ import { WorkflowError } from "@/lib/workflow/state-machine";
 
 import { CATALOG, seedPanelBuilder } from "../../../prisma/seed-panel-builder";
 import { analyzePanelPhoto, lookupComponent } from "./geminiPanelService";
-import { analyzeProject, assignCatalogComponent, createPanelProject, importDatasheet, lookupComponentForItem, addModule, addRail, configureItem, deleteItem, deleteRail, mergeItems, releaseDocumentation, saveTree, splitItem, updateItemText } from "./panel-builder";
+import { analyzeProject, assignCatalogComponent, createPanelProject, importDatasheet, lookupComponentForItem, addModule, addRail, configureItem, deleteItem, deleteRail, mergeItems, releaseDocumentation, saveTree, setItemBox, splitItem, updateItemText } from "./panel-builder";
 import { createTestDb, seedMinimal } from "./test-db";
 
 let db: Awaited<ReturnType<typeof createTestDb>>;
@@ -23,12 +23,12 @@ afterEach(async () => {
 });
 
 const REFERENCE_PAGES = [
-  ["2CDD283101R0040 SD203/40 Vypínac 3P, 40A /12.1 Odpínač", "2CDS251001R1165 -F8 S201-B16 Jistic 1P, 16A, char. B, 6kA /12.4 Zásuvky kuchyně"],
+  ["2CDD283101R0040 SD203/40 Vypínac 3P, 40A /12.1 Odpínač", "2CDS251001R1165 -F6 S201-B16 Jistic 1P, 16A, char. B, 6kA /12.4 Zásuvky kuchyně"],
   ["PCS2220017 =SYS0/+1.1/-UC1.F1 -- PCS-MCB-017 Circuit Breaker (MCB) 4P 10A /5.3", "PCS2250101 =SYS0.1/+1.1/-UC1.Q1 -- PCS-CON01 Contactor 3POL 1NO 1NC type1 /7.3"],
 ];
 
 describe("AI Panel Builder – katalog a seed", () => {
-  it("seed: ≥ 40 prvků, PB-001 s 13 přístroji (-Q1, -F1 až -F12) na 3 lištách (1 žlutý, 1 červený), opakovaně bez duplicit", async () => {
+  it("seed: ≥ 40 prvků, PB-001 s 13 přístroji (-Q1, -FV1 až -F10) na 3 lištách (1 žlutý, 1 červený), opakovaně bez duplicit", async () => {
     expect(CATALOG.length).toBeGreaterThanOrEqual(40);
     expect(await seedPanelBuilder(prisma)).toEqual({ components: CATALOG.length, project: true });
     expect(await seedPanelBuilder(prisma)).toEqual({ components: CATALOG.length, project: false });
@@ -36,9 +36,9 @@ describe("AI Panel Builder – katalog a seed", () => {
     const project = await prisma.panelBoardProject.findUniqueOrThrow({ where: { code: "PB-001" }, include: { items: true } });
     expect(project.items).toHaveLength(13);
     expect(new Set(project.items.map((item) => item.dinRailIndex))).toEqual(new Set([1, 2, 3]));
-    expect(project.items.filter((item) => item.recognitionStatus === "PARTIAL").map((item) => item.designation)).toEqual(["-F9"]);
-    expect(project.items.filter((item) => item.recognitionStatus === "UNRECOGNIZED").map((item) => item.designation)).toEqual(["-F6"]);
-    expect(project.items.find((item) => item.designation === "-F6")?.catalogComponentId).toBeNull();
+    expect(project.items.filter((item) => item.recognitionStatus === "PARTIAL").map((item) => item.designation)).toEqual(["-F7"]);
+    expect(project.items.filter((item) => item.recognitionStatus === "UNRECOGNIZED").map((item) => item.designation)).toEqual(["-F4"]);
+    expect(project.items.find((item) => item.designation === "-F4")?.catalogComponentId).toBeNull();
   });
 
   it("atomizace PDF: nové přístroje jako samostatné řádky, známá objednací čísla se nepřepisují", async () => {
@@ -87,8 +87,8 @@ describe("AI Panel Builder – projekt a analýza fotky", () => {
     expect(saved.dominantManufacturer).toBe("MIX");
     expect(saved.items.map((item) => [item.designation, item.catalogComponent?.manufacturer, item.recognitionStatus])).toEqual([
       ["-Q1", "OEZ", "VERIFIED"],
-      ["-F1", "Saltek", "VERIFIED"],
-      ["-F2", "Eaton", "PARTIAL"],
+      ["-FV1", "Saltek", "VERIFIED"],
+      ["-F1", "Eaton", "PARTIAL"],
     ]);
   });
 
@@ -100,7 +100,7 @@ describe("AI Panel Builder – projekt a analýza fotky", () => {
     const result = await analyzeProject(prisma, project.id, demo);
     expect(result).toMatchObject({ mode: "DEMO", total: 13, unresolved: 2 });
     const items = await prisma.panelBoardItem.findMany({ where: { projectId: project.id }, orderBy: { sortOrder: "asc" }, include: { catalogComponent: true } });
-    expect(items.map((item) => item.designation)).toEqual(["-Q1", "-F1", "-F2", "-F3", "-F4", "-F5", "-F6", "-F7", "-F8", "-F9", "-F10", "-F11", "-F12"]);
+    expect(items.map((item) => item.designation)).toEqual(["-Q1", "-FV1", "-FI1", "-F1", "-F2", "-F3", "-F4", "-F5", "-F6", "-F7", "-F8", "-F9", "-F10"]);
     expect(items[0].catalogComponent?.typeCode).toBe("SD203/40");
     expect(items[9]).toMatchObject({ recognitionStatus: "PARTIAL" });
     expect(items[9].catalogComponent?.typeCode).toBe("S201-B16");
@@ -111,7 +111,7 @@ describe("AI Panel Builder – projekt a analýza fotky", () => {
   it("picker: přiřazení zezelená, dohledání najde katalog nebo uloží nový přístroj", async () => {
     vi.stubEnv("GEMINI_API_KEY", "");
     await seedPanelBuilder(prisma);
-    const f6 = await prisma.panelBoardItem.findFirstOrThrow({ where: { designation: "-F6", project: { code: "PB-001" } } });
+    const f6 = await prisma.panelBoardItem.findFirstOrThrow({ where: { designation: "-F4", project: { code: "PB-001" } } });
     const s201b10 = await prisma.catalogComponent.findUniqueOrThrow({ where: { articleNumber: "2CDS251001R0105" } });
 
     const hints = { category: "MCB" as const, poles: "1P", current: 10, curve: "B", manufacturer: "ABB" };
@@ -140,32 +140,32 @@ describe("AI Panel Builder – strom zapojení", () => {
     const { project, nodes } = await pb001();
     const result = await saveTree(prisma, project.id, assignments(nodes));
     expect(result).toMatchObject({ status: "TREE_BUILT", connected: true });
-    // i nerozpoznaný -F6 (bez katalogového kusu) dostane jističový vývod a fázi → hlídač je čistý
+    // i nerozpoznaný -F4 (bez katalogového kusu) dostane jističový vývod a fázi → hlídač je čistý
     expect(result.issues.map((issue) => issue.message)).toEqual([]);
-    const f3 = await prisma.panelBoardItem.findFirstOrThrow({ where: { projectId: project.id, designation: "-F3" }, include: { parent: true } });
-    expect(f3.parent?.designation).toBe("-F2");
+    const f3 = await prisma.panelBoardItem.findFirstOrThrow({ where: { projectId: project.id, designation: "-F1" }, include: { parent: true } });
+    expect(f3.parent?.designation).toBe("-FI1");
     expect(f3.phaseAssignment).toBe("L1,L2,L3");
   });
 
   it("cyklus a duplicitní značení se odmítnou, odpojený prvek vrátí stav RECOGNIZED", async () => {
     const { project, nodes } = await pb001();
     const q1 = nodes.find((node) => node.designation === "-Q1")!;
-    const f2 = nodes.find((node) => node.designation === "-F2")!;
+    const f2 = nodes.find((node) => node.designation === "-FI1")!;
     await expect(saveTree(prisma, project.id, assignments(nodes.map((node) => (node.id === q1.id ? { ...node, parentItemId: f2.id, fedFromIncomer: false } : node))))).rejects.toThrow("cyklus");
-    await expect(saveTree(prisma, project.id, assignments(nodes.map((node) => (node.designation === "-F4" ? { ...node, designation: "-F3" } : node))))).rejects.toThrow("Značení -F3 je použito dvakrát");
-    const result = await saveTree(prisma, project.id, assignments(nodes.map((node) => (node.designation === "-F12" ? { ...node, parentItemId: null, fedFromIncomer: false } : node))));
+    await expect(saveTree(prisma, project.id, assignments(nodes.map((node) => (node.designation === "-F2" ? { ...node, designation: "-F1" } : node))))).rejects.toThrow("Značení -F1 je použito dvakrát");
+    const result = await saveTree(prisma, project.id, assignments(nodes.map((node) => (node.designation === "-F10" ? { ...node, parentItemId: null, fedFromIncomer: false } : node))));
     expect(result).toMatchObject({ status: "RECOGNIZED", connected: false });
-    expect(result.issues[0].message).toBe("-F12 není zapojen – vyberte, odkud je napájen.");
+    expect(result.issues[0].message).toBe("-F10 není zapojen – vyberte skupinu, ze které je napájen.");
   });
 
   it("propuštění dokumentace: jen kompletní projekt a jen ke kartě rozváděče", async () => {
     await seedMinimal(prisma);
     const { project, nodes } = await pb001();
     await saveTree(prisma, project.id, assignments(nodes));
-    await expect(releaseDocumentation(prisma, project.id, "eq-R-LIS-01")).rejects.toThrow("Nepotvrzené přístroje (krok 1): -F6, -F9.");
+    await expect(releaseDocumentation(prisma, project.id, "eq-R-LIS-01")).rejects.toThrow("Nepotvrzené přístroje (krok 1): -F4, -F7.");
 
     for (const item of await prisma.panelBoardItem.findMany({ where: { projectId: project.id, recognitionStatus: { not: "VERIFIED" } } })) {
-      const component = await prisma.catalogComponent.findUniqueOrThrow({ where: { articleNumber: item.designation === "-F6" ? "2CDS251001R0105" : "2CDS251001R1165" } });
+      const component = await prisma.catalogComponent.findUniqueOrThrow({ where: { articleNumber: item.designation === "-F4" ? "2CDS251001R0105" : "2CDS251001R1165" } });
       await assignCatalogComponent(prisma, item.id, component.id);
     }
     await prisma.equipment.update({ where: { id: "eq-R-CNC-04" }, data: { type: "CNC_MACHINE" } });
@@ -189,13 +189,26 @@ describe("AI Panel Builder – živý konfigurátor a geometrie DIN lišty", () 
     return { project, items, byDesignation };
   }
 
+  it("IEC značení podle kategorie (-Q, -FV, -FI, -F), ruční přepis značení a ruční srovnání rámečku", async () => {
+    const { items, byDesignation } = await pb001Items();
+    expect((await items()).map((item) => item.designation).slice(0, 4)).toEqual(["-Q1", "-FV1", "-FI1", "-F1"]);
+    const rcd = await byDesignation("-FI1");
+    await updateItemText(prisma, rcd.id, { customTypeCode: null, circuitLabel: "Chránič 1", designation: "fi9" });
+    expect(await byDesignation("-FI9")).toMatchObject({ circuitLabel: "Chránič 1" });
+    await expect(updateItemText(prisma, rcd.id, { customTypeCode: null, circuitLabel: "", designation: "-Q1" })).rejects.toThrow(/-Q1 už v rozváděči má jiný přístroj/);
+    await expect(updateItemText(prisma, rcd.id, { customTypeCode: null, circuitLabel: "", designation: "Q 1" })).rejects.toThrow(/Značení zadejte/);
+    await setItemBox(prisma, rcd.id, [10, 20, 30, 40.123]);
+    expect(JSON.parse((await byDesignation("-FI9")).boundingBoxJson!)).toEqual([10, 20, 30, 40.12]);
+    await expect(setItemBox(prisma, rcd.id, [10, 50, 30, 40])).rejects.toThrow(/Neplatný rámeček/);
+  });
+
   it("klik v konfigurátoru: přesný kus z katalogu, VERIFIED; neznámý výrobce → uložený odhad IEC", async () => {
     const { byDesignation } = await pb001Items();
-    const f6 = await byDesignation("-F6");
+    const f6 = await byDesignation("-F4");
     const result = await configureItem(prisma, f6.id, { ...defaultConfig("MCB", { manufacturer: "Eaton", modules: 1 }), ratedCurrentA: 10, breakingCapacityKa: 10 });
     expect(result).toMatchObject({ estimated: false, component: { typeCode: "PL7-B10/1" } });
-    expect(await byDesignation("-F6")).toMatchObject({ recognitionStatus: "VERIFIED", confidence: 1, modulesWidth: 1 });
-    expect(JSON.parse((await byDesignation("-F6")).configJson!)).toMatchObject({ manufacturer: "Eaton", ratedCurrentA: 10 });
+    expect(await byDesignation("-F4")).toMatchObject({ recognitionStatus: "VERIFIED", confidence: 1, modulesWidth: 1 });
+    expect(JSON.parse((await byDesignation("-F4")).configJson!)).toMatchObject({ manufacturer: "Eaton", ratedCurrentA: 10 });
 
     const legrand = await configureItem(prisma, f6.id, { ...defaultConfig("MCB", { manufacturer: "Legrand", modules: 1 }), ratedCurrentA: 10 });
     expect(legrand).toMatchObject({ estimated: true, component: { manufacturer: "Legrand", typeCode: "Jistič 1P B10 6 kA" } });
@@ -203,26 +216,26 @@ describe("AI Panel Builder – živý konfigurátor a geometrie DIN lišty", () 
     expect(await prisma.catalogComponent.count({ where: { manufacturer: "Legrand" } })).toBe(1);
 
     // změna kategorie (F → K) přečísluje značení
-    const f8 = await byDesignation("-F8");
+    const f8 = await byDesignation("-F6");
     await configureItem(prisma, f8.id, defaultConfig("CONTACTOR", { manufacturer: "ABB", modules: 1 }));
     expect((await prisma.panelBoardItem.findUniqueOrThrow({ where: { id: f8.id } })).designation).toBe("-K1");
   });
 
   it("sloučení 3× 1M → 3P (spojený rámeček, přečíslování) a rozdělení zpět na 1M", async () => {
     const { items, byDesignation } = await pb001Items();
-    const f5 = await byDesignation("-F5");
-    const boxes = (await items()).filter((item) => ["-F5", "-F6", "-F7"].includes(item.designation)).map((item) => JSON.parse(item.boundingBoxJson!) as number[]);
+    const f5 = await byDesignation("-F3");
+    const boxes = (await items()).filter((item) => ["-F3", "-F4", "-F5"].includes(item.designation)).map((item) => JSON.parse(item.boundingBoxJson!) as number[]);
     expect(await mergeItems(prisma, f5.id, 3)).toMatchObject({ width: 3, removed: 2 });
 
     const merged = await prisma.panelBoardItem.findUniqueOrThrow({ where: { id: f5.id }, include: { catalogComponent: true } });
-    expect(merged).toMatchObject({ modulesWidth: 3, recognitionStatus: "VERIFIED", designation: "-F5", positionOnRail: 3 });
+    expect(merged).toMatchObject({ modulesWidth: 3, recognitionStatus: "VERIFIED", designation: "-F3", positionOnRail: 3 });
     expect(merged.catalogComponent?.typeCode).toBe("S203-B10");
     expect(JSON.parse(merged.boundingBoxJson!)).toEqual([Math.min(...boxes.map((b) => b[0])), boxes[0][1], Math.max(...boxes.map((b) => b[2])), boxes[2][3]]);
     const after = await items();
     expect(after).toHaveLength(11);
-    expect(after.map((item) => item.designation)).toEqual(["-Q1", "-F1", "-F2", "-F3", "-F4", "-F5", "-F6", "-F7", "-F8", "-F9", "-F10"]);
+    expect(after.map((item) => item.designation)).toEqual(["-Q1", "-FV1", "-FI1", "-F1", "-F2", "-F3", "-F4", "-F5", "-F6", "-F7", "-F8"]);
     expect(after.filter((item) => item.dinRailIndex === 2).map((item) => item.positionOnRail)).toEqual([1, 2, 3, 4, 5, 6]);
-    await expect(mergeItems(prisma, (await byDesignation("-F10")).id, 3)).rejects.toThrow("nejsou na liště 2 další moduly");
+    await expect(mergeItems(prisma, (await byDesignation("-F8")).id, 3)).rejects.toThrow("nejsou na liště 2 další moduly");
 
     expect(await splitItem(prisma, f5.id)).toMatchObject({ parts: 3 });
     const split = await items();
@@ -233,12 +246,12 @@ describe("AI Panel Builder – živý konfigurátor a geometrie DIN lišty", () 
       [1, "S201-B10", "VERIFIED"],
       [1, "S201-B10", "VERIFIED"],
     ]);
-    expect(split.map((item) => item.designation).slice(-2)).toEqual(["-F11", "-F12"]);
+    expect(split.map((item) => item.designation).slice(-2)).toEqual(["-F9", "-F10"]);
   });
 
   it("chytré sloučení: volba 3P u 1M modulu pohltí sousedy vpravo", async () => {
     const { items, byDesignation } = await pb001Items();
-    const f11 = await byDesignation("-F11");
+    const f11 = await byDesignation("-F9");
     await configureItem(prisma, f11.id, { ...defaultConfig("MCB", { manufacturer: "ABB", modules: 3 }), ratedCurrentA: 16 }, { mergeNeighbors: true });
     const rail3 = (await items()).filter((item) => item.dinRailIndex === 3);
     expect(rail3).toHaveLength(1);
@@ -274,24 +287,24 @@ describe("AI Panel Builder – Vision Analyzer 2.0 a správa lišt", () => {
 
   it("přidat modul (rámeček vpravo), smazat prvek, smazat lištu a přidat lištu – vše přečísluje", async () => {
     const { project, items } = await pb001();
-    const f12 = (await items()).find((item) => item.designation === "-F12")!;
+    const f12 = (await items()).find((item) => item.designation === "-F10")!;
     const f12Box = JSON.parse(f12.boundingBoxJson!) as number[];
     const added = await addModule(prisma, project.id, 3);
     expect(added).toMatchObject({ dinRailIndex: 3, positionOnRail: 3, recognitionStatus: "UNRECOGNIZED" });
     const addedBox = JSON.parse((await prisma.panelBoardItem.findUniqueOrThrow({ where: { id: added.id } })).boundingBoxJson!) as number[];
     expect(addedBox[1]).toBeCloseTo(f12Box[3], 2);
     expect(addedBox[3] - addedBox[1]).toBeCloseTo(f12Box[3] - f12Box[1], 1);
-    expect((await items()).map((item) => item.designation).slice(-1)).toEqual(["-F13"]);
+    expect((await items()).map((item) => item.designation).slice(-1)).toEqual(["-F11"]);
 
-    // smazání -F3 (rail 2): pozice na liště 2 se posunou, značení se přečísluje
-    const f3 = (await items()).find((item) => item.designation === "-F3")!;
+    // smazání -F1 (rail 2): pozice na liště 2 se posunou, značení se přečísluje
+    const f3 = (await items()).find((item) => item.designation === "-F1")!;
     await deleteItem(prisma, f3.id);
     const afterDelete = await items();
     expect(afterDelete).toHaveLength(13);
     expect(afterDelete.filter((item) => item.dinRailIndex === 2).map((item) => item.positionOnRail)).toEqual([1, 2, 3, 4, 5, 6, 7]);
-    expect(afterDelete.map((item) => item.designation)).toContain("-F12");
+    expect(afterDelete.map((item) => item.designation)).toContain("-F10");
 
-    // smazání lišty 1 (-Q1, -F1, -F2): lišty 2 a 3 se posunou na 1 a 2
+    // smazání lišty 1 (-Q1, -FV1, -FI1): lišty 2 a 3 se posunou na 1 a 2
     expect(await deleteRail(prisma, project.id, 1)).toEqual({ removed: 3 });
     const afterRail = await items();
     expect(new Set(afterRail.map((item) => item.dinRailIndex))).toEqual(new Set([1, 2]));
@@ -304,7 +317,7 @@ describe("AI Panel Builder – Vision Analyzer 2.0 a správa lišt", () => {
 
   it("kompaktní 2×1P v 1M: konfigurace z katalogu a rozdělení na 2 obvodové větve", async () => {
     const { items } = await pb001();
-    const f6 = (await items()).find((item) => item.designation === "-F6")!;
+    const f6 = (await items()).find((item) => item.designation === "-F4")!;
     const result = await configureItem(prisma, f6.id, { ...defaultConfig("MCB", { manufacturer: "Hager", modules: 1 }), poles: "2x1P", modules: 1, ratedCurrentA: 16 });
     expect(result.component.typeCode).toBe("MBN 2x1P B16 kompakt");
     expect(await splitItem(prisma, f6.id)).toEqual(expect.objectContaining({ parts: 2 }));

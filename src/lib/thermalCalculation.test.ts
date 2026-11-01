@@ -56,19 +56,19 @@ describe("výpočet oteplení – referenční rozváděč (PDF PanelBuilder: 30
   });
 
   it("řádky přístrojů odpovídají tabulce oteplení", () => {
-    expect(row("-F3")).toMatchObject({ leaf: true });
-    expect(row("-F3").operatingCurrentA).toBeCloseTo(13.52, 1);
-    expect(row("-F3").lossW).toBeCloseTo(1.79, 1);
-    expect(row("-F3").reducedLossW).toBeCloseTo(0.45, 2);
-    expect(row("-F3").imaxSf).toBeCloseTo(6.76, 1);
-    expect(row("-F5").N).toBeCloseTo(8.45, 1);
-    expect(row("-F2").imax).toBeCloseTo(62.51, 1);
-    expect(row("-F2").L3).toBeCloseTo(49, 0);
-    expect(row("-F2").N).toBeCloseTo(13.52, 1);
-    expect(row("-F2").lossW).toBeCloseTo(20.8, 1);
+    expect(row("-F1")).toMatchObject({ leaf: true });
+    expect(row("-F1").operatingCurrentA).toBeCloseTo(13.52, 1);
+    expect(row("-F1").lossW).toBeCloseTo(1.79, 1);
+    expect(row("-F1").reducedLossW).toBeCloseTo(0.45, 2);
+    expect(row("-F1").imaxSf).toBeCloseTo(6.76, 1);
+    expect(row("-F3").N).toBeCloseTo(8.45, 1);
+    expect(row("-FI1").imax).toBeCloseTo(62.51, 1);
+    expect(row("-FI1").L3).toBeCloseTo(49, 0);
+    expect(row("-FI1").N).toBeCloseTo(13.52, 1);
+    expect(row("-FI1").lossW).toBeCloseTo(20.8, 1);
     expect(row("-Q1").lossW).toBeCloseTo(16.63, 1);
     expect(row("-Q1").reducedLossW).toBeCloseTo(4.17, 1);
-    expect(row("-F1").constantLossW).toBe(0.03);
+    expect(row("-FV1").constantLossW).toBe(0.03);
   });
 
   it("fázová bilance (L1, L2, L3, N) a provozní proud", () => {
@@ -118,9 +118,9 @@ describe("výpočet oteplení – vstupy skříně", () => {
     expect(hot.verdict).toMatch(/^NEVYHOVUJE/);
     expect(deratingFactor(20)).toBe(1);
     expect(deratingFactor(70)).toBe(0.5);
-    const devices = referenceDevices().map((device) => (device.designation === "-F3" ? { ...device, operatingCurrentA: 4 } : device));
+    const devices = referenceDevices().map((device) => (device.designation === "-F1" ? { ...device, operatingCurrentA: 4 } : device));
     const result = calculateThermal(devices, ENCLOSURE);
-    expect(result.rows.find((row) => row.designation === "-F3")!.operatingCurrentA).toBe(4);
+    expect(result.rows.find((row) => row.designation === "-F1")!.operatingCurrentA).toBe(4);
     expect(result.totalLossW).toBeLessThan(17.75);
   });
 

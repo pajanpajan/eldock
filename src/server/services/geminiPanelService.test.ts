@@ -6,7 +6,7 @@ import { normalizeManufacturer } from "@/lib/panel-builder/catalog";
 
 import sharp from "sharp";
 
-import { RAILS_PROMPT, RAIL_CONCURRENCY, abbS200Article, mapWithConcurrency, analyzePanelPhoto, cropRegionFor, photoPrompt, railPrompt, toPhotoBox, toRailDetections, extractDatasheetComponents, isGeminiConfigured, lookupComponent, toDetections, toExtracted } from "./geminiPanelService";
+import { RAILS_PROMPT, RAIL_CONCURRENCY, switchDisconnectorFromText, abbS200Article, mapWithConcurrency, analyzePanelPhoto, cropRegionFor, photoPrompt, railPrompt, toPhotoBox, toRailDetections, extractDatasheetComponents, isGeminiConfigured, lookupComponent, toDetections, toExtracted } from "./geminiPanelService";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -177,5 +177,32 @@ describe("Vision Analyzer – paralelní fáze B", () => {
     expect(results).toEqual([0, 1, 2, 3, 4, 5, 6]);
     expect(peak).toBe(3);
     expect(await mapWithConcurrency([], 3, async () => 1)).toEqual([]);
+  });
+});
+
+describe("Vision Analyzer – odpínače s červenou páčkou a prompt B vs. C", () => {
+  it("SHD203/25 i SD203/40 jsou odpínače 25 A / 40 A, nikdy jistič C25", () => {
+    expect(switchDisconnectorFromText("ABB SHD203/25")).toEqual({ ratedCurrentA: 25, poles: "3P" });
+    expect(switchDisconnectorFromText("SD 203 / 40 400V")).toEqual({ ratedCurrentA: 40, poles: "3P" });
+    expect(switchDisconnectorFromText("SHD204/40")).toEqual({ ratedCurrentA: 40, poles: "4P" });
+    expect(switchDisconnectorFromText("SH201-B16")).toBeNull();
+    const region = { left: 0, top: 0, width: 1000, height: 200, imageWidth: 1000, imageHeight: 1000 };
+    const [device] = toRailDetections([{ position: 1, box_2d: [0, 0, 1000, 300], text: "ABB SHD203/25", category: "MCB", poles: "3P", modulesWidth: 3, ratedCurrentA: 25, trippingCurve: "C", manufacturer: "ABB", confidence: 0.8 }], 1, region, 3);
+    expect(device).toMatchObject({ category: "MAIN_SWITCH", ratedCurrentA: 25, trippingCurve: null, poles: "3P" });
+  });
+
+  it("prompt lišty: červená páčka = odpínač, přednost charakteristiky B, rámečky jen kolem těl přístrojů", () => {
+    const prompt = railPrompt("COVERED", "ABB");
+    expect(prompt).toContain("ČERVENÁ PÁČKA");
+    expect(prompt).toContain("vrať \"B\"");
+    expect(prompt).toContain("POUZE skutečné plastové tělo");
+    expect(RAILS_PROMPT).toContain("NE prázdný konec kovové DIN lišty");
+  });
+
+  it("doplnění vynechaných modulů nikdy nepřeteče za výřez lišty (částečně osazená lišta se neroztáhne)", () => {
+    const region = { left: 0, top: 0, width: 500, height: 100, imageWidth: 1000, imageHeight: 1000 };
+    const devices = [1, 2, 3].map((position) => ({ position, box_2d: [0, (position - 1) * 300, 1000, position * 300], text: "", category: "MCB", poles: "1P", modulesWidth: 1, ratedCurrentA: 16, trippingCurve: "B", manufacturer: "ABB", confidence: 0.9 }));
+    // AI tvrdí 12 modulů, ale výřez lišty končí za 3. přístrojem → nic se nedoplní
+    expect(toRailDetections(devices, 1, region, 12)).toHaveLength(3);
   });
 });

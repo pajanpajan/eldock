@@ -10,7 +10,7 @@ import { WorkflowError } from "@/lib/workflow/state-machine";
 import { assertFeature } from "@/server/modules";
 import { analyzePanelPhoto, extractDatasheetComponents, lookupComponent, type AiMode, type AnalysisMode } from "@/server/services/geminiPanelService";
 import { PHASE_OPTIONS, type TreeIssue } from "@/lib/panel-builder/tree";
-import { analyzeProject, assignCatalogComponent, createPanelProject, importDatasheet, addModule, addRail, configureItem, deleteItem, deleteRail, lookupComponentForItem, mergeItems, releaseDocumentation, saveThermalInputs, saveTree, splitItem, updateItemText, type ImportedComponent } from "@/server/services/panel-builder";
+import { analyzeProject, assignCatalogComponent, createPanelProject, importDatasheet, addModule, addRail, configureItem, deleteItem, deleteRail, lookupComponentForItem, mergeItems, releaseDocumentation, saveThermalInputs, saveTree, splitItem, setItemBox, updateItemText, type ImportedComponent } from "@/server/services/panel-builder";
 import { getCurrentAccount } from "@/server/session";
 import { readStoredFile } from "@/server/storage";
 
@@ -269,8 +269,8 @@ export async function splitItemAction(itemId: string): Promise<ActionResult<{ pa
 }
 
 /** Karta „Přiřazený přístroj“: ruční typ a popis obvodu. */
-export async function updateItemTextAction(itemId: string, input: { customTypeCode: string | null; circuitLabel: string }): Promise<ActionResult> {
-  const parsed = z.object({ customTypeCode: z.string().max(80).nullable(), circuitLabel: z.string().max(80) }).safeParse(input);
+export async function updateItemTextAction(itemId: string, input: { customTypeCode: string | null; circuitLabel: string; designation?: string | null }): Promise<ActionResult> {
+  const parsed = z.object({ customTypeCode: z.string().max(80).nullable(), circuitLabel: z.string().max(80), designation: z.string().max(8).nullable().optional() }).safeParse(input);
   if (!id.safeParse(itemId).success || !parsed.success) return { ok: false, error: "Neplatné údaje přístroje." };
   try {
     await guard();
@@ -279,6 +279,20 @@ export async function updateItemTextAction(itemId: string, input: { customTypeCo
     return { ok: true, data: undefined };
   } catch (error) {
     return failure(error, "Údaje se nepodařilo uložit.");
+  }
+}
+
+/** Ruční úprava rámečku přístroje na fotce (tažení myší). */
+export async function setItemBoxAction(itemId: string, box: [number, number, number, number]): Promise<ActionResult> {
+  const parsed = z.tuple([z.number(), z.number(), z.number(), z.number()]).safeParse(box);
+  if (!id.safeParse(itemId).success || !parsed.success) return { ok: false, error: "Neplatný rámeček." };
+  try {
+    await guard();
+    const item = await setItemBox(prisma, itemId, parsed.data);
+    revalidatePath(`/panel-builder/${item.projectId}`, "layout");
+    return { ok: true, data: undefined };
+  } catch (error) {
+    return failure(error, "Rámeček se nepodařilo uložit.");
   }
 }
 

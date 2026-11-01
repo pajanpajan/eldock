@@ -229,6 +229,14 @@ for (const [p, current] of [[3, 63], [3, 100], [4, 40], [4, 63], [1, 40]] as con
 for (const [p, current] of [[3, 63], [3, 80], [4, 40], [4, 63], [3, 125]] as const) sw("Hager", "SBN", `SBN${p}${current}`, `${p}P`, current);
 sw("Noark", "Ex9IP", "Ex9IP 3P 63A", "3P", 63);
 
+// ABB Compact Home (fáze 37, podle reálné fotky PB-004): odpínače SHD200 s červenou páčkou (bez tlačítka T),
+// jističe SH200 vč. 13 A a chrániče FH202 / FH204. Objednací kód = typové označení (vzor neověřen).
+for (const [p, current] of [[3, 25], [3, 40], [3, 63], [4, 40]] as const) sw("ABB", "SHD200 (Compact Home)", `SHD20${p}/${current}`, `${p}P`, current);
+mcbSeries({ manufacturer: "ABB", series: "SH200 (Compact Home)", poles: ["1P", "3P"], curves: ["B", "C"], currents: [6, 10, 13, 16, 20, 25, 32], ka: 6, type: (p, c, i) => `SH20${p.charAt(0)}-${c}${i}` });
+for (const type of ["AC", "A"]) {
+  for (const current of [25, 40, 63]) rcd("ABB", "FH200 (Compact Home)", `FH202 ${type}-${current}/0,03`, "2P", current, 30, type);
+}
+
 // ---------------------------------------------------------------------------
 //  Svodiče přepětí (SPD)
 // ---------------------------------------------------------------------------

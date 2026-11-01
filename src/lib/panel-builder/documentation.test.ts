@@ -43,8 +43,8 @@ describe("kusovník a seznam komponent (referenční PDF)", () => {
   it("seznam komponent podle značení (přirozené řazení) s pozicí v 1P schématu a funkcí", () => {
     const rows = componentsList(docItems, enclosure);
     expect(rows.map((row) => row.designation).slice(0, 5)).toEqual(["-A1", "-F1", "-F2", "-F3", "-F4"]);
-    expect(rows.map((row) => row.designation).slice(-4)).toEqual(["-F10", "-F11", "-F12", "-Q1"]);
-    expect(rows.find((row) => row.designation === "-F8")).toMatchObject({ articleNumber: "2CDS251001R1165", function: "Zásuvky kuchyně" });
+    expect(rows.map((row) => row.designation).slice(-4)).toEqual(["-F10", "-FI1", "-FV1", "-Q1"]);
+    expect(rows.find((row) => row.designation === "-F6")).toMatchObject({ articleNumber: "2CDS251001R1165", function: "Zásuvky kuchyně" });
     expect(rows.find((row) => row.designation === "-Q1")?.position).toBe("/3.1");
   });
 
@@ -52,11 +52,11 @@ describe("kusovník a seznam komponent (referenční PDF)", () => {
     const swap = (designation: string, component: DocItem["component"]) => (item: DocItem) => (item.designation === designation ? { ...item, component } : item);
     const mixed = docItems
       .map(swap("-Q1", { articleNumber: "43345", typeCode: "MSO-40-3", manufacturer: "OEZ", description: "Vypínač 3P, 40 A", category: "MAIN_SWITCH" }))
-      .map(swap("-F1", { articleNumber: "SLP-275-V-3+1", typeCode: "SLP-275 V/3+1", manufacturer: "Saltek", description: "SPD T2", category: "SPD" }))
-      .map(swap("-F5", { articleNumber: "262704", typeCode: "PL7-B10/1", manufacturer: "Eaton", description: "Jistič 1P B10", category: "MCB" }));
+      .map(swap("-FV1", { articleNumber: "SLP-275-V-3+1", typeCode: "SLP-275 V/3+1", manufacturer: "Saltek", description: "SPD T2", category: "SPD" }))
+      .map(swap("-F3", { articleNumber: "262704", typeCode: "PL7-B10/1", manufacturer: "Eaton", description: "Jistič 1P B10", category: "MCB" }));
     expect(new Set(partsList(mixed, null).map((row) => row.manufacturer))).toEqual(new Set(["OEZ", "Saltek", "Eaton", "ABB"]));
     const rows = Object.fromEntries(componentsList(mixed, null).map((row) => [row.designation, row.manufacturer]));
-    expect(rows).toMatchObject({ "-Q1": "OEZ", "-F1": "Saltek", "-F5": "Eaton", "-F6": "ABB" });
+    expect(rows).toMatchObject({ "-Q1": "OEZ", "-FV1": "Saltek", "-F3": "Eaton", "-F4": "ABB" });
     const sld = renderSingleLineDiagramSvg(drawing.map((item) => ({ ...item, manufacturer: item.designation === "-Q1" ? "OEZ" : "ABB" })), { incomer: "L1,L2,L3,N", network: "" });
     expect(sld).toContain(">OEZ</text>");
   });
@@ -65,7 +65,7 @@ describe("kusovník a seznam komponent (referenční PDF)", () => {
     const ready = docItems.map((item) => ({ ...item, recognitionStatus: "VERIFIED" }));
     expect(releaseBlockers({ items: ready, connected: true, thermalOk: true })).toEqual([]);
     const blockers = releaseBlockers({ items: ready.map((item, i) => (i === 6 ? { ...item, recognitionStatus: "UNRECOGNIZED", component: null } : item)), connected: false, thermalOk: false });
-    expect(blockers).toEqual(["Nepotvrzené přístroje (krok 1): -F6.", "Strom zapojení není kompletní (krok 2).", "Výpočet oteplení nevyhovuje (krok 3)."]);
+    expect(blockers).toEqual(["Nepotvrzené přístroje (krok 1): -F4.", "Strom zapojení není kompletní (krok 2).", "Výpočet oteplení nevyhovuje (krok 3)."]);
   });
 });
 
@@ -74,20 +74,20 @@ describe("výkresy SVG", () => {
     const svg = renderPanelDrawingSvg(REFERENCE_DIMS, drawing, "MISTRAL41W, 36M 3R");
     expect(svg.startsWith("<svg")).toBe(true);
     expect(svg.match(/fill="#e5e7eb"/g)).toHaveLength(3);
-    for (const designation of ["-Q1", "-F1", "-F12"]) expect(svg).toContain(`>${designation}</text>`);
+    for (const designation of ["-Q1", "-FV1", "-F10"]) expect(svg).toContain(`>${designation}</text>`);
     expect(svg).toContain('stroke="#1d4ed8"');
     expect(svg).toContain("292 mm");
     expect(svg).toContain("507 mm");
   });
 
-  it("1P schéma ze stromu: přívod, -Q1 → -F1/-F2 → -F3 až -F12, fáze a popisy obvodů", () => {
+  it("1P schéma ze stromu: přívod, -Q1 → -FV1/-FI1 → -F1 až -F10, fáze a popisy obvodů", () => {
     const svg = renderSingleLineDiagramSvg(drawing, { incomer: "L1,L2,L3,N", network: "3 x 230/400 V, 50Hz, TN-S" });
     expect(svg).toContain(">L1,L2,L3,N</text>");
-    for (const designation of ["-Q1", "-F1", "-F2", "-F3", "-F12"]) expect(svg).toContain(`>${designation}</text>`);
+    for (const designation of ["-Q1", "-FV1", "-FI1", "-F1", "-F10"]) expect(svg).toContain(`>${designation}</text>`);
     for (const label of ["Tepelné čerpadlo", "Zásuvky pokoje + koupelna"]) expect(svg).toContain(label);
     expect(svg).not.toContain("Nezapojeno ve stromu");
     // nezapojený prvek se vypíše pod schéma
-    const loose = renderSingleLineDiagramSvg(drawing.map((item) => (item.designation === "-F12" ? { ...item, parentItemId: null, fedFromIncomer: false } : item)), { incomer: "L1,L2,L3,N", network: "" });
-    expect(loose).toContain("Nezapojeno ve stromu: -F12");
+    const loose = renderSingleLineDiagramSvg(drawing.map((item) => (item.designation === "-F10" ? { ...item, parentItemId: null, fedFromIncomer: false } : item)), { incomer: "L1,L2,L3,N", network: "" });
+    expect(loose).toContain("Nezapojeno ve stromu: -F10");
   });
 });

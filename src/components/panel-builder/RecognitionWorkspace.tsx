@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, useTransition } from "react";
+import { useCallback, useRef, useState, useTransition, type PointerEvent as ReactPointerEvent } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
@@ -11,7 +11,7 @@ import { describeConfig, type ItemConfig } from "@/lib/panel-builder/configurato
 import type { BoundingBox } from "@/lib/panel-builder/layout";
 import { RECOGNITION } from "@/lib/panel-builder/project";
 import { cn } from "@/lib/utils";
-import { addModuleAction, addRailAction, analyzePanelProjectAction, deleteRailAction } from "@/server/actions/panel-builder";
+import { addModuleAction, addRailAction, analyzePanelProjectAction, deleteRailAction, setItemBoxAction } from "@/server/actions/panel-builder";
 import type { AnalysisMode } from "@/server/services/geminiPanelService";
 
 import { DinRails } from "./DinRails";
@@ -72,6 +72,73 @@ export function RecognitionWorkspace({
   const unresolved = items.filter((item) => item.recognitionStatus !== "VERIFIED");
   const [selectedId, setSelectedId] = useState<string | null>(unresolved[0]?.id ?? null);
   const [analyzing, startAnalyze] = useTransition();
+  // Popis obvodu psaný v konfigurátoru se hned ukáže na dlaždici lišty
+  const [labels, setLabels] = useState<ReadonlyMap<string, string>>(new Map());
+  const labelPreview = useCallback(
+    (itemId: string, label: string | null) =>
+      setLabels((current) => {
+        const next = new Map(current);
+        if (label === null) next.delete(itemId);
+        else next.set(itemId, label);
+        return next;
+      }),
+    [],
+  );
+  // Ruční srovnání rámečku vybraného přístroje na fotce: posun celého rámečku nebo levé / pravé hrany
+  const photoSvg = useRef<SVGSVGElement>(null);
+  const [boxes, setBoxes] = useState<ReadonlyMap<string, BoundingBox>>(new Map());
+  const [boxDrag, setBoxDrag] = useState<{ id: string; mode: "move" | "left" | "right"; x: number; y: number; start: BoundingBox; moved: boolean } | null>(null);
+  const [, startBoxSave] = useTransition();
+  const boxOf = (item: WorkspaceItem) => boxes.get(item.id) ?? item.box;
+  const photoPoint = (event: ReactPointerEvent) => {
+    const rect = photoSvg.current!.getBoundingClientRect();
+    return { x: ((event.clientX - rect.left) / rect.width) * 100, y: ((event.clientY - rect.top) / rect.height) * 100 };
+  };
+  function startBoxDrag(event: ReactPointerEvent, item: WorkspaceItem, mode: "move" | "left" | "right") {
+    const box = boxOf(item);
+    if (!box || event.button !== 0) return;
+    event.stopPropagation();
+    photoSvg.current?.setPointerCapture(event.pointerId);
+    const point = photoPoint(event);
+    setBoxDrag({ id: item.id, mode, x: point.x, y: point.y, start: box, moved: false });
+  }
+  function moveBoxDrag(event: ReactPointerEvent) {
+    if (!boxDrag) return;
+    const point = photoPoint(event);
+    const dx = point.x - boxDrag.x;
+    const dy = point.y - boxDrag.y;
+    if (!boxDrag.moved && Math.hypot(dx, dy) < 0.3) return;
+    const [ymin, xmin, ymax, xmax] = boxDrag.start;
+    const clamp = (value: number) => Math.min(100, Math.max(0, value));
+    let next: BoundingBox;
+    if (boxDrag.mode === "left") next = [ymin, Math.min(clamp(xmin + dx), xmax - 0.5), ymax, xmax];
+    else if (boxDrag.mode === "right") next = [ymin, xmin, ymax, Math.max(clamp(xmax + dx), xmin + 0.5)];
+    else {
+      const sx = Math.min(100 - xmax, Math.max(-xmin, dx));
+      const sy = Math.min(100 - ymax, Math.max(-ymin, dy));
+      next = [ymin + sy, xmin + sx, ymax + sy, xmax + sx];
+    }
+    setBoxDrag({ ...boxDrag, moved: true });
+    setBoxes((current) => new Map(current).set(boxDrag.id, next));
+  }
+  function endBoxDrag() {
+    if (!boxDrag) return;
+    const { id, moved } = boxDrag;
+    setBoxDrag(null);
+    const box = boxes.get(id);
+    if (!moved || !box) return;
+    startBoxSave(async () => {
+      const result = await setItemBoxAction(id, box);
+      if (!result.ok) toast.error(result.error);
+      // Uložený rámeček přijde s revalidací stránky – náhled se zahodí
+      setBoxes((current) => {
+        const next = new Map(current);
+        next.delete(id);
+        return next;
+      });
+    });
+  }
+
   // Optimistický náhled konfigurace (prvek → rozklikaná konfigurace), než dorazí uložená data
   const [previews, setPreviews] = useState<ReadonlyMap<string, ItemConfig>>(new Map());
   const preview = useCallback(
@@ -152,11 +219,20 @@ export function RecognitionWorkspace({
           <div className="relative mx-auto w-full max-w-xl overflow-hidden rounded-xl border border-border bg-black" data-testid="panel-photo">
             {/* eslint-disable-next-line @next/next/no-img-element -- fotka z /api/files (SVG i JPG), rámečky v % */}
             <img src={photoUrl} alt="Fotka rozváděče" className="block h-auto w-full" />
-            <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-0 size-full">
+            <svg
+              ref={photoSvg}
+              viewBox="0 0 100 100"
+              preserveAspectRatio="none"
+              className="absolute inset-0 size-full touch-none"
+              onPointerMove={moveBoxDrag}
+              onPointerUp={endBoxDrag}
+              onPointerCancel={() => setBoxDrag(null)}
+            >
               {/* Vybraný rámeček se kreslí naposledy, ať je nahoře */}
               {[...items].sort((a, b) => Number(a.id === selectedId) - Number(b.id === selectedId)).map((item) => {
-                if (!item.box) return null;
-                const [ymin, xmin, ymax, xmax] = item.box;
+                const itemBox = boxOf(item);
+                if (!itemBox) return null;
+                const [ymin, xmin, ymax, xmax] = itemBox;
                 const style = RECOGNITION[item.recognitionStatus];
                 const active = item.id === selectedId;
                 return (
@@ -188,6 +264,14 @@ export function RecognitionWorkspace({
                           return <line key={index} x1={x} x2={x} y1={ymin} y2={ymax} stroke={active ? SELECTED : style.stroke} strokeDasharray="1.5 1.5" vectorEffect="non-scaling-stroke" style={{ strokeWidth: 1 }} opacity={0.9} data-module-divider="" />;
                         })
                       : null}
+                    {active ? (
+                      // Úchyty vybraného rámečku: tělo = posun, svislé hrany = šířka (srovnání na hrany přístroje)
+                      <>
+                        <rect x={xmin} y={ymin} width={xmax - xmin} height={ymax - ymin} fill="transparent" className="cursor-move" onPointerDown={(event) => startBoxDrag(event, item, "move")} data-testid="box-move" />
+                        <rect x={xmin - 1} y={ymin} width={2} height={ymax - ymin} fill={SELECTED} fillOpacity={0.35} className="cursor-ew-resize" onPointerDown={(event) => startBoxDrag(event, item, "left")} data-testid="box-edge-left" />
+                        <rect x={xmax - 1} y={ymin} width={2} height={ymax - ymin} fill={SELECTED} fillOpacity={0.35} className="cursor-ew-resize" onPointerDown={(event) => startBoxDrag(event, item, "right")} data-testid="box-edge-right" />
+                      </>
+                    ) : null}
                     {item.recognitionStatus === "UNRECOGNIZED" && !active ? (
                       <text x={(xmin + xmax) / 2} y={(ymin + ymax) / 2} fontSize={4} fontWeight={800} fill="#fff" textAnchor="middle" dominantBaseline="middle" style={{ paintOrder: "stroke", stroke: "#ef4444", strokeWidth: 0.8 }}>
                         ?
@@ -198,10 +282,10 @@ export function RecognitionWorkspace({
               })}
             </svg>
             {/* Jmenovka vybraného modulu v HTML (ostrý text nezávislý na deformaci SVG) */}
-            {selected?.box ? (
+            {selected && boxOf(selected) ? (
               <span
                 className="pointer-events-none absolute -translate-y-full rounded-sm bg-amber-400 px-1.5 py-0.5 font-mono text-[11px] font-extrabold whitespace-nowrap text-neutral-950 shadow-[0_0_12px_rgba(251,191,36,0.8)]"
-                style={{ left: `${selected.box[1]}%`, top: `calc(${selected.box[0]}% - 2px)` }}
+                style={{ left: `${boxOf(selected)![1]}%`, top: `calc(${boxOf(selected)![0]}% - 2px)` }}
                 data-testid="photo-selected-label"
               >
                 {selected.designation} · {selected.modulesWidth}M
@@ -215,8 +299,9 @@ export function RecognitionWorkspace({
         <DinRails
           items={items.map((item) => {
             const draft = previews.get(item.id);
-            if (draft) return { ...item, recognitionStatus: "VERIFIED" as const, caption: item.customTypeCode || describeConfig(draft) };
-            return { ...item, caption: item.customTypeCode || item.component?.typeCode || (item.recognitionStatus === "UNRECOGNIZED" ? "?" : (item.rawOcrText ?? "")) };
+            const label = labels.get(item.id) ?? item.circuitLabel;
+            if (draft) return { ...item, label, recognitionStatus: "VERIFIED" as const, caption: item.customTypeCode || describeConfig(draft) };
+            return { ...item, label, caption: item.customTypeCode || item.component?.typeCode || (item.recognitionStatus === "UNRECOGNIZED" ? "?" : (item.rawOcrText ?? "")) };
           })}
           rails={rails}
           modulesPerRail={modulesPerRail}
@@ -248,6 +333,7 @@ export function RecognitionWorkspace({
               dominant={dominant}
               rightNeighbors={rightNeighbors}
               onPreview={preview}
+              onLabel={labelPreview}
               onChanged={() => router.refresh()}
               onDeleted={() => {
                 setSelectedId(null);

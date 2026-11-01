@@ -288,7 +288,7 @@ export async function saveTree(prisma: PrismaClient, projectId: string, assignme
     ),
     prisma.panelBoardProject.update({ where: { id: projectId }, data: { status } }),
   ]);
-  return { status, connected, issues: validateTree(nodes, project.simultaneityFactor) };
+  return { status, connected, issues: validateTree(nodes) };
 }
 
 // ---------------------------------------------------------------------------
@@ -551,14 +551,37 @@ export async function splitItem(prisma: PrismaClient, itemId: string) {
 }
 
 /** Ruční typové označení a popis obvodu z karty „Přiřazený přístroj“. */
-export async function updateItemText(prisma: PrismaClient, itemId: string, input: { customTypeCode: string | null; circuitLabel: string }) {
-  const item = await prisma.panelBoardItem.findUnique({ where: { id: itemId }, select: { id: true, projectId: true } });
+/** Ručně zadané IEC značení: „-FI1“, „-Q2“, „-KA3“ … (pomlčka, 1–3 písmena, číslo). */
+export const DESIGNATION_PATTERN = /^-[A-Z]{1,3}\d{1,3}$/;
+
+export async function updateItemText(prisma: PrismaClient, itemId: string, input: { customTypeCode: string | null; circuitLabel: string; designation?: string | null }) {
+  const item = await prisma.panelBoardItem.findUnique({ where: { id: itemId }, select: { id: true, projectId: true, designation: true } });
   if (!item) throw new WorkflowError("NOT_FOUND", "Prvek rozváděče neexistuje.");
+  let designation = item.designation;
+  if (input.designation != null) {
+    const next = input.designation.trim().toUpperCase();
+    const normalized = next.startsWith("-") ? next : `-${next}`;
+    if (!DESIGNATION_PATTERN.test(normalized)) throw new WorkflowError("VALIDATION", "Značení zadejte jako -Q1, -FI1, -F3 …");
+    if (normalized !== item.designation && (await prisma.panelBoardItem.findFirst({ where: { projectId: item.projectId, designation: normalized, NOT: { id: itemId } }, select: { id: true } }))) {
+      throw new WorkflowError("CONFLICT", `Značení ${normalized} už v rozváděči má jiný přístroj.`);
+    }
+    designation = normalized;
+  }
   return prisma.panelBoardItem.update({
     where: { id: itemId },
-    data: { customTypeCode: input.customTypeCode?.trim().slice(0, 80) || null, circuitLabel: input.circuitLabel.trim().slice(0, 80) },
-    select: { id: true, projectId: true },
+    data: { customTypeCode: input.customTypeCode?.trim().slice(0, 80) || null, circuitLabel: input.circuitLabel.trim().slice(0, 80), designation },
+    select: { id: true, projectId: true, designation: true },
   });
+}
+
+/** Ruční srovnání rámečku přístroje na fotce (posun, levá / pravá hrana) – souřadnice v % fotky. */
+export async function setItemBox(prisma: PrismaClient, itemId: string, box: BoundingBox) {
+  const [ymin, xmin, ymax, xmax] = box;
+  if (!box.every((value) => Number.isFinite(value) && value >= 0 && value <= 100) || xmin >= xmax || ymin >= ymax) throw new WorkflowError("VALIDATION", "Neplatný rámeček přístroje.");
+  const item = await prisma.panelBoardItem.findUnique({ where: { id: itemId }, select: { id: true } });
+  if (!item) throw new WorkflowError("NOT_FOUND", "Prvek rozváděče neexistuje.");
+  const rounded = box.map((value) => Math.round(value * 100) / 100) as unknown as BoundingBox;
+  return prisma.panelBoardItem.update({ where: { id: itemId }, data: { boundingBoxJson: JSON.stringify(rounded) }, select: { id: true, projectId: true } });
 }
 
 // ---------------------------------------------------------------------------

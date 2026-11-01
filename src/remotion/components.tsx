@@ -86,6 +86,6 @@ export function Badge({ color, children, style }: { color: string; children: Rea
  */
 export function InlineSvg({ svg, style }: { svg: string; style?: CSSProperties }) {
   // Velikost přes atribut kořenového <svg> – Remotion render nemá Tailwind.
-  const sized = svg.replace(/<svg/, '<svg style="display:block;width:100%;height:100%"');
+  const sized = svg.replace(/<svg\b/, '<svg style="display:block;width:100%;height:100%"');
   return <div aria-hidden style={{ lineHeight: 0, ...style }} dangerouslySetInnerHTML={{ __html: sized }} />;
 }

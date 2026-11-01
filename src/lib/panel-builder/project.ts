@@ -5,7 +5,7 @@ import type { EnclosureMaterial, EnclosureType, PanelProjectStatus, RecognitionS
 export const PROJECT_STATUS: Record<PanelProjectStatus, { label: string; badge: string }> = {
   DRAFT: { label: "Rozpracováno", badge: "border-zinc-500/50 bg-zinc-500/15 text-zinc-300" },
   RECOGNIZED: { label: "Prvky rozpoznány", badge: "border-sky-500/50 bg-sky-500/15 text-sky-300" },
-  TREE_BUILT: { label: "Strom zapojení hotov", badge: "border-violet-500/50 bg-violet-500/15 text-violet-300" },
+  TREE_BUILT: { label: "Zapojení hotovo", badge: "border-violet-500/50 bg-violet-500/15 text-violet-300" },
   COMPLETED: { label: "Propuštěno do provozu", badge: "border-emerald-500/50 bg-emerald-500/15 text-emerald-300" },
 };
 

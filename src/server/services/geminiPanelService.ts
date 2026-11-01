@@ -175,7 +175,8 @@ export const RAILS_PROMPT = `Jsi zkušený elektrotechnik. Na fotce je rozvádě
    "COVERED" = zakrytovaný čelní plastovou maskou (šroubky nejsou vidět, jen výřezy s páčkami přístrojů).
 2) Vrať box_2d [ymin, xmin, ymax, xmax] v rozsahu 0–1000 POUZE pro skutečné DIN lišty OSAZENÉ modulovými
    přístroji (jističe, chrániče, vypínače, svodiče, stykače, relé …), seřazené shora dolů. Rámeček obepíná
-   celou řadu přístrojů včetně páček.
+   jen osazenou řadu přístrojů včetně páček – NE prázdný konec kovové DIN lišty ani kabely napravo
+   od posledního přístroje.
 NIKDY neoznačuj jako DIN lištu holé mosazné svorkovnice PE/N (zemnicí a nulové můstky se šroubky),
 prázdné DIN lišty bez přístrojů, kabelové žlaby, svazky vodičů ani štítky. Když si nejsi jistý, lištu nevracej.`;
 
@@ -215,6 +216,17 @@ sousedních lišt na okrajích ignoruj). Projdi přístroje zleva doprava a vra�
 ${counting}
 Kompaktní přístroje (póly ≠ šířka): dvojitý jistič 2 úzké páčky v 1 modulu = poles "2x1P", modulesWidth 1;
 kompaktní 1P+N v 1 modulu (2 šroubky) = poles "1P+N", modulesWidth 1; kompaktní 3P ve 2 modulech = poles "3P", modulesWidth 2.
+DŮLEŽITÁ PRAVIDLA ČTENÍ:
+a) ČERVENÁ PÁČKA: 3M nebo 4M přístroj s červenou ovládací páčkou a BEZ testovacího tlačítka "T" (např. ABB SHD203/25,
+   SD203/40, SHD204/40) je VŽDY hlavní vypínač / odpínač – category "MAIN_SWITCH", NIKDY jistič. Číslo za lomítkem
+   ("/25", "/40", "/63") je jmenovitý proud 25 A / 40 A / 63 A – NENÍ to charakteristika (žádné "C25").
+b) CHARAKTERISTIKA B vs. C: písmena B a C se na potisku snadno zamění. V domovních a plastových rozváděčích
+   (řady SH201, S201, PL6, PL7, LTN, MBN) je drtivá většina jističů charakteristiky "B" (B10, B13, B16).
+   Pokud není na přístroji zcela zřetelně vytištěno "C" (např. "C16", "C10"), vrať "B". Pečlivě rozliš
+   hodnoty B10, B13 a B16 vytištěné pod barevným proužkem ABB (13 A je běžná hodnota, nezaokrouhluj na 10 ani 16).
+c) RÁMEČKY: box_2d obepíná POUZE skutečné plastové tělo osazeného přístroje (od levé do pravé hrany tělesa).
+   Nikdy neroztahuj rámeček přes prázdnou kovovou DIN lištu, mezery ani kabely napravo od posledního přístroje.
+   totalModules je počet modulů SKUTEČNĚ osazených přístroji (ne kapacita lišty).
 ${brand}
 Pro každý přístroj vrať: position (od 1 zleva), box_2d [ymin, xmin, ymax, xmax] 0–1000 v souřadnicích TOHOTO výřezu,
 text (vše čitelné z čela), category, poles, modulesWidth, ratedCurrentA, trippingCurve (B/C/D), manufacturer,
@@ -299,12 +311,40 @@ interface GeminiRailDevice {
  * Přístroje jedné lišty → detekce v souřadnicích celé fotky. Je-li součet šířek menší než totalModules
  * (AI vynechala konec řady), doplní se chybějící moduly jako nerozpoznané 1M pozice vpravo.
  */
+/**
+ * Pojistka po odpovědi AI: odpínač ABB SD200 / SHD200 („SHD203/25“) je hlavní vypínač 25 A, nikdy jistič C25.
+ * Vrací opravenou kategorii, proud a póly, nebo null, když text odpínač neobsahuje.
+ */
+export function switchDisconnectorFromText(text: string | null | undefined): { ratedCurrentA: number; poles: string } | null {
+  const match = /\bS?H?D\s?20([1-4])\s?\/\s?(\d{2,3})\b/i.exec(text ?? "");
+  if (!match) return null;
+  return { ratedCurrentA: Number(match[2]), poles: `${match[1]}P` };
+}
+
 export function toRailDetections(devices: readonly GeminiRailDevice[], rail: number, region: CropRegion, totalModules: number | null | undefined): Detection[] {
   const sorted = [...devices].filter((device) => Array.isArray(device.box_2d) && device.box_2d.length === 4).sort((a, b) => a.position - b.position || a.box_2d[1] - b.box_2d[1]);
   const detections: Detection[] = sorted.map((device, index) => {
     const poles = str(device.poles);
     const curve = str(device.trippingCurve)?.toUpperCase() ?? null;
     const width = Math.round((num(device.modulesWidth) ?? 1) * 2) / 2;
+    const disconnector = switchDisconnectorFromText(device.text);
+    if (disconnector) {
+      // Červená páčka SD/SHD: „/25“ je proud 25 A, ne charakteristika C25
+      return {
+        dinRailIndex: rail,
+        positionOnRail: index + 1,
+        modules: clamp(width, 0.5, 12),
+        box: toPhotoBox(device.box_2d, region),
+        rawOcrText: (device.text ?? "").slice(0, 200),
+        category: "MAIN_SWITCH" as const,
+        poles: disconnector.poles,
+        ratedCurrentA: disconnector.ratedCurrentA,
+        trippingCurve: null,
+        manufacturer: normalizeManufacturer(device.manufacturer),
+        confidence: Math.min(1, Math.max(0, Number(device.confidence) || 0.5)),
+        circuitLabel: str(device.label)?.slice(0, 80),
+      };
+    }
     return {
       dinRailIndex: rail,
       positionOnRail: index + 1,
@@ -324,10 +364,13 @@ export function toRailDetections(devices: readonly GeminiRailDevice[], rail: num
   const missing = Math.round((num(totalModules) ?? 0) - used);
   if (missing > 0 && detections.length) {
     // Šířka 1M odhadem z rozpoznaných přístrojů; doplněné pozice navazují vpravo od posledního.
+    // Doplňuje se jen to, co se vejde do výřezu lišty – částečně osazená lišta se nikdy neroztáhne na celou šířku.
     const perModule = detections.reduce((sum, d) => sum + (d.box ? (d.box[3] - d.box[1]) / d.modules : 0), 0) / detections.length;
     const last = detections[detections.length - 1].box!;
+    const regionRight = ((region.left + region.width) / region.imageWidth) * 100;
     for (let i = 0; i < missing; i++) {
       const xmin = Math.min(99.5, last[3] + i * perModule);
+      if (xmin + perModule * 0.8 > regionRight) break;
       detections.push({
         dinRailIndex: rail,
         positionOnRail: detections.length + 1,
@@ -371,7 +414,7 @@ async function cropRail(image: { bytes: Buffer }, box: readonly number[]): Promi
   const height = meta.autoOrient?.height ?? meta.height ?? 0;
   if (!width || !height) throw new Error("Neznámé rozměry fotky.");
   const region = cropRegionFor(box, width, height);
-  const bytes = await sharp(image.bytes).rotate().extract({ left: region.left, top: region.top, width: region.width, height: region.height }).jpeg({ quality: 90 }).toBuffer();
+  const bytes = await sharp(image.bytes).rotate().extract({ left: region.left, top: region.top, width: region.width, height: region.height }).jpeg({ quality: 95, chromaSubsampling: "4:4:4" }).toBuffer();
   return { bytes, region };
 }
 

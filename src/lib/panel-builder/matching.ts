@@ -87,25 +87,26 @@ export function matchDetection(detection: Detection, catalog: readonly Matchable
 }
 
 // ---------------------------------------------------------------------------
-//  IEC značení (ČSN EN 81346): Q odpínače, F jisticí a ochranné přístroje, K stykače a relé …
+//  IEC značení (ČSN EN 81346, praxe domovních a průmyslových rozváděčů): -Q odpínač, -FI chránič,
+//  -FA jističochránič, -FV svodič přepětí, -F jistič, -K stykač, -KA relé, -T zdroj, -X ostatní …
 // ---------------------------------------------------------------------------
 
 export const DESIGNATION_PREFIX: Record<ComponentCategory, string> = {
   MAIN_SWITCH: "Q",
   MCB: "F",
-  RCD: "F",
-  RCBO: "F",
-  SPD: "F",
+  RCD: "FI",
+  RCBO: "FA",
+  SPD: "FV",
   CONTACTOR: "K",
-  RELAY: "K",
+  RELAY: "KA",
   PSU: "T",
   PLC: "A",
   TERMINAL: "X",
   ENCLOSURE: "A",
-  OTHER: "F",
+  OTHER: "X",
 };
 
-/** Značení v pořadí čtení (lišta shora, zleva): -Q1, -F1, -F2 … (nerozpoznané = jistič). */
+/** Značení v pořadí čtení (lišta shora, zleva): -Q1, -FI1, -F1, -F2 … (nerozpoznané = jistič). */
 export function designationsInOrder(categories: readonly (ComponentCategory | null)[]): string[] {
   const counters = new Map<string, number>();
   return categories.map((category) => {

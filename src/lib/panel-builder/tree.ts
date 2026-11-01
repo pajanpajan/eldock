@@ -6,7 +6,7 @@ import type { ComponentCategory } from "@/generated/prisma/enums";
 import { phaseCount, poleCount } from "./catalog";
 import { designationsInOrder } from "./matching";
 
-export const PHASE_OPTIONS = ["L1,L2,L3,N", "L1,L2,L3", "L1", "L2", "L3"] as const;
+export const PHASE_OPTIONS = ["L1,L2,L3,N", "L1,L2,L3", "L1", "L2", "L3", "L1,N", "L2,N", "L3,N"] as const;
 export type PhaseAssignment = (typeof PHASE_OPTIONS)[number];
 export const isPhaseAssignment = (value: string | null | undefined): value is PhaseAssignment => (PHASE_OPTIONS as readonly (string | null | undefined)[]).includes(value);
 
@@ -44,53 +44,69 @@ export function threePhaseAssignment(node: Pick<TreeNode, "poles">): PhaseAssign
   return hasNeutral(node) && poleCount(node.poles ?? "") >= 4 ? "L1,L2,L3,N" : "L1,L2,L3";
 }
 
-const UNKNOWN_FEEDER_A = 10;
-
 /** Návrhový proud vývodu pro bilanci (Ib, jinak In). */
 export const designCurrent = (node: Pick<TreeNode, "operatingCurrentA" | "ratedCurrentA">) => node.operatingCurrentA ?? node.ratedCurrentA ?? 0;
 
 // ---------------------------------------------------------------------------
-//  AI návrh stromu na 1 klik
+//  AI návrh stromu na 1 klik (pravidlo DIN lišty a hřebenové propojky)
 // ---------------------------------------------------------------------------
 
+/** Vývod napájený z chrániče nebo hlavního vypínače (jistič, stykač, relé, nerozpoznaný přístroj …). */
+const isFeeder = (node: Pick<TreeNode, "category">) => !node.category || !["MAIN_SWITCH", "RCD", "RCBO", "SPD", "ENCLOSURE"].includes(node.category);
+const SINGLE_PHASES = ["L1", "L2", "L3"] as const;
+
 /**
- * Logický strom z kategorií a pozic: hlavní vypínač na vstup, pod něj SPD a chrániče, pod chrániče
- * jističe (vždy nejbližší předchozí chránič v pořadí čtení, jinak první), jističochrániče přímo pod
- * vypínač. Jednofázové vývody se rozvrhnou na L1/L2/L3 podle nejmenšího zatížení.
+ * Logický strom podle pozic na DIN lištách:
+ * 1. Hlavní vypínač (-Q1) je kořen (vstup napájení), 3P/4P vede „L1,L2,L3,N“.
+ * 2. Chrániče, jističochrániče a svodiče přepětí visí přímo pod -Q1; 4P / 3P+N chránič vede vždy
+ *    „L1,L2,L3,N“, 2P chránič jednu fázi s N.
+ * 3. Pravidlo DIN lišty: jistič napravo od chrániče na STEJNÉ liště patří pod tento (nejbližší) chránič.
+ * 4. Jistič nalevo od chrániče nebo na liště hlavního vypínače → přímo pod -Q1.
+ * 5. Jistič na liště bez chrániče: když je výše „samostatný“ chránič (na své liště nemá vpravo žádné
+ *    vývody – typicky chránič na horní liště napájející lišty pod ním), patří pod něj; jinak pod -Q1.
+ * 6. Jednofázové vývody se v každé skupině střídají L1 → L2 → L3 → L1 …; pod 2P chráničem dědí jeho fázi.
  */
 export function proposeTree(nodes: readonly TreeNode[]): Map<string, Omit<TreeAssignment, "id" | "circuitLabel" | "designation">> {
   const ordered = readingOrder(nodes);
   const result = new Map<string, Omit<TreeAssignment, "id" | "circuitLabel" | "designation">>();
   const main = ordered.find((node) => node.category === "MAIN_SWITCH") ?? null;
   const rcds = ordered.filter((node) => node.category === "RCD");
+  const standalone = rcds.filter((rcd) => !ordered.some((node) => node.dinRailIndex === rcd.dinRailIndex && node.positionOnRail > rcd.positionOnRail && isFeeder(node)));
   const top = (node: TreeNode) => (main && node.id !== main.id ? { parentItemId: main.id, fedFromIncomer: false } : { parentItemId: null, fedFromIncomer: true });
 
   for (const node of ordered) {
     let link: { parentItemId: string | null; fedFromIncomer: boolean };
-    if (node === main || node.category === "MAIN_SWITCH") link = node === main ? { parentItemId: null, fedFromIncomer: true } : top(node);
-    else if (node.category === "SPD" || node.category === "RCD" || node.category === "RCBO" || node.category === "ENCLOSURE") link = top(node);
+    if (node === main) link = { parentItemId: null, fedFromIncomer: true };
+    else if (!isFeeder(node)) link = top(node);
     else {
-      const index = ordered.indexOf(node);
-      const before = rcds.filter((rcd) => ordered.indexOf(rcd) < index);
-      const rcd = before[before.length - 1] ?? rcds[0];
+      const sameRail = rcds.filter((rcd) => rcd.dinRailIndex === node.dinRailIndex && rcd.positionOnRail < node.positionOnRail);
+      const onMainRail = !!main && main.dinRailIndex === node.dinRailIndex;
+      const leftOfRcd = rcds.some((rcd) => rcd.dinRailIndex === node.dinRailIndex && rcd.positionOnRail > node.positionOnRail);
+      const above = standalone.filter((rcd) => rcd.dinRailIndex < node.dinRailIndex);
+      const rcd = sameRail[sameRail.length - 1] ?? (onMainRail || leftOfRcd ? undefined : above[above.length - 1]);
       link = rcd ? { parentItemId: rcd.id, fedFromIncomer: false } : top(node);
     }
-    result.set(node.id, { ...link, phaseAssignment: isThreePhase(node) ? threePhaseAssignment(node) : null });
+    const fourWire = (node.category === "MAIN_SWITCH" || node.category === "RCD") && isThreePhase(node);
+    result.set(node.id, { ...link, phaseAssignment: fourWire ? "L1,L2,L3,N" : isThreePhase(node) ? threePhaseAssignment(node) : null });
   }
 
-  // Rozvržení fází: jednofázové vývody v pořadí čtení na nejméně zatíženou fázi (shoda → L1, L2, L3).
-  // Nerozpoznaný přístroj bez proudu se počítá jako typický světelný vývod 10 A, ať rotace fází nesklouzne.
-  const load = { L1: 0, L2: 0, L3: 0 };
-  const share = (node: TreeNode) => designCurrent(node) || UNKNOWN_FEEDER_A;
+  // Fáze jednofázových prvků: střídání L1 → L2 → L3 v rámci skupiny (stejný nadřazený prvek, pořadí čtení).
+  const rotation = new Map<string, number>();
   for (const node of ordered) {
-    if (isThreePhase(node)) {
-      for (const phase of ["L1", "L2", "L3"] as const) load[phase] += share(node);
+    const assignment = result.get(node.id)!;
+    if (assignment.phaseAssignment || node.category === "SPD") continue;
+    const parent = assignment.parentItemId ? result.get(assignment.parentItemId) : null;
+    const parentPhases = parent?.phaseAssignment?.split(",").filter((phase) => phase !== "N") ?? [];
+    if (parentPhases.length === 1) {
+      assignment.phaseAssignment = parentPhases[0];
       continue;
     }
-    if (node.category === "SPD") continue;
-    const phase = (["L1", "L2", "L3"] as const).reduce((best, candidate) => (load[candidate] < load[best] ? candidate : best), "L1");
-    load[phase] += share(node);
-    result.get(node.id)!.phaseAssignment = phase;
+    const group = assignment.parentItemId ?? "__incomer__";
+    const index = rotation.get(group) ?? 0;
+    rotation.set(group, index + 1);
+    const phase = SINGLE_PHASES[index % 3];
+    // 2P chránič (L + N) dostane fázi s nulou, jednofázové vývody jen fázi
+    assignment.phaseAssignment = node.category === "RCD" && hasNeutral(node) ? `${phase},N` : phase;
   }
   return result;
 }
@@ -143,16 +159,16 @@ export function subtreeLoad(nodeId: string, nodes: readonly TreeNode[], simultan
 }
 
 /**
- * Živý hlídač: nezapojené prvky, cykly, 3P pod 1P uzlem, fáze mimo nadřazený uzel, vývody pod SPD,
- * přetížení nadřazeného prvku součtem výpočtových proudů a selektivita jističů.
+ * Živý hlídač: chyby = nezapojený prvek, cyklus, 3P přístroj pod jednofázovým uzlem; varování = fáze
+ * mimo nadřazený uzel, vývod pod SPD, chybějící fáze; informace = selektivita jističů.
  */
-export function validateTree(nodes: readonly TreeNode[], simultaneity: number): TreeIssue[] {
+export function validateTree(nodes: readonly TreeNode[]): TreeIssue[] {
   const issues: TreeIssue[] = [];
   const byId = new Map(nodes.map((node) => [node.id, node]));
   for (const node of nodes) {
     const parent = node.parentItemId ? byId.get(node.parentItemId) : null;
     if (!parent && !node.fedFromIncomer) {
-      issues.push({ itemId: node.id, severity: "warning", message: `${node.designation} není zapojen – vyberte, odkud je napájen.` });
+      issues.push({ itemId: node.id, severity: "error", message: `${node.designation} není zapojen – vyberte skupinu, ze které je napájen.` });
       continue;
     }
     if (ancestors(node.id, byId) === null) {
@@ -164,32 +180,32 @@ export function validateTree(nodes: readonly TreeNode[], simultaneity: number): 
     }
     if (!parent) continue;
     if (parent.category === "SPD") {
-      issues.push({ itemId: node.id, severity: "error", message: `${node.designation} je zapojen pod přepěťovou ochranu ${parent.designation} – SPD nenapájí vývody.` });
+      issues.push({ itemId: node.id, severity: "warning", message: `${node.designation} je zapojen pod přepěťovou ochranu ${parent.designation} – SPD nenapájí vývody.` });
     }
     const parentPhases = phasesOf(parent);
     if (isThreePhase(node) && parentPhases.length && parentPhases.length < 3) {
       issues.push({ itemId: node.id, severity: "error", message: `${node.poles} přístroj ${node.designation} nemůže být napájen z jednofázového uzlu ${parent.designation} (${parentPhases.join(", ")}).` });
     } else if (parentPhases.length) {
       const missing = phasesOf(node).filter((phase) => !parentPhases.includes(phase));
-      if (missing.length) issues.push({ itemId: node.id, severity: "error", message: `${node.designation} je na fázi ${missing.join(", ")}, ale nadřazený ${parent.designation} vede jen ${parentPhases.join(", ")}.` });
+      if (missing.length) issues.push({ itemId: node.id, severity: "warning", message: `${node.designation} je na fázi ${missing.join(", ")}, ale nadřazený ${parent.designation} vede jen ${parentPhases.join(", ")}.` });
     }
     if (node.category === "MCB" && parent.category === "MCB" && node.ratedCurrentA && parent.ratedCurrentA && node.ratedCurrentA >= parent.ratedCurrentA) {
       issues.push({ itemId: node.id, severity: "info", message: `${node.designation} (${fmt(node.ratedCurrentA)} A) není selektivní vůči nadřazenému ${parent.designation} (${fmt(parent.ratedCurrentA)} A).` });
     }
   }
-  // Přetížení: součet Ib × SF potomků na nejzatíženější fázi > In nadřazeného prvku
-  for (const node of nodes) {
-    if (!node.ratedCurrentA || node.category === "SPD") continue;
-    const load = subtreeLoad(node.id, nodes, simultaneity);
-    const [phase, current] = Object.entries(load).sort((a, b) => b[1] - a[1])[0];
-    if (current > node.ratedCurrentA + 1e-9) {
-      issues.push({ itemId: node.id, severity: "error", message: `Součet výpočtových proudů ${fmt(current)} A na ${phase} přetěžuje ${node.designation} (In ${fmt(node.ratedCurrentA)} A).` });
-    }
-  }
+  // Součet In jističů běžně převyšuje In hlavního vypínače i chrániče (soudobost) – to není chyba.
+  // Zatížení skupiny se zobrazuje jen jako informace (groupLoad); chybou zůstává nezapojený prvek,
+  // cyklus a 3P přístroj pod jednofázovým uzlem.
   return issues;
 }
 
-/** Automatické přečíslování IEC značení v pořadí čtení (-Q1, -F1, -F2 …). */
+/** Zatížení skupiny (Ib × soudobost po fázích) – informace v kartě skupiny, ne chyba. */
+export function groupLoad(nodeId: string, nodes: readonly TreeNode[], simultaneity: number) {
+  const load = subtreeLoad(nodeId, nodes, simultaneity);
+  return { ...load, max: Math.max(load.L1, load.L2, load.L3) };
+}
+
+/** Automatické přečíslování IEC značení v pořadí čtení (-Q1, -FI1, -F1 …). */
 export function renumber(nodes: readonly Pick<TreeNode, "id" | "category" | "dinRailIndex" | "positionOnRail">[]): Map<string, string> {
   const ordered = readingOrder(nodes);
   const designations = designationsInOrder(ordered.map((node) => node.category));

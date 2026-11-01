@@ -141,6 +141,24 @@
   html {
     @apply font-sans;
   }
+  /* Jediné tmavé téma i pro nativní prvky prohlížeče (posuvníky, rozbalená menu selectů). */
+  :root,
+  html {
+    color-scheme: dark;
+  }
+  /* Rozbalené menu <select> na Windows: bez tohoto má světlé pozadí se světlým textem (nečitelné). */
+  select,
+  option,
+  optgroup {
+    background-color: #18181b;
+    color: #f4f4f5;
+  }
+  option:checked {
+    background-color: #3f3f46;
+  }
+  option:disabled {
+    color: #71717a;
+  }
 }
 /* Spodní lišty na mobilu: odsazení nad domovskou lištou iOS / gesty (viewport-fit=cover). */
 @utility pb-safe {

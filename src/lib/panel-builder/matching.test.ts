@@ -53,7 +53,7 @@ describe("párování detekcí s katalogem", () => {
   });
 
   it("IEC značení v pořadí čtení", () => {
-    expect(designationsInOrder(["MAIN_SWITCH", "SPD", "RCD", "MCB", null, "CONTACTOR"])).toEqual(["-Q1", "-F1", "-F2", "-F3", "-F4", "-K1"]);
+    expect(designationsInOrder(["MAIN_SWITCH", "SPD", "RCD", "MCB", null, "CONTACTOR"])).toEqual(["-Q1", "-FV1", "-FI1", "-F1", "-F2", "-K1"]);
   });
 
   it("demo detekce referenčního rozváděče: 13 přístrojů na 3 lištách s rámečky v %", () => {
@@ -66,7 +66,7 @@ describe("párování detekcí s katalogem", () => {
     expect(Math.max(...detections.map((d) => d.box![3]))).toBeLessThanOrEqual(100);
     // F3 začíná tam, kde na liště 2 začíná první modul; F4 hned za ním
     expect(detections[4].box![1]).toBeGreaterThan(detections[3].box![3] - 0.01);
-    expect(detections.find((d) => d.designation === "-F6")).toMatchObject({ ratedCurrentA: null, manufacturer: null });
+    expect(detections.find((d) => d.designation === "-F4")).toMatchObject({ ratedCurrentA: null, manufacturer: null });
   });
 });
 

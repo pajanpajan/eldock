@@ -15,7 +15,7 @@ export interface ReferenceDevice {
   modules: number;
   rail: number;
   label: string;
-  /** Výsledek „rozpoznání“ – -F6 je pod odleskem, -F9 přečten jen částečně. */
+  /** Výsledek „rozpoznání“ – -F4 je pod odleskem, -F7 přečten jen částečně. */
   status: RecognitionStatus;
   confidence: number;
   ocr: string;
@@ -63,7 +63,7 @@ export const REFERENCE_DEVICES: ReferenceDevice[] = [
     ocr: "ABB SD203/40 400V",
   },
   {
-    designation: "-F1",
+    designation: "-FV1",
     articleNumber: "2CTB803973R1200",
     typeCode: "OVR T2-T3 3N 20-275 P QS",
     manufacturer: "ABB",
@@ -79,7 +79,7 @@ export const REFERENCE_DEVICES: ReferenceDevice[] = [
     ocr: "ABB OVR T2-T3 3N 20-275 P QS",
   },
   {
-    designation: "-F2",
+    designation: "-FI1",
     articleNumber: "2CSF204102R1400",
     typeCode: "FH204 A-40/0,03",
     manufacturer: "ABB",
@@ -94,16 +94,16 @@ export const REFERENCE_DEVICES: ReferenceDevice[] = [
     confidence: 0.95,
     ocr: "ABB FH204 A-40/0,03 IΔn 30mA",
   },
-  mcb("-F3", "3P", 16, "Tepelné čerpadlo", 2),
-  mcb("-F4", "3P", 16, "Sporák", 2),
-  mcb("-F5", "1P", 10, "Světla chodby", 2),
-  mcb("-F6", "1P", 10, "Světla obytné místnosti", 2, { status: "UNRECOGNIZED", confidence: 0.18, ocr: "S2?? -B1?", glare: true }),
-  mcb("-F7", "1P", 10, "Světla koupelny + venkovní", 2),
-  mcb("-F8", "1P", 16, "Zásuvky kuchyně", 2),
-  mcb("-F9", "1P", 16, "Zásuvky obývák", 2, { status: "PARTIAL", confidence: 0.64, ocr: "S201-B1б" }),
-  mcb("-F10", "1P", 16, "Zásuvky obývák + chodba", 2),
-  mcb("-F11", "1P", 16, "Zásuvky ložnice + koupelna", 3),
-  mcb("-F12", "1P", 16, "Zásuvky pokoje + koupelna", 3),
+  mcb("-F1", "3P", 16, "Tepelné čerpadlo", 2),
+  mcb("-F2", "3P", 16, "Sporák", 2),
+  mcb("-F3", "1P", 10, "Světla chodby", 2),
+  mcb("-F4", "1P", 10, "Světla obytné místnosti", 2, { status: "UNRECOGNIZED", confidence: 0.18, ocr: "S2?? -B1?", glare: true }),
+  mcb("-F5", "1P", 10, "Světla koupelny + venkovní", 2),
+  mcb("-F6", "1P", 16, "Zásuvky kuchyně", 2),
+  mcb("-F7", "1P", 16, "Zásuvky obývák", 2, { status: "PARTIAL", confidence: 0.64, ocr: "S201-B1б" }),
+  mcb("-F8", "1P", 16, "Zásuvky obývák + chodba", 2),
+  mcb("-F9", "1P", 16, "Zásuvky ložnice + koupelna", 3),
+  mcb("-F10", "1P", 16, "Zásuvky pokoje + koupelna", 3),
 ];
 
 /** Pozice na liště (1..N zleva) podle pořadí v seznamu. */

@@ -5,7 +5,7 @@ revize VTZ, změny skutečného provedení mezi údržbou v hale a externími CA
 rozváděčů. Pracovní název byl Digitry, od fáze 20 je to **ELDOCK**. Produkce běží na https://eldock.cz.
 Původní zadání MVP je v `docs/archiv/SPECIFIKACE-MVP.md`, celá historie fází 0–35 v `docs/archiv/PLAN-faze-00-35.md`.
 
-## 1. Milníky (fáze 0–35 nasazené, 36 hotová k nasazení)
+## 1. Milníky (fáze 0–35 nasazené, 36–37 hotové k nasazení)
 
 | Fáze | Milník |
 |---|---|
@@ -17,6 +17,7 @@ Původní zadání MVP je v `docs/archiv/SPECIFIKACE-MVP.md`, celá historie fá
 | 27–34 | AI Panel Builder: katalog prvků a těžba datasheetů, analýza fotky přes Gemini, strom zapojení s hlídačem, oteplení (IEC TR 60890), dokumentace a CE, mix výrobců, živý konfigurátor, Vision Analyzer 2.0 |
 | 35 | Revize Studia: rozměr areálu X × Y, funkční měřítko, živé kóty, tažení stěn, 7 typů zón, vrata, banery a barvy zařízení, jemný rastr 1 m, spotřebiče do místností |
 | 36 | Konsolidace: zpětná editace pater ve Studiu (`Floor.studioLayoutJson`), optimistický konfigurátor, katalog Bonega, paralelní Vision Analyzer, originál fotky u zákresu, materiál skříně v oteplení, `ELDOCK_LOCK_ACCOUNT_SWITCHER` |
+| 37 | Panel Builder: katalog ABB Compact Home, přesnější prompt (odpínače, B vs. C), ruční úprava rámečků, funkce obvodu, IEC prefixy -Q/-FI/-FA/-FV/-F/-K/-KA, krok 2 se skupinovými kartami |
 
 ## 2. Moduly a klíčová místa v kódu
 
@@ -43,6 +44,7 @@ Server je hlídá přes `assertFeature`, správa je na `/admin/modules`.
 - **Účty:** `ELDOCK_LOCK_ACCOUNT_SWITCHER=1` (produkce bez dema) = účet určuje jen podepsaná přihlašovací cookie a server přepnutí odmítne; výchozí `0` = obchodní demo s přepínačem. Nastavení účtu bez kontroly je `applyAccount` v `src/server/account-switch.ts` (záměrně mimo `"use server"`).
 - **Soubory:** jen ve `storage/uploads`. Upload přes `POST /api/uploads`, čtení přes `GET /api/files/[...path]`. SVG se v UI zobrazuje přes `<img>`; výjimka jsou půdorysy generované aplikací.
 - **Workflow (CAE):** požadavek prochází `SUBMITTED → IN_PROGRESS → WAITING_APPROVAL → APPROVED`. Zamítnutá revize (`REJECTED`, komentář povinný) vrací požadavek do `IN_PROGRESS`; CAE může požadavek zrušit (`CANCELLED`). Každý přechod probíhá v `$transaction` se záznamem `ChangeRequestEvent`. Zařízení má max. 1 otevřený požadavek a 1 aktivní revizi. Stav zařízení se odvozuje přes `deriveEquipmentStatus`. Úplná tabulka přechodů je v archivu plánu, sekce B.
+- **Panel Builder – značení a zapojení:** IEC prefixy jen z `DESIGNATION_PREFIX` (`src/lib/panel-builder/matching.ts`); návrh zapojení `proposeTree` = pravidlo DIN lišty (chránič napájí jističe napravo na své liště). Hlídač hlásí jako chybu jen nezapojený prvek, cyklus a 3P pod 1P – součet In nad In chrániče není chyba.
 - **Studio:** souřadnice v metrech od osy A1, jednotné měřítko (`planFrame`). Každé uložené patro má `Floor.studioLayoutJson` (rastr, zóny, vrata) a jde znovu upravit; starší patra bez JSON se čtou ze SVG (`src/lib/studio-layout.ts`). Pin zařízení je vždy v rámu svého patra (`frameOfFloor`); při úpravě patra se piny přepočítají přes metry.
 
 ## 4. Databáze – bezpečnostní pravidla
@@ -64,7 +66,7 @@ Server je hlídá přes `assertFeature`, správa je na `/admin/modules`.
 - Plán je v `docs/PLAN.md` (rotující: hotové fáze jednořádkově, podrobně jen otevřená fáze). `/faze` = další otevřená fáze, `/faze N` = konkrétní fáze. Jedna fáze = jeden commit, pak se zastav a shrň. `/overit` = kompletní kontrola.
 - Uživatel občas vloží nové zadání místo obsahu `docs/PLAN.md`. Plán pak obnov z gitu a zadání doplň jako novou fázi. **Čísla fází v zadání ověř proti `git log`**, zadání někdy uvádí zastaralé číslo.
 - Před každým commitem musí projít `npm run verify` (typecheck, lint, vitest, build). U UI změn spusť i dotčené E2E (`npx playwright test e2e/<soubor>`; vlastní server na portu 3200 s `e2e.db` a `.next-e2e`). Ruční dev server při testování spouštěj s jiným `NEXT_DIST_DIR` (např. `.next/shots`). Dva servery se sdíleným `.next-e2e` si rozbijí cache a stránky se pak přenačítají dokola.
-- Prostředí je Windows: používej npm a Node/TS skripty. Pozor na CRLF po `git stash`. `git push` dělej jen při nasazení. Na mazání mimo projekt a nevratné operace se nejdřív zeptej.
+- Prostředí je Windows: používej npm a Node/TS skripty. Pozor na CRLF po `git stash`. Regexy a `\b` nepiš přes bash heredoc do JS řetězců (vznikne řídicí znak) – použij Edit nebo `String.raw`. `git push` dělej jen při nasazení. Na mazání mimo projekt a nevratné operace se nejdřív zeptej.
 - E2E: `e2e/global-setup.ts` před testy v prohlížeči zahřeje hlavní trasy (studený dev server stránky během kompilace přenačítá, první testy pak náhodně padaly).
 
 ## 7. Nasazení na produkci (Hetzner, https://eldock.cz)

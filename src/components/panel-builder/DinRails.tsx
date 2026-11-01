@@ -13,6 +13,8 @@ export interface RailItem {
   modulesWidth: number;
   /** Text na čele modulu (typ). */
   caption: string;
+  /** Funkce obvodu (popis) – zobrazí se na dlaždici pod typem. */
+  label?: string;
 }
 
 /**
@@ -76,7 +78,7 @@ export function DinRails<T extends RailItem>({
               ) : null}
             </span>
             <div
-              className={cn("relative flex h-16 flex-1 rounded-md border border-border bg-muted/30", selectedVariant === "pick" && "overflow-hidden")}
+              className={cn("relative flex h-16 min-w-0 flex-1 rounded-md border border-border bg-muted/30", selectedVariant === "pick" && "overflow-hidden")}
               // mřížka pozic po 1 modulu
               style={{ backgroundImage: `repeating-linear-gradient(90deg, transparent 0, transparent calc(${100 / capacity}% - 1px), rgba(161,161,170,0.18) calc(${100 / capacity}% - 1px), rgba(161,161,170,0.18) ${100 / capacity}%)` }}
             >
@@ -90,7 +92,7 @@ export function DinRails<T extends RailItem>({
                     onClick={() => onSelect?.(item)}
                     disabled={!onSelect}
                     aria-pressed={selected}
-                    aria-label={`${item.designation} ${item.caption}`}
+                    aria-label={`${item.designation} ${item.caption}${item.label ? ` · ${item.label}` : ""}`}
                     className={cn(
                       "relative z-10 m-0.5 flex min-w-0 flex-col items-center justify-center gap-0.5 rounded border-2 px-0.5 text-center transition-transform outline-none focus-visible:ring-3 focus-visible:ring-ring/50 enabled:hover:-translate-y-0.5",
                       selected && selectedVariant === "edit"
@@ -102,6 +104,11 @@ export function DinRails<T extends RailItem>({
                   >
                     <span className="max-w-full truncate font-mono text-[11px] font-semibold">{item.designation}</span>
                     <span className="max-w-full truncate text-[9px] opacity-80">{item.caption}</span>
+                    {item.label ? (
+                      <span className="max-w-full truncate text-[9px] leading-tight font-semibold" data-testid="rail-label" title={item.label}>
+                        {item.label}
+                      </span>
+                    ) : null}
                     {badge ? <span className="absolute -top-1 -right-1">{badge(item)}</span> : null}
                     {selected && selectedVariant === "edit" ? (
                       <span className="pointer-events-none absolute -top-6 left-1/2 -translate-x-1/2 rounded bg-amber-400 px-1.5 py-0.5 text-[10px] font-extrabold whitespace-nowrap text-neutral-950 shadow" data-testid="rail-editing">

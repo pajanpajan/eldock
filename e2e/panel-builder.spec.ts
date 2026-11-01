@@ -50,11 +50,11 @@ test("krok 1: výrazný výběr, živá konfigurace prvku jedním klikem a potvr
   await expect(page.getByTestId("count-VERIFIED")).toHaveText("Ověřeno: 11");
   await expect(page.getByTestId("panel-photo").getByRole("button")).toHaveCount(13);
 
-  // Výběr -F6 na fotce: jmenovka na fotce i štítek na liště
-  await page.getByTestId("panel-photo").getByRole("button", { name: "-F6 – Nerozpoznáno" }).click();
+  // Výběr -F4 na fotce: jmenovka na fotce i štítek na liště
+  await page.getByTestId("panel-photo").getByRole("button", { name: "-F4 – Nerozpoznáno" }).click();
   const configurator = page.getByTestId("item-configurator");
-  await expect(configurator).toContainText("-F6");
-  await expect(page.getByTestId("photo-selected-label")).toHaveText("-F6 · 1M");
+  await expect(configurator.getByLabel("Značení přístroje")).toHaveValue("-F4");
+  await expect(page.getByTestId("photo-selected-label")).toHaveText("-F4 · 1M");
   await expect(page.getByTestId("rail-editing")).toHaveText("▼ UPRAVUJETE");
   await expect(configurator.getByRole("button", { name: "ABB", pressed: true })).toBeVisible();
   await expect(configurator.getByText("Odpovídající kusy z katalogu")).toHaveCount(0);
@@ -68,14 +68,29 @@ test("krok 1: výrazný výběr, živá konfigurace prvku jedním klikem a potvr
   await expect(page.getByTestId("assigned-device")).toContainText("Šířka: 1M");
   await expect(page.getByTestId("configurator-status")).toHaveText("Ověřeno");
 
-  // Chránič -F2: parametry chrániče, žádná charakteristika B/C/D
-  await page.getByTestId("din-rails").getByRole("button", { name: /^-F2 / }).click();
+  // Funkce obvodu nahoře: rychlý štítek se hned ukáže na dlaždici DIN lišty a uloží se
+  await configurator.getByRole("button", { name: "Koupelna", exact: true }).click();
+  await expect(page.getByTestId("din-rails").getByRole("button", { name: /^-F4 / })).toContainText("Koupelna");
+  await expect(configurator.getByLabel("Popis obvodu")).toHaveValue("Koupelna");
+
+  // Ruční srovnání rámečku: tažení pravé hrany vybraného rámečku na fotce
+  const edge = page.getByTestId("box-edge-right");
+  const before = (await page.getByTestId("box-move").boundingBox())!;
+  const handle = (await edge.boundingBox())!;
+  await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(handle.x + handle.width / 2 + 12, handle.y + handle.height / 2, { steps: 4 });
+  await page.mouse.up();
+  await expect.poll(async () => (await page.getByTestId("box-move").boundingBox())!.width).toBeGreaterThan(before.width + 5);
+
+  // Chránič -FI1: parametry chrániče, žádná charakteristika B/C/D
+  await page.getByTestId("din-rails").getByRole("button", { name: /^-FI1 / }).click();
   await expect(configurator.getByRole("button", { name: "Chránič", pressed: true })).toBeVisible();
   await expect(configurator.getByRole("region", { name: "Typ chrániče" })).toBeVisible();
   await expect(configurator.getByRole("region", { name: "Vypínací charakteristika" })).toHaveCount(0);
 
-  // Částečně rozpoznaný -F9: návrh AI stačí potvrdit
-  await page.getByTestId("din-rails").getByRole("button", { name: /^-F9 / }).click();
+  // Částečně rozpoznaný -F7: návrh AI stačí potvrdit
+  await page.getByTestId("din-rails").getByRole("button", { name: /^-F7 / }).click();
   await configurator.getByRole("button", { name: "Potvrdit návrh" }).click();
   await expect(page.getByTestId("count-VERIFIED")).toHaveText("Ověřeno: 13");
 });
@@ -92,19 +107,19 @@ test("nový projekt: sloučení 3× 1M → 3P, rozdělení zpět, filtr výrobce
   const photoButtons = page.getByTestId("panel-photo").getByRole("button");
   await expect(photoButtons).toHaveCount(13);
 
-  // Sloučení -F5, -F6, -F7 (3× 1P B10) → jeden 3P jistič
-  await page.getByTestId("din-rails").getByRole("button", { name: /^-F5 / }).click();
+  // Sloučení -F3, -F4, -F5 (3× 1P B10) → jeden 3P jistič
+  await page.getByTestId("din-rails").getByRole("button", { name: /^-F3 / }).click();
   const configurator = page.getByTestId("item-configurator");
   await configurator.getByRole("button", { name: /Sloučit 3× 1M → 3P/ }).click();
   await expect(photoButtons).toHaveCount(11);
-  await expect(page.getByTestId("photo-selected-label")).toHaveText("-F5 · 3M");
+  await expect(page.getByTestId("photo-selected-label")).toHaveText("-F3 · 3M");
   await expect(page.getByTestId("assigned-device")).toContainText("S203-B10");
-  await expect(page.getByTestId("din-rails").getByRole("button", { name: /^-F6 / })).toContainText("S201-B16");
+  await expect(page.getByTestId("din-rails").getByRole("button", { name: /^-F4 / })).toContainText("S201-B16");
 
   // Rozdělení zpět na 1M moduly
   await configurator.getByRole("button", { name: "Rozdělit na 1M moduly" }).click();
   await expect(photoButtons).toHaveCount(13);
-  await expect(page.getByTestId("photo-selected-label")).toHaveText("-F5 · 1M");
+  await expect(page.getByTestId("photo-selected-label")).toHaveText("-F3 · 1M");
 
   // Filtr výrobce jen pro tento modul: Eaton 1P B10 6 kA → PL6
   await configurator.getByRole("button", { name: "EATON" }).click();
@@ -129,10 +144,10 @@ test("Vision Analyzer 2.0: režim analýzy, 1M dělení, přidání a smazání 
   await expect(page.getByRole("button", { name: "🛡️ Zakrytovaný", pressed: true })).toBeVisible();
   await expect(page.locator("[data-module-divider]").first()).toBeAttached();
 
-  // + Přidat modul na lištu 3 → nový nerozpoznaný -F13 s rámečkem na fotce
+  // + Přidat modul na lištu 3 → nový nerozpoznaný -F11 s rámečkem na fotce
   await page.getByRole("button", { name: "Přidat modul na lištu 3" }).click();
   await expect(photoButtons).toHaveCount(14);
-  await expect(page.getByTestId("photo-selected-label")).toHaveText("-F13 · 1M");
+  await expect(page.getByTestId("photo-selected-label")).toHaveText("-F11 · 1M");
 
   // Kompaktní dvojitý jistič 2×1P v 1M a rozdělení na 2 obvodové větve
   const configurator = page.getByTestId("item-configurator");
@@ -143,66 +158,68 @@ test("Vision Analyzer 2.0: režim analýzy, 1M dělení, přidání a smazání 
   await expect(photoButtons).toHaveCount(15);
 
   // Smazat prvek
-  await page.getByTestId("panel-photo").getByRole("button", { name: /^-F14 / }).click();
+  await page.getByTestId("panel-photo").getByRole("button", { name: /^-F12 / }).click();
   await page.getByTestId("item-configurator").getByRole("button", { name: "Smazat prvek" }).click();
   await expect(photoButtons).toHaveCount(14);
 
   // Smazat celou lištu 3 a přidat novou
   await page.getByRole("button", { name: "Smazat celou lištu 3" }).click();
-  await expect(photoButtons).toHaveCount(11); // lišta 3 měla -F11, -F12 a jednu větev 2×1P
+  await expect(photoButtons).toHaveCount(11); // lišta 3 měla -F9, -F10 a jednu větev 2×1P
   await expect(page.getByRole("button", { name: "Přidat modul na lištu 3" })).toHaveCount(0);
   await page.getByRole("button", { name: "Přidat DIN lištu" }).click();
   await expect(page.getByRole("button", { name: "Přidat modul na lištu 3" })).toBeVisible();
 });
 
-test("krok 2: AI návrh stromu, hlídač, Zpět/Vpřed, hromadné přiřazení a uložení", async ({ page }) => {
+test("krok 2: skupinové karty, AI návrh zapojení podle DIN lišt, fáze tlačítky, přesun mezi skupinami, Zpět/Vpřed a uložení", async ({ page }) => {
   await page.goto("/panel-builder");
   await page.getByRole("link", { name: /PB-001/ }).click();
-  await page.getByRole("link", { name: "2. Hierarchický strom a zapojení" }).click();
+  await page.getByRole("link", { name: "2. Zapojení a hierarchie" }).click();
   const summary = page.getByTestId("tree-summary");
   await expect(summary).toContainText("Zapojeno 0/13");
   await expect(page.getByTestId("tree-loose")).toBeVisible();
 
   await expect(async () => {
-    await page.getByRole("button", { name: "AI návrh stromu na 1 klik" }).click();
+    await page.getByRole("button", { name: "AI návrh zapojení na 1 klik" }).click();
     await expect(summary).toContainText("Zapojeno 13/13", { timeout: 2_000 });
   }).toPass({ timeout: 20_000 });
   await expect(summary).toContainText("Chyby: 0");
-  await expect(page.getByLabel("-F9 fáze")).toHaveValue("L2");
   await expect(page.getByTestId("tree-save-state")).toHaveText("Uloženo");
 
-  // Chyba: 3P jistič pod jednofázovým -F5 → hlídač; Zpět / Vpřed
-  await page.getByLabel("-F3 napájeno z").selectOption({ label: "-F5 · Světla chodby" });
-  await expect(page.getByTestId("tree-row--F3")).toContainText("3P přístroj -F3 nemůže být napájen z jednofázového uzlu -F5");
-  await expect(summary).toContainText("Chyby: 1");
-  await page.getByRole("button", { name: "Zpět" }).click();
-  await expect(summary).toContainText("Chyby: 0");
-  await page.getByRole("button", { name: "Vpřed" }).click();
-  await expect(summary).toContainText("Chyby: 1");
-  await page.getByRole("button", { name: "Zpět" }).click();
-  await expect(summary).toContainText("Chyby: 0");
+  // Karty: hlavní přívod pod -Q1 a skupina chrániče -FI1 se svými jističi; chránič vede L1, L2, L3, N
+  const mainCard = page.getByTestId("group--Q1");
+  const rcdCard = page.getByTestId("group--FI1");
+  await expect(mainCard).toContainText("Hlavní přívod a přímé vývody");
+  await expect(rcdCard).toContainText("Skupina chrániče -FI1");
+  await expect(rcdCard.getByTestId("tree-row--F7")).toBeVisible();
+  await expect(page.getByTestId("phase-fixed--FI1")).toHaveText("L1, L2, L3, N");
+  await expect(page.getByTestId("group-load--Q1")).toContainText("informace, ne chyba");
+  await expect(page.getByRole("button", { name: "-F7 fáze L2", pressed: true })).toBeVisible();
 
-  // Hromadné přiřazení: -F11 a -F12 pod -Q1 a zpět pod chránič -F2
-  await page.getByLabel("Vybrat -F11").check();
-  await page.getByLabel("Vybrat -F12").check();
-  await page.getByLabel("Hromadně zapojit pod").selectOption({ label: "-Q1 · Odpínač" });
-  await page.getByRole("button", { name: "Zapojit (2)" }).click();
-  await expect(page.getByLabel("-F12 napájeno z")).toHaveValue(/.+/);
-  await expect(page.getByLabel("-F12 napájeno z").locator("option:checked")).toHaveText("-Q1 · Odpínač");
-  await page.getByLabel("Vybrat -F11").check();
-  await page.getByLabel("Vybrat -F12").check();
-  await page.getByLabel("Hromadně zapojit pod").selectOption({ label: "-F2 · Proudový chránič (RCD)" });
-  await page.getByRole("button", { name: "Zapojit (2)" }).click();
-  await expect(page.getByLabel("-F12 napájeno z").locator("option:checked")).toHaveText("-F2 · Proudový chránič (RCD)");
+  // Fáze jedním klikem
+  await page.getByRole("button", { name: "-F7 fáze L3" }).click();
+  await expect(page.getByRole("button", { name: "-F7 fáze L3", pressed: true })).toBeVisible();
+  // zpět na navrženou fázi (referenční výpočet oteplení v kroku 3 počítá s původním rozložením)
+  await page.getByRole("button", { name: "-F7 fáze L2" }).click();
+
+  // Přesun jističe -F9 pod hlavní vypínač a zpět; Zpět / Vpřed
+  await page.getByRole("button", { name: "-F9 napájeno z -Q1 Hlavní" }).click();
+  await expect(mainCard.getByTestId("tree-row--F9")).toBeVisible();
+  await page.getByRole("button", { name: "Zpět" }).click();
+  await expect(rcdCard.getByTestId("tree-row--F9")).toBeVisible();
+  await page.getByRole("button", { name: "Vpřed" }).click();
+  await expect(mainCard.getByTestId("tree-row--F9")).toBeVisible();
+  await page.getByRole("button", { name: "-F9 napájeno z -FI1 Chránič (Lišta 1)" }).click();
+  await expect(rcdCard.getByTestId("tree-row--F9")).toBeVisible();
+  await expect(summary).toContainText("Chyby: 0");
 
   // Název obvodu inline a uložení
-  await page.getByLabel("-F4 název obvodu").fill("Sporák + trouba");
-  await page.getByLabel("-F4 název obvodu").blur();
+  await page.getByLabel("-F2 název obvodu").fill("Sporák + trouba");
+  await page.getByLabel("-F2 název obvodu").blur();
   await expect(page.getByTestId("tree-save-state")).toHaveText("Uloženo");
   await page.reload();
   await expect(page.getByTestId("tree-summary")).toContainText("Zapojeno 13/13");
-  await expect(page.getByLabel("-F4 název obvodu")).toHaveValue("Sporák + trouba");
-  await expect(page.getByText("Strom zapojení hotov")).toBeVisible();
+  await expect(page.getByLabel("-F2 název obvodu")).toHaveValue("Sporák + trouba");
+  await expect(page.getByText("Zapojení hotovo")).toBeVisible();
 });
 
 test("krok 3: výpočet oteplení referenčního rozváděče, živý přepočet a uložení vstupů", async ({ page }) => {
@@ -212,7 +229,7 @@ test("krok 3: výpočet oteplení referenčního rozváděče, živý přepočet
   const verdict = page.getByTestId("thermal-verdict");
   await expect(verdict).toContainText("VYHOVUJE dle ČSN EN 61439 – Vypočítaná teplota 42,4 °C");
   await expect(verdict).toContainText("pod limitem 70 °C");
-  await expect(page.getByTestId("thermal-row--F2")).toContainText("20,80");
+  await expect(page.getByTestId("thermal-row--FI1")).toContainText("20,80");
   await expect(page.getByTestId("phase-balance")).toContainText("L3");
   await expect(page.getByTestId("thermal-curve")).toBeVisible();
 
@@ -231,9 +248,9 @@ test("krok 3: výpočet oteplení referenčního rozváděče, živý přepočet
   await page.getByLabel("Teplota okolí [°C]").fill("30");
   await page.getByLabel("Koeficient soudobosti SF").fill("0.5");
   await expect(page.getByTestId("thermal-verdict")).toContainText("42,4 °C");
-  await page.getByLabel("-F3 výpočtový proud Ib").fill("4");
+  await page.getByLabel("-F1 výpočtový proud Ib").fill("4");
   await expect(page.getByTestId("thermal-verdict")).not.toContainText("42,4 °C");
-  await page.getByLabel("-F3 výpočtový proud Ib").fill("");
+  await page.getByLabel("-F1 výpočtový proud Ib").fill("");
   await expect(page.getByTestId("thermal-verdict")).toContainText("42,4 °C");
   await expect(page.getByTestId("thermal-save-state")).toHaveText("Uloženo");
 });

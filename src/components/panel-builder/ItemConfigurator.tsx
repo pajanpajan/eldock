@@ -16,6 +16,23 @@ import { assignComponentAction, configureItemAction, deleteItemAction, lookupCom
 
 import type { WorkspaceItem } from "./RecognitionWorkspace";
 
+/** Rychlé štítky funkce obvodu (1 klik = vyplněno a uloženo). */
+export const CIRCUIT_CHIPS = [
+  "Hlavní vypínač",
+  "Chránič 1",
+  "Chránič 2",
+  "Světla",
+  "Zásuvky",
+  "Kuchyně",
+  "Koupelna",
+  "Varná deska",
+  "Trouba",
+  "Myčka / Pračka",
+  "Bojler / TČ",
+  "Topení",
+  "Venek / Garáž",
+] as const;
+
 /** Prodleva uložení při rychlém klikání po dlaždicích parametrů (ms). */
 const CONFIGURE_DEBOUNCE_MS = 250;
 
@@ -49,6 +66,7 @@ export function ItemConfigurator({
   onChanged,
   onDeleted,
   onPreview,
+  onLabel,
 }: {
   item: WorkspaceItem;
   dominant: string;
@@ -57,6 +75,8 @@ export function ItemConfigurator({
   onDeleted: () => void;
   /** Optimistický náhled na DIN liště (null = zrušit po uložení nebo chybě). */
   onPreview: (itemId: string, config: ItemConfig | null) => void;
+  /** Okamžitý popis obvodu na dlaždici DIN lišty (null = zrušit náhled). */
+  onLabel?: (itemId: string, label: string | null) => void;
 }) {
   const initialManufacturer = item.config?.manufacturer ?? item.component?.manufacturer ?? item.detected?.manufacturer ?? (isMix(dominant) ? null : dominant);
   const [config, setConfig] = useState<ItemConfig | null>(item.config);
@@ -149,15 +169,23 @@ export function ItemConfigurator({
     });
   }
 
-  function saveText(patch: { customTypeCode?: string | null; circuitLabel?: string }) {
-    const next = { customTypeCode: patch.customTypeCode !== undefined ? patch.customTypeCode : item.customTypeCode, circuitLabel: patch.circuitLabel ?? item.circuitLabel };
-    if (next.customTypeCode === item.customTypeCode && next.circuitLabel === item.circuitLabel) return;
+  function saveText(patch: { customTypeCode?: string | null; circuitLabel?: string; designation?: string }) {
+    const next = {
+      customTypeCode: patch.customTypeCode !== undefined ? patch.customTypeCode : item.customTypeCode,
+      circuitLabel: patch.circuitLabel ?? item.circuitLabel,
+      designation: patch.designation ?? null,
+    };
+    if (next.customTypeCode === item.customTypeCode && next.circuitLabel === item.circuitLabel && (!next.designation || next.designation === item.designation)) return;
+    if (patch.circuitLabel !== undefined) onLabel?.(item.id, patch.circuitLabel);
     startTransition(async () => {
       const result = await updateItemTextAction(item.id, next);
+      if (patch.circuitLabel !== undefined) onLabel?.(item.id, null);
       if (!result.ok) return void toast.error(result.error);
-      onChanged();
     });
   }
+
+  // Funkce obvodu: lokální stav (okamžitě na dlaždici), uložení po opuštění pole nebo kliknutím na štítek
+  const [label, setLabel] = useState(item.circuitLabel);
 
   // Rozklikaný (zatím neuložený) prvek je hned „ověřený“ – stejně jako po uložení konfigurace.
   const shownStatus = config && config !== item.config ? "VERIFIED" : item.recognitionStatus;
@@ -167,7 +195,20 @@ export function ItemConfigurator({
   return (
     <div className="flex flex-col gap-4" data-testid="item-configurator">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="font-mono text-lg font-semibold">{item.designation}</span>
+        <Input
+          key={`designation:${item.id}:${item.designation}`}
+          defaultValue={item.designation}
+          aria-label="Značení přístroje"
+          title="IEC značení – ručně přepsatelné (-Q1, -FI1, -FA1, -F3 …)"
+          maxLength={8}
+          className="h-9 w-24 font-mono text-lg font-semibold"
+          onBlur={(event) => {
+            const value = event.target.value.trim().toUpperCase();
+            if (value && value !== item.designation) saveText({ designation: value });
+            else event.target.value = item.designation;
+          }}
+          onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
+        />
         <span className={cn("rounded-full border px-2 py-0.5 text-xs", RECOGNITION[shownStatus].badge)} data-testid="configurator-status">
           {RECOGNITION[shownStatus].label}
         </span>
@@ -193,6 +234,45 @@ export function ItemConfigurator({
           <Trash2 className="size-3.5" aria-hidden /> Smazat prvek
         </Button>
       </div>
+
+      {/* Funkce obvodu hned pod hlavičkou prvku + rychlé štítky */}
+      <section aria-label="Funkce obvodu" className="flex flex-col gap-2">
+        <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
+          Funkce / Popis obvodu
+          <Input
+            value={label}
+            placeholder="např. Zásuvky kuchyně"
+            maxLength={80}
+            className="h-11 text-base"
+            aria-label="Popis obvodu"
+            onChange={(event) => {
+              setLabel(event.target.value);
+              onLabel?.(item.id, event.target.value);
+            }}
+            onBlur={() => saveText({ circuitLabel: label })}
+            onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
+          />
+        </label>
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Rychlé štítky funkce obvodu">
+          {CIRCUIT_CHIPS.map((chip) => (
+            <button
+              key={chip}
+              type="button"
+              aria-pressed={label === chip}
+              onClick={() => {
+                setLabel(chip);
+                saveText({ circuitLabel: chip });
+              }}
+              className={cn(
+                "min-h-8 rounded-full border px-2.5 text-xs font-medium transition-colors",
+                label === chip ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card hover:border-primary/60",
+              )}
+            >
+              {chip}
+            </button>
+          ))}
+        </div>
+      </section>
 
       {/* Geometrie na DIN liště */}
       <section aria-label="Geometrie na DIN liště" className="flex flex-col gap-2 rounded-lg border border-border bg-muted/30 p-3">
@@ -310,7 +390,7 @@ export function ItemConfigurator({
         ) : (
           <p className="text-sm text-muted-foreground">Zatím nepřiřazeno – ťukněte na kategorii a parametry.</p>
         )}
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid gap-2">
           <label className="flex flex-col gap-1 text-xs text-muted-foreground">
             Typové označení (ručně)
             <Input
@@ -321,18 +401,6 @@ export function ItemConfigurator({
               className="h-10"
               aria-label="Typové označení"
               onBlur={(event) => saveText({ customTypeCode: event.target.value.trim() || null })}
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-            Popis obvodu
-            <Input
-              key={`label:${item.id}:${item.circuitLabel}`}
-              defaultValue={item.circuitLabel}
-              placeholder="např. Zásuvky kuchyně"
-              maxLength={80}
-              className="h-10"
-              aria-label="Popis obvodu"
-              onBlur={(event) => saveText({ circuitLabel: event.target.value })}
             />
           </label>
         </div>
