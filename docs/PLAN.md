@@ -53,9 +53,9 @@ a postup nasazení jsou v `CLAUDE.md`. Soubor drž pod 150 řádky.
 | 36 | Konsolidace a technický dluh: stabilní E2E (zahřátí dev serveru, data plánovače podle pražského dne), optimistický konfigurátor, zpětná editace pater ve Studiu (`studioLayoutJson`), katalog Bonega, paralelní Vision Analyzer, originál fotky u zákresu, Remotion bez `<Img>`, materiál skříně v oteplení, `ELDOCK_LOCK_ACCOUNT_SWITCHER` | ✅ |
 | 37 | AI Panel Builder: tmavé selecty, katalog ABB Compact Home (SHD/SH/FH), prompt (červená páčka = odpínač, B vs. C, těsné rámečky), ruční úprava rámečku, funkce obvodu se štítky, IEC prefixy -Q/-FI/-FA/-FV/-F/-K/-KA, nový krok 2 se skupinovými kartami | ✅ |
 | 38 | Studio: budova v metrech bez limitu os (A…ZZ), více budov v jednom konceptu (jedna transakce), editovatelné názvy stávajících pater, krok 2 bez šablon + Zpět/Vpřed (30 kroků), krok 3 místnost → kategorie → produktové banery / úprava stávajících | ✅ |
-| 39 | Studio: sloupy jako jemné křížky, vlastní nabídka kroku 3 (názvy kategorií a dlaždic, prefixy, vlastní dlaždice – `TenantSetting` + localStorage), štítky „☕ 2× Kávovar“ v místnostech (Studio i uložený půdorys), seskupené „Upravit stávající“ s − / + | 🟦 |
+| 39 | Studio: sloupy jako jemné křížky, vlastní nabídka kroku 3 (názvy kategorií a dlaždic, prefixy, vlastní dlaždice – `TenantSetting` + localStorage), štítky „☕ 2× Kávovar“ v místnostech (Studio i uložený půdorys), seskupené „Upravit stávající“ s − / + | ✅ |
 
-Fáze 36–38 jsou nasazené 2026-11-02 (commit `e9bfd76`), oprava kmitání plátna „Celé“ (`bd37aeb`) také.
+Fáze 36–38 jsou nasazené 2026-11-02 (commit `e9bfd76`), oprava kmitání plátna „Celé“ (`bd37aeb`) také; fáze 39 nasazena 2026-11-02 (commit `3c99981`).
 
 ## B. Otevřená fáze
 
