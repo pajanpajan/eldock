@@ -1,11 +1,12 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
+import { STUDIO_MENU_KEY } from "@/lib/studio-menu";
 
 /** Podklady Studia: budovy a patra závodu (s půdorysem), zařízení pro hierarchii napájení. */
 export async function getStudioData(plantId: string) {
   // Závod i zařízení najednou (zařízení se filtrují přes plantId, na závodu nezávisí).
-  const [plant, equipment] = await Promise.all([
+  const [plant, equipment, menu] = await Promise.all([
     prisma.plant.findUnique({
       where: { id: plantId },
       select: {
@@ -45,9 +46,11 @@ export async function getStudioData(plantId: string) {
         fedFrom: { select: { id: true, tag: true } },
       },
     }),
+    prisma.tenantSetting.findUnique({ where: { key: STUDIO_MENU_KEY }, select: { value: true } }),
   ]);
   if (!plant) return null;
-  return { plant, equipment };
+  // Vlastní nabídka kroku 3 jako JSON (klient ji ověří a porovná s localStorage)
+  return { plant, equipment, menuJson: menu?.value ?? null };
 }
 
 export type StudioData = NonNullable<Awaited<ReturnType<typeof getStudioData>>>;

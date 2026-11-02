@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { EQUIPMENT_CATEGORIES, PLACEABLE_TYPES, categoryOf, placementOf, roomInventoryLabel } from "./equipment-categories";
+import { EQUIPMENT_CATEGORIES, PLACEABLE_TYPES, categoryOf, deviceBaseName, inventoryChipText, placementOf, roomInventoryGroups } from "./equipment-categories";
 import { isPortable } from "./inspection-rules";
 
 describe("kategorie zařízení ve Studiu", () => {
@@ -23,9 +23,23 @@ describe("kategorie zařízení ve Studiu", () => {
     for (const type of PLACEABLE_TYPES) expect(placementOf(type)).toBe(isPortable(type) ? "room" : "grid");
   });
 
-  it("inventární štítek místnosti", () => {
-    expect(roomInventoryLabel(["APPLIANCE", "POWER_TOOL", "APPLIANCE", "EXTENSION_CORD", "WELDER"])).toBe("🔌 3× Spotřebič · 🛠️ 2× Nářadí");
-    expect(roomInventoryLabel([])).toBe("");
+  it("inventář místnosti sečtený podle názvu přístroje (místnost i tag se z názvu odstraní)", () => {
+    expect(deviceBaseName("SP-0003 - Kávovar – Kancelář 1", "SP-0003")).toBe("Kávovar");
+    expect(deviceBaseName("PC sestava")).toBe("PC sestava");
+    const groups = roomInventoryGroups([
+      ...Array.from({ length: 7 }, (_, i) => ({ name: "PC sestava – Kancelář 1", type: "APPLIANCE" as const, tag: `SP-0${i}` })),
+      { name: "Prodlužovací přívod – Kancelář 1", type: "EXTENSION_CORD" },
+      { name: "Prodlužovací přívod", type: "EXTENSION_CORD" },
+      { name: "Kávovar – Kancelář 1", type: "APPLIANCE" },
+      { name: "Svářečka", type: "WELDER" },
+    ]);
+    expect(groups.map(inventoryChipText)).toEqual(["🖥️ 7× PC sestava", "🔌 2× Prodlužovací přívod", "☕ 1× Kávovar", "⚡ 1× Svářečka"]);
+    // vlastní dlaždice určí ikonu, neznámý přístroj dostane ikonu kategorie
+    const custom = roomInventoryGroups([{ name: "Rychlovarná konvice", type: "APPLIANCE" }, { name: "Vysoušeč rukou", type: "APPLIANCE" }], [
+      { key: "user-1", label: "Rychlovarná konvice", name: "Rychlovarná konvice", emoji: "🫖", type: "APPLIANCE" },
+    ]);
+    expect(custom.map(inventoryChipText)).toEqual(["🫖 1× Rychlovarná konvice", "🔌 1× Vysoušeč rukou"]);
+    expect(roomInventoryGroups([])).toEqual([]);
   });
 });
 

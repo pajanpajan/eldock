@@ -11,7 +11,9 @@ import { floorHref, plantHref } from "@/lib/routes";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 import { assertFeature } from "@/server/modules";
 import { assertPermission } from "@/server/permissions";
-import { saveStudioConcept } from "@/server/services/studio";
+import { getCurrentUser } from "@/server/session";
+import { saveStudioConcept, saveStudioMenu } from "@/server/services/studio";
+import { studioMenuSchema, type StudioMenu } from "@/lib/studio-menu";
 
 import type { ActionResult } from "./workflow";
 
@@ -124,5 +126,23 @@ export async function saveStudioAction(input: z.input<typeof conceptSchema>): Pr
     if (error instanceof WorkflowError) return { ok: false, error: error.message };
     console.error(error);
     return { ok: false, error: "Koncept se nepodařilo uložit. Zkuste to prosím znovu." };
+  }
+}
+
+/** Uloží vlastní nabídku kroku 3 (názvy kategorií, dlaždice, prefixy) do nastavení tenantu. */
+export async function saveStudioMenuAction(input: z.input<typeof studioMenuSchema>): Promise<ActionResult<StudioMenu>> {
+  const parsed = studioMenuSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Neplatná nabídka – zkontrolujte názvy a prefixy (jen písmena, číslice, tečka, pomlčka)." };
+  try {
+    await assertPermission("studio");
+    await assertFeature("enterprise.studio");
+    const user = await getCurrentUser();
+    const menu = await saveStudioMenu(prisma, parsed.data as StudioMenu, user.id);
+    revalidatePath("/studio");
+    return { ok: true, data: menu };
+  } catch (error) {
+    if (error instanceof WorkflowError) return { ok: false, error: error.message };
+    console.error(error);
+    return { ok: false, error: "Nabídku se nepodařilo uložit. Zkuste to prosím znovu." };
   }
 }

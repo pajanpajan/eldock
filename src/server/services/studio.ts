@@ -16,7 +16,8 @@ import {
   type GridSpec,
   type PlanFrame,
 } from "@/lib/cad-grid";
-import { frameOfFloor, layoutOfFloor, serializeLayout } from "@/lib/studio-layout";
+import { frameOfFloor, layoutOfFloor, parseLayout, serializeLayout } from "@/lib/studio-layout";
+import { STUDIO_MENU_KEY, allMenuTemplates, normalizeMenu, parseStudioMenu, type StudioMenu } from "@/lib/studio-menu";
 import { campusSizeValid, campusViewBox, polygonBounds, rectInsideCampus, rescalePolygon, type CampusSize } from "@/lib/campus-layout";
 import { placementOf } from "@/lib/equipment-categories";
 import { inspectionRuleFor, isPortable } from "@/lib/inspection-rules";
@@ -330,6 +331,20 @@ async function saveBuildingInTx(prisma: Tx, draft: StudioDraft) {
       });
     }
 
+    // Seskupené štítky spotřebičů a nářadí v místnostech („☕ 2× Kávovar“) v uloženém půdorysu
+    // všech pater, kterých se koncept dotkl (nová, upravená, s novým nebo upraveným zařízením).
+    const touched = new Set<string>([
+      ...floorIds.values(),
+      ...edited.keys(),
+      ...draft.equipment.flatMap((item) => (item.floor.kind === "existing" ? [item.floor.id] : [])),
+      ...(edits.length ? (await tx.equipment.findMany({ where: { id: { in: edits.map((edit) => edit.id) } }, select: { floorId: true } })).map((row) => row.floorId) : []),
+    ]);
+    if (touched.size) {
+      const menu = parseStudioMenu((await tx.tenantSetting.findUnique({ where: { key: STUDIO_MENU_KEY }, select: { value: true } }))?.value);
+      const templates = menu ? allMenuTemplates(menu) : [];
+      for (const floorId of touched) await refreshFloorInventory(tx, floorId, templates);
+    }
+
     // Přesměrování: patro prvního osazeného zařízení, jinak nové 1. NP, jinak první nové patro.
     const first = draft.equipment[0]?.floor;
     const firstFloorId =
@@ -351,4 +366,39 @@ async function saveBuildingInTx(prisma: Tx, draft: StudioDraft) {
       equipment: equipmentIds.size,
     };
   }
+}
+
+/**
+ * Překreslí uložený půdorys patra ze Studia (JSON rozvržení) se seskupenými štítky inventáře místností.
+ * Starší patra bez JSON (půdorys jen jako SVG) se nemění.
+ */
+export async function refreshFloorInventory(prisma: Tx, floorId: string, templates: Parameters<typeof renderGridFloorplanSvg>[0]["templates"] = []) {
+  const floor = await prisma.floor.findUnique({ where: { id: floorId }, select: { name: true, studioLayoutJson: true } });
+  const layout = parseLayout(floor?.studioLayoutJson);
+  if (!floor || !layout) return false;
+  const frame = planFrame(layout.grid);
+  const rows = await prisma.equipment.findMany({ where: { floorId }, select: { tag: true, name: true, type: true, pinX: true, pinY: true } });
+  const roomItems = rows
+    .filter((row) => placementOf(row.type) === "room")
+    .map((row) => ({ tag: row.tag, name: row.name, type: row.type, pos: pxToMeters(frame, { x: (row.pinX / 100) * FLOOR_VIEWBOX.width, y: (row.pinY / 100) * FLOOR_VIEWBOX.height }) }));
+  await prisma.floor.update({
+    where: { id: floorId },
+    data: { floorplanSvg: renderGridFloorplanSvg({ floorName: floor.name, spec: layout.grid, zones: layout.zones, gates: layout.gates, roomItems, templates }) },
+  });
+  return true;
+}
+
+/** Vlastní nabídka kroku 3 Studia (nastavení tenantu); bez úprav `null`. */
+export async function getStudioMenu(prisma: PrismaClient): Promise<StudioMenu | null> {
+  return parseStudioMenu((await prisma.tenantSetting.findUnique({ where: { key: STUDIO_MENU_KEY }, select: { value: true } }))?.value);
+}
+
+/** Uloží nabídku kroku 3 pro celý tenant; starší verze (podle `updatedAt`) nepřepíše novější. */
+export async function saveStudioMenu(prisma: PrismaClient, menu: StudioMenu, actorId: string | null): Promise<StudioMenu> {
+  const current = await getStudioMenu(prisma);
+  if (current && current.updatedAt > menu.updatedAt) return current;
+  const value = JSON.stringify(normalizeMenu(menu));
+  if (value.length > 60_000) throw new WorkflowError("VALIDATION", "Nabídka je příliš velká – smažte nepoužívané dlaždice.");
+  await prisma.tenantSetting.upsert({ where: { key: STUDIO_MENU_KEY }, create: { key: STUDIO_MENU_KEY, value, updatedById: actorId }, update: { value, updatedById: actorId } });
+  return normalizeMenu(menu);
 }

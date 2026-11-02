@@ -42,7 +42,7 @@ import {
   zoneToRoom,
   type GridZone,
 } from "./cad-grid";
-import { extractFloorplanRoomsWithLabels } from "./mock-graphics/floorplan";
+import { PILLAR_COLOR, extractFloorplanRoomsWithLabels, stripFloorplanInventory } from "./mock-graphics/floorplan";
 import { allowedParents, powerRole, suggestCircuit, validatePlacement } from "./power-hierarchy";
 
 const zone = (patch: Partial<GridZone> = {}): GridZone => ({ key: "z", x: 6, y: 6, w: 24, h: 6, name: "Svařovna", kind: "PRODUCTION", ...patch });
@@ -193,6 +193,39 @@ describe("vygenerovaný půdorys", () => {
     expect((svg.match(/<circle /g) ?? []).length).toBe(6 + 5);
     expect(extractFloorplanRoomsWithLabels(svg).map((room) => room.label)).toEqual(["Linka <1>", "Rozvodna"]);
     expect(renderGridFloorplanSvg({ floorName: "x", spec, zones, gates: [], fineGrid: true })).toContain('fill="url(#fp-fine)"');
+  });
+
+  it("sloupy jako jemné středové křížky v tónu rastru (jedna cesta, žádné plné čtverce)", () => {
+    const spec = { ...DEFAULT_GRID, cols: 6, rows: 5, scale: "1:500" as const };
+    const svg = renderGridFloorplanSvg({ floorName: "x", spec, zones: [], gates: [] });
+    const pillars = /<path d="([^"]+)" fill="none" stroke="([^"]+)"[^>]*data-pillars=""/.exec(svg);
+    expect(pillars?.[2]).toBe(PILLAR_COLOR);
+    expect((pillars?.[1].match(/M/g) ?? []).length).toBe(6 * 5 * 2);
+    expect(pillars?.[1]).toMatch(/h8M[\d.]+ [\d.]+v8/);
+    expect(svg).not.toMatch(/<rect x="[\d.]+" y="[\d.]+" width="10" height="10"/);
+  });
+
+  it("seskupené štítky spotřebičů a nářadí v místnostech uloženého půdorysu", () => {
+    const spec = { ...DEFAULT_GRID, cols: 6, rows: 5, scale: "1:200" as const };
+    const zones = [zone({ key: "k", x: 0, y: 0, w: 18, h: 12, name: "Kancelář 1" }), zone({ key: "d", x: 18, y: 0, w: 12, h: 12, name: "Dílna" })];
+    const roomItems = [
+      ...Array.from({ length: 3 }, (_, i) => ({ name: "PC sestava – Kancelář 1", type: "APPLIANCE" as const, pos: { x: 1 + i * 1.5, y: 1 } })),
+      { name: "Kávovar – Kancelář 1", type: "APPLIANCE" as const, pos: { x: 3, y: 4 } },
+      { name: "Úhlová bruska – Dílna", type: "POWER_TOOL" as const, pos: { x: 20, y: 2 } },
+      // pevná zařízení (rozváděč) se do štítků nepočítají
+      { name: "Podružný rozváděč", type: "SWITCHBOARD" as const, pos: { x: 2, y: 2 } },
+    ];
+    const svg = renderGridFloorplanSvg({ floorName: "1. NP", spec, zones, gates: [], roomItems });
+    expect(svg).toContain("🖥️ 3× PC sestava");
+    expect(svg).toContain("☕ 1× Kávovar");
+    expect(svg).toContain("⚙️ 1× Úhlová bruska");
+    expect(svg).not.toContain("rozváděč");
+    // štítky nerozbijí zpětné čtení místností a Studio je umí z uloženého SVG odstranit
+    expect(extractFloorplanRoomsWithLabels(svg).map((room) => room.label)).toEqual(["Kancelář 1", "Dílna"]);
+    const stripped = stripFloorplanInventory(svg);
+    expect(stripped).not.toContain("PC sestava");
+    expect(stripped).toContain("Kancelář 1");
+    expect(renderGridFloorplanSvg({ floorName: "1. NP", spec, zones, gates: [] })).not.toContain("data-room-inventory");
   });
 });
 

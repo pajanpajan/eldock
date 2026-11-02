@@ -51,7 +51,67 @@ export interface FloorplanInput {
   scale?: { label: string; pxPer10m: number; dimensions?: string };
   /** Jemný pod-rastr uvnitř obvodu (krok v px ve viewBoxu), např. po 1 m ve Studiu. */
   fineGrid?: { stepX: number; stepY: number };
+  /** Seskupené štítky spotřebičů a nářadí v místnostech („☕ 2× Kávovar“), obdélník místnosti ve viewBoxu. */
+  inventory?: FloorplanInventory[];
 }
+
+export interface FloorplanInventory {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** Popisky štítků, např. „🖥️ 7× PC sestava“. */
+  chips: { text: string; color: string }[];
+  /** Odsazení od horní hrany místnosti (pod názvem a rozměrem). */
+  top?: number;
+}
+
+/** Barva křížků sloupů – tón os rastru, aby nerušily místnosti, popisky ani zařízení. */
+export const PILLAR_COLOR = "#3b5b85";
+/** Polovina ramene křížku sloupu ve viewBoxu. */
+export const PILLAR_ARM = 4;
+
+/** Odhad šířky textu štítku (monospace ~0,6 em, emoji na dva znaky). */
+const chipWidth = (text: string, size: number) => 12 + [...text].reduce((sum, char) => sum + (char.codePointAt(0)! > 0x2000 ? 2 : 1), 0) * size * 0.62;
+
+/**
+ * Štítky inventáře uvnitř místnosti zleva doprava s ořezem na šířku; co se nevejde na výšku, shrne „+N“.
+ * Vše v jedné skupině `data-room-inventory` (Studio ji nad uloženým SVG nahrazuje živými štítky).
+ */
+function inventorySvg(list: FloorplanInventory[]): string {
+  const parts: string[] = [];
+  const size = 10.5;
+  const height = 17;
+  const gap = 4;
+  for (const room of list) {
+    let x = room.x + 8;
+    let y = room.y + (room.top ?? 30);
+    const right = room.x + room.w - 6;
+    const bottom = room.y + room.h - 4;
+    for (let index = 0; index < room.chips.length; index++) {
+      const chip = room.chips[index];
+      const w = Math.min(chipWidth(chip.text, size), room.w - 14);
+      if (x + w > right && x > room.x + 8) {
+        x = room.x + 8;
+        y += height + gap;
+      }
+      if (y + height > bottom) {
+        const rest = room.chips.length - index;
+        if (parts.length && rest > 0) parts.push(`<text x="${n(x)}" y="${n(Math.min(y, bottom) - 4)}" font-size="${size}" fill="${TEXT}">+${rest}</text>`);
+        break;
+      }
+      parts.push(
+        `<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${height}" rx="4" fill="#09090b" fill-opacity="0.9" stroke="${chip.color}" stroke-width="1.2"/>`,
+        `<text x="${n(x + 6)}" y="${n(y + 12.5)}" font-size="${size}" font-weight="600" fill="#f4f4f5">${esc(chip.text)}</text>`,
+      );
+      x += w + gap;
+    }
+  }
+  return parts.length ? `<g data-room-inventory="">${parts.join("")}</g>` : "";
+}
+
+/** Odstraní seskupené štítky inventáře z uloženého půdorysu (Studio je kreslí živě nad ním). */
+export const stripFloorplanInventory = (svg: string) => svg.replace(/<g data-room-inventory="">[\s\S]*?<\/g>/, "");
 
 const WALL = "#94a3b8";
 const GRID = "#1e3a5f";
@@ -183,12 +243,16 @@ export function renderFloorplanSvg(input: FloorplanInput): string {
       j % everyY === 0 || j === ys.length - 1 ? `<text x="${o.x - 28}" y="${n(y + 4)}" font-size="${rowName(j).length > 1 ? 10 : 12}" fill="${TEXT}" text-anchor="middle">${rowName(j)}</text>` : "",
     );
   });
-  // Sloupy v průsečících (u obřích hal nad 4 000 sloupů jen osy, ať SVG nezahltí prohlížeč)
-  if (xs.length * ys.length <= 4000) {
-    for (const x of xs) for (const y of ys) {
-      out.push(`<rect x="${n(x - 5)}" y="${n(y - 5)}" width="10" height="10" fill="${WALL}" opacity="0.55"/>`);
-    }
+  // Sloupy v průsečících: jemné středové křížky (+) v tónu rastru, všechny v jedné cestě
+  // (u obřích hal nad 20 000 sloupů jen osy, ať SVG nezahltí prohlížeč)
+  if (xs.length * ys.length <= 20000) {
+    const a = PILLAR_ARM;
+    const d = xs.flatMap((x) => ys.map((y) => `M${n(x - a)} ${n(y)}h${a * 2}M${n(x)} ${n(y - a)}v${a * 2}`)).join("");
+    out.push(`<path d="${d}" fill="none" stroke="${PILLAR_COLOR}" stroke-width="1.2" stroke-linecap="square" data-pillars=""/>`);
   }
+
+  // Seskupený inventář místností (nad sloupy, pod zdmi a vraty)
+  if (input.inventory?.length) out.push(inventorySvg(input.inventory));
 
   // Obvodové zdi
   out.push(`<rect x="${o.x}" y="${o.y}" width="${o.w}" height="${o.h}" fill="none" stroke="${WALL}" stroke-width="6"/>`);

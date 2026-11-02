@@ -5,7 +5,9 @@ import { DEFAULT_GRID, gridFromMeters } from "@/lib/cad-grid";
 import { parseLayout } from "@/lib/studio-layout";
 import type { StudioDraft } from "@/lib/studio-draft";
 
-import { saveStudioBuilding, saveStudioConcept, withTag } from "./studio";
+import { EMPTY_MENU, addTemplate, updateTemplate } from "@/lib/studio-menu";
+
+import { getStudioMenu, saveStudioBuilding, saveStudioConcept, saveStudioMenu, withTag } from "./studio";
 import { createTestDb, seedMinimal } from "./test-db";
 
 // Integrační test Studia nad SQLite z migrací.
@@ -239,5 +241,59 @@ describe("saveStudioBuilding", () => {
       saveStudioBuilding(prisma, draft({ building: { mode: "existing", id: "b" }, floors: [], equipment: [], equipmentEdits: [{ id: "eq-R-CNC-04", tag: "R-LIS-01", name: "x", parentId: null, circuit: null, zone: null }] })),
     ).rejects.toThrow(/R-LIS-01: na patře už zařízení/);
     expect(withTag("R-1", "R-1 - Rozváděč")).toBe("R-1 - Rozváděč");
+  });
+});
+
+describe("fáze 39: inventář místností v půdorysu a vlastní nabídka", () => {
+  const appliance = (key: string, tag: string, name: string, pos: { x: number; y: number }) => ({
+    key,
+    floor: { kind: "draft" as const, key: "f0" },
+    pos,
+    roomKey: "z2",
+    tag,
+    name,
+    type: "APPLIANCE" as const,
+    parent: { kind: "draft" as const, key: "rs" },
+    circuit: "Zásuvkový okruh ZS1",
+    zone: "Zázemí",
+    isRoot: false,
+  });
+
+  it("uložený půdorys má štítky sečtené podle názvu; další kus na stávajícím patře je přepočítá", async () => {
+    const base = draft();
+    base.equipment.push(appliance("k1", "KAV01", "Kávovar – Zázemí", { x: 38.5, y: 19 }), appliance("k2", "KAV02", "Kávovar – Zázemí", { x: 40, y: 19 }));
+    const result = await saveStudioBuilding(prisma, base);
+    const floor = await prisma.floor.findFirstOrThrow({ where: { buildingId: result.buildingId, level: 0 } });
+    expect(floor.floorplanSvg).toContain("☕ 2× Kávovar");
+    // přístroj mimo nabídku má ikonu kategorie; pevná zařízení (linka, rozváděč) se do štítků nepočítají
+    expect(floor.floorplanSvg).toContain("🔌 1× Mikrovlnka");
+    expect(floor.floorplanSvg).not.toMatch(/× Svařovací linka|× Rozváděč svařovny/);
+
+    // Druhý koncept: třetí kávovar na stávající patro → štítek se přepočítá
+    await saveStudioBuilding(prisma, {
+      ...draft(),
+      building: { mode: "existing", id: result.buildingId },
+      floors: [],
+      equipment: [{ ...appliance("k3", "KAV03", "Kávovar – Zázemí", { x: 41.5, y: 19 }), floor: { kind: "existing", id: floor.id }, parent: { kind: "existing", id: "eq-R-LIS-01" } }],
+    });
+    const after = await prisma.floor.findUniqueOrThrow({ where: { id: floor.id } });
+    expect(after.floorplanSvg).toContain("☕ 3× Kávovar");
+    expect(after.floorplanSvg).not.toContain("2× Kávovar");
+  });
+
+  it("vlastní nabídka tenantu: uloží se, starší verze nepřepíše novější a ikona dlaždice se použije ve štítku", async () => {
+    expect(await getStudioMenu(prisma)).toBeNull();
+    const added = addTemplate(updateTemplate(EMPTY_MENU, "SP", "coffee", { label: "Kávovar", prefix: "KAV" }, 100), "SP", { label: "Rychlovarná konvice", emoji: "🫖", prefix: "RK" }, 200);
+    await saveStudioMenu(prisma, added.menu, null);
+    expect((await getStudioMenu(prisma))?.templates.SP?.map((entry) => entry.label)).toContain("Rychlovarná konvice");
+    // starší verze (jiný prohlížeč) se zahodí
+    const stale = await saveStudioMenu(prisma, { ...EMPTY_MENU, updatedAt: 50 }, null);
+    expect(stale.updatedAt).toBe(200);
+
+    const base = draft();
+    base.equipment.push(appliance("r1", "RK01", "Rychlovarná konvice – Zázemí", { x: 38.5, y: 19 }));
+    const result = await saveStudioBuilding(prisma, base);
+    const floor = await prisma.floor.findFirstOrThrow({ where: { buildingId: result.buildingId, level: 0 } });
+    expect(floor.floorplanSvg).toContain("🫖 1× Rychlovarná konvice");
   });
 });

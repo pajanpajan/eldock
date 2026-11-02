@@ -112,7 +112,7 @@ test("nový areál z přepínače závodů a tlačítko Přidat budovu do areál
   await expect(page.getByTestId("campus-new-building")).toBeVisible();
 });
 
-test("Studio: budova v metrech, více budov v konceptu, místnost s posunem stěny a Zpět/Vpřed, vrata, kontextový krok 3 s produktovými banery a úpravou → uložení", async ({ page }) => {
+test("Studio: budova v metrech, více budov v konceptu, místnost s posunem stěny a Zpět/Vpřed, vrata, kontextový krok 3 s produktovými banery, vlastní nabídkou, součty v místnostech a úpravou → uložení", async ({ page }) => {
   await startAsAccount(page, "acc-dvorak");
   await page.goto("/studio");
 
@@ -238,11 +238,56 @@ test("Studio: budova v metrech, více budov v konceptu, místnost s posunem stě
   await page.getByRole("radio", { name: "Spotřebič", exact: true }).click();
   await page.getByRole("radio", { name: "Kávovar / Rychlovarná konvice" }).click();
   await page.getByRole("button", { name: /^Vložit SP-\d+ do místnosti Svařovna$/ }).click();
-  await expect(page.getByTestId("room-inventory")).toHaveText("🔌 1× Spotřebič");
+  const svarovna = page.locator('[data-testid="room-inventory"][data-room="Svařovna"]');
+  await expect(svarovna.getByTestId("room-chip")).toHaveText(["☕ 1× Kávovar"]);
+
+  // Upravit nabídku: dlaždici rozdělit na „Kávovar“ (prefix KAV) a vlastní „Rychlovarná konvice“ (prefix RK)
+  await page.getByTestId("menu-edit-templates").click();
+  const editor = page.getByTestId("template-editor");
+  await expect(editor.getByLabel("Název dlaždice 2")).toHaveValue("Kávovar / Rychlovarná konvice");
+  await editor.getByLabel("Název dlaždice 2").fill("Kávovar");
+  await editor.getByLabel("Prefix tagu dlaždice 2").fill("KAV");
+  await page.getByTestId("menu-edit-templates").click();
+  await page.getByRole("button", { name: "Přidat vlastní dlaždici" }).click();
+  await page.getByLabel("Ikona nové dlaždice").fill("🫖");
+  await page.getByLabel("Název nové dlaždice").fill("Rychlovarná konvice");
+  await page.getByLabel("Prefix tagu nové dlaždice").fill("RK");
+  await page.getByRole("button", { name: "Uložit dlaždici" }).click();
+  await expect(page.getByLabel("Tag", { exact: true })).toHaveValue("RK01");
+  await page.getByRole("button", { name: "Vložit RK01 do místnosti Svařovna" }).click();
+  await page.getByRole("radio", { name: "Kávovar", exact: true }).click();
+  await expect(page.getByLabel("Tag", { exact: true })).toHaveValue("KAV01");
+  await page.getByRole("button", { name: "Vložit KAV01 do místnosti Svařovna" }).click();
+  // součty přímo v místnosti podle názvu přístroje
+  await expect(svarovna.getByTestId("room-chip")).toHaveText(["☕ 2× Kávovar", "🫖 1× Rychlovarná konvice"]);
+  // nabídka se pamatuje v prohlížeči i v nastavení tenantu
+  expect(await page.evaluate(() => localStorage.getItem("eldock.studio.menu"))).toContain("Rychlovarná konvice");
+
+  // Upravit stávající: seskupené řádky, rychlé + / − (další tag v řadě) a rozbalení na kusy
+  await page.getByRole("radio", { name: /Upravit stávající \(3\)/ }).click();
+  const kavovar = page.getByTestId("existing-list").locator('[data-testid="group-row"][data-group="Kávovar"]');
+  await expect(kavovar.getByTestId("group-count")).toHaveText("(2×)");
+  await page.getByRole("button", { name: "Přidat kus: Kávovar" }).click();
+  await expect(toast(page)).toContainText("KAV02 přidáno");
+  await expect(kavovar.getByTestId("group-count")).toHaveText("(3×)");
+  await expect(svarovna.getByTestId("room-chip").first()).toHaveText("☕ 3× Kávovar");
+  await page.getByRole("button", { name: "Ubrat kus: Kávovar" }).click();
+  await expect(kavovar.getByTestId("group-count")).toHaveText("(2×)");
+  await page.getByRole("button", { name: "Rozbalit: Kávovar" }).click();
+  await expect(page.getByRole("list", { name: "Kusy: Kávovar" }).getByRole("button", { name: /KAV01/ })).toBeVisible();
+  await expect(page.getByRole("list", { name: "Kusy: Kávovar" }).getByRole("button", { name: /KAV02/ })).toHaveCount(0);
+
+  // Přejmenování kategorie v nabídce (legenda i banner)
+  await page.getByTestId("menu-edit-categories").click();
+  await page.getByLabel("Název kategorie: Spotřebič").fill("Spotřebiče a kuchyňky");
+  await page.getByTestId("menu-edit-categories").click();
+  await expect(page.getByTestId("studio-legend")).toContainText("Spotřebiče a kuchyňky");
+  await expect(page.getByRole("radio", { name: "Spotřebiče a kuchyňky" })).toBeVisible();
 
   // Upravit stávající: linka ML-03 – nový název, uložení; Zpět vrátí změnu
   await page.getByRole("radio", { name: "Výrobní stroj / Linka" }).click();
   await page.getByRole("radio", { name: /Upravit stávající \(1\)/ }).click();
+  await page.getByRole("button", { name: "Rozbalit: Lisovací linka" }).click();
   await page.getByTestId("existing-list").getByRole("button", { name: /ML-03/ }).click();
   await page.getByLabel("Název zařízení").fill("Lisovací linka 400 t");
   await page.getByRole("button", { name: "Uložit změny" }).click();
@@ -260,4 +305,7 @@ test("Studio: budova v metrech, více budov v konceptu, místnost s posunem stě
   await expect(page.getByRole("heading", { level: 1 })).toContainText("1. NP - Hlavní výroba");
   await expect(pin(page, "ML-03")).toBeVisible();
   await expect(pin(page, "R-C-01")).toBeVisible();
+  // seskupené štítky jsou i v uloženém půdorysu patra (mimo Studio)
+  await expect(page.locator("svg text", { hasText: "☕ 2× Kávovar" })).toHaveCount(1);
+  await expect(page.locator("svg text", { hasText: "🫖 1× Rychlovarná konvice" })).toHaveCount(1);
 });

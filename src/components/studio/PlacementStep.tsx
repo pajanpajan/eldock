@@ -1,7 +1,7 @@
 "use client";
 
-import { useRef, useState, type PointerEvent } from "react";
-import { ChevronDown, DoorOpen, Move, Plus, Trash2 } from "lucide-react";
+import { useRef, useState, useTransition, type PointerEvent } from "react";
+import { Check, ChevronDown, DoorOpen, Minus, Move, Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { PowerSpiderOverlay } from "@/components/map/floorplan/PowerSpiderOverlay";
@@ -9,22 +9,40 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { EquipmentType } from "@/generated/prisma/enums";
-import { DEFAULT_GRID, FLOOR_VIEWBOX, fineStep, fmtM, metersToPercent, metersToPx, pxPerMeter, planFrame, pxToMeters, zoneAt, type MeterPoint, type PlanFrame } from "@/lib/cad-grid";
+import { DEFAULT_GRID, FLOOR_VIEWBOX, fineStep, fmtM, inventoryTop, metersToPercent, metersToPx, pxPerMeter, planFrame, pxToMeters, zoneAt, type MeterPoint, type PlanFrame } from "@/lib/cad-grid";
 import {
   EQUIPMENT_CATEGORIES,
-  PRODUCT_TEMPLATES,
   categoryByKey,
   categoryOf,
   customTemplate,
-  roomInventoryLabel,
+  deviceBaseName,
+  inventoryChipText,
+  roomInventoryGroups,
   type EquipmentCategoryKey,
+  type InventoryGroup,
   type ProductTemplate,
 } from "@/lib/equipment-categories";
 import { EQUIPMENT_TYPE_ICONS } from "@/lib/equipment-icons";
-import { GATE_COLOR } from "@/lib/mock-graphics/floorplan";
+import { GATE_COLOR, stripFloorplanInventory } from "@/lib/mock-graphics/floorplan";
+import {
+  STUDIO_MENU_STORAGE_KEY,
+  addTemplate,
+  allMenuTemplates,
+  categoryLabel,
+  menuTemplates,
+  newerMenu,
+  normalizeMenu,
+  parseStudioMenu,
+  removeTemplate,
+  resetCategory,
+  setCategoryLabel,
+  updateTemplate,
+  type StudioMenu,
+} from "@/lib/studio-menu";
+import { saveStudioMenuAction } from "@/server/actions/studio";
 import { POWER_ROLE_HINTS, powerRole, suggestCircuit, validatePlacement } from "@/lib/power-hierarchy";
 import type { SpiderItem } from "@/lib/power-tree";
-import { bestParent, nextTag, nextTagWithPrefix, type AutopilotSource } from "@/lib/studio-autopilot";
+import { bestParent, nextInSeries, nextTag, nextTagWithPrefix, type AutopilotSource } from "@/lib/studio-autopilot";
 import { frameOfFloor, layoutOfFloor } from "@/lib/studio-layout";
 import { floorLabel, floorName, type StudioEquipmentDraft, type StudioEquipmentEdit, type StudioFloorDraft } from "@/lib/studio-draft";
 import { cn } from "@/lib/utils";
@@ -72,21 +90,72 @@ function roomAnchor(room: Pick<Room, "x" | "y" | "w" | "h">, index: number): Met
   return { x: Math.round(x * 2) / 2, y: Math.round(y * 2) / 2 };
 }
 
-/** Sekce rozbalovacího panelu (accordion) kroku 3. */
-function Section({ n, title, summary, open, onToggle, children, testId }: { n: number; title: string; summary?: string; open: boolean; onToggle: () => void; children: React.ReactNode; testId: string }) {
+/** Sekce rozbalovacího panelu (accordion) kroku 3; `action` = tlačítko v záhlaví (např. „Upravit nabídku“). */
+function Section({
+  n,
+  title,
+  summary,
+  open,
+  onToggle,
+  children,
+  testId,
+  action,
+}: {
+  n: number;
+  title: string;
+  summary?: string;
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+  testId: string;
+  action?: React.ReactNode;
+}) {
   return (
     <section className="rounded-lg border border-border bg-background/40" data-testid={testId}>
-      <button type="button" onClick={onToggle} aria-expanded={open} className="flex w-full items-center gap-2 px-3 py-2.5 text-left">
-        <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary font-mono text-xs font-bold text-primary-foreground">{n}</span>
-        <span className="flex-1">
-          <span className="block text-sm font-semibold">{title}</span>
-          {summary ? <span className="block truncate text-xs text-muted-foreground">{summary}</span> : null}
-        </span>
-        <ChevronDown className={cn("size-4 transition-transform", open && "rotate-180")} aria-hidden />
-      </button>
+      <div className="flex items-center">
+        <button type="button" onClick={onToggle} aria-expanded={open} className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2.5 text-left">
+          <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary font-mono text-xs font-bold text-primary-foreground">{n}</span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-semibold">{title}</span>
+            {summary ? <span className="block truncate text-xs text-muted-foreground">{summary}</span> : null}
+          </span>
+          <ChevronDown className={cn("size-4 shrink-0 transition-transform", open && "rotate-180")} aria-hidden />
+        </button>
+        {open && action ? <div className="shrink-0 pr-2">{action}</div> : null}
+      </div>
       {open ? <div className="space-y-3 border-t border-border p-3">{children}</div> : null}
     </section>
   );
+}
+
+/** Přepínač „✏️ Upravit nabídku“ / „Hotovo“ v záhlaví sekce. */
+function MenuEditToggle({ editing, onToggle, testId }: { editing: boolean; onToggle: () => void; testId: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-pressed={editing}
+      className={cn(
+        "flex h-8 items-center gap-1 rounded-md border px-2 text-xs font-semibold",
+        editing ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:text-foreground",
+      )}
+      data-testid={testId}
+    >
+      {editing ? <Check className="size-3.5" aria-hidden /> : <Pencil className="size-3.5" aria-hidden />}
+      {editing ? "Hotovo" : "Upravit nabídku"}
+    </button>
+  );
+}
+
+/** Nabídka při otevření kroku 3: novější z nastavení tenantu a z localStorage prohlížeče. */
+function initialMenu(serverJson: string | null): StudioMenu {
+  let local: StudioMenu | null = null;
+  try {
+    local = parseStudioMenu(typeof window === "undefined" ? null : window.localStorage.getItem(STUDIO_MENU_STORAGE_KEY));
+  } catch {
+    local = null;
+  }
+  return newerMenu(parseStudioMenu(serverJson), local);
 }
 
 /**
@@ -141,7 +210,8 @@ export function PlacementStep({
   const editDraft = existingFloor ? floors.find((floor) => floor.existingId === existingFloor.id) : undefined;
   const storedFrame = existingFloor ? frameOfFloor(existingFloor) : draftFrame;
   const frame = draftFloor ? draftFrame : editDraft ? planFrame(editDraft.grid ?? DEFAULT_GRID) : storedFrame;
-  const svg = draftFloor ? svgFor(draftFloor) : editDraft ? svgFor(editDraft) : (existingFloor?.floorplanSvg ?? "");
+  // Uložený půdorys bez seskupených štítků inventáře – Studio je kreslí živě (s rozpracovanými kusy)
+  const svg = draftFloor ? svgFor(draftFloor) : editDraft ? svgFor(editDraft) : stripFloorplanInventory(existingFloor?.floorplanSvg ?? "");
   const activeId = floorRefKey(active);
   const floorTitle = draftFloor ? floorName(draftFloor.level, draftFloor.usage) : (existingFloor?.name ?? "");
   const step = fineStep(frame);
@@ -166,7 +236,44 @@ export function PlacementStep({
   const [editing, setEditing] = useState<string | null>(null);
   const [moving, setMoving] = useState<string | null>(null);
   const [hover, setHover] = useState<MeterPoint | null>(null);
+  // Vlastní nabídka (fáze 39): krok 3 se otevírá až po interakci, takže čtení localStorage nehrozí nesouladem hydratace
+  const [menu, setMenu] = useState<StudioMenu>(() => initialMenu(data.menuJson));
+  const [menuEdit, setMenuEdit] = useState<null | "categories" | "templates">(null);
+  const [adding, setAdding] = useState<{ label: string; prefix: string; emoji: string } | null>(null);
+  const [openGroups, setOpenGroups] = useState<ReadonlySet<string>>(() => new Set());
+  const [, startSaving] = useTransition();
   const category = categoryKey ? categoryByKey(categoryKey) : null;
+  const labelOf = (entry: (typeof EQUIPMENT_CATEGORIES)[number]) => categoryLabel(menu, entry);
+  const menuAll = allMenuTemplates(menu);
+
+  /** Rozpracovaná úprava nabídky: hned v prohlížeči (localStorage), do nastavení tenantu až „Hotovo“. */
+  function changeMenu(next: StudioMenu) {
+    setMenu(next);
+    try {
+      window.localStorage.setItem(STUDIO_MENU_STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      // soukromé okno / zakázané úložiště – nabídka se uloží aspoň do nastavení tenantu
+    }
+  }
+  function persistMenu(next: StudioMenu) {
+    const clean = normalizeMenu(next);
+    changeMenu(clean);
+    startSaving(async () => {
+      const result = await saveStudioMenuAction(clean);
+      if (!result.ok) toast.error(result.error);
+    });
+  }
+  const toggleMenuEdit = (section: "categories" | "templates") => {
+    if (menuEdit === section) persistMenu(menu);
+    setMenuEdit(menuEdit === section ? null : section);
+  };
+  const toggleGroup = (key: string, force?: boolean) =>
+    setOpenGroups((current) => {
+      const next = new Set(current);
+      if (force ?? !next.has(key)) next.add(key);
+      else next.delete(key);
+      return next;
+    });
 
   // Místnosti patra v metrech: zóny konceptu, u stávajícího patra z JSON Studia (starší patra ze SVG)
   const rooms: Room[] = (() => {
@@ -247,7 +354,9 @@ export function PlacementStep({
     setTemplate(next);
     const tags = [...allTags, ...extraTags];
     const room = choice && choice !== WHOLE_FLOOR ? rooms.find((entry) => entry.key === choice) : null;
-    const nextTagValue = prefix.trim() ? nextTagWithPrefix(prefix, tags) : nextTag(next.type, { buildingCode, tags });
+    // Prefix: vlastní z formuláře, jinak výchozí prefix dlaždice z nabídky, jinak autopilot podle typu
+    const usePrefix = prefix.trim() || next.prefix || "";
+    const nextTagValue = usePrefix ? nextTagWithPrefix(usePrefix, tags) : nextTag(next.type, { buildingCode, tags });
     const parent = next.type === "TRANSFORMER" || next.root ? null : bestParent(next.type, sources, activeId);
     const root = next.type === "TRANSFORMER" || !!next.root || (next.type === "SWITCHBOARD" && !parent);
     setTag(nextTagValue);
@@ -333,6 +442,7 @@ export function PlacementStep({
     else if (!inChoice(item)) setRoomChoice(item.roomKey ?? WHOLE_FLOOR);
     setMode("edit");
     setEditing(item.id);
+    toggleGroup(groupKeyOf(item), true);
     setOpen(3);
   }
 
@@ -357,8 +467,44 @@ export function PlacementStep({
     ...existingFloors.map((floor) => ({ id: floor.id, level: floor.level, label: floorLabel(floor.level).short, isNew: false })),
     ...floors.filter((floor) => !floor.existingId).map((floor) => ({ id: `draft:${floor.key}`, level: floor.level, label: floorLabel(floor.level).short, isNew: true })),
   ].sort((a, b) => a.level - b.level);
-  const templates = category ? [...PRODUCT_TEMPLATES[category.key], customTemplate(category)] : [];
+  const templates = category ? [...menuTemplates(menu, category.key), customTemplate(category)] : [];
   const edited = editing ? items.find((item) => item.id === editing) : null;
+
+  // „Upravit stávající“: shodné přístroje seskupené podle názvu („🖥️ PC sestava (7×)“)
+  const groupKeyOf = (item: FloorItem) => `${categoryOf(item.type).key}:${deviceBaseName(item.name, item.tag).toLowerCase()}`;
+  const groups: (InventoryGroup & { items: FloorItem[] })[] = roomInventoryGroups(listed, menuAll).map((group) => ({ ...group, items: listed.filter((item) => groupKeyOf(item) === group.key) }));
+
+  /** „+“ u skupiny: další kus stejného přístroje do stejné místnosti s dalším tagem v řadě. */
+  function addOne(group: (typeof groups)[number]) {
+    const sample = group.items[group.items.length - 1];
+    const room = rooms.find((entry) => entry.key === sample.roomKey) ?? selectedRoom;
+    const nextValue = nextInSeries(sample.tag, allTags) ?? nextTag(sample.type, { buildingCode, tags: allTags });
+    const errors = validatePlacement({ type: sample.type, tag: nextValue, parentId: sample.parentId, circuit: sample.circuit ?? "", zone: room?.name ?? sample.zone ?? floorTitle, isRoot: false }, sources);
+    if (errors.length) return void toast.error(`${sample.tag}: ${errors[0]} Doplňte napájení v detailu kusu.`);
+    const parent = sample.parentId ? (sample.parentId.startsWith("draft:") ? { kind: "draft" as const, key: sample.parentId.slice(6) } : { kind: "existing" as const, id: sample.parentId }) : null;
+    onAdd({
+      floor: active.kind === "draft" ? { kind: "draft", key: active.key } : { kind: "existing", id: active.id },
+      pos: room ? roomAnchor(room, items.filter((item) => item.roomKey === room.key).length) : roomAnchor({ x: 0, y: 0, w: frame.widthM, h: frame.depthM }, items.length),
+      roomKey: room?.key ?? null,
+      tag: nextValue,
+      name: sample.name,
+      type: sample.type,
+      parent,
+      circuit: sample.circuit,
+      zone: room?.name ?? sample.zone,
+      isRoot: false,
+    });
+    toast.success(`${nextValue} přidáno – ${group.label} (${group.count + 1}×).`);
+  }
+
+  /** „−“ u skupiny: ubere poslední nový kus (uložená zařízení se mažou v kartě zařízení). */
+  function removeOne(group: (typeof groups)[number]) {
+    const last = [...group.items].reverse().find((item) => item.draftKey);
+    if (!last?.draftKey) return;
+    onRemove(last.draftKey);
+    if (editing === last.id) setEditing(null);
+    toast.success(`${last.tag} odebráno – ${group.label} (${group.count - 1}×).`);
+  }
   const choiceLabel = roomChoice === WHOLE_FLOOR ? "Celé patro" : (selectedRoom?.name ?? null);
 
   return (
@@ -411,59 +557,80 @@ export function PlacementStep({
         <Section
           n={2}
           title="Kategorie zařízení"
-          summary={category ? `${category.label} · ${countIn(category.key)} ks v místnosti` : choiceLabel ? "Vyberte typ zařízení" : "Nejdřív vyberte místnost"}
+          summary={category ? `${labelOf(category)} · ${countIn(category.key)} ks v místnosti` : choiceLabel ? "Vyberte typ zařízení" : "Nejdřív vyberte místnost"}
           open={open[2]}
           onToggle={() => toggle(2)}
           testId="section-category"
+          action={<MenuEditToggle editing={menuEdit === "categories"} onToggle={() => toggleMenuEdit("categories")} testId="menu-edit-categories" />}
         >
-          <div className="space-y-1.5" role="radiogroup" aria-label="Typ zařízení">
-            {EQUIPMENT_CATEGORIES.map((entry) => {
-              const CategoryIcon = EQUIPMENT_TYPE_ICONS[entry.types[0]];
-              const selected = entry.key === categoryKey;
-              return (
-                <button
-                  key={entry.key}
-                  type="button"
-                  role="radio"
-                  aria-checked={selected}
-                  aria-label={entry.label}
-                  onClick={() => chooseCategory(entry.key)}
-                  className={cn(
-                    "flex w-full items-center gap-3 overflow-hidden rounded-lg border bg-background/60 py-1.5 pr-3 text-left transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-                    selected ? "bg-muted" : "border-border hover:bg-muted/50",
-                  )}
-                  style={selected ? { borderColor: entry.color, boxShadow: `inset 0 0 0 1px ${entry.color}` } : undefined}
-                  data-testid={`eq-banner-${entry.key}`}
-                >
-                  <span className="h-9 w-1.5 shrink-0 rounded-r" style={{ background: entry.color }} aria-hidden />
-                  <span className="flex size-8 shrink-0 items-center justify-center rounded-md" style={{ background: `${entry.color}26`, color: entry.color }} aria-hidden>
-                    <CategoryIcon className="size-4" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-semibold text-foreground">{entry.label}</span>
-                    <span className="block text-[11px] text-muted-foreground">{entry.placement === "grid" ? "Do jemného rastru" : "Do místnosti"}</span>
-                  </span>
-                  <span
-                    className="flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full px-1.5 font-mono text-xs font-bold"
-                    style={{ background: `${entry.color}33`, color: entry.color }}
-                    title="Kusů ve vybrané místnosti"
-                    data-testid={`eq-banner-count-${entry.key}`}
+          {menuEdit === "categories" ? (
+            <div className="space-y-1.5" data-testid="category-editor">
+              <p className="text-xs text-muted-foreground">Přejmenujte kategorie podle zvyklostí firmy. Prázdný název = výchozí.</p>
+              {EQUIPMENT_CATEGORIES.map((entry) => (
+                <div key={entry.key} className="flex items-center gap-2">
+                  <span className="h-8 w-1.5 shrink-0 rounded-r" style={{ background: entry.color }} aria-hidden />
+                  <Input
+                    aria-label={`Název kategorie: ${entry.label}`}
+                    value={menu.labels[entry.key] ?? entry.label}
+                    placeholder={entry.label}
+                    onChange={(event) => changeMenu(setCategoryLabel(menu, entry.key, event.target.value))}
+                    maxLength={60}
+                    className="h-9"
+                  />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-1.5" role="radiogroup" aria-label="Typ zařízení">
+              {EQUIPMENT_CATEGORIES.map((entry) => {
+                const CategoryIcon = EQUIPMENT_TYPE_ICONS[entry.types[0]];
+                const selected = entry.key === categoryKey;
+                return (
+                  <button
+                    key={entry.key}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    aria-label={labelOf(entry)}
+                    onClick={() => chooseCategory(entry.key)}
+                    className={cn(
+                      "flex w-full items-center gap-3 overflow-hidden rounded-lg border bg-background/60 py-1.5 pr-3 text-left transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+                      selected ? "bg-muted" : "border-border hover:bg-muted/50",
+                    )}
+                    style={selected ? { borderColor: entry.color, boxShadow: `inset 0 0 0 1px ${entry.color}` } : undefined}
+                    data-testid={`eq-banner-${entry.key}`}
                   >
-                    {countIn(entry.key)}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+                    <span className="h-9 w-1.5 shrink-0 rounded-r" style={{ background: entry.color }} aria-hidden />
+                    <span className="flex size-8 shrink-0 items-center justify-center rounded-md" style={{ background: `${entry.color}26`, color: entry.color }} aria-hidden>
+                      <CategoryIcon className="size-4" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold text-foreground">{labelOf(entry)}</span>
+                      <span className="block text-[11px] text-muted-foreground">{entry.placement === "grid" ? "Do jemného rastru" : "Do místnosti"}</span>
+                    </span>
+                    <span
+                      className="flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full px-1.5 font-mono text-xs font-bold"
+                      style={{ background: `${entry.color}33`, color: entry.color }}
+                      title="Kusů ve vybrané místnosti"
+                      data-testid={`eq-banner-count-${entry.key}`}
+                    >
+                      {countIn(entry.key)}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </Section>
 
         <Section
           n={3}
-          title={category ? category.label : "Vytvořit / upravit"}
+          title={category ? labelOf(category) : "Vytvořit / upravit"}
           summary={category ? (mode === "new" ? "Vytvořit nové" : `Upravit stávající (${listed.length})`) : "Nejdřív vyberte kategorii"}
           open={open[3] && !!category}
           onToggle={() => toggle(3)}
           testId="section-action"
+          action={mode === "new" ? <MenuEditToggle editing={menuEdit === "templates"} onToggle={() => toggleMenuEdit("templates")} testId="menu-edit-templates" /> : undefined}
         >
           {category ? (
             <>
@@ -494,7 +661,51 @@ export function PlacementStep({
                 </button>
               </div>
 
-              {mode === "new" ? (
+              {mode === "new" && menuEdit === "templates" ? (
+                <div className="space-y-1.5" data-testid="template-editor">
+                  <p className="text-xs text-muted-foreground">Ikona, název dlaždice a výchozí prefix tagu (prázdný = autopilot). Změny platí pro celou firmu.</p>
+                  {menuTemplates(menu, category.key).map((entry, index) => (
+                    <div key={entry.key} className="grid grid-cols-[2.5rem_minmax(0,1fr)_4.5rem_2.25rem] items-center gap-1.5">
+                      <Input
+                        aria-label={`Ikona dlaždice ${index + 1}`}
+                        value={entry.emoji}
+                        onChange={(event) => changeMenu(updateTemplate(menu, category.key, entry.key, { emoji: event.target.value }))}
+                        className="h-9 px-1 text-center"
+                      />
+                      <Input
+                        aria-label={`Název dlaždice ${index + 1}`}
+                        value={entry.label}
+                        onChange={(event) => changeMenu(updateTemplate(menu, category.key, entry.key, { label: event.target.value }))}
+                        maxLength={80}
+                        className="h-9"
+                      />
+                      <Input
+                        aria-label={`Prefix tagu dlaždice ${index + 1}`}
+                        value={entry.prefix ?? ""}
+                        placeholder="auto"
+                        onChange={(event) => changeMenu(updateTemplate(menu, category.key, entry.key, { prefix: event.target.value }))}
+                        maxLength={16}
+                        className="h-9 font-mono uppercase"
+                      />
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="size-9 border-red-500/40 text-red-300"
+                        aria-label={`Smazat dlaždici ${entry.label}`}
+                        onClick={() => {
+                          if (template?.key === entry.key) setTemplate(null);
+                          changeMenu(removeTemplate(menu, category.key, entry.key));
+                        }}
+                      >
+                        <Trash2 className="size-3.5" aria-hidden />
+                      </Button>
+                    </div>
+                  ))}
+                  <Button variant="ghost" size="sm" className="h-8 gap-1 text-xs text-muted-foreground" onClick={() => changeMenu(resetCategory(menu, category.key))}>
+                    <RotateCcw className="size-3.5" aria-hidden /> Obnovit výchozí nabídku kategorie
+                  </Button>
+                </div>
+              ) : mode === "new" ? (
                 <>
                   <div className="grid grid-cols-2 gap-1.5" role="radiogroup" aria-label="Produktové šablony">
                     {templates.map((entry) => (
@@ -516,7 +727,52 @@ export function PlacementStep({
                         {entry.label}
                       </button>
                     ))}
+                    {adding ? null : (
+                      <button
+                        type="button"
+                        onClick={() => setAdding({ label: "", prefix: "", emoji: "🏷️" })}
+                        className="flex min-h-14 items-center justify-center gap-1.5 rounded-lg border border-dashed border-border px-2 text-xs font-semibold text-muted-foreground hover:border-primary/60 hover:text-foreground"
+                      >
+                        <Plus className="size-4" aria-hidden /> Přidat vlastní dlaždici
+                      </button>
+                    )}
                   </div>
+                  {adding ? (
+                    <form
+                      className="space-y-2 rounded-lg border border-dashed border-primary/60 p-2.5"
+                      data-testid="add-tile-form"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        if (!adding.label.trim()) return void toast.error("Zadejte název dlaždice.");
+                        const result = addTemplate(menu, category.key, adding);
+                        persistMenu(result.menu);
+                        setAdding(null);
+                        applyTemplate(result.template);
+                        toast.success(`Dlaždice „${result.template.label}“ uložena do nabídky.`);
+                      }}
+                    >
+                      <div className="grid grid-cols-[2.5rem_minmax(0,1fr)_4.5rem] gap-1.5">
+                        <Input aria-label="Ikona nové dlaždice" value={adding.emoji} onChange={(event) => setAdding({ ...adding, emoji: event.target.value })} className="h-9 px-1 text-center" />
+                        <Input aria-label="Název nové dlaždice" value={adding.label} onChange={(event) => setAdding({ ...adding, label: event.target.value })} placeholder="např. Rychlovarná konvice" maxLength={80} className="h-9" autoFocus />
+                        <Input
+                          aria-label="Prefix tagu nové dlaždice"
+                          value={adding.prefix}
+                          onChange={(event) => setAdding({ ...adding, prefix: event.target.value.toUpperCase() })}
+                          placeholder="auto"
+                          maxLength={16}
+                          className="h-9 font-mono"
+                        />
+                      </div>
+                      <div className="flex gap-1.5">
+                        <Button type="submit" size="sm" className="h-9">
+                          Uložit dlaždici
+                        </Button>
+                        <Button type="button" size="sm" variant="ghost" className="h-9" onClick={() => setAdding(null)}>
+                          Zrušit
+                        </Button>
+                      </div>
+                    </form>
+                  ) : null}
                   {template ? (
                     <div className="space-y-2 rounded-lg border border-border p-2.5" data-testid="new-device-form">
                       <div className="grid grid-cols-[8rem_minmax(0,1fr)] gap-2">
@@ -605,40 +861,82 @@ export function PlacementStep({
                 </>
               ) : (
                 <ul className="space-y-1.5" aria-label="Stávající zařízení" data-testid="existing-list">
-                  {listed.map((item) => (
-                    <li key={item.id} className="rounded-md border border-border">
-                      <button type="button" onClick={() => setEditing(editing === item.id ? null : item.id)} className="flex w-full items-center gap-2 px-2 py-1.5 text-left text-sm" aria-expanded={editing === item.id}>
-                        <span className="size-2.5 shrink-0 rounded-full" style={{ background: categoryOf(item.type).color }} aria-hidden />
-                        <span className="font-mono text-xs font-semibold">{item.tag}</span>
-                        <span className="flex-1 truncate text-xs text-muted-foreground">{item.name}</span>
-                        <span className="text-[10px] text-muted-foreground">{item.draftKey ? "nové" : "uložené"}</span>
-                      </button>
-                      {editing === item.id && edited ? (
-                        <EditForm
-                          key={item.id}
-                          item={edited}
-                          rooms={rooms}
-                          parents={parentsFor(item.type, item.id)}
-                          onSave={(patch) => {
-                            if (item.draftKey) {
-                              const parent = patch.parentId ? (patch.parentId.startsWith("draft:") ? { kind: "draft" as const, key: patch.parentId.slice(6) } : { kind: "existing" as const, id: patch.parentId }) : null;
-                              onUpdate(item.draftKey, { tag: patch.tag, name: patch.name, parent, circuit: patch.circuit, zone: patch.zone, isRoot: !parent && (item.type === "SWITCHBOARD" || item.type === "TRANSFORMER") });
-                            } else onEditExisting({ id: item.id, ...patch });
-                            toast.success(`${patch.tag} upraveno.`);
-                          }}
-                          onMove={item.draftKey ? () => setMoving(item.draftKey) : undefined}
-                          onRemove={
-                            item.draftKey
-                              ? () => {
-                                  onRemove(item.draftKey!);
-                                  setEditing(null);
-                                }
-                              : undefined
-                          }
-                        />
-                      ) : null}
-                    </li>
-                  ))}
+                  {groups.map((group) => {
+                    const expanded = openGroups.has(group.key);
+                    const removable = group.items.some((item) => item.draftKey);
+                    return (
+                      <li key={group.key} className="rounded-md border border-border" data-testid="group-row" data-group={group.label}>
+                        <div className="flex items-center gap-1 pr-1">
+                          <button type="button" onClick={() => toggleGroup(group.key)} aria-expanded={expanded} aria-label={`${expanded ? "Sbalit" : "Rozbalit"}: ${group.label}`} className="flex min-w-0 flex-1 items-center gap-2 px-2 py-2 text-left text-sm">
+                            <ChevronDown className={cn("size-4 shrink-0 text-muted-foreground transition-transform", expanded && "rotate-180")} aria-hidden />
+                            <span aria-hidden>{group.emoji}</span>
+                            <span className="truncate font-medium">{group.label}</span>
+                            <span className="shrink-0 font-mono text-xs font-bold" style={{ color: group.color }} data-testid="group-count">
+                              ({group.count}×)
+                            </span>
+                          </button>
+                          {category.placement === "room" ? (
+                            <>
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                className="size-8"
+                                aria-label={`Ubrat kus: ${group.label}`}
+                                title={removable ? "Ubrat poslední nový kus" : "Uložená zařízení se mažou v kartě zařízení"}
+                                disabled={!removable}
+                                onClick={() => removeOne(group)}
+                              >
+                                <Minus className="size-3.5" aria-hidden />
+                              </Button>
+                              <Button variant="outline" size="icon" className="size-8" aria-label={`Přidat kus: ${group.label}`} title="Přidat další kus s dalším tagem v řadě" onClick={() => addOne(group)}>
+                                <Plus className="size-3.5" aria-hidden />
+                              </Button>
+                            </>
+                          ) : null}
+                        </div>
+                        {expanded ? (
+                          <ul className="space-y-1 border-t border-border p-1.5" aria-label={`Kusy: ${group.label}`}>
+                            {group.items.map((item) => (
+                              <li key={item.id} className="rounded-md border border-border">
+                                <button type="button" onClick={() => setEditing(editing === item.id ? null : item.id)} className="flex w-full items-center gap-2 px-2 py-1.5 text-left text-sm" aria-expanded={editing === item.id}>
+                                  <span className="size-2.5 shrink-0 rounded-full" style={{ background: categoryOf(item.type).color }} aria-hidden />
+                                  <span className="font-mono text-xs font-semibold">{item.tag}</span>
+                                  <span className="flex-1 truncate text-xs text-muted-foreground">{item.name}</span>
+                                  <span className="text-[10px] text-muted-foreground">{item.draftKey ? "nové" : "uložené"}</span>
+                                </button>
+                                {editing === item.id && edited ? (
+                                  <EditForm
+                                    key={item.id}
+                                    item={edited}
+                                    rooms={rooms}
+                                    parents={parentsFor(item.type, item.id)}
+                                    onSave={(patch) => {
+                                      if (item.draftKey) {
+                                        const parent = patch.parentId ? (patch.parentId.startsWith("draft:") ? { kind: "draft" as const, key: patch.parentId.slice(6) } : { kind: "existing" as const, id: patch.parentId }) : null;
+                                        onUpdate(item.draftKey, { tag: patch.tag, name: patch.name, parent, circuit: patch.circuit, zone: patch.zone, isRoot: !parent && (item.type === "SWITCHBOARD" || item.type === "TRANSFORMER") });
+                                      } else onEditExisting({ id: item.id, ...patch });
+                                      // Přejmenovaný kus patří do jiné skupiny – ta zůstane rozbalená
+                                      toggleGroup(groupKeyOf({ ...item, tag: patch.tag, name: patch.name }), true);
+                                      toast.success(`${patch.tag} upraveno.`);
+                                    }}
+                                    onMove={item.draftKey ? () => setMoving(item.draftKey) : undefined}
+                                    onRemove={
+                                      item.draftKey
+                                        ? () => {
+                                            onRemove(item.draftKey!);
+                                            setEditing(null);
+                                          }
+                                        : undefined
+                                    }
+                                  />
+                                ) : null}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
+                      </li>
+                    );
+                  })}
                   {!listed.length ? <li className="text-xs text-muted-foreground">V této místnosti zatím žádné zařízení tohoto typu není.</li> : null}
                 </ul>
               )}
@@ -668,7 +966,7 @@ export function PlacementStep({
               <HistoryButtons history={history} testId="placement-history" />
               {category ? (
                 <button type="button" onClick={() => setShowAll((value) => !value)} aria-pressed={showAll} className="h-9 rounded-md border border-border px-2.5 text-xs font-semibold hover:border-primary/60">
-                  {showAll ? `Zvýraznit jen: ${category.label}` : "Zobrazit vše"}
+                  {showAll ? `Zvýraznit jen: ${labelOf(category)}` : "Zobrazit vše"}
                 </button>
               ) : null}
               <p className="text-xs text-muted-foreground">{floorTitle}</p>
@@ -679,7 +977,7 @@ export function PlacementStep({
               {EQUIPMENT_CATEGORIES.map((entry) => (
                 <span key={entry.key} className="flex items-center gap-1.5">
                   <span className="size-3 rounded-full" style={{ background: entry.color }} aria-hidden />
-                  {entry.label}
+                  {labelOf(entry)}
                 </span>
               ))}
               <span className="flex items-center gap-1.5">
@@ -771,31 +1069,53 @@ export function PlacementStep({
                   </button>
                 );
               })}
-              {/* Inventární štítky místností (spotřebiče a nářadí se nekreslí jako body) */}
+              {/* Seskupené štítky místností: spotřebiče a nářadí sečtené podle názvu („🖥️ 7× PC sestava“) */}
               {rooms
                 .filter((room) => inventory.has(room.key))
                 .map((room) => {
-                  const corner = metersToPx(frame, { x: room.x + room.w, y: room.y });
-                  const roomList = inventory.get(room.key) ?? [];
-                  const faded = category !== null && !showAll && !roomList.some((item) => categoryOf(item.type).key === category.key);
+                  const corner = metersToPx(frame, room);
+                  const w = room.w * k.x;
+                  const h = room.h * k.y;
+                  const top = inventoryTop({ w, h, subLabel: "rozměr" });
+                  const roomGroups = roomInventoryGroups(inventory.get(room.key) ?? [], menuAll);
                   return (
-                    <button
+                    <div
                       key={room.key}
-                      type="button"
-                      onPointerDown={(event) => event.stopPropagation()}
-                      onClick={() => {
-                        chooseRoom(room.key);
-                        setCategoryKey(categoryOf(roomList[0].type).key);
-                        setMode("edit");
-                        setOpen(3);
+                      className="pointer-events-none absolute flex flex-wrap content-start gap-1 overflow-hidden"
+                      style={{
+                        left: `${((corner.x + 8) / FLOOR_VIEWBOX.width) * 100}%`,
+                        top: `${((corner.y + top) / FLOOR_VIEWBOX.height) * 100}%`,
+                        width: `${(Math.max(20, w - 16) / FLOOR_VIEWBOX.width) * 100}%`,
+                        maxHeight: `${(Math.max(16, h - top - 4) / FLOOR_VIEWBOX.height) * 100}%`,
                       }}
-                      className="absolute -translate-x-full rounded-md border border-zinc-600 bg-zinc-950/90 px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap text-zinc-100 shadow hover:border-primary"
-                      style={{ left: `${((corner.x - 4) / FLOOR_VIEWBOX.width) * 100}%`, top: `${((corner.y + 4) / FLOOR_VIEWBOX.height) * 100}%`, opacity: faded ? 0.2 : 1 }}
                       data-testid="room-inventory"
-                      title={`Inventář místnosti ${room.name}`}
+                      data-room={room.name}
+                      aria-label={`Inventář místnosti ${room.name}`}
                     >
-                      {roomInventoryLabel(roomList.map((item) => item.type))}
-                    </button>
+                      {roomGroups.map((group) => {
+                        const faded = category !== null && !showAll && group.category !== category.key;
+                        return (
+                          <button
+                            key={group.key}
+                            type="button"
+                            onPointerDown={(event) => event.stopPropagation()}
+                            onClick={() => {
+                              chooseRoom(room.key);
+                              setCategoryKey(group.category);
+                              setMode("edit");
+                              toggleGroup(group.key, true);
+                              setOpen(3);
+                            }}
+                            className="pointer-events-auto rounded-md border bg-zinc-950/90 px-1.5 py-0.5 text-[10px] leading-tight font-semibold whitespace-nowrap text-zinc-100 shadow transition-opacity hover:bg-zinc-800"
+                            style={{ borderColor: group.color, opacity: faded ? 0.2 : 1 }}
+                            data-testid="room-chip"
+                            title={`${group.label} v místnosti ${room.name} – upravit`}
+                          >
+                            {inventoryChipText(group)}
+                          </button>
+                        );
+                      })}
+                    </div>
                   );
                 })}
             </>

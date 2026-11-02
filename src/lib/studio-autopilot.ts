@@ -101,3 +101,9 @@ export function nextTagWithPrefix(prefix: string, tags: readonly string[], width
   const max = Math.max(0, ...tags.map((tag) => Number(regex.exec(tag)?.[1] ?? 0)));
   return `${clean}${String(max + 1).padStart(width, "0")}`;
 }
+
+/** Další tag v řadě podle vzoru („SP-0007“ → SP-0008, „KAV01“ → KAV02); bez čísla na konci `null`. */
+export function nextInSeries(sample: string, tags: readonly string[]): string | null {
+  const match = /^(.*?)(\d+)$/.exec(sample.trim().toUpperCase());
+  return match ? nextTagWithPrefix(match[1], tags, match[2].length) : null;
+}

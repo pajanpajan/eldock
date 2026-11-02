@@ -51,15 +51,6 @@ export const PLACEABLE_TYPES: readonly EquipmentType[] = EQUIPMENT_CATEGORIES.fl
 /** Umisťuje se typ do místnosti (spotřebiče, nářadí), nebo do jemného rastru? */
 export const placementOf = (type: EquipmentType): PlacementMode => categoryOf(type).placement;
 
-/** Inventární štítek místnosti: „🔌 3× Spotřebič · 🛠️ 2× Nářadí“. */
-export function roomInventoryLabel(types: readonly EquipmentType[]): string {
-  const counts = new Map<EquipmentCategoryKey, number>();
-  for (const type of types) counts.set(categoryOf(type).key, (counts.get(categoryOf(type).key) ?? 0) + 1);
-  const short: Partial<Record<EquipmentCategoryKey, string>> = { SP: "Spotřebič", RN: "Nářadí" };
-  return EQUIPMENT_CATEGORIES.filter((category) => counts.has(category.key))
-    .map((category) => `${category.emoji} ${counts.get(category.key)}× ${short[category.key] ?? category.label}`)
-    .join(" · ");
-}
 
 /** Konkrétní produktová šablona (banner „Vytvořit nové“ v kroku 3): typ, český název a emoji. */
 export interface ProductTemplate {
@@ -71,6 +62,8 @@ export interface ProductTemplate {
   name: string;
   /** Rozváděč: hlavní (kořenový) zdroj. */
   root?: boolean;
+  /** Výchozí prefix tagu dlaždice („KAV“ → KAV01, KAV02 …); jinak autopilot podle typu. */
+  prefix?: string;
 }
 
 const product = (key: string, label: string, emoji: string, type: EquipmentType, name = label, root?: boolean): ProductTemplate => ({ key, label, emoji, type, name, root });
@@ -120,3 +113,46 @@ export const PRODUCT_TEMPLATES: Record<EquipmentCategoryKey, readonly ProductTem
 
 /** Dlaždice „Vlastní zařízení / Vytvořit nový Tag“ – výchozí typ kategorie. */
 export const customTemplate = (category: EquipmentCategory): ProductTemplate => product(`custom-${category.key}`, "Vlastní zařízení / Vytvořit nový Tag", "🏷️", category.types[0], category.label.split(" / ")[0]);
+
+/** Základ názvu zařízení bez místnosti a tagu („SP-0003 - Kávovar – Kancelář 1“ → „Kávovar“). */
+export function deviceBaseName(name: string, tag?: string): string {
+  let base = name.trim();
+  if (tag && base.toUpperCase().startsWith(`${tag.toUpperCase()} - `)) base = base.slice(tag.length + 3);
+  const dash = base.lastIndexOf(" – ");
+  if (dash > 0) base = base.slice(0, dash);
+  return base.trim() || name.trim();
+}
+
+/** Seskupený štítek místnosti: „☕ 2× Kávovar“. */
+export interface InventoryGroup {
+  /** Klíč skupiny = kategorie + název (malými písmeny). */
+  key: string;
+  label: string;
+  emoji: string;
+  color: string;
+  category: EquipmentCategoryKey;
+  count: number;
+}
+
+/**
+ * Spotřebiče a nářadí v místnosti sečtené podle názvu přístroje (fáze 39). Ikona podle dlaždice se
+ * stejným názvem (výchozí i vlastní nabídka), jinak podle kategorie. Řazení: nejvíc kusů první.
+ */
+export function roomInventoryGroups(items: readonly { name: string; type: EquipmentType; tag?: string }[], templates: readonly ProductTemplate[] = []): InventoryGroup[] {
+  const known = [...templates, ...Object.values(PRODUCT_TEMPLATES).flat()];
+  const groups = new Map<string, InventoryGroup>();
+  for (const item of items) {
+    const category = categoryOf(item.type);
+    const label = deviceBaseName(item.name, item.tag);
+    const key = `${category.key}:${label.toLowerCase()}`;
+    const group = groups.get(key);
+    if (group) group.count++;
+    else {
+      const template = known.find((entry) => entry.name.toLowerCase() === label.toLowerCase() || entry.label.toLowerCase() === label.toLowerCase());
+      groups.set(key, { key, label, emoji: template?.emoji ?? category.emoji, color: category.color, category: category.key, count: 1 });
+    }
+  }
+  return [...groups.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, "cs"));
+}
+
+export const inventoryChipText = (group: InventoryGroup) => `${group.emoji} ${group.count}× ${group.label}`;

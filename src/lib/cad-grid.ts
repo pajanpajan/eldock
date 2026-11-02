@@ -1,4 +1,7 @@
-import { renderFloorplanSvg, type FloorplanGate, type FloorplanRoom, type RoomStyle } from "./mock-graphics/floorplan";
+import type { EquipmentType } from "@/generated/prisma/enums";
+
+import { inventoryChipText, placementOf, roomInventoryGroups, type ProductTemplate } from "./equipment-categories";
+import { renderFloorplanSvg, type FloorplanGate, type FloorplanInventory, type FloorplanRoom, type RoomStyle } from "./mock-graphics/floorplan";
 
 // Konstrukční rastr Studia: osy 1…N (svislé čáry, číslované) a A…Z, AA…ZZ (vodorovné, písmenné).
 // Primární je ROZMĚR BUDOVY v metrech (widthM × depthM); osy se dopočítají po rozteči sloupů
@@ -435,7 +438,46 @@ export function gateToFloorplan(gate: GridGate, frame: PlanFrame): FloorplanGate
 // ---------------------------------------------------------------------------
 
 /** Půdorys patra ze Studia: rastr, zóny, vrata, měřítko a rozměr haly; `fineGrid` = jemný pod-rastr (plátno Studia). */
-export function renderGridFloorplanSvg(input: { floorName: string; spec: GridSpec; zones: GridZone[]; gates: GridGate[]; fineGrid?: boolean }): string {
+/** Spotřebič / nářadí patra pro seskupené štítky místností v uloženém půdorysu. */
+export interface RoomInventoryItem {
+  name: string;
+  tag?: string;
+  type: EquipmentType;
+  pos: MeterPoint;
+}
+
+/** Odsazení štítků inventáře od horní hrany místnosti (pod názvem a rozměrem) ve viewBoxu. */
+export const inventoryTop = (room: Pick<FloorplanRoom, "w" | "h" | "subLabel">) => (room.subLabel && room.h >= 40 ? (room.w < 140 || room.h < 60 ? 40 : 44) : 28);
+
+/** Štítky „☕ 2× Kávovar“ pro každou místnost patra (zařízení přiřazená podle polohy v metrech). */
+export function floorInventory(zones: readonly GridZone[], frame: PlanFrame, items: readonly RoomInventoryItem[], templates: readonly ProductTemplate[] = []): FloorplanInventory[] {
+  const byZone = new Map<string, RoomInventoryItem[]>();
+  for (const item of items) {
+    if (placementOf(item.type) !== "room") continue;
+    const zone = zoneAt(zones, item.pos);
+    if (zone) byZone.set(zone.key, [...(byZone.get(zone.key) ?? []), item]);
+  }
+  const result: FloorplanInventory[] = [];
+  for (const zone of zones) {
+    const list = byZone.get(zone.key);
+    const room = list ? zoneToRoom(zone, frame) : null;
+    if (!list || !room) continue;
+    const chips = roomInventoryGroups(list, templates).map((group) => ({ text: inventoryChipText(group), color: group.color }));
+    result.push({ x: room.x, y: room.y, w: room.w, h: room.h, chips, top: inventoryTop(room) });
+  }
+  return result;
+}
+
+export function renderGridFloorplanSvg(input: {
+  floorName: string;
+  spec: GridSpec;
+  zones: GridZone[];
+  gates: GridGate[];
+  fineGrid?: boolean;
+  /** Spotřebiče a nářadí patra → seskupené štítky v místnostech. */
+  roomItems?: readonly RoomInventoryItem[];
+  templates?: readonly ProductTemplate[];
+}): string {
   const { spec } = input;
   const frame = planFrame(spec);
   const k = pxPerMeter(frame);
@@ -453,5 +495,6 @@ export function renderGridFloorplanSvg(input: { floorName: string; spec: GridSpe
     gates: input.gates.map((gate) => gateToFloorplan(gate, frame)).filter((gate): gate is FloorplanGate => gate !== null),
     scale: { label: `M ${spec.scale}`, pxPer10m: Math.round(k.x * 100) / 10, dimensions: `osa X ${fmtM(dims.widthM)} m × osa Y ${fmtM(dims.depthM)} m, rozteč ${fmtM(spec.stepMeters)} m` },
     fineGrid: input.fineGrid ? { stepX: Math.round(k.x * step * 100) / 100, stepY: Math.round(k.y * step * 100) / 100 } : undefined,
+    inventory: input.roomItems?.length ? floorInventory(input.zones, frame, input.roomItems, input.templates) : undefined,
   });
 }

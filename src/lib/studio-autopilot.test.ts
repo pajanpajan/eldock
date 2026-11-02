@@ -49,4 +49,11 @@ describe("vlastní prefix tagu (krok 3 – Vytvořit nové)", () => {
     expect(nextTagWithPrefix("nr-dil-", ["NR-DIL-01", "NR-DIL-07", "SP-0001"])).toBe("NR-DIL-08");
     expect(nextTagWithPrefix("VRT-", [])).toBe("VRT-01");
   });
+
+  it("další kus v řadě podle vzoru tagu (rychlé + ve skupině)", async () => {
+    const { nextInSeries } = await import("./studio-autopilot");
+    expect(nextInSeries("SP-0007", ["SP-0002", "SP-0007", "SP-0012"])).toBe("SP-0013");
+    expect(nextInSeries("kav01", ["KAV01", "KAV02"])).toBe("KAV03");
+    expect(nextInSeries("RH", [])).toBeNull();
+  });
 });
