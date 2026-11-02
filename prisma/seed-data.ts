@@ -10,7 +10,6 @@ import type {
   RevisionStatus,
   UserRole,
 } from "../src/generated/prisma/enums";
-import type { FloorplanGate, FloorplanRoom } from "../src/lib/mock-graphics/floorplan";
 import type { PartOverrides } from "../src/lib/mock-graphics/parts";
 
 // ---------------------------------------------------------------------------
@@ -98,6 +97,7 @@ export const BUILDINGS: {
 export type FloorKey =
   | "e-1pp" | "e-1np" | "a-1np" | "a-2np" | "b-1np" | "s-1np" | "k-1np" | "k-2np" | "lbc-1np";
 
+/** Patro vzorového závodu; rozvržení v metrech je v `seed-demo-plant.ts` (DEMO_FLOOR_LAYOUTS). */
 interface FloorSeed {
   key: FloorKey;
   id: string;
@@ -106,100 +106,44 @@ interface FloorSeed {
   code: string;
   name: string;
   description: string;
-  rooms: FloorplanRoom[];
-  gates: FloorplanGate[];
 }
-
-const room = (label: string, x: number, y: number, w: number, h: number, kind: FloorplanRoom["kind"] = "room"): FloorplanRoom => ({ label, x, y, w, h, kind });
 
 export const FLOORS: FloorSeed[] = [
   {
     key: "e-1pp", id: "floor-jbc-e-1pp", buildingId: "bld-jbc-e", level: -1, code: "1PP", name: "1. PP - Rozvodny",
     description: "Hlavní rozvodna nn, kompenzace a záložní napájení.",
-    rooms: [
-      room("Rozvodna nn", 90, 100, 470, 320, "electrical"), room("Kompenzace jalového výkonu", 580, 100, 280, 320, "electrical"),
-      room("UPS a baterie", 880, 100, 220, 320, "electrical"), room("Kabelová chodba", 90, 440, 1010, 110),
-      room("Schodiště", 90, 570, 130, 170, "stairs"), room("Sklad náhradních dílů", 240, 570, 320, 170),
-      room("Dílna údržby", 580, 570, 300, 170), room("Šatna", 900, 570, 200, 170),
-    ],
-    gates: [{ x: 1120, y: 480, length: 70, orient: "v", label: "Vrata - kabely" }],
   },
   {
     key: "e-1np", id: "floor-jbc-e-1np", buildingId: "bld-jbc-e", level: 0, code: "1NP", name: "1. NP - Trafostanice a kompresorovna",
     description: "Transformátor 22/0,4 kV a stanice stlačeného vzduchu.",
-    rooms: [
-      room("Trafostanice", 90, 100, 430, 350, "electrical"), room("Kompresorovna", 540, 100, 560, 350, "zone"),
-      room("Chodba", 90, 470, 1010, 80), room("Schodiště", 90, 570, 130, 170, "stairs"),
-      room("Dílna", 240, 570, 500, 170), room("Zázemí", 760, 570, 340, 170),
-    ],
-    gates: [{ x: 1120, y: 200, length: 90, orient: "v", label: "Vrata - kompresory" }],
   },
   {
     key: "a-1np", id: "floor-jbc-a-1np", buildingId: "bld-jbc-a", level: 0, code: "1NP", name: "1. NP - Hlavní výroba",
     description: "Lisovací linky, obrábění a robotická pracoviště.",
-    rooms: [
-      room("Lisovací linka 1", 90, 100, 520, 330, "zone"), room("Obrábění - CNC", 640, 100, 460, 330, "zone"),
-      room("Robotická buňka odebírání", 90, 460, 470, 280, "zone"), room("Expedice výlisků", 590, 460, 200, 280), room("Dílna údržby", 810, 460, 170, 280),
-      room("Schodiště", 1000, 460, 100, 200, "stairs"),
-    ],
-    gates: [{ x: 300, y: 760, length: 120, orient: "h", label: "Vrata - zásobování" }, { x: 1120, y: 300, length: 120, orient: "v", label: "Vrata - expedice" }],
   },
   {
     key: "a-2np", id: "floor-jbc-a-2np", buildingId: "bld-jbc-a", level: 1, code: "2NP", name: "2. NP - Vzduchotechnika",
     description: "Strojovna vzduchotechniky haly A.",
-    rooms: [
-      room("Strojovna VZT", 90, 100, 700, 400, "zone"), room("Rozvodna VZT", 820, 100, 280, 230, "electrical"),
-      room("Technické prostory", 820, 350, 280, 150), room("Schodiště", 90, 540, 130, 200, "stairs"),
-      room("Střešní výstup", 240, 540, 860, 200),
-    ],
-    gates: [],
   },
   {
     key: "b-1np", id: "floor-jbc-b-1np", buildingId: "bld-jbc-b", level: 0, code: "1NP", name: "1. NP - Montážní linky",
     description: "Montážní linky dveřních modulů a sedadel, svařovna.",
-    rooms: [
-      room("Montážní linka 1 - dveřní moduly", 90, 100, 1010, 200, "zone"), room("Montážní linka 2 - sedadla", 90, 320, 1010, 200, "zone"),
-      room("Svařovna", 90, 540, 470, 200, "zone"), room("Sklad komponent", 580, 540, 520, 200),
-    ],
-    gates: [{ x: 1120, y: 600, length: 110, orient: "v", label: "Vrata - expedice" }],
   },
   {
     key: "s-1np", id: "floor-jbc-s-1np", buildingId: "bld-jbc-s", level: 0, code: "1NP", name: "1. NP - Expediční sklad",
     description: "Expediční sklad a nabíjení VZV.",
-    rooms: [
-      room("Nabíjení VZV", 90, 100, 300, 220, "electrical"), room("Příjem zboží", 410, 100, 690, 220),
-      room("Skladové uličky", 90, 340, 1010, 400, "zone"),
-    ],
-    gates: [{ x: 200, y: 760, length: 140, orient: "h", label: "Rampa 1" }, { x: 500, y: 760, length: 140, orient: "h", label: "Rampa 2" }],
   },
   {
     key: "k-1np", id: "floor-jbc-k-1np", buildingId: "bld-jbc-k", level: 0, code: "1NP", name: "1. NP",
     description: "Recepce, kanceláře a technická místnost.",
-    rooms: [
-      room("Recepce", 90, 100, 300, 200), room("Kanceláře", 410, 100, 690, 300),
-      room("Technická místnost", 90, 320, 200, 150, "electrical"), room("Zasedací místnost", 310, 420, 500, 320),
-      room("Schodiště", 90, 500, 130, 240, "stairs"),
-    ],
-    gates: [],
   },
   {
     key: "k-2np", id: "floor-jbc-k-2np", buildingId: "bld-jbc-k", level: 1, code: "2NP", name: "2. NP - Kanceláře",
     description: "Kanceláře projekce a open space.",
-    rooms: [
-      room("Kanceláře projekce", 90, 100, 600, 300), room("Open space", 710, 100, 390, 300),
-      room("Technická místnost", 90, 420, 200, 150, "electrical"), room("Zasedací místnost", 310, 420, 500, 320),
-      room("Schodiště", 90, 600, 130, 140, "stairs"),
-    ],
-    gates: [],
   },
   {
     key: "lbc-1np", id: "floor-lbc-1-1np", buildingId: "bld-lbc-1", level: 0, code: "1NP", name: "1. NP - Lakovna",
     description: "Lakovací linka, sušicí pec a rozvodna.",
-    rooms: [
-      room("Lakovací linka", 90, 100, 720, 360, "zone"), room("Rozvodna lakovny", 830, 100, 270, 200, "electrical"),
-      room("Sušicí pec", 830, 320, 270, 140, "zone"), room("Příprava", 90, 480, 700, 260),
-    ],
-    gates: [{ x: 1120, y: 500, length: 110, orient: "v", label: "Vrata - výjezd" }],
   },
 ];
 

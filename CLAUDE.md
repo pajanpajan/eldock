@@ -5,7 +5,7 @@ revize VTZ, změny skutečného provedení mezi údržbou v hale a externími CA
 rozváděčů. Pracovní název byl Digitry, od fáze 20 je to **ELDOCK**. Produkce běží na https://eldock.cz.
 Původní zadání MVP je v `docs/archiv/SPECIFIKACE-MVP.md`, celá historie fází 0–35 v `docs/archiv/PLAN-faze-00-35.md`.
 
-## 1. Milníky (fáze 0–39 nasazené)
+## 1. Milníky (fáze 0–39 nasazené, 40 hotová k nasazení)
 
 | Fáze | Milník |
 |---|---|
@@ -20,6 +20,7 @@ Původní zadání MVP je v `docs/archiv/SPECIFIKACE-MVP.md`, celá historie fá
 | 37 | Panel Builder: katalog ABB Compact Home, přesnější prompt (odpínače, B vs. C), ruční úprava rámečků, funkce obvodu, IEC prefixy -Q/-FI/-FA/-FV/-F/-K/-KA, krok 2 se skupinovými kartami |
 | 38 | Studio: budovy v metrech (osy A…ZZ), více budov v jednom konceptu, přejmenování pater, Zpět/Vpřed, kontextový krok 3 s produktovými banery |
 | 39 | Studio: sloupy jako jemné křížky, vlastní nabídka kroku 3 (tenant + localStorage), seskupené štítky „☕ 2× Kávovar“ v místnostech i v uloženém půdorysu, − / + ve skupinách |
+| 40 | Studio: výchozí mapa závodu → proklik na budovu (Zařízení a napájení / Místnosti, zóny a vrata / Budova a podlaží), mazání a přesun uložených zařízení; vzorové závody v metrech s bohatým vybavením (`db:demo-plant`) |
 
 ## 2. Moduly a klíčová místa v kódu
 
@@ -47,13 +48,13 @@ Server je hlídá přes `assertFeature`, správa je na `/admin/modules`.
 - **Soubory:** jen ve `storage/uploads`. Upload přes `POST /api/uploads`, čtení přes `GET /api/files/[...path]`. SVG se v UI zobrazuje přes `<img>`; výjimka jsou půdorysy generované aplikací.
 - **Workflow (CAE):** požadavek prochází `SUBMITTED → IN_PROGRESS → WAITING_APPROVAL → APPROVED`. Zamítnutá revize (`REJECTED`, komentář povinný) vrací požadavek do `IN_PROGRESS`; CAE může požadavek zrušit (`CANCELLED`). Každý přechod probíhá v `$transaction` se záznamem `ChangeRequestEvent`. Zařízení má max. 1 otevřený požadavek a 1 aktivní revizi. Stav zařízení se odvozuje přes `deriveEquipmentStatus`. Úplná tabulka přechodů je v archivu plánu, sekce B.
 - **Panel Builder – značení a zapojení:** IEC prefixy jen z `DESIGNATION_PREFIX` (`src/lib/panel-builder/matching.ts`); návrh zapojení `proposeTree` = pravidlo DIN lišty (chránič napájí jističe napravo na své liště). Hlídač hlásí jako chybu jen nezapojený prvek, cyklus a 3P pod 1P – součet In nad In chrániče není chyba.
-- **Studio:** rozměr budovy v metrech (`GridSpec.widthM/depthM`, osy dopočítané `axisMeters`, bez limitu os), koncept = více budov uložených v jedné transakci (`saveStudioConcept`). Souřadnice v metrech od osy A1, jednotné měřítko (`planFrame`). Každé uložené patro má `Floor.studioLayoutJson` (rastr, zóny, vrata) a jde znovu upravit; starší patra bez JSON se čtou ze SVG (`src/lib/studio-layout.ts`). Pin zařízení je vždy v rámu svého patra (`frameOfFloor`); při úpravě patra se piny přepočítají přes metry. Nabídka kroku 3 = `src/lib/studio-menu.ts` (`TenantSetting` `studio.menu` + localStorage, vyhrává novější `updatedAt`); seskupené štítky místností (`roomInventoryGroups`) se při uložení konceptu kreslí do `floorplanSvg` (`refreshFloorInventory`, skupina `data-room-inventory`).
+- **Studio:** rozměr budovy v metrech (`GridSpec.widthM/depthM`, osy dopočítané `axisMeters`, bez limitu os), koncept = více budov uložených v jedné transakci (`saveStudioConcept`). Souřadnice v metrech od osy A1, jednotné měřítko (`planFrame`). Každé uložené patro má `Floor.studioLayoutJson` (rastr, zóny, vrata) a jde znovu upravit; starší patra bez JSON se čtou ze SVG (`src/lib/studio-layout.ts`). Pin zařízení je vždy v rámu svého patra (`frameOfFloor`); při úpravě patra se piny přepočítají přes metry. Nabídka kroku 3 = `src/lib/studio-menu.ts` (`TenantSetting` `studio.menu` + localStorage, vyhrává novější `updatedAt`); seskupené štítky místností (`roomInventoryGroups`) se při uložení konceptu kreslí do `floorplanSvg` (`refreshFloorInventory`, skupina `data-room-inventory`). Výchozí obrazovka `/studio` je mapa závodu (bez konceptu); klik na budovu = pohled budovy se 3 režimy, „Uložit změny patra“ zůstane ve Studiu. Uložená zařízení jde ve Studiu přesunout (`equipmentEdits[].pos`) a smazat (`equipmentDeletes`, potvrzení v UI, server odmítne zařízení s otevřeným požadavkem nebo s nepřepojenými odběry).
 
 ## 4. Databáze – bezpečnostní pravidla
 
 - **Na produkci NIKDY** nespouštěj `db:reset`, `prisma migrate reset`, `prisma db push` ani `npm run db:seed` nad daty. Seed nejdřív maže tabulky a je určený jen pro prázdnou databázi.
 - Změna schématu = vždy čistá přírůstková migrace: `npx prisma migrate dev --name <popis>`, pak `npx prisma generate`. Migrace musí projít nad existujícími daty (výchozí hodnoty, žádné destruktivní přejmenování). Kontejner je při startu aplikuje přes `prisma migrate deploy`.
-- Nová demo nebo katalogová data patří do přírůstkových skriptů (`upsert`, nic nemazat), stejně jako `db:demo-docs` a `db:panel-builder`, které entrypoint pouští nad neprázdnou DB. `ELDOCK_SEED_DEMO=1` plní demo daty jen prázdnou databázi.
+- Nová demo nebo katalogová data patří do přírůstkových skriptů (`upsert`, nic nemazat), stejně jako `db:demo-docs`, `db:demo-plant` (vzorové závody v metrech, jednorázově přes značku `demo.plant-layout`, patra upravená ve Studiu nemění) a `db:panel-builder`, které entrypoint pouští nad neprázdnou DB. `ELDOCK_SEED_DEMO=1` plní demo daty jen prázdnou databázi.
 - Lokálně: seed se spouští ručně (`npm run db:seed`). `db:reset` (smaže `dev.db`) jen po výslovném souhlasu uživatele.
 
 ## 5. Gemini (AI Panel Builder)

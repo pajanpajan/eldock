@@ -1,7 +1,7 @@
 "use client";
 
-import { useRef, useState, useTransition, type PointerEvent } from "react";
-import { Check, ChevronDown, DoorOpen, Minus, Move, Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { useRef, useState, useTransition, type PointerEvent, type ReactNode } from "react";
+import { Check, ChevronDown, DoorOpen, Minus, Move, Pencil, Plus, RotateCcw, Trash2, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { PowerSpiderOverlay } from "@/components/map/floorplan/PowerSpiderOverlay";
@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { EquipmentType } from "@/generated/prisma/enums";
-import { DEFAULT_GRID, FLOOR_VIEWBOX, fineStep, fmtM, inventoryTop, metersToPercent, metersToPx, pxPerMeter, planFrame, pxToMeters, zoneAt, type MeterPoint, type PlanFrame } from "@/lib/cad-grid";
+import { DEFAULT_GRID, FLOOR_VIEWBOX, fineStep, fmtM, inventoryTop, metersToPercent, metersToPx, pxPerMeter, planFrame, pxToMeters, roomAnchor, zoneAt, type MeterPoint, type PlanFrame } from "@/lib/cad-grid";
 import {
   EQUIPMENT_CATEGORIES,
   categoryByKey,
@@ -80,16 +80,6 @@ interface FloorItem {
 /** Výběr místnosti: klíč místnosti, „celé patro“, nebo zatím nic. */
 type RoomChoice = string | "floor" | null;
 const WHOLE_FLOOR = "floor";
-const ROOM_STEP_M = 1.5;
-
-/** Kotva n-tého zařízení v místnosti (řady po 1,5 m od levého horního rohu). */
-function roomAnchor(room: Pick<Room, "x" | "y" | "w" | "h">, index: number): MeterPoint {
-  const perRow = Math.max(1, Math.floor((room.w - 1) / ROOM_STEP_M));
-  const x = room.x + Math.min(room.w - 0.5, 1 + (index % perRow) * ROOM_STEP_M);
-  const y = room.y + Math.min(room.h - 0.5, 1 + Math.floor(index / perRow) * ROOM_STEP_M);
-  return { x: Math.round(x * 2) / 2, y: Math.round(y * 2) / 2 };
-}
-
 /** Sekce rozbalovacího panelu (accordion) kroku 3; `action` = tlačítko v záhlaví (např. „Upravit nabídku“). */
 function Section({
   n,
@@ -182,6 +172,11 @@ export function PlacementStep({
   onUpdate,
   onRemove,
   onEditExisting,
+  deletes = [],
+  onDeleteExisting,
+  onRestoreExisting,
+  panelHeader,
+  hideFloorTabs = false,
   history,
 }: {
   frame: PlanFrame;
@@ -202,6 +197,14 @@ export function PlacementStep({
   onUpdate: (key: string, patch: Partial<StudioEquipmentDraft>) => void;
   onRemove: (key: string) => void;
   onEditExisting: (edit: StudioEquipmentEdit) => void;
+  /** Uložená zařízení označená ke smazání (smažou se až při uložení). */
+  deletes?: readonly string[];
+  onDeleteExisting?: (id: string) => void;
+  onRestoreExisting?: (id: string) => void;
+  /** Obsah nad panelem (přepínač režimů práce s budovou). */
+  panelHeader?: ReactNode;
+  /** Patro se přepíná nahoře nad Studiem (pohled budovy). */
+  hideFloorTabs?: boolean;
   history: HistoryControls;
 }) {
   const draftFloor = active.kind === "draft" ? floors.find((floor) => floor.key === active.key && !floor.existingId) : undefined;
@@ -289,10 +292,10 @@ export function PlacementStep({
   const items: FloorItem[] = [
     ...(existingFloor
       ? data.equipment
-          .filter((item) => item.floorId === existingFloor.id)
+          .filter((item) => item.floorId === existingFloor.id && !deletes.includes(item.id))
           .map((item) => {
             const edit = edits[item.id];
-            const pos = existingMeters(item);
+            const pos = edit?.pos ?? existingMeters(item);
             return {
               id: item.id,
               draftKey: null,
@@ -406,7 +409,7 @@ export function PlacementStep({
     const box = svgRef.current!.getBoundingClientRect();
     return { x: ((event.clientX - box.left) / box.width) * FLOOR_VIEWBOX.width, y: ((event.clientY - box.top) / box.height) * FLOOR_VIEWBOX.height };
   };
-  const gridMode = (template && category?.placement === "grid") || (moving && categoryOf(items.find((item) => item.draftKey === moving)?.type ?? "OTHER").placement === "grid");
+  const gridMode = (template && category?.placement === "grid") || (moving && categoryOf(items.find((item) => item.id === moving)?.type ?? "OTHER").placement === "grid");
   const pointer = (event: PointerEvent) => pxToMeters(frame, viewPoint(event), gridMode ? step : 0);
 
   function onCanvasDown(event: PointerEvent) {
@@ -414,11 +417,14 @@ export function PlacementStep({
     const point = pointer(event);
     const room = zoneAt(rooms, point);
     if (moving) {
-      const item = items.find((entry) => entry.draftKey === moving);
+      const item = items.find((entry) => entry.id === moving);
       if (item) {
         const roomPlaced = categoryOf(item.type).placement === "room";
-        const pos = roomPlaced && room ? roomAnchor(room, items.filter((entry) => entry.roomKey === room.key && entry.draftKey !== moving).length) : point;
-        onUpdate(moving, { pos, roomKey: roomPlaced ? (room?.key ?? null) : null, zone: room?.name ?? item.zone });
+        if (roomPlaced && !room) return void toast.info("Spotřebiče a nářadí patří do místnosti – klikněte dovnitř místnosti.");
+        const pos = roomPlaced && room ? roomAnchor(room, items.filter((entry) => entry.roomKey === room.key && entry.id !== moving).length) : point;
+        const taken = roomPlaced ? null : items.find((entry) => entry.id !== item.id && categoryOf(entry.type).placement === "grid" && Math.abs(entry.pos.x - pos.x) < step / 2 && Math.abs(entry.pos.y - pos.y) < step / 2);
+        if (taken) return void toast.error(`Bod je obsazen zařízením ${taken.tag} – zvolte sousední bod jemného rastru.`);
+        relocate(item, pos, room?.name ?? item.zone);
         toast.success(`${item.tag} přesunuto${room ? ` do ${room.name}` : ""}.`);
       }
       setMoving(null);
@@ -497,14 +503,35 @@ export function PlacementStep({
     toast.success(`${nextValue} přidáno – ${group.label} (${group.count + 1}×).`);
   }
 
-  /** „−“ u skupiny: ubere poslední nový kus (uložená zařízení se mažou v kartě zařízení). */
+  /** „−“ u skupiny: ubere poslední nový kus, jinak označí ke smazání poslední uložený (smaže se až při uložení). */
   function removeOne(group: (typeof groups)[number]) {
-    const last = [...group.items].reverse().find((item) => item.draftKey);
-    if (!last?.draftKey) return;
-    onRemove(last.draftKey);
+    const last = [...group.items].reverse().find((item) => item.draftKey) ?? group.items[group.items.length - 1];
+    if (!last) return;
     if (editing === last.id) setEditing(null);
-    toast.success(`${last.tag} odebráno – ${group.label} (${group.count - 1}×).`);
+    if (last.draftKey) {
+      onRemove(last.draftKey);
+      return void toast.success(`${last.tag} odebráno – ${group.label} (${group.count - 1}×).`);
+    }
+    if (!onDeleteExisting) return;
+    onDeleteExisting(last.id);
+    toast.success(`${last.tag} se smaže při uložení – ${group.label} (${group.count - 1}×).`, onRestoreExisting ? { action: { label: "Vrátit", onClick: () => onRestoreExisting(last.id) } } : undefined);
   }
+
+  /** Nová poloha zařízení (přesun nebo jiná místnost): koncept hned, uložené jako úprava. */
+  function relocate(item: FloorItem, pos: MeterPoint, zoneName: string | null) {
+    const roomKey = categoryOf(item.type).placement === "room" ? (zoneAt(rooms, pos)?.key ?? null) : null;
+    if (item.draftKey) return onUpdate(item.draftKey, { pos, roomKey, zone: zoneName });
+    onEditExisting({ id: item.id, tag: item.tag, name: item.name, parentId: item.parentId, circuit: item.circuit, zone: zoneName, pos });
+  }
+
+  /** Spotřebič / nářadí přiřazené jiné místnosti v detailu kusu → přesun na další kotvu v ní. */
+  function roomMove(item: FloorItem, zoneName: string | null): MeterPoint | null {
+    if (categoryOf(item.type).placement !== "room" || !zoneName) return null;
+    const target = rooms.find((room) => room.name === zoneName);
+    if (!target || target.key === item.roomKey) return null;
+    return roomAnchor(target, items.filter((entry) => entry.roomKey === target.key).length);
+  }
+  const deletedHere = existingFloor ? data.equipment.filter((item) => item.floorId === existingFloor.id && deletes.includes(item.id)) : [];
   const choiceLabel = roomChoice === WHOLE_FLOOR ? "Celé patro" : (selectedRoom?.name ?? null);
 
   return (
@@ -516,6 +543,8 @@ export function PlacementStep({
           </h2>
           <HistoryButtons history={history} />
         </div>
+        {panelHeader}
+        {hideFloorTabs ? null : (
         <FloorTabs
           items={floorItems}
           active={activeId}
@@ -526,6 +555,7 @@ export function PlacementStep({
             setOpen(1);
           }}
         />
+        )}
 
         <Section n={1} title="Místnost / zóna" summary={choiceLabel ?? "Klikněte na místnost v půdorysu nebo ji vyberte"} open={open[1]} onToggle={() => toggle(1)} testId="section-room">
           <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Místnosti patra">
@@ -863,7 +893,7 @@ export function PlacementStep({
                 <ul className="space-y-1.5" aria-label="Stávající zařízení" data-testid="existing-list">
                   {groups.map((group) => {
                     const expanded = openGroups.has(group.key);
-                    const removable = group.items.some((item) => item.draftKey);
+                    const removable = group.items.some((item) => item.draftKey) || (!!onDeleteExisting && group.items.length > 0);
                     return (
                       <li key={group.key} className="rounded-md border border-border" data-testid="group-row" data-group={group.label}>
                         <div className="flex items-center gap-1 pr-1">
@@ -882,7 +912,7 @@ export function PlacementStep({
                                 size="icon"
                                 className="size-8"
                                 aria-label={`Ubrat kus: ${group.label}`}
-                                title={removable ? "Ubrat poslední nový kus" : "Uložená zařízení se mažou v kartě zařízení"}
+                                title={group.items.some((item) => item.draftKey) ? "Ubrat poslední nový kus" : "Označit poslední kus ke smazání (smaže se při uložení)"}
                                 disabled={!removable}
                                 onClick={() => removeOne(group)}
                               >
@@ -911,23 +941,39 @@ export function PlacementStep({
                                     rooms={rooms}
                                     parents={parentsFor(item.type, item.id)}
                                     onSave={(patch) => {
+                                      const moved = roomMove(item, patch.zone);
                                       if (item.draftKey) {
                                         const parent = patch.parentId ? (patch.parentId.startsWith("draft:") ? { kind: "draft" as const, key: patch.parentId.slice(6) } : { kind: "existing" as const, id: patch.parentId }) : null;
-                                        onUpdate(item.draftKey, { tag: patch.tag, name: patch.name, parent, circuit: patch.circuit, zone: patch.zone, isRoot: !parent && (item.type === "SWITCHBOARD" || item.type === "TRANSFORMER") });
-                                      } else onEditExisting({ id: item.id, ...patch });
+                                        onUpdate(item.draftKey, {
+                                          tag: patch.tag,
+                                          name: patch.name,
+                                          parent,
+                                          circuit: patch.circuit,
+                                          zone: patch.zone,
+                                          isRoot: !parent && (item.type === "SWITCHBOARD" || item.type === "TRANSFORMER"),
+                                          ...(moved ? { pos: moved, roomKey: zoneAt(rooms, moved)?.key ?? null } : {}),
+                                        });
+                                      } else onEditExisting({ id: item.id, ...patch, pos: moved ?? edits[item.id]?.pos ?? null });
                                       // Přejmenovaný kus patří do jiné skupiny – ta zůstane rozbalená
                                       toggleGroup(groupKeyOf({ ...item, tag: patch.tag, name: patch.name }), true);
                                       toast.success(`${patch.tag} upraveno.`);
                                     }}
-                                    onMove={item.draftKey ? () => setMoving(item.draftKey) : undefined}
+                                    onMove={() => setMoving(item.id)}
                                     onRemove={
                                       item.draftKey
                                         ? () => {
                                             onRemove(item.draftKey!);
                                             setEditing(null);
                                           }
-                                        : undefined
+                                        : onDeleteExisting
+                                          ? () => {
+                                              onDeleteExisting(item.id);
+                                              setEditing(null);
+                                              toast.success(`${item.tag} se smaže při uložení patra.`);
+                                            }
+                                          : undefined
                                     }
+                                    confirmRemove={!item.draftKey}
                                   />
                                 ) : null}
                               </li>
@@ -943,9 +989,26 @@ export function PlacementStep({
             </>
           ) : null}
         </Section>
+        {deletedHere.length ? (
+          <div className="space-y-1.5 rounded-lg border border-red-500/40 bg-red-500/10 p-2 text-xs text-red-100" data-testid="pending-deletes">
+            <p className="font-semibold">Smaže se při uložení ({deletedHere.length}):</p>
+            <ul className="flex flex-wrap gap-1.5">
+              {deletedHere.map((item) => (
+                <li key={item.id} className="flex items-center gap-1 rounded-md border border-red-500/40 px-1.5 py-0.5">
+                  <span className="font-mono">{item.tag}</span>
+                  {onRestoreExisting ? (
+                    <button type="button" onClick={() => onRestoreExisting(item.id)} aria-label={`Vrátit ${item.tag}`} className="text-red-200 hover:text-white">
+                      <Undo2 className="size-3.5" aria-hidden />
+                    </button>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         {moving ? (
           <p className="rounded-lg border border-primary/50 bg-primary/10 p-2 text-sm" data-testid="moving-hint">
-            Přesun {items.find((item) => item.draftKey === moving)?.tag}: klikněte na nové místo v půdorysu.{" "}
+            Přesun {items.find((item) => item.id === moving)?.tag}: klikněte na nové místo v půdorysu.{" "}
             <button type="button" className="underline" onClick={() => setMoving(null)}>
               Zrušit
             </button>
@@ -1128,7 +1191,7 @@ export function PlacementStep({
   );
 }
 
-/** Úprava jednoho zařízení: tag, název, napájení, vývod a místnost; u konceptu i přesun a smazání. */
+/** Úprava jednoho zařízení: tag, název, napájení, vývod, místnost, přesun a smazání (uložené s potvrzením). */
 function EditForm({
   item,
   rooms,
@@ -1136,14 +1199,18 @@ function EditForm({
   onSave,
   onMove,
   onRemove,
+  confirmRemove = false,
 }: {
   item: FloorItem;
   rooms: Room[];
   parents: AutopilotSource[];
-  onSave: (patch: Omit<StudioEquipmentEdit, "id">) => void;
+  onSave: (patch: Omit<StudioEquipmentEdit, "id" | "pos">) => void;
   onMove?: () => void;
   onRemove?: () => void;
+  /** Uložené zařízení: smazání až po potvrzení. */
+  confirmRemove?: boolean;
 }) {
+  const [confirming, setConfirming] = useState(false);
   const [tag, setTag] = useState(item.tag);
   const [name, setName] = useState(item.name);
   const [parentId, setParentId] = useState(item.parentId ?? "");
@@ -1184,13 +1251,26 @@ function EditForm({
           </Button>
         ) : null}
         {onRemove ? (
-          <Button size="sm" variant="outline" className="h-9 gap-1 border-red-500/50 text-red-300" onClick={onRemove}>
+          <Button size="sm" variant="outline" className="h-9 gap-1 border-red-500/50 text-red-300" onClick={() => (confirmRemove ? setConfirming(true) : onRemove())} disabled={confirming}>
             <Trash2 className="size-3.5" aria-hidden /> Smazat
           </Button>
-        ) : (
-          <span className="self-center text-[11px] text-muted-foreground">Uložené zařízení se maže a přesouvá v jeho kartě.</span>
-        )}
+        ) : null}
       </div>
+      {confirming && onRemove ? (
+        <div className="space-y-2 rounded-md border border-red-500/50 bg-red-500/10 p-2 text-xs text-red-100" role="alertdialog" aria-label={`Smazat ${item.tag}`} data-testid="confirm-delete">
+          <p>
+            Opravdu smazat <span className="font-mono font-semibold">{item.tag}</span>? Zařízení se smaže při uložení patra i s historií revizí a dokumentů.
+          </p>
+          <div className="flex gap-1.5">
+            <Button size="sm" className="h-8 bg-red-600 text-white hover:bg-red-500" onClick={onRemove}>
+              Ano, smazat
+            </Button>
+            <Button size="sm" variant="ghost" className="h-8" onClick={() => setConfirming(false)}>
+              Ne
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

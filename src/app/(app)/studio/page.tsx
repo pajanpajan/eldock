@@ -30,7 +30,7 @@ export default async function StudioPage({ searchParams }: PageProps<"/studio">)
     <>
       <PageHeader
         title="Studio výstavby závodu"
-        description={`${data.plant.name} · nová budova, patra, místnosti a zařízení s hierarchií napájení přímo v konstrukčním rastru.`}
+        description={`${data.plant.name} · mapa závodu → budova → místnosti a zařízení s hierarchií napájení přímo v konstrukčním rastru.`}
       />
       <StudioWizard key={`${data.plant.id}:${startNewPlant}`} data={data} startNewPlant={startNewPlant} />
     </>

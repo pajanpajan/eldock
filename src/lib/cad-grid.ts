@@ -383,6 +383,17 @@ export function zoneAt<T extends Pick<GridZone, "x" | "y" | "w" | "h">>(zones: r
   return zones.filter((zone) => zoneContains(zone, point)).sort((a, b) => a.w * a.h - b.w * b.h)[0] ?? null;
 }
 
+/** Rozestup kotev spotřebičů a nářadí v místnosti [m]. */
+export const ROOM_STEP_M = 1.5;
+
+/** Kotva n-tého spotřebiče / nářadí v místnosti (řady po 1,5 m od levého horního rohu, na 0,5 m). */
+export function roomAnchor(room: Pick<GridZone, "x" | "y" | "w" | "h">, index: number): MeterPoint {
+  const perRow = Math.max(1, Math.floor((room.w - 1) / ROOM_STEP_M));
+  const x = room.x + Math.min(room.w - 0.5, 1 + (index % perRow) * ROOM_STEP_M);
+  const y = room.y + Math.min(room.h - 0.5, 1 + Math.floor(index / perRow) * ROOM_STEP_M);
+  return { x: Math.round(x * 2) / 2, y: Math.round(y * 2) / 2 };
+}
+
 // Buňky rastru (pole mezi sousedními osami): „B2“ leží mezi osami B–C a 2–3 – ruční zadání a šablony.
 
 /** Počet buněk rastru (o jednu méně než os). */

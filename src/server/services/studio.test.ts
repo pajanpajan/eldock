@@ -265,8 +265,8 @@ describe("fáze 39: inventář místností v půdorysu a vlastní nabídka", () 
     const result = await saveStudioBuilding(prisma, base);
     const floor = await prisma.floor.findFirstOrThrow({ where: { buildingId: result.buildingId, level: 0 } });
     expect(floor.floorplanSvg).toContain("☕ 2× Kávovar");
-    // přístroj mimo nabídku má ikonu kategorie; pevná zařízení (linka, rozváděč) se do štítků nepočítají
-    expect(floor.floorplanSvg).toContain("🔌 1× Mikrovlnka");
+    // přístroj mimo nabídku má ikonu podle názvu (mikrovlnka 🍲); pevná zařízení (linka, rozváděč) se do štítků nepočítají
+    expect(floor.floorplanSvg).toContain("🍲 1× Mikrovlnka");
     expect(floor.floorplanSvg).not.toMatch(/× Svařovací linka|× Rozváděč svařovny/);
 
     // Druhý koncept: třetí kávovar na stávající patro → štítek se přepočítá
@@ -295,5 +295,64 @@ describe("fáze 39: inventář místností v půdorysu a vlastní nabídka", () 
     const result = await saveStudioBuilding(prisma, base);
     const floor = await prisma.floor.findFirstOrThrow({ where: { buildingId: result.buildingId, level: 0 } });
     expect(floor.floorplanSvg).toContain("🫖 1× Rychlovarná konvice");
+  });
+});
+
+describe("fáze 40: plnohodnotná úprava stávajících zařízení a budovy ve Studiu", () => {
+  const existing = (overrides: Partial<StudioDraft> = {}) => draft({ building: { mode: "existing", id: "b" }, floors: [], equipment: [], ...overrides });
+  const kettle = (tag: string, pos: { x: number; y: number }) => ({
+    key: tag,
+    floor: { kind: "existing" as const, id: "f" },
+    pos,
+    roomKey: null,
+    tag,
+    name: "Rychlovarná konvice",
+    type: "APPLIANCE" as const,
+    parent: { kind: "existing" as const, id: "eq-R-LIS-01" },
+    circuit: "Zásuvkový okruh ZS1",
+    zone: "Kuchyňka",
+    isRoot: false,
+  });
+
+  it("smazání uloženého zařízení, přesun pinu v metrech a nová poloha budovy v areálu", async () => {
+    await saveStudioBuilding(prisma, existing({ equipment: [kettle("RK01", { x: 6, y: 6 }), kettle("RK02", { x: 7.5, y: 6 })] }));
+    const [rk1, rk2] = await prisma.equipment.findMany({ where: { tag: { in: ["RK01", "RK02"] } }, orderBy: { tag: "asc" } });
+
+    // Rozváděč, ze kterého něco napájí, smazat nejde (nejdřív přepojit nebo smazat i odběry)
+    await expect(saveStudioBuilding(prisma, existing({ equipmentDeletes: ["eq-R-LIS-01"] }))).rejects.toThrow(/R-LIS-01: napájí .*RK01/);
+    // Nadřazený rozváděč nového kusu se nesmí mazat
+    await expect(saveStudioBuilding(prisma, existing({ equipment: [{ ...kettle("RK03", { x: 9, y: 6 }), parent: { kind: "existing", id: "eq-R-CNC-04" } }], equipmentDeletes: ["eq-R-CNC-04"] }))).rejects.toThrow(
+      /RK03: nadřazený rozváděč se maže/,
+    );
+
+    const result = await saveStudioBuilding(
+      prisma,
+      existing({
+        building: { mode: "existing", id: "b", map: { x: 50, y: 40, w: 12, h: 8 } },
+        equipmentEdits: [{ id: rk1.id, tag: "RK01", name: "Rychlovarná konvice", parentId: "eq-R-LIS-01", circuit: "Zásuvkový okruh ZS1", zone: "Kuchyňka", pos: { x: 30, y: 18 } }],
+        equipmentDeletes: [rk2.id, "eq-R-CNC-04"],
+      }),
+    );
+    expect(result).toMatchObject({ deletedEquipment: 2, editedEquipment: 1 });
+    expect(await prisma.equipment.findMany({ where: { id: { in: [rk2.id, "eq-R-CNC-04"] } } })).toEqual([]);
+    // Kaskáda: revize smazaného rozváděče zmizely s ním, ostatní data zůstala
+    expect(await prisma.documentRevision.count({ where: { equipmentId: "eq-R-CNC-04" } })).toBe(0);
+    expect(await prisma.documentRevision.count({ where: { equipmentId: "eq-R-LIS-01" } })).toBe(1);
+    const moved = await prisma.equipment.findUniqueOrThrow({ where: { id: rk1.id } });
+    expect([moved.pinX, moved.pinY]).not.toEqual([rk1.pinX, rk1.pinY]);
+    expect(await prisma.building.findUniqueOrThrow({ where: { id: "b" } })).toMatchObject({ mapPolygon: "50,40 62,40 62,48 50,48", labelX: 56, labelY: 44 });
+
+    // Poloha mimo půdorys a budova mimo areál neprojdou
+    await expect(
+      saveStudioBuilding(prisma, existing({ equipmentEdits: [{ id: rk1.id, tag: "RK01", name: "x", parentId: "eq-R-LIS-01", circuit: null, zone: null, pos: { x: 900, y: 1 } }] })),
+    ).rejects.toThrow(/leží mimo půdorys/);
+    await expect(saveStudioBuilding(prisma, existing({ building: { mode: "existing", id: "b", map: { x: 95, y: 95, w: 12, h: 8 } } }))).rejects.toThrow(/mimo areál/);
+  });
+
+  it("zařízení s otevřeným požadavkem na změnu ani cizí zařízení smazat nejde – nic se nezmění", async () => {
+    await prisma.changeRequest.create({ data: { number: "ZM-2026-0999", equipmentId: "eq-R-CNC-04", reporterId: "u-maint", status: "IN_PROGRESS" } });
+    await expect(saveStudioBuilding(prisma, existing({ equipmentDeletes: ["eq-R-CNC-04"] }))).rejects.toThrow(/otevřený požadavek na změnu ZM-2026-0999/);
+    await expect(saveStudioBuilding(prisma, existing({ equipmentDeletes: ["neexistuje"] }))).rejects.toThrow(/nepatří/);
+    expect(await prisma.equipment.count({ where: { id: "eq-R-CNC-04" } })).toBe(1);
   });
 });

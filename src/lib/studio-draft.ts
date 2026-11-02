@@ -39,7 +39,8 @@ export interface StudioEquipmentDraft {
 
 export type StudioBuildingDraft =
   | { mode: "new"; code: string; name: string; type: BuildingType; map: { x: number; y: number; w: number; h: number } }
-  | { mode: "existing"; id: string };
+  /** Stávající budova; `map` = nová poloha / velikost v areálu (procenta mapy), bez něj se nemění. */
+  | { mode: "existing"; id: string; map?: { x: number; y: number; w: number; h: number } | null };
 
 /** Nový závod od nuly (Studio): vznikne ve stejné transakci jako první budova. */
 export interface StudioNewPlantDraft {
@@ -69,6 +70,8 @@ export interface StudioDraft {
   floorRenames?: { id: string; usage: string }[];
   /** Úpravy stávajících zařízení (tag, název, napájení, vývod, místnost) z kroku 3 „Upravit stávající“. */
   equipmentEdits?: StudioEquipmentEdit[];
+  /** Uložená zařízení budovy ke smazání (Studio: „Smazat“ s potvrzením, „−“ u skupiny). */
+  equipmentDeletes?: string[];
 }
 
 export interface StudioEquipmentEdit {
@@ -78,10 +81,12 @@ export interface StudioEquipmentEdit {
   parentId: string | null;
   circuit: string | null;
   zone: string | null;
+  /** Nová poloha v metrech od osy A1 (přesun / změna místnosti); bez ní pin zůstává. */
+  pos?: { x: number; y: number } | null;
 }
 
 /** Jedna budova konceptu (Studio zvládne více budov v jednom průchodu). */
-export type StudioBuildingConcept = Pick<StudioDraft, "grid" | "building" | "floors" | "equipment" | "floorRenames" | "equipmentEdits">;
+export type StudioBuildingConcept = Pick<StudioDraft, "grid" | "building" | "floors" | "equipment" | "floorRenames" | "equipmentEdits" | "equipmentDeletes">;
 
 /** Celý koncept Studia: závod (nový / stávající), areál a jedna či více budov – uloží se v jedné transakci. */
 export interface StudioConceptDraft {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type PointerEvent } from "react";
+import { useRef, useState, type PointerEvent, type ReactNode } from "react";
 import { DoorOpen, Pencil, SquareDashedMousePointer, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -79,6 +79,8 @@ export function ZoneStep({
   onDiscard,
   history,
   onCheckpoint,
+  panelHeader,
+  hideFloorTabs = false,
 }: {
   floors: StudioFloorDraft[];
   activeKey: string;
@@ -99,6 +101,10 @@ export function ZoneStep({
   history: HistoryControls;
   /** Začátek tažení: celé tažení stěny / místnosti je jeden krok historie. */
   onCheckpoint: () => void;
+  /** Obsah nad panelem (přepínač režimů práce s budovou). */
+  panelHeader?: ReactNode;
+  /** Patro se přepíná nahoře nad Studiem (pohled budovy) – bez vlastních záložek a tlačítek pater. */
+  hideFloorTabs?: boolean;
 }) {
   const floor = floors.find((entry) => entry.key === activeKey) ?? floors[0];
   const [mode, setMode] = useState<"draw" | "wall">("draw");
@@ -110,7 +116,7 @@ export function ZoneStep({
   const svgRef = useRef<SVGSVGElement>(null);
 
   const editable = existingFloors.filter((entry) => !floors.some((draft) => draft.existingId === entry.id));
-  const editButtons = editable.length ? (
+  const editButtons = editable.length && !hideFloorTabs ? (
     <div className="flex flex-wrap items-center gap-2 text-sm" data-testid="edit-existing-floors">
       <span className="text-muted-foreground">Upravit rozvržení stávajícího patra:</span>
       {editable.map((entry) => (
@@ -209,7 +215,10 @@ export function ZoneStep({
         <h2 id="step-2" className="text-lg font-semibold">
           Místnosti, zóny a vrata
         </h2>
-        <FloorTabs items={floors.map((entry) => ({ id: entry.key, label: `${floorLabel(entry.level).short}${entry.existingId ? " ✎" : ""}` }))} active={floor.key} onActive={onActive} />
+        {panelHeader}
+        {hideFloorTabs ? null : (
+          <FloorTabs items={floors.map((entry) => ({ id: entry.key, label: `${floorLabel(entry.level).short}${entry.existingId ? " ✎" : ""}` }))} active={floor.key} onActive={onActive} />
+        )}
         {floor.existingId ? (
           <div className="flex flex-wrap items-center gap-2 rounded-lg border border-sky-500/40 bg-sky-500/10 p-2 text-xs text-sky-100" data-testid="editing-existing-floor">
             <span className="flex-1">Upravujete uložené patro – po uložení se přepíše jeho půdorys a zařízení zůstanou na svých místech.</span>

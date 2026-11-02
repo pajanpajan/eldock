@@ -57,7 +57,11 @@ const buildingSchema = z.object({
       type: z.enum(["PRODUCTION", "ASSEMBLY", "ENERGY", "WAREHOUSE", "OFFICE", "OTHER"]),
       map: z.object({ x: z.number().min(0).max(100), y: z.number().min(0).max(100), w: z.number().min(2).max(100), h: z.number().min(2).max(100) }),
     }),
-    z.object({ mode: z.literal("existing"), id }),
+    z.object({
+      mode: z.literal("existing"),
+      id,
+      map: z.object({ x: z.number().min(0).max(100), y: z.number().min(0).max(100), w: z.number().min(0.5).max(100), h: z.number().min(0.5).max(100) }).nullable().optional(),
+    }),
   ]),
   floors: z
     .array(
@@ -91,9 +95,12 @@ const buildingSchema = z.object({
     .max(200),
   floorRenames: z.array(z.object({ id, usage: text(80) })).max(40).optional(),
   equipmentEdits: z
-    .array(z.object({ id, tag: text(24), name: text(120), parentId: id.nullable(), circuit: text(80).nullable(), zone: text(80).nullable() }))
-    .max(200)
+    .array(
+      z.object({ id, tag: text(24), name: text(120), parentId: id.nullable(), circuit: text(80).nullable(), zone: text(80).nullable(), pos: z.object({ x: meters, y: meters }).nullable().optional() }),
+    )
+    .max(400)
     .optional(),
+  equipmentDeletes: z.array(id).max(400).optional(),
 });
 
 const conceptSchema = z.object({
@@ -103,7 +110,7 @@ const conceptSchema = z.object({
   buildings: z.array(buildingSchema).min(1).max(12),
 });
 
-type Summary = { href: string; buildings: number; floors: number; editedFloors: number; equipment: number; plantCreated: boolean };
+type Summary = { href: string; buildings: number; floors: number; editedFloors: number; equipment: number; editedEquipment: number; deletedEquipment: number; plantCreated: boolean };
 
 /** Uloží celý koncept Studia (jedna či více budov) v jedné transakci a vrátí odkaz na první patro; nový závod si zapamatuje. */
 export async function saveStudioAction(input: z.input<typeof conceptSchema>): Promise<ActionResult<Summary>> {
@@ -120,8 +127,20 @@ export async function saveStudioAction(input: z.input<typeof conceptSchema>): Pr
     revalidatePath("/", "layout");
     const target = results.find((result) => result.firstFloorId) ?? first;
     const href = target.firstFloorId ? floorHref(target.plantId, target.buildingId, target.firstFloorId) : plantHref(first.plantId);
-    const sum = (key: "floors" | "editedFloors" | "equipment") => results.reduce((total, result) => total + result[key], 0);
-    return { ok: true, data: { href, buildings: results.length, floors: sum("floors"), editedFloors: sum("editedFloors"), equipment: sum("equipment"), plantCreated: first.plantCreated } };
+    const sum = (key: "floors" | "editedFloors" | "equipment" | "editedEquipment" | "deletedEquipment") => results.reduce((total, result) => total + result[key], 0);
+    return {
+      ok: true,
+      data: {
+        href,
+        buildings: results.length,
+        floors: sum("floors"),
+        editedFloors: sum("editedFloors"),
+        equipment: sum("equipment"),
+        editedEquipment: sum("editedEquipment"),
+        deletedEquipment: sum("deletedEquipment"),
+        plantCreated: first.plantCreated,
+      },
+    };
   } catch (error) {
     if (error instanceof WorkflowError) return { ok: false, error: error.message };
     console.error(error);

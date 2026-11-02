@@ -138,6 +138,24 @@ export interface InventoryGroup {
  * Spotřebiče a nářadí v místnosti sečtené podle názvu přístroje (fáze 39). Ikona podle dlaždice se
  * stejným názvem (výchozí i vlastní nabídka), jinak podle kategorie. Řazení: nejvíc kusů první.
  */
+/** Ikona podle klíčového slova v názvu přístroje, který neodpovídá žádné dlaždici („Rychlovarná konvice“ → 🫖). */
+const EMOJI_HINTS: readonly [RegExp, string][] = [
+  [/konvice/i, "🫖"],
+  [/tiskárn/i, "🖨️"],
+  [/mikrovln/i, "🍲"],
+  [/chladni|lednič/i, "🧊"],
+  [/kávovar/i, "☕"],
+  [/vysavač/i, "🧹"],
+  [/\bpc\b|počítač|terminál|monitor/i, "🖥️"],
+  [/buben|prodlužovací/i, "🔌"],
+  [/šroubovák|vrtačk/i, "🔩"],
+  [/brusk/i, "⚙️"],
+  [/horkovzduš/i, "🔥"],
+  [/svářečk/i, "⚡"],
+  [/měřicí|revizní přístroj|multimetr/i, "📏"],
+];
+export const emojiHint = (label: string) => EMOJI_HINTS.find(([pattern]) => pattern.test(label))?.[1] ?? null;
+
 export function roomInventoryGroups(items: readonly { name: string; type: EquipmentType; tag?: string }[], templates: readonly ProductTemplate[] = []): InventoryGroup[] {
   const known = [...templates, ...Object.values(PRODUCT_TEMPLATES).flat()];
   const groups = new Map<string, InventoryGroup>();
@@ -149,7 +167,7 @@ export function roomInventoryGroups(items: readonly { name: string; type: Equipm
     if (group) group.count++;
     else {
       const template = known.find((entry) => entry.name.toLowerCase() === label.toLowerCase() || entry.label.toLowerCase() === label.toLowerCase());
-      groups.set(key, { key, label, emoji: template?.emoji ?? category.emoji, color: category.color, category: category.key, count: 1 });
+      groups.set(key, { key, label, emoji: template?.emoji ?? emojiHint(label) ?? category.emoji, color: category.color, category: category.key, count: 1 });
     }
   }
   return [...groups.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, "cs"));

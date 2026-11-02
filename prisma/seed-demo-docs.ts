@@ -273,14 +273,14 @@ const DEMO_APPLIANCES = [
 const czDate = (date: Date) => date.toLocaleDateString("cs-CZ", { timeZone: "UTC" });
 const DAY = 86_400_000;
 
-const INSPECTOR_APPLIANCES = { name: "Milan Černý", license: "Technik revizí spotřebičů – ČSN 33 1600 ed. 2" };
+export const INSPECTOR_APPLIANCES = { name: "Milan Černý", license: "Technik revizí spotřebičů – ČSN 33 1600 ed. 2" };
 const INSPECTOR_VTZ = { name: "Ing. Jiří Kovář", license: "TIČR č. E-2210/2019 (E2A)" };
 
 /** Pravidelná revize se zprávou (SVG v documents/seed) – před `daysAgo` dny, lhůta podle zařízení. */
-async function addInspection(
+export async function addInspection(
   prisma: PrismaClient,
   equipmentId: string,
-  options: { daysAgo: number; inspector: { name: string; license: string }; measurements?: { rpe: number; riso: number; leakage: number } },
+  options: { daysAgo: number; inspector: { name: string; license: string }; measurements?: { rpe: number | null; riso: number; leakage: number } },
 ) {
   const eq = await prisma.equipment.findUniqueOrThrow({
     where: { id: equipmentId },

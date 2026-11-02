@@ -24,7 +24,7 @@ import { inspectionRuleFor, isPortable } from "@/lib/inspection-rules";
 import { newQrToken } from "@/lib/qr-label";
 import { validatePlacement, type PowerSource } from "@/lib/power-hierarchy";
 import { floorLabel, floorName, rectPolygon, type StudioConceptDraft, type StudioDraft } from "@/lib/studio-draft";
-import { WorkflowError } from "@/lib/workflow/state-machine";
+import { OPEN_STATUSES, WorkflowError } from "@/lib/workflow/state-machine";
 
 import { preparePlant } from "./plants";
 import type { Tx } from "./workflow";
@@ -118,6 +118,9 @@ async function saveBuildingInTx(prisma: Tx, draft: StudioDraft) {
       fail(`Budova s kódem ${code.trim().toUpperCase()} v závodě už existuje.`);
     }
   }
+  // Přesun / změna velikosti stávající budovy v areálu
+  const movedMap = draft.building.mode === "existing" ? (draft.building.map ?? null) : null;
+  if (movedMap && !rectInsideCampus(movedMap)) fail("Budova leží mimo areál – posuňte ji na mapě dovnitř pozemku.");
   const levels = new Set(existingBuilding?.floors.map((floor) => floor.level) ?? []);
   // Upravovaná stávající patra: jejich vlastní rastr (uložený v JSON, u starších pater ze SVG)
   const edited = new Map<string, { grid: GridSpec; frame: PlanFrame }>();
@@ -197,13 +200,33 @@ async function saveBuildingInTx(prisma: Tx, draft: StudioDraft) {
       if (!edit.tag.trim()) fail("Zařízení musí mít označení (tag).");
       if (edit.parentId === edit.id) fail(`${edit.tag}: zařízení nemůže napájet samo sebe.`);
       if (edit.parentId && !sources.some((source) => source.id === edit.parentId)) fail(`${edit.tag}: nadřazený rozváděč neexistuje.`);
-      const sameFloor = await prisma.equipment.findFirst({ where: { floorId: row!.floorId, tag: edit.tag.trim().toUpperCase(), NOT: { id: edit.id } }, select: { id: true } });
+      if (edit.pos && !insideFrame(existingFrame(row!.floorId), edit.pos)) fail(`${edit.tag}: poloha X ${fmtM(edit.pos.x)} m, Y ${fmtM(edit.pos.y)} m leží mimo půdorys.`);
+      const sameFloor = await prisma.equipment.findFirst({ where: { floorId: row!.floorId, tag: edit.tag.trim().toUpperCase(), NOT: { id: { in: [edit.id, ...(draft.equipmentDeletes ?? [])] } } }, select: { id: true } });
       if (sameFloor) fail(`${edit.tag}: na patře už zařízení s tímto označením je.`);
     }
   }
+  // Mazání uložených zařízení (Studio „Smazat“ / „−“): jen v této budově, bez otevřeného požadavku
+  // na změnu a bez zařízení, která z něj dál napájí (ta se musí nejdřív přepojit nebo smazat také).
+  const deletes = [...new Set(draft.equipmentDeletes ?? [])];
+  const deleted = new Set(deletes);
+  if (deletes.length) {
+    const rows = await prisma.equipment.findMany({
+      where: { id: { in: deletes }, floorId: { in: [...existingFloorIds] } },
+      select: { id: true, tag: true, changeRequests: { where: { status: { in: [...OPEN_STATUSES] } }, select: { number: true }, take: 1 }, feeds: { select: { id: true, tag: true } } },
+    });
+    for (const id of deletes) {
+      const row = rows.find((entry) => entry.id === id);
+      if (!row) fail("Mazané zařízení do budovy nepatří.");
+      if (row!.changeRequests.length) fail(`${row!.tag}: má otevřený požadavek na změnu ${row!.changeRequests[0].number} – nejdřív ho uzavřete.`);
+      const fed = row!.feeds.filter((child) => !deleted.has(child.id) && !edits.some((edit) => edit.id === child.id && edit.parentId !== id));
+      if (fed.length) fail(`${row!.tag}: napájí ${fed.map((child) => child.tag).join(", ")} – nejdřív je přepojte nebo smažte také.`);
+    }
+    for (const item of draft.equipment) if (item.parent?.kind === "existing" && deleted.has(item.parent.id)) fail(`${item.tag}: nadřazený rozváděč se maže.`);
+    for (const edit of edits) if (edit.parentId && deleted.has(edit.parentId) && !deleted.has(edit.id)) fail(`${edit.tag}: nadřazený rozváděč se maže.`);
+  }
   if (draft.equipment.some((item) => item.floor.kind === "existing")) {
-    const taken = await prisma.equipment.findMany({ where: { floorId: { in: [...existingFloorIds] } }, select: { floorId: true, tag: true } });
-    for (const row of taken) if (tagsByFloor.get(row.floorId)?.has(row.tag.toUpperCase())) fail(`${row.tag}: na patře už zařízení s tímto označením je.`);
+    const taken = await prisma.equipment.findMany({ where: { floorId: { in: [...existingFloorIds] } }, select: { id: true, floorId: true, tag: true } });
+    for (const row of taken) if (!deleted.has(row.id) && tagsByFloor.get(row.floorId)?.has(row.tag.toUpperCase())) fail(`${row.tag}: na patře už zařízení s tímto označením je.`);
   }
 
   const tx = prisma;
@@ -221,6 +244,9 @@ async function saveBuildingInTx(prisma: Tx, draft: StudioDraft) {
       for (const building of rescaled) await tx.building.update({ where: { id: building.id }, data: { mapPolygon: building.mapPolygon, labelX: building.labelX, labelY: building.labelY } });
     }
     let buildingId = existingBuilding?.id;
+    if (existingBuilding && movedMap) {
+      await tx.building.update({ where: { id: existingBuilding.id }, data: { mapPolygon: rectPolygon(movedMap), labelX: round1(movedMap.x + movedMap.w / 2), labelY: round1(movedMap.y + movedMap.h / 2) } });
+    }
     if (draft.building.mode === "new") {
       const last = await tx.building.findFirst({ where: { plantId: plant.id }, orderBy: { sortOrder: "desc" }, select: { sortOrder: true } });
       const { map } = draft.building;
@@ -318,7 +344,9 @@ async function saveBuildingInTx(prisma: Tx, draft: StudioDraft) {
       await tx.floor.update({ where: { id: entry.id }, data: { name: floorName(current.level, entry.usage), description: entry.usage.trim() || null } });
     }
     for (const edit of edits) {
+      if (deleted.has(edit.id)) continue;
       const tag = edit.tag.trim().toUpperCase();
+      const row = edit.pos ? await tx.equipment.findUnique({ where: { id: edit.id }, select: { floorId: true } }) : null;
       await tx.equipment.update({
         where: { id: edit.id },
         data: {
@@ -327,9 +355,13 @@ async function saveBuildingInTx(prisma: Tx, draft: StudioDraft) {
           fedFromEquipmentId: edit.parentId,
           fedFromCircuit: edit.parentId ? edit.circuit?.trim() || null : null,
           assignedZone: edit.zone?.trim() || null,
+          ...(edit.pos && row ? metersToPercent(existingFrame(row.floorId), edit.pos) : {}),
         },
       });
     }
+    // Smazání uložených zařízení (kaskádově i jejich historie revizí, dokumentů a požadavků)
+    const deletedFloors = deletes.length ? (await tx.equipment.findMany({ where: { id: { in: deletes } }, select: { floorId: true } })).map((row) => row.floorId) : [];
+    if (deletes.length) await tx.equipment.deleteMany({ where: { id: { in: deletes } } });
 
     // Seskupené štítky spotřebičů a nářadí v místnostech („☕ 2× Kávovar“) v uloženém půdorysu
     // všech pater, kterých se koncept dotkl (nová, upravená, s novým nebo upraveným zařízením).
@@ -337,7 +369,8 @@ async function saveBuildingInTx(prisma: Tx, draft: StudioDraft) {
       ...floorIds.values(),
       ...edited.keys(),
       ...draft.equipment.flatMap((item) => (item.floor.kind === "existing" ? [item.floor.id] : [])),
-      ...(edits.length ? (await tx.equipment.findMany({ where: { id: { in: edits.map((edit) => edit.id) } }, select: { floorId: true } })).map((row) => row.floorId) : []),
+      ...(edits.length ? (await tx.equipment.findMany({ where: { id: { in: edits.filter((edit) => !deleted.has(edit.id)).map((edit) => edit.id) } }, select: { floorId: true } })).map((row) => row.floorId) : []),
+      ...deletedFloors,
     ]);
     if (touched.size) {
       const menu = parseStudioMenu((await tx.tenantSetting.findUnique({ where: { key: STUDIO_MENU_KEY }, select: { value: true } }))?.value);
@@ -363,6 +396,7 @@ async function saveBuildingInTx(prisma: Tx, draft: StudioDraft) {
       editedFloors,
       renamedFloors: renames.length,
       editedEquipment: edits.length,
+      deletedEquipment: deletes.length,
       equipment: equipmentIds.size,
     };
   }

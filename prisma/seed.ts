@@ -11,7 +11,6 @@ import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import { PrismaClient } from "../src/generated/prisma/client";
 import { inspectionRuleFor } from "../src/lib/inspection-rules";
 import { renderComplianceDocumentSvg, renderInspectionReportSvg } from "../src/lib/mock-graphics/compliance";
-import { renderFloorplanSvg } from "../src/lib/mock-graphics/floorplan";
 import { buildParts, type PartOverrides } from "../src/lib/mock-graphics/parts";
 import { renderPhotoSvg } from "../src/lib/mock-graphics/photo";
 import { renderSchematicSvg, schematicElementCenter } from "../src/lib/mock-graphics/schematic";
@@ -31,6 +30,7 @@ import {
 import { defectDeadline, severityForResult, splitDefects } from "../src/lib/defects";
 import { ACCOUNTS } from "./seed-accounts";
 import { seedDemoDocs } from "./seed-demo-docs";
+import { demoFloorSvg, demoLayoutJson, demoLayoutOf, seedDemoPlant } from "./seed-demo-plant";
 import { seedPanelBuilder } from "./seed-panel-builder";
 import { LIGHT_EQUIPMENT } from "./seed-appliances";
 import { TEMPORARY_MODS } from "./seed-temporary-mods";
@@ -101,8 +101,10 @@ async function main() {
   await prisma.plant.createMany({ data: PLANTS });
   await prisma.building.createMany({ data: BUILDINGS });
 
+  // Patra v metrové architektuře Studia (rozvržení a zařízení doplní seedDemoPlant na konci)
   for (const floor of FLOORS) {
-    const { rooms, gates } = floor;
+    const layout = demoLayoutOf(floor.id);
+    if (!layout) throw new Error(`Chybí vzorové rozvržení patra ${floor.id}.`);
     await prisma.floor.create({
       data: {
         id: floor.id,
@@ -113,11 +115,8 @@ async function main() {
         description: floor.description,
         viewBoxW: FLOOR_VIEWBOX.w,
         viewBoxH: FLOOR_VIEWBOX.h,
-        floorplanSvg: renderFloorplanSvg({
-          floor: { name: floor.name, viewBoxW: FLOOR_VIEWBOX.w, viewBoxH: FLOOR_VIEWBOX.h },
-          rooms,
-          gates,
-        }),
+        floorplanSvg: demoFloorSvg(layout, floor.name),
+        studioLayoutJson: demoLayoutJson(layout),
       },
     });
   }
@@ -292,7 +291,7 @@ async function main() {
 
     for (const record of inspectionsFor(eq, index, plant.code)) {
       const inspector = INSPECTORS[record.inspector];
-      const fileName = `${record.reportNumber.replace(/[^w-]/g, "_")}.svg`;
+      const fileName = `${record.reportNumber.replace(/[^\w-]/g, "_")}.svg`;
       await writeFile(
         path.join(documentsDir, fileName),
         renderInspectionReportSvg({
@@ -436,6 +435,8 @@ async function main() {
 
   // Reálné projekty PCSCHEMATIC (PDF v public/demo-docs), fotografie a další spotřebiče
   await seedDemoDocs(prisma);
+  // Vzorové závody v metrové architektuře Studia: piny v metrech, bohaté vybavení, štítky v místnostech
+  await seedDemoPlant(prisma, { force: true });
   await seedPanelBuilder(prisma);
   // Kódy QR štítků (stejně jako migrace 20261030190000)
   await prisma.$executeRaw`UPDATE "Equipment" SET "qrToken" = upper(hex(randomblob(5))) WHERE "qrToken" IS NULL`;

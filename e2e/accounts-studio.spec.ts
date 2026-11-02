@@ -116,6 +116,15 @@ test("Studio: budova v metrech, více budov v konceptu, místnost s posunem stě
   await startAsAccount(page, "acc-dvorak");
   await page.goto("/studio");
 
+  // Výchozí obrazovka = čistá mapa závodu bez konceptu nové budovy; průvodce areálem až po kliknutí
+  await expect(page.getByTestId("studio-map-hint")).toHaveText("Klikněte na libovolnou budovu pro správu jejího vybavení a místností.");
+  await expect(page.getByTestId("campus-new-building")).toHaveCount(0);
+  await expect(page.getByText("Krok 1:")).toHaveCount(0);
+  await whenReady(
+    () => page.getByRole("button", { name: "✏️ Upravit areál / + Přidat budovu" }).click(),
+    () => expect(page.getByTestId("campus-new-building")).toBeVisible({ timeout: 1_000 }),
+  );
+
   // Krok 1 – šablona, rozměr areálu a budovy v metrech, posun a zvětšení tažením (s kótami X / Y)
   await whenReady(
     () => page.getByRole("button", { name: /Výrobní hala \(66 × 42 m/ }).click(),
@@ -308,4 +317,71 @@ test("Studio: budova v metrech, více budov v konceptu, místnost s posunem stě
   // seskupené štítky jsou i v uloženém půdorysu patra (mimo Studio)
   await expect(page.locator("svg text", { hasText: "☕ 2× Kávovar" })).toHaveCount(1);
   await expect(page.locator("svg text", { hasText: "🫖 1× Rychlovarná konvice" })).toHaveCount(1);
+});
+
+test("Studio: mapa závodu → klik na budovu → zařízení patra (přidání, přesun do jiné místnosti, smazání s potvrzením) → uložení změn patra", async ({ page }) => {
+  await startAsAccount(page, "acc-dvorak");
+  await page.goto("/studio");
+
+  // Klik na budovu v mapě závodu otevře rovnou zařízení přízemí (bez kroku 1)
+  await whenReady(
+    () => page.getByRole("button", { name: "Otevřít budovu: Administrativa" }).click(),
+    () => expect(page.getByTestId("building-title")).toContainText("Administrativa", { timeout: 1_000 }),
+  );
+  await expect(page.getByTestId("building-bar").getByRole("tab", { name: "1. NP", selected: true })).toBeVisible();
+  await expect(page.getByRole("tablist", { name: "Režim práce s budovou" }).getByRole("tab", { selected: true })).toContainText("Zařízení a napájení");
+  // stávající zařízení i seskupené štítky ze seedu (metrová architektura vzorového závodu)
+  await expect(page.getByTestId("studio-existing-pin").filter({ hasText: "RP-ADM1" })).toBeVisible();
+  const kitchen = page.locator('[data-testid="room-inventory"][data-room="Kuchyňka"]');
+  // stejný počet kusů → česká abeceda (ch až za h)
+  await expect(kitchen.getByTestId("room-chip")).toHaveText(["🧊 1× Chladnička", "☕ 1× Kávovar", "🔌 1× Prodlužovací přívod", "🫖 1× Rychlovarná konvice"]);
+  await expect(page.locator('[data-testid="room-inventory"][data-room="Kanceláře mistrů"]').getByTestId("room-chip").first()).toHaveText("🖥️ 4× PC sestava");
+
+  // Kuchyňka → Spotřebič → Upravit stávající: + další kávovar
+  await page.getByRole("radiogroup", { name: "Místnosti patra" }).getByRole("radio", { name: "Kuchyňka" }).click();
+  // kategorie může mít z předchozího testu vlastní název („Spotřebiče a kuchyňky“) – nabídka je tenantová
+  await page.getByTestId("eq-banner-SP").click();
+  await page.getByRole("radio", { name: /Upravit stávající \(4\)/ }).click();
+  await page.getByRole("button", { name: "Přidat kus: Kávovar" }).click();
+  await expect(toast(page)).toContainText("přidáno – Kávovar (2×)");
+  await expect(kitchen.getByTestId("room-chip").first()).toHaveText("☕ 2× Kávovar");
+
+  // Uložená konvice do jiné místnosti (Kancelář údržby)
+  await page.getByRole("button", { name: "Rozbalit: Rychlovarná konvice" }).click();
+  await page.getByRole("list", { name: "Kusy: Rychlovarná konvice" }).getByRole("button", { name: /SP-0522/ }).click();
+  await page.getByTestId("edit-form").getByLabel("Místnost").selectOption("Kancelář údržby");
+  await page.getByTestId("edit-form").getByRole("button", { name: "Uložit změny" }).click();
+  await expect(page.locator('[data-testid="room-inventory"][data-room="Kancelář údržby"]').getByTestId("room-chip")).toContainText(["🫖 1× Rychlovarná konvice"]);
+
+  // Smazání uložené chladničky s potvrzením (smaže se až při uložení)
+  await page.getByRole("button", { name: "Rozbalit: Chladnička" }).click();
+  await page.getByRole("list", { name: "Kusy: Chladnička" }).getByRole("button", { name: /SP-0523/ }).click();
+  await page.getByTestId("edit-form").getByRole("button", { name: "Smazat" }).click();
+  await page.getByTestId("confirm-delete").getByRole("button", { name: "Ano, smazat" }).click();
+  await expect(page.getByTestId("pending-deletes")).toContainText("SP-0523");
+  await expect(kitchen.getByTestId("room-chip")).toHaveText(["☕ 2× Kávovar", "🔌 1× Prodlužovací přívod"]);
+  await expect(page.getByTestId("pending-changes")).toHaveText("Neuložené změny: 3");
+
+  // Uložit změny patra → potvrzení smazání → zůstává se ve Studiu nad stejnou budovou
+  await page.getByRole("button", { name: "Uložit změny patra" }).click();
+  await expect(page.getByTestId("confirm-save-deletes")).toContainText("SP-0523");
+  await page.getByRole("button", { name: "Ano, uložit a smazat" }).click();
+  await expect(toast(page)).toContainText("Změny budovy Administrativa uloženy");
+  await expect(page.getByTestId("pending-changes")).toHaveText("Bez neuložených změn");
+  await expect(kitchen.getByTestId("room-chip")).toHaveText(["☕ 2× Kávovar", "🔌 1× Prodlužovací přívod"]);
+  await expect(page.getByTestId("pending-deletes")).toHaveCount(0);
+
+  // Režim „Místnosti, zóny a vrata“ otevře rozvržení uloženého patra; zpět na mapu závodu
+  await page.getByRole("tab", { name: /Místnosti, zóny a vrata/ }).click();
+  await expect(page.getByTestId("editing-existing-floor")).toBeVisible();
+  await expect(page.getByRole("list", { name: "Místnosti a vrata patra" }).getByRole("textbox", { name: "Název místnosti 2" })).toHaveValue("Kanceláře mistrů");
+  await page.getByRole("tab", { name: /Budova a podlaží/ }).click();
+  await expect(page.getByLabel("Využití patra 2. NP")).toHaveValue("Kanceláře");
+  await page.getByTestId("building-bar").getByRole("button", { name: "Mapa závodu" }).click();
+  await expect(page.getByTestId("studio-map-hint")).toBeVisible();
+
+  // Uložený půdorys patra (mimo Studio) má přepočítané štítky
+  await page.goto("/plant/plant-jbc/building/bld-jbc-k/floor/floor-jbc-k-1np");
+  await expect(page.locator("svg text", { hasText: "☕ 2× Kávovar" })).toHaveCount(1);
+  await expect(page.locator("svg text", { hasText: "🧊 1× Chladnička" })).toHaveCount(0);
 });

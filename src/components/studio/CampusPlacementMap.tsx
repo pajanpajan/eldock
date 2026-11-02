@@ -38,6 +38,10 @@ interface Props {
   /** Další budovy konceptu (neaktivní) – kliknutím se stanou aktivní. */
   others?: { key: string; label: string; rect: CampusRect }[];
   onSelectOther?: (key: string) => void;
+  /** Kliknutí na stávající budovu (mapa závodu ve Studiu → správa budovy). */
+  onSelectBuilding?: (id: string) => void;
+  /** Popisek akce u stávajících budov („Otevřít budovu“). */
+  selectLabel?: string;
 }
 
 /** Krok souřadnicové sítě v metrech: čáry aspoň 28 px od sebe. */
@@ -46,7 +50,24 @@ function gridStepMeters(pxPerMeter: number) {
 }
 
 /** Velká mapa areálu ve skutečném měřítku: budovu lze umístit kliknutím, posunout tažením a zvětšit úchytem. */
-export function CampusPlacementMap({ buildings, rect, onChange, label, highlightId = null, newLabel = "Nová budova", plantCode = "", campus, zoom, onZoom, toolbar, others = [], onSelectOther }: Props) {
+export function CampusPlacementMap({
+  buildings,
+  rect,
+  onChange,
+  label,
+  highlightId = null,
+  newLabel = "Nová budova",
+  plantCode = "",
+  campus,
+  zoom,
+  onZoom,
+  toolbar,
+  others = [],
+  onSelectOther,
+  onSelectBuilding,
+  selectLabel = "Otevřít budovu",
+}: Props) {
+  const [hovered, setHovered] = useState<string | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const [drag, setDrag] = useState<{ kind: "move" | "resize"; x: number; y: number; start: CampusRect } | null>(null);
   const viewBox = campusViewBox(campus);
@@ -148,10 +169,35 @@ export function CampusPlacementMap({ buildings, rect, onChange, label, highlight
                 </text>
               </g>
               {buildings.map((building) => {
-                const highlighted = building.id === highlightId;
+                const highlighted = building.id === highlightId || (onSelectBuilding && building.id === hovered);
                 const bad = overlaps.some((entry) => entry.id === building.id) || outside.some((entry) => entry.id === building.id);
+                const select = onSelectBuilding;
                 return (
-                  <g key={building.id}>
+                  <g
+                    key={building.id}
+                    {...(select
+                      ? {
+                          role: "button",
+                          tabIndex: 0,
+                          "aria-label": `${selectLabel}: ${building.name}`,
+                          className: "cursor-pointer outline-none",
+                          onPointerDown: (event: PointerEvent) => event.stopPropagation(),
+                          onClick: () => select(building.id),
+                          onKeyDown: (event: React.KeyboardEvent) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              select(building.id);
+                            }
+                          },
+                          onPointerEnter: () => setHovered(building.id),
+                          onPointerLeave: () => setHovered((current) => (current === building.id ? null : current)),
+                          onFocus: () => setHovered(building.id),
+                          onBlur: () => setHovered(null),
+                        }
+                      : {})}
+                    data-testid="campus-building"
+                    data-building={building.name}
+                  >
                     <polygon
                       points={building.mapPolygon
                         .split(" ")
