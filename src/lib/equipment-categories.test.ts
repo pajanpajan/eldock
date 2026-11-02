@@ -28,3 +28,17 @@ describe("kategorie zařízení ve Studiu", () => {
     expect(roomInventoryLabel([])).toBe("");
   });
 });
+
+describe("produktové banery kroku 3", () => {
+  it("každá kategorie má konkrétní šablony s typem z kategorie a dlaždici Vlastní zařízení", async () => {
+    const { PRODUCT_TEMPLATES, customTemplate } = await import("./equipment-categories");
+    for (const category of EQUIPMENT_CATEGORIES) {
+      const templates = PRODUCT_TEMPLATES[category.key];
+      expect(templates.length).toBeGreaterThan(0);
+      for (const template of templates) expect(category.types).toContain(template.type);
+      expect(customTemplate(category).label).toBe("Vlastní zařízení / Vytvořit nový Tag");
+    }
+    expect(PRODUCT_TEMPLATES.RN.map((template) => template.label)).toContain("Úhlová bruska");
+    expect(PRODUCT_TEMPLATES.R.find((template) => template.key === "rh")?.root).toBe(true);
+  });
+});

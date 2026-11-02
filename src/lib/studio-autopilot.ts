@@ -93,3 +93,11 @@ export function bestParent<T extends AutopilotSource>(type: EquipmentType, sourc
     allowed[0]
   );
 }
+
+/** Další volný tag s vlastním prefixem („NR-DIL-“ → NR-DIL-01, NR-DIL-02 …). */
+export function nextTagWithPrefix(prefix: string, tags: readonly string[], width = 2): string {
+  const clean = prefix.trim().toUpperCase();
+  const regex = new RegExp(`^${escapeRegExp(clean)}(\\d+)$`, "i");
+  const max = Math.max(0, ...tags.map((tag) => Number(regex.exec(tag)?.[1] ?? 0)));
+  return `${clean}${String(max + 1).padStart(width, "0")}`;
+}

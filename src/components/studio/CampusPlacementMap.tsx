@@ -35,6 +35,9 @@ interface Props {
   zoom: ViewZoom;
   onZoom: (zoom: ViewZoom) => void;
   toolbar?: ReactNode;
+  /** Další budovy konceptu (neaktivní) – kliknutím se stanou aktivní. */
+  others?: { key: string; label: string; rect: CampusRect }[];
+  onSelectOther?: (key: string) => void;
 }
 
 /** Krok souřadnicové sítě v metrech: čáry aspoň 28 px od sebe. */
@@ -43,13 +46,18 @@ function gridStepMeters(pxPerMeter: number) {
 }
 
 /** Velká mapa areálu ve skutečném měřítku: budovu lze umístit kliknutím, posunout tažením a zvětšit úchytem. */
-export function CampusPlacementMap({ buildings, rect, onChange, label, highlightId = null, newLabel = "Nová budova", plantCode = "", campus, zoom, onZoom, toolbar }: Props) {
+export function CampusPlacementMap({ buildings, rect, onChange, label, highlightId = null, newLabel = "Nová budova", plantCode = "", campus, zoom, onZoom, toolbar, others = [], onSelectOther }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [drag, setDrag] = useState<{ kind: "move" | "resize"; x: number; y: number; start: CampusRect } | null>(null);
   const viewBox = campusViewBox(campus);
   const W = viewBox.width;
   const H = viewBox.height;
-  const overlaps = rect ? buildings.filter((building) => rectsOverlap(rect, polygonBounds(building.mapPolygon))) : [];
+  const overlaps = rect
+    ? [
+        ...buildings.filter((building) => rectsOverlap(rect, polygonBounds(building.mapPolygon))),
+        ...others.filter((other) => rectsOverlap(rect, other.rect)).map((other) => ({ id: other.key, name: other.label })),
+      ]
+    : [];
   const outside = buildings.filter((building) => !rectInsideCampus(polygonBounds(building.mapPolygon)));
   const unitsPerMeter = W / campus.width;
 
@@ -162,6 +170,32 @@ export function CampusPlacementMap({ buildings, rect, onChange, label, highlight
                   </g>
                 );
               })}
+              {/* Další budovy konceptu: přerušovaný obrys, kliknutím se budova stane aktivní */}
+              {others.map((other) => (
+                <g
+                  key={other.key}
+                  className="cursor-pointer"
+                  onPointerDown={(event) => {
+                    event.stopPropagation();
+                    onSelectOther?.(other.key);
+                  }}
+                  data-testid="campus-concept-building"
+                >
+                  <rect
+                    x={toX(other.rect.x)}
+                    y={toY(other.rect.y)}
+                    width={toX(other.rect.w)}
+                    height={toY(other.rect.h)}
+                    fill="rgba(250,204,21,0.1)"
+                    stroke="#facc15"
+                    strokeWidth={2 * unit}
+                    strokeDasharray={`${8 * unit} ${5 * unit}`}
+                  />
+                  <text x={toX(other.rect.x + other.rect.w / 2)} y={toY(other.rect.y + other.rect.h / 2)} textAnchor="middle" fontSize={12 * unit} fontWeight={700} fill="#fde68a" pointerEvents="none">
+                    {other.label}
+                  </text>
+                </g>
+              ))}
               {rect && meters ? (
                 <g data-testid="campus-new-building">
                   <rect

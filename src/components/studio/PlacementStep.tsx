@@ -1,42 +1,37 @@
 "use client";
 
 import { useRef, useState, type PointerEvent } from "react";
-import { DoorOpen, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, DoorOpen, Move, Plus, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 
 import { PowerSpiderOverlay } from "@/components/map/floorplan/PowerSpiderOverlay";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { EquipmentType } from "@/generated/prisma/enums";
+import { DEFAULT_GRID, FLOOR_VIEWBOX, fineStep, fmtM, metersToPercent, metersToPx, pxPerMeter, planFrame, pxToMeters, zoneAt, type MeterPoint, type PlanFrame } from "@/lib/cad-grid";
 import {
-  DEFAULT_GRID,
-  FLOOR_VIEWBOX,
-  fineStep,
-  fmtM,
-  formatPosition,
-  metersToPercent,
-  metersToPx,
-  pxPerMeter,
-  planFrame,
-  pxToMeters,
-  zoneAt,
-  type MeterPoint,
-  type PlanFrame,
-} from "@/lib/cad-grid";
-import { EQUIPMENT_CATEGORIES, categoryByKey, categoryOf, roomInventoryLabel, type EquipmentCategoryKey } from "@/lib/equipment-categories";
+  EQUIPMENT_CATEGORIES,
+  PRODUCT_TEMPLATES,
+  categoryByKey,
+  categoryOf,
+  customTemplate,
+  roomInventoryLabel,
+  type EquipmentCategoryKey,
+  type ProductTemplate,
+} from "@/lib/equipment-categories";
 import { EQUIPMENT_TYPE_ICONS } from "@/lib/equipment-icons";
-import { EQUIPMENT_TYPE_LABELS } from "@/lib/format";
 import { GATE_COLOR } from "@/lib/mock-graphics/floorplan";
 import { POWER_ROLE_HINTS, powerRole, suggestCircuit, validatePlacement } from "@/lib/power-hierarchy";
 import type { SpiderItem } from "@/lib/power-tree";
-import { bestParent, nextTag, suggestName, type AutopilotSource } from "@/lib/studio-autopilot";
+import { bestParent, nextTag, nextTagWithPrefix, type AutopilotSource } from "@/lib/studio-autopilot";
 import { frameOfFloor, layoutOfFloor } from "@/lib/studio-layout";
-import { floorLabel, floorName, type StudioEquipmentDraft, type StudioFloorDraft } from "@/lib/studio-draft";
+import { floorLabel, floorName, type StudioEquipmentDraft, type StudioEquipmentEdit, type StudioFloorDraft } from "@/lib/studio-draft";
 import { cn } from "@/lib/utils";
 import type { StudioData } from "@/server/queries/studio";
 
 import { PlanViewport, type ViewZoom } from "./PlanViewport";
-import { FloorTabs, selectClass } from "./studio-ui";
+import { FloorTabs, HistoryButtons, selectClass, type HistoryControls } from "./studio-ui";
 
 export type FloorRef = { kind: "draft"; key: string } | { kind: "existing"; id: string };
 export const floorRefKey = (ref: FloorRef) => (ref.kind === "draft" ? `draft:${ref.key}` : ref.id);
@@ -50,18 +45,55 @@ interface Room {
   h: number;
 }
 
-type Pick = { kind: "grid"; pos: MeterPoint } | { kind: "room"; room: Room | null };
+/** Zařízení na patře – koncept i uložené (s rozpracovanými úpravami). */
+interface FloorItem {
+  id: string;
+  draftKey: string | null;
+  tag: string;
+  name: string;
+  type: EquipmentType;
+  pos: MeterPoint;
+  roomKey: string | null;
+  parentId: string | null;
+  circuit: string | null;
+  zone: string | null;
+}
 
+/** Výběr místnosti: klíč místnosti, „celé patro“, nebo zatím nic. */
+type RoomChoice = string | "floor" | null;
+const WHOLE_FLOOR = "floor";
 const ROOM_STEP_M = 1.5;
 
-/** Kotva n-tého spotřebiče / nářadí v místnosti (řady po 1,5 m od levého horního rohu). */
-function roomAnchor(room: Room, index: number): MeterPoint {
+/** Kotva n-tého zařízení v místnosti (řady po 1,5 m od levého horního rohu). */
+function roomAnchor(room: Pick<Room, "x" | "y" | "w" | "h">, index: number): MeterPoint {
   const perRow = Math.max(1, Math.floor((room.w - 1) / ROOM_STEP_M));
   const x = room.x + Math.min(room.w - 0.5, 1 + (index % perRow) * ROOM_STEP_M);
   const y = room.y + Math.min(room.h - 0.5, 1 + Math.floor(index / perRow) * ROOM_STEP_M);
   return { x: Math.round(x * 2) / 2, y: Math.round(y * 2) / 2 };
 }
 
+/** Sekce rozbalovacího panelu (accordion) kroku 3. */
+function Section({ n, title, summary, open, onToggle, children, testId }: { n: number; title: string; summary?: string; open: boolean; onToggle: () => void; children: React.ReactNode; testId: string }) {
+  return (
+    <section className="rounded-lg border border-border bg-background/40" data-testid={testId}>
+      <button type="button" onClick={onToggle} aria-expanded={open} className="flex w-full items-center gap-2 px-3 py-2.5 text-left">
+        <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary font-mono text-xs font-bold text-primary-foreground">{n}</span>
+        <span className="flex-1">
+          <span className="block text-sm font-semibold">{title}</span>
+          {summary ? <span className="block truncate text-xs text-muted-foreground">{summary}</span> : null}
+        </span>
+        <ChevronDown className={cn("size-4 transition-transform", open && "rotate-180")} aria-hidden />
+      </button>
+      {open ? <div className="space-y-3 border-t border-border p-3">{children}</div> : null}
+    </section>
+  );
+}
+
+/**
+ * Krok 3 Studia: 1) místnost (klik v půdorysu nebo seznam) → 2) kategorie zařízení (počty v místnosti,
+ * půdorys zvýrazní jen zvolený typ) → 3) „Vytvořit nové“ (konkrétní produktové banery s autopilotem)
+ * nebo „Upravit stávající“ (tag, název, napájení, vývod, přesun, smazání).
+ */
 export function PlacementStep({
   frame: draftFrame,
   zoom,
@@ -73,11 +105,15 @@ export function PlacementStep({
   svgFor,
   data,
   equipment,
+  edits,
   sources,
   buildingCode,
   buildingTitle,
   onAdd,
+  onUpdate,
   onRemove,
+  onEditExisting,
+  history,
 }: {
   frame: PlanFrame;
   zoom: ViewZoom;
@@ -89,11 +125,15 @@ export function PlacementStep({
   svgFor: (floor: StudioFloorDraft) => string;
   data: StudioData;
   equipment: StudioEquipmentDraft[];
+  edits: Readonly<Record<string, StudioEquipmentEdit>>;
   sources: AutopilotSource[];
   buildingCode: string;
   buildingTitle: string;
   onAdd: (item: Omit<StudioEquipmentDraft, "key">) => void;
+  onUpdate: (key: string, patch: Partial<StudioEquipmentDraft>) => void;
   onRemove: (key: string) => void;
+  onEditExisting: (edit: StudioEquipmentEdit) => void;
+  history: HistoryControls;
 }) {
   const draftFloor = active.kind === "draft" ? floors.find((floor) => floor.key === active.key && !floor.existingId) : undefined;
   const existingFloor = active.kind === "existing" ? existingFloors.find((floor) => floor.id === active.id) : undefined;
@@ -108,185 +148,275 @@ export function PlacementStep({
   const k = pxPerMeter(frame);
   const svgRef = useRef<SVGSVGElement>(null);
 
-  const [categoryKey, setCategoryKey] = useState<EquipmentCategoryKey>("R");
-  const category = categoryByKey(categoryKey);
-  const [type, setType] = useState<EquipmentType>("SWITCHBOARD");
-  const [pick, setPick] = useState<Pick | null>(null);
-  const [hover, setHover] = useState<MeterPoint | null>(null);
-  const [openRoom, setOpenRoom] = useState<string | null>(null);
+  const [roomChoice, setRoomChoice] = useState<RoomChoice>(null);
+  const [categoryKey, setCategoryKey] = useState<EquipmentCategoryKey | null>(null);
+  const [mode, setMode] = useState<"new" | "edit">("new");
+  // Sekce accordionu: místnost se po výběru sbalí, kategorie zůstává otevřená i s akcemi (rychlé přepínání typů)
+  const [open, setOpenState] = useState({ 1: true, 2: false, 3: false });
+  const setOpen = (section: 1 | 2 | 3) => setOpenState((current) => (section === 1 ? { 1: true, 2: false, 3: false } : section === 2 ? { 1: false, 2: true, 3: current[3] } : { 1: false, 2: true, 3: true }));
+  const toggle = (section: 1 | 2 | 3) => setOpenState((current) => ({ ...current, [section]: !current[section] }));
+  const [showAll, setShowAll] = useState(false);
+  const [template, setTemplate] = useState<ProductTemplate | null>(null);
+  const [customPrefix, setCustomPrefix] = useState("");
   const [tag, setTag] = useState("");
   const [name, setName] = useState("");
   const [isRoot, setIsRoot] = useState(false);
   const [parentId, setParentId] = useState("");
   const [circuit, setCircuit] = useState("");
-  const [zone, setZone] = useState("");
+  const [editing, setEditing] = useState<string | null>(null);
+  const [moving, setMoving] = useState<string | null>(null);
+  const [hover, setHover] = useState<MeterPoint | null>(null);
+  const category = categoryKey ? categoryByKey(categoryKey) : null;
 
-  // Místnosti patra v metrech: zóny konceptu, u stávajícího patra vytažené z uloženého půdorysu.
+  // Místnosti patra v metrech: zóny konceptu, u stávajícího patra z JSON Studia (starší patra ze SVG)
   const rooms: Room[] = (() => {
     const zones = draftFloor?.zones ?? editDraft?.zones;
     if (zones) return zones.map((entry) => ({ key: entry.key, name: entry.name.trim() || "Místnost", x: entry.x, y: entry.y, w: entry.w, h: entry.h }));
-    // Stávající patro: rozvržení z JSON Studia, u starších pater dopočtené ze SVG
     return existingFloor ? layoutOfFloor(existingFloor).zones.map((zone, index) => ({ key: `ex:${index}`, name: zone.name, x: zone.x, y: zone.y, w: zone.w, h: zone.h })) : [];
   })();
+  const selectedRoom = roomChoice && roomChoice !== WHOLE_FLOOR ? (rooms.find((room) => room.key === roomChoice) ?? null) : null;
+  const roomName = selectedRoom?.name ?? null;
 
-  const onFloor = equipment.filter((item) => floorRefKey(item.floor) === activeId);
-  const existingOnFloor = existingFloor ? data.equipment.filter((item) => item.floorId === existingFloor.id) : [];
+  // Zařízení na patře: koncept + uložená (s rozpracovanými úpravami z „Upravit stávající“)
+  const existingMeters = (item: { pinX: number; pinY: number }) => pxToMeters(storedFrame, { x: (item.pinX / 100) * FLOOR_VIEWBOX.width, y: (item.pinY / 100) * FLOOR_VIEWBOX.height });
+  const items: FloorItem[] = [
+    ...(existingFloor
+      ? data.equipment
+          .filter((item) => item.floorId === existingFloor.id)
+          .map((item) => {
+            const edit = edits[item.id];
+            const pos = existingMeters(item);
+            return {
+              id: item.id,
+              draftKey: null,
+              tag: edit?.tag ?? item.tag,
+              name: edit?.name ?? (item.name.startsWith(`${item.tag} - `) ? item.name.slice(item.tag.length + 3) : item.name),
+              type: item.type,
+              pos,
+              roomKey: zoneAt(rooms, pos)?.key ?? null,
+              parentId: edit ? edit.parentId : item.fedFromEquipmentId,
+              circuit: edit ? edit.circuit : item.fedFromCircuit,
+              zone: edit?.zone ?? null,
+            };
+          })
+      : []),
+    ...equipment
+      .filter((item) => floorRefKey(item.floor) === activeId)
+      .map((item) => ({
+        id: `draft:${item.key}`,
+        draftKey: item.key,
+        tag: item.tag,
+        name: item.name,
+        type: item.type,
+        pos: item.pos,
+        roomKey: item.roomKey ?? zoneAt(rooms, item.pos)?.key ?? null,
+        parentId: item.parent ? (item.parent.kind === "draft" ? `draft:${item.parent.key}` : item.parent.id) : null,
+        circuit: item.circuit,
+        zone: item.zone,
+      })),
+  ];
+  const inChoice = (item: FloorItem) => roomChoice === WHOLE_FLOOR || (roomChoice !== null && item.roomKey === roomChoice);
+  const roomItems = items.filter(inChoice);
+  const countIn = (key: EquipmentCategoryKey) => roomItems.filter((item) => categoryOf(item.type).key === key).length;
+  const listed = category ? roomItems.filter((item) => categoryOf(item.type).key === category.key) : [];
   const allTags = [...data.equipment.map((item) => item.tag), ...equipment.map((item) => item.tag)];
   const boardsInBuilding =
-    data.equipment.filter((item) => item.type === "SWITCHBOARD" && existingFloors.some((floor) => floor.id === item.floorId)).length +
-    equipment.filter((item) => item.type === "SWITCHBOARD").length;
+    data.equipment.filter((item) => item.type === "SWITCHBOARD" && existingFloors.some((floor) => floor.id === item.floorId)).length + equipment.filter((item) => item.type === "SWITCHBOARD").length;
   const siblings = (id: string) =>
     data.equipment.filter((item) => item.fedFromEquipmentId === id).length + equipment.filter((item) => item.parent && (item.parent.kind === "draft" ? `draft:${item.parent.key}` : item.parent.id) === id).length;
+  const tagOf = (id: string) => sources.find((source) => source.id === id)?.tag ?? data.equipment.find((item) => item.id === id)?.tag ?? "?";
 
-  // Stávající zařízení: procenta půdorysu → metry (seskupení spotřebičů do místností)
-  // Uložené piny jsou v rámu uloženého půdorysu; při úpravě patra se zobrazí v novém rámu (stejné metry)
-  const existingMeters = (item: { pinX: number; pinY: number }) => pxToMeters(storedFrame, { x: (item.pinX / 100) * FLOOR_VIEWBOX.width, y: (item.pinY / 100) * FLOOR_VIEWBOX.height });
-  const roomItems = new Map<string, { key: string; tag: string; type: EquipmentType; draft: boolean }[]>();
-  for (const item of onFloor) {
-    if (categoryOf(item.type).placement !== "room" || !item.roomKey) continue;
-    roomItems.set(item.roomKey, [...(roomItems.get(item.roomKey) ?? []), { key: item.key, tag: item.tag, type: item.type, draft: true }]);
+  function chooseRoom(choice: RoomChoice) {
+    setRoomChoice(choice);
+    setEditing(null);
+    setOpen(category ? 3 : 2);
+    if (template) applyTemplate(template, choice);
   }
-  for (const item of existingOnFloor) {
-    if (categoryOf(item.type).placement !== "room") continue;
-    const room = zoneAt(rooms, existingMeters(item));
-    if (room) roomItems.set(room.key, [...(roomItems.get(room.key) ?? []), { key: item.id, tag: item.tag, type: item.type, draft: false }]);
-  }
-  const counts = new Map<EquipmentCategoryKey, number>();
-  for (const item of [...onFloor, ...existingOnFloor]) counts.set(categoryOf(item.type).key, (counts.get(categoryOf(item.type).key) ?? 0) + 1);
-  const fixedSpots = [...onFloor.filter((item) => categoryOf(item.type).placement === "grid").map((item) => item.pos), ...existingOnFloor.filter((item) => categoryOf(item.type).placement === "grid").map(existingMeters)];
-  const occupiedBy = (pos: MeterPoint) =>
-    onFloor.find((item) => categoryOf(item.type).placement === "grid" && Math.abs(item.pos.x - pos.x) < 0.01 && Math.abs(item.pos.y - pos.y) < 0.01)?.tag ??
-    existingOnFloor.find((item) => {
-      const point = existingMeters(item);
-      return categoryOf(item.type).placement === "grid" && Math.abs(point.x - pos.x) < step / 2 && Math.abs(point.y - pos.y) < step / 2;
-    })?.tag ??
-    null;
-
-  /** Autopilot: tag, název, napájení, vývod a místnost podle typu a místa. */
-  function autopilot(nextType: EquipmentType, roomName: string | null) {
-    const nextTagValue = nextTag(nextType, { buildingCode, tags: allTags });
-    const parent = nextType === "TRANSFORMER" ? null : bestParent(nextType, sources, activeId);
-    const root = nextType === "TRANSFORMER" || (nextType === "SWITCHBOARD" && !parent);
-    setTag(nextTagValue);
-    setName(suggestName(nextType, { tag: nextTagValue, zone: roomName, buildingName: buildingTitle, boardsInBuilding }));
-    setIsRoot(root);
-    setParentId(root || !parent ? "" : parent.id);
-    setCircuit(root || !parent ? "" : suggestCircuit(nextType, parent, siblings(parent.id)));
-    setZone(roomName ?? (powerRole(nextType) === "OUTLET" ? floorTitle : ""));
-  }
-
-  const pickRoomName = (value: Pick | null) => (value?.kind === "room" ? (value.room?.name ?? floorTitle) : value?.kind === "grid" ? (zoneAt(rooms, value.pos)?.name ?? null) : null);
 
   function chooseCategory(key: EquipmentCategoryKey) {
-    const next = categoryByKey(key);
     setCategoryKey(key);
-    setType(next.types[0]);
-    // Jiný způsob umístění (rastr ↔ místnost) = nový výběr místa
-    if (next.placement !== category.placement) setPick(null);
-    else if (pick) autopilot(next.types[0], pickRoomName(pick));
+    setTemplate(null);
+    setEditing(null);
+    setMoving(null);
+    setShowAll(false);
+    setOpen(3);
   }
 
-  function chooseType(next: EquipmentType) {
-    setType(next);
-    if (pick) autopilot(next, pickRoomName(pick));
+  /** Autopilot pro produktový banner: tag (případně s vlastním prefixem), český název, napájení a vývod. */
+  function applyTemplate(next: ProductTemplate, choice: RoomChoice = roomChoice, prefix = customPrefix, extraTags: string[] = []) {
+    setTemplate(next);
+    const tags = [...allTags, ...extraTags];
+    const room = choice && choice !== WHOLE_FLOOR ? rooms.find((entry) => entry.key === choice) : null;
+    const nextTagValue = prefix.trim() ? nextTagWithPrefix(prefix, tags) : nextTag(next.type, { buildingCode, tags });
+    const parent = next.type === "TRANSFORMER" || next.root ? null : bestParent(next.type, sources, activeId);
+    const root = next.type === "TRANSFORMER" || !!next.root || (next.type === "SWITCHBOARD" && !parent);
+    setTag(nextTagValue);
+    setName(`${next.name}${room ? ` – ${room.name}` : next.type === "SWITCHBOARD" && boardsInBuilding === 0 ? ` ${buildingTitle.split(" - ")[0]}` : ""}`);
+    setIsRoot(root);
+    setParentId(root || !parent ? "" : parent.id);
+    setCircuit(root || !parent ? "" : suggestCircuit(next.type, parent, siblings(parent.id)));
+  }
+
+  const type = template?.type ?? category?.types[0] ?? "SWITCHBOARD";
+  const role = powerRole(type, isRoot);
+  const zone = roomName ?? (role === "OUTLET" ? floorTitle : "");
+  const parentsFor = (forType: EquipmentType, selfId?: string) =>
+    sources.filter((source) => source.id !== selfId && (forType === "SWITCHBOARD" ? source.type === "SWITCHBOARD" || source.type === "TRANSFORMER" : source.type === "SWITCHBOARD"));
+  const errors = template ? validatePlacement({ type, tag, parentId: parentId || null, circuit, zone, isRoot }, sources) : [];
+  const occupiedBy = (pos: MeterPoint) => items.find((item) => categoryOf(item.type).placement === "grid" && Math.abs(item.pos.x - pos.x) < step / 2 && Math.abs(item.pos.y - pos.y) < step / 2)?.tag ?? null;
+
+  /** Vložení zařízení: do jemného rastru (bod), jinak na kotvu ve vybrané místnosti / na patře. */
+  function insert(point?: MeterPoint) {
+    if (!template || !category) return;
+    if (errors.length) return void toast.error(errors[0]);
+    const room = point ? (zoneAt(rooms, point) ?? selectedRoom) : selectedRoom;
+    const roomList = room ? items.filter((item) => item.roomKey === room.key) : items;
+    const pos = point ?? (room ? roomAnchor(room, roomList.length) : roomAnchor({ x: 0, y: 0, w: frame.widthM, h: frame.depthM }, items.length));
+    const taken = category.placement === "grid" ? occupiedBy(pos) : null;
+    if (taken) return void toast.error(`Bod je obsazen zařízením ${taken} – zvolte sousední bod jemného rastru.`);
+    const parentRef = parentId ? (parentId.startsWith("draft:") ? { kind: "draft" as const, key: parentId.slice(6) } : { kind: "existing" as const, id: parentId }) : null;
+    const insertedTag = tag.trim().toUpperCase();
+    onAdd({
+      floor: active.kind === "draft" ? { kind: "draft", key: active.key } : { kind: "existing", id: active.id },
+      pos,
+      roomKey: category.placement === "room" ? (room?.key ?? null) : null,
+      tag: insertedTag,
+      name,
+      type,
+      parent: role === "SOURCE" ? null : parentRef,
+      circuit: role === "SOURCE" ? null : circuit,
+      zone: (room?.name ?? zone) || null,
+      isRoot: role === "SOURCE",
+    });
+    toast.success(`${insertedTag} vloženo${room ? ` do místnosti ${room.name}` : ""}.`);
+    // Další kus stejného typu: nový tag hned připravený
+    applyTemplate(template, room?.key ?? roomChoice, customPrefix, [insertedTag]);
   }
 
   const viewPoint = (event: PointerEvent) => {
     const box = svgRef.current!.getBoundingClientRect();
     return { x: ((event.clientX - box.left) / box.width) * FLOOR_VIEWBOX.width, y: ((event.clientY - box.top) / box.height) * FLOOR_VIEWBOX.height };
   };
-  const pointer = (event: PointerEvent) => pxToMeters(frame, viewPoint(event), category.placement === "grid" ? step : 0);
+  const gridMode = (template && category?.placement === "grid") || (moving && categoryOf(items.find((item) => item.draftKey === moving)?.type ?? "OTHER").placement === "grid");
+  const pointer = (event: PointerEvent) => pxToMeters(frame, viewPoint(event), gridMode ? step : 0);
 
   function onCanvasDown(event: PointerEvent) {
     if (event.button !== 0) return;
     const point = pointer(event);
-    if (category.placement === "grid") {
-      const next: Pick = { kind: "grid", pos: point };
-      setPick(next);
-      autopilot(type, pickRoomName(next));
+    const room = zoneAt(rooms, point);
+    if (moving) {
+      const item = items.find((entry) => entry.draftKey === moving);
+      if (item) {
+        const roomPlaced = categoryOf(item.type).placement === "room";
+        const pos = roomPlaced && room ? roomAnchor(room, items.filter((entry) => entry.roomKey === room.key && entry.draftKey !== moving).length) : point;
+        onUpdate(moving, { pos, roomKey: roomPlaced ? (room?.key ?? null) : null, zone: room?.name ?? item.zone });
+        toast.success(`${item.tag} přesunuto${room ? ` do ${room.name}` : ""}.`);
+      }
+      setMoving(null);
       return;
     }
-    const room = zoneAt(rooms, point);
-    if (!room) return;
-    chooseRoom(room);
+    if (template && mode === "new" && category) {
+      if (category.placement === "grid") return insert(point);
+      if (room) {
+        setRoomChoice(room.key);
+        return insert(roomAnchor(room, items.filter((entry) => entry.roomKey === room.key).length));
+      }
+      return void toast.info("Spotřebiče a nářadí se vkládají do místnosti – klikněte dovnitř místnosti.");
+    }
+    chooseRoom(room?.key ?? WHOLE_FLOOR);
   }
 
-  function chooseRoom(room: Room | null) {
-    const next: Pick = { kind: "room", room };
-    setPick(next);
-    setOpenRoom(room?.key ?? null);
-    autopilot(type, pickRoomName(next));
+  /** Klik na značku v půdorysu: kategorie + „Upravit stávající“ s otevřenou položkou. */
+  function selectItem(item: FloorItem) {
+    setCategoryKey(categoryOf(item.type).key);
+    if (roomChoice === null) setRoomChoice(item.roomKey ?? WHOLE_FLOOR);
+    else if (!inChoice(item)) setRoomChoice(item.roomKey ?? WHOLE_FLOOR);
+    setMode("edit");
+    setEditing(item.id);
+    setOpen(3);
   }
 
-  const role = powerRole(type, isRoot);
-  const parents = role === "SOURCE" ? [] : sources.filter((source) => (type === "SWITCHBOARD" ? source.type === "SWITCHBOARD" || source.type === "TRANSFORMER" : source.type === "SWITCHBOARD"));
-  const parentRef = parentId ? (parentId.startsWith("draft:") ? { kind: "draft" as const, key: parentId.slice(6) } : { kind: "existing" as const, id: parentId }) : null;
-  const taken = pick?.kind === "grid" ? occupiedBy(pick.pos) : null;
-  const errors = pick
-    ? [...(taken ? [`Bod je obsazen zařízením ${taken} – zvolte sousední bod jemného rastru.`] : []), ...validatePlacement({ type, tag, parentId: parentId || null, circuit, zone, isRoot }, sources)]
-    : [category.placement === "grid" ? "Klikněte do půdorysu – zařízení se přichytí na jemný rastr." : "Klikněte do místnosti v půdorysu nebo ji vyberte v seznamu."];
-
-  function add() {
-    if (!pick || errors.length || (!draftFloor && !existingFloor)) return;
-    const room = pick.kind === "room" ? pick.room : null;
-    const pos = pick.kind === "grid" ? pick.pos : room ? roomAnchor(room, (roomItems.get(room.key) ?? []).length) : { x: 1, y: 1 };
-    onAdd({
-      floor: active.kind === "draft" ? { kind: "draft", key: active.key } : { kind: "existing", id: active.id },
-      pos,
-      roomKey: room?.key ?? null,
-      tag: tag.trim().toUpperCase(),
-      name,
-      type,
-      parent: role === "SOURCE" ? null : parentRef,
-      circuit: role === "SOURCE" ? null : circuit,
-      zone: zone || null,
-      isRoot: role === "SOURCE",
-    });
-    setPick(null);
-  }
-
-  const tagOf = (id: string) => sources.find((source) => source.id === id)?.tag ?? data.equipment.find((item) => item.id === id)?.tag ?? "?";
-  const pins: (SpiderItem & { type: EquipmentType; draft: boolean })[] = [
-    ...existingOnFloor
-      .filter((item) => categoryOf(item.type).placement === "grid")
-      .map((item) => ({ id: item.id, tag: item.tag, type: item.type, ...metersToPercent(frame, existingMeters(item)), fedFromEquipmentId: item.fedFromEquipmentId, fedFromCircuit: item.fedFromCircuit, fedFrom: item.fedFrom, draft: false })),
-    ...onFloor
-      .filter((item) => categoryOf(item.type).placement === "grid")
-      .map((item) => {
-        const parent = item.parent ? (item.parent.kind === "draft" ? `draft:${item.parent.key}` : item.parent.id) : null;
-        return { id: `draft:${item.key}`, tag: item.tag, type: item.type, ...metersToPercent(frame, item.pos), fedFromEquipmentId: parent, fedFromCircuit: item.circuit, fedFrom: parent ? { id: parent, tag: tagOf(parent) } : null, draft: true };
-      }),
-  ];
+  const pins: (SpiderItem & { type: EquipmentType; draft: boolean; item: FloorItem })[] = items
+    .filter((item) => categoryOf(item.type).placement === "grid")
+    .map((item) => ({
+      id: item.id,
+      tag: item.tag,
+      type: item.type,
+      ...metersToPercent(frame, item.pos),
+      fedFromEquipmentId: item.parentId,
+      fedFromCircuit: item.circuit,
+      fedFrom: item.parentId ? { id: item.parentId, tag: tagOf(item.parentId) } : null,
+      draft: !!item.draftKey,
+      item,
+    }));
+  const inventory = new Map<string, FloorItem[]>();
+  for (const item of items) if (categoryOf(item.type).placement === "room" && item.roomKey) inventory.set(item.roomKey, [...(inventory.get(item.roomKey) ?? []), item]);
+  const dimmed = (item: FloorItem) => !showAll && category !== null && categoryOf(item.type).key !== category.key;
 
   const floorItems = [
     ...existingFloors.map((floor) => ({ id: floor.id, level: floor.level, label: floorLabel(floor.level).short, isNew: false })),
     ...floors.filter((floor) => !floor.existingId).map((floor) => ({ id: `draft:${floor.key}`, level: floor.level, label: floorLabel(floor.level).short, isNew: true })),
   ].sort((a, b) => a.level - b.level);
-  const Icon = EQUIPMENT_TYPE_ICONS[type];
-  const hoverRoom = category.placement === "room" && hover ? zoneAt(rooms, hover) : null;
-  const open = openRoom ? rooms.find((room) => room.key === openRoom) : null;
+  const templates = category ? [...PRODUCT_TEMPLATES[category.key], customTemplate(category)] : [];
+  const edited = editing ? items.find((item) => item.id === editing) : null;
+  const choiceLabel = roomChoice === WHOLE_FLOOR ? "Celé patro" : (selectedRoom?.name ?? null);
 
   return (
-    <section aria-labelledby="step-3" className="grid gap-6 xl:grid-cols-[24rem_minmax(0,1fr)]">
-      <div className="space-y-4 rounded-xl border border-border bg-card p-4">
-        <h2 id="step-3" className="text-lg font-semibold">
-          Osazení zařízení a napájení
-        </h2>
+    <section aria-labelledby="step-3" className="grid gap-6 xl:grid-cols-[26rem_minmax(0,1fr)]">
+      <div className="space-y-3 rounded-xl border border-border bg-card p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 id="step-3" className="text-lg font-semibold">
+            Zařízení a napájení
+          </h2>
+          <HistoryButtons history={history} />
+        </div>
         <FloorTabs
           items={floorItems}
           active={activeId}
           onActive={(id) => {
             onActive(id.startsWith("draft:") ? { kind: "draft", key: id.slice(6) } : { kind: "existing", id });
-            setPick(null);
-            setOpenRoom(null);
+            setRoomChoice(null);
+            setEditing(null);
+            setOpen(1);
           }}
         />
 
-        <div className="space-y-1.5">
-          <p className="text-xs font-medium" id="eq-category-label">
-            Typ zařízení
-          </p>
-          <div className="space-y-1.5" role="radiogroup" aria-labelledby="eq-category-label">
+        <Section n={1} title="Místnost / zóna" summary={choiceLabel ?? "Klikněte na místnost v půdorysu nebo ji vyberte"} open={open[1]} onToggle={() => toggle(1)} testId="section-room">
+          <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Místnosti patra">
+            {rooms.map((room) => (
+              <button
+                key={room.key}
+                type="button"
+                role="radio"
+                aria-checked={roomChoice === room.key}
+                onClick={() => chooseRoom(room.key)}
+                className={cn("h-9 rounded-md border px-2.5 text-sm", roomChoice === room.key ? "border-primary bg-primary/15 text-foreground" : "border-border text-muted-foreground hover:text-foreground")}
+              >
+                {room.name}
+              </button>
+            ))}
+            <button
+              type="button"
+              role="radio"
+              aria-checked={roomChoice === WHOLE_FLOOR}
+              onClick={() => chooseRoom(WHOLE_FLOOR)}
+              className={cn("h-9 rounded-md border px-2.5 text-sm", roomChoice === WHOLE_FLOOR ? "border-primary bg-primary/15 text-foreground" : "border-dashed border-border text-muted-foreground hover:text-foreground")}
+            >
+              Celé patro
+            </button>
+          </div>
+          {!rooms.length ? <p className="text-xs text-muted-foreground">Patro nemá místnosti – nakreslete je v kroku 2, nebo pracujte s celým patrem.</p> : null}
+        </Section>
+
+        <Section
+          n={2}
+          title="Kategorie zařízení"
+          summary={category ? `${category.label} · ${countIn(category.key)} ks v místnosti` : choiceLabel ? "Vyberte typ zařízení" : "Nejdřív vyberte místnost"}
+          open={open[2]}
+          onToggle={() => toggle(2)}
+          testId="section-category"
+        >
+          <div className="space-y-1.5" role="radiogroup" aria-label="Typ zařízení">
             {EQUIPMENT_CATEGORIES.map((entry) => {
               const CategoryIcon = EQUIPMENT_TYPE_ICONS[entry.types[0]];
               const selected = entry.key === categoryKey;
@@ -299,232 +429,230 @@ export function PlacementStep({
                   aria-label={entry.label}
                   onClick={() => chooseCategory(entry.key)}
                   className={cn(
-                    "flex w-full items-center gap-3 overflow-hidden rounded-lg border bg-background/60 py-2 pr-3 text-left transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+                    "flex w-full items-center gap-3 overflow-hidden rounded-lg border bg-background/60 py-1.5 pr-3 text-left transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
                     selected ? "bg-muted" : "border-border hover:bg-muted/50",
                   )}
                   style={selected ? { borderColor: entry.color, boxShadow: `inset 0 0 0 1px ${entry.color}` } : undefined}
                   data-testid={`eq-banner-${entry.key}`}
                 >
-                  <span className="h-10 w-1.5 shrink-0 rounded-r" style={{ background: entry.color }} aria-hidden />
-                  <span className="flex size-9 shrink-0 items-center justify-center rounded-md" style={{ background: `${entry.color}26`, color: entry.color }} aria-hidden>
-                    <CategoryIcon className="size-5" />
+                  <span className="h-9 w-1.5 shrink-0 rounded-r" style={{ background: entry.color }} aria-hidden />
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-md" style={{ background: `${entry.color}26`, color: entry.color }} aria-hidden>
+                    <CategoryIcon className="size-4" />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="flex items-baseline gap-2">
-                      <span className="truncate text-sm font-semibold text-foreground">{entry.label}</span>
-                      <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{entry.code}</span>
-                    </span>
-                    <span className="block text-[11px] text-muted-foreground">{entry.placement === "grid" ? "Umístění do jemného rastru" : "Přiřazení do místnosti"}</span>
+                    <span className="block truncate text-sm font-semibold text-foreground">{entry.label}</span>
+                    <span className="block text-[11px] text-muted-foreground">{entry.placement === "grid" ? "Do jemného rastru" : "Do místnosti"}</span>
                   </span>
                   <span
                     className="flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full px-1.5 font-mono text-xs font-bold"
                     style={{ background: `${entry.color}33`, color: entry.color }}
-                    title="Osazeno na patře"
+                    title="Kusů ve vybrané místnosti"
                     data-testid={`eq-banner-count-${entry.key}`}
                   >
-                    {counts.get(entry.key) ?? 0}
+                    {countIn(entry.key)}
                   </span>
                 </button>
               );
             })}
           </div>
-          {category.types.length > 1 ? (
-            <div className="flex flex-wrap gap-1.5 pt-1" role="radiogroup" aria-label="Podtyp zařízení">
-              {category.types.map((value) => (
+        </Section>
+
+        <Section
+          n={3}
+          title={category ? category.label : "Vytvořit / upravit"}
+          summary={category ? (mode === "new" ? "Vytvořit nové" : `Upravit stávající (${listed.length})`) : "Nejdřív vyberte kategorii"}
+          open={open[3] && !!category}
+          onToggle={() => toggle(3)}
+          testId="section-action"
+        >
+          {category ? (
+            <>
+              <div className="grid grid-cols-2 gap-1.5" role="radiogroup" aria-label="Režim">
                 <button
-                  key={value}
                   type="button"
                   role="radio"
-                  aria-checked={type === value}
-                  onClick={() => chooseType(value)}
-                  className={cn("h-8 rounded-md border px-2.5 text-xs", type === value ? "text-foreground" : "border-border text-muted-foreground hover:text-foreground")}
-                  style={type === value ? { borderColor: category.color, background: `${category.color}22` } : undefined}
+                  aria-checked={mode === "new"}
+                  onClick={() => {
+                    setMode("new");
+                    setEditing(null);
+                  }}
+                  className={cn("h-10 rounded-md border text-sm font-semibold", mode === "new" ? "border-primary bg-primary/15 text-primary" : "border-border text-muted-foreground")}
                 >
-                  {EQUIPMENT_TYPE_LABELS[value]}
+                  ➕ Vytvořit nové
                 </button>
-              ))}
-            </div>
-          ) : null}
-        </div>
-
-        {category.placement === "room" ? (
-          <div className="space-y-1.5 rounded-lg border border-dashed p-2" style={{ borderColor: category.color }}>
-            <p className="text-xs font-medium">Režim „Výběr místnosti“ – klikněte do místnosti v půdorysu, nebo ji vyberte:</p>
-            {rooms.length ? (
-              <div className="flex flex-wrap gap-1.5" aria-label="Místnosti patra">
-                {rooms.map((room) => (
-                  <button
-                    key={room.key}
-                    type="button"
-                    onClick={() => chooseRoom(room)}
-                    className={cn("h-8 rounded-md border px-2 text-xs", pick?.kind === "room" && pick.room?.key === room.key ? "text-foreground" : "border-border text-muted-foreground hover:text-foreground")}
-                    style={pick?.kind === "room" && pick.room?.key === room.key ? { borderColor: category.color, background: `${category.color}22` } : undefined}
-                  >
-                    {room.name}
-                  </button>
-                ))}
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={mode === "edit"}
+                  onClick={() => {
+                    setMode("edit");
+                    setTemplate(null);
+                  }}
+                  className={cn("h-10 rounded-md border text-sm font-semibold", mode === "edit" ? "border-primary bg-primary/15 text-primary" : "border-border text-muted-foreground")}
+                >
+                  ✏️ Upravit stávající ({listed.length})
+                </button>
               </div>
-            ) : (
-              <div className="space-y-1.5 text-xs text-muted-foreground">
-                <p>Patro nemá místnosti – nakreslete je v kroku 2, nebo přiřaďte vybavení k celému patru.</p>
-                <Button variant="outline" size="sm" className="h-8" onClick={() => chooseRoom(null)}>
-                  Přiřadit k celému patru
-                </Button>
-              </div>
-            )}
-          </div>
-        ) : null}
 
-        <p className="rounded-lg border p-2 text-sm" style={{ borderColor: `${category.color}88`, background: `${category.color}14` }}>
-          {pick ? (
-            <>
-              <Icon className="mr-1 inline size-4 align-text-bottom" style={{ color: category.color }} aria-hidden />
-              {pick.kind === "grid" ? (
+              {mode === "new" ? (
                 <>
-                  Bod <span className="font-mono font-semibold" data-testid="placement-point">{formatPosition(frame, pick.pos)}</span>
+                  <div className="grid grid-cols-2 gap-1.5" role="radiogroup" aria-label="Produktové šablony">
+                    {templates.map((entry) => (
+                      <button
+                        key={entry.key}
+                        type="button"
+                        role="radio"
+                        aria-checked={template?.key === entry.key}
+                        onClick={() => applyTemplate(entry)}
+                        className={cn(
+                          "flex min-h-14 items-center gap-2 rounded-lg border px-2 py-1.5 text-left text-xs font-medium",
+                          template?.key === entry.key ? "text-foreground" : "border-border text-muted-foreground hover:text-foreground",
+                        )}
+                        style={template?.key === entry.key ? { borderColor: category.color, background: `${category.color}1f` } : undefined}
+                      >
+                        <span className="text-lg" aria-hidden>
+                          {entry.emoji}
+                        </span>
+                        {entry.label}
+                      </button>
+                    ))}
+                  </div>
+                  {template ? (
+                    <div className="space-y-2 rounded-lg border border-border p-2.5" data-testid="new-device-form">
+                      <div className="grid grid-cols-[8rem_minmax(0,1fr)] gap-2">
+                        <div className="space-y-1">
+                          <Label htmlFor="eq-tag" className="text-xs">
+                            Tag
+                          </Label>
+                          <Input id="eq-tag" value={tag} onChange={(event) => setTag(event.target.value.toUpperCase())} maxLength={24} className="h-10 font-mono" />
+                        </div>
+                        <div className="space-y-1">
+                          <Label htmlFor="eq-name" className="text-xs">
+                            Název
+                          </Label>
+                          <Input id="eq-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={120} className="h-10" />
+                        </div>
+                      </div>
+                      <div className="flex items-end gap-2">
+                        <div className="flex-1 space-y-1">
+                          <Label htmlFor="eq-prefix" className="text-xs">
+                            Vlastní prefix tagu (nepovinné)
+                          </Label>
+                          <Input id="eq-prefix" value={customPrefix} onChange={(event) => setCustomPrefix(event.target.value.toUpperCase())} placeholder="např. NR-DIL-" maxLength={16} className="h-9 font-mono" />
+                        </div>
+                        <Button variant="outline" className="h-9" onClick={() => applyTemplate(template, roomChoice, customPrefix)}>
+                          Použít prefix
+                        </Button>
+                      </div>
+                      {type === "SWITCHBOARD" ? (
+                        <label className="flex items-center gap-2 text-sm">
+                          <input type="checkbox" className="size-4 accent-primary" checked={isRoot} onChange={(event) => setIsRoot(event.target.checked)} />
+                          Hlavní rozváděč (kořenový zdroj, bez nadřazeného)
+                        </label>
+                      ) : null}
+                      <p className="text-xs text-muted-foreground">{POWER_ROLE_HINTS[role]}</p>
+                      {role !== "SOURCE" ? (
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                            <Label htmlFor="eq-parent" className="text-xs">
+                              Napájeno z
+                            </Label>
+                            <select
+                              id="eq-parent"
+                              value={parentId}
+                              onChange={(event) => {
+                                setParentId(event.target.value);
+                                const parent = sources.find((source) => source.id === event.target.value);
+                                if (parent) setCircuit(suggestCircuit(type, parent, siblings(parent.id)));
+                              }}
+                              className={selectClass}
+                            >
+                              <option value="">– vyberte –</option>
+                              {parentsFor(type).map((source) => (
+                                <option key={source.id} value={source.id}>
+                                  {source.tag}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="space-y-1">
+                            <Label htmlFor="eq-circuit" className="text-xs">
+                              Vývod / okruh
+                            </Label>
+                            <Input id="eq-circuit" value={circuit} onChange={(event) => setCircuit(event.target.value)} maxLength={80} className="h-10" />
+                          </div>
+                        </div>
+                      ) : null}
+                      <p className="text-xs text-muted-foreground" data-testid="placement-room">
+                        Místnost: <span className="font-semibold text-foreground">{zone || "–"}</span>
+                      </p>
+                      {errors.length ? (
+                        <ul className="space-y-0.5 text-xs text-amber-300">
+                          {errors.map((error) => (
+                            <li key={error}>{error}</li>
+                          ))}
+                        </ul>
+                      ) : null}
+                      <Button className="touch-target w-full gap-2" onClick={() => insert()} disabled={errors.length > 0}>
+                        <Plus className="size-4" aria-hidden />
+                        Vložit {tag} {selectedRoom ? `do místnosti ${selectedRoom.name}` : "na patro"}
+                      </Button>
+                      {category.placement === "grid" ? <p className="text-xs text-muted-foreground">…nebo klikněte do jemného rastru v půdorysu (bod po {step} m).</p> : null}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Vyberte konkrétní zařízení – autopilot vygeneruje tag, český název a napájení.</p>
+                  )}
                 </>
               ) : (
-                <>
-                  Místnost <span className="font-semibold" data-testid="placement-room">{pick.room?.name ?? floorTitle}</span>
-                </>
-              )}{" "}
-              – autopilot předvyplnil tag, název, napájení a místnost.
+                <ul className="space-y-1.5" aria-label="Stávající zařízení" data-testid="existing-list">
+                  {listed.map((item) => (
+                    <li key={item.id} className="rounded-md border border-border">
+                      <button type="button" onClick={() => setEditing(editing === item.id ? null : item.id)} className="flex w-full items-center gap-2 px-2 py-1.5 text-left text-sm" aria-expanded={editing === item.id}>
+                        <span className="size-2.5 shrink-0 rounded-full" style={{ background: categoryOf(item.type).color }} aria-hidden />
+                        <span className="font-mono text-xs font-semibold">{item.tag}</span>
+                        <span className="flex-1 truncate text-xs text-muted-foreground">{item.name}</span>
+                        <span className="text-[10px] text-muted-foreground">{item.draftKey ? "nové" : "uložené"}</span>
+                      </button>
+                      {editing === item.id && edited ? (
+                        <EditForm
+                          key={item.id}
+                          item={edited}
+                          rooms={rooms}
+                          parents={parentsFor(item.type, item.id)}
+                          onSave={(patch) => {
+                            if (item.draftKey) {
+                              const parent = patch.parentId ? (patch.parentId.startsWith("draft:") ? { kind: "draft" as const, key: patch.parentId.slice(6) } : { kind: "existing" as const, id: patch.parentId }) : null;
+                              onUpdate(item.draftKey, { tag: patch.tag, name: patch.name, parent, circuit: patch.circuit, zone: patch.zone, isRoot: !parent && (item.type === "SWITCHBOARD" || item.type === "TRANSFORMER") });
+                            } else onEditExisting({ id: item.id, ...patch });
+                            toast.success(`${patch.tag} upraveno.`);
+                          }}
+                          onMove={item.draftKey ? () => setMoving(item.draftKey) : undefined}
+                          onRemove={
+                            item.draftKey
+                              ? () => {
+                                  onRemove(item.draftKey!);
+                                  setEditing(null);
+                                }
+                              : undefined
+                          }
+                        />
+                      ) : null}
+                    </li>
+                  ))}
+                  {!listed.length ? <li className="text-xs text-muted-foreground">V této místnosti zatím žádné zařízení tohoto typu není.</li> : null}
+                </ul>
+              )}
             </>
-          ) : category.placement === "grid" ? (
-            `Klikněte do půdorysu – ${category.label.toLowerCase()} se přichytí na jemný rastr po ${step} m.`
-          ) : (
-            "Najeďte na půdorys – zvýrazní se celé místnosti; kliknutím vybavení přiřadíte."
-          )}
-        </p>
-
-        {pick ? (
-          <>
-            <div className="grid grid-cols-[7rem_minmax(0,1fr)] gap-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="eq-tag" className="text-xs">
-                  Tag
-                </Label>
-                <Input id="eq-tag" value={tag} onChange={(event) => setTag(event.target.value.toUpperCase())} maxLength={24} className="h-10 font-mono" />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="eq-name" className="text-xs">
-                  Název
-                </Label>
-                <Input id="eq-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={120} className="h-10" />
-              </div>
-            </div>
-            {type === "SWITCHBOARD" ? (
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" className="size-4 accent-primary" checked={isRoot} onChange={(event) => setIsRoot(event.target.checked)} />
-                Hlavní rozváděč (kořenový zdroj, bez nadřazeného)
-              </label>
-            ) : null}
-            <p className="text-xs text-muted-foreground">{POWER_ROLE_HINTS[role]}</p>
-            {role !== "SOURCE" ? (
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor="eq-parent" className="text-xs">
-                    Napájeno z
-                  </Label>
-                  <select
-                    id="eq-parent"
-                    value={parentId}
-                    onChange={(event) => {
-                      setParentId(event.target.value);
-                      const parent = sources.find((source) => source.id === event.target.value);
-                      if (parent) setCircuit(suggestCircuit(type, parent, siblings(parent.id)));
-                    }}
-                    className={selectClass}
-                  >
-                    <option value="">– vyberte –</option>
-                    {parents.map((source) => (
-                      <option key={source.id} value={source.id}>
-                        {source.tag}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="eq-circuit" className="text-xs">
-                    Vývod / okruh
-                  </Label>
-                  <Input id="eq-circuit" value={circuit} onChange={(event) => setCircuit(event.target.value)} maxLength={80} className="h-10" />
-                </div>
-              </div>
-            ) : null}
-            <div className="space-y-1.5">
-              <Label htmlFor="eq-zone" className="text-xs">
-                Místnost / zóna
-              </Label>
-              <Input
-                id="eq-zone"
-                value={zone}
-                onChange={(event) => setZone(event.target.value)}
-                maxLength={80}
-                placeholder={role === "OUTLET" ? "povinné" : "nepovinné"}
-                readOnly={pick.kind === "room" && !!pick.room}
-                className="h-10"
-              />
-            </div>
-            {errors.length ? (
-              <ul className="space-y-0.5 text-xs text-amber-300">
-                {errors.map((error) => (
-                  <li key={error}>{error}</li>
-                ))}
-              </ul>
-            ) : null}
-            <Button className="touch-target w-full gap-2" onClick={add} disabled={errors.length > 0}>
-              <Plus className="size-4" aria-hidden />
-              {pick.kind === "room" ? `Přiřadit ${tag || "vybavení"} do místnosti` : `Osadit ${tag || "zařízení"}`}
-            </Button>
-          </>
+          ) : null}
+        </Section>
+        {moving ? (
+          <p className="rounded-lg border border-primary/50 bg-primary/10 p-2 text-sm" data-testid="moving-hint">
+            Přesun {items.find((item) => item.draftKey === moving)?.tag}: klikněte na nové místo v půdorysu.{" "}
+            <button type="button" className="underline" onClick={() => setMoving(null)}>
+              Zrušit
+            </button>
+          </p>
         ) : null}
-
-        {open ? (
-          <div className="space-y-1.5 rounded-lg border border-border p-2" data-testid="room-inventory-detail">
-            <p className="text-sm font-medium">Inventář místnosti {open.name}</p>
-            {(roomItems.get(open.key) ?? []).length ? (
-              <ul className="space-y-1 text-xs">
-                {(roomItems.get(open.key) ?? []).map((item) => (
-                  <li key={item.key} className="flex items-center gap-2">
-                    <span className="size-2.5 shrink-0 rounded-full" style={{ background: categoryOf(item.type).color }} aria-hidden />
-                    <span className="font-mono font-semibold">{item.tag}</span>
-                    <span className="flex-1 truncate text-muted-foreground">
-                      {EQUIPMENT_TYPE_LABELS[item.type]}
-                      {item.draft ? "" : " · stávající"}
-                    </span>
-                    {item.draft ? (
-                      <Button variant="ghost" size="icon" className="size-7" onClick={() => onRemove(item.key)} aria-label={`Odebrat ${item.tag}`}>
-                        <Trash2 className="size-3" />
-                      </Button>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-xs text-muted-foreground">Zatím bez spotřebičů a nářadí.</p>
-            )}
-          </div>
-        ) : null}
-
-        <ul className="space-y-1 text-sm" aria-label="Osazená zařízení konceptu">
-          {equipment.map((item) => {
-            const entry = categoryOf(item.type);
-            return (
-              <li key={item.key} className="flex items-center gap-2 rounded-md bg-muted/40 py-1 pr-1 pl-0" style={{ boxShadow: `inset 3px 0 0 ${entry.color}` }}>
-                <span className="ml-2 size-2.5 shrink-0 rounded-full" style={{ background: entry.color }} aria-hidden />
-                <span className="font-mono text-xs font-semibold">{item.tag}</span>
-                <span className="flex-1 truncate text-xs text-muted-foreground">
-                  {item.roomKey || entry.placement === "room" ? `🏠 ${item.zone ?? ""}` : `X ${fmtM(item.pos.x)} · Y ${fmtM(item.pos.y)} m`} ·{" "}
-                  {item.parent ? `← ${tagOf(item.parent.kind === "draft" ? `draft:${item.parent.key}` : item.parent.id)} ${item.circuit ?? ""}` : "kořen"}
-                </span>
-                <Button variant="ghost" size="icon" className="size-8" onClick={() => onRemove(item.key)} aria-label={`Odebrat ${item.tag}`}>
-                  <Trash2 className="size-3.5" />
-                </Button>
-              </li>
-            );
-          })}
-        </ul>
       </div>
 
       {svg ? (
@@ -533,12 +661,18 @@ export function PlacementStep({
           viewBox={FLOOR_VIEWBOX}
           zoom={zoom}
           onZoom={onZoom}
-          label={category.placement === "grid" ? "Půdorys – kliknutím do jemného rastru osadíte zařízení" : "Půdorys – kliknutím do místnosti přiřadíte spotřebič nebo nářadí"}
+          label={template ? "Půdorys – kliknutím vložíte vybrané zařízení" : "Půdorys – kliknutím vyberete místnost"}
           testId="studio-grid"
           toolbar={
-            <p className="text-xs text-muted-foreground">
-              {category.placement === "grid" ? `Jemný rastr ${step} m uvnitř polí sloupů` : "Režim výběru místnosti"} · {floorTitle}
-            </p>
+            <>
+              <HistoryButtons history={history} testId="placement-history" />
+              {category ? (
+                <button type="button" onClick={() => setShowAll((value) => !value)} aria-pressed={showAll} className="h-9 rounded-md border border-border px-2.5 text-xs font-semibold hover:border-primary/60">
+                  {showAll ? `Zvýraznit jen: ${category.label}` : "Zobrazit vše"}
+                </button>
+              ) : null}
+              <p className="text-xs text-muted-foreground">{floorTitle}</p>
+            </>
           }
           footer={
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-lg border border-border bg-card px-3 py-2 text-xs" aria-label="Legenda" data-testid="studio-legend">
@@ -562,7 +696,7 @@ export function PlacementStep({
               <svg
                 ref={svgRef}
                 viewBox={`0 0 ${FLOOR_VIEWBOX.width} ${FLOOR_VIEWBOX.height}`}
-                className={cn("absolute inset-0 size-full", category.placement === "grid" ? "cursor-crosshair" : hoverRoom ? "cursor-pointer" : "cursor-not-allowed")}
+                className={cn("absolute inset-0 size-full", gridMode ? "cursor-crosshair" : "cursor-pointer")}
                 onPointerDown={onCanvasDown}
                 onPointerMove={(event) => {
                   const point = pointer(event);
@@ -570,7 +704,7 @@ export function PlacementStep({
                 }}
                 onPointerLeave={() => setHover(null)}
               >
-                {!draftFloor && !editDraft && category.placement === "grid" ? (
+                {!draftFloor && !editDraft ? (
                   <>
                     <defs>
                       <pattern id="studio-fine" x={frame.x} y={frame.y} width={k.x * step} height={k.y * step} patternUnits="userSpaceOnUse">
@@ -580,103 +714,90 @@ export function PlacementStep({
                     <rect x={frame.x} y={frame.y} width={frame.w} height={frame.h} fill="url(#studio-fine)" pointerEvents="none" />
                   </>
                 ) : null}
-                {/* Režim místnosti: zvýraznění celé místnosti pod kurzorem a vybrané místnosti */}
-                {category.placement === "room"
-                  ? rooms.map((room) => {
-                      const a = metersToPx(frame, room);
-                      const lit = room.key === hoverRoom?.key || (pick?.kind === "room" && pick.room?.key === room.key);
-                      return (
-                        <rect
-                          key={room.key}
-                          x={a.x}
-                          y={a.y}
-                          width={room.w * k.x}
-                          height={room.h * k.y}
-                          fill={lit ? `${category.color}33` : "transparent"}
-                          stroke={lit ? category.color : "transparent"}
-                          strokeWidth={3}
-                          vectorEffect="non-scaling-stroke"
-                          pointerEvents="none"
-                          data-testid={lit ? "room-highlight" : undefined}
-                        />
-                      );
-                    })
-                  : null}
-                {/* Režim rastru: náhled bodu pod kurzorem a obsazené body */}
-                {category.placement === "grid" && hover ? (
+                {/* Vybraná místnost a místnost pod kurzorem */}
+                {rooms.map((room) => {
+                  const a = metersToPx(frame, room);
+                  const selected = room.key === roomChoice;
+                  const hovered = hover && zoneAt(rooms, hover)?.key === room.key;
+                  const color = category?.color ?? "#facc15";
+                  return selected || hovered ? (
+                    <rect
+                      key={room.key}
+                      x={a.x}
+                      y={a.y}
+                      width={room.w * k.x}
+                      height={room.h * k.y}
+                      fill={selected ? `${color}26` : `${color}12`}
+                      stroke={color}
+                      strokeWidth={selected ? 3 : 1.5}
+                      strokeDasharray={selected ? undefined : "6 4"}
+                      vectorEffect="non-scaling-stroke"
+                      pointerEvents="none"
+                      data-testid={selected ? "room-selected" : "room-highlight"}
+                    />
+                  ) : null;
+                })}
+                {gridMode && hover ? (
                   <g pointerEvents="none">
-                    <circle cx={metersToPx(frame, hover).x} cy={metersToPx(frame, hover).y} r={6 * unit} fill="none" stroke={category.color} strokeWidth={2 * unit} />
+                    <circle cx={metersToPx(frame, hover).x} cy={metersToPx(frame, hover).y} r={6 * unit} fill="none" stroke={category?.color ?? "#facc15"} strokeWidth={2 * unit} />
                     <text x={metersToPx(frame, hover).x + 9 * unit} y={metersToPx(frame, hover).y - 8 * unit} fontSize={10.5 * unit} fill="#f8fafc" fontWeight={700} fontFamily="ui-monospace, monospace">
                       X {fmtM(hover.x)} · Y {fmtM(hover.y)} m
                     </text>
                   </g>
                 ) : null}
-                {category.placement === "grid"
-                  ? fixedSpots.map((spot, index) => (
-                      <rect
-                        key={index}
-                        x={metersToPx(frame, spot).x - (k.x * step) / 2}
-                        y={metersToPx(frame, spot).y - (k.y * step) / 2}
-                        width={k.x * step}
-                        height={k.y * step}
-                        fill="rgba(248,250,252,0.08)"
-                        pointerEvents="none"
-                      />
-                    ))
-                  : null}
               </svg>
-              <PowerSpiderOverlay items={pins} viewBox={FLOOR_VIEWBOX} />
+              <PowerSpiderOverlay items={pins.filter((pin) => !dimmed(pin.item))} viewBox={FLOOR_VIEWBOX} />
               {pins.map((pin) => {
                 const entry = categoryOf(pin.type);
                 const PinIcon = EQUIPMENT_TYPE_ICONS[pin.type];
                 return (
-                  <span
+                  <button
                     key={pin.id}
+                    type="button"
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={() => selectItem(pin.item)}
                     className={cn(
-                      "pointer-events-none absolute flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-full border-2 px-1.5 py-0.5 font-mono text-[10px] font-bold shadow",
-                      pin.draft ? "text-zinc-950" : "border-dashed text-zinc-100 opacity-85",
+                      "absolute flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-full border-2 px-1.5 py-0.5 font-mono text-[10px] font-bold shadow transition-opacity",
+                      pin.draft ? "text-zinc-950" : "border-dashed text-zinc-100",
+                      editing === pin.id && "ring-2 ring-white",
                     )}
-                    style={{ left: `${pin.pinX}%`, top: `${pin.pinY}%`, background: pin.draft ? entry.color : "#18181b", borderColor: entry.color }}
-                    data-testid={pin.draft ? "studio-draft-pin" : undefined}
+                    style={{ left: `${pin.pinX}%`, top: `${pin.pinY}%`, background: pin.draft ? entry.color : "#18181b", borderColor: entry.color, opacity: dimmed(pin.item) ? 0.2 : 1 }}
+                    data-testid={pin.draft ? "studio-draft-pin" : "studio-existing-pin"}
                     data-category={entry.key}
+                    aria-label={`${pin.tag} – upravit`}
                   >
                     <PinIcon className="size-3" aria-hidden />
                     {pin.tag}
-                  </span>
+                  </button>
                 );
               })}
               {/* Inventární štítky místností (spotřebiče a nářadí se nekreslí jako body) */}
               {rooms
-                .filter((room) => roomItems.has(room.key))
+                .filter((room) => inventory.has(room.key))
                 .map((room) => {
                   const corner = metersToPx(frame, { x: room.x + room.w, y: room.y });
+                  const roomList = inventory.get(room.key) ?? [];
+                  const faded = category !== null && !showAll && !roomList.some((item) => categoryOf(item.type).key === category.key);
                   return (
                     <button
                       key={room.key}
                       type="button"
                       onPointerDown={(event) => event.stopPropagation()}
-                      onClick={() => setOpenRoom(room.key)}
+                      onClick={() => {
+                        chooseRoom(room.key);
+                        setCategoryKey(categoryOf(roomList[0].type).key);
+                        setMode("edit");
+                        setOpen(3);
+                      }}
                       className="absolute -translate-x-full rounded-md border border-zinc-600 bg-zinc-950/90 px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap text-zinc-100 shadow hover:border-primary"
-                      style={{ left: `${((corner.x - 4) / FLOOR_VIEWBOX.width) * 100}%`, top: `${((corner.y + 4) / FLOOR_VIEWBOX.height) * 100}%` }}
+                      style={{ left: `${((corner.x - 4) / FLOOR_VIEWBOX.width) * 100}%`, top: `${((corner.y + 4) / FLOOR_VIEWBOX.height) * 100}%`, opacity: faded ? 0.2 : 1 }}
                       data-testid="room-inventory"
                       title={`Inventář místnosti ${room.name}`}
                     >
-                      {roomInventoryLabel((roomItems.get(room.key) ?? []).map((item) => item.type))}
+                      {roomInventoryLabel(roomList.map((item) => item.type))}
                     </button>
                   );
                 })}
-              {pick?.kind === "grid" ? (
-                <span
-                  className="pointer-events-none absolute size-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2"
-                  style={{
-                    left: `${metersToPercent(frame, pick.pos).pinX}%`,
-                    top: `${metersToPercent(frame, pick.pos).pinY}%`,
-                    borderColor: category.color,
-                    boxShadow: `0 0 0 4px ${category.color}55`,
-                  }}
-                  aria-hidden
-                />
-              ) : null}
             </>
           )}
         </PlanViewport>
@@ -686,3 +807,71 @@ export function PlacementStep({
     </section>
   );
 }
+
+/** Úprava jednoho zařízení: tag, název, napájení, vývod a místnost; u konceptu i přesun a smazání. */
+function EditForm({
+  item,
+  rooms,
+  parents,
+  onSave,
+  onMove,
+  onRemove,
+}: {
+  item: FloorItem;
+  rooms: Room[];
+  parents: AutopilotSource[];
+  onSave: (patch: Omit<StudioEquipmentEdit, "id">) => void;
+  onMove?: () => void;
+  onRemove?: () => void;
+}) {
+  const [tag, setTag] = useState(item.tag);
+  const [name, setName] = useState(item.name);
+  const [parentId, setParentId] = useState(item.parentId ?? "");
+  const [circuit, setCircuit] = useState(item.circuit ?? "");
+  const [zone, setZone] = useState(item.zone ?? rooms.find((room) => room.key === item.roomKey)?.name ?? "");
+  return (
+    <div className="space-y-2 border-t border-border p-2" data-testid="edit-form">
+      <div className="grid grid-cols-[7rem_minmax(0,1fr)] gap-2">
+        <Input aria-label="Tag zařízení" value={tag} onChange={(event) => setTag(event.target.value.toUpperCase())} maxLength={24} className="h-9 font-mono" />
+        <Input aria-label="Název zařízení" value={name} onChange={(event) => setName(event.target.value)} maxLength={120} className="h-9" />
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <select aria-label="Napájeno z" value={parentId} onChange={(event) => setParentId(event.target.value)} className={cn(selectClass, "h-9")}>
+          <option value="">– bez napájení / kořen –</option>
+          {parents.map((source) => (
+            <option key={source.id} value={source.id}>
+              {source.tag}
+            </option>
+          ))}
+        </select>
+        <Input aria-label="Vývod / okruh" value={circuit} onChange={(event) => setCircuit(event.target.value)} maxLength={80} placeholder="Vývod" className="h-9" />
+      </div>
+      <select aria-label="Místnost" value={zone} onChange={(event) => setZone(event.target.value)} className={cn(selectClass, "h-9")}>
+        <option value="">– bez místnosti –</option>
+        {[...new Set([...rooms.map((room) => room.name), ...(zone ? [zone] : [])])].map((roomName) => (
+          <option key={roomName} value={roomName}>
+            {roomName}
+          </option>
+        ))}
+      </select>
+      <div className="flex flex-wrap gap-1.5">
+        <Button size="sm" className="h-9" onClick={() => onSave({ tag: tag.trim().toUpperCase(), name, parentId: parentId || null, circuit: circuit || null, zone: zone || null })} disabled={!tag.trim()}>
+          Uložit změny
+        </Button>
+        {onMove ? (
+          <Button size="sm" variant="outline" className="h-9 gap-1" onClick={onMove}>
+            <Move className="size-3.5" aria-hidden /> Přesunout
+          </Button>
+        ) : null}
+        {onRemove ? (
+          <Button size="sm" variant="outline" className="h-9 gap-1 border-red-500/50 text-red-300" onClick={onRemove}>
+            <Trash2 className="size-3.5" aria-hidden /> Smazat
+          </Button>
+        ) : (
+          <span className="self-center text-[11px] text-muted-foreground">Uložené zařízení se maže a přesouvá v jeho kartě.</span>
+        )}
+      </div>
+    </div>
+  );
+}
+

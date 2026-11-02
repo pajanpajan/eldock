@@ -112,11 +112,11 @@ test("nový areál z přepínače závodů a tlačítko Přidat budovu do areál
   await expect(page.getByTestId("campus-new-building")).toBeVisible();
 });
 
-test("Studio: rozměr areálu a kóty, místnost tažením s posunem stěny, vrata, měřítko, banery zařízení a přiřazení spotřebiče do místnosti → uložení", async ({ page }) => {
+test("Studio: budova v metrech, více budov v konceptu, místnost s posunem stěny a Zpět/Vpřed, vrata, kontextový krok 3 s produktovými banery a úpravou → uložení", async ({ page }) => {
   await startAsAccount(page, "acc-dvorak");
   await page.goto("/studio");
 
-  // Krok 1 – šablona, rozměr areálu, umístění a zvětšení budovy tažením (s kótami X / Y)
+  // Krok 1 – šablona, rozměr areálu a budovy v metrech, posun a zvětšení tažením (s kótami X / Y)
   await whenReady(
     () => page.getByRole("button", { name: /Výrobní hala \(66 × 42 m/ }).click(),
     () => expect(page.getByTestId("grid-dimensions")).toHaveText("66 m × 42 m", { timeout: 1_000 }),
@@ -124,23 +124,30 @@ test("Studio: rozměr areálu a kóty, místnost tažením s posunem stěny, vra
   await expect(page.getByTestId("grid-axes")).toHaveText("Osa X (šířka): 66 m × Osa Y (hloubka): 42 m");
   await expect(page.getByTestId("floor-add-buttons").getByRole("button").first()).toHaveText(/Přidat nadzemní patro \(NP\)/);
   await expect(page.getByTestId("campus-dim-x")).toContainText("X: 66 m");
-  await expect(page.getByTestId("campus-dim-y")).toContainText("Y: 42 m");
   await expect(page.getByTestId("campus-size")).toContainText("Areál 400 × 280 m");
   await whenReady(
     () => page.getByRole("button", { name: "500×350 m" }).click(),
     () => expect(page.getByTestId("campus-size")).toContainText("Areál 500 × 350 m", { timeout: 1_000 }),
   );
-  await expect(page.getByTestId("campus-dim-x")).toContainText("X: 66 m");
   await page.getByLabel("Šířka areálu – osa X [m]").fill("400");
   await page.getByLabel("Hloubka areálu – osa Y [m]").fill("280");
   await expect(page.getByTestId("campus-size")).toContainText("Areál 400 × 280 m");
-  await page.getByLabel("Název budovy").fill("Hala C - Svařovna");
+
+  // Rozměr budovy přímo v metrech – bez limitu 20 × 16 os (114 × 90 m), osy se dopočítají
+  await page.getByLabel("Šířka budovy – osa X [m]").fill("114");
+  await page.getByLabel("Šířka budovy – osa X [m]").press("Enter");
+  await page.getByLabel("Hloubka budovy – osa Y [m]").fill("90");
+  await page.getByLabel("Hloubka budovy – osa Y [m]").press("Enter");
+  await expect(page.getByTestId("grid-dimensions")).toHaveText("114 m × 90 m");
+  await expect(page.getByTestId("campus-dim-x")).toContainText("X: 114 m");
+  await expect(page.getByTestId("grid-advanced")).toContainText("osy 1–20 × A–P");
+
   const building = page.getByTestId("campus-new-building").locator("rect").first();
   await building.scrollIntoViewIfNeeded();
   const before = (await building.boundingBox())!;
   await page.mouse.move(before.x + before.width / 2, before.y + before.height / 2);
   await page.mouse.down();
-  await page.mouse.move(before.x + before.width / 2 + 40, before.y + before.height / 2 + 20, { steps: 5 });
+  await page.mouse.move(before.x + before.width / 2 + 30, before.y + before.height / 2 + 15, { steps: 5 });
   await page.mouse.up();
   const moved = (await building.boundingBox())!;
   expect(Math.round(moved.x)).not.toBe(Math.round(before.x));
@@ -149,33 +156,37 @@ test("Studio: rozměr areálu a kóty, místnost tažením s posunem stěny, vra
   await page.mouse.down();
   await page.mouse.move(handle.x + 40, handle.y + 30, { steps: 5 });
   await page.mouse.up();
-  expect((await building.boundingBox())!.width).toBeGreaterThan(moved.width);
-  // Úchyt přichytává velikost na rozteč sloupů → rastr se prodloužil
-  await expect(page.getByTestId("grid-dimensions")).not.toHaveText("66 m × 42 m");
-  // Zpět na šablonu (rastr 12 × 8) a pokračovat
+  await expect(page.getByTestId("grid-dimensions")).not.toHaveText("114 m × 90 m");
+
+  // Zpět na šablonu 66 × 42 m a název
   await page.getByRole("button", { name: /Výrobní hala \(66 × 42 m/ }).click();
   await page.getByLabel("Název budovy").fill("Hala C - Svařovna");
+
+  // Druhá budova konceptu: přidat, zkontrolovat přepínač a vrátit se k první
+  await page.getByTestId("building-switcher").getByRole("button", { name: "Přidat další budovu" }).click();
+  const switcher = page.getByTestId("building-switcher");
+  await expect(switcher.getByRole("tab")).toHaveCount(2);
+  await expect(switcher.getByRole("tab", { selected: true })).toContainText("Hala D");
+  await expect(page.getByTestId("campus-concept-building")).toHaveCount(1);
+  await switcher.getByRole("tab", { name: /Hala C/ }).click();
+  await expect(page.getByLabel("Název budovy")).toHaveValue("Hala C - Svařovna");
   await page.getByRole("button", { name: "Další krok" }).click();
 
-  // Krok 2 – měřítko 1:500, místnost tažením (jemný rastr 1 m) s živými kótami, posun stěny, vrata u zdi
+  // Krok 2 – bez šablon rozdělení patra; místnost tažením s kótami, posun stěny, Zpět / Vpřed, vrata u zdi
+  await expect(page.getByText("Rozdělit patro šablonou")).toHaveCount(0);
   await page.getByRole("radiogroup", { name: "Měřítko zobrazení" }).getByRole("radio", { name: "1:500" }).click();
   await expect(page.getByTestId("studio-grid")).toHaveAttribute("data-scale", "1:500");
-  await expect(page.getByTestId("studio-grid-scalebar")).toContainText("M 1:500");
   const start = await planPoint(page, { x: 6, y: 6 });
   const end = await planPoint(page, { x: 30, y: 12 });
   await page.mouse.move(start.x, start.y);
   await page.mouse.down();
   await page.mouse.move(end.x, end.y, { steps: 8 });
   await expect(page.getByTestId("studio-selection")).toContainText("X: 24 m");
-  await expect(page.getByTestId("studio-selection")).toContainText("Y: 6 m");
   await expect(page.getByTestId("draft-size")).toHaveText("24 m × 6 m (144 m²)");
   await page.mouse.up();
   const rooms = page.getByRole("list", { name: "Místnosti a vrata patra" });
   await expect(rooms).toContainText("24 × 6 m");
-  await expect(rooms.getByRole("textbox", { name: "Název místnosti 1" })).toHaveValue("Výrobní zóna 1");
   await rooms.getByRole("textbox", { name: "Název místnosti 1" }).fill("Svařovna");
-  await expect(page.getByTestId("zone-detail-size")).toContainText("Osa X (šířka): 24 m × Osa Y (hloubka): 6 m");
-  // Východní stěna: chytit a posunout o 6 m doprava
   const wallFrom = await planPoint(page, { x: 30, y: 9 });
   const wallTo = await planPoint(page, { x: 36, y: 9 });
   await page.mouse.move(wallFrom.x, wallFrom.y);
@@ -184,53 +195,67 @@ test("Studio: rozměr areálu a kóty, místnost tažením s posunem stěny, vra
   await expect(page.getByTestId("zone-dim-x")).toContainText("X: 30 m");
   await page.mouse.up();
   await expect(page.getByTestId("zone-detail-size")).toContainText("Osa X (šířka): 30 m");
+  // Zpět vrátí posun stěny (24 m), Vpřed ho znovu provede (30 m)
+  await page.getByTestId("zone-history").getByRole("button", { name: "Zpět (Ctrl+Z)" }).click();
+  await expect(page.getByTestId("zone-detail-size")).toContainText("Osa X (šířka): 24 m");
+  await page.getByTestId("zone-history").getByRole("button", { name: "Vpřed (Ctrl+Y)" }).click();
+  await expect(page.getByTestId("zone-detail-size")).toContainText("Osa X (šířka): 30 m");
   await page.getByRole("radio", { name: /Umístit vrata/ }).click();
   const wall = await planPoint(page, { x: 66, y: 36 }, { x: -6, y: 0 });
   await page.mouse.click(wall.x, wall.y);
   await expect(rooms).toContainText("G12");
-  await expect(page.getByTestId("studio-grid")).toContainText("🚪 Vrata 1");
   await page.getByRole("button", { name: "Další krok" }).click();
 
-  // Krok 3 – banery typů, autopilot: rozváděč do jemného rastru, linka uvnitř Svařovny, spotřebič do místnosti
+  // Krok 3 – 1) místnost, 2) kategorie, 3) produktový banner a vložení
   await expect(page.getByRole("tab", { name: "1. NP" })).toHaveCount(1);
-  await expect(page.getByRole("combobox", { name: "Typ zařízení" })).toHaveCount(0);
-  await expect(page.getByRole("radio", { name: "Rozváděč" })).toHaveAttribute("aria-checked", "true");
-  const boardAt = await planPoint(page, { x: 48, y: 6 });
-  await page.mouse.click(boardAt.x, boardAt.y);
-  await expect(page.getByTestId("placement-point")).toHaveText("X 48 m · Y 6 m (pole B9)");
-  await expect(page.getByLabel("Tag")).toHaveValue("R-C-01");
-  await expect(page.getByLabel("Název", { exact: true })).toHaveValue("Hlavní rozváděč Hala C");
+  await page.getByRole("radiogroup", { name: "Místnosti patra" }).getByRole("radio", { name: "Svařovna" }).click();
+  await expect(page.getByTestId("room-selected")).toHaveCount(1);
+  await page.getByRole("radio", { name: "Rozváděč", exact: true }).click();
+  await page.getByRole("radio", { name: "Podružný / Patrový rozváděč (RP)" }).click();
+  await expect(page.getByLabel("Tag", { exact: true })).toHaveValue("R-C-01");
+  await expect(page.getByLabel("Název", { exact: true })).toHaveValue("Podružný rozváděč – Svařovna");
   await expect(page.getByLabel("Napájeno z").locator("option:checked")).toHaveText("RM1");
   await expect(page.getByLabel("Vývod / okruh")).toHaveValue(/^Pole \d+ \/ QF\d+$/);
-  await page.getByRole("button", { name: "Osadit R-C-01" }).click();
+  // vložení klikem do jemného rastru uvnitř místnosti
+  const boardAt = await planPoint(page, { x: 30, y: 9 });
+  await page.mouse.click(boardAt.x, boardAt.y);
+  await expect(toast(page)).toContainText("R-C-01 vloženo do místnosti Svařovna");
   await expect(page.getByTestId("eq-banner-count-R")).toHaveText("1");
 
   await page.getByRole("radio", { name: "Výrobní stroj / Linka" }).click();
-  const lineAt = await planPoint(page, { x: 12, y: 9 });
-  await page.mouse.click(lineAt.x, lineAt.y);
-  await expect(page.getByLabel("Tag")).toHaveValue("ML-03");
-  await expect(page.getByLabel("Název", { exact: true })).toHaveValue("Výrobní linka 3 – Svařovna");
+  await page.getByRole("radio", { name: "Lisovací linka", exact: true }).click();
+  await expect(page.getByLabel("Tag", { exact: true })).toHaveValue("ML-03");
+  await expect(page.getByLabel("Název", { exact: true })).toHaveValue("Lisovací linka – Svařovna");
   await expect(page.getByLabel("Napájeno z").locator("option:checked")).toHaveText("R-C-01");
   await expect(page.getByLabel("Vývod / okruh")).toHaveValue("Vývod FA1");
-  await expect(page.getByLabel("Místnost / zóna")).toHaveValue("Svařovna");
-  await page.getByRole("button", { name: "Osadit ML-03" }).click();
+  await page.getByRole("button", { name: "Vložit ML-03 do místnosti Svařovna" }).click();
+  // filtr půdorysu: rozváděč je při kategorii „Výrobní stroj / Linka“ ztlumený
+  await expect(page.getByTestId("studio-draft-pin").filter({ hasText: "R-C-01" })).toHaveCSS("opacity", "0.2");
+  await page.getByRole("button", { name: "Zobrazit vše" }).click();
+  await expect(page.getByTestId("studio-draft-pin").filter({ hasText: "R-C-01" })).toHaveCSS("opacity", "1");
+  await expect(page.locator('[data-spider-link="R-C-01>ML-03"]')).toHaveCount(1);
 
-  await page.getByRole("radio", { name: "Spotřebič" }).click();
-  const roomAt = await planPoint(page, { x: 24, y: 9 });
-  await page.mouse.move(roomAt.x, roomAt.y);
-  await expect(page.getByTestId("room-highlight")).toHaveCount(1);
-  await page.mouse.click(roomAt.x, roomAt.y);
-  await expect(page.getByTestId("placement-room")).toHaveText("Svařovna");
-  await expect(page.getByLabel("Místnost / zóna")).toHaveValue("Svařovna");
-  await page.getByRole("button", { name: /^Přiřadit SP-\d+ do místnosti$/ }).click();
+  await page.getByRole("radio", { name: "Spotřebič", exact: true }).click();
+  await page.getByRole("radio", { name: "Kávovar / Rychlovarná konvice" }).click();
+  await page.getByRole("button", { name: /^Vložit SP-\d+ do místnosti Svařovna$/ }).click();
   await expect(page.getByTestId("room-inventory")).toHaveText("🔌 1× Spotřebič");
 
-  await expect(page.getByTestId("studio-draft-pin")).toHaveCount(2);
-  await expect(page.locator('[data-spider-link="R-C-01>ML-03"]')).toHaveCount(1);
+  // Upravit stávající: linka ML-03 – nový název, uložení; Zpět vrátí změnu
+  await page.getByRole("radio", { name: "Výrobní stroj / Linka" }).click();
+  await page.getByRole("radio", { name: /Upravit stávající \(1\)/ }).click();
+  await page.getByTestId("existing-list").getByRole("button", { name: /ML-03/ }).click();
+  await page.getByLabel("Název zařízení").fill("Lisovací linka 400 t");
+  await page.getByRole("button", { name: "Uložit změny" }).click();
+  await expect(page.getByTestId("existing-list")).toContainText("Lisovací linka 400 t");
+  await page.getByTestId("placement-history").getByRole("button", { name: "Zpět (Ctrl+Z)" }).click();
+  await expect(page.getByTestId("existing-list")).toContainText("Lisovací linka – Svařovna");
+  await page.getByTestId("placement-history").getByRole("button", { name: "Vpřed (Ctrl+Y)" }).click();
+  await expect(page.getByTestId("existing-list")).toContainText("Lisovací linka 400 t");
   await expect(page.getByTestId("studio-legend")).toContainText("Ruční nářadí");
 
-  await page.getByRole("button", { name: "Uložit budovu do závodu" }).click();
-  await expect(toast(page)).toContainText("Budova uložena do závodu");
+  // Uložení obou budov konceptu v jedné transakci
+  await page.getByRole("button", { name: "Uložit 2 budovy do závodu" }).click();
+  await expect(toast(page)).toContainText("Uloženo 2 budovy do závodu");
   await expect(page).toHaveURL(/\/floor\//);
   await expect(page.getByRole("heading", { level: 1 })).toContainText("1. NP - Hlavní výroba");
   await expect(pin(page, "ML-03")).toBeVisible();

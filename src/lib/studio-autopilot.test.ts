@@ -42,3 +42,11 @@ describe("bestParent", () => {
     expect(bestParent("SWITCHBOARD", [source("TR1", "TRANSFORMER", "e1", true)], "x")?.tag).toBe("TR1");
   });
 });
+
+describe("vlastní prefix tagu (krok 3 – Vytvořit nové)", () => {
+  it("další volné číslo k prefixu, velká písmena", async () => {
+    const { nextTagWithPrefix } = await import("./studio-autopilot");
+    expect(nextTagWithPrefix("nr-dil-", ["NR-DIL-01", "NR-DIL-07", "SP-0001"])).toBe("NR-DIL-08");
+    expect(nextTagWithPrefix("VRT-", [])).toBe("VRT-01");
+  });
+});

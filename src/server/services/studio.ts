@@ -22,10 +22,11 @@ import { placementOf } from "@/lib/equipment-categories";
 import { inspectionRuleFor, isPortable } from "@/lib/inspection-rules";
 import { newQrToken } from "@/lib/qr-label";
 import { validatePlacement, type PowerSource } from "@/lib/power-hierarchy";
-import { floorLabel, floorName, rectPolygon, type StudioDraft } from "@/lib/studio-draft";
+import { floorLabel, floorName, rectPolygon, type StudioConceptDraft, type StudioDraft } from "@/lib/studio-draft";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 
 import { preparePlant } from "./plants";
+import type { Tx } from "./workflow";
 
 const fail = (message: string): never => {
   throw new WorkflowError("VALIDATION", message);
@@ -33,7 +34,41 @@ const fail = (message: string): never => {
 
 const round1 = (value: number) => Math.round(value * 10) / 10;
 
-export async function saveStudioBuilding(prisma: PrismaClient, draft: StudioDraft) {
+/** Celý název zařízení „TAG - název“ (název, který už tagem začíná, se neopakuje). */
+export function withTag(tag: string, name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) return tag;
+  const prefix = `${tag} - `;
+  return trimmed.toUpperCase().startsWith(prefix.toUpperCase()) ? `${tag} - ${trimmed.slice(prefix.length).trim()}` : `${prefix}${trimmed}`;
+}
+
+/** Jedna budova v samostatné transakci (zpětná kompatibilita a testy). */
+export function saveStudioBuilding(prisma: PrismaClient, draft: StudioDraft) {
+  return prisma.$transaction((tx) => saveBuildingInTx(tx, draft), { timeout: 60_000 });
+}
+
+/**
+ * Celý koncept Studia v JEDNÉ transakci: první budova případně založí nový závod a změní rozměr areálu,
+ * další budovy se uloží do stejného závodu. Chyba u kterékoli budovy vrátí vše zpět.
+ */
+export async function saveStudioConcept(prisma: PrismaClient, concept: StudioConceptDraft) {
+  if (!concept.buildings.length) fail("Koncept neobsahuje žádnou budovu.");
+  return prisma.$transaction(
+    async (tx) => {
+      const results = [];
+      let plantId = concept.plantId;
+      for (const [index, building] of concept.buildings.entries()) {
+        const result = await saveBuildingInTx(tx, { ...building, plantId, newPlant: index === 0 ? concept.newPlant : null, campus: concept.campus });
+        plantId = result.plantId;
+        results.push(result);
+      }
+      return results;
+    },
+    { timeout: 120_000 },
+  );
+}
+
+async function saveBuildingInTx(prisma: Tx, draft: StudioDraft) {
   const grid: GridSpec = clampGrid(draft.grid);
   const frame = planFrame(grid);
   const campus: CampusSize | null = draft.campus ? { width: Math.round(draft.campus.widthM), height: Math.round(draft.campus.depthM) } : null;
@@ -145,12 +180,33 @@ export async function saveStudioBuilding(prisma: PrismaClient, draft: StudioDraf
       occupied.set(spot, item.tag);
     }
   }
+  // Přejmenování stávajících pater upravované budovy
+  const renames = (draft.floorRenames ?? []).filter((entry) => {
+    const current = existingBuilding?.floors.find((floor) => floor.id === entry.id);
+    if (!current) fail("Přejmenované patro do budovy nepatří.");
+    return floorName(current!.level, entry.usage) !== current!.name;
+  });
+  // Úpravy stávajících zařízení (krok 3 „Upravit stávající“): jen zařízení této budovy, platné napájení
+  const edits = draft.equipmentEdits ?? [];
+  if (edits.length) {
+    const rows = await prisma.equipment.findMany({ where: { id: { in: edits.map((edit) => edit.id) }, floorId: { in: [...existingFloorIds] } }, select: { id: true, floorId: true, type: true } });
+    for (const edit of edits) {
+      const row = rows.find((entry) => entry.id === edit.id);
+      if (!row) fail("Upravované zařízení do budovy nepatří.");
+      if (!edit.tag.trim()) fail("Zařízení musí mít označení (tag).");
+      if (edit.parentId === edit.id) fail(`${edit.tag}: zařízení nemůže napájet samo sebe.`);
+      if (edit.parentId && !sources.some((source) => source.id === edit.parentId)) fail(`${edit.tag}: nadřazený rozváděč neexistuje.`);
+      const sameFloor = await prisma.equipment.findFirst({ where: { floorId: row!.floorId, tag: edit.tag.trim().toUpperCase(), NOT: { id: edit.id } }, select: { id: true } });
+      if (sameFloor) fail(`${edit.tag}: na patře už zařízení s tímto označením je.`);
+    }
+  }
   if (draft.equipment.some((item) => item.floor.kind === "existing")) {
     const taken = await prisma.equipment.findMany({ where: { floorId: { in: [...existingFloorIds] } }, select: { floorId: true, tag: true } });
     for (const row of taken) if (tagsByFloor.get(row.floorId)?.has(row.tag.toUpperCase())) fail(`${row.tag}: na patře už zařízení s tímto označením je.`);
   }
 
-  return prisma.$transaction(async (tx) => {
+  const tx = prisma;
+  {
     if (newPlant) {
       const viewBox = campusViewBox({ width: newPlant.campusWidthM, height: newPlant.campusDepthM });
       plant.id = (await tx.plant.create({ data: { ...newPlant, campusViewBoxW: viewBox.width, campusViewBoxH: viewBox.height }, select: { id: true } })).id;
@@ -256,6 +312,24 @@ export async function saveStudioBuilding(prisma: PrismaClient, draft: StudioDraf
       });
     }
 
+    for (const entry of renames) {
+      const current = existingBuilding!.floors.find((floor) => floor.id === entry.id)!;
+      await tx.floor.update({ where: { id: entry.id }, data: { name: floorName(current.level, entry.usage), description: entry.usage.trim() || null } });
+    }
+    for (const edit of edits) {
+      const tag = edit.tag.trim().toUpperCase();
+      await tx.equipment.update({
+        where: { id: edit.id },
+        data: {
+          tag,
+          name: withTag(tag, edit.name),
+          fedFromEquipmentId: edit.parentId,
+          fedFromCircuit: edit.parentId ? edit.circuit?.trim() || null : null,
+          assignedZone: edit.zone?.trim() || null,
+        },
+      });
+    }
+
     // Přesměrování: patro prvního osazeného zařízení, jinak nové 1. NP, jinak první nové patro.
     const first = draft.equipment[0]?.floor;
     const firstFloorId =
@@ -272,7 +346,9 @@ export async function saveStudioBuilding(prisma: PrismaClient, draft: StudioDraf
       firstFloorId: firstFloorId ?? null,
       floors: floorIds.size,
       editedFloors,
+      renamedFloors: renames.length,
+      editedEquipment: edits.length,
       equipment: equipmentIds.size,
     };
-  });
+  }
 }

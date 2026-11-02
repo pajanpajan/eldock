@@ -3,14 +3,16 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_GRID,
   EXISTING_FLOOR_FRAME,
-  FLOOR_TEMPLATES,
   bayAt,
   canvasWidthPx,
   cellsToRect,
+  axisMeters,
   clampGrid,
+  gridFromMeters,
+  rowIndex,
+  rowLabel,
   colLabels,
   fineStep,
-  floorTemplate,
   formatGridRef,
   formatPosition,
   gateToFloorplan,
@@ -53,8 +55,25 @@ describe("konstrukční rastr", () => {
     expect(gridDimensions({ ...DEFAULT_GRID, cols: 5, rows: 4, stepMeters: 7.5 }).label).toBe("30 m × 22,5 m");
   });
 
-  it("omezí rozsah os 4–20 / 4–16", () => {
-    expect(clampGrid({ ...DEFAULT_GRID, cols: 30, rows: 2 })).toMatchObject({ cols: 20, rows: 4 });
+  it("rastr v metrech: osy po rozteči, poslední osa na hraně budovy, žádný limit 20 × 16 os", () => {
+    expect(axisMeters(66, 6)).toEqual([0, 6, 12, 18, 24, 30, 36, 42, 48, 54, 60, 66]);
+    expect(axisMeters(100, 6).slice(-3)).toEqual([90, 96, 100]);
+    expect(gridFromMeters(114, 90, 6, "1:200")).toMatchObject({ cols: 20, rows: 16, widthM: 114, depthM: 90 });
+    const huge = gridFromMeters(1000, 600, 6, "1:1000");
+    expect(huge).toMatchObject({ cols: 168, rows: 101, widthM: 1000, depthM: 600 });
+    expect(gridFromMeters(3, 5000, 1, "1:200")).toMatchObject({ widthM: 6, depthM: 2000, stepMeters: 2 });
+    // starší rastr „počet os × rozteč“ se převede na metry
+    expect(clampGrid({ ...DEFAULT_GRID, cols: 30, rows: 2 })).toMatchObject({ cols: 30, rows: 2, widthM: 174, depthM: 6 });
+    const frame = planFrame(gridFromMeters(100, 50, 6, "1:200"));
+    expect(frame.axesX.length).toBe(18);
+    expect(gridToPx({ row: 0, col: 17 }, frame).x).toBeCloseTo(frame.x + frame.w, 6);
+  });
+
+  it("osy A … Z, AA … ZZ (zápis i čtení odkazu)", () => {
+    expect([0, 25, 26, 27, 51, 701].map(rowLabel)).toEqual(["A", "Z", "AA", "AB", "AZ", "ZZ"]);
+    expect(rowIndex("AB")).toBe(27);
+    expect(parseGridRef("AA3", { cols: 5, rows: 30 })).toEqual({ row: 26, col: 2 });
+    expect(formatGridRef({ row: 27, col: 119 })).toBe("AB120");
   });
 
   it("rám půdorysu má jednotné měřítko v ose X i Y a je vystředěný", () => {
@@ -139,23 +158,6 @@ describe("zóny a místnosti v metrech", () => {
     expect(zoneContains(zones[1], { x: 18, y: 18 })).toBe(true);
   });
 
-  it("šablony rozdělení patra vytvoří platné zóny i v nejmenším rastru", () => {
-    for (const spec of [DEFAULT_GRID, { ...DEFAULT_GRID, cols: 4, rows: 4 }]) {
-      for (const template of FLOOR_TEMPLATES) {
-        const zones = floorTemplate(template.key, spec);
-        expect(zones.length).toBeGreaterThan(1);
-        expect(new Set(zones.map((entry) => entry.key)).size).toBe(zones.length);
-        for (const entry of zones) expect(zoneToRoom(entry, planFrame(spec))).not.toBeNull();
-      }
-    }
-    expect(floorTemplate("two-lines", DEFAULT_GRID).map((entry) => `${entry.x},${entry.y} ${entry.w}×${entry.h} ${entry.kind} ${entry.name}`)).toEqual([
-      "0,0 66×12 PRODUCTION Výrobní linka 1",
-      "0,12 66×12 PRODUCTION Výrobní linka 2",
-      "0,24 30×18 FACILITIES Zázemí a šatny",
-      "30,24 36×18 STORAGE Sklad komponent",
-    ]);
-    expect(floorTemplate("offices", DEFAULT_GRID).map((entry) => entry.kind)).toEqual(["OFFICE", "OFFICE", "CORRIDOR", "OFFICE", "FACILITIES"]);
-  });
 });
 
 describe("měřítko na obrazovce", () => {

@@ -1,19 +1,17 @@
 "use client";
 
 import { useRef, useState, type PointerEvent } from "react";
-import { DoorOpen, Pencil, SquareDashedMousePointer, Trash2, Wand2 } from "lucide-react";
+import { DoorOpen, Pencil, SquareDashedMousePointer, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  FLOOR_TEMPLATES,
   FLOOR_VIEWBOX,
   HANDLE_CURSORS,
   ZONE_KINDS,
   ZONE_KIND_KEYS,
   cellsToRect,
-  floorTemplate,
   fmtM,
   formatGridRef,
   gateToFloorplan,
@@ -38,7 +36,7 @@ import { floorLabel, type StudioFloorDraft } from "@/lib/studio-draft";
 import { cn } from "@/lib/utils";
 
 import { PlanViewport, type ViewZoom } from "./PlanViewport";
-import { ChoiceButton, FloorTabs } from "./studio-ui";
+import { ChoiceButton, FloorTabs, HistoryButtons, type HistoryControls } from "./studio-ui";
 
 type Drag =
   | { kind: "new"; start: MeterPoint; end: MeterPoint }
@@ -79,6 +77,8 @@ export function ZoneStep({
   existingFloors,
   onEditExisting,
   onDiscard,
+  history,
+  onCheckpoint,
 }: {
   floors: StudioFloorDraft[];
   activeKey: string;
@@ -95,6 +95,10 @@ export function ZoneStep({
   onEditExisting: (floorId: string) => void;
   /** Zahodit úpravy stávajícího patra (koncept úprav). */
   onDiscard: (key: string) => void;
+  /** Zpět / Vpřed (Ctrl+Z / Ctrl+Y) – posledních 30 změn. */
+  history: HistoryControls;
+  /** Začátek tažení: celé tažení stěny / místnosti je jeden krok historie. */
+  onCheckpoint: () => void;
 }) {
   const floor = floors.find((entry) => entry.key === activeKey) ?? floors[0];
   const [mode, setMode] = useState<"draw" | "wall">("draw");
@@ -157,6 +161,7 @@ export function ZoneStep({
 
   function capture(event: PointerEvent) {
     event.stopPropagation();
+    onCheckpoint();
     svgRef.current?.setPointerCapture(event.pointerId);
   }
 
@@ -228,6 +233,7 @@ export function ZoneStep({
             </span>
           </ChoiceButton>
         </div>
+        <HistoryButtons history={history} />
         {mode === "draw" ? (
           <>
             <p className="text-sm text-muted-foreground">
@@ -280,19 +286,6 @@ export function ZoneStep({
                 </Button>
               </div>
             </details>
-            <div className="space-y-2">
-              <p className="flex items-center gap-1.5 text-sm font-medium">
-                <Wand2 className="size-4 text-primary" aria-hidden />
-                Rozdělit patro šablonou
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {FLOOR_TEMPLATES.map((template) => (
-                  <Button key={template.key} variant="outline" size="sm" className="h-10" onClick={() => setZones(floorTemplate(template.key, grid).map((zone) => ({ ...zone, key: newKey() })))}>
-                    {template.label}
-                  </Button>
-                ))}
-              </div>
-            </div>
           </>
         ) : (
           <p className="text-sm text-muted-foreground">Klikněte do půdorysu blízko obvodové zdi – vrata se umístí na nejbližší osu stěny (šířka průjezdu 4 m).</p>
@@ -395,9 +388,12 @@ export function ZoneStep({
         label={mode === "draw" ? `Půdorys ${floorLabel(floor.level).short} – tažením myši nakreslete místnost` : `Půdorys ${floorLabel(floor.level).short} – kliknutím u zdi umístíte vrata`}
         testId="studio-grid"
         toolbar={
-          <p className="text-xs text-muted-foreground">
+          <>
+            <HistoryButtons history={history} testId="zone-history" />
+            <p className="text-xs text-muted-foreground">
             Osa X (šířka): <span className="font-mono text-foreground">{fmtM(frame.widthM)} m</span> × Osa Y (hloubka): <span className="font-mono text-foreground">{fmtM(frame.depthM)} m</span> · jemný rastr 1 m
-          </p>
+            </p>
+          </>
         }
       >
         {({ unit }) => {

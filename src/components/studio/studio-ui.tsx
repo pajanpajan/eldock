@@ -83,3 +83,39 @@ export function FloorTabs({ items, active, onActive }: { items: { id: string; la
     </div>
   );
 }
+
+export interface HistoryControls {
+  canUndo: boolean;
+  canRedo: boolean;
+  undo: () => void;
+  redo: () => void;
+  /** Počet kroků v historii (max. 30). */
+  depth: number;
+}
+
+/** Výrazná tlačítka Zpět (Ctrl+Z) / Vpřed (Ctrl+Y) – kroky 2 a 3 Studia. */
+export function HistoryButtons({ history, testId }: { history: HistoryControls; testId?: string }) {
+  return (
+    <div className="flex items-center gap-1.5" role="group" aria-label="Historie změn" data-testid={testId}>
+      <button
+        type="button"
+        onClick={history.undo}
+        disabled={!history.canUndo}
+        aria-label="Zpět (Ctrl+Z)"
+        title={`Vrátit poslední změnu (${history.depth} v historii)`}
+        className="flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-sm font-semibold hover:border-primary/60 disabled:opacity-40"
+      >
+        ↩ Zpět <span className="hidden text-xs font-normal text-muted-foreground sm:inline">(Ctrl+Z)</span>
+      </button>
+      <button
+        type="button"
+        onClick={history.redo}
+        disabled={!history.canRedo}
+        aria-label="Vpřed (Ctrl+Y)"
+        className="flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-sm font-semibold hover:border-primary/60 disabled:opacity-40"
+      >
+        ↪ Vpřed <span className="hidden text-xs font-normal text-muted-foreground sm:inline">(Ctrl+Y)</span>
+      </button>
+    </div>
+  );
+}

@@ -49,14 +49,17 @@ test("Studio: úplně nový závod od nuly – čistá mapa, uložení v jedné 
   await page.getByRole("button", { name: "Další krok" }).click();
 
   // První rozváděč nového závodu je kořenový (hlavní) – žádný zdroj napájení zatím neexistuje.
+  await page.getByRole("radiogroup", { name: "Místnosti patra" }).getByRole("radio", { name: "Celé patro" }).click();
+  await page.getByRole("radio", { name: "Rozváděč", exact: true }).click();
+  await page.getByRole("radio", { name: "Hlavní rozváděč (RH)" }).click();
+  await expect(page.getByLabel("Tag", { exact: true })).toHaveValue("R-A-01");
+  await expect(page.getByRole("checkbox", { name: /Hlavní rozváděč/ })).toBeChecked();
   await page.getByRole("radiogroup", { name: "Měřítko zobrazení" }).getByRole("radio", { name: "1:500" }).click();
   const at = await planPoint(page, { x: 48, y: 6 });
   await page.mouse.click(at.x, at.y);
-  await expect(page.getByLabel("Tag")).toHaveValue("R-A-01");
-  await expect(page.getByRole("checkbox", { name: /Hlavní rozváděč/ })).toBeChecked();
-  await page.getByRole("button", { name: "Osadit R-A-01" }).click();
+  await expect(toast(page)).toContainText("R-A-01 vloženo");
 
-  await page.getByRole("button", { name: "Založit závod a uložit budovu" }).click();
+  await page.getByRole("button", { name: "Založit závod a uložit budovy" }).click();
   await expect(toast(page)).toContainText("Závod Mladá Boleslav – Lakovna založen");
   await expect(page).toHaveURL(/\/floor\//);
   await expect(pin(page, "R-A-01")).toBeVisible();

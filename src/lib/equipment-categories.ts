@@ -60,3 +60,63 @@ export function roomInventoryLabel(types: readonly EquipmentType[]): string {
     .map((category) => `${category.emoji} ${counts.get(category.key)}× ${short[category.key] ?? category.label}`)
     .join(" · ");
 }
+
+/** Konkrétní produktová šablona (banner „Vytvořit nové“ v kroku 3): typ, český název a emoji. */
+export interface ProductTemplate {
+  key: string;
+  label: string;
+  emoji: string;
+  type: EquipmentType;
+  /** Základ názvu zařízení („Úhlová bruska“ → „Úhlová bruska – Dílna údržby“). */
+  name: string;
+  /** Rozváděč: hlavní (kořenový) zdroj. */
+  root?: boolean;
+}
+
+const product = (key: string, label: string, emoji: string, type: EquipmentType, name = label, root?: boolean): ProductTemplate => ({ key, label, emoji, type, name, root });
+
+/** Produktové banery podle kategorie (zadání fáze 38) – vždy i „Vlastní zařízení“. */
+export const PRODUCT_TEMPLATES: Record<EquipmentCategoryKey, readonly ProductTemplate[]> = {
+  TR: [product("tr", "Transformátor / Trafostanice", "⚡", "TRANSFORMER", "Transformátor")],
+  R: [
+    product("rh", "Hlavní rozváděč (RH)", "⚡", "SWITCHBOARD", "Hlavní rozváděč", true),
+    product("rp", "Podružný / Patrový rozváděč (RP)", "🔌", "SWITCHBOARD", "Podružný rozváděč"),
+    product("rm", "Rozváděč stroje / linky (RM)", "🤖", "SWITCHBOARD", "Rozváděč stroje"),
+  ],
+  STR: [
+    product("press", "Lisovací linka", "🏭", "PRODUCTION_LINE"),
+    product("cnc", "CNC obráběcí centrum", "⚙️", "CNC_MACHINE"),
+    product("lathe", "Soustruh / Frézka", "🔧", "MACHINE"),
+    product("assembly", "Montážní / Balicí linka", "📦", "PRODUCTION_LINE"),
+    product("crane", "Jeřáb / Zdvihadlo", "🏗️", "MACHINE"),
+  ],
+  ROB: [
+    product("weld-robot", "Svařovací robot", "🤖", "ROBOT_CELL"),
+    product("handling", "Manipulační robotická buňka", "🦾", "ROBOT_CELL"),
+    product("vision", "Kamerové / Kontrolní pracoviště", "👁️", "ROBOT_CELL"),
+  ],
+  TECH: [
+    product("hvac", "Vzduchotechnická jednotka (VZT)", "🌀", "HVAC_UNIT", "Vzduchotechnická jednotka"),
+    product("compressor", "Kompresorová stanice", "💨", "COMPRESSOR"),
+    product("cooling", "Chlazení / Tepelné čerpadlo", "❄️", "HVAC_UNIT"),
+    product("emergency", "Nouzové osvětlení / Hromosvod", "🚨", "EMERGENCY_LIGHTING", "Nouzové osvětlení"),
+  ],
+  SP: [
+    product("vacuum", "Průmyslový vysavač", "🧹", "APPLIANCE"),
+    product("coffee", "Kávovar / Rychlovarná konvice", "☕", "APPLIANCE", "Kávovar"),
+    product("fridge", "Chladnička / Mikrovlnka", "🧊", "APPLIANCE", "Chladnička"),
+    product("pc", "PC sestava / Tiskárna", "🖥️", "APPLIANCE", "PC sestava"),
+    product("cord", "Prodlužovací přívod / Buben", "🔌", "EXTENSION_CORD", "Prodlužovací přívod"),
+  ],
+  RN: [
+    product("drill", "Vrtačka / Aku šroubovák", "🔩", "POWER_TOOL", "Vrtačka"),
+    product("grinder", "Úhlová bruska", "⚙️", "POWER_TOOL"),
+    product("hammer", "Vrtací / Bourací kladivo", "🔨", "POWER_TOOL", "Vrtací kladivo"),
+    product("heatgun", "Horkovzdušná pistole", "🔥", "POWER_TOOL"),
+    product("welder", "Svářečka", "⚡", "WELDER"),
+    product("meter", "Měřicí přístroj", "📏", "POWER_TOOL"),
+  ],
+};
+
+/** Dlaždice „Vlastní zařízení / Vytvořit nový Tag“ – výchozí typ kategorie. */
+export const customTemplate = (category: EquipmentCategory): ProductTemplate => product(`custom-${category.key}`, "Vlastní zařízení / Vytvořit nový Tag", "🏷️", category.types[0], category.label.split(" / ")[0]);

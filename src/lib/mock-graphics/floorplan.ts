@@ -40,6 +40,11 @@ export interface FloorplanInput {
   /** Počet os číslovaných 1…N (svisle vedených) a písmenných os A…(vodorovně vedených). */
   columns?: number;
   rows?: number;
+  /** Skutečné polohy os ve viewBoxu (Studio: poslední osa na hraně budovy); jinak rovnoměrně. */
+  axesX?: number[];
+  axesY?: number[];
+  /** Popis osy Y (výchozí A, B, C …; Studio i AA … ZZ). */
+  rowLabel?: (index: number) => string;
   rooms: FloorplanRoom[];
   gates?: FloorplanGate[];
   /** Měřítko výkresu a ryska 10 m (Studio); výchozí M 1:200 a 100 px. */
@@ -157,24 +162,32 @@ export function renderFloorplanSvg(input: FloorplanInput): string {
   }
 
   // Osy sloupů
-  const xs = Array.from({ length: cols }, (_, i) => o.x + (o.w / (cols - 1)) * i);
-  const ys = Array.from({ length: rows }, (_, j) => o.y + (o.h / (rows - 1)) * j);
+  const xs = input.axesX ?? Array.from({ length: cols }, (_, i) => o.x + (o.w / (cols - 1)) * i);
+  const ys = input.axesY ?? Array.from({ length: rows }, (_, j) => o.y + (o.h / (rows - 1)) * j);
+  const rowName = input.rowLabel ?? ((j: number) => String.fromCharCode(65 + j));
+  // U velkých hal (osy blíž než 30 px) se popisuje jen každá n-tá osa; kroužky zůstávají kvůli zpětnému čtení
+  const spacing = (values: number[]) => (values.length > 1 ? Math.min(...values.slice(1).map((value, index) => value - values[index])) : 100);
+  const everyX = Math.max(1, Math.ceil(30 / Math.max(1, spacing(xs))));
+  const everyY = Math.max(1, Math.ceil(30 / Math.max(1, spacing(ys))));
   xs.forEach((x, i) => {
     out.push(
       `<line x1="${n(x)}" y1="${o.y - 12}" x2="${n(x)}" y2="${o.y + o.h + 12}" stroke="${GRID}" stroke-width="1" stroke-dasharray="14 4 2 4"/>`,
       `<circle cx="${n(x)}" cy="${o.y - 28}" r="13" fill="#0b1220" stroke="${MUTED}"/>`,
-      `<text x="${n(x)}" y="${o.y - 24}" font-size="12" fill="${TEXT}" text-anchor="middle">${i + 1}</text>`,
+      i % everyX === 0 || i === xs.length - 1 ? `<text x="${n(x)}" y="${o.y - 24}" font-size="12" fill="${TEXT}" text-anchor="middle">${i + 1}</text>` : "",
     );
   });
   ys.forEach((y, j) => {
     out.push(
       `<line x1="${o.x - 12}" y1="${n(y)}" x2="${o.x + o.w + 12}" y2="${n(y)}" stroke="${GRID}" stroke-width="1" stroke-dasharray="14 4 2 4"/>`,
       `<circle cx="${o.x - 28}" cy="${n(y)}" r="13" fill="#0b1220" stroke="${MUTED}"/>`,
-      `<text x="${o.x - 28}" y="${n(y + 4)}" font-size="12" fill="${TEXT}" text-anchor="middle">${String.fromCharCode(65 + j)}</text>`,
+      j % everyY === 0 || j === ys.length - 1 ? `<text x="${o.x - 28}" y="${n(y + 4)}" font-size="${rowName(j).length > 1 ? 10 : 12}" fill="${TEXT}" text-anchor="middle">${rowName(j)}</text>` : "",
     );
   });
-  for (const x of xs) for (const y of ys) {
-    out.push(`<rect x="${n(x - 5)}" y="${n(y - 5)}" width="10" height="10" fill="${WALL}" opacity="0.55"/>`);
+  // Sloupy v průsečících (u obřích hal nad 4 000 sloupů jen osy, ať SVG nezahltí prohlížeč)
+  if (xs.length * ys.length <= 4000) {
+    for (const x of xs) for (const y of ys) {
+      out.push(`<rect x="${n(x - 5)}" y="${n(y - 5)}" width="10" height="10" fill="${WALL}" opacity="0.55"/>`);
+    }
   }
 
   // Obvodové zdi

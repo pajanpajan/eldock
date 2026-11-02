@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import type { PrismaClient } from "@/generated/prisma/client";
-import { DEFAULT_GRID } from "@/lib/cad-grid";
+import { DEFAULT_GRID, gridFromMeters } from "@/lib/cad-grid";
 import { parseLayout } from "@/lib/studio-layout";
 import type { StudioDraft } from "@/lib/studio-draft";
 
-import { saveStudioBuilding } from "./studio";
+import { saveStudioBuilding, saveStudioConcept, withTag } from "./studio";
 import { createTestDb, seedMinimal } from "./test-db";
 
 // Integrační test Studia nad SQLite z migrací.
@@ -193,5 +193,51 @@ describe("saveStudioBuilding", () => {
     await expect(
       saveStudioBuilding(prisma, draft({ building: { mode: "existing", id: "b" }, floors: [{ key: "x", existingId: (await prisma.floor.findFirstOrThrow({ where: { buildingId: created.buildingId } })).id, level: 0, usage: "", zones: [], gates: [] }], equipment: [] })),
     ).rejects.toThrow(/nepatří/);
+  });
+
+  it("koncept se dvěma budovami (budova v metrech 114 × 90 m) v jedné transakci; chyba druhé budovy vrátí i první", async () => {
+    const base = { plantId: "p", campus: null };
+    const big = { ...draft(), grid: gridFromMeters(114, 90, 6, "1:200"), building: { mode: "new" as const, code: "C", name: "Hala C - Lisovna", type: "PRODUCTION" as const, map: { x: 10, y: 10, w: 30, h: 30 } } };
+    const energy = {
+      ...draft(),
+      grid: gridFromMeters(24, 18, 6, "1:200"),
+      building: { mode: "new" as const, code: "D", name: "Energetika D", type: "ENERGY" as const, map: { x: 60, y: 60, w: 8, h: 8 } },
+      floors: [{ key: "e0", level: 0, usage: "Trafostanice", zones: [], gates: [] }],
+      equipment: [],
+    };
+    const results = await saveStudioConcept(prisma, { ...base, buildings: [big, energy] });
+    expect(results.map((result) => result.floors)).toEqual([2, 1]);
+    const hall = await prisma.building.findUniqueOrThrow({ where: { id: results[0].buildingId }, include: { floors: true } });
+    expect(hall.description).toContain("114 × 90 m");
+    expect(await prisma.building.count({ where: { plantId: "p" } })).toBe(3);
+
+    // Duplicitní kód druhé budovy → nic z konceptu se neuloží
+    await expect(saveStudioConcept(prisma, { ...base, buildings: [{ ...big, building: { ...big.building, code: "E" } }, { ...energy, building: { ...energy.building, code: "E" } }] })).rejects.toThrow(/kódem E/);
+    expect(await prisma.building.count({ where: { plantId: "p" } })).toBe(3);
+  });
+
+  it("přejmenování stávajícího patra a úprava uloženého zařízení (tag, název, napájení, místnost)", async () => {
+    await saveStudioBuilding(
+      prisma,
+      draft({
+        building: { mode: "existing", id: "b" },
+        floors: [],
+        equipment: [],
+        floorRenames: [{ id: "f", usage: "Lisovna a expedice" }],
+        equipmentEdits: [{ id: "eq-R-CNC-04", tag: "r-cnc-05", name: "Rozváděč CNC 05", parentId: "eq-R-LIS-01", circuit: "Pole 7 / QF7", zone: "Obrábění" }],
+      }),
+    );
+    expect(await prisma.floor.findUniqueOrThrow({ where: { id: "f" } })).toMatchObject({ name: "1. NP - Lisovna a expedice", description: "Lisovna a expedice" });
+    expect(await prisma.equipment.findUniqueOrThrow({ where: { id: "eq-R-CNC-04" } })).toMatchObject({
+      tag: "R-CNC-05",
+      name: "R-CNC-05 - Rozváděč CNC 05",
+      fedFromEquipmentId: "eq-R-LIS-01",
+      fedFromCircuit: "Pole 7 / QF7",
+      assignedZone: "Obrábění",
+    });
+    await expect(
+      saveStudioBuilding(prisma, draft({ building: { mode: "existing", id: "b" }, floors: [], equipment: [], equipmentEdits: [{ id: "eq-R-CNC-04", tag: "R-LIS-01", name: "x", parentId: null, circuit: null, zone: null }] })),
+    ).rejects.toThrow(/R-LIS-01: na patře už zařízení/);
+    expect(withTag("R-1", "R-1 - Rozváděč")).toBe("R-1 - Rozváděč");
   });
 });

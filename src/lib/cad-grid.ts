@@ -1,46 +1,89 @@
 import { renderFloorplanSvg, type FloorplanGate, type FloorplanRoom, type RoomStyle } from "./mock-graphics/floorplan";
 
-// Konstrukční rastr Studia: osy 1…N (svislé čáry, číslované) a A…Z (vodorovné, písmenné),
-// rozteč sloupů v metrech. Půdorys se kreslí ve viewBoxu 1200 × 800 v JEDNOTNÉM měřítku
+// Konstrukční rastr Studia: osy 1…N (svislé čáry, číslované) a A…Z, AA…ZZ (vodorovné, písmenné).
+// Primární je ROZMĚR BUDOVY v metrech (widthM × depthM); osy se dopočítají po rozteči sloupů
+// (poslední osa leží na hraně budovy, i když rozměr není násobkem rozteče). Půdorys se kreslí ve viewBoxu 1200 × 800 v JEDNOTNÉM měřítku
 // (stejný počet px na metr v ose X i Y) – rám `PlanFrame` převádí metry ↔ viewBox.
 // Místnosti a zařízení konceptu mají souřadnice v metrech od průsečíku os A1 (osa X doprava,
 // osa Y dolů), takže je jde přichytávat na jemný rastr po 1 m.
 
-export const GRID_LIMITS = { cols: { min: 4, max: 20 }, rows: { min: 4, max: 16 } } as const;
+/** Rozměr budovy v metrech (osa X i Y) a rozteč nosných sloupů. */
+export const BUILDING_LIMITS = { min: 6, max: 2000 } as const;
+export const STEP_LIMITS = { min: 2, max: 30 } as const;
 export const SCALES = ["1:100", "1:200", "1:500", "1:1000"] as const;
 export type DrawingScale = (typeof SCALES)[number];
 
 export interface GridSpec {
-  /** Počet os 1…N (osa X). */
+  /** Počet os 1…N (osa X) – u rastru v metrech dopočítaný z `widthM`. */
   cols: number;
-  /** Počet os A…Z (osa Y). */
+  /** Počet os A…Z, AA… (osa Y) – u rastru v metrech dopočítaný z `depthM`. */
   rows: number;
   /** Rozteč sloupů [m]. */
   stepMeters: number;
   scale: DrawingScale;
+  /** Šířka budovy – osa X [m]; bez ní = (cols − 1) × rozteč. */
+  widthM?: number;
+  /** Hloubka budovy – osa Y [m]; bez ní = (rows − 1) × rozteč. */
+  depthM?: number;
 }
 
 export const DEFAULT_GRID: GridSpec = { cols: 12, rows: 8, stepMeters: 6, scale: "1:200" };
+
+/** Polohy os v metrech: 0, rozteč, 2 × rozteč … a poslední osa na hraně (délka nemusí být násobkem). */
+export function axisMeters(lengthM: number, stepMeters: number): number[] {
+  const axes: number[] = [];
+  for (let position = 0; position < lengthM - 0.01; position += stepMeters) axes.push(Math.round(position * 100) / 100);
+  axes.push(Math.round(lengthM * 100) / 100);
+  return axes;
+}
+
+/** Rastr z rozměru budovy v metrech (osy se dopočítají, žádný limit počtu os). */
+export function gridFromMeters(widthM: number, depthM: number, stepMeters: number, scale: DrawingScale): GridSpec {
+  const clampM = (value: number) => Math.min(BUILDING_LIMITS.max, Math.max(BUILDING_LIMITS.min, Math.round(value * 10) / 10));
+  const step = Math.min(STEP_LIMITS.max, Math.max(STEP_LIMITS.min, stepMeters));
+  const width = clampM(widthM);
+  const depth = clampM(depthM);
+  return { cols: axisMeters(width, step).length, rows: axisMeters(depth, step).length, stepMeters: step, scale, widthM: width, depthM: depth };
+}
 export const FLOOR_VIEWBOX = { width: 1200, height: 800 } as const;
 
-export const clampGrid = (spec: GridSpec): GridSpec => ({
-  ...spec,
-  cols: Math.min(GRID_LIMITS.cols.max, Math.max(GRID_LIMITS.cols.min, Math.round(spec.cols))),
-  rows: Math.min(GRID_LIMITS.rows.max, Math.max(GRID_LIMITS.rows.min, Math.round(spec.rows))),
-  stepMeters: Math.min(30, Math.max(2, spec.stepMeters)),
-});
+/** Normalizace rastru: vždy v metrech (starší rastr „počet os × rozteč“ se převede). */
+export function clampGrid(spec: GridSpec): GridSpec {
+  const step = Math.min(STEP_LIMITS.max, Math.max(STEP_LIMITS.min, spec.stepMeters));
+  const widthM = spec.widthM ?? (Math.max(2, Math.round(spec.cols)) - 1) * step;
+  const depthM = spec.depthM ?? (Math.max(2, Math.round(spec.rows)) - 1) * step;
+  return gridFromMeters(widthM, depthM, step, spec.scale);
+}
+
+/** Popis osy Y: A … Z, AA … AZ, BA … ZZ (jako sloupce v Excelu). */
+export function rowLabel(index: number): string {
+  let n = index + 1;
+  let label = "";
+  while (n > 0) {
+    const rest = (n - 1) % 26;
+    label = String.fromCharCode(65 + rest) + label;
+    n = Math.floor((n - 1) / 26);
+  }
+  return label;
+}
+
+/** „AB“ → 27 (0-based); neplatné → −1. */
+export function rowIndex(label: string): number {
+  if (!/^[A-Z]{1,2}$/.test(label)) return -1;
+  return [...label].reduce((sum, char) => sum * 26 + (char.charCodeAt(0) - 64), 0) - 1;
+}
 
 export const colLabels = (cols: number) => Array.from({ length: cols }, (_, i) => String(i + 1));
-export const rowLabels = (rows: number) => Array.from({ length: rows }, (_, i) => String.fromCharCode(65 + i));
+export const rowLabels = (rows: number) => Array.from({ length: rows }, (_, i) => rowLabel(i));
 
 /** Číslo v metrech česky: 22.5 → „22,5“. */
 export const fmtM = (value: number) => String(Math.round(value * 10) / 10).replace(".", ",");
 const fmtArea = (value: number) => Math.round(value).toLocaleString("cs-CZ");
 
-/** Rozměr haly mezi krajními osami: 12 os × 6 m → 66 m. */
-export function gridDimensions(spec: Pick<GridSpec, "cols" | "rows" | "stepMeters">): { widthM: number; depthM: number; label: string } {
-  const widthM = (spec.cols - 1) * spec.stepMeters;
-  const depthM = (spec.rows - 1) * spec.stepMeters;
+/** Rozměr budovy: zadané metry, u staršího rastru mezi krajními osami (12 os × 6 m → 66 m). */
+export function gridDimensions(spec: Pick<GridSpec, "cols" | "rows" | "stepMeters" | "widthM" | "depthM">): { widthM: number; depthM: number; label: string } {
+  const widthM = spec.widthM ?? (spec.cols - 1) * spec.stepMeters;
+  const depthM = spec.depthM ?? (spec.rows - 1) * spec.stepMeters;
   return { widthM, depthM, label: `${fmtM(widthM)} m × ${fmtM(depthM)} m` };
 }
 
@@ -82,20 +125,25 @@ export interface PlanFrame {
   cols: number;
   rows: number;
   stepMeters: number;
+  /** Polohy os 1…N a A…ZZ v metrech od osy A1. */
+  axesX: number[];
+  axesY: number[];
 }
 
 /** Rám nového patra: obvod v jednotném měřítku, vystředěný v ploše viewBoxu (okraj 70 px pro popisy os). */
-export function planFrame(spec: Pick<GridSpec, "cols" | "rows" | "stepMeters">, viewBox: { width: number; height: number } = FLOOR_VIEWBOX): PlanFrame {
+export function planFrame(spec: Pick<GridSpec, "cols" | "rows" | "stepMeters" | "widthM" | "depthM">, viewBox: { width: number; height: number } = FLOOR_VIEWBOX): PlanFrame {
   const { widthM, depthM } = gridDimensions(spec);
   const area = { x: 70, y: 70, w: viewBox.width - 150, h: viewBox.height - 110 };
   const k = Math.min(area.w / widthM, area.h / depthM);
   const w = widthM * k;
   const h = depthM * k;
-  return { x: area.x + (area.w - w) / 2, y: area.y + (area.h - h) / 2, w, h, widthM, depthM, cols: spec.cols, rows: spec.rows, stepMeters: spec.stepMeters };
+  const axesX = axisMeters(widthM, spec.stepMeters);
+  const axesY = axisMeters(depthM, spec.stepMeters);
+  return { x: area.x + (area.w - w) / 2, y: area.y + (area.h - h) / 2, w, h, widthM, depthM, cols: axesX.length, rows: axesY.length, stepMeters: spec.stepMeters, axesX, axesY };
 }
 
 /** Stávající patra (půdorysy ze seedu a starších verzí Studia): obvod 70/70/1050/690 px = rastr 12 × 8 po 6 m. */
-export const EXISTING_FLOOR_FRAME: PlanFrame = { x: 70, y: 70, w: 1050, h: 690, widthM: 66, depthM: 42, cols: 12, rows: 8, stepMeters: 6 };
+export const EXISTING_FLOOR_FRAME: PlanFrame = { x: 70, y: 70, w: 1050, h: 690, widthM: 66, depthM: 42, cols: 12, rows: 8, stepMeters: 6, axesX: axisMeters(66, 6), axesY: axisMeters(42, 6) };
 
 export interface MeterPoint {
   x: number;
@@ -134,9 +182,8 @@ export function fineStep(frame: PlanFrame): number {
 
 /** Pole rastru, ve kterém leží bod: „B3“ = mezi osami B–C a 3–4. */
 export function bayAt(frame: PlanFrame, point: MeterPoint): string {
-  const col = Math.min(frame.cols - 2, Math.max(0, Math.floor(point.x / frame.stepMeters)));
-  const row = Math.min(frame.rows - 2, Math.max(0, Math.floor(point.y / frame.stepMeters)));
-  return formatGridRef({ row, col });
+  const bay = (axes: number[], value: number) => Math.min(axes.length - 2, Math.max(0, axes.findIndex((axis, index) => index < axes.length - 1 && value < axes[index + 1])));
+  return formatGridRef({ row: bay(frame.axesY, point.y), col: bay(frame.axesX, point.x) });
 }
 
 /** Popis polohy: „X 12 m · Y 6 m (pole B3)“. */
@@ -153,26 +200,26 @@ export interface GridPoint {
 
 /** „C11“ → { row: 2, col: 10 } (0-based); neplatné / mimo rastr → `null`. */
 export function parseGridRef(ref: string, spec: Pick<GridSpec, "cols" | "rows">): GridPoint | null {
-  const match = /^\s*([A-Za-z])\s*(\d{1,2})\s*$/.exec(ref);
+  const match = /^\s*([A-Za-z]{1,2})\s*(\d{1,3})\s*$/.exec(ref);
   if (!match) return null;
-  const row = match[1].toUpperCase().charCodeAt(0) - 65;
+  const row = rowIndex(match[1].toUpperCase());
   const col = Number(match[2]) - 1;
   if (row < 0 || row >= spec.rows || col < 0 || col >= spec.cols) return null;
   return { row, col };
 }
 
-export const formatGridRef = (point: GridPoint) => `${String.fromCharCode(65 + point.row)}${point.col + 1}`;
+export const formatGridRef = (point: GridPoint) => `${rowLabel(point.row)}${point.col + 1}`;
 
 /** Průsečík os ve viewBoxu. */
 export function gridToPx(point: GridPoint, frame: PlanFrame): { x: number; y: number } {
-  return { x: frame.x + (frame.w / (frame.cols - 1)) * point.col, y: frame.y + (frame.h / (frame.rows - 1)) * point.row };
+  return metersToPx(frame, { x: frame.axesX[point.col] ?? frame.widthM, y: frame.axesY[point.row] ?? frame.depthM });
 }
 
 /** Nejbližší průsečík os k bodu viewBoxu. */
 export function nearestGridPoint(point: { x: number; y: number }, frame: PlanFrame): GridPoint {
-  const col = Math.round(((point.x - frame.x) / frame.w) * (frame.cols - 1));
-  const row = Math.round(((point.y - frame.y) / frame.h) * (frame.rows - 1));
-  return { col: Math.min(frame.cols - 1, Math.max(0, col)), row: Math.min(frame.rows - 1, Math.max(0, row)) };
+  const meters = pxToMeters(frame, point);
+  const nearest = (axes: number[], value: number) => axes.reduce((best, axis, index) => (Math.abs(axis - value) < Math.abs(axes[best] - value) ? index : best), 0);
+  return { col: nearest(frame.axesX, meters.x), row: nearest(frame.axesY, meters.y) };
 }
 
 /** Nejbližší průsečík na obvodové stěně k bodu viewBoxu (vrata jedním klikem u zdi). */
@@ -345,14 +392,19 @@ export function parseCellRef(ref: string, spec: Pick<GridSpec, "cols" | "rows">)
 }
 
 /** Rozsah buněk „B2“–„B5“ → obdélník v metrech; neplatné buňky → `null`. */
-export function cellsToRect(from: string, to: string, spec: Pick<GridSpec, "cols" | "rows" | "stepMeters">) {
-  const a = parseCellRef(from, spec);
-  const b = parseCellRef(to, spec);
+export function cellsToRect(from: string, to: string, spec: Pick<GridSpec, "cols" | "rows" | "stepMeters" | "widthM" | "depthM">) {
+  const dims = gridDimensions(spec);
+  const axesX = axisMeters(dims.widthM, spec.stepMeters);
+  const axesY = axisMeters(dims.depthM, spec.stepMeters);
+  const cells = { cols: axesX.length, rows: axesY.length };
+  const a = parseCellRef(from, cells);
+  const b = parseCellRef(to, cells);
   if (!a || !b) return null;
-  const step = spec.stepMeters;
   const col = Math.min(a.col, b.col);
   const row = Math.min(a.row, b.row);
-  return { x: col * step, y: row * step, w: (Math.max(a.col, b.col) - col + 1) * step, h: (Math.max(a.row, b.row) - row + 1) * step };
+  const x = axesX[col];
+  const y = axesY[row];
+  return { x, y, w: axesX[Math.max(a.col, b.col) + 1] - x, h: axesY[Math.max(a.row, b.row) + 1] - y };
 }
 
 // ---------------------------------------------------------------------------
@@ -369,68 +421,13 @@ export function gateToFloorplan(gate: GridGate, frame: PlanFrame): FloorplanGate
   const point = parseGridRef(gate.at, frame);
   if (!point) return null;
   const { x, y } = gridToPx(point, frame);
-  const bay = Math.min(frame.w / (frame.cols - 1), frame.h / (frame.rows - 1));
+  const k = pxPerMeter(frame);
+  const bay = Math.min(frame.stepMeters * k.x, frame.stepMeters * k.y, frame.w, frame.h);
   const half = Math.max(10, Math.min(bay / 2.2, 2 * Math.min(pxPerMeter(frame).x, pxPerMeter(frame).y)));
   const label = gate.label.trim() || "Vrata";
   if (point.col === 0 || point.col === frame.cols - 1) return { x: Math.round(x), y: Math.round(y - half), length: Math.round(half * 2), orient: "v", label };
   if (point.row === 0 || point.row === frame.rows - 1) return { x: Math.round(x - half), y: Math.round(y), length: Math.round(half * 2), orient: "h", label };
   return null;
-}
-
-// ---------------------------------------------------------------------------
-//  Šablony rozdělení patra (1 klik)
-// ---------------------------------------------------------------------------
-
-export const FLOOR_TEMPLATES = [
-  { key: "two-lines", label: "2 výrobní linky + sklad" },
-  { key: "switchroom", label: "Rozvodna + zázemí" },
-  { key: "offices", label: "Kanceláře podél chodby" },
-] as const;
-
-export type FloorTemplateKey = (typeof FLOOR_TEMPLATES)[number]["key"];
-
-/** Zóny šablony pro daný rastr (po polích rastru); funguje i pro nejmenší rastr 4 × 4 os. */
-export function floorTemplate(key: FloorTemplateKey, spec: Pick<GridSpec, "cols" | "rows" | "stepMeters">): GridZone[] {
-  const cells = cellCount(spec);
-  const ref = (row: number, col: number) => formatGridRef({ row, col });
-  const lastRow = cells.rows - 1;
-  const lastCol = cells.cols - 1;
-  const half = Math.max(1, Math.floor(cells.cols / 2));
-  const zone = (from: string, to: string, name: string, zoneKind: ZoneKind): GridZone[] => {
-    const rect = cellsToRect(from, to, spec);
-    return rect ? [{ key: "", ...rect, name, kind: zoneKind }] : [];
-  };
-  let zones: GridZone[];
-  switch (key) {
-    case "two-lines": {
-      const band = Math.max(1, Math.floor(cells.rows * 0.35));
-      zones = [
-        ...zone(ref(0, 0), ref(band - 1, lastCol), "Výrobní linka 1", "PRODUCTION"),
-        ...zone(ref(band, 0), ref(Math.min(2 * band - 1, lastRow - 1), lastCol), "Výrobní linka 2", "PRODUCTION"),
-        ...zone(ref(Math.min(2 * band, lastRow), 0), ref(lastRow, half - 1), "Zázemí a šatny", "FACILITIES"),
-        ...zone(ref(Math.min(2 * band, lastRow), half), ref(lastRow, lastCol), "Sklad komponent", "STORAGE"),
-      ];
-      break;
-    }
-    case "switchroom": {
-      const split = Math.max(1, Math.floor(cells.cols * 0.6));
-      zones = [...zone(ref(0, 0), ref(lastRow, split - 1), "Rozvodna nn", "ELECTRICAL"), ...zone(ref(0, split), ref(lastRow, lastCol), "Zázemí", "FACILITIES")];
-      break;
-    }
-    case "offices": {
-      const corridor = Math.max(1, Math.floor(cells.rows / 2));
-      zones = [
-        ...zone(ref(0, 0), ref(corridor - 1, half - 1), "Kanceláře A", "OFFICE"),
-        ...zone(ref(0, half), ref(corridor - 1, lastCol), "Kanceláře B", "OFFICE"),
-        ...zone(ref(corridor, 0), ref(corridor, lastCol), "Chodba", "CORRIDOR"),
-        ...(corridor + 1 <= lastRow
-          ? [...zone(ref(corridor + 1, 0), ref(lastRow, half - 1), "Zasedací místnost", "OFFICE"), ...zone(ref(corridor + 1, half), ref(lastRow, lastCol), "Kuchyňka", "FACILITIES")]
-          : []),
-      ];
-      break;
-    }
-  }
-  return zones.map((entry, index) => ({ ...entry, key: `${key}-${index + 1}` }));
 }
 
 // ---------------------------------------------------------------------------
@@ -447,8 +444,11 @@ export function renderGridFloorplanSvg(input: { floorName: string; spec: GridSpe
   return renderFloorplanSvg({
     floor: { name: input.floorName, viewBoxW: FLOOR_VIEWBOX.width, viewBoxH: FLOOR_VIEWBOX.height },
     outline: { x: frame.x, y: frame.y, w: frame.w, h: frame.h },
-    columns: spec.cols,
-    rows: spec.rows,
+    columns: frame.cols,
+    rows: frame.rows,
+    axesX: frame.axesX.map((meters) => frame.x + meters * k.x),
+    axesY: frame.axesY.map((meters) => frame.y + meters * k.y),
+    rowLabel,
     rooms: input.zones.map((zone) => zoneToRoom(zone, frame)).filter((room): room is FloorplanRoom => room !== null),
     gates: input.gates.map((gate) => gateToFloorplan(gate, frame)).filter((gate): gate is FloorplanGate => gate !== null),
     scale: { label: `M ${spec.scale}`, pxPer10m: Math.round(k.x * 100) / 10, dimensions: `osa X ${fmtM(dims.widthM)} m × osa Y ${fmtM(dims.depthM)} m, rozteč ${fmtM(spec.stepMeters)} m` },

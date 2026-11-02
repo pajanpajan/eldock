@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, Building2, Factory, Loader2, Plug, Plus, Save, Shapes, Trash2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Building2, Factory, Loader2, Plug, Plus, Save, Shapes, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { IsometricBuilding } from "@/components/map/isometric/IsometricBuilding";
@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { BuildingType } from "@/generated/prisma/enums";
-import { DEFAULT_GRID, FLOOR_VIEWBOX, GRID_LIMITS, SCALES, clampGrid, fmtM, gridDimensions, planFrame, renderGridFloorplanSvg, zoneToRoom, type DrawingScale, type GridSpec } from "@/lib/cad-grid";
+import { BUILDING_LIMITS, DEFAULT_GRID, FLOOR_VIEWBOX, SCALES, fmtM, gridDimensions, gridFromMeters, planFrame, renderGridFloorplanSvg, rowLabel, zoneToRoom, type DrawingScale, type GridSpec } from "@/lib/cad-grid";
 import {
   CAMPUS_LIMITS,
   CAMPUS_PRESETS,
@@ -29,7 +29,7 @@ import { BUILDING_TYPE_LABELS } from "@/lib/format";
 import { extractFloorplanRooms } from "@/lib/mock-graphics/floorplan";
 import type { AutopilotSource } from "@/lib/studio-autopilot";
 import { layoutOfFloor } from "@/lib/studio-layout";
-import { floorLabel, floorName, type StudioBuildingDraft, type StudioEquipmentDraft, type StudioFloorDraft, type StudioNewPlantDraft } from "@/lib/studio-draft";
+import { floorLabel, floorName, type StudioBuildingDraft, type StudioEquipmentDraft, type StudioEquipmentEdit, type StudioFloorDraft, type StudioNewPlantDraft } from "@/lib/studio-draft";
 import { cn } from "@/lib/utils";
 import { saveStudioAction } from "@/server/actions/studio";
 import type { FloorOverview } from "@/server/queries/building";
@@ -38,24 +38,26 @@ import type { StudioData } from "@/server/queries/studio";
 import { CampusPlacementMap } from "./CampusPlacementMap";
 import { PlacementStep, type FloorRef } from "./PlacementStep";
 import type { ViewZoom } from "./PlanViewport";
-import { ChoiceButton, NumberField, selectClass } from "./studio-ui";
+import { ChoiceButton, selectClass, type HistoryControls } from "./studio-ui";
 import { ZoneStep } from "./ZoneStep";
 
 const STEPS = [
-  { n: 1, title: "Budova, umístění a podlaží", icon: Building2 },
+  { n: 1, title: "Budovy, umístění a podlaží", icon: Building2 },
   { n: 2, title: "Místnosti, zóny a vrata", icon: Shapes },
   { n: 3, title: "Zařízení a napájení", icon: Plug },
 ] as const;
 
-/** Šablony budov na 1 klik: rozměr (rastr), typ a patra. */
-const PRESETS: { key: string; label: string; name: string; type: BuildingType; grid: Omit<GridSpec, "scale">; floors: { level: number; usage: string }[] }[] = [
-  { key: "hall", label: "🏭 Výrobní hala (66 × 42 m, rastr 12×8)", name: "Výroba", type: "PRODUCTION", grid: { cols: 12, rows: 8, stepMeters: 6 }, floors: [{ level: 0, usage: "Hlavní výroba" }] },
+/** Šablony budov na 1 klik: rozměr v metrech, typ a patra. */
+const PRESETS: { key: string; label: string; emoji: string; name: string; type: BuildingType; widthM: number; depthM: number; floors: { level: number; usage: string }[] }[] = [
+  { key: "hall", label: "🏭 Výrobní hala (66 × 42 m)", emoji: "🏭", name: "Výroba", type: "PRODUCTION", widthM: 66, depthM: 42, floors: [{ level: 0, usage: "Hlavní výroba" }] },
   {
     key: "energy",
     label: "⚡ Energetika / Rozvodna (24 × 18 m, 1. PP + 1. NP)",
+    emoji: "⚡",
     name: "Energetika",
     type: "ENERGY",
-    grid: { cols: 5, rows: 4, stepMeters: 6 },
+    widthM: 24,
+    depthM: 18,
     floors: [
       { level: -1, usage: "Rozvodny" },
       { level: 0, usage: "Trafostanice" },
@@ -64,120 +66,221 @@ const PRESETS: { key: string; label: string; name: string; type: BuildingType; g
   {
     key: "office",
     label: "🏢 Administrativa (36 × 24 m, 2 patra)",
+    emoji: "🏢",
     name: "Administrativa",
     type: "OFFICE",
-    grid: { cols: 7, rows: 5, stepMeters: 6 },
+    widthM: 36,
+    depthM: 24,
     floors: [
       { level: 0, usage: "Recepce a kanceláře" },
       { level: 1, usage: "Kanceláře" },
     ],
   },
-  { key: "warehouse", label: "📦 Sklad / Expedice (48 × 30 m)", name: "Sklad", type: "WAREHOUSE", grid: { cols: 9, rows: 6, stepMeters: 6 }, floors: [{ level: 0, usage: "Expediční sklad" }] },
+  { key: "warehouse", label: "📦 Sklad / Expedice (48 × 30 m)", emoji: "📦", name: "Sklad", type: "WAREHOUSE", widthM: 48, depthM: 30, floors: [{ level: 0, usage: "Expediční sklad" }] },
 ];
+const TYPE_EMOJI: Record<BuildingType, string> = { PRODUCTION: "🏭", ASSEMBLY: "🔧", ENERGY: "⚡", WAREHOUSE: "📦", OFFICE: "🏢", OTHER: "🏗️" };
 
 const BUILDING_TYPES = Object.keys(BUILDING_TYPE_LABELS) as BuildingType[];
+const HISTORY_LIMIT = 30;
+/** Změny rychleji po sobě (psaní, tažení) se slučují do jednoho kroku historie. */
+const HISTORY_COALESCE_MS = 500;
 
 type PlantMode = "existing" | "new";
+
+/** Jedna budova konceptu se vším, co se k ní ve Studiu nakreslí. */
+interface Concept {
+  key: string;
+  building: StudioBuildingDraft;
+  grid: GridSpec;
+  floors: StudioFloorDraft[];
+  equipment: StudioEquipmentDraft[];
+  /** Nové využití stávajících pater (Floor.id → využití). */
+  renames: Record<string, string>;
+  /** Úpravy uložených zařízení z kroku 3. */
+  edits: Record<string, StudioEquipmentEdit>;
+  zoneFloorKey: string;
+  placeFloor: FloorRef;
+}
+
+interface WizardState {
+  concepts: Concept[];
+  past: Concept[][];
+  future: Concept[][];
+  lastPush: number;
+}
 
 const NEW_PLANT_DEFAULT: StudioNewPlantDraft = { name: "", code: "", location: "" };
 const NEW_CAMPUS_DEFAULT: CampusSize = { width: 300, height: 200 };
 
-/** První volné písmeno kódu budovy v závodě. */
-function freeBuildingCode(buildings: { code: string }[]) {
-  const used = new Set(buildings.map((building) => building.code.toUpperCase()));
+/** První volné písmeno kódu budovy (závod i ostatní budovy konceptu). */
+function freeBuildingCode(codes: readonly string[]) {
+  const used = new Set(codes.map((code) => code.toUpperCase()));
   return "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").find((letter) => !used.has(letter)) ?? "N";
 }
 
 /** Nový závod od nuly: čistá mapa bez budov a bez zdrojů napájení. */
 const cleanScene = (data: StudioData): StudioData => ({ ...data, plant: { ...data.plant, buildings: [] }, equipment: [] });
+const usageOf = (name: string) => name.split(" - ").slice(1).join(" - ");
 
-/** Studio výstavby závodu – 3 kroky bez ručních souřadnic, uložení v jedné transakci. */
+/** Nová budova konceptu ze šablony – volné místo v areálu i volný kód. */
+function makeConcept(preset: (typeof PRESETS)[number], scene: { codes: string[]; rects: CampusRect[]; campus: CampusSize }, scale: DrawingScale, key: (prefix: string) => string): Concept {
+  const grid = gridFromMeters(preset.widthM, preset.depthM, DEFAULT_GRID.stepMeters, scale);
+  const code = freeBuildingCode(scene.codes);
+  const floors = preset.floors.map((floor) => ({ key: key("f"), level: floor.level, usage: floor.usage, zones: [], gates: [] }));
+  const ground = floors.find((floor) => floor.level === 0) ?? floors[0];
+  return {
+    key: key("b"),
+    building: {
+      mode: "new",
+      code,
+      name: preset.type === "PRODUCTION" ? `Hala ${code} - ${preset.name}` : `${preset.name} ${code}`,
+      type: preset.type,
+      map: findFreeSpot(metersToRect(preset.widthM, preset.depthM, scene.campus), scene.rects),
+    },
+    grid,
+    floors,
+    equipment: [],
+    renames: {},
+    edits: {},
+    zoneFloorKey: ground.key,
+    placeFloor: { kind: "draft", key: ground.key },
+  };
+}
+
+/** Studio výstavby závodu – 3 kroky, jedna či více budov, uložení celého konceptu v jedné transakci. */
 export function StudioWizard({ data: source, startNewPlant = false }: { data: StudioData; startNewPlant?: boolean }) {
   const router = useRouter();
-  // Režim závodu: budova do stávajícího závodu, nebo úplně nový závod od nuly (čistá mapa areálu).
   const [plantMode, setPlantMode] = useState<PlantMode>(startNewPlant ? "new" : "existing");
   const [newPlant, setNewPlant] = useState<StudioNewPlantDraft>(NEW_PLANT_DEFAULT);
   const plantCampus: CampusSize = { width: source.plant.campusWidthM, height: source.plant.campusDepthM };
-  // Rozměr areálu (osa X × osa Y) – editovatelný v obou režimech; vstupy se ověřují až při použití.
   const [campusInput, setCampusInput] = useState<CampusSize>(startNewPlant ? NEW_CAMPUS_DEFAULT : plantCampus);
   const [campus, setCampus] = useState<CampusSize>(startNewPlant ? NEW_CAMPUS_DEFAULT : plantCampus);
   const [campusZoom, setCampusZoom] = useState<ViewZoom>("fit");
-  // Zoom půdorysu (kroky 2 a 3): „Celé“, nebo skutečné měřítko výkresu z přepínače Měřítko
   const [floorZoom, setFloorZoom] = useState<ViewZoom>("fit");
   const baseData = useMemo(() => (plantMode === "new" ? cleanScene(source) : source), [plantMode, source]);
   // Stávající budovy přepočtené na aktuální rozměr areálu (stejná poloha v metrech).
   const data = useMemo<StudioData>(() => {
-    if (campus.width === plantCampus.width && campus.height === plantCampus.height) return baseData;
+    if (campus.width === source.plant.campusWidthM && campus.height === source.plant.campusDepthM) return baseData;
+    const from = { width: source.plant.campusWidthM, height: source.plant.campusDepthM };
     return {
       ...baseData,
       plant: {
         ...baseData.plant,
         buildings: baseData.plant.buildings.map((building) => ({
           ...building,
-          mapPolygon: rescalePolygon(building.mapPolygon, plantCampus, campus),
-          labelX: (building.labelX * plantCampus.width) / campus.width,
-          labelY: (building.labelY * plantCampus.height) / campus.height,
+          mapPolygon: rescalePolygon(building.mapPolygon, from, campus),
+          labelX: (building.labelX * from.width) / campus.width,
+          labelY: (building.labelY * from.height) / campus.height,
         })),
       },
     };
-    // plantCampus je odvozený ze `source`
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [baseData, campus, source.plant.campusWidthM, source.plant.campusDepthM]);
   const counter = useRef(1);
   const nextKey = (prefix: string) => `${prefix}${counter.current++}`;
   const [step, setStep] = useState(1);
   const [pending, startTransition] = useTransition();
+  const [hoveredFloor, setHoveredFloor] = useState<string | null>(null);
 
-  const freeCode = useMemo(() => freeBuildingCode(data.plant.buildings), [data.plant.buildings]);
+  const [state, setState] = useState<WizardState>(() => {
+    // Výchozí budova: klíče z lokálního počítadla (počítadlo v ref se při renderu číst nesmí)
+    let index = 0;
+    const initialKey = (prefix: string) => `${prefix}0${index++}`;
+    const buildings = data.plant.buildings;
+    return {
+      concepts: [makeConcept(PRESETS[0], { codes: buildings.map((building) => building.code), rects: buildings.map((building) => polygonBounds(building.mapPolygon)), campus }, DEFAULT_GRID.scale, initialKey)],
+      past: [],
+      future: [],
+      lastPush: 0,
+    };
+  });
+  const { concepts } = state;
+  const [activeKey, setActiveKey] = useState(state.concepts[0].key);
+  const concept = concepts.find((entry) => entry.key === activeKey) ?? concepts[0];
 
-  // Krok 1 – budova, umístění, rastr a patra
-  const [grid, setGrid] = useState<GridSpec>(DEFAULT_GRID);
+  /** Změna konceptu s historií (Zpět / Vpřed, max. 30 kroků; rychlé po sobě jdoucí změny se slučují). */
+  const change = useCallback((fn: (all: Concept[]) => Concept[], record = true) => {
+    const now = Date.now();
+    setState((current) => {
+      const next = fn(current.concepts);
+      if (next === current.concepts) return current;
+      if (!record) return { ...current, concepts: next };
+      const push = now - current.lastPush > HISTORY_COALESCE_MS;
+      return {
+        concepts: next,
+        past: push ? [...current.past, current.concepts].slice(-HISTORY_LIMIT) : current.past,
+        future: [],
+        lastPush: push ? now : current.lastPush,
+      };
+    });
+  }, []);
+  const checkpoint = useCallback(() => setState((current) => ({ ...current, lastPush: 0 })), []);
+  const undo = useCallback(
+    () => setState((current) => (current.past.length ? { concepts: current.past[current.past.length - 1], past: current.past.slice(0, -1), future: [current.concepts, ...current.future], lastPush: 0 } : current)),
+    [],
+  );
+  const redo = useCallback(
+    () => setState((current) => (current.future.length ? { concepts: current.future[0], past: [...current.past, current.concepts].slice(-HISTORY_LIMIT), future: current.future.slice(1), lastPush: 0 } : current)),
+    [],
+  );
+  const history: HistoryControls = { canUndo: state.past.length > 0, canRedo: state.future.length > 0, undo, redo, depth: state.past.length };
+
+  // Ctrl+Z / Ctrl+Y v krocích 2 a 3 (mimo textová pole)
+  useEffect(() => {
+    if (step === 1) return;
+    function onKey(event: KeyboardEvent) {
+      if (!(event.ctrlKey || event.metaKey) || (event.target as HTMLElement).closest("input, textarea, select")) return;
+      const key = event.key.toLowerCase();
+      if (key === "z" && !event.shiftKey) {
+        event.preventDefault();
+        undo();
+      } else if (key === "y" || (key === "z" && event.shiftKey)) {
+        event.preventDefault();
+        redo();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [step, undo, redo]);
+
+  /** Úprava aktivní budovy konceptu. */
+  const patch = (update: Partial<Concept> | ((current: Concept) => Partial<Concept>), record = true) =>
+    change((all) => all.map((entry) => (entry.key === concept.key ? { ...entry, ...(typeof update === "function" ? update(entry) : update) } : entry)), record);
+
+  const { building, grid, floors, equipment } = concept;
   const dims = gridDimensions(grid);
   const frame = useMemo(() => planFrame(grid), [grid]);
-  const [building, setBuilding] = useState<StudioBuildingDraft>(() => ({
-    mode: "new",
-    code: freeCode,
-    name: `Hala ${freeCode} - Výroba`,
-    type: "PRODUCTION",
-    map: findFreeSpot(
-      metersToRect(66, 42, campus),
-      data.plant.buildings.map((entry) => polygonBounds(entry.mapPolygon)),
-    ),
-  }));
-  const [floors, setFloors] = useState<StudioFloorDraft[]>([{ key: "f0", level: 0, usage: "Hlavní výroba", zones: [], gates: [] }]);
   const existingBuilding = building.mode === "existing" ? data.plant.buildings.find((entry) => entry.id === building.id) : undefined;
   const existingFloors = useMemo(() => existingBuilding?.floors ?? [], [existingBuilding]);
-  const [hoveredFloor, setHoveredFloor] = useState<string | null>(null);
   const buildingCode = building.mode === "new" ? building.code : (existingBuilding?.code ?? "X");
   const buildingTitle = building.mode === "new" ? building.name : (existingBuilding?.name ?? "");
+  const otherConcepts = concepts.filter((entry) => entry.key !== concept.key);
+  const scene = (excludeKey = concept.key, sceneCampus = campus) => ({
+    codes: [...data.plant.buildings.map((entry) => entry.code), ...concepts.filter((entry) => entry.key !== excludeKey && entry.building.mode === "new").map((entry) => (entry.building as { code: string }).code)],
+    rects: [
+      ...data.plant.buildings.map((entry) => polygonBounds(entry.mapPolygon)),
+      ...concepts.filter((entry) => entry.key !== excludeKey && entry.building.mode === "new").map((entry) => (entry.building as { map: CampusRect }).map),
+    ],
+    campus: sceneCampus,
+  });
 
-  // Kroky 2 a 3
-  const [zoneFloorKey, setZoneFloorKey] = useState("f0");
-  const [equipment, setEquipment] = useState<StudioEquipmentDraft[]>([]);
-  const [placeFloor, setPlaceFloor] = useState<FloorRef>({ kind: "draft", key: "f0" });
+  /** Šablona budovy pro AKTIVNÍ budovu konceptu. */
+  function applyPreset(preset: (typeof PRESETS)[number]) {
+    const fresh = makeConcept(preset, scene(), grid.scale, nextKey);
+    patch({ ...fresh, key: concept.key });
+  }
 
-  /** Šablona budovy (i „Zahodit koncept“ a přepnutí režimu závodu – kontext areálu se předává výslovně). */
-  function applyPreset(preset: (typeof PRESETS)[number], scene: { buildings: { code: string; mapPolygon: string }[]; campus: CampusSize } = { buildings: data.plant.buildings, campus }) {
-    const nextGrid = clampGrid({ ...preset.grid, scale: grid.scale });
-    setGrid(nextGrid);
-    const size = metersToRect(gridDimensions(nextGrid).widthM, gridDimensions(nextGrid).depthM, scene.campus);
-    const code = freeBuildingCode(scene.buildings);
-    setBuilding({
-      mode: "new",
-      code,
-      name: preset.type === "PRODUCTION" ? `Hala ${code} - ${preset.name}` : `${preset.name} ${code}`,
-      type: preset.type,
-      map: findFreeSpot(
-        size,
-        scene.buildings.map((entry) => polygonBounds(entry.mapPolygon)),
-      ),
-    });
-    const next = preset.floors.map((floor) => ({ key: nextKey("f"), level: floor.level, usage: floor.usage, zones: [], gates: [] }));
-    setFloors(next);
-    setEquipment([]);
-    const ground = next.find((floor) => floor.level === 0) ?? next[0];
-    setZoneFloorKey(ground.key);
-    setPlaceFloor({ kind: "draft", key: ground.key });
+  /** „+ Přidat další budovu“: aktuální budova zůstane v konceptu, nová se stane aktivní. */
+  function addBuilding() {
+    const fresh = makeConcept(PRESETS[0], scene("__none__"), grid.scale, nextKey);
+    change((all) => [...all, fresh]);
+    setActiveKey(fresh.key);
+    toast.success(`Do konceptu přidána ${fresh.building.mode === "new" ? fresh.building.name : "budova"}.`);
+  }
+
+  function removeConcept(key: string) {
+    if (concepts.length < 2) return;
+    change((all) => all.filter((entry) => entry.key !== key));
+    if (key === concept.key) setActiveKey(concepts.find((entry) => entry.key !== key)!.key);
   }
 
   function switchPlantMode(mode: PlantMode) {
@@ -186,37 +289,39 @@ export function StudioWizard({ data: source, startNewPlant = false }: { data: St
     const nextCampus = mode === "new" ? NEW_CAMPUS_DEFAULT : plantCampus;
     setCampus(nextCampus);
     setCampusInput(nextCampus);
-    applyPreset(PRESETS[0], { buildings: mode === "new" ? [] : source.plant.buildings, campus: nextCampus });
+    const buildings = mode === "new" ? [] : source.plant.buildings;
+    const fresh = makeConcept(PRESETS[0], { codes: buildings.map((entry) => entry.code), rects: buildings.map((entry) => polygonBounds(entry.mapPolygon)), campus: nextCampus }, grid.scale, nextKey);
+    setState({ concepts: [fresh], past: [], future: [], lastPush: 0 });
+    setActiveKey(fresh.key);
   }
 
-  /** Nový rozměr areálu: nová budova si zachová polohu i rozměr v metrech a zůstane uvnitř pozemku. */
-  function updateCampus(patch: Partial<CampusSize>) {
-    const next = { ...campusInput, ...patch };
-    setCampusInput(next);
-    if (!campusSizeValid(next)) return;
-    if (building.mode === "new") setBuilding({ ...building, map: clampRect(rescaleRect(building.map, campus, next)) });
-    setCampus(next);
+  /** Nový rozměr areálu: všechny nové budovy konceptu si zachovají polohu i rozměr v metrech. */
+  function updateCampus(next: Partial<CampusSize>) {
+    const size = { ...campusInput, ...next };
+    setCampusInput(size);
+    if (!campusSizeValid(size)) return;
+    change((all) => all.map((entry) => (entry.building.mode === "new" ? { ...entry, building: { ...entry.building, map: clampRect(rescaleRect(entry.building.map, campus, size)) } } : entry)));
+    setCampus(size);
   }
 
-  /** Změna rastru: obrys nové budovy v areálu odpovídá rozměru haly. */
-  function updateGrid(patch: Partial<GridSpec>) {
-    const next = clampGrid({ ...grid, ...patch });
-    setGrid(next);
-    if (building.mode === "new") {
-      const size = metersToRect(gridDimensions(next).widthM, gridDimensions(next).depthM, campus);
-      setBuilding({ ...building, map: clampRect({ ...building.map, ...size }) });
-    }
+  /** Rozměr budovy v metrech (6 m až rozměr areálu) – osy rastru se dopočítají automaticky. */
+  function updateSize(next: { widthM?: number; depthM?: number; stepMeters?: number }) {
+    const widthM = Math.min(campus.width, next.widthM ?? dims.widthM);
+    const depthM = Math.min(campus.height, next.depthM ?? dims.depthM);
+    const nextGrid = gridFromMeters(widthM, depthM, next.stepMeters ?? grid.stepMeters, grid.scale);
+    const nextDims = gridDimensions(nextGrid);
+    patch((current) => ({
+      grid: nextGrid,
+      building: current.building.mode === "new" ? { ...current.building, map: clampRect({ ...current.building.map, ...metersToRect(nextDims.widthM, nextDims.depthM, campus) }) } : current.building,
+    }));
   }
 
-  /** Posun / změna velikosti budovy v areálu; velikost se přichytí na rozteč sloupů (počet os). */
+  /** Posun / změna velikosti tažením v areálu: velikost po 1 m až do rozměru celého areálu. */
   function onCampusRect(rect: CampusRect, kind: "move" | "resize") {
     if (building.mode !== "new") return;
-    if (kind === "move") return setBuilding({ ...building, map: rect });
+    if (kind === "move") return patch({ building: { ...building, map: rect } });
     const meters = rectToMeters(rect, campus);
-    const next = clampGrid({ ...grid, cols: Math.round(meters.w / grid.stepMeters) + 1, rows: Math.round(meters.h / grid.stepMeters) + 1 });
-    setGrid(next);
-    const size = metersToRect(gridDimensions(next).widthM, gridDimensions(next).depthM, campus);
-    setBuilding({ ...building, map: clampRect({ ...rect, ...size }) });
+    updateSize({ widthM: Math.max(BUILDING_LIMITS.min, Math.round(meters.w)), depthM: Math.max(BUILDING_LIMITS.min, Math.round(meters.h)) });
   }
 
   function discardBuilding() {
@@ -226,13 +331,10 @@ export function StudioWizard({ data: source, startNewPlant = false }: { data: St
   }
 
   function chooseExisting(id: string) {
-    setBuilding({ mode: "existing", id });
-    // Stávající budova: jen její skutečná patra – nová se přidávají tlačítky (žádné duplicity).
-    setFloors([]);
-    setEquipment([]);
     const target = data.plant.buildings.find((entry) => entry.id === id);
     const ground = target?.floors.find((floor) => floor.level === 0) ?? target?.floors[0];
-    if (ground) setPlaceFloor({ kind: "existing", id: ground.id });
+    // Stávající budova: jen její skutečná patra – nová se přidávají tlačítky (žádné duplicity).
+    patch({ building: { mode: "existing", id }, floors: [], equipment: [], renames: {}, edits: {}, placeFloor: ground ? { kind: "existing", id: ground.id } : concept.placeFloor });
   }
 
   const newFloors = floors.filter((floor) => !floor.existingId);
@@ -240,9 +342,11 @@ export function StudioWizard({ data: source, startNewPlant = false }: { data: St
   function addFloor(direction: "up" | "down") {
     const level = direction === "up" ? (allLevels.length ? Math.max(...allLevels) + 1 : 0) : Math.min(0, ...allLevels) - 1;
     const key = nextKey("f");
-    setFloors((current) => [...current, { key, level, usage: direction === "up" ? "" : "Technické zázemí", zones: [], gates: [] }].sort((a, b) => a.level - b.level));
-    setZoneFloorKey(key);
-    if (!newFloors.length && !existingFloors.length) setPlaceFloor({ kind: "draft", key });
+    patch((current) => ({
+      floors: [...current.floors, { key, level, usage: direction === "up" ? "" : "Technické zázemí", zones: [], gates: [] }].sort((a, b) => a.level - b.level),
+      zoneFloorKey: key,
+      placeFloor: !newFloors.length && !existingFloors.length ? { kind: "draft", key } : current.placeFloor,
+    }));
   }
 
   /** Otevře uložené patro k úpravě: rozvržení z `studioLayoutJson`, u starších pater dopočtené ze SVG. */
@@ -251,37 +355,34 @@ export function StudioWizard({ data: source, startNewPlant = false }: { data: St
     if (!target || floors.some((floor) => floor.existingId === floorId)) return;
     const layout = layoutOfFloor(target);
     const key = nextKey("f");
-    setFloors((current) => [
-      ...current,
-      {
-        key,
-        existingId: target.id,
-        level: target.level,
-        usage: target.name.split(" - ").slice(1).join(" - "),
-        zones: layout.zones.map((zone) => ({ ...zone, key: nextKey("z") })),
-        gates: layout.gates,
-        grid: { ...layout.grid, scale: grid.scale },
-      },
-    ]);
-    setZoneFloorKey(key);
+    patch((current) => ({
+      floors: [
+        ...current.floors,
+        { key, existingId: target.id, level: target.level, usage: usageOf(target.name), zones: layout.zones.map((zone) => ({ ...zone, key: nextKey("z") })), gates: layout.gates, grid: { ...layout.grid, scale: grid.scale } },
+      ],
+      zoneFloorKey: key,
+    }));
   }
 
-  const updateFloor = (key: string, patch: Partial<StudioFloorDraft>) => setFloors((current) => current.map((floor) => (floor.key === key ? { ...floor, ...patch } : floor)));
+  const updateFloor = (key: string, update: Partial<StudioFloorDraft>) => patch((current) => ({ floors: current.floors.map((floor) => (floor.key === key ? { ...floor, ...update } : floor)) }));
 
   function removeFloor(key: string) {
-    setFloors((current) => current.filter((floor) => floor.key !== key));
-    setEquipment((current) => current.filter((item) => !(item.floor.kind === "draft" && item.floor.key === key)));
+    patch((current) => ({
+      floors: current.floors.filter((floor) => floor.key !== key),
+      equipment: current.equipment.filter((item) => !(item.floor.kind === "draft" && item.floor.key === key)),
+    }));
   }
 
   // Plátno Studia s jemným pod-rastrem po 1 m (uložený půdorys ho nemá)
-  const floorSvg = (floor: StudioFloorDraft) => renderGridFloorplanSvg({ floorName: floorName(floor.level, floor.usage), spec: floor.grid ? { ...floor.grid, scale: grid.scale } : grid, zones: floor.zones, gates: floor.gates, fineGrid: true });
+  const floorSvg = (floor: StudioFloorDraft) =>
+    renderGridFloorplanSvg({ floorName: floorName(floor.level, floor.usage), spec: floor.grid ? { ...floor.grid, scale: grid.scale } : grid, zones: floor.zones, gates: floor.gates, fineGrid: true });
   const setScale = (scale: DrawingScale) => {
-    setGrid((current) => ({ ...current, scale }));
+    change((all) => all.map((entry) => ({ ...entry, grid: { ...entry.grid, scale } })), false);
     setFloorZoom(scale);
   };
   const zoomFloor = (zoom: ViewZoom) => (zoom === "fit" ? setFloorZoom("fit") : setScale(zoom));
 
-  // Zdroje napájení pro autopilota: rozváděče a trafa závodu + rozváděče konceptu
+  // Zdroje napájení pro autopilota: rozváděče a trafa závodu + rozváděče aktivní budovy konceptu
   const buildingFloorIds = new Set(existingFloors.map((floor) => floor.id));
   const draftFloorId = (item: StudioEquipmentDraft) => (item.floor.kind === "draft" ? `draft:${item.floor.key}` : item.floor.id);
   const sources: AutopilotSource[] = [
@@ -291,7 +392,7 @@ export function StudioWizard({ data: source, startNewPlant = false }: { data: St
         const parentType = data.equipment.find((entry) => entry.id === item.fedFromEquipmentId)?.type;
         return {
           id: item.id,
-          tag: item.tag,
+          tag: concept.edits[item.id]?.tag ?? item.tag,
           type: item.type,
           floorId: item.floorId,
           isMain: item.type === "SWITCHBOARD" && (!parentType || parentType === "TRANSFORMER"),
@@ -309,20 +410,25 @@ export function StudioWizard({ data: source, startNewPlant = false }: { data: St
         plantId: source.plant.id,
         newPlant: plantMode === "new" ? newPlant : null,
         campus: { widthM: campus.width, depthM: campus.height },
-        grid,
-        building,
-        floors,
-        equipment,
+        buildings: concepts.map((entry) => ({
+          grid: entry.grid,
+          building: entry.building,
+          floors: entry.floors,
+          equipment: entry.equipment,
+          floorRenames: Object.entries(entry.renames).map(([id, usage]) => ({ id, usage })),
+          equipmentEdits: Object.values(entry.edits),
+        })),
       });
       if (!result.ok) return void toast.error(result.error);
-      toast.success(result.data.plantCreated ? `Závod ${newPlant.name.trim()} založen.` : "Budova uložena do závodu.", {
-        description: `${result.data.plantCreated ? "První budova uložena · " : ""}Nových pater: ${result.data.floors}${result.data.editedFloors ? ` · upravených: ${result.data.editedFloors}` : ""} · zařízení: ${result.data.equipment}.`,
+      const many = result.data.buildings > 1;
+      toast.success(result.data.plantCreated ? `Závod ${newPlant.name.trim()} založen.` : many ? `Uloženo ${result.data.buildings} ${result.data.buildings < 5 ? "budovy" : "budov"} do závodu.` : "Budova uložena do závodu.", {
+        description: `Nových pater: ${result.data.floors}${result.data.editedFloors ? ` · upravených: ${result.data.editedFloors}` : ""} · zařízení: ${result.data.equipment}.`,
       });
       router.push(result.data.href);
     });
   }
 
-  // Izometrický náhled pater
+  // Izometrický náhled pater aktivní budovy
   const isoFloors: FloorOverview[] = useMemo(() => {
     const normalize = (rooms: { x: number; y: number; w: number; h: number }[]) =>
       rooms.map((room) => ({ x: room.x / FLOOR_VIEWBOX.width, y: room.y / FLOOR_VIEWBOX.height, w: room.w / FLOOR_VIEWBOX.width, h: room.h / FLOOR_VIEWBOX.height }));
@@ -347,6 +453,49 @@ export function StudioWizard({ data: source, startNewPlant = false }: { data: St
       ...newFloors.map((floor) => overview(`draft:${floor.key}`, floor.level, floorName(floor.level, floor.usage), floor.zones.map((zone) => zoneToRoom(zone, frame)).filter((room) => room !== null))),
     ].sort((a, b) => a.level - b.level);
   }, [existingFloors, floors, newFloors, frame, grid]);
+
+  const conceptLabel = (entry: Concept) => {
+    if (entry.building.mode === "existing") {
+      const target = data.plant.buildings.find((item) => item.id === (entry.building as { id: string }).id);
+      return `✏️ ${target?.name.split(" - ")[0] ?? "Stávající budova"}`;
+    }
+    const size = gridDimensions(entry.grid);
+    return `${TYPE_EMOJI[entry.building.type]} ${entry.building.name.split(" - ")[0]} (${fmtM(size.widthM)}×${fmtM(size.depthM)} m)`;
+  };
+  const buildingSwitcher = (testId: string) => (
+    <div className="flex flex-wrap items-center gap-1.5" role="tablist" aria-label="Budovy v konceptu" data-testid={testId}>
+      {concepts.map((entry) => (
+        <span key={entry.key} className="flex items-center">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={entry.key === concept.key}
+            onClick={() => setActiveKey(entry.key)}
+            className={cn(
+              "h-9 rounded-l-md border px-2.5 text-sm font-medium",
+              concepts.length < 2 && "rounded-r-md",
+              entry.key === concept.key ? "border-primary bg-primary/15 text-primary" : "border-border bg-card text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {conceptLabel(entry)}
+          </button>
+          {concepts.length > 1 ? (
+            <button
+              type="button"
+              onClick={() => removeConcept(entry.key)}
+              aria-label={`Odebrat z konceptu: ${conceptLabel(entry)}`}
+              className="flex h-9 items-center rounded-r-md border border-l-0 border-border bg-card px-1.5 text-muted-foreground hover:text-red-300"
+            >
+              <X className="size-3.5" aria-hidden />
+            </button>
+          ) : null}
+        </span>
+      ))}
+      <Button variant="outline" className="h-9 gap-1.5" onClick={addBuilding}>
+        <Plus className="size-4" aria-hidden /> Přidat další budovu
+      </Button>
+    </div>
+  );
 
   const campusInvalid = !campusSizeValid(campusInput);
   const campusToolbar = (
@@ -392,10 +541,7 @@ export function StudioWizard({ data: source, startNewPlant = false }: { data: St
               type="button"
               onClick={() => updateCampus(preset)}
               aria-pressed={activePreset}
-              className={cn(
-                "h-9 rounded-md border px-2 font-mono text-xs",
-                activePreset ? "border-primary bg-primary/15 text-primary" : "border-border text-muted-foreground hover:text-foreground",
-              )}
+              className={cn("h-9 rounded-md border px-2 font-mono text-xs", activePreset ? "border-primary bg-primary/15 text-primary" : "border-border text-muted-foreground hover:text-foreground")}
             >
               {preset.width}×{preset.height} m
             </button>
@@ -409,6 +555,9 @@ export function StudioWizard({ data: source, startNewPlant = false }: { data: St
       ) : null}
     </div>
   );
+  const newConceptRects = otherConcepts
+    .filter((entry) => entry.building.mode === "new")
+    .map((entry) => ({ key: entry.key, label: (entry.building as { name: string }).name.split(" - ")[0], rect: (entry.building as { map: CampusRect }).map }));
 
   return (
     <div className="space-y-6 pb-8">
@@ -434,15 +583,17 @@ export function StudioWizard({ data: source, startNewPlant = false }: { data: St
         ))}
       </ol>
 
+      {step > 1 && concepts.length > 1 ? buildingSwitcher("building-switcher-steps") : null}
+
       {step === 1 ? (
         <section aria-labelledby="step-1" className="space-y-4">
           <h2 id="step-1" className="sr-only">
-            Budova, umístění v areálu a podlaží
+            Budovy, umístění v areálu a podlaží
           </h2>
           <div className="space-y-3 rounded-xl border border-border bg-card p-4">
             <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Závod">
               <ChoiceButton active={plantMode === "existing"} onClick={() => switchPlantMode("existing")}>
-                Přidat budovu do stávajícího závodu ({source.plant.name})
+                Přidat budovy do stávajícího závodu ({source.plant.name})
               </ChoiceButton>
               <ChoiceButton active={plantMode === "new"} onClick={() => switchPlantMode("new")}>
                 🆕 Vytvořit úplně nový závod od nuly (Čistá mapa areálu)
@@ -464,7 +615,7 @@ export function StudioWizard({ data: source, startNewPlant = false }: { data: St
                 </div>
                 <p className="flex items-center gap-2 text-xs text-muted-foreground sm:col-span-2 lg:col-span-3">
                   <Factory className="size-4 shrink-0" aria-hidden />
-                  Mapa začíná jako prázdný oplocený pozemek s vrátnicí; rozměr areálu nastavíte nad mapou. Závod, budova, patra i zařízení se uloží najednou a aplikace se do nového závodu přepne.
+                  Mapa začíná jako prázdný oplocený pozemek s vrátnicí; rozměr areálu nastavíte nad mapou. Závod, budovy, patra i zařízení se uloží najednou a aplikace se do nového závodu přepne.
                 </p>
               </div>
             ) : null}
@@ -480,6 +631,7 @@ export function StudioWizard({ data: source, startNewPlant = false }: { data: St
 
           <div className="grid gap-6 xl:grid-cols-[26rem_minmax(0,1fr)]">
             <div className="space-y-4 rounded-xl border border-border bg-card p-4">
+              {buildingSwitcher("building-switcher")}
               <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Budova">
                 <ChoiceButton active={building.mode === "new"} onClick={() => building.mode !== "new" && applyPreset(PRESETS[0])}>
                   Nová budova
@@ -499,15 +651,15 @@ export function StudioWizard({ data: source, startNewPlant = false }: { data: St
                 <div className="grid gap-3 sm:grid-cols-[6rem_minmax(0,1fr)]">
                   <div className="space-y-2">
                     <Label htmlFor="building-code">Kód</Label>
-                    <Input id="building-code" value={building.code} maxLength={4} onChange={(event) => setBuilding({ ...building, code: event.target.value.toUpperCase() })} className="h-11 font-mono" />
+                    <Input id="building-code" value={building.code} maxLength={4} onChange={(event) => patch({ building: { ...building, code: event.target.value.toUpperCase() } })} className="h-11 font-mono" />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="building-name">Název budovy</Label>
-                    <Input id="building-name" value={building.name} maxLength={120} onChange={(event) => setBuilding({ ...building, name: event.target.value })} className="h-11" />
+                    <Input id="building-name" value={building.name} maxLength={120} onChange={(event) => patch({ building: { ...building, name: event.target.value } })} className="h-11" />
                   </div>
                   <div className="space-y-2 sm:col-span-2">
                     <Label htmlFor="building-type">Typ</Label>
-                    <select id="building-type" value={building.type} onChange={(event) => setBuilding({ ...building, type: event.target.value as BuildingType })} className={selectClass}>
+                    <select id="building-type" value={building.type} onChange={(event) => patch({ building: { ...building, type: event.target.value as BuildingType } })} className={selectClass}>
                       {BUILDING_TYPES.map((type) => (
                         <option key={type} value={type}>
                           {BUILDING_TYPE_LABELS[type]}
@@ -529,6 +681,102 @@ export function StudioWizard({ data: source, startNewPlant = false }: { data: St
                 </div>
               )}
 
+              <div className="space-y-3 rounded-lg border border-border bg-background/50 p-3">
+                <p className="text-sm font-medium">{building.mode === "existing" ? "Rozměr nových pater" : "Rozměr budovy"}</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="building-width" className="text-xs">
+                      Šířka budovy – osa X [m]
+                    </Label>
+                    <Input
+                      id="building-width"
+                      type="number"
+                      inputMode="decimal"
+                      min={BUILDING_LIMITS.min}
+                      max={campus.width}
+                      key={`w:${concept.key}:${dims.widthM}`}
+                      defaultValue={dims.widthM}
+                      onBlur={(event) => event.target.value && updateSize({ widthM: Number(event.target.value) })}
+                      onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
+                      className="h-10 font-mono"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="building-depth" className="text-xs">
+                      Hloubka budovy – osa Y [m]
+                    </Label>
+                    <Input
+                      id="building-depth"
+                      type="number"
+                      inputMode="decimal"
+                      min={BUILDING_LIMITS.min}
+                      max={campus.height}
+                      key={`d:${concept.key}:${dims.depthM}`}
+                      defaultValue={dims.depthM}
+                      onBlur={(event) => event.target.value && updateSize({ depthM: Number(event.target.value) })}
+                      onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
+                      className="h-10 font-mono"
+                    />
+                  </div>
+                </div>
+                <p className="text-sm">
+                  <span className="font-mono font-semibold" data-testid="grid-axes">
+                    Osa X (šířka): {fmtM(dims.widthM)} m × Osa Y (hloubka): {fmtM(dims.depthM)} m
+                  </span>
+                  <span className="block text-xs text-muted-foreground">
+                    Rozměr <span data-testid="grid-dimensions">{dims.label}</span> · {Math.round(dims.widthM * dims.depthM).toLocaleString("cs-CZ")} m² · {BUILDING_LIMITS.min} m až {campus.width} × {campus.height} m
+                    (areál)
+                  </span>
+                </p>
+                <details className="rounded-md border border-border p-2 text-sm" data-testid="grid-advanced">
+                  <summary className="cursor-pointer text-xs text-muted-foreground">
+                    Pokročilé: Rozteč nosných sloupů (výchozí 6 m / 12 m) · osy 1–{frame.cols} × A–{rowLabel(frame.rows - 1)}
+                  </summary>
+                  <div className="mt-2 flex flex-wrap items-end gap-2">
+                    {[6, 12].map((value) => (
+                      <button
+                        key={value}
+                        type="button"
+                        aria-pressed={grid.stepMeters === value}
+                        onClick={() => updateSize({ stepMeters: value })}
+                        className={cn("h-9 rounded-md border px-3 font-mono text-xs", grid.stepMeters === value ? "border-primary bg-primary/15 text-primary" : "border-border text-muted-foreground")}
+                      >
+                        {value} m
+                      </button>
+                    ))}
+                    <div className="space-y-1">
+                      <Label htmlFor="grid-step" className="text-[11px]">
+                        Vlastní rozteč [m]
+                      </Label>
+                      <Input
+                        id="grid-step"
+                        type="number"
+                        step={0.5}
+                        min={2}
+                        max={30}
+                        key={`s:${concept.key}:${grid.stepMeters}`}
+                        defaultValue={grid.stepMeters}
+                        onBlur={(event) => event.target.value && updateSize({ stepMeters: Number(event.target.value) })}
+                        className="h-9 w-24 font-mono"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="grid-scale" className="text-[11px]">
+                        Měřítko výkresu
+                      </Label>
+                      <select id="grid-scale" value={grid.scale} onChange={(event) => setScale(event.target.value as DrawingScale)} className="h-9 rounded-md border border-input bg-background px-2 text-sm">
+                        {SCALES.map((scale) => (
+                          <option key={scale} value={scale}>
+                            {scale}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">Počet sloupových os se dopočítává automaticky z rozměru budovy – rastr velikost budovy neomezuje.</p>
+                </details>
+              </div>
+
               <div className="space-y-2">
                 <p className="text-sm font-medium">Podlaží</p>
                 <ul className="space-y-2" aria-label="Podlaží budovy">
@@ -536,10 +784,17 @@ export function StudioWizard({ data: source, startNewPlant = false }: { data: St
                     .sort((a, b) => b.floor.level - a.floor.level)
                     .map((entry) =>
                       entry.kind === "existing" ? (
-                        <li key={entry.floor.id} className="flex items-center gap-2 rounded-lg border border-dashed border-border px-3 py-2 text-sm">
-                          <span className="w-14 shrink-0 font-mono font-semibold">{floorLabel(entry.floor.level).short}</span>
-                          <span className="flex-1 text-muted-foreground">{entry.floor.name.split(" - ")[1] ?? ""}</span>
-                          <span className="text-xs text-muted-foreground">stávající</span>
+                        <li key={entry.floor.id} className="flex items-center gap-2 rounded-lg border border-dashed border-border px-3 py-2">
+                          <span className="w-14 shrink-0 font-mono text-sm font-semibold">{floorLabel(entry.floor.level).short}</span>
+                          <Input
+                            value={concept.renames[entry.floor.id] ?? usageOf(entry.floor.name)}
+                            onChange={(event) => patch((current) => ({ renames: { ...current.renames, [entry.floor.id]: event.target.value } }))}
+                            placeholder="Využití patra"
+                            aria-label={`Využití patra ${floorLabel(entry.floor.level).short}`}
+                            maxLength={80}
+                            className="h-10"
+                          />
+                          <span className="shrink-0 text-xs text-muted-foreground">stávající</span>
                         </li>
                       ) : (
                         <li key={entry.floor.key} className="flex items-center gap-2 rounded-lg border border-border px-3 py-2">
@@ -577,38 +832,10 @@ export function StudioWizard({ data: source, startNewPlant = false }: { data: St
                   ) : null}
                 </div>
               </div>
-
-              <div className="space-y-3 rounded-lg border border-border bg-background/50 p-3">
-                <p className="text-sm font-medium">Konstrukční rastr{building.mode === "existing" ? " nových pater" : ""}</p>
-                <div className="grid grid-cols-2 gap-2">
-                  <NumberField id="grid-cols" label={`Osa X: počet os 1…N (${GRID_LIMITS.cols.min}–${GRID_LIMITS.cols.max})`} value={grid.cols} onChange={(cols) => updateGrid({ cols })} />
-                  <NumberField id="grid-rows" label={`Osa Y: počet os A…Z (${GRID_LIMITS.rows.min}–${GRID_LIMITS.rows.max})`} value={grid.rows} onChange={(rows) => updateGrid({ rows })} />
-                  <NumberField id="grid-step" label="Rozteč sloupů [m]" value={grid.stepMeters} step={0.5} onChange={(stepMeters) => updateGrid({ stepMeters })} />
-                  <div className="space-y-1.5">
-                    <Label htmlFor="grid-scale" className="text-xs">
-                      Měřítko výkresu
-                    </Label>
-                    <select id="grid-scale" value={grid.scale} onChange={(event) => setScale(event.target.value as DrawingScale)} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
-                      {SCALES.map((scale) => (
-                        <option key={scale} value={scale}>
-                          {scale}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                <p className="text-sm">
-                  <span className="font-mono font-semibold" data-testid="grid-axes">
-                    Osa X (šířka): {fmtM(dims.widthM)} m × Osa Y (hloubka): {fmtM(dims.depthM)} m
-                  </span>
-                  <span className="block text-xs text-muted-foreground">
-                    Rozměr <span data-testid="grid-dimensions">{dims.label}</span> · {Math.round(dims.widthM * dims.depthM).toLocaleString("cs-CZ")} m² · osy 1–{grid.cols} × A–{String.fromCharCode(64 + grid.rows)}, M {grid.scale}
-                  </span>
-                </p>
-              </div>
             </div>
 
             <div className="space-y-4">
+              {buildingSwitcher("building-switcher-map")}
               <CampusPlacementMap
                 buildings={data.plant.buildings}
                 rect={building.mode === "new" ? building.map : null}
@@ -620,7 +847,9 @@ export function StudioWizard({ data: source, startNewPlant = false }: { data: St
                 zoom={campusZoom}
                 onZoom={setCampusZoom}
                 toolbar={campusToolbar}
-                label="Mapa areálu – umístění budovy"
+                others={newConceptRects}
+                onSelectOther={setActiveKey}
+                label="Mapa areálu – umístění budov"
               />
               <div className="rounded-xl border border-border bg-card p-2">
                 {isoFloors.length ? (
@@ -636,48 +865,57 @@ export function StudioWizard({ data: source, startNewPlant = false }: { data: St
 
       {step === 2 ? (
         <ZoneStep
+          key={concept.key}
           floors={floors}
-          activeKey={zoneFloorKey}
-          onActive={setZoneFloorKey}
+          activeKey={concept.zoneFloorKey}
+          onActive={(key) => patch({ zoneFloorKey: key }, false)}
           grid={grid}
           svgFor={floorSvg}
           existingFloors={existingFloors}
           onEditExisting={editExistingFloor}
           onDiscard={removeFloor}
-          onChange={(key, patch) => updateFloor(key, patch)}
+          onChange={(key, update) => updateFloor(key, update)}
           zoom={floorZoom}
           onZoom={zoomFloor}
           newKey={() => nextKey("z")}
+          history={history}
+          onCheckpoint={checkpoint}
         />
       ) : null}
 
       {step === 3 ? (
         <PlacementStep
+          key={concept.key}
           frame={frame}
           zoom={floorZoom}
           onZoom={zoomFloor}
           floors={floors}
           existingFloors={existingFloors}
-          active={placeFloor}
-          onActive={setPlaceFloor}
+          active={concept.placeFloor}
+          onActive={(ref) => patch({ placeFloor: ref }, false)}
           svgFor={floorSvg}
           data={data}
           equipment={equipment}
+          edits={concept.edits}
           sources={sources}
           buildingCode={buildingCode}
           buildingTitle={buildingTitle}
-          onAdd={(item) => setEquipment((current) => [...current, { ...item, key: nextKey("e") }])}
-          onRemove={(key) => setEquipment((current) => current.filter((item) => item.key !== key && !(item.parent?.kind === "draft" && item.parent.key === key)))}
+          onAdd={(item) => patch((current) => ({ equipment: [...current.equipment, { ...item, key: nextKey("e") }] }))}
+          onUpdate={(key, update) => patch((current) => ({ equipment: current.equipment.map((item) => (item.key === key ? { ...item, ...update } : item)) }))}
+          onRemove={(key) => patch((current) => ({ equipment: current.equipment.filter((item) => item.key !== key && !(item.parent?.kind === "draft" && item.parent.key === key)) }))}
+          onEditExisting={(edit) => patch((current) => ({ edits: { ...current.edits, [edit.id]: edit } }))}
+          history={history}
         />
       ) : null}
 
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-4">
         <Button variant="outline" className="touch-target gap-2" disabled={step === 1} onClick={() => setStep((value) => value - 1)}>
           <ArrowLeft className="size-4" aria-hidden />
-          Zpět
+          Předchozí krok
         </Button>
         <p className="text-sm text-muted-foreground">
-          Koncept: {newFloors.length} nových pater{floors.length > newFloors.length ? ` · ${floors.length - newFloors.length} upravovaných` : ""} · {floors.reduce((sum, floor) => sum + floor.zones.length, 0)} místností · {equipment.length} zařízení
+          Koncept: {concepts.length} {concepts.length === 1 ? "budova" : concepts.length < 5 ? "budovy" : "budov"} · {concepts.reduce((sum, entry) => sum + entry.floors.filter((floor) => !floor.existingId).length, 0)} nových pater ·{" "}
+          {concepts.reduce((sum, entry) => sum + entry.floors.reduce((rooms, floor) => rooms + floor.zones.length, 0), 0)} místností · {concepts.reduce((sum, entry) => sum + entry.equipment.length, 0)} zařízení
         </p>
         {step < 3 ? (
           <Button className="touch-target gap-2" onClick={() => setStep((value) => value + 1)}>
@@ -687,7 +925,7 @@ export function StudioWizard({ data: source, startNewPlant = false }: { data: St
         ) : (
           <Button className="touch-target gap-2" onClick={save} disabled={pending}>
             {pending ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-            {plantMode === "new" ? "Založit závod a uložit budovu" : "Uložit budovu do závodu"}
+            {plantMode === "new" ? "Založit závod a uložit budovy" : concepts.length > 1 ? `Uložit ${concepts.length} ${concepts.length < 5 ? "budovy" : "budov"} do závodu` : "Uložit budovu do závodu"}
           </Button>
         )}
       </div>

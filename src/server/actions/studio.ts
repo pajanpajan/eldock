@@ -11,14 +11,21 @@ import { floorHref, plantHref } from "@/lib/routes";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 import { assertFeature } from "@/server/modules";
 import { assertPermission } from "@/server/permissions";
-import { saveStudioBuilding } from "@/server/services/studio";
+import { saveStudioConcept } from "@/server/services/studio";
 
 import type { ActionResult } from "./workflow";
 
 const id = z.string().min(1).max(64);
-const ref = z.string().min(2).max(3);
+const ref = z.string().min(2).max(6);
 const meters = z.number().min(0).max(2000);
-const gridSchema = z.object({ cols: z.number().int(), rows: z.number().int(), stepMeters: z.number().positive().max(30), scale: z.enum(SCALES) });
+const gridSchema = z.object({
+  cols: z.number().int(),
+  rows: z.number().int(),
+  stepMeters: z.number().positive().max(30),
+  scale: z.enum(SCALES),
+  widthM: z.number().min(1).max(2000).optional(),
+  depthM: z.number().min(1).max(2000).optional(),
+});
 const text = (max: number) => z.string().max(max);
 const equipmentType = z.enum([
   "SWITCHBOARD",
@@ -38,10 +45,7 @@ const equipmentType = z.enum([
   "OTHER",
 ]);
 
-const draftSchema = z.object({
-  plantId: id,
-  newPlant: z.object({ name: text(120), code: text(6), location: text(200) }).nullable().optional(),
-  campus: z.object({ widthM: z.number().int().min(1).max(5000), depthM: z.number().int().min(1).max(5000) }).nullable().optional(),
+const buildingSchema = z.object({
   grid: gridSchema,
   building: z.discriminatedUnion("mode", [
     z.object({
@@ -83,25 +87,42 @@ const draftSchema = z.object({
       }),
     )
     .max(200),
+  floorRenames: z.array(z.object({ id, usage: text(80) })).max(40).optional(),
+  equipmentEdits: z
+    .array(z.object({ id, tag: text(24), name: text(120), parentId: id.nullable(), circuit: text(80).nullable(), zone: text(80).nullable() }))
+    .max(200)
+    .optional(),
 });
 
-/** Uloží budovu ze Studia (ředitel, vedoucí údržby) a vrátí odkaz na první patro; nový závod si zapamatuje jako aktuální. */
-export async function saveStudioAction(input: z.input<typeof draftSchema>): Promise<ActionResult<{ href: string; floors: number; editedFloors: number; equipment: number; plantCreated: boolean }>> {
-  const parsed = draftSchema.safeParse(input);
+const conceptSchema = z.object({
+  plantId: id,
+  newPlant: z.object({ name: text(120), code: text(6), location: text(200) }).nullable().optional(),
+  campus: z.object({ widthM: z.number().int().min(1).max(5000), depthM: z.number().int().min(1).max(5000) }).nullable().optional(),
+  buildings: z.array(buildingSchema).min(1).max(12),
+});
+
+type Summary = { href: string; buildings: number; floors: number; editedFloors: number; equipment: number; plantCreated: boolean };
+
+/** Uloží celý koncept Studia (jedna či více budov) v jedné transakci a vrátí odkaz na první patro; nový závod si zapamatuje. */
+export async function saveStudioAction(input: z.input<typeof conceptSchema>): Promise<ActionResult<Summary>> {
+  const parsed = conceptSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Neplatná data konceptu. Zkontrolujte vyplněné údaje." };
   try {
     await assertPermission("studio");
     await assertFeature("enterprise.studio");
-    const result = await saveStudioBuilding(prisma, parsed.data);
-    if (result.plantCreated) {
-      (await cookies()).set(PLANT_COOKIE, result.plantId, { path: "/", maxAge: 60 * 60 * 24 * 365, sameSite: "lax", httpOnly: true });
+    const results = await saveStudioConcept(prisma, parsed.data);
+    const first = results[0];
+    if (first.plantCreated) {
+      (await cookies()).set(PLANT_COOKIE, first.plantId, { path: "/", maxAge: 60 * 60 * 24 * 365, sameSite: "lax", httpOnly: true });
     }
     revalidatePath("/", "layout");
-    const href = result.firstFloorId ? floorHref(result.plantId, result.buildingId, result.firstFloorId) : plantHref(result.plantId);
-    return { ok: true, data: { href, floors: result.floors, editedFloors: result.editedFloors, equipment: result.equipment, plantCreated: result.plantCreated } };
+    const target = results.find((result) => result.firstFloorId) ?? first;
+    const href = target.firstFloorId ? floorHref(target.plantId, target.buildingId, target.firstFloorId) : plantHref(first.plantId);
+    const sum = (key: "floors" | "editedFloors" | "equipment") => results.reduce((total, result) => total + result[key], 0);
+    return { ok: true, data: { href, buildings: results.length, floors: sum("floors"), editedFloors: sum("editedFloors"), equipment: sum("equipment"), plantCreated: first.plantCreated } };
   } catch (error) {
     if (error instanceof WorkflowError) return { ok: false, error: error.message };
     console.error(error);
-    return { ok: false, error: "Budovu se nepodařilo uložit. Zkuste to prosím znovu." };
+    return { ok: false, error: "Koncept se nepodařilo uložit. Zkuste to prosím znovu." };
   }
 }

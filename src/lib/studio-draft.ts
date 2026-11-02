@@ -65,6 +65,30 @@ export interface StudioDraft {
   building: StudioBuildingDraft;
   floors: StudioFloorDraft[];
   equipment: StudioEquipmentDraft[];
+  /** Nový název / využití stávajících pater upravované budovy. */
+  floorRenames?: { id: string; usage: string }[];
+  /** Úpravy stávajících zařízení (tag, název, napájení, vývod, místnost) z kroku 3 „Upravit stávající“. */
+  equipmentEdits?: StudioEquipmentEdit[];
+}
+
+export interface StudioEquipmentEdit {
+  id: string;
+  tag: string;
+  name: string;
+  parentId: string | null;
+  circuit: string | null;
+  zone: string | null;
+}
+
+/** Jedna budova konceptu (Studio zvládne více budov v jednom průchodu). */
+export type StudioBuildingConcept = Pick<StudioDraft, "grid" | "building" | "floors" | "equipment" | "floorRenames" | "equipmentEdits">;
+
+/** Celý koncept Studia: závod (nový / stávající), areál a jedna či více budov – uloží se v jedné transakci. */
+export interface StudioConceptDraft {
+  plantId: string;
+  newPlant?: StudioNewPlantDraft | null;
+  campus?: StudioCampusDraft | null;
+  buildings: StudioBuildingConcept[];
 }
 
 /** Kód a název patra: level 0 → „1NP“ / „1. NP“, level −1 → „1PP“ / „1. PP“. */

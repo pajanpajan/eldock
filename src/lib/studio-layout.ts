@@ -1,5 +1,6 @@
 import {
   DEFAULT_GRID,
+  axisMeters,
   SCALES,
   ZONE_KIND_KEYS,
   formatGridRef,
@@ -42,7 +43,8 @@ export function parseLayout(json: string | null | undefined): StudioLayout | nul
       (zone): zone is GridZone => !!zone && [zone.x, zone.y, zone.w, zone.h].every(isNumber) && typeof zone.name === "string" && ZONE_KIND_KEYS.includes(zone.kind),
     );
     const gates = (Array.isArray(raw.gates) ? raw.gates : []).filter((gate): gate is GridGate => !!gate && typeof gate.at === "string" && typeof gate.label === "string");
-    return { version: 1, grid: { cols: grid.cols, rows: grid.rows, stepMeters: grid.stepMeters, scale }, zones: zones.map((zone, index) => ({ ...zone, key: zone.key || `z${index + 1}` })), gates };
+    const meters = isNumber(grid.widthM) && isNumber(grid.depthM) ? { widthM: grid.widthM, depthM: grid.depthM } : {};
+    return { version: 1, grid: { cols: grid.cols, rows: grid.rows, stepMeters: grid.stepMeters, scale, ...meters }, zones: zones.map((zone, index) => ({ ...zone, key: zone.key || `z${index + 1}` })), gates };
   } catch {
     return null;
   }
@@ -62,7 +64,9 @@ export function frameFromSvg(svg: string): PlanFrame {
   const cols = circles.filter((circle) => Math.abs(circle.cy - (y - 28)) < 1).length || DEFAULT_GRID.cols;
   const rows = circles.filter((circle) => Math.abs(circle.cx - (x - 28)) < 1).length || DEFAULT_GRID.rows;
   const step = Number(/rozteč ([\d,]+) m/.exec(svg)?.[1]?.replace(",", ".") ?? 6) || 6;
-  return { x, y, w, h, cols, rows, stepMeters: step, widthM: (cols - 1) * step, depthM: (rows - 1) * step };
+  const widthM = (cols - 1) * step;
+  const depthM = (rows - 1) * step;
+  return { x, y, w, h, cols, rows, stepMeters: step, widthM, depthM, axesX: axisMeters(widthM, step), axesY: axisMeters(depthM, step) };
 }
 
 /** Typ zóny podle barvy obrysu v SVG (nové barvy Studia i původní styly seedu). */

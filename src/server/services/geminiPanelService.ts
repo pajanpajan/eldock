@@ -456,8 +456,10 @@ export async function analyzePanelPhoto(input: { image: { bytes: Buffer; mimeTyp
     }
 
     // Fáze B paralelně (max. RAIL_CONCURRENCY dotazů najednou), výsledky v pořadí lišt shora dolů.
-    const perRail = await mapWithConcurrency(rails, RAIL_CONCURRENCY, async (box, index) => {
-      const crop = await cropRail(image, box);
+    // Výřezy postupně (sharp), dotazy do Gemini paralelně – volání tak odchází v pořadí lišt.
+    const crops: { bytes: Buffer; region: CropRegion }[] = [];
+    for (const box of rails) crops.push(await cropRail(image, box));
+    const perRail = await mapWithConcurrency(crops, RAIL_CONCURRENCY, async (crop, index) => {
       const result = await generateJson<{ totalModules?: number; devices?: GeminiRailDevice[] }>(
         visionModel,
         [{ text: railPrompt(cover, hint) }, { inline_data: { mime_type: "image/jpeg", data: crop.bytes.toString("base64") } }],
