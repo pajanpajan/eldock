@@ -29,6 +29,23 @@ interface Props {
 }
 
 /** Přibližné měřítko pro zobrazení „Celé“ (zaokrouhlené na 1:50 / 1:10). */
+/** Mrtvé pásmo měření: změny šířky do 4 px (posuvník, subpixely) se ignorují. */
+export const RESIZE_DEADBAND_PX = 4;
+/** Pevná rezerva v režimu „Celé“, aby plátno nikdy nevyvolalo posuvník. */
+export const FIT_MARGIN_PX = 32;
+
+/** Další šířka obalu, nebo předchozí, pokud je změna v mrtvém pásmu (proti kmitání layoutu). */
+export function nextMeasuredWidth(prev: number, measured: number): number {
+  if (!(measured > 0)) return prev;
+  return Math.abs(measured - prev) > RESIZE_DEADBAND_PX ? Math.round(measured) : prev;
+}
+
+/** Měřítko „Celé“ [px/m]: šířka obalu minus rezerva, zaokrouhleno na 3 desetinná místa. */
+export function fitPxPerMeter(containerWidth: number, viewMeters: number): number {
+  const usable = Math.max(240, containerWidth - FIT_MARGIN_PX);
+  return Math.max(0.001, Math.floor((usable / Math.max(1, viewMeters)) * 1000) / 1000);
+}
+
 const approxScale = (pxPerMeter: number) => {
   const denominator = 96 / 0.0254 / pxPerMeter;
   return Math.round(denominator / (denominator > 500 ? 50 : 10)) * (denominator > 500 ? 50 : 10);
@@ -40,21 +57,32 @@ const approxScale = (pxPerMeter: number) => {
  * se přepočítává podle zoomu.
  */
 export function PlanViewport({ viewMeters, viewBox, zoom, onZoom, label, testId, toolbar, footer, children }: Props) {
+  const frameRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const center = useRef({ x: 0.5, y: 0.5 });
   const [available, setAvailable] = useState(960);
 
+  // Měří se jen vnější obal (overflow hidden, šířku mu dává mřížka stránky) – jeho velikost
+  // nezávisí na plátnu ani na posuvníku uvnitř, takže „Celé“ nemůže roztočit smyčku layoutu.
+  // Výška se ignoruje, šířka se mění až nad mrtvým pásmem 4 px.
   useEffect(() => {
-    const element = scrollRef.current;
+    const element = frameRef.current;
     if (!element) return;
-    const observer = new ResizeObserver(() => setAvailable(Math.max(240, element.clientWidth)));
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[entries.length - 1]?.contentRect.width ?? element.clientWidth;
+      setAvailable((prev) => nextMeasuredWidth(prev, width));
+    });
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
 
   const fitted = zoom === "fit" ? null : canvasWidthPx(viewMeters, zoom);
-  const px = zoom === "fit" ? available : (fitted ?? MAX_CANVAS_PX);
+  const fitRatio = fitPxPerMeter(available, viewMeters);
+  const px = zoom === "fit" ? Math.floor(fitRatio * viewMeters) : (fitted ?? MAX_CANVAS_PX);
   const pxPerMeter = px / viewMeters;
+  // Výška plátna je daná jen rastrem budovy (ne obsahem patra) – obal ji drží jako min-height,
+  // takže přepnutí patra nezmění výšku stránky.
+  const canvasHeight = Math.round((px * viewBox.height) / viewBox.width);
   const bar = scaleBarLength(pxPerMeter);
 
   // Při změně měřítka zůstane střed výřezu na stejném místě výkresu.
@@ -102,8 +130,14 @@ export function PlanViewport({ viewMeters, viewBox, zoom, onZoom, label, testId,
           })}
         </div>
       </div>
-      <div className="relative">
-        <div ref={scrollRef} onScroll={remember} className="max-h-[75vh] overflow-auto rounded-xl border border-border bg-[#0b1220]" data-testid={`${testId}-viewport`}>
+      <div ref={frameRef} className="relative w-full min-w-0 overflow-hidden rounded-xl" style={{ minHeight: `min(${canvasHeight + 2}px, 75vh)` }} data-testid={`${testId}-frame`}>
+        <div
+          ref={scrollRef}
+          onScroll={remember}
+          className="max-h-[75vh] overflow-auto rounded-xl border border-border bg-[#0b1220] [scrollbar-gutter:stable]"
+          style={{ minHeight: `min(${canvasHeight + 2}px, 75vh)` }}
+          data-testid={`${testId}-viewport`}
+        >
           <div
             className="relative mx-auto touch-none select-none"
             style={{ width: px, aspectRatio: `${viewBox.width} / ${viewBox.height}` }}

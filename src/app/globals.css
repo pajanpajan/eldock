@@ -140,6 +140,9 @@
   }
   html {
     @apply font-sans;
+    /* Místo pro posuvník stránky je vždy rezervované: objevení posuvníku nezmění šířku obsahu
+       (jinak plátno Studia v režimu „Celé“ kmitalo – užší okno → nižší plátno → bez posuvníku → …). */
+    scrollbar-gutter: stable;
   }
   /* Jediné tmavé téma i pro nativní prvky prohlížeče (posuvníky, rozbalená menu selectů). */
   :root,
