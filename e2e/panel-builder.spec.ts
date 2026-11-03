@@ -1,15 +1,23 @@
 import { expect, test } from "@playwright/test";
 
-// AI Panel Builder (fáze 27–31). Výchozí účet E2E je vedoucí údržby (má oprávnění Panel Builder).
+// AI Panel Builder (fáze 27–31, 41). Samostatný produkt: E2E běží za přihlášenou demo firmu Tester.
 test.describe.configure({ mode: "serial" });
 
 test("katalog prvků: navigace, okamžité hledání, filtry a atomizace vzorového PDF", async ({ page }) => {
+  // Správa závodů už Panel Builder v navigaci nemá – produkt má vlastní lištu s firmou a kredity
   await page.goto("/app");
-  await page.getByRole("navigation", { name: "Hlavní navigace" }).getByRole("link", { name: /Panel Builder/ }).click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("AI Panel Builder");
+  await expect(page.getByRole("navigation", { name: "Hlavní navigace" }).getByRole("link", { name: /Panel Builder/ })).toHaveCount(0);
+  // první vstup do samostatné skupiny tras: studený dev server ji může během kompilace přenačíst
+  await expect(async () => {
+    await page.goto("/panel-builder");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("AI Panel Builder", { timeout: 5_000 });
+  }).toPass({ timeout: 60_000 });
+  await expect(page.getByTestId("panel-company")).toContainText("Elektro Tester s.r.o.");
+  await expect(page.getByTestId("panel-company")).toContainText("IČO 12345679");
+  await expect(page.getByTestId("panel-credits")).toContainText(/Kredity: \d+/);
   await expect(page.getByRole("link", { name: /PB-001/ })).toContainText("Domovní / Podružný rozváděč PB-001");
 
-  await page.getByRole("link", { name: "Katalog prvků" }).click();
+  await page.getByRole("main").getByRole("link", { name: "Katalog prvků" }).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Katalog prvků");
   await expect(page.getByTestId("catalog-count")).toContainText(/z \d+ prvků/);
 
@@ -266,6 +274,20 @@ test("krok 4: 6 listů dokumentace, tiskový režim a propuštění pasportu ke 
   await expect(page.getByTestId("doc-verdict")).toContainText("VYHOVUJE dle ČSN EN 61439");
   await expect(page.getByTestId("doc-declaration")).toContainText("LVD 2014/35/EU");
   await expect(page.getByTestId("ce-label").locator("svg")).toHaveCount(2);
+  // Údaje registrované firmy: titulní list, razítko na všech listech, prohlášení o shodě a štítek CE
+  await expect(page.getByTestId("doc-manufacturer")).toContainText("Elektro Tester s.r.o.");
+  await expect(page.getByTestId("doc-manufacturer")).toContainText("12345679");
+  await expect(page.getByTestId("doc-manufacturer")).toContainText("Ing. Tomáš Tester");
+  await expect(page.getByTestId("stamp-author")).toHaveCount(6);
+  await expect(page.getByTestId("doc-sheet-3").getByTestId("stamp-manufacturer")).toContainText("Elektro Tester s.r.o.");
+  await expect(page.getByTestId("doc-declaration")).toContainText("na svou výhradní odpovědnost");
+  await expect(page.getByTestId("declaration-signature")).toContainText("Ing. Tomáš Tester");
+  await expect(page.getByTestId("label-manufacturer")).toContainText("Elektro Tester s.r.o., Průmyslová 1280/7, 466 01 Jablonec nad Nisou");
+  // Tisk až po potvrzení odborné kontroly a převzetí odpovědnosti
+  const print = page.getByRole("button", { name: /Vytisknout \/ Exportovat/ });
+  await expect(print).toBeDisabled();
+  await page.getByTestId("print-confirmation").getByRole("checkbox").check();
+  await expect(print).toBeEnabled();
 
   // Tisk: bez hlavičky aplikace, kroků a tlačítek
   await page.emulateMedia({ media: "print" });

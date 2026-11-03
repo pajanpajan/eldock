@@ -14,6 +14,8 @@ export interface CreateSubAccountInput {
   accountType: AccountType;
   /** Vlastní výřez kategorií; prázdné = výchozí výřez typu účtu. */
   layers?: LayerKey[];
+  /** Registrovaná firma zakladatele (fáze 41): podúčet patří do stejné firmy a vidí jen její závod. */
+  owner?: { companyId: string | null; homePlantId: string | null } | null;
 }
 
 export async function createSubAccount(prisma: PrismaClient, input: CreateSubAccountInput) {
@@ -39,6 +41,8 @@ export async function createSubAccount(prisma: PrismaClient, input: CreateSubAcc
       accountType: input.accountType,
       scopeLayers: custom ? layers.join(",") : null,
       company: "Podúčet závodu",
+      companyId: input.owner?.companyId ?? null,
+      homePlantId: input.owner?.homePlantId ?? null,
       sortOrder: (last?.sortOrder ?? 0) + 1,
     },
   });

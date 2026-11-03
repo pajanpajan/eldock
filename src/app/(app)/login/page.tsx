@@ -14,7 +14,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   const params = await searchParams;
   const next = safeNextPath(typeof params.next === "string" ? params.next : undefined);
   if (await getAuthSession()) redirect(next ?? APP_HOME);
-  const accounts = (await getAccountUsers()).flatMap(({ id, name, email, title, accountType }) => (accountType ? [{ id, name, email, title, accountType }] : []));
+  const accounts = (await getAccountUsers({ demoOnly: true })).flatMap(({ id, name, email, title, accountType }) => (accountType ? [{ id, name, email, title, accountType }] : []));
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center gap-6 py-6">

@@ -3,12 +3,30 @@ import "server-only";
 import { cache } from "react";
 
 import type { BuildingType, EquipmentStatus, EquipmentType } from "@/generated/prisma/enums";
+import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
+import { getCurrentUser } from "@/server/session";
 import { buildingEntryHref } from "@/lib/routes";
 import { worstEquipmentStatus } from "@/lib/status";
 
+/**
+ * Závody viditelné pro aktuálního uživatele: registrovaná firma (fáze 41) jen svůj závod,
+ * obchodní demo jen závody, které nepatří žádné firmě registrované do Správy závodů.
+ */
+export async function plantAccessWhere(): Promise<Prisma.PlantWhereInput> {
+  const user = await getCurrentUser();
+  // Firma AI Panel Builderu může mít vazbu na demo závod (propuštění pasportu) – skrývají se jen závody správy závodů.
+  return user.homePlantId ? { id: user.homePlantId } : { registeredCompanies: { none: { productScope: "PLANT_MANAGEMENT" } } };
+}
+
+/** Závod je pro aktuálního uživatele dostupný (jinak stránka vrátí 404). */
+export async function canAccessPlant(plantId: string): Promise<boolean> {
+  return (await prisma.plant.count({ where: { AND: [{ id: plantId }, await plantAccessWhere()] } })) > 0;
+}
+
 export async function getPlants() {
   return prisma.plant.findMany({
+    where: await plantAccessWhere(),
     orderBy: { code: "asc" },
     select: { id: true, code: true, name: true, city: true },
   });

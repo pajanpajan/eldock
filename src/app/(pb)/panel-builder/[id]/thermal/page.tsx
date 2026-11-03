@@ -15,7 +15,7 @@ export async function generateMetadata({ params }: PageProps<"/panel-builder/[id
 
 // Krok 3: výpočet oteplení dle ČSN EN 61439 / IEC TR 60890 a fázová bilance.
 export default async function PanelThermalPage({ params }: PageProps<"/panel-builder/[id]/thermal">) {
-  const guard = await panelBuilderGuard("AI Panel Builder");
+  const guard = await panelBuilderGuard();
   if (guard) return guard;
   const project = await getPanelProject((await params).id);
   if (!project) notFound();

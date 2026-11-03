@@ -16,7 +16,7 @@ export async function generateMetadata({ params }: PageProps<"/panel-builder/[id
 
 // Krok 2: hierarchický strom zapojení s hlídačem, hromadným přiřazením a historií změn.
 export default async function PanelTreePage({ params }: PageProps<"/panel-builder/[id]/tree">) {
-  const guard = await panelBuilderGuard("AI Panel Builder");
+  const guard = await panelBuilderGuard();
   if (guard) return guard;
   const project = await getPanelProject((await params).id);
   if (!project) notFound();

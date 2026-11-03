@@ -189,8 +189,14 @@ model User {
   title       String? // „Technický ředitel“
   scopeLayers String? // vlastní výřez kategorií (klíče vrstev mapy oddělené čárkou); null = výchozí pro typ účtu
   sortOrder   Int          @default(0)
+  /// Registrovaný uživatel (fáze 41): vidí jen svůj závod, přihlašuje se vlastním heslem firmy, bez přepínače účtů.
+  homePlantId String?
+  companyId   String?
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
+
+  homePlant         Plant?             @relation("UserHomePlant", fields: [homePlantId], references: [id], onDelete: SetNull)
+  registeredCompany RegisteredCompany? @relation(fields: [companyId], references: [id], onDelete: SetNull)
 
   authoredRevisions      DocumentRevision[]   @relation("RevisionAuthor")
   approvedRevisions      DocumentRevision[]   @relation("RevisionApprover")
@@ -201,6 +207,7 @@ model User {
 
   @@index([role])
   @@index([accountType])
+  @@index([homePlantId])
 }
 
 // -----------------------------------------------------------------------------
@@ -228,7 +235,9 @@ model Plant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  buildings Building[]
+  buildings           Building[]
+  registeredCompanies RegisteredCompany[]
+  homeUsers           User[]              @relation("UserHomePlant")
 }
 
 /// Budova v areálu – klikací oblast v Campus View.
@@ -268,10 +277,10 @@ model Floor {
   description String?
 
   // Level 3 – podklad půdorysu (SVG generované v aplikaci nebo nahraný soubor)
-  floorplanUrl String?
-  floorplanSvg String? // inline SVG půdorysu (mock grafika bez externích assetů)
-  viewBoxW     Int     @default(1200)
-  viewBoxH     Int     @default(800)
+  floorplanUrl     String?
+  floorplanSvg     String? // inline SVG půdorysu (mock grafika bez externích assetů)
+  viewBoxW         Int     @default(1200)
+  viewBoxH         Int     @default(800)
   /// Zdrojová definice patra ze Studia (JSON: rastr, zóny v metrech, vrata) – zpětná editace patra.
   studioLayoutJson String?
 
@@ -694,6 +703,46 @@ model TenantSetting {
 }
 
 // -----------------------------------------------------------------------------
+//  REGISTROVANÉ FIRMY (fáze 41) – AI Panel Builder a Správa závodů jako samostatné produkty
+// -----------------------------------------------------------------------------
+
+enum ProductScope {
+  PANEL_BUILDER // ELDOCK AI Panel Builder – výrobce rozváděčů / projektant
+  PLANT_MANAGEMENT // ELDOCK Průmyslový dok – správa závodu, dokumentace a revizí
+}
+
+/// Firma registrovaná do jednoho z produktů (IČO z ARES, odpovědná osoba, souhlas s VOP a přenesením odpovědnosti).
+model RegisteredCompany {
+  id                  String       @id @default(cuid())
+  productScope        ProductScope
+  ico                 String
+  dic                 String?
+  companyName         String // propisuje se jako Výrobce rozváděče
+  street              String
+  city                String
+  zip                 String
+  contactName         String // odpovědná osoba / projektant
+  email               String       @unique // přihlašovací e-mail
+  phone               String
+  passwordHash        String // scrypt (node:crypto), viz src/server/password.ts
+  authorizationNumber String? // ev. č. oprávnění / osvědčení TIČR (NV 190/2022 Sb.)
+  termsAcceptedAt     DateTime
+  termsVersion        String       @default("1.0-2026-11")
+  creditsRemaining    Int          @default(5)
+  plantId             String? // vlastní závod (PLANT_MANAGEMENT)
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  plant         Plant?              @relation(fields: [plantId], references: [id], onDelete: SetNull)
+  panelProjects PanelBoardProject[]
+  users         User[]
+
+  @@index([productScope])
+  @@index([ico])
+  @@index([plantId])
+}
+
+// -----------------------------------------------------------------------------
 //  AI PANEL BUILDER – katalog prvků a projekty rozváděčů (fáze 27–31)
 // -----------------------------------------------------------------------------
 
@@ -820,14 +869,18 @@ model PanelBoardProject {
   coverState           String?
 
   createdById String?
+  /// Registrovaná firma (fáze 41): vidí jen své rozváděče, její údaje se propisují do dokumentace.
+  companyId   String?
   releasedAt  DateTime? // propuštění dokumentace do provozu
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  equipment Equipment?       @relation(fields: [equipmentId], references: [id], onDelete: SetNull)
+  equipment Equipment?         @relation(fields: [equipmentId], references: [id], onDelete: SetNull)
+  company   RegisteredCompany? @relation(fields: [companyId], references: [id], onDelete: SetNull)
   items     PanelBoardItem[]
 
   @@index([equipmentId])
+  @@index([companyId])
 }
 
 /// Konkrétní prvek osazený v rozváděči.

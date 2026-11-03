@@ -9,6 +9,7 @@ import { prisma } from "@/lib/prisma";
 import { APP_HOME } from "@/lib/routes";
 
 import { applyAccount } from "@/server/account-switch";
+import { verifyPassword } from "@/server/password";
 
 export interface LoginState {
   error?: string;
@@ -38,7 +39,11 @@ export async function login(_state: LoginState, formData: FormData): Promise<Log
       ? await prisma.user.findFirst({ where: { id: input.accountId, accountType: { not: null } } })
       : null;
   if (!user) return { ...echo, error: input.email ? "Účet s tímto e-mailem neexistuje." : "Vyberte účet nebo zadejte e-mail." };
-  if (!(await checkAccessPassword(input.password))) return { ...echo, error: "Nesprávné heslo / PIN." };
+  // Registrovaná firma (fáze 41) má vlastní heslo; sdílené heslo / PIN obchodního dema pro ni neplatí.
+  const passwordOk = user.companyId
+    ? (await prisma.registeredCompany.findFirst({ where: { id: user.companyId, productScope: "PLANT_MANAGEMENT" }, select: { passwordHash: true } }).then((company) => (company ? verifyPassword(input.password, company.passwordHash) : false)))
+    : await checkAccessPassword(input.password);
+  if (!passwordOk) return { ...echo, error: "Nesprávné heslo / PIN." };
 
   const store = await cookies();
   store.set(AUTH_COOKIE, await signAuthToken(user.id), {

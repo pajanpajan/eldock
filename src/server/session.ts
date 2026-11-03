@@ -8,15 +8,18 @@ import { AUTH_COOKIE, isAccountSwitcherLocked, isAuthBypassed, verifyAuthToken }
 import { prisma } from "@/lib/prisma";
 import { ACCOUNT_COOKIE, DEMO_USER_ID, PLANT_COOKIE, ROLE_COOKIE, parseRole, type AppRole } from "@/lib/roles";
 
+/** Přihlášený uživatel z podepsané cookie (bez ohledu na přepínač účtů), pokud existuje. */
+export const getSignedInUser = cache(async () => {
+  const session = await verifyAuthToken((await cookies()).get(AUTH_COOKIE)?.value);
+  return session ? prisma.user.findFirst({ where: { id: session.userId, accountType: { not: null } } }) : null;
+});
+
 /** Uživatel aktuálního účtu: cookie účtu, jinak výchozí účet podle (starší) cookie role. */
 export const getCurrentUser = cache(async () => {
   const store = await cookies();
-  // Uzamčený přepínač: účet určuje jen podepsaná přihlašovací cookie (podvržená cookie účtu nic nezmění).
-  if (isAccountSwitcherLocked()) {
-    const session = await verifyAuthToken(store.get(AUTH_COOKIE)?.value);
-    const signedIn = session ? await prisma.user.findFirst({ where: { id: session.userId, accountType: { not: null } } }) : null;
-    if (signedIn) return signedIn;
-  }
+  // Uzamčený přepínač nebo registrovaná firma (fáze 41): účet určuje jen podepsaná přihlašovací cookie.
+  const signedIn = await getSignedInUser();
+  if (signedIn && (isAccountSwitcherLocked() || signedIn.companyId)) return signedIn;
   const accountId = store.get(ACCOUNT_COOKIE)?.value;
   if (accountId) {
     const user = await prisma.user.findFirst({ where: { id: accountId, accountType: { not: null } } });

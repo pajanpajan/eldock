@@ -40,6 +40,8 @@ export function DocumentationActions({
   const [open, setOpen] = useState(false);
   const [equipmentId, setEquipmentId] = useState(released?.equipmentId ?? targets[0]?.id ?? "");
   const [pending, startTransition] = useTransition();
+  // Před tiskem / exportem výrobce potvrdí odbornou kontrolu a převzetí odpovědnosti (fáze 41)
+  const [confirmed, setConfirmed] = useState(false);
 
   function release() {
     startTransition(async () => {
@@ -53,10 +55,15 @@ export function DocumentationActions({
 
   return (
     <div className="no-print flex flex-col gap-3">
+      <label className="flex max-w-3xl items-start gap-2.5 rounded-lg border border-primary/40 bg-primary/10 p-3 text-sm" data-testid="print-confirmation">
+        <input type="checkbox" className="mt-0.5 size-4 shrink-0 accent-primary" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />
+        <span>✅ Potvrzuji, že jsem veškeré rozpoznané přístroje, schéma zapojení i výpočet oteplení odborně zkontroloval(a) a přebírám za dokumentaci plnou odpovědnost výrobce rozváděče.</span>
+      </label>
       <div className="flex flex-wrap items-center gap-2">
-        <Button className="touch-target gap-2" onClick={() => window.print()}>
+        <Button className="touch-target gap-2" onClick={() => window.print()} disabled={!confirmed} title={confirmed ? undefined : "Nejdřív potvrďte odbornou kontrolu dokumentace"}>
           <Printer className="size-4" aria-hidden /> Vytisknout / Exportovat kompletní PDF elaborát
         </Button>
+        {targets.length || released ? (
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button variant="outline" className="touch-target gap-2">
@@ -92,6 +99,7 @@ export function DocumentationActions({
             </Button>
           </DialogContent>
         </Dialog>
+        ) : null}
       </div>
       {released ? (
         <p className="flex items-center gap-2 text-sm text-emerald-300" data-testid="released">

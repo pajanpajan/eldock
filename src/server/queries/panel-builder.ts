@@ -5,6 +5,7 @@ import { cache } from "react";
 import type { Prisma } from "@/generated/prisma/client";
 import { normalizeSearch, type CatalogFilter } from "@/lib/panel-builder/catalog";
 import { prisma } from "@/lib/prisma";
+import { getPanelCompany } from "@/server/panel-session";
 
 // Čtení dat AI Panel Builderu: katalog prvků, seznam projektů a detail projektu.
 
@@ -36,38 +37,49 @@ export const getCatalog = cache(async (filter: CatalogFilter) => {
 
 export type CatalogRow = Awaited<ReturnType<typeof getCatalog>>["items"][number];
 
-export const getPanelProjects = cache(() =>
-  prisma.panelBoardProject.findMany({
+/** Rozváděče přihlášené firmy (fáze 41: každá firma vidí jen své projekty). */
+export const getPanelProjects = cache(async () => {
+  const company = await getPanelCompany();
+  if (!company) return [];
+  return prisma.panelBoardProject.findMany({
+    where: { companyId: company.id },
     orderBy: { code: "asc" },
     include: {
       equipment: { select: { id: true, tag: true, name: true } },
       items: { select: { recognitionStatus: true, parentItemId: true, fedFromIncomer: true } },
     },
-  }),
-);
+  });
+});
 
-/** Detail projektu: prvky v pořadí lišta → pozice, s katalogovými kusy a vazbou na zařízení. */
-export const getPanelProject = cache((id: string) =>
-  prisma.panelBoardProject.findUnique({
-    where: { id },
+const companyProfile = { companyName: true, ico: true, dic: true, street: true, city: true, zip: true, contactName: true, phone: true, email: true, authorizationNumber: true } as const;
+
+/** Detail projektu přihlášené firmy (cizí projekt → `null` = 404): prvky v pořadí lišta → pozice, katalogové kusy, výrobce. */
+export const getPanelProject = cache(async (id: string) => {
+  const company = await getPanelCompany();
+  if (!company) return null;
+  return prisma.panelBoardProject.findFirst({
+    where: { id, companyId: company.id },
     include: {
       equipment: { select: { id: true, tag: true, name: true } },
+      company: { select: companyProfile },
       items: { orderBy: [{ dinRailIndex: "asc" }, { positionOnRail: "asc" }], include: { catalogComponent: true } },
     },
-  }),
-);
+  });
+});
 
 export type PanelProjectDetail = NonNullable<Awaited<ReturnType<typeof getPanelProject>>>;
 export type PanelItemDetail = PanelProjectDetail["items"][number];
 
-/** Rozváděče v závodech, ke kterým lze pasport propustit (výběr v kroku 4). */
-export const getReleaseTargets = cache(() =>
-  prisma.equipment.findMany({
-    where: { type: "SWITCHBOARD" },
+/** Rozváděče ve vlastním závodě firmy, ke kterým lze pasport propustit (krok 4); firma bez závodu → nic. */
+export const getReleaseTargets = cache(async () => {
+  const plantId = (await getPanelCompany())?.plantId;
+  if (!plantId) return [];
+  return prisma.equipment.findMany({
+    where: { type: "SWITCHBOARD", floor: { building: { plantId } } },
     select: { id: true, tag: true, name: true, floor: { select: { name: true, building: { select: { name: true, plant: { select: { name: true } } } } } } },
     orderBy: [{ tag: "asc" }],
-  }),
-);
+  });
+});
 
 /** Propuštěné pasporty rozváděče (karta zařízení). */
 export const getEquipmentPassports = cache((equipmentId: string) =>

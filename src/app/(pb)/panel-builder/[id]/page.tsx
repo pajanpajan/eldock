@@ -25,7 +25,7 @@ function parseDetected(json: string | null): WorkspaceItem["detected"] {
 
 // Pracovní plocha projektu rozváděče – krok 1: analýza fotky a živý konfigurátor prvku.
 export default async function PanelProjectPage({ params }: PageProps<"/panel-builder/[id]">) {
-  const guard = await panelBuilderGuard("AI Panel Builder");
+  const guard = await panelBuilderGuard();
   if (guard) return guard;
   const { id } = await params;
   const project = await getPanelProject(id);

@@ -27,18 +27,28 @@ export const ENCLOSURE_MATERIALS: Record<EnclosureMaterial, string> = {
   STAINLESS_STEEL: "Nerezová ocel",
 };
 
+/** Výrobce rozváděče v dokumentaci; u registrované firmy (fáze 41) i IČO, DIČ, e-mail a odpovědná osoba. */
 export interface ManufacturerInfo {
   name: string;
   address: string;
   city: string;
   phone: string;
+  ico?: string;
+  dic?: string;
+  email?: string;
+  contactName?: string;
+  authorizationNumber?: string;
 }
+
+const MANUFACTURER_KEYS = ["name", "address", "city", "phone", "ico", "dic", "email", "contactName", "authorizationNumber"] as const;
 
 export function parseManufacturerInfo(json: string | null | undefined): ManufacturerInfo {
   const empty = { name: "", address: "", city: "", phone: "" };
   try {
-    const value = JSON.parse(json ?? "{}") as Partial<ManufacturerInfo>;
-    return { name: String(value.name ?? ""), address: String(value.address ?? ""), city: String(value.city ?? ""), phone: String(value.phone ?? "") };
+    const value = JSON.parse(json ?? "{}") as Partial<Record<(typeof MANUFACTURER_KEYS)[number], unknown>>;
+    const result: ManufacturerInfo = { ...empty };
+    for (const key of MANUFACTURER_KEYS) if (value[key] !== undefined && value[key] !== null) result[key] = String(value[key]);
+    return result;
   } catch {
     return empty;
   }

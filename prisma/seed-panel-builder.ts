@@ -17,6 +17,8 @@ import { buildSearchText, iecSymbolFor } from "../src/lib/panel-builder/catalog"
 import { demoDetections } from "../src/lib/panel-builder/matching";
 import { REFERENCE_DEVICES, REFERENCE_DIMS, withPositions } from "../src/lib/panel-builder/reference";
 import { applyDetections } from "../src/server/services/panel-builder";
+import { TESTER_COMPANY } from "../src/lib/registered-company";
+import { hashPassword } from "../src/server/password";
 
 const UPLOADS = fileURLToPath(new URL("../storage/uploads", import.meta.url));
 
@@ -303,8 +305,43 @@ export async function seedPanelProject(prisma: PrismaClient): Promise<boolean> {
   return true;
 }
 
+/**
+ * Demo firma „Tester“ AI Panel Builderu (fáze 41): předvyplněné přihlášení na /panel-builder/auth, vazba na
+ * demo závod Jablonec (propuštění pasportu ke kartě rozváděče). Projekty bez firmy (vzorový PB-001 a projekty
+ * založené před fází 41) se jí přiřadí, aby nezmizely. Existující firmu nemění (heslo ani kredity).
+ */
+export async function seedTesterCompany(prisma: PrismaClient) {
+  const exists = await prisma.registeredCompany.findUnique({ where: { id: TESTER_COMPANY.id }, select: { id: true } });
+  if (!exists) {
+    const plant = await prisma.plant.findUnique({ where: { id: "plant-jbc" }, select: { id: true } });
+    await prisma.registeredCompany.create({
+      data: {
+        id: TESTER_COMPANY.id,
+        productScope: "PANEL_BUILDER",
+        ico: "12345679",
+        dic: "CZ12345679",
+        companyName: "Elektro Tester s.r.o.",
+        street: "Průmyslová 1280/7",
+        city: "Jablonec nad Nisou",
+        zip: "466 01",
+        contactName: "Ing. Tomáš Tester",
+        email: TESTER_COMPANY.email,
+        phone: "+420 777 123 456",
+        passwordHash: await hashPassword(TESTER_COMPANY.password),
+        authorizationNumber: "E-0815/2021",
+        termsAcceptedAt: new Date("2026-11-03T08:00:00Z"),
+        creditsRemaining: 50,
+        plantId: plant?.id ?? null,
+      },
+    });
+  }
+  const { count } = await prisma.panelBoardProject.updateMany({ where: { companyId: null }, data: { companyId: TESTER_COMPANY.id } });
+  return { created: !exists, attached: count };
+}
+
 export async function seedPanelBuilder(prisma: PrismaClient) {
   const components = await seedCatalog(prisma);
   const project = await seedPanelProject(prisma);
-  return { components, project };
+  const tester = await seedTesterCompany(prisma);
+  return { components, project, tester };
 }

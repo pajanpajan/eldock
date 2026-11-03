@@ -19,7 +19,7 @@ const selectClass = "h-10 rounded-md border border-input bg-transparent px-2 tex
 export const SAMPLE_PHOTO = "/api/files/photos/seed/panel-pb-001.svg";
 
 /** Nový projekt rozváděče z fotky – po založení se fotka hned analyzuje (Gemini / demo). */
-export function NewProjectDialog() {
+export function NewProjectDialog({ credits = null }: { credits?: number | null }) {
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState(false);
@@ -60,7 +60,7 @@ export function NewProjectDialog() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button className="touch-target gap-2">
+        <Button className="touch-target gap-2" disabled={credits !== null && credits <= 0} title={credits !== null && credits <= 0 ? "Došly testovací kredity" : credits !== null ? `Spotřebuje 1 kredit (zbývá ${credits})` : undefined}>
           <Plus className="size-4" aria-hidden /> Nový projekt z fotky
         </Button>
       </DialogTrigger>

@@ -1,12 +1,13 @@
 import { ModuleDisabled } from "@/components/common/ModuleDisabled";
-import { NoAccess } from "@/components/common/NoAccess";
 import { getFeatures } from "@/server/modules";
-import { getCurrentAccount } from "@/server/session";
+import { requirePanelCompany } from "@/server/panel-session";
 
-/** Stránky AI Panel Builderu: bez oprávnění nebo s vypnutým modulem vrátí náhradní obsah, jinak null. */
-export async function panelBuilderGuard(title: string) {
-  const [account, features] = await Promise.all([getCurrentAccount(), getFeatures()]);
-  if (!account.can("panelBuilder")) return <NoAccess title={title} current={account.accountType} suggest="MAINTENANCE_LEAD" />;
-  if (!features.on("enterprise.ai_panel_builder")) return <ModuleDisabled feature="enterprise.ai_panel_builder" canManage={account.can("manageModules")} />;
+/**
+ * Stránky AI Panel Builderu (samostatný produkt, fáze 41): bez přihlášené firmy přesměruje na
+ * `/panel-builder/auth`, s vypnutým modulem vrátí náhradní obsah, jinak null.
+ */
+export async function panelBuilderGuard() {
+  const [, features] = await Promise.all([requirePanelCompany(), getFeatures()]);
+  if (!features.on("enterprise.ai_panel_builder")) return <ModuleDisabled feature="enterprise.ai_panel_builder" canManage={false} />;
   return null;
 }

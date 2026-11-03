@@ -18,7 +18,7 @@ const num = (value: number) => value.toLocaleString("cs-CZ", { maximumFractionDi
 
 // Atomická databáze prvků: filtry, okamžité hledání a těžba PDF datasheetů.
 export default async function CatalogPage({ searchParams }: PageProps<"/panel-builder/catalog">) {
-  const guard = await panelBuilderGuard("Katalog prvků");
+  const guard = await panelBuilderGuard();
   if (guard) return guard;
   const filter = parseCatalogFilter(await searchParams);
   const catalog = await getCatalog(filter);

@@ -14,9 +14,11 @@ import { applyAccount } from "@/server/account-switch";
  * jinak přistane na domovské stránce účtu.
  */
 export async function setAccount(userId: string, pathname: string, redirectTo?: string) {
-  if (isAccountSwitcherLocked()) {
-    const session = await verifyAuthToken((await cookies()).get(AUTH_COOKIE)?.value);
-    if (session?.userId !== userId) throw new Error("Přepínání účtů je uzamčené – pro jiný účet se odhlaste a přihlaste na /login.");
+  const session = await verifyAuthToken((await cookies()).get(AUTH_COOKIE)?.value);
+  // Registrovaná firma (fáze 41) má účet vždy uzamčený na přihlášeného uživatele, demo účty z ní nejsou dostupné.
+  const registered = session ? await prisma.user.findFirst({ where: { id: session.userId, companyId: { not: null } }, select: { id: true } }) : null;
+  if ((isAccountSwitcherLocked() || registered) && session?.userId !== userId) {
+    throw new Error("Přepínání účtů je uzamčené – pro jiný účet se odhlaste a přihlaste na /login.");
   }
   return applyAccount(userId, pathname, redirectTo);
 }

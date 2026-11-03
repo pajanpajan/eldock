@@ -6,6 +6,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 import { assertPermission } from "@/server/permissions";
+import { getCurrentUser } from "@/server/session";
 import { createSubAccount } from "@/server/services/accounts";
 
 import type { ActionResult } from "./workflow";
@@ -24,7 +25,8 @@ export async function createSubAccountAction(input: z.input<typeof schema>): Pro
   if (!parsed.success) return { ok: false, error: "Neplatná data formuláře. Zkontrolujte vyplněné údaje." };
   try {
     await assertPermission("manageUsers");
-    const user = await createSubAccount(prisma, parsed.data);
+    const actor = await getCurrentUser();
+    const user = await createSubAccount(prisma, { ...parsed.data, owner: { companyId: actor.companyId, homePlantId: actor.homePlantId } });
     revalidatePath("/", "layout");
     return { ok: true, data: { id: user.id, name: user.name } };
   } catch (error) {

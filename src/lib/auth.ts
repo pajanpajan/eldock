@@ -5,6 +5,16 @@
 export const AUTH_COOKIE = "digitry-auth";
 /** Platnost přihlášení (12 h = jedna dlouhá směna + rezerva). */
 export const AUTH_TTL_SECONDS = 60 * 60 * 12;
+/**
+ * Samostatné přihlášení firmy do AI Panel Builderu (fáze 41): stejný podpis jako `digitry-auth`,
+ * ale vlastní cookie a předmět `pbc:<id firmy>` – přihlášení do správy závodů do Panel Builderu nepustí a naopak.
+ */
+export const PANEL_AUTH_COOKIE = "eldock-pb";
+export const PANEL_AUTH_TTL_SECONDS = 60 * 60 * 24 * 14;
+const PANEL_SUBJECT = "pbc:";
+export const panelSubject = (companyId: string) => `${PANEL_SUBJECT}${companyId}`;
+/** Id firmy z ověřeného tokenu Panel Builderu (token správy závodů → `null`). */
+export const companyIdOf = (session: { userId: string } | null) => (session?.userId.startsWith(PANEL_SUBJECT) ? session.userId.slice(PANEL_SUBJECT.length) : null);
 /** Výchozí přístupové heslo dema, pokud `ELDOCK_ACCESS_PASSWORD` není nastavené. */
 export const DEFAULT_ACCESS_PASSWORD = "eldock2026";
 

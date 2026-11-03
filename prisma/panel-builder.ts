@@ -12,7 +12,11 @@ if (!url) throw new Error("Chybí DATABASE_URL (viz .env.example).");
 const prisma = new PrismaClient({ adapter: new PrismaBetterSqlite3({ url }) });
 
 seedPanelBuilder(prisma)
-  .then(({ components, project }) => console.log(`AI Panel Builder: katalog ${components} prvků aktualizován, vzorový projekt PB-001 ${project ? "založen" : "už existuje"}.`))
+  .then(({ components, project, tester }) =>
+    console.log(
+      `AI Panel Builder: katalog ${components} prvků aktualizován, vzorový projekt PB-001 ${project ? "založen" : "už existuje"}, firma Tester ${tester.created ? "založena" : "už existuje"}${tester.attached ? ` (přiřazeno projektů: ${tester.attached})` : ""}.`,
+    ),
+  )
   .catch((error) => {
     console.error(error);
     process.exitCode = 1;

@@ -10,21 +10,22 @@ import { NewProjectDialog } from "@/components/panel-builder/NewProjectDialog";
 import { Button } from "@/components/ui/button";
 import { PROJECT_STATUS, RECOGNITION } from "@/lib/panel-builder/project";
 import { cn } from "@/lib/utils";
+import { requirePanelCompany } from "@/server/panel-session";
 import { getPanelProjects } from "@/server/queries/panel-builder";
 
 export const metadata: Metadata = { title: "AI Panel Builder" };
 
 // AI Panel Builder: projekty rozváděčů (pasportizace z fotky → strom → oteplení → dokumentace).
 export default async function PanelBuilderPage() {
-  const guard = await panelBuilderGuard("AI Panel Builder");
+  const guard = await panelBuilderGuard();
   if (guard) return guard;
-  const projects = await getPanelProjects();
+  const [projects, company] = await Promise.all([getPanelProjects(), requirePanelCompany()]);
 
   return (
     <PageTransition>
       <PageHeader
         title="AI Panel Builder"
-        description="Pasportizace a projekce rozváděčů z fotky: rozpoznání přístrojů, strom zapojení, výpočet oteplení dle ČSN EN 61439 a kompletní dokumentace s CE štítkem."
+        description={`${company.companyName} · rozváděče z fotky: rozpoznání přístrojů, strom zapojení, výpočet oteplení dle ČSN EN 61439 a dokumentace s CE štítkem. Nový projekt = 1 kredit (zbývá ${company.creditsRemaining}).`}
         actions={
           <>
             <Button asChild variant="outline" className="touch-target gap-2">
@@ -32,7 +33,7 @@ export default async function PanelBuilderPage() {
                 <Library className="size-4" aria-hidden /> Katalog prvků
               </Link>
             </Button>
-            <NewProjectDialog />
+            <NewProjectDialog credits={company.creditsRemaining} />
           </>
         }
       />

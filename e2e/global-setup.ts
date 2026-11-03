@@ -2,7 +2,8 @@ import { chromium, type FullConfig } from "@playwright/test";
 import { mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { AUTH_COOKIE, signAuthToken } from "../src/lib/auth";
+import { AUTH_COOKIE, PANEL_AUTH_COOKIE, panelSubject, signAuthToken } from "../src/lib/auth";
+import { TESTER_COMPANY } from "../src/lib/registered-company";
 import { E2E_AUTH_SECRET, E2E_AUTH_STATE } from "./auth";
 
 const UPLOAD_DIRS = ["photos", "revisions", "markups", "voice", "documents"].map((dir) => path.join("storage", "uploads", dir));
@@ -14,11 +15,11 @@ const UPLOAD_DIRS = ["photos", "revisions", "markups", "voice", "documents"].map
  */
 export default async function globalSetup(config: FullConfig) {
   const token = await signAuthToken("acc-novotny", { secret: E2E_AUTH_SECRET, ttl: 60 * 60 * 6 });
+  // AI Panel Builder je samostatný produkt (fáze 41): testy v něm běží za demo firmu Tester
+  const panelToken = await signAuthToken(panelSubject(TESTER_COMPANY.id), { secret: E2E_AUTH_SECRET, ttl: 60 * 60 * 6 });
+  const cookie = (name: string, value: string) => ({ name, value, domain: "localhost", path: "/", expires: -1, httpOnly: true, secure: false, sameSite: "Lax" });
   mkdirSync(path.dirname(E2E_AUTH_STATE), { recursive: true });
-  writeFileSync(
-    E2E_AUTH_STATE,
-    JSON.stringify({ cookies: [{ name: AUTH_COOKIE, value: token, domain: "localhost", path: "/", expires: -1, httpOnly: true, secure: false, sameSite: "Lax" }], origins: [] }),
-  );
+  writeFileSync(E2E_AUTH_STATE, JSON.stringify({ cookies: [cookie(AUTH_COOKIE, token), cookie(PANEL_AUTH_COOKIE, panelToken)], origins: [] }));
   await warmUp(config);
   const startedAt = Date.now();
   return function globalTeardown() {

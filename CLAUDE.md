@@ -5,7 +5,7 @@ revize VTZ, změny skutečného provedení mezi údržbou v hale a externími CA
 rozváděčů. Pracovní název byl Digitry, od fáze 20 je to **ELDOCK**. Produkce běží na https://eldock.cz.
 Původní zadání MVP je v `docs/archiv/SPECIFIKACE-MVP.md`, celá historie fází 0–35 v `docs/archiv/PLAN-faze-00-35.md`.
 
-## 1. Milníky (fáze 0–39 nasazené, 40 hotová k nasazení)
+## 1. Milníky (fáze 0–39 nasazené, 40–41 hotové k nasazení)
 
 | Fáze | Milník |
 |---|---|
@@ -21,6 +21,7 @@ Původní zadání MVP je v `docs/archiv/SPECIFIKACE-MVP.md`, celá historie fá
 | 38 | Studio: budovy v metrech (osy A…ZZ), více budov v jednom konceptu, přejmenování pater, Zpět/Vpřed, kontextový krok 3 s produktovými banery |
 | 39 | Studio: sloupy jako jemné křížky, vlastní nabídka kroku 3 (tenant + localStorage), seskupené štítky „☕ 2× Kávovar“ v místnostech i v uloženém půdorysu, − / + ve skupinách |
 | 40 | Studio: výchozí mapa závodu → proklik na budovu (Zařízení a napájení / Místnosti, zóny a vrata / Budova a podlaží), mazání a přesun uložených zařízení; vzorové závody v metrech s bohatým vybavením (`db:demo-plant`) |
+| 41 | Dva samostatné produkty: AI Panel Builder (registrace firmy přes ARES, vlastní přihlášení `eldock-pb`, kredity, údaje firmy v PDF) a Správa závodů (`/register-plant`, registrovaný uživatel vidí jen svůj závod) |
 
 ## 2. Moduly a klíčová místa v kódu
 
@@ -34,8 +35,8 @@ Server je hlídá přes `assertFeature`, správa je na `/admin/modules`.
 | CAE workflow | `/cae`, `/equipment/[id]/change-request` | `lib/workflow/state-machine.ts`, `server/services/workflow.ts` |
 | Revize VTZ | `/inspections/*` (plánovač, rychlá revize, audit) | `server/services/inspection.ts`, `lib/inspection-rules.ts` |
 | Studio | `/studio` | `components/studio/*`, `lib/cad-grid.ts`, `lib/campus-layout.ts`, `lib/equipment-categories.ts`, `server/services/studio.ts` |
-| AI Panel Builder | `/panel-builder` | `lib/panel-builder/*`, `server/services/{panel-builder,geminiPanelService}.ts` |
-| Účty a přístup | `/admin/users`, `/login` | `lib/accounts.ts`, `server/permissions.ts`, `src/proxy.ts` |
+| AI Panel Builder (samostatný produkt) | `/panel-builder/*` (skupina `(pb)`), `/panel-builder/auth` | `lib/panel-builder/*`, `server/services/{panel-builder,geminiPanelService}.ts`, `server/panel-session.ts` |
+| Účty, firmy a přístup | `/admin/users`, `/login`, `/register-plant`, `/api/ares` | `lib/accounts.ts`, `lib/registered-company.ts`, `server/permissions.ts`, `server/services/companies.ts`, `src/proxy.ts` |
 
 ## 3. Architektonické mantinely (závazné)
 
@@ -45,6 +46,7 @@ Server je hlídá přes `assertFeature`, správa je na `/admin/modules`.
 - **SQLite:** za běhu produkce `journal_mode=WAL`, `synchronous=NORMAL`, `busy_timeout=5000` a `foreign_keys=ON` (`SQLITE_PRAGMAS` v `src/lib/prisma.ts`). V dev režimu je `DELETE`.
 - **Vrstvy:** čtení dat v `src/server/queries` (`server-only`), business logika ve `src/server/services` (dostává `prisma` a `actor`, testuje se nad SQLite přes `test-db.ts`), tenké Server Actions v `src/server/actions` (zod → služba → `revalidatePath`), čisté funkce v `src/lib`.
 - **Účty:** `ELDOCK_LOCK_ACCOUNT_SWITCHER=1` (produkce bez dema) = účet určuje jen podepsaná přihlašovací cookie a server přepnutí odmítne; výchozí `0` = obchodní demo s přepínačem. Nastavení účtu bez kontroly je `applyAccount` v `src/server/account-switch.ts` (záměrně mimo `"use server"`).
+- **Dva produkty (fáze 41):** AI Panel Builder má vlastní přihlášení firmy (`RegisteredCompany` PANEL_BUILDER, cookie `eldock-pb` s předmětem `pbc:<id>`, `getPanelCompany`) a vlastní lištu; v navigaci správy závodů není. Každý dotaz i akce Panel Builderu filtruje `companyId`. Registrovaná firma správy závodů (`/register-plant`) má uživatele s `homePlantId` + `companyId`: přihlašuje se heslem firmy, bez přepínače účtů a vidí jen svůj závod (`plantAccessWhere`); demo účty nevidí závody registrovaných firem. Demo firma Tester (`tester@eldock.cz` / `Tester2026!`) vzniká v `db:panel-builder`.
 - **Soubory:** jen ve `storage/uploads`. Upload přes `POST /api/uploads`, čtení přes `GET /api/files/[...path]`. SVG se v UI zobrazuje přes `<img>`; výjimka jsou půdorysy generované aplikací.
 - **Workflow (CAE):** požadavek prochází `SUBMITTED → IN_PROGRESS → WAITING_APPROVAL → APPROVED`. Zamítnutá revize (`REJECTED`, komentář povinný) vrací požadavek do `IN_PROGRESS`; CAE může požadavek zrušit (`CANCELLED`). Každý přechod probíhá v `$transaction` se záznamem `ChangeRequestEvent`. Zařízení má max. 1 otevřený požadavek a 1 aktivní revizi. Stav zařízení se odvozuje přes `deriveEquipmentStatus`. Úplná tabulka přechodů je v archivu plánu, sekce B.
 - **Panel Builder – značení a zapojení:** IEC prefixy jen z `DESIGNATION_PREFIX` (`src/lib/panel-builder/matching.ts`); návrh zapojení `proposeTree` = pravidlo DIN lišty (chránič napájí jističe napravo na své liště). Hlídač hlásí jako chybu jen nezapojený prvek, cyklus a 3P pod 1P – součet In nad In chrániče není chyba.

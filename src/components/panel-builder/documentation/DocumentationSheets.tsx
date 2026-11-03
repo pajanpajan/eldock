@@ -56,9 +56,13 @@ function Sheet({ data, number, children }: { data: DocumentationData; number: nu
               <div className="text-zinc-500">Zákazník</div>
               <div>{data.customerName ?? "–"}</div>
             </td>
-            <td className="border border-black px-1.5 py-1">
+            <td className="border border-black px-1.5 py-1" data-testid="stamp-manufacturer">
               <div className="text-zinc-500">Výrobce rozváděče</div>
-              <div>{data.manufacturer.name || "–"}</div>
+              <div className="font-semibold">{data.manufacturer.name || "–"}</div>
+            </td>
+            <td className="border border-black px-1.5 py-1" data-testid="stamp-author">
+              <div className="text-zinc-500">Zpracoval</div>
+              <div>{data.manufacturer.contactName || "–"}</div>
             </td>
             <td className="border border-black px-1.5 py-1">
               <div className="text-zinc-500">Datum</div>
@@ -109,11 +113,51 @@ export function DocumentationSheets({ data }: { data: DocumentationData }) {
             <dd>{data.customerName ?? "–"}</dd>
             <dt className="text-zinc-600">Skříň</dt>
             <dd>{data.enclosure}</dd>
-            <dt className="text-zinc-600">Výrobce rozváděče</dt>
-            <dd>{[m.name, m.address, m.city].filter(Boolean).join(", ") || "–"}</dd>
             <dt className="text-zinc-600">Datum</dt>
             <dd>{data.date}</dd>
           </dl>
+          <section className="max-w-lg rounded border border-black p-3 text-[10pt]" data-testid="doc-manufacturer" aria-label="Výrobce rozváděče">
+            <h2 className="mb-1.5 text-[11pt] font-bold">Výrobce rozváděče</h2>
+            <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-0.5">
+              <dt className="text-zinc-600">Název firmy</dt>
+              <dd className="font-semibold">{m.name || "–"}</dd>
+              {m.ico ? (
+                <>
+                  <dt className="text-zinc-600">IČO</dt>
+                  <dd>{m.ico}</dd>
+                </>
+              ) : null}
+              {m.dic ? (
+                <>
+                  <dt className="text-zinc-600">DIČ</dt>
+                  <dd>{m.dic}</dd>
+                </>
+              ) : null}
+              <dt className="text-zinc-600">Sídlo</dt>
+              <dd>{[m.address, m.city].filter(Boolean).join(", ") || "–"}</dd>
+              {m.contactName ? (
+                <>
+                  <dt className="text-zinc-600">Odpovědná osoba</dt>
+                  <dd>
+                    {m.contactName}
+                    {m.authorizationNumber ? ` (oprávnění TIČR ${m.authorizationNumber})` : ""}
+                  </dd>
+                </>
+              ) : null}
+              {m.phone ? (
+                <>
+                  <dt className="text-zinc-600">Telefon</dt>
+                  <dd>{m.phone}</dd>
+                </>
+              ) : null}
+              {m.email ? (
+                <>
+                  <dt className="text-zinc-600">E-mail</dt>
+                  <dd>{m.email}</dd>
+                </>
+              ) : null}
+            </dl>
+          </section>
           <div>
             <h2 className="mb-2 border-b border-black text-[11pt] font-bold">Obsah</h2>
             <ol className="flex flex-col gap-1 text-[10pt]">
@@ -251,11 +295,18 @@ export function DocumentationSheets({ data }: { data: DocumentationData }) {
       <Sheet data={data} number={6}>
         <div className="flex flex-col gap-2 text-[10pt]" data-testid="doc-declaration">
           <h3 className="text-center text-[14pt] font-bold tracking-wide">ES PROHLÁŠENÍ O SHODĚ</h3>
-          <p>Níže podepsaný, zastupující výrobce</p>
-          <p className="pl-6 font-semibold">
+          <p>Výrobce</p>
+          <p className="pl-6 font-semibold" data-testid="declaration-manufacturer">
             {m.name || "–"}
             <br />
             {[m.address, m.city].filter(Boolean).join(", ")}
+            {m.ico ? (
+              <>
+                <br />
+                IČO {m.ico}
+                {m.dic ? `, DIČ ${m.dic}` : ""}
+              </>
+            ) : null}
             {m.phone ? (
               <>
                 <br />
@@ -264,7 +315,8 @@ export function DocumentationSheets({ data }: { data: DocumentationData }) {
             ) : null}
           </p>
           <p>
-            prohlašuje, že výrobek <b>{data.name}</b> (<span className="font-mono">{data.code}</span>) je ve shodě s ustanoveními následujících směrnic EU:
+            který tímto na svou výhradní odpovědnost prohlašuje, že výrobek <b>{data.name}</b> (<span className="font-mono">{data.code}</span>) je ve shodě s ustanoveními následujících
+            směrnic EU:
           </p>
           <ul className="list-disc pl-10">
             <li>Směrnice o elektrických zařízeních nízkého napětí – LVD 2014/35/EU</li>
@@ -277,8 +329,12 @@ export function DocumentationSheets({ data }: { data: DocumentationData }) {
           </ul>
           <p>Rok, ve kterém bylo připojeno označení CE: {data.year}</p>
           <div className="mt-6 grid grid-cols-2 gap-10">
-            <div className="border-t border-black pt-1 text-[8pt] text-zinc-600">Datum a místo</div>
-            <div className="border-t border-black pt-1 text-[8pt] text-zinc-600">Podpis, jméno a funkce</div>
+            <div className="border-t border-black pt-1 text-[8pt] text-zinc-600">
+              Datum a místo{m.city ? `: ${data.date}, ${m.city.replace(/^\d{3} ?\d{2} /, "")}` : ""}
+            </div>
+            <div className="border-t border-black pt-1 text-[8pt] text-zinc-600" data-testid="declaration-signature">
+              Podpis, jméno a funkce{m.contactName ? `: ${m.contactName}, odpovědná osoba výrobce` : ""}
+            </div>
           </div>
         </div>
 
@@ -302,7 +358,7 @@ export function DocumentationSheets({ data }: { data: DocumentationData }) {
             <span className="text-zinc-600">Krytí</span>
             <b>{data.label.ipRating}</b>
             <span className="text-zinc-600">Výrobce</span>
-            <b>{[m.name, m.city].filter(Boolean).join(", ") || "–"}</b>
+            <b data-testid="label-manufacturer">{[m.name, m.address, m.city].filter(Boolean).join(", ") || "–"}</b>
             <span className="text-zinc-600">ID</span>
             <b className="font-mono">{data.code}</b>
           </div>

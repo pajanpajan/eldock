@@ -100,6 +100,8 @@ export interface CreateProjectInput {
   manufacturerInfo?: ManufacturerInfo;
   dims?: Partial<EnclosureDims & { depthMm: number }>;
   createdById?: string | null;
+  /** Registrovaná firma (fáze 41): projekt vidí jen ona, její údaje jsou výrobce rozváděče. */
+  companyId?: string | null;
 }
 
 export async function createPanelProject(prisma: PrismaClient, input: CreateProjectInput) {
@@ -115,6 +117,7 @@ export async function createPanelProject(prisma: PrismaClient, input: CreateProj
       dominantManufacturer: input.dominantManufacturer ?? "ABB",
       manufacturerInfoJson: JSON.stringify(input.manufacturerInfo ?? {}),
       createdById: input.createdById ?? null,
+      companyId: input.companyId ?? null,
       ...input.dims,
     },
   });

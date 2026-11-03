@@ -3,6 +3,9 @@ import Link from "next/link";
 import {
   ArrowRight,
   Building2,
+  CircuitBoard,
+  Factory,
+  Rocket,
   CalendarClock,
   CheckCircle2,
   ClipboardCheck,
@@ -43,6 +46,7 @@ export const metadata: Metadata = {
 };
 
 const NAV = [
+  { href: "#produkty", label: "Produkty" },
   { href: "#reseni", label: "Řešení" },
   { href: "#jak-to-funguje", label: "Jak to funguje" },
   { href: "#pro-koho", label: "Pro koho" },
@@ -172,6 +176,47 @@ export default async function LandingPage() {
               <LazyPromoVideo />
             </div>
             <p className="mt-3 text-center font-mono text-xs text-muted-foreground">Eldock za 45 sekund – od QR kódu na rozváděči po protokol o revizi</p>
+          </div>
+        </section>
+
+        {/* DVA SAMOSTATNÉ PRODUKTY (fáze 41) */}
+        <section id="produkty" className="mx-auto w-full max-w-6xl scroll-mt-20 px-4 pb-20 sm:px-6" aria-label="Produkty ELDOCK">
+          <div className="grid gap-6 lg:grid-cols-2">
+            <article className="relative flex flex-col gap-4 overflow-hidden rounded-2xl border-2 border-primary/60 bg-gradient-to-br from-primary/15 via-card to-card p-6 shadow-xl" data-testid="product-panel-builder">
+              <span className="inline-flex w-fit items-center gap-2 rounded-full bg-primary px-3 py-1 font-mono text-xs font-bold text-primary-foreground">
+                <CircuitBoard className="size-3.5" aria-hidden /> Samostatný produkt
+              </span>
+              <h2 className="text-2xl font-bold tracking-tight text-balance">⚡ ELDOCK AI Panel Builder – Výrobní dokumentace, oteplení a CE štítek rozváděče z fotky za 3 minuty</h2>
+              <p className="text-muted-foreground">
+                Vyfoťte osazený rozváděč, AI rozpozná přístroje, navrhne zapojení, spočítá oteplení dle IEC TR 60890 a připraví 6 listů dokumentace s vaší firmou v razítku, prohlášením o shodě a výrobním štítkem CE.
+              </p>
+              <div className="mt-auto flex flex-wrap gap-3">
+                <Button asChild className={anchorButton}>
+                  <Link href="/panel-builder/auth">
+                    <Rocket data-icon="inline-start" aria-hidden /> 🚀 Spustit AI Panel Builder (Registrace / Přihlášení)
+                  </Link>
+                </Button>
+              </div>
+            </article>
+            <article className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-6" data-testid="product-plant">
+              <span className="inline-flex w-fit items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 font-mono text-xs text-primary">
+                <Factory className="size-3.5" aria-hidden /> Celozávodní platforma
+              </span>
+              <h2 className="text-2xl font-bold tracking-tight text-balance">🏭 ELDOCK Průmyslový dok – Správa výrobních závodů, dokumentace a revizí</h2>
+              <p className="text-muted-foreground">
+                Mapa areálu, budovy a půdorysy se zařízeními, elektrodokumentace s historií verzí, červenky z haly do CAE, lhůtník a plánovač revizí VTZ, spotřebičů a nářadí.
+              </p>
+              <div className="mt-auto flex flex-wrap gap-3">
+                <Button asChild className={anchorButton}>
+                  <Link href="/register-plant">Registrovat výrobní závod</Link>
+                </Button>
+                <Button asChild variant="outline" className={anchorButton}>
+                  <Link href={clientZone.href}>
+                    <LogIn data-icon="inline-start" aria-hidden /> {signedIn ? clientZone.label : "Přihlásit se / Demo závodu"}
+                  </Link>
+                </Button>
+              </div>
+            </article>
           </div>
         </section>
 

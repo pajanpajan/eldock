@@ -72,6 +72,7 @@ async function wipe() {
   // Pořadí podle cizích klíčů (děti před rodiči).
   await prisma.panelBoardItem.deleteMany();
   await prisma.panelBoardProject.deleteMany();
+  await prisma.registeredCompany.deleteMany();
   await prisma.catalogComponent.deleteMany();
   await prisma.temporaryModification.deleteMany();
   await prisma.inspectionDefect.deleteMany();

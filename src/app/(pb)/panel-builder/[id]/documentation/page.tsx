@@ -12,6 +12,7 @@ import { isMix } from "@/lib/panel-builder/catalog";
 import { componentsList, partsList, technicalData } from "@/lib/panel-builder/documentation";
 import { renderPanelDrawingSvg, renderSingleLineDiagramSvg, type DrawingItem } from "@/lib/panel-builder/drawings";
 import { parseManufacturerInfo } from "@/lib/panel-builder/project";
+import { companyManufacturer } from "@/lib/registered-company";
 import { readingOrder } from "@/lib/panel-builder/tree";
 import { equipmentHref } from "@/lib/routes";
 import { getEnclosureComponent, getPanelProject, getReleaseTargets } from "@/server/queries/panel-builder";
@@ -27,7 +28,7 @@ const n = (value: number, digits = 2) => value.toLocaleString("cs-CZ", { minimum
 
 // Krok 4: kompletní elaborát rozváděče (6 listů A4) k tisku / PDF a propuštění do provozu.
 export default async function PanelDocumentationPage({ params }: PageProps<"/panel-builder/[id]/documentation">) {
-  const guard = await panelBuilderGuard("AI Panel Builder");
+  const guard = await panelBuilderGuard();
   if (guard) return guard;
   const project = await getPanelProject((await params).id);
   if (!project) notFound();
@@ -63,7 +64,8 @@ export default async function PanelDocumentationPage({ params }: PageProps<"/pan
     customerName: project.customerName,
     norm: project.norm,
     enclosure: [project.enclosureModel, `${project.heightMm} × ${project.widthMm} × ${project.depthMm} mm`, project.ipRating].filter(Boolean).join(" · "),
-    manufacturer: parseManufacturerInfo(project.manufacturerInfoJson),
+    // Registrovaná firma = výrobce rozváděče (vždy aktuální „Firemní údaje do razítka“), jinak údaje projektu
+    manufacturer: project.company ? companyManufacturer(project.company) : parseManufacturerInfo(project.manufacturerInfoJson),
     date: formatDate(date),
     year: String(date.getFullYear()),
     panelDrawingSvg: renderPanelDrawingSvg(project, drawingItems, project.enclosureModel),
