@@ -5,7 +5,7 @@ revize VTZ, změny skutečného provedení mezi údržbou v hale a externími CA
 rozváděčů. Pracovní název byl Digitry, od fáze 20 je to **ELDOCK**. Produkce běží na https://eldock.cz.
 Původní zadání MVP je v `docs/archiv/SPECIFIKACE-MVP.md`, celá historie fází 0–35 v `docs/archiv/PLAN-faze-00-35.md`.
 
-## 1. Milníky (fáze 0–43 nasazené)
+## 1. Milníky (fáze 0–43 nasazené, 44 hotová k nasazení)
 
 | Fáze | Milník |
 |---|---|
@@ -24,6 +24,7 @@ Původní zadání MVP je v `docs/archiv/SPECIFIKACE-MVP.md`, celá historie fá
 | 41 | Dva samostatné produkty: AI Panel Builder (registrace firmy přes ARES, vlastní přihlášení `eldock-pb`, kredity, údaje firmy v PDF) a Správa závodů (`/register-plant`, registrovaný uživatel vidí jen svůj závod) |
 | 42 | Panel Builder: čistá fotka se zoomem, 2D vektorový rozváděč (mechanické symboly, CAD Dark / Výkres osazení), našeptávač databáze prvků; zapojení drag & drop nad vektorovým rozváděčem s hlavním přívodem a modrými spojnicemi |
 | 43 | Panel Builder: návrh rozváděče od nuly (lišty 8–36M), kaskádový výběr výrobce → kategorie → parametry s drag & drop osazením, výběr skříně podle velikosti, logo a razítko firmy, popisky 1:1, import externí databáze prvků (`npm run catalog:sync`) |
+| 44 | Most „půdorys → rozváděč“ (`src/engine/floorplan-bridge.ts`, `FLOORPLAN_SPEC.md`): kalibrace, řazení vypínačů, okruhy dle ČSN 33 2130 ed. 4, fáze, chrániče, přístroje na lištách a skříň |
 
 ## 2. Moduly a klíčová místa v kódu
 
@@ -46,7 +47,7 @@ Server je hlídá přes `assertFeature`, správa je na `/admin/modules`.
 - **UI:** Tailwind CSS 4 (loader `@tailwindcss/turbopack`), shadcn/ui, `lucide-react`, `motion/react`, `sonner`. Výhradně česky, kód anglicky. Tmavý průmyslový vzhled. Stavové barvy a popisky jsou jen v `src/lib/status.ts`. Grafika je SVG/CSS generovaná kódem, bez externích obrázků a CDN.
 - **Prisma 7.10:** balíčky vždy `@7` (tag `latest` je 8.0 RC). Klient se importuje z `@/generated/prisma/client` a v aplikaci jen přes `src/lib/prisma.ts`. Adaptér `@prisma/adapter-better-sqlite3`; `DATABASE_URL` je v `prisma.config.ts`.
 - **SQLite:** za běhu produkce `journal_mode=WAL`, `synchronous=NORMAL`, `busy_timeout=5000` a `foreign_keys=ON` (`SQLITE_PRAGMAS` v `src/lib/prisma.ts`). V dev režimu je `DELETE`.
-- **Vrstvy:** čtení dat v `src/server/queries` (`server-only`), business logika ve `src/server/services` (dostává `prisma` a `actor`, testuje se nad SQLite přes `test-db.ts`), tenké Server Actions v `src/server/actions` (zod → služba → `revalidatePath`), čisté funkce v `src/lib`.
+- **Vrstvy:** čtení dat v `src/server/queries` (`server-only`), business logika ve `src/server/services` (dostává `prisma` a `actor`, testuje se nad SQLite přes `test-db.ts`), tenké Server Actions v `src/server/actions` (zod → služba → `revalidatePath`), čisté funkce v `src/lib`; výpočetní moduly mezi produkty v `src/engine` (most půdorys → rozváděč, `FLOORPLAN_SPEC.md`).
 - **Účty:** `ELDOCK_LOCK_ACCOUNT_SWITCHER=1` (produkce bez dema) = účet určuje jen podepsaná přihlašovací cookie a server přepnutí odmítne; výchozí `0` = obchodní demo s přepínačem. Nastavení účtu bez kontroly je `applyAccount` v `src/server/account-switch.ts` (záměrně mimo `"use server"`).
 - **Dva produkty (fáze 41):** AI Panel Builder má vlastní přihlášení firmy (`RegisteredCompany` PANEL_BUILDER, cookie `eldock-pb` s předmětem `pbc:<id>`, `getPanelCompany`) a vlastní lištu; v navigaci správy závodů není. Každý dotaz i akce Panel Builderu filtruje `companyId`. Registrovaná firma správy závodů (`/register-plant`) má uživatele s `homePlantId` + `companyId`: přihlašuje se heslem firmy, bez přepínače účtů a vidí jen svůj závod (`plantAccessWhere`); demo účty nevidí závody registrovaných firem. Demo firma Tester (`tester@eldock.cz` / `Tester2026!`) vzniká v `db:panel-builder`.
 - **Soubory:** jen ve `storage/uploads`. Upload přes `POST /api/uploads`, čtení přes `GET /api/files/[...path]`. SVG se v UI zobrazuje přes `<img>`; výjimka jsou půdorysy generované aplikací.
