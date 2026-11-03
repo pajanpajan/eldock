@@ -5,7 +5,7 @@ revize VTZ, změny skutečného provedení mezi údržbou v hale a externími CA
 rozváděčů. Pracovní název byl Digitry, od fáze 20 je to **ELDOCK**. Produkce běží na https://eldock.cz.
 Původní zadání MVP je v `docs/archiv/SPECIFIKACE-MVP.md`, celá historie fází 0–35 v `docs/archiv/PLAN-faze-00-35.md`.
 
-## 1. Milníky (fáze 0–41 nasazené, 42 hotová k nasazení)
+## 1. Milníky (fáze 0–42 nasazené)
 
 | Fáze | Milník |
 |---|---|
