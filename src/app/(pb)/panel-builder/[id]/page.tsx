@@ -7,7 +7,7 @@ import { PanelSteps } from "@/components/panel-builder/PanelSteps";
 import { ProjectHeader } from "@/components/panel-builder/ProjectHeader";
 import { RecognitionWorkspace, type WorkspaceItem } from "@/components/panel-builder/RecognitionWorkspace";
 import { configFromComponent, parseConfig } from "@/lib/panel-builder/configurator";
-import { parseBox } from "@/lib/panel-builder/layout";
+import { vectorDeviceFrom } from "@/lib/panel-builder/vector-symbols";
 import { getPanelProject } from "@/server/queries/panel-builder";
 
 export async function generateMetadata({ params }: PageProps<"/panel-builder/[id]">): Promise<Metadata> {
@@ -23,7 +23,7 @@ function parseDetected(json: string | null): WorkspaceItem["detected"] {
   }
 }
 
-// Pracovní plocha projektu rozváděče – krok 1: analýza fotky a živý konfigurátor prvku.
+// Pracovní plocha projektu rozváděče – krok 1: čistá fotka, 2D vektorový rozváděč a živý konfigurátor prvku.
 export default async function PanelProjectPage({ params }: PageProps<"/panel-builder/[id]">) {
   const guard = await panelBuilderGuard();
   if (guard) return guard;
@@ -39,7 +39,6 @@ export default async function PanelProjectPage({ params }: PageProps<"/panel-bui
     dinRailIndex: item.dinRailIndex,
     positionOnRail: item.positionOnRail,
     modulesWidth: item.modulesWidth,
-    box: parseBox(item.boundingBoxJson),
     recognitionStatus: item.recognitionStatus,
     confidence: item.confidence,
     rawOcrText: item.rawOcrText,
@@ -57,6 +56,7 @@ export default async function PanelProjectPage({ params }: PageProps<"/panel-bui
           estimated: item.catalogComponent.dataSource === "IEC_ESTIMATE",
         }
       : null,
+    device: vectorDeviceFrom(item),
   }));
 
   return (

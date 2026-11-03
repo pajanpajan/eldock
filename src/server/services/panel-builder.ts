@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@/generated/prisma/client";
-import type { EnclosureMaterial, EnclosureType } from "@/generated/prisma/enums";
-import { buildSearchText, isMix } from "@/lib/panel-builder/catalog";
+import type { ComponentCategory, EnclosureMaterial, EnclosureType } from "@/generated/prisma/enums";
+import { buildSearchText, isMix, normalizeSearch } from "@/lib/panel-builder/catalog";
 import { extractComponents, type ExtractedComponent } from "@/lib/panel-builder/datasheet-extract";
 import type { EnclosureDims } from "@/lib/panel-builder/layout";
 import { catalogCategory, configFromComponent, defaultConfig, matchConfig, parseConfig, polesForWidth, synthesizeComponent, type ItemConfig } from "@/lib/panel-builder/configurator";
@@ -131,7 +131,7 @@ export async function applyDetections(prisma: PrismaClient, projectId: string, d
   if (!detections.length) throw new WorkflowError("VALIDATION", "Na fotce nebyl rozpoznán žádný přístroj.");
   const catalog = await prisma.catalogComponent.findMany({
     where: { category: { not: "ENCLOSURE" } },
-    select: { id: true, manufacturer: true, typeCode: true, articleNumber: true, category: true, poles: true, ratedCurrentA: true, trippingCurve: true, modulesCount: true },
+    select: { id: true, manufacturer: true, typeCode: true, articleNumber: true, category: true, poles: true, ratedCurrentA: true, trippingCurve: true, rcdType: true, rcdSensitivityMa: true, modulesCount: true },
   });
   // „Různí výrobci“ (null): bez preference – každý modul se páruje podle vlastního výrobce.
   const manufacturer = isMix(dominant) ? null : dominant;
@@ -162,6 +162,8 @@ export async function applyDetections(prisma: PrismaClient, projectId: string, d
             poles: detection.poles,
             ratedCurrentA: detection.ratedCurrentA,
             trippingCurve: detection.trippingCurve,
+            rcdType: detection.rcdType ?? null,
+            rcdSensitivityMa: detection.rcdSensitivityMa ?? null,
             manufacturer: detection.manufacturer,
             modules: detection.modules,
           }),
@@ -207,7 +209,8 @@ export async function assignCatalogComponent(prisma: PrismaClient, itemId: strin
   if (!component) throw new WorkflowError("NOT_FOUND", "Katalogový prvek neexistuje.");
   return prisma.panelBoardItem.update({
     where: { id: itemId },
-    data: { catalogComponentId: component.id, recognitionStatus: "VERIFIED", confidence: 1, modulesWidth: component.modulesCount || 1 },
+    // Konfigurace se odvodí z vybraného kusu (dlaždice konfigurátoru i texty vektorového symbolu)
+    data: { catalogComponentId: component.id, recognitionStatus: "VERIFIED", confidence: 1, modulesWidth: component.modulesCount || 1, configJson: null },
     select: { id: true, projectId: true },
   });
 }
@@ -234,16 +237,56 @@ export async function lookupComponentForItem(
   if (!component) return { mode, component: null };
   const existing = await prisma.catalogComponent.findUnique({ where: { articleNumber: component.articleNumber } });
   if (existing) return { mode, component: summary(existing, "existing") };
+  // Databáze se sama učí: dohledaný typ se uloží (upsert podle objednacího čísla – souběh dvou dohledání nespadne)
   const { powerLossEstimated, sourcePage, ...fields } = component;
-  const created = await prisma.catalogComponent.create({
-    data: {
-      ...fields,
-      dataSource: mode === "GEMINI" ? "GEMINI_AI" : powerLossEstimated ? "IEC_ESTIMATE" : "PDF_DATASHEET",
-      sourcePage: mode === "GEMINI" ? null : sourcePage,
-      searchText: buildSearchText(component),
-    },
-  });
+  const data = {
+    ...fields,
+    dataSource: mode === "GEMINI" ? ("GEMINI_AI" as const) : powerLossEstimated ? ("IEC_ESTIMATE" as const) : ("PDF_DATASHEET" as const),
+    sourcePage: mode === "GEMINI" ? null : sourcePage,
+    searchText: buildSearchText(component),
+  };
+  const created = await prisma.catalogComponent.upsert({ where: { articleNumber: component.articleNumber }, create: data, update: {} });
   return { mode, component: summary(created, "created") };
+}
+
+/** Výsledek našeptávače konfigurátoru. */
+export interface CatalogHit {
+  id: string;
+  manufacturer: string;
+  typeCode: string;
+  articleNumber: string;
+  category: ComponentCategory;
+  poles: string;
+  ratedCurrentA: number;
+  trippingCurve: string | null;
+  rcdType: string | null;
+  rcdSensitivityMa: number | null;
+  powerLossWatts: number;
+  modulesCount: number;
+}
+
+/**
+ * Našeptávač z databáze prvků (CatalogComponent): filtr dlaždic výrobce → kategorie → póly a
+ * hledání v textu bez diakritiky („s201b16“, „fh204 30ma“). Nejvýš `limit` kusů.
+ */
+export async function searchCatalog(prisma: PrismaClient, filter: { q: string; manufacturer: string | null; category: ComponentCategory | null; poles: string | null }, limit = 8): Promise<CatalogHit[]> {
+  const terms = normalizeSearch(filter.q).split(" ").filter(Boolean).slice(0, 6);
+  return prisma.catalogComponent.findMany({
+    where: {
+      category: filter.category ?? { not: "ENCLOSURE" },
+      ...(filter.manufacturer ? { manufacturer: filter.manufacturer } : {}),
+      ...(filter.poles ? { poles: filter.poles } : {}),
+      AND: terms.map((term) => ({ searchText: { contains: term } })),
+    },
+    orderBy: [{ category: "asc" }, { manufacturer: "asc" }, { ratedCurrentA: "asc" }, { typeCode: "asc" }],
+    take: limit,
+    select: { id: true, manufacturer: true, typeCode: true, articleNumber: true, category: true, poles: true, ratedCurrentA: true, trippingCurve: true, rcdType: true, rcdSensitivityMa: true, powerLossWatts: true, modulesCount: true },
+  });
+}
+
+/** Hlavní přívod rozváděče shora / zespoda (vektorový rozváděč, spojnice). */
+export async function setIncomer(prisma: PrismaClient, projectId: string, incomerFrom: "TOP" | "BOTTOM") {
+  return prisma.panelBoardProject.update({ where: { id: projectId }, data: { incomerFrom }, select: { id: true, incomerFrom: true } });
 }
 
 // ---------------------------------------------------------------------------

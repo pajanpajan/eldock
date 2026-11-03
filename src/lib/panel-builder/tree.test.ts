@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { REFERENCE_DEVICES, withPositions } from "./reference";
-import { flattenTree, groupLoad, isConnected, proposeTree, renumber, validateTree, type TreeNode } from "./tree";
+import { assignParent, chooseRoot, connectRightOf, currentRoot, dropOnto, flattenTree, groupLoad, isConnected, proposeTree, renumber, setRoot, validateTree, type TreeNode } from "./tree";
 
 const NODES: TreeNode[] = withPositions(REFERENCE_DEVICES).map((device) => ({
   id: device.designation,
@@ -140,5 +140,115 @@ describe("elektrotechnický hlídač", () => {
   it("přečíslování IEC značení v pořadí čtení", () => {
     const shuffled = NODES.map((node, index) => ({ ...node, id: `x${index}` }));
     expect([...renumber(shuffled).values()].slice(0, 4)).toEqual(["-Q1", "-FV1", "-FI1", "-F1"]);
+  });
+});
+
+describe("zapojování na vektorovém rozváděči (fáze 42)", () => {
+  const node = (id: string, rail: number, position: number, category: TreeNode["category"], poles: string, current: number): TreeNode => ({
+    id,
+    designation: id,
+    circuitLabel: "",
+    dinRailIndex: rail,
+    positionOnRail: position,
+    category,
+    poles,
+    ratedCurrentA: current,
+    operatingCurrentA: null,
+    parentItemId: null,
+    fedFromIncomer: false,
+    phaseAssignment: null,
+  });
+  // Rozváděč BEZ odpínače: 3P jistič -F1 na 1. liště je hlavní vstupní prvek
+  const NO_Q1 = [
+    node("-FV1", 1, 1, "SPD", "3P+N", 0),
+    node("-F1", 1, 2, "MCB", "3P", 25),
+    node("-FI1", 1, 3, "RCD", "4P", 40),
+    node("-F2", 2, 1, "MCB", "1P", 10),
+    node("-F3", 2, 2, "MCB", "1P", 16),
+    node("-F4", 2, 3, "MCB", "1P", 16),
+    node("-F5", 2, 4, "MCB", "1P", 16),
+  ];
+  const connectedCount = (nodes: TreeNode[]) => nodes.filter((entry) => isConnected(entry.id, new Map(nodes.map((n) => [n.id, n])))).length;
+  const apply = (nodes: TreeNode[], tree: ReturnType<typeof proposeTree>) => nodes.map((entry) => ({ ...entry, ...tree.get(entry.id)! }));
+
+  it("bez -Q1 vezme AI návrh první 3P přístroj na 1. liště (SPD ne) a zapojí 100 % prvků", () => {
+    expect(chooseRoot(NO_Q1)?.id).toBe("-F1");
+    const nodes = apply(NO_Q1, proposeTree(NO_Q1));
+    expect(connectedCount(nodes)).toBe(NO_Q1.length);
+    expect(currentRoot(nodes)?.id).toBe("-F1");
+    expect(nodes.find((entry) => entry.id === "-FV1")?.parentItemId).toBe("-F1");
+    expect(["-F2", "-F3", "-F4", "-F5"].map((id) => nodes.find((entry) => entry.id === id)?.parentItemId)).toEqual(["-FI1", "-FI1", "-FI1", "-FI1"]);
+    expect(validateTree(nodes).filter((issue) => issue.severity === "error")).toEqual([]);
+    // Uživatelem zvolený kořen má v AI návrhu přednost
+    expect(currentRoot(apply(NO_Q1, proposeTree(NO_Q1, "-FI1")))?.id).toBe("-FI1");
+    // Starý strom se 37 nezapojenými prvky (žádný kořen, žádný odpínač) → návrh vždy zapojí vše
+    const loose = Array.from({ length: 37 }, (_, index) => node(`-F${index + 1}`, Math.floor(index / 12) + 1, (index % 12) + 1, "MCB", index === 0 ? "3P" : "1P", 16));
+    expect(connectedCount(apply(loose, proposeTree(loose)))).toBe(37);
+  });
+
+  it("hlavním vstupním prvkem může být cokoli: setRoot přepojí ostatní kořeny pod nový", () => {
+    const base = apply(NO_Q1, proposeTree(NO_Q1));
+    const nodes = setRoot(base, "-FI1");
+    const by = Object.fromEntries(nodes.map((entry) => [entry.id, entry]));
+    expect(by["-FI1"]).toMatchObject({ parentItemId: null, fedFromIncomer: true, phaseAssignment: "L1,L2,L3,N" });
+    expect(by["-F1"]).toMatchObject({ parentItemId: "-FI1", fedFromIncomer: false });
+    expect(currentRoot(nodes)?.id).toBe("-FI1");
+    expect(connectedCount(nodes)).toBe(NO_Q1.length);
+  });
+
+  it("drag & drop: SPD a chránič na hlavní prvek, chránič na přepěťovku = průchozí uzel, jističe paralelně se střídáním L1/L2/L3", () => {
+    let nodes = setRoot(NO_Q1, "-F1");
+    const step = (sources: string[], target: string) => {
+      const result = dropOnto(nodes, sources, target);
+      if (!result.ok) throw new Error(result.error);
+      nodes = result.nodes;
+      return result.parentId;
+    };
+    const by = () => Object.fromEntries(nodes.map((entry) => [entry.id, entry]));
+    expect(step(["-FV1"], "-F1")).toBe("-F1");
+    // chránič na přepěťovku → průchozí napájecí uzel v hlavní větvi, bez varování
+    expect(step(["-FI1"], "-FV1")).toBe("-FV1");
+    expect(validateTree(nodes).filter((issue) => issue.itemId === "-FI1")).toEqual([]);
+    // jističe na chránič → sourozenci pod -FI1
+    step(["-F2", "-F3"], "-FI1");
+    // jistič přetažený na jiný jistič pod chráničem → vedle něj (pod -FI1), nikdy do série
+    expect(step(["-F4"], "-F2")).toBe("-FI1");
+    expect(step(["-F5"], "-F3")).toBe("-FI1");
+    expect(["-F2", "-F3", "-F4", "-F5"].map((id) => by()[id].parentItemId)).toEqual(["-FI1", "-FI1", "-FI1", "-FI1"]);
+    expect(["-F2", "-F3", "-F4", "-F5"].map((id) => by()[id].phaseAssignment)).toEqual(["L1", "L2", "L3", "L1"]);
+    expect(connectedCount(nodes)).toBe(NO_Q1.length);
+    expect(validateTree(nodes).filter((issue) => issue.severity !== "info")).toEqual([]);
+  });
+
+  it("drag & drop odmítne cyklus, přetažení na sebe a přesun hlavního vstupního prvku", () => {
+    const nodes = apply(NO_Q1, proposeTree(NO_Q1));
+    expect(dropOnto(nodes, ["-FI1"], "-FI1")).toMatchObject({ ok: false });
+    // jistič pod chráničem → „vedle něj“ = pod chráničem samotným → nemůže napájet sám sebe
+    expect(dropOnto(nodes, ["-FI1"], "-F2")).toMatchObject({ ok: false, error: "Prvek nemůže napájet sám sebe." });
+    const chain = assignParent(nodes, ["-FI1"], "-FV1") as { nodes: TreeNode[] };
+    expect(dropOnto(chain.nodes, ["-FV1"], "-F2")).toMatchObject({ ok: false, error: expect.stringContaining("cyklus") });
+    expect(dropOnto(nodes, ["-F1"], "-FI1")).toMatchObject({ ok: false, error: expect.stringContaining("hlavní vstupní prvek") });
+    expect(assignParent(nodes, ["-F2"], "-F1")).toMatchObject({ ok: true, parentId: "-F1" });
+  });
+
+  it("„Připojit jističe vpravo“ naváže vývody napravo od chrániče až po další chránič", () => {
+    const rail = [
+      node("-Q1", 1, 1, "MAIN_SWITCH", "3P", 40),
+      node("-FI1", 2, 1, "RCD", "4P", 40),
+      node("-F1", 2, 2, "MCB", "1P", 10),
+      node("-F2", 2, 3, "MCB", "1P", 16),
+      node("-FI2", 2, 4, "RCD", "2P", 25),
+      node("-F3", 2, 5, "MCB", "1P", 16),
+    ];
+    const rooted = setRoot(rail, "-Q1");
+    const { nodes, count } = connectRightOf(rooted, "-FI1");
+    expect(count).toBe(2);
+    expect(["-F1", "-F2", "-F3"].map((id) => nodes.find((entry) => entry.id === id)?.parentItemId)).toEqual(["-FI1", "-FI1", null]);
+    expect(["-F1", "-F2"].map((id) => nodes.find((entry) => entry.id === id)?.phaseAssignment)).toEqual(["L1", "L2"]);
+    // 2P chránič: jističe dědí jeho jedinou fázi
+    const second = connectRightOf(assignParent(nodes, ["-FI2"], "-Q1").ok ? (assignParent(nodes, ["-FI2"], "-Q1") as { nodes: TreeNode[] }).nodes : nodes, "-FI2");
+    const fi2 = second.nodes.find((entry) => entry.id === "-FI2")!;
+    expect(second.nodes.find((entry) => entry.id === "-F3")?.phaseAssignment).toBe(fi2.phaseAssignment?.split(",")[0]);
+    expect(connectRightOf(rooted, "-F3").count).toBe(0);
   });
 });

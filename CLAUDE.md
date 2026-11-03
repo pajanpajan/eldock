@@ -5,7 +5,7 @@ revize VTZ, změny skutečného provedení mezi údržbou v hale a externími CA
 rozváděčů. Pracovní název byl Digitry, od fáze 20 je to **ELDOCK**. Produkce běží na https://eldock.cz.
 Původní zadání MVP je v `docs/archiv/SPECIFIKACE-MVP.md`, celá historie fází 0–35 v `docs/archiv/PLAN-faze-00-35.md`.
 
-## 1. Milníky (fáze 0–39 nasazené, 40–41 hotové k nasazení)
+## 1. Milníky (fáze 0–41 nasazené, 42 hotová k nasazení)
 
 | Fáze | Milník |
 |---|---|
@@ -22,6 +22,7 @@ Původní zadání MVP je v `docs/archiv/SPECIFIKACE-MVP.md`, celá historie fá
 | 39 | Studio: sloupy jako jemné křížky, vlastní nabídka kroku 3 (tenant + localStorage), seskupené štítky „☕ 2× Kávovar“ v místnostech i v uloženém půdorysu, − / + ve skupinách |
 | 40 | Studio: výchozí mapa závodu → proklik na budovu (Zařízení a napájení / Místnosti, zóny a vrata / Budova a podlaží), mazání a přesun uložených zařízení; vzorové závody v metrech s bohatým vybavením (`db:demo-plant`) |
 | 41 | Dva samostatné produkty: AI Panel Builder (registrace firmy přes ARES, vlastní přihlášení `eldock-pb`, kredity, údaje firmy v PDF) a Správa závodů (`/register-plant`, registrovaný uživatel vidí jen svůj závod) |
+| 42 | Panel Builder: čistá fotka se zoomem, 2D vektorový rozváděč (mechanické symboly, CAD Dark / Výkres osazení), našeptávač databáze prvků; zapojení drag & drop nad vektorovým rozváděčem s hlavním přívodem a modrými spojnicemi |
 
 ## 2. Moduly a klíčová místa v kódu
 
@@ -50,6 +51,7 @@ Server je hlídá přes `assertFeature`, správa je na `/admin/modules`.
 - **Soubory:** jen ve `storage/uploads`. Upload přes `POST /api/uploads`, čtení přes `GET /api/files/[...path]`. SVG se v UI zobrazuje přes `<img>`; výjimka jsou půdorysy generované aplikací.
 - **Workflow (CAE):** požadavek prochází `SUBMITTED → IN_PROGRESS → WAITING_APPROVAL → APPROVED`. Zamítnutá revize (`REJECTED`, komentář povinný) vrací požadavek do `IN_PROGRESS`; CAE může požadavek zrušit (`CANCELLED`). Každý přechod probíhá v `$transaction` se záznamem `ChangeRequestEvent`. Zařízení má max. 1 otevřený požadavek a 1 aktivní revizi. Stav zařízení se odvozuje přes `deriveEquipmentStatus`. Úplná tabulka přechodů je v archivu plánu, sekce B.
 - **Panel Builder – značení a zapojení:** IEC prefixy jen z `DESIGNATION_PREFIX` (`src/lib/panel-builder/matching.ts`); návrh zapojení `proposeTree` = pravidlo DIN lišty (chránič napájí jističe napravo na své liště). Hlídač hlásí jako chybu jen nezapojený prvek, cyklus a 3P pod 1P – součet In nad In chrániče není chyba.
+- **Panel Builder – vektorový rozváděč (fáze 42):** krok 1 i 2 kreslí `VectorPanel` se symboly `VectorModuleSymbol` (texty `symbolTexts`, data `vectorDeviceFrom` v `lib/panel-builder/vector-symbols.ts`, geometrie a spojnice `vectorLayout` / `wiringPaths` v `vector-layout.ts` – čáry jen mezerami mezi lištami a okraji). Na fotce se rámečky nekreslí. Kořen stromu = prvek s `fedFromIncomer` bez rodiče (`currentRoot`; bez volby `chooseRoot`: odpínač, jinak první 3P/4P na 1. liště); `PanelBoardProject.incomerFrom` = TOP / BOTTOM. Drag & drop = `dropOnto` (na koncový přístroj → sourozenec pod jeho rodičem, fáze `rotatePhases`), hlavní vstupní prvek se nepřetahuje, mění se jen přes `setRoot`.
 - **Studio:** rozměr budovy v metrech (`GridSpec.widthM/depthM`, osy dopočítané `axisMeters`, bez limitu os), koncept = více budov uložených v jedné transakci (`saveStudioConcept`). Souřadnice v metrech od osy A1, jednotné měřítko (`planFrame`). Každé uložené patro má `Floor.studioLayoutJson` (rastr, zóny, vrata) a jde znovu upravit; starší patra bez JSON se čtou ze SVG (`src/lib/studio-layout.ts`). Pin zařízení je vždy v rámu svého patra (`frameOfFloor`); při úpravě patra se piny přepočítají přes metry. Nabídka kroku 3 = `src/lib/studio-menu.ts` (`TenantSetting` `studio.menu` + localStorage, vyhrává novější `updatedAt`); seskupené štítky místností (`roomInventoryGroups`) se při uložení konceptu kreslí do `floorplanSvg` (`refreshFloorInventory`, skupina `data-room-inventory`). Výchozí obrazovka `/studio` je mapa závodu (bez konceptu); klik na budovu = pohled budovy se 3 režimy, „Uložit změny patra“ zůstane ve Studiu. Uložená zařízení jde ve Studiu přesunout (`equipmentEdits[].pos`) a smazat (`equipmentDeletes`, potvrzení v UI, server odmítne zařízení s otevřeným požadavkem nebo s nepřepojenými odběry).
 
 ## 4. Databáze – bezpečnostní pravidla

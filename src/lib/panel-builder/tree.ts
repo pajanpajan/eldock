@@ -56,8 +56,31 @@ const isFeeder = (node: Pick<TreeNode, "category">) => !node.category || !["MAIN
 const SINGLE_PHASES = ["L1", "L2", "L3"] as const;
 
 /**
+ * Hlavní vstupní prvek (kořen), když ho uživatel neurčil: odpínač / hlavní vypínač, jinak první
+ * 3P/4P přístroj na 1. liště (např. -F1 S203-C25 nebo hlavní chránič), jinak první 3P/4P kdekoli,
+ * jinak první prvek. Strom tak vždy má kořen a AI návrh nikdy neskončí s 0 zapojenými prvky.
+ */
+export function chooseRoot<T extends Pick<TreeNode, "id" | "category" | "poles" | "dinRailIndex" | "positionOnRail">>(nodes: readonly T[]): T | null {
+  const ordered = readingOrder(nodes);
+  const multiPole = (node: T) => node.category !== "SPD" && phaseCount(node.poles ?? "1P") === 3;
+  const firstRail = ordered[0]?.dinRailIndex;
+  return (
+    ordered.find((node) => node.category === "MAIN_SWITCH") ??
+    ordered.find((node) => node.dinRailIndex === firstRail && multiPole(node)) ??
+    ordered.find(multiPole) ??
+    ordered.find((node) => node.category !== "SPD") ??
+    ordered[0] ??
+    null
+  );
+}
+
+/** Aktuální hlavní vstupní prvek (napájený z přívodu bez rodiče); při více kořenech první v pořadí lišt. */
+export const currentRoot = <T extends Pick<TreeNode, "id" | "parentItemId" | "fedFromIncomer" | "dinRailIndex" | "positionOnRail">>(nodes: readonly T[]) =>
+  readingOrder(nodes).find((node) => node.fedFromIncomer && !node.parentItemId) ?? null;
+
+/**
  * Logický strom podle pozic na DIN lištách:
- * 1. Hlavní vypínač (-Q1) je kořen (vstup napájení), 3P/4P vede „L1,L2,L3,N“.
+ * 1. Hlavní vstupní prvek je kořen (zvolený uživatelem, jinak `chooseRoot`), 3P/4P vede „L1,L2,L3,N“.
  * 2. Chrániče, jističochrániče a svodiče přepětí visí přímo pod -Q1; 4P / 3P+N chránič vede vždy
  *    „L1,L2,L3,N“, 2P chránič jednu fázi s N.
  * 3. Pravidlo DIN lišty: jistič napravo od chrániče na STEJNÉ liště patří pod tento (nejbližší) chránič.
@@ -66,10 +89,10 @@ const SINGLE_PHASES = ["L1", "L2", "L3"] as const;
  *    vývody – typicky chránič na horní liště napájející lišty pod ním), patří pod něj; jinak pod -Q1.
  * 6. Jednofázové vývody se v každé skupině střídají L1 → L2 → L3 → L1 …; pod 2P chráničem dědí jeho fázi.
  */
-export function proposeTree(nodes: readonly TreeNode[]): Map<string, Omit<TreeAssignment, "id" | "circuitLabel" | "designation">> {
+export function proposeTree(nodes: readonly TreeNode[], rootId: string | null = null): Map<string, Omit<TreeAssignment, "id" | "circuitLabel" | "designation">> {
   const ordered = readingOrder(nodes);
   const result = new Map<string, Omit<TreeAssignment, "id" | "circuitLabel" | "designation">>();
-  const main = ordered.find((node) => node.category === "MAIN_SWITCH") ?? null;
+  const main = (rootId ? ordered.find((node) => node.id === rootId) : null) ?? chooseRoot(ordered);
   const rcds = ordered.filter((node) => node.category === "RCD");
   const standalone = rcds.filter((rcd) => !ordered.some((node) => node.dinRailIndex === rcd.dinRailIndex && node.positionOnRail > rcd.positionOnRail && isFeeder(node)));
   const top = (node: TreeNode) => (main && node.id !== main.id ? { parentItemId: main.id, fedFromIncomer: false } : { parentItemId: null, fedFromIncomer: true });
@@ -109,6 +132,101 @@ export function proposeTree(nodes: readonly TreeNode[]): Map<string, Omit<TreeAs
     assignment.phaseAssignment = node.category === "RCD" && hasNeutral(node) ? `${phase},N` : phase;
   }
   return result;
+}
+
+// ---------------------------------------------------------------------------
+//  Zapojování přímo na vektorovém rozváděči (fáze 42): kořen, drag & drop, „připojit vpravo“
+// ---------------------------------------------------------------------------
+
+/** Přístroje, které při přetažení na ně nenapájí, ale řadí přetažené jako sourozence (jističe, stykače …). */
+const isLeafTarget = (node: Pick<TreeNode, "category">) => !node.category || ["MCB", "RCBO", "CONTACTOR", "RELAY", "PSU", "PLC", "TERMINAL", "OTHER"].includes(node.category);
+
+/**
+ * Fáze přímých potomků uzlu: jednofázové se v pořadí lišt střídají L1 → L2 → L3 (pod jednofázovým
+ * rodičem dědí jeho fázi), 3P/4P vedou všechny fáze, 2P chránič fázi s N, SPD se do rotace nepočítá.
+ */
+export function rotatePhases(nodes: readonly TreeNode[], parentId: string | null): TreeNode[] {
+  const parent = parentId ? nodes.find((node) => node.id === parentId) : null;
+  const parentPhases = parent ? phasesOf(parent).filter((phase) => phase !== "N") : [];
+  const children = readingOrder(nodes.filter((node) => (parentId ? node.parentItemId === parentId : node.fedFromIncomer && !node.parentItemId)));
+  const phases = new Map<string, string | null>();
+  let index = 0;
+  for (const child of children) {
+    // SPD bez vlastní fáze v rotaci; 3P/4P svodič vede všechny fáze (jako v AI návrhu)
+    if (child.category === "SPD") phases.set(child.id, isThreePhase(child) ? threePhaseAssignment(child) : null);
+    else if (isThreePhase(child)) phases.set(child.id, (child.category === "MAIN_SWITCH" || child.category === "RCD") ? "L1,L2,L3,N" : threePhaseAssignment(child));
+    else {
+      const phase = parentPhases.length === 1 ? parentPhases[0] : SINGLE_PHASES[index++ % 3];
+      phases.set(child.id, child.category === "RCD" && hasNeutral(child) ? `${phase},N` : phase);
+    }
+  }
+  return nodes.map((node) => (phases.has(node.id) ? { ...node, phaseAssignment: phases.get(node.id)! } : node));
+}
+
+/**
+ * Určení hlavního vstupního prvku: kořen je napájen z přívodu; ostatní prvky, které visely přímo
+ * na přívodu (včetně dosavadního kořene), přejdou pod nový kořen.
+ */
+export function setRoot(nodes: readonly TreeNode[], rootId: string): TreeNode[] {
+  if (!nodes.some((node) => node.id === rootId)) return [...nodes];
+  const next = nodes.map((node) => {
+    if (node.id === rootId) return { ...node, parentItemId: null, fedFromIncomer: true, phaseAssignment: isThreePhase(node) ? (node.category === "MAIN_SWITCH" || node.category === "RCD" ? "L1,L2,L3,N" : threePhaseAssignment(node)) : node.phaseAssignment };
+    if (node.fedFromIncomer && !node.parentItemId) return { ...node, parentItemId: rootId, fedFromIncomer: false };
+    return node;
+  });
+  return rotatePhases(next, rootId);
+}
+
+export type DropResult = { ok: true; nodes: TreeNode[]; parentId: string } | { ok: false; error: string };
+
+/**
+ * Drag & drop: přetažené prvky se zapojí pod cílový přístroj, ze kterého jsou napájeny.
+ * - Cíl = hlavní prvek, chránič, odpínač nebo přepěťovka → přetažené visí přímo pod ním
+ *   (chránič na přepěťovce = průchozí napájecí uzel v hlavní větvi).
+ * - Cíl = jistič (nebo jiný koncový přístroj) pod skupinou → přetažené se zařadí VEDLE něj jako
+ *   sourozenci pod jeho rodiče, nikdy do série.
+ * Jednofázové přístroje ve skupině dostanou střídavě L1, L2, L3. Cyklus odmítne.
+ */
+export function dropOnto(nodes: readonly TreeNode[], sourceIds: readonly string[], targetId: string): DropResult {
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const target = byId.get(targetId);
+  if (!target) return { ok: false, error: "Cílový přístroj neexistuje." };
+  const sources = sourceIds.filter((id) => id !== targetId && byId.has(id));
+  if (!sources.length) return { ok: false, error: "Prvek nemůže napájet sám sebe." };
+  return assignParent(nodes, sources, dropParent(target));
+}
+
+/** Skutečný napájecí prvek po přetažení na cíl (koncový přístroj pod skupinou → jeho rodič). */
+export function dropParent(target: Pick<TreeNode, "id" | "category" | "parentItemId" | "fedFromIncomer">): string {
+  const isRoot = target.fedFromIncomer && !target.parentItemId;
+  return isLeafTarget(target) && !isRoot && target.parentItemId ? target.parentItemId : target.id;
+}
+
+/** Přesné zapojení prvků pod zvolený napájecí prvek (roletka „Napájeno z“) se střídáním fází. */
+export function assignParent(nodes: readonly TreeNode[], sourceIds: readonly string[], parentId: string): DropResult {
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  if (!byId.has(parentId)) return { ok: false, error: "Napájecí přístroj neexistuje." };
+  const sources = sourceIds.filter((id) => byId.has(id));
+  if (!sources.length || sources.includes(parentId)) return { ok: false, error: "Prvek nemůže napájet sám sebe." };
+  const root = currentRoot(nodes);
+  if (root && sources.includes(root.id)) return { ok: false, error: `${root.designation} je hlavní vstupní prvek napájený z přívodu – jiný kořen určíte tlačítkem „🎯 Určit hlavní vstupní prvek“.` };
+  const chain = ancestors(parentId, byId) ?? [];
+  const looped = sources.find((id) => chain.includes(id));
+  if (looped) return { ok: false, error: `${byId.get(looped)!.designation} napájí ${byId.get(parentId)!.designation} – zapojení by vytvořilo cyklus.` };
+  const moved = nodes.map((node) => (sources.includes(node.id) ? { ...node, parentItemId: parentId, fedFromIncomer: false } : node));
+  return { ok: true, nodes: rotatePhases(moved, parentId), parentId };
+}
+
+/** „🔗 Připojit jističe vpravo na této liště“: vývody napravo od chrániče až po další chránič / odpínač. */
+export function connectRightOf(nodes: readonly TreeNode[], headId: string): { nodes: TreeNode[]; count: number } {
+  const head = nodes.find((node) => node.id === headId);
+  if (!head) return { nodes: [...nodes], count: 0 };
+  const rail = readingOrder(nodes.filter((node) => node.dinRailIndex === head.dinRailIndex && node.positionOnRail > head.positionOnRail));
+  const stop = rail.findIndex((node) => node.category === "RCD" || node.category === "MAIN_SWITCH");
+  const feeders = (stop < 0 ? rail : rail.slice(0, stop)).filter((node) => isFeeder(node) && !(node.fedFromIncomer && !node.parentItemId)).map((node) => node.id);
+  if (!feeders.length) return { nodes: [...nodes], count: 0 };
+  const result = dropOnto(nodes, feeders, headId);
+  return result.ok ? { nodes: result.nodes, count: feeders.length } : { nodes: [...nodes], count: 0 };
 }
 
 // ---------------------------------------------------------------------------
@@ -179,7 +297,8 @@ export function validateTree(nodes: readonly TreeNode[]): TreeIssue[] {
       issues.push({ itemId: node.id, severity: "warning", message: `${node.designation}: chybí přiřazení fáze (L1 / L2 / L3).` });
     }
     if (!parent) continue;
-    if (parent.category === "SPD") {
+    // Chránič za přepěťovkou = průchozí napájecí uzel v hlavní větvi (fáze 42), jen koncové vývody se hlásí
+    if (parent.category === "SPD" && isFeeder(node)) {
       issues.push({ itemId: node.id, severity: "warning", message: `${node.designation} je zapojen pod přepěťovou ochranu ${parent.designation} – SPD nenapájí vývody.` });
     }
     const parentPhases = phasesOf(parent);

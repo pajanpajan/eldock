@@ -52,6 +52,14 @@ describe("párování detekcí s katalogem", () => {
     expect(matchDetection(detection({ rawOcrText: "S2?? -B1?", category: "MCB" }), CATALOG, "ABB")).toMatchObject({ componentId: null, status: "UNRECOGNIZED" });
   });
 
+  it("chránič se páruje i podle typu AC/A a citlivosti mA (fáze 42)", () => {
+    const rcd = (id: string, type: string, ma: number) => ({ ...c(id, "ABB", `FH204 ${type}-40/${ma}`, `ART-${id}`, "RCD", "4P", 40, null, 4), rcdType: type, rcdSensitivityMa: ma });
+    const catalog = [rcd("ac30", "AC", 30), rcd("a30", "A", 30), rcd("a300", "A", 300)];
+    expect(matchDetection(detection({ category: "RCD", poles: "4P", ratedCurrentA: 40, rcdType: "A", rcdSensitivityMa: 300 }), catalog, "ABB").componentId).toBe("a300");
+    expect(matchDetection(detection({ category: "RCD", poles: "4P", ratedCurrentA: 40, rcdType: "AC", rcdSensitivityMa: 30 }), catalog, "ABB").componentId).toBe("ac30");
+    expect(matchDetection(detection({ category: "RCD", poles: "4P", ratedCurrentA: 40, rcdType: "B" }), catalog, "ABB").status).toBe("UNRECOGNIZED");
+  });
+
   it("IEC značení v pořadí čtení", () => {
     expect(designationsInOrder(["MAIN_SWITCH", "SPD", "RCD", "MCB", null, "CONTACTOR"])).toEqual(["-Q1", "-FV1", "-FI1", "-F1", "-F2", "-K1"]);
   });

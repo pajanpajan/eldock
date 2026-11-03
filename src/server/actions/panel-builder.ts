@@ -9,7 +9,7 @@ import { WorkflowError } from "@/lib/workflow/state-machine";
 import { assertFeature } from "@/server/modules";
 import { analyzePanelPhoto, extractDatasheetComponents, lookupComponent, type AiMode, type AnalysisMode } from "@/server/services/geminiPanelService";
 import { PHASE_OPTIONS, type TreeIssue } from "@/lib/panel-builder/tree";
-import { analyzeProject, assignCatalogComponent, createPanelProject, importDatasheet, addModule, addRail, configureItem, deleteItem, deleteRail, lookupComponentForItem, mergeItems, releaseDocumentation, saveThermalInputs, saveTree, splitItem, setItemBox, updateItemText, type ImportedComponent } from "@/server/services/panel-builder";
+import { analyzeProject, assignCatalogComponent, createPanelProject, importDatasheet, addModule, addRail, configureItem, deleteItem, deleteRail, lookupComponentForItem, mergeItems, releaseDocumentation, saveThermalInputs, saveTree, searchCatalog, setIncomer, splitItem, updateItemText, type CatalogHit, type ImportedComponent } from "@/server/services/panel-builder";
 import { getPanelCompany } from "@/server/panel-session";
 import { consumeCredit } from "@/server/services/companies";
 import { companyManufacturer } from "@/lib/registered-company";
@@ -310,17 +310,35 @@ export async function updateItemTextAction(itemId: string, input: { customTypeCo
   }
 }
 
-/** Ruční úprava rámečku přístroje na fotce (tažení myší). */
-export async function setItemBoxAction(itemId: string, box: [number, number, number, number]): Promise<ActionResult> {
-  const parsed = z.tuple([z.number(), z.number(), z.number(), z.number()]).safeParse(box);
-  if (!id.safeParse(itemId).success || !parsed.success) return { ok: false, error: "Neplatný rámeček." };
+const catalogSearchSchema = z.object({
+  q: z.string().trim().max(80),
+  manufacturer: z.string().max(40).nullable(),
+  category: z.enum(COMPONENT_CATEGORIES).nullable(),
+  poles: z.string().max(8).nullable(),
+});
+
+/** Našeptávač konfigurátoru: rychlé hledání v databázi prvků (výrobce → kategorie → póly → text). */
+export async function searchCatalogAction(input: z.input<typeof catalogSearchSchema>): Promise<ActionResult<CatalogHit[]>> {
+  const parsed = catalogSearchSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Neplatné hledání v katalogu." };
   try {
-    await guardItem(itemId);
-    const item = await setItemBox(prisma, itemId, parsed.data);
-    revalidatePath(`/panel-builder/${item.projectId}`, "layout");
+    await guard();
+    return { ok: true, data: await searchCatalog(prisma, parsed.data) };
+  } catch (error) {
+    return failure(error, "Hledání v katalogu se nepodařilo.");
+  }
+}
+
+/** Hlavní přívod rozváděče: shora / zespoda (krok 2). */
+export async function setIncomerAction(projectId: string, incomerFrom: "TOP" | "BOTTOM"): Promise<ActionResult> {
+  if (!id.safeParse(projectId).success || !z.enum(["TOP", "BOTTOM"]).safeParse(incomerFrom).success) return { ok: false, error: "Neplatný směr přívodu." };
+  try {
+    await guardProject(projectId);
+    await setIncomer(prisma, projectId, incomerFrom);
+    revalidatePath(`/panel-builder/${projectId}`, "layout");
     return { ok: true, data: undefined };
   } catch (error) {
-    return failure(error, "Rámeček se nepodařilo uložit.");
+    return failure(error, "Směr přívodu se nepodařilo uložit.");
   }
 }
 

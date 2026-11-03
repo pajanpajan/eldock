@@ -1,18 +1,19 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { Check, Link2, Loader2, Scissors, Sparkles, Trash2 } from "lucide-react";
+import { Check, Link2, Loader2, Scissors, Search, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { PICKER_MANUFACTURERS, formatWatts, isMix } from "@/lib/panel-builder/catalog";
-import { CONFIG_CATEGORIES, CONFIG_FIELDS, defaultConfig, isOptionActive, type ConfigCategory, type ItemConfig } from "@/lib/panel-builder/configurator";
+import { CATEGORY_LABELS, PICKER_MANUFACTURERS, formatWatts, isMix } from "@/lib/panel-builder/catalog";
+import { CONFIG_CATEGORIES, CONFIG_FIELDS, catalogCategory, defaultConfig, isOptionActive, toConfigCategory, type ConfigCategory, type ItemConfig } from "@/lib/panel-builder/configurator";
 import { sameManufacturer } from "@/lib/panel-builder/matching";
 import { RECOGNITION } from "@/lib/panel-builder/project";
 import { cn } from "@/lib/utils";
-import { assignComponentAction, configureItemAction, deleteItemAction, lookupComponentAction, mergeItemsAction, splitItemAction, updateItemTextAction } from "@/server/actions/panel-builder";
+import { assignComponentAction, configureItemAction, deleteItemAction, lookupComponentAction, mergeItemsAction, searchCatalogAction, splitItemAction, updateItemTextAction } from "@/server/actions/panel-builder";
+import type { CatalogHit } from "@/server/services/panel-builder";
 
 import type { WorkspaceItem } from "./RecognitionWorkspace";
 
@@ -84,6 +85,11 @@ export function ItemConfigurator({
   const [mergeRight, setMergeRight] = useState(true);
   const [pending, startTransition] = useTransition();
   const [lookupText, setLookupText] = useState(item.rawOcrText?.replace(/[?б]/g, "") ?? "");
+  // Našeptávač z databáze prvků (filtr podle dlaždic výrobce → kategorie → póly)
+  const [query, setQuery] = useState("");
+  const [hits, setHits] = useState<CatalogHit[] | null>(null);
+  const [searching, setSearching] = useState(false);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Optimistické UI: dlaždice i modul na liště se překreslí hned, uložení (configureItem) běží na pozadí
   // s debounce. Server Action sama obnoví data stránky (revalidatePath) – žádný router.refresh, žádné probliknutí.
@@ -153,11 +159,11 @@ export function ItemConfigurator({
     });
   }
 
-  function lookup() {
+  function lookup(text = lookupText) {
     startTransition(async () => {
       const found = await lookupComponentAction({
         itemId: item.id,
-        text: lookupText,
+        text,
         hints: { category: config?.category === "OTHER" ? null : (config?.category ?? null), poles: config?.poles ?? null, current: config?.ratedCurrentA ?? null, curve: config?.curve ?? null, manufacturer },
       });
       if (!found.ok) return void toast.error(found.error);
@@ -165,6 +171,47 @@ export function ItemConfigurator({
       const assigned = await assignComponentAction(item.id, found.data.component.id);
       if (!assigned.ok) return void toast.error(assigned.error);
       toast.success(`Přiřazeno: ${found.data.component.manufacturer} ${found.data.component.typeCode}${found.data.mode === "GEMINI" ? " (Gemini AI)" : ""}`);
+      onChanged();
+    });
+  }
+
+  function runSearch(text: string, filters: { manufacturer: string | null; config: ItemConfig | null }) {
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    if (text.trim().length < 2) {
+      setHits(null);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    searchTimer.current = setTimeout(async () => {
+      const result = await searchCatalogAction({
+        q: text,
+        manufacturer: filters.manufacturer,
+        category: filters.config ? catalogCategory(filters.config) : null,
+        poles: filters.config?.poles && filters.config.poles !== "2x1P" ? filters.config.poles : null,
+      });
+      setSearching(false);
+      if (!result.ok) return void toast.error(result.error);
+      setHits(result.data);
+    }, 200);
+  }
+
+  /** Výběr kusu z databáze: symbol se hned přepíše (náhled), přiřazení se uloží. */
+  function pickHit(hit: CatalogHit) {
+    const category = toConfigCategory(hit.category);
+    if (category) {
+      const next: ItemConfig = { category, manufacturer: hit.manufacturer, poles: hit.poles, modules: hit.modulesCount || item.modulesWidth, ratedCurrentA: hit.ratedCurrentA || null, curve: hit.trippingCurve, rcdType: hit.rcdType, rcdSensitivityMa: hit.rcdSensitivityMa };
+      setConfig(next);
+      setManufacturer(hit.manufacturer);
+      onPreview(item.id, next);
+    }
+    setHits(null);
+    setQuery("");
+    startTransition(async () => {
+      const result = await assignComponentAction(item.id, hit.id);
+      onPreview(item.id, null);
+      if (!result.ok) return void toast.error(result.error);
+      toast.success(`Přiřazeno z databáze: ${hit.manufacturer} ${hit.typeCode}`);
       onChanged();
     });
   }
@@ -324,6 +371,80 @@ export function ItemConfigurator({
           </Button>
         </div>
       ) : null}
+
+      <section aria-label="Našeptávač databáze prvků" className="flex flex-col gap-2 rounded-lg border border-sky-500/40 bg-sky-500/5 p-3">
+        <label className="flex flex-col gap-1 text-xs font-semibold text-sky-200">
+          Rychlé hledání v databázi prvků
+          <span className="relative">
+            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+            <Input
+              value={query}
+              placeholder="např. S201 B16, FH204 30mA, SD203 …"
+              className="h-10 pl-8"
+              aria-label="Hledat v databázi prvků"
+              onChange={(event) => {
+                setQuery(event.target.value);
+                runSearch(event.target.value, { manufacturer, config });
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && hits?.[0]) {
+                  event.preventDefault();
+                  pickHit(hits[0]);
+                }
+                if (event.key === "Escape") setHits(null);
+              }}
+            />
+            {searching ? <Loader2 className="absolute top-1/2 right-2.5 size-4 -translate-y-1/2 animate-spin text-muted-foreground" aria-label="Hledám" /> : null}
+          </span>
+        </label>
+        <p className="text-[11px] text-muted-foreground" data-testid="catalog-filter">
+          Filtr podle dlaždic: {manufacturer ?? "všichni výrobci"} → {config ? CATEGORY_LABELS[catalogCategory(config)] : "všechny kategorie"}
+          {config?.poles && config.poles !== "2x1P" ? ` → ${config.poles}` : ""}
+        </p>
+        {hits ? (
+          hits.length ? (
+            <ul className="flex max-h-64 flex-col gap-1 overflow-y-auto" aria-label="Nalezené prvky" data-testid="catalog-hits">
+              {hits.map((hit) => (
+                <li key={hit.id}>
+                  <button
+                    type="button"
+                    onClick={() => pickHit(hit)}
+                    className="flex w-full flex-wrap items-baseline gap-x-2 rounded-md border border-border bg-card px-2.5 py-1.5 text-left text-sm hover:border-primary"
+                  >
+                    <b>
+                      {hit.manufacturer} {hit.typeCode}
+                    </b>
+                    <span className="font-mono text-[11px] text-muted-foreground">{hit.articleNumber}</span>
+                    <span className="ml-auto text-[11px] text-muted-foreground">
+                      {hit.poles}
+                      {hit.ratedCurrentA ? ` · ${hit.trippingCurve ?? ""}${hit.ratedCurrentA} A` : ""}
+                      {hit.rcdSensitivityMa ? ` · ${hit.rcdSensitivityMa} mA` : ""} · {hit.modulesCount}M · Pv {formatWatts(hit.powerLossWatts)}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground" data-testid="catalog-no-hits">
+              Typ v databázi zatím není.
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="gap-1.5"
+                disabled={pending}
+                onClick={() => {
+                  setLookupText(query);
+                  setHits(null);
+                  lookup(query);
+                }}
+              >
+                <Sparkles className="size-3.5" aria-hidden /> Dohledat přes Gemini AI a uložit do databáze
+              </Button>
+            </div>
+          )
+        ) : null}
+      </section>
 
       <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground" role="group" aria-label="Výrobce přístroje">
         <span className="mr-1">Výrobce:</span>

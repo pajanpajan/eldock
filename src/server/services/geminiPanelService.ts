@@ -74,7 +74,8 @@ takový přístroj vrať jako JEDEN prvek s poles 2P / 3P / 3P+N / 4P a modules 
 Třífázový jistič (3 páčky spojené hrazdičkou) = 1 prvek 3P, 3M; čtyřpólový chránič = 1 prvek 4P, 4M.
 Pro každý přístroj vrať: rail, position (od 1 zleva), box_2d [ymin, xmin, ymax, xmax] v rozsahu 0–1000,
 text (vše čitelné z čela: výrobce, typ, objednací číslo), category, poles (1P, 1P+N, 2P, 3P, 3P+N, 4P),
-ratedCurrentA, trippingCurve (B/C/D), modules (šířka v modulech 18 mm), manufacturer (výrobce tohoto modulu),
+ratedCurrentA, trippingCurve (B/C/D), u chráničů a jističochráničů rcdType (AC/A/F/B) a rcdSensitivityMa (10/30/100/300),
+modules (šířka v modulech 18 mm), manufacturer (výrobce tohoto modulu),
 label (ručně psaný popis obvodu pod přístrojem, je-li čitelný) a confidence 0–1. Neznámé hodnoty vynech.
 Urči i dominantního výrobce (nebo „MIX“, je-li značek více).`;
 }
@@ -96,6 +97,8 @@ const PHOTO_SCHEMA = {
           poles: { type: "STRING" },
           ratedCurrentA: { type: "NUMBER" },
           trippingCurve: { type: "STRING" },
+          rcdType: { type: "STRING" },
+          rcdSensitivityMa: { type: "NUMBER" },
           modules: { type: "NUMBER" },
           manufacturer: { type: "STRING" },
           label: { type: "STRING" },
@@ -117,10 +120,21 @@ interface GeminiDevice {
   poles?: string;
   ratedCurrentA?: number;
   trippingCurve?: string;
+  rcdType?: string;
+  rcdSensitivityMa?: number;
   modules: number;
   manufacturer?: string;
   label?: string;
   confidence: number;
+}
+
+/** Typ a citlivost chrániče z odpovědi AI (jen u chráničů a jističochráničů) – párování s katalogem podle AC/A a mA. */
+export function rcdFields(device: { category?: string; rcdType?: string; rcdSensitivityMa?: number }): { rcdType: string | null; rcdSensitivityMa: number | null } {
+  const kind = category(device.category);
+  if (kind !== "RCD" && kind !== "RCBO") return { rcdType: null, rcdSensitivityMa: null };
+  const type = str(device.rcdType)?.toUpperCase() ?? null;
+  const ma = num(device.rcdSensitivityMa);
+  return { rcdType: type && ["AC", "A", "F", "B", "G", "S"].includes(type) ? type : null, rcdSensitivityMa: ma && [10, 30, 100, 300, 500].includes(ma) ? ma : null };
 }
 
 /** Odpověď Gemini → detekce (box z 0–1000 na %; pořadí podle lišty a pozice). */
@@ -142,6 +156,8 @@ export function toDetections(devices: readonly GeminiDevice[]): Detection[] {
         poles: poles && isPoles(poles) ? poles : null,
         ratedCurrentA: num(device.ratedCurrentA),
         trippingCurve: curve && ["B", "C", "D"].includes(curve) ? curve : null,
+      ...rcdFields(device),
+        ...rcdFields(device),
         manufacturer: normalizeManufacturer(device.manufacturer),
         confidence: Math.min(1, Math.max(0, Number(device.confidence) || 0.5)),
         circuitLabel: str(device.label)?.slice(0, 80),
@@ -229,7 +245,8 @@ c) RÁMEČKY: box_2d obepíná POUZE skutečné plastové tělo osazeného pří
    totalModules je počet modulů SKUTEČNĚ osazených přístroji (ne kapacita lišty).
 ${brand}
 Pro každý přístroj vrať: position (od 1 zleva), box_2d [ymin, xmin, ymax, xmax] 0–1000 v souřadnicích TOHOTO výřezu,
-text (vše čitelné z čela), category, poles, modulesWidth, ratedCurrentA, trippingCurve (B/C/D), manufacturer,
+text (vše čitelné z čela), category, poles, modulesWidth, ratedCurrentA, trippingCurve (B/C/D), u chráničů a jističochráničů
+rcdType (AC/A/F/B) a rcdSensitivityMa (10/30/100/300), manufacturer,
 label (ručně psaný popis obvodu, je-li čitelný) a confidence 0–1. Vrať i totalModules (celkový počet modulů řady).`;
 }
 
@@ -250,6 +267,8 @@ const RAIL_SCHEMA = {
           modulesWidth: { type: "NUMBER" },
           ratedCurrentA: { type: "NUMBER" },
           trippingCurve: { type: "STRING" },
+          rcdType: { type: "STRING" },
+          rcdSensitivityMa: { type: "NUMBER" },
           manufacturer: { type: "STRING" },
           label: { type: "STRING" },
           confidence: { type: "NUMBER" },
@@ -302,6 +321,8 @@ interface GeminiRailDevice {
   modulesWidth: number;
   ratedCurrentA?: number;
   trippingCurve?: string;
+  rcdType?: string;
+  rcdSensitivityMa?: number;
   manufacturer?: string;
   label?: string;
   confidence: number;

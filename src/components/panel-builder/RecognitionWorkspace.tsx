@@ -1,21 +1,22 @@
 "use client";
 
-import { useCallback, useRef, useState, useTransition, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import type { ComponentCategory, RecognitionStatus } from "@/generated/prisma/enums";
-import { describeConfig, type ItemConfig } from "@/lib/panel-builder/configurator";
-import type { BoundingBox } from "@/lib/panel-builder/layout";
+import type { ItemConfig } from "@/lib/panel-builder/configurator";
+import { deviceWithConfig, type VectorDevice } from "@/lib/panel-builder/vector-symbols";
 import { RECOGNITION } from "@/lib/panel-builder/project";
 import { cn } from "@/lib/utils";
-import { addModuleAction, addRailAction, analyzePanelProjectAction, deleteRailAction, setItemBoxAction } from "@/server/actions/panel-builder";
+import { addModuleAction, addRailAction, analyzePanelProjectAction, deleteRailAction, updateItemTextAction } from "@/server/actions/panel-builder";
 import type { AnalysisMode } from "@/server/services/geminiPanelService";
 
-import { DinRails } from "./DinRails";
 import { ItemConfigurator } from "./ItemConfigurator";
+import { PhotoViewer } from "./PhotoViewer";
+import { VectorPanel } from "./VectorPanel";
 
 export interface WorkspaceItem {
   id: string;
@@ -25,22 +26,22 @@ export interface WorkspaceItem {
   dinRailIndex: number;
   positionOnRail: number;
   modulesWidth: number;
-  box: BoundingBox | null;
   recognitionStatus: RecognitionStatus;
   confidence: number;
   rawOcrText: string | null;
   detected: { category?: ComponentCategory | null; poles?: string | null; ratedCurrentA?: number | null; trippingCurve?: string | null; manufacturer?: string | null } | null;
   config: ItemConfig | null;
   component: { id: string; manufacturer: string; typeCode: string; articleNumber: string; category: ComponentCategory; powerLossWatts: number; estimated: boolean } | null;
+  /** Přístroj pro 2D vektorový rozváděč (fáze 42). */
+  device: VectorDevice;
 }
 
-const TONE: Record<RecognitionStatus, string> = {
-  VERIFIED: "border-emerald-500/70 bg-emerald-500/15 text-emerald-100",
-  PARTIAL: "border-yellow-500/80 bg-yellow-500/20 text-yellow-100",
-  UNRECOGNIZED: "border-red-500/80 bg-red-500/20 text-red-100",
+/** Obrys symbolu podle stavu rozpoznání (ověřené bez obrysu). */
+const STATUS_OUTLINE: Record<RecognitionStatus, { color: string; dashed?: boolean } | null> = {
+  VERIFIED: null,
+  PARTIAL: { color: "#eab308", dashed: true },
+  UNRECOGNIZED: { color: "#ef4444", dashed: true },
 };
-
-const SELECTED = "#fbbf24";
 
 const ANALYSIS_MODES: { value: AnalysisMode; label: string; hint: string }[] = [
   { value: "AUTO", label: "🔍 Auto-detekce", hint: "AI sama pozná, zda je rozváděč zakrytovaný" },
@@ -48,7 +49,10 @@ const ANALYSIS_MODES: { value: AnalysisMode; label: string; hint: string }[] = [
   { value: "COVERED", label: "🛡️ Zakrytovaný", hint: "podle páček a kalibrace šířky 1M" },
 ];
 
-/** Krok 1: fotka s rámečky rozpoznání, DIN lišty v měřítku a živý konfigurátor vybraného modulu. */
+/**
+ * Krok 1: čistá referenční fotka (zoom / posun, bez rámečků), 2D vektorový rozváděč se
+ * standardizovanými symboly a živý konfigurátor vybraného modulu.
+ */
 export function RecognitionWorkspace({
   projectId,
   photoUrl,
@@ -84,61 +88,6 @@ export function RecognitionWorkspace({
       }),
     [],
   );
-  // Ruční srovnání rámečku vybraného přístroje na fotce: posun celého rámečku nebo levé / pravé hrany
-  const photoSvg = useRef<SVGSVGElement>(null);
-  const [boxes, setBoxes] = useState<ReadonlyMap<string, BoundingBox>>(new Map());
-  const [boxDrag, setBoxDrag] = useState<{ id: string; mode: "move" | "left" | "right"; x: number; y: number; start: BoundingBox; moved: boolean } | null>(null);
-  const [, startBoxSave] = useTransition();
-  const boxOf = (item: WorkspaceItem) => boxes.get(item.id) ?? item.box;
-  const photoPoint = (event: ReactPointerEvent) => {
-    const rect = photoSvg.current!.getBoundingClientRect();
-    return { x: ((event.clientX - rect.left) / rect.width) * 100, y: ((event.clientY - rect.top) / rect.height) * 100 };
-  };
-  function startBoxDrag(event: ReactPointerEvent, item: WorkspaceItem, mode: "move" | "left" | "right") {
-    const box = boxOf(item);
-    if (!box || event.button !== 0) return;
-    event.stopPropagation();
-    photoSvg.current?.setPointerCapture(event.pointerId);
-    const point = photoPoint(event);
-    setBoxDrag({ id: item.id, mode, x: point.x, y: point.y, start: box, moved: false });
-  }
-  function moveBoxDrag(event: ReactPointerEvent) {
-    if (!boxDrag) return;
-    const point = photoPoint(event);
-    const dx = point.x - boxDrag.x;
-    const dy = point.y - boxDrag.y;
-    if (!boxDrag.moved && Math.hypot(dx, dy) < 0.3) return;
-    const [ymin, xmin, ymax, xmax] = boxDrag.start;
-    const clamp = (value: number) => Math.min(100, Math.max(0, value));
-    let next: BoundingBox;
-    if (boxDrag.mode === "left") next = [ymin, Math.min(clamp(xmin + dx), xmax - 0.5), ymax, xmax];
-    else if (boxDrag.mode === "right") next = [ymin, xmin, ymax, Math.max(clamp(xmax + dx), xmin + 0.5)];
-    else {
-      const sx = Math.min(100 - xmax, Math.max(-xmin, dx));
-      const sy = Math.min(100 - ymax, Math.max(-ymin, dy));
-      next = [ymin + sy, xmin + sx, ymax + sy, xmax + sx];
-    }
-    setBoxDrag({ ...boxDrag, moved: true });
-    setBoxes((current) => new Map(current).set(boxDrag.id, next));
-  }
-  function endBoxDrag() {
-    if (!boxDrag) return;
-    const { id, moved } = boxDrag;
-    setBoxDrag(null);
-    const box = boxes.get(id);
-    if (!moved || !box) return;
-    startBoxSave(async () => {
-      const result = await setItemBoxAction(id, box);
-      if (!result.ok) toast.error(result.error);
-      // Uložený rámeček přijde s revalidací stránky – náhled se zahodí
-      setBoxes((current) => {
-        const next = new Map(current);
-        next.delete(id);
-        return next;
-      });
-    });
-  }
-
   // Optimistický náhled konfigurace (prvek → rozklikaná konfigurace), než dorazí uložená data
   const [previews, setPreviews] = useState<ReadonlyMap<string, ItemConfig>>(new Map());
   const preview = useCallback(
@@ -181,12 +130,19 @@ export function RecognitionWorkspace({
     });
   }
 
+  // Vektorové symboly: uložený stav + optimistický náhled konfigurace a popisu obvodu
+  const devices = items.map((item) => {
+    const draft = previews.get(item.id);
+    const device = draft ? deviceWithConfig(item.device, draft) : item.device;
+    return { ...device, label: labels.get(item.id) ?? item.circuitLabel };
+  });
+
   const counts = { VERIFIED: 0, PARTIAL: 0, UNRECOGNIZED: 0 };
   for (const item of items) counts[item.recognitionStatus]++;
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
-      <section aria-label="Fotka rozváděče a DIN lišty" className="flex flex-col gap-4">
+    <div className="grid gap-6 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] 2xl:grid-cols-[minmax(0,0.7fr)_minmax(0,1.3fr)_minmax(0,1fr)]">
+      <section aria-label="Referenční fotka rozváděče" className="flex flex-col gap-4 xl:col-start-1 xl:row-start-1 2xl:col-start-1">
         <div className="flex flex-wrap items-center gap-3 text-sm">
           {(["VERIFIED", "PARTIAL", "UNRECOGNIZED"] as const).map((status) => (
             <span key={status} className={cn("rounded-full border px-2 py-0.5 text-xs", RECOGNITION[status].badge)} data-testid={`count-${status}`}>
@@ -216,99 +172,37 @@ export function RecognitionWorkspace({
         </div>
 
         {photoUrl ? (
-          <div className="relative mx-auto w-full max-w-xl overflow-hidden rounded-xl border border-border bg-black" data-testid="panel-photo">
-            {/* eslint-disable-next-line @next/next/no-img-element -- fotka z /api/files (SVG i JPG), rámečky v % */}
-            <img src={photoUrl} alt="Fotka rozváděče" className="block h-auto w-full" />
-            <svg
-              ref={photoSvg}
-              viewBox="0 0 100 100"
-              preserveAspectRatio="none"
-              className="absolute inset-0 size-full touch-none"
-              onPointerMove={moveBoxDrag}
-              onPointerUp={endBoxDrag}
-              onPointerCancel={() => setBoxDrag(null)}
-            >
-              {/* Vybraný rámeček se kreslí naposledy, ať je nahoře */}
-              {[...items].sort((a, b) => Number(a.id === selectedId) - Number(b.id === selectedId)).map((item) => {
-                const itemBox = boxOf(item);
-                if (!itemBox) return null;
-                const [ymin, xmin, ymax, xmax] = itemBox;
-                const style = RECOGNITION[item.recognitionStatus];
-                const active = item.id === selectedId;
-                return (
-                  <g
-                    key={item.id}
-                    role="button"
-                    tabIndex={0}
-                    aria-label={`${item.designation} – ${style.label}`}
-                    aria-pressed={active}
-                    className="cursor-pointer outline-none"
-                    opacity={selected && !active ? 0.3 : 1}
-                    onClick={() => setSelectedId(item.id)}
-                    onKeyDown={(event) => (event.key === "Enter" || event.key === " ") && setSelectedId(item.id)}
-                  >
-                    <rect
-                      x={xmin}
-                      y={ymin}
-                      width={xmax - xmin}
-                      height={ymax - ymin}
-                      fill={active ? "rgba(251,191,36,0.22)" : style.fill}
-                      stroke={active ? SELECTED : style.stroke}
-                      vectorEffect="non-scaling-stroke"
-                      style={{ strokeWidth: active ? 3 : 2, filter: active ? "drop-shadow(0 0 4px rgba(251,191,36,0.9))" : undefined }}
-                    />
-                    {/* Tečkované dělení po 1M uvnitř vícemodulových přístrojů – kontrola šířky proti šroubkům a spárám */}
-                    {item.modulesWidth > 1
-                      ? Array.from({ length: Math.ceil(item.modulesWidth) - 1 }, (_, index) => {
-                          const x = xmin + ((xmax - xmin) / item.modulesWidth) * (index + 1);
-                          return <line key={index} x1={x} x2={x} y1={ymin} y2={ymax} stroke={active ? SELECTED : style.stroke} strokeDasharray="1.5 1.5" vectorEffect="non-scaling-stroke" style={{ strokeWidth: 1 }} opacity={0.9} data-module-divider="" />;
-                        })
-                      : null}
-                    {active ? (
-                      // Úchyty vybraného rámečku: tělo = posun, svislé hrany = šířka (srovnání na hrany přístroje)
-                      <>
-                        <rect x={xmin} y={ymin} width={xmax - xmin} height={ymax - ymin} fill="transparent" className="cursor-move" onPointerDown={(event) => startBoxDrag(event, item, "move")} data-testid="box-move" />
-                        <rect x={xmin - 1} y={ymin} width={2} height={ymax - ymin} fill={SELECTED} fillOpacity={0.35} className="cursor-ew-resize" onPointerDown={(event) => startBoxDrag(event, item, "left")} data-testid="box-edge-left" />
-                        <rect x={xmax - 1} y={ymin} width={2} height={ymax - ymin} fill={SELECTED} fillOpacity={0.35} className="cursor-ew-resize" onPointerDown={(event) => startBoxDrag(event, item, "right")} data-testid="box-edge-right" />
-                      </>
-                    ) : null}
-                    {item.recognitionStatus === "UNRECOGNIZED" && !active ? (
-                      <text x={(xmin + xmax) / 2} y={(ymin + ymax) / 2} fontSize={4} fontWeight={800} fill="#fff" textAnchor="middle" dominantBaseline="middle" style={{ paintOrder: "stroke", stroke: "#ef4444", strokeWidth: 0.8 }}>
-                        ?
-                      </text>
-                    ) : null}
-                  </g>
-                );
-              })}
-            </svg>
-            {/* Jmenovka vybraného modulu v HTML (ostrý text nezávislý na deformaci SVG) */}
-            {selected && boxOf(selected) ? (
-              <span
-                className="pointer-events-none absolute -translate-y-full rounded-sm bg-amber-400 px-1.5 py-0.5 font-mono text-[11px] font-extrabold whitespace-nowrap text-neutral-950 shadow-[0_0_12px_rgba(251,191,36,0.8)]"
-                style={{ left: `${boxOf(selected)![1]}%`, top: `calc(${boxOf(selected)![0]}% - 2px)` }}
-                data-testid="photo-selected-label"
-              >
-                {selected.designation} · {selected.modulesWidth}M
-              </span>
-            ) : null}
-          </div>
+          <PhotoViewer src={photoUrl} />
         ) : (
           <p className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">Projekt nemá fotku – prvky lze nastavit ručně v konfigurátoru.</p>
         )}
+      </section>
 
-        <DinRails
-          items={items.map((item) => {
-            const draft = previews.get(item.id);
-            const label = labels.get(item.id) ?? item.circuitLabel;
-            if (draft) return { ...item, label, recognitionStatus: "VERIFIED" as const, caption: item.customTypeCode || describeConfig(draft) };
-            return { ...item, label, caption: item.customTypeCode || item.component?.typeCode || (item.recognitionStatus === "UNRECOGNIZED" ? "?" : (item.rawOcrText ?? "")) };
-          })}
+      <section aria-label="2D vektorový rozváděč" className="flex flex-col gap-3 xl:col-start-1 xl:row-start-2 2xl:col-start-2 2xl:row-start-1">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="font-semibold">2D vektorový rozváděč</h2>
+          <span className="text-xs text-muted-foreground">Klik = výběr přístroje · dvojklik na spodní štítek = funkce obvodu</span>
+        </div>
+        <VectorPanel
+          devices={devices}
           rails={rails}
           modulesPerRail={modulesPerRail}
           selectedIds={new Set(selectedId ? [selectedId] : [])}
-          selectedVariant="edit"
-          onSelect={(item) => setSelectedId(item.id)}
-          tone={(item) => TONE[item.recognitionStatus]}
+          outlineFor={(device) => STATUS_OUTLINE[device.status]}
+          onSelect={(device) => setSelectedId(device.id)}
+          onLabelEdit={(device, label) => {
+            const item = items.find((candidate) => candidate.id === device.id);
+            if (!item) return;
+            labelPreview(item.id, label);
+            startEditing(async () => {
+              const result = await updateItemTextAction(item.id, { customTypeCode: item.customTypeCode, circuitLabel: label });
+              if (!result.ok) {
+                labelPreview(item.id, null);
+                return void toast.error(result.error);
+              }
+              router.refresh();
+            });
+          }}
           busy={editing}
           onAddModule={(rail) => railAction(() => addModuleAction(projectId, rail), `Modul přidán na lištu ${rail}.`, (data) => setSelectedId((data as { id: string }).id))}
           onDeleteRail={(rail) => {
@@ -317,9 +211,14 @@ export function RecognitionWorkspace({
           }}
           onAddRail={() => railAction(() => addRailAction(projectId), "DIN lišta přidána.")}
         />
+        {selected ? (
+          <p className="text-xs text-muted-foreground" data-testid="vector-selected">
+            Upravujete <b className="font-mono text-amber-300">{selected.designation}</b> · lišta {selected.dinRailIndex}, {String(selected.modulesWidth).replace(".", ",")}M
+          </p>
+        ) : null}
       </section>
 
-      <section aria-label="Konfigurátor prvku" className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 sm:p-5">
+      <section aria-label="Konfigurátor prvku" className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 sm:p-5 xl:col-start-2 xl:row-span-2 xl:row-start-1 xl:self-start 2xl:col-start-3 2xl:row-span-1">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="font-semibold">Konfigurátor prvku</h2>
           <span className="text-xs text-muted-foreground">Každý klik se hned uloží a modul zezelená</span>
@@ -328,7 +227,7 @@ export function RecognitionWorkspace({
           <>
             {/* Klíč bez katalogového kusu: uložení konfigurace prvek znovu nepřipojí (žádná ztráta stavu ani probliknutí) */}
             <ItemConfigurator
-              key={`${selected.id}:${selected.modulesWidth}`}
+              key={`${selected.id}:${selected.modulesWidth}:${selected.circuitLabel}`}
               item={selected}
               dominant={dominant}
               rightNeighbors={rightNeighbors}

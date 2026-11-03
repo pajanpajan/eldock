@@ -1,0 +1,371 @@
+"use client";
+
+import { useId, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { Moon, Plus, Printer, Trash2 } from "lucide-react";
+
+import { cn } from "@/lib/utils";
+import { pathOf, vectorLayout, wiringPaths, VECTOR, type IncomerFrom, type Rect, type WiringNode } from "@/lib/panel-builder/vector-layout";
+import { symbolTexts, type VectorDevice } from "@/lib/panel-builder/vector-symbols";
+
+import { VECTOR_THEMES, VectorModuleSymbol, type VectorTheme } from "./VectorModuleSymbol";
+
+export interface SymbolOutline {
+  color: string;
+  dashed?: boolean;
+  glow?: boolean;
+}
+
+const DRAG_THRESHOLD = 6;
+
+/**
+ * 2D vektorový rozváděč (Interactive Vector CAD): DIN lišty se standardizovanými mechanickými
+ * symboly, živé modré spojnice podle stromu zapojení a přívodní šipka. Režim zobrazení
+ * „Tmavý editor (CAD Dark)“ / „Výkres osazení“. Volitelně výběr (Ctrl/Shift = více), drag & drop
+ * přístroje na přístroj, ze kterého je napájen, dvojklik na spodní štítek = úprava funkce obvodu
+ * a správa lišt (krok 1).
+ */
+export function VectorPanel({
+  devices,
+  rails,
+  modulesPerRail,
+  nodes,
+  incomer = "TOP",
+  selectedIds,
+  outlineFor,
+  onSelect,
+  onBackground,
+  onDrop,
+  dragHint,
+  onLabelEdit,
+  onSelectRail,
+  onAddModule,
+  onDeleteRail,
+  onAddRail,
+  busy,
+  deviceAction,
+  toolbar,
+  pickHint,
+}: {
+  devices: readonly VectorDevice[];
+  rails: number;
+  modulesPerRail: number;
+  /** Strom zapojení pro modré spojnice (bez něj se kreslí jen osazení). */
+  nodes?: readonly WiringNode[];
+  incomer?: IncomerFrom;
+  selectedIds?: ReadonlySet<string>;
+  outlineFor?: (device: VectorDevice) => SymbolOutline | null;
+  onSelect?: (device: VectorDevice, modifiers: { additive: boolean }) => void;
+  onBackground?: () => void;
+  /** Drag & drop: přetažené prvky (výběr nebo jeden) na cílový přístroj. */
+  onDrop?: (sourceIds: string[], targetId: string) => void;
+  /** Text u kurzoru při přetahování na cíl (např. „napájet z -FI1“). */
+  dragHint?: (sourceIds: string[], target: VectorDevice) => string;
+  onLabelEdit?: (device: VectorDevice, label: string) => void;
+  onSelectRail?: (rail: number) => void;
+  onAddModule?: (rail: number) => void;
+  onDeleteRail?: (rail: number) => void;
+  onAddRail?: () => void;
+  busy?: boolean;
+  /** Tlačítko nad přístrojem (např. „🔗 Připojit jističe vpravo“ u chrániče). */
+  deviceAction?: (device: VectorDevice) => { label: string; onClick: () => void } | null;
+  toolbar?: ReactNode;
+  /** Režim výběru (např. „Klikněte na hlavní vstupní prvek“). */
+  pickHint?: string | null;
+}) {
+  const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
+  const [theme, setTheme] = useState<VectorTheme>("dark");
+  const colors = VECTOR_THEMES[theme];
+  const layout = useMemo(() => vectorLayout(devices, rails, modulesPerRail), [devices, rails, modulesPerRail]);
+  const wires = useMemo(() => (nodes ? wiringPaths(layout, devices, nodes, incomer) : []), [layout, devices, nodes, incomer]);
+  const svg = useRef<SVGSVGElement>(null);
+  const [drag, setDrag] = useState<{ ids: string[]; startX: number; startY: number; x: number; y: number; active: boolean; pointerId: number; origin: VectorDevice; additive: boolean } | null>(null);
+  const [editing, setEditing] = useState<{ id: string; value: string } | null>(null);
+
+  const toSvg = (event: ReactPointerEvent) => {
+    const box = svg.current!.getBoundingClientRect();
+    return { x: ((event.clientX - box.left) / box.width) * layout.width, y: ((event.clientY - box.top) / box.height) * layout.height };
+  };
+  const hit = (point: { x: number; y: number }) => devices.find((device) => {
+    const rect = layout.rects.get(device.id);
+    return rect && point.x >= rect.x && point.x <= rect.x + rect.w && point.y >= rect.y - 4 && point.y <= rect.y + rect.h + 4;
+  }) ?? null;
+  const target = drag?.active ? hit(drag) : null;
+  const validTarget = target && !drag?.ids.includes(target.id) ? target : null;
+
+  function pointerDown(event: ReactPointerEvent, device: VectorDevice) {
+    if (event.button !== 0 || editing) return;
+    event.stopPropagation();
+    const point = toSvg(event);
+    const additive = event.ctrlKey || event.metaKey || event.shiftKey;
+    const ids = selectedIds?.has(device.id) && selectedIds.size > 1 ? [...selectedIds] : [device.id];
+    if (onDrop) svg.current?.setPointerCapture(event.pointerId);
+    setDrag({ ids, startX: point.x, startY: point.y, x: point.x, y: point.y, active: false, pointerId: event.pointerId, origin: device, additive });
+  }
+  function pointerMove(event: ReactPointerEvent) {
+    if (!drag || !onDrop) return;
+    const point = toSvg(event);
+    const active = drag.active || Math.hypot(point.x - drag.startX, point.y - drag.startY) > DRAG_THRESHOLD;
+    setDrag({ ...drag, ...point, active });
+  }
+  function pointerUp() {
+    if (!drag) return;
+    const current = drag;
+    setDrag(null);
+    if (!current.active) return onSelect?.(current.origin, { additive: current.additive });
+    if (validTarget) onDrop?.(current.ids, validTarget.id);
+  }
+  function keyDown(event: ReactKeyboardEvent, device: VectorDevice) {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onSelect?.(device, { additive: event.ctrlKey || event.shiftKey });
+    }
+  }
+  function commitLabel() {
+    if (!editing) return;
+    const device = devices.find((candidate) => candidate.id === editing.id);
+    setEditing(null);
+    if (device && editing.value.trim() !== device.label) onLabelEdit?.(device, editing.value.trim());
+  }
+
+  const pct = (value: number, total: number) => `${(value / total) * 100}%`;
+  const overlay = (rect: Rect) => ({ left: pct(rect.x, layout.width), top: pct(rect.y, layout.height), width: pct(rect.w, layout.width), height: pct(rect.h, layout.height) });
+  const editingRect = editing ? layout.rects.get(editing.id) : null;
+
+  return (
+    <div className="flex flex-col gap-2" data-testid="vector-panel" data-theme={theme}>
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex rounded-lg border border-border p-0.5 text-xs" role="group" aria-label="Režim zobrazení rozváděče">
+          {(
+            [
+              ["dark", "Tmavý editor (CAD Dark)", Moon],
+              ["print", "Výkres osazení", Printer],
+            ] as const
+          ).map(([value, label, Icon]) => (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={theme === value}
+              onClick={() => setTheme(value)}
+              className={cn("flex min-h-8 items-center gap-1.5 rounded-md px-2.5 font-semibold", theme === value ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")}
+            >
+              <Icon className="size-3.5" aria-hidden /> {label}
+            </button>
+          ))}
+        </div>
+        {toolbar}
+      </div>
+      {pickHint ? (
+        <p className="rounded-md border border-amber-400/60 bg-amber-400/10 px-3 py-1.5 text-xs font-semibold text-amber-200" role="status" data-testid="pick-hint">
+          {pickHint}
+        </p>
+      ) : null}
+
+      <div className="overflow-x-auto rounded-xl border border-border" style={{ background: colors.bg }}>
+        <div className="relative" style={{ minWidth: Math.max(360, layout.capacity * 30 + 110) }}>
+          <svg
+            ref={svg}
+            viewBox={`0 0 ${layout.width} ${layout.height}`}
+            className={cn("block h-auto w-full select-none", drag?.active && "cursor-grabbing")}
+            role="group"
+            aria-label="2D vektorový rozváděč"
+            onPointerMove={pointerMove}
+            onPointerUp={pointerUp}
+            onPointerCancel={() => setDrag(null)}
+            onPointerDown={() => onBackground?.()}
+          >
+            <defs>
+              <marker id={`arrow-${uid}`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+                <path d="M0 0 L10 5 L0 10 Z" fill={colors.wire} />
+              </marker>
+            </defs>
+            <rect width={layout.width} height={layout.height} fill={colors.bg} />
+
+            {/* DIN lišty (35 mm) a volné pozice */}
+            {layout.rails.map((rail) => (
+              <g key={rail.index} data-rail={rail.index}>
+                <rect x={rail.x0} y={rail.y - 7} width={rail.x1 - rail.x0} height={14} fill={colors.rail} stroke={colors.railStroke} strokeWidth={0.8} />
+                {Array.from({ length: Math.max(0, layout.capacity - Math.ceil(rail.used)) }, (_, index) => (
+                  <rect
+                    key={index}
+                    x={VECTOR.left + (Math.ceil(rail.used) + index) * VECTOR.moduleW + 2}
+                    y={rail.top + 6}
+                    width={VECTOR.moduleW - 4}
+                    height={VECTOR.deviceH - 12}
+                    rx={3}
+                    fill="none"
+                    stroke={colors.grid.replace(/0\.0\d\)/, "0.35)")}
+                    strokeDasharray="4 4"
+                  />
+                ))}
+                <text x={8} y={rail.y - 4} fontSize={11} fontWeight={700} fill={colors.text} fontFamily="ui-sans-serif, system-ui, sans-serif">
+                  Lišta {rail.index}
+                </text>
+                <text x={8} y={rail.y + 10} fontSize={9.5} fill={rail.used > modulesPerRail ? "#ef4444" : colors.muted} fontFamily="ui-monospace, monospace">
+                  {String(rail.used).replace(".", ",")}/{modulesPerRail} M
+                </text>
+              </g>
+            ))}
+
+            {/* Modré spojnice: přívod, propojky, hřebenové sběrnice a odbočky */}
+            <g data-testid="vector-wires" pointerEvents="none">
+              {wires.map((wire, index) => (
+                <path
+                  key={index}
+                  d={pathOf(wire.points)}
+                  fill="none"
+                  stroke={colors.wire}
+                  strokeWidth={wire.kind === "bus" ? 4.5 : wire.kind === "incomer" ? 4 : wire.kind === "feed" ? 2.6 : 2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  markerEnd={wire.kind === "incomer" ? `url(#arrow-${uid})` : undefined}
+                  opacity={selectedIds?.size && wire.from !== "incomer" && !selectedIds.has(wire.from) ? 0.55 : 1}
+                  data-wire={wire.kind}
+                  data-from={wire.from}
+                />
+              ))}
+              {wires
+                .filter((wire) => wire.kind === "incomer")
+                .map((wire, index) => (
+                  <text key={`label-${index}`} x={wire.points[0][0] + 8} y={incomer === "TOP" ? 20 : layout.height - 12} fontSize={10} fontWeight={700} fill={colors.wire} fontFamily="ui-sans-serif, system-ui, sans-serif">
+                    PŘÍVOD {incomer === "TOP" ? "SHORA ⬇" : "ZESPODA ⬆"}
+                  </text>
+                ))}
+            </g>
+
+            {devices.map((device) => {
+              const rect = layout.rects.get(device.id);
+              if (!rect) return null;
+              const selected = selectedIds?.has(device.id) ?? false;
+              const isTarget = validTarget?.id === device.id;
+              const custom = outlineFor?.(device) ?? null;
+              const outline = isTarget ? { color: "#22d3ee", glow: true } : selected ? { color: "#fbbf24", glow: true } : custom;
+              const texts = symbolTexts(device);
+              return (
+                <g
+                  key={device.id}
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={selected}
+                  aria-label={`${device.designation} ${[texts.manufacturer, texts.value, texts.detail].filter(Boolean).join(" ")}${device.label ? ` · ${device.label}` : ""}`}
+                  className={cn("outline-none", onDrop ? "cursor-grab" : "cursor-pointer")}
+                  onPointerDown={(event) => pointerDown(event, device)}
+                  onKeyDown={(event) => keyDown(event, device)}
+                  onDoubleClick={() => onLabelEdit && setEditing({ id: device.id, value: device.label })}
+                  data-testid={`symbol-${device.designation}`}
+                >
+                  <VectorModuleSymbol
+                    device={device}
+                    rect={rect}
+                    theme={theme}
+                    outline={outline?.color}
+                    dashed={outline?.dashed}
+                    glow={outline?.glow}
+                    dimmed={drag?.active && drag.ids.includes(device.id)}
+                  />
+                </g>
+              );
+            })}
+
+            {/* Přetahovaný prvek u kurzoru */}
+            {drag?.active ? (
+              <g pointerEvents="none" data-testid="drag-ghost">
+                <rect x={drag.x + 10} y={drag.y - 26} width={Math.max(90, (validTarget && dragHint ? dragHint(drag.ids, validTarget).length : 14) * 6.4 + 16)} height={22} rx={4} fill="#0f172a" stroke={validTarget ? "#22d3ee" : "#64748b"} />
+                <text x={drag.x + 18} y={drag.y - 11} fontSize={11} fontWeight={700} fill="#e2e8f0" fontFamily="ui-sans-serif, system-ui, sans-serif">
+                  {validTarget && dragHint ? dragHint(drag.ids, validTarget) : `${drag.ids.length > 1 ? `${drag.ids.length} prvky` : drag.origin.designation} → …`}
+                </text>
+              </g>
+            ) : null}
+          </svg>
+
+          {/* HTML vrstva: tlačítka u přístrojů, správa lišt a úprava štítku */}
+          {deviceAction
+            ? devices.map((device) => {
+                const action = deviceAction(device);
+                const rect = layout.rects.get(device.id);
+                if (!action || !rect) return null;
+                return (
+                  <button
+                    key={`action-${device.id}`}
+                    type="button"
+                    onClick={action.onClick}
+                    className="absolute z-10 -translate-y-full rounded-md border border-sky-400/70 bg-sky-500/20 px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap text-sky-100 backdrop-blur hover:bg-sky-500/40"
+                    style={{ left: pct(rect.x, layout.width), top: `calc(${pct(rect.y, layout.height)} - 4px)` }}
+                  >
+                    {action.label}
+                  </button>
+                );
+              })
+            : null}
+          {layout.rails.map((rail) => (
+            <div key={`controls-${rail.index}`}>
+              {onSelectRail ? (
+                <button
+                  type="button"
+                  onClick={() => onSelectRail(rail.index)}
+                  aria-label={`Označit celou lištu ${rail.index}`}
+                  title="Označit celou lištu (pak přetáhnout na napájecí přístroj)"
+                  className="absolute rounded px-1 text-[10px] text-sky-300 hover:bg-sky-500/15"
+                  style={{ left: pct(6, layout.width), top: pct(rail.y + 16, layout.height) }}
+                >
+                  ▣ lišta
+                </button>
+              ) : null}
+              {onDeleteRail ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => onDeleteRail(rail.index)}
+                  aria-label={`Smazat celou lištu ${rail.index}`}
+                  title="Smazat celou lištu"
+                  className="absolute flex items-center gap-0.5 rounded px-1 text-[10px] text-red-300 hover:bg-red-500/15 disabled:opacity-50"
+                  style={{ left: pct(6, layout.width), top: pct(rail.y + 16, layout.height) }}
+                >
+                  <Trash2 className="size-3" aria-hidden /> lišta
+                </button>
+              ) : null}
+              {onAddModule ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => onAddModule(rail.index)}
+                  aria-label={`Přidat modul na lištu ${rail.index}`}
+                  title="Přidat modul na konec lišty"
+                  className="absolute flex -translate-y-1/2 flex-col items-center rounded-md border-2 border-dashed border-slate-500 px-1 py-1 text-[10px] text-slate-300 hover:border-primary hover:text-white disabled:opacity-50"
+                  style={{ left: pct(layout.width - VECTOR.right + 6, layout.width), top: pct(rail.y, layout.height) }}
+                >
+                  <Plus className="size-3.5" aria-hidden /> modul
+                </button>
+              ) : null}
+            </div>
+          ))}
+          {editing && editingRect ? (
+            <input
+              autoFocus
+              aria-label="Funkce obvodu na štítku"
+              value={editing.value}
+              maxLength={80}
+              onChange={(event) => setEditing({ ...editing, value: event.target.value })}
+              onBlur={commitLabel}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") commitLabel();
+                if (event.key === "Escape") setEditing(null);
+              }}
+              className="absolute z-20 min-w-28 rounded border-2 border-amber-400 bg-white px-1 text-xs text-black shadow-lg"
+              style={{ ...overlay({ x: editingRect.x, y: editingRect.y + 100, w: editingRect.w, h: 22 }) }}
+            />
+          ) : null}
+        </div>
+      </div>
+      {onAddRail ? (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onAddRail}
+          className="touch-target flex items-center justify-center gap-1.5 rounded-md border-2 border-dashed border-border text-xs text-muted-foreground hover:border-primary hover:text-foreground disabled:opacity-50"
+        >
+          <Plus className="size-4" aria-hidden /> Přidat DIN lištu
+        </button>
+      ) : null}
+    </div>
+  );
+}

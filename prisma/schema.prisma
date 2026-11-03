@@ -867,6 +867,8 @@ model PanelBoardProject {
   analysisMode         String?
   /// Stav zakrytování z poslední analýzy: "UNCOVERED" (vidět šroubky svorek) | "COVERED" (čelní maska).
   coverState           String?
+  /// Hlavní přívod rozváděče (fáze 42): "TOP" = přívod shora, "BOTTOM" = zespoda.
+  incomerFrom          String             @default("TOP")
 
   createdById String?
   /// Registrovaná firma (fáze 41): vidí jen své rozváděče, její údaje se propisují do dokumentace.

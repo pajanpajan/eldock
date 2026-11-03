@@ -7,7 +7,7 @@ import { WorkflowError } from "@/lib/workflow/state-machine";
 
 import { CATALOG, seedPanelBuilder } from "../../../prisma/seed-panel-builder";
 import { analyzePanelPhoto, lookupComponent } from "./geminiPanelService";
-import { analyzeProject, assignCatalogComponent, createPanelProject, importDatasheet, lookupComponentForItem, addModule, addRail, configureItem, deleteItem, deleteRail, mergeItems, releaseDocumentation, saveTree, setItemBox, splitItem, updateItemText } from "./panel-builder";
+import { analyzeProject, assignCatalogComponent, createPanelProject, importDatasheet, lookupComponentForItem, addModule, addRail, configureItem, deleteItem, deleteRail, mergeItems, releaseDocumentation, saveTree, searchCatalog, setIncomer, setItemBox, splitItem, updateItemText } from "./panel-builder";
 import { createTestDb, seedMinimal } from "./test-db";
 
 let db: Awaited<ReturnType<typeof createTestDb>>;
@@ -122,8 +122,31 @@ describe("AI Panel Builder – projekt a analýza fotky", () => {
     expect(await prisma.catalogComponent.findUniqueOrThrow({ where: { articleNumber: "2CDS253001R0251" } })).toMatchObject({ dataSource: "IEC_ESTIMATE" });
     await expect(lookupComponentForItem(prisma, { itemId: f6.id, text: "x", hints }, lookupComponent)).rejects.toBeInstanceOf(WorkflowError);
 
+    // opakované dohledání stejného nového typu nespadne na unikátním objednacím čísle (upsert)
+    const again = await lookupComponentForItem(prisma, { itemId: f6.id, text: "S203 D25", hints }, lookupComponent);
+    expect(again.component).toMatchObject({ articleNumber: "2CDS253001R0251", status: "existing" });
+
+    await prisma.panelBoardItem.update({ where: { id: f6.id }, data: { configJson: JSON.stringify(defaultConfig("RCD", { manufacturer: "ABB", modules: 2 })) } });
     await assignCatalogComponent(prisma, f6.id, s201b10.id);
-    expect(await prisma.panelBoardItem.findUniqueOrThrow({ where: { id: f6.id } })).toMatchObject({ recognitionStatus: "VERIFIED", catalogComponentId: s201b10.id, confidence: 1 });
+    // výběr z databáze zahodí starou konfiguraci – dlaždice i symbol se odvodí z kusu
+    expect(await prisma.panelBoardItem.findUniqueOrThrow({ where: { id: f6.id } })).toMatchObject({ recognitionStatus: "VERIFIED", catalogComponentId: s201b10.id, confidence: 1, configJson: null });
+  });
+
+  it("našeptávač databáze prvků: text bez diakritiky + filtr dlaždic výrobce → kategorie → póly; směr přívodu", async () => {
+    await seedPanelBuilder(prisma);
+    const hits = await searchCatalog(prisma, { q: "s201 b16", manufacturer: "ABB", category: "MCB", poles: "1P" });
+    expect(hits[0]).toMatchObject({ manufacturer: "ABB", typeCode: "S201-B16", articleNumber: "2CDS251001R1165" });
+    expect(hits[0].powerLossWatts).toBeGreaterThan(0);
+    expect(await searchCatalog(prisma, { q: "s201 b16", manufacturer: "ABB", category: "RCD", poles: null })).toEqual([]);
+    const rcds = await searchCatalog(prisma, { q: "fh204", manufacturer: null, category: "RCD", poles: "4P" });
+    expect(rcds.length).toBeGreaterThan(0);
+    expect(rcds.every((hit) => hit.category === "RCD" && hit.poles === "4P")).toBe(true);
+    expect((await searchCatalog(prisma, { q: "jistic", manufacturer: null, category: null, poles: null }, 5)).length).toBe(5);
+
+    const project = await prisma.panelBoardProject.findFirstOrThrow({ where: { code: "PB-001" } });
+    expect(project.incomerFrom).toBe("TOP");
+    await setIncomer(prisma, project.id, "BOTTOM");
+    expect((await prisma.panelBoardProject.findUniqueOrThrow({ where: { id: project.id } })).incomerFrom).toBe("BOTTOM");
   });
 });
 

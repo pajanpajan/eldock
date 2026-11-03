@@ -18,6 +18,9 @@ export interface Detection {
   poles: string | null;
   ratedCurrentA: number | null;
   trippingCurve: string | null;
+  /** Chránič / jističochránič: typ AC/A/F/B a citlivost IΔn v mA (páruje se s katalogem). */
+  rcdType?: string | null;
+  rcdSensitivityMa?: number | null;
   manufacturer: string | null;
   confidence: number;
   /** Ručně psaný popis pod přístrojem (je-li čitelný). */
@@ -34,6 +37,8 @@ export interface MatchableComponent {
   poles: string;
   ratedCurrentA: number;
   trippingCurve: string | null;
+  rcdType?: string | null;
+  rcdSensitivityMa?: number | null;
   modulesCount: number;
 }
 
@@ -56,8 +61,8 @@ const byPreference = (preferred: string | null) => (a: MatchableComponent, b: Ma
   Number(sameManufacturer(b.manufacturer, preferred)) - Number(sameManufacturer(a.manufacturer, preferred)) || a.typeCode.localeCompare(b.typeCode);
 
 /**
- * Detekce → katalog: přečtené objednací číslo nebo typ = VERIFIED; shoda parametrů (kategorie,
- * póly, proud, charakteristika) = PARTIAL k potvrzení; jinak UNRECOGNIZED. Hledá se napříč všemi
+ * Detekce → katalog (CatalogComponent): přečtené objednací číslo nebo typ = VERIFIED; shoda parametrů
+ * (kategorie, póly, proud, charakteristika B/C/D, u chráničů typ AC/A a citlivost mA) = PARTIAL k potvrzení; jinak UNRECOGNIZED. Hledá se napříč všemi
  * výrobci; výrobce přečtený u modulu má přednost před převažujícím výrobcem rozváděče
  * (`dominantManufacturer` null = „Různí výrobci“, bez preference).
  */
@@ -78,6 +83,8 @@ export function matchDetection(detection: Detection, catalog: readonly Matchable
           component.ratedCurrentA === detection.ratedCurrentA &&
           (!detection.poles || component.poles === detection.poles) &&
           (!detection.trippingCurve || component.trippingCurve === detection.trippingCurve) &&
+          (!detection.rcdType || component.rcdType === undefined || component.rcdType === detection.rcdType) &&
+          (!detection.rcdSensitivityMa || component.rcdSensitivityMa === undefined || component.rcdSensitivityMa === detection.rcdSensitivityMa) &&
           (!detection.manufacturer || sameManufacturer(component.manufacturer, detection.manufacturer)),
       )
       .sort(byPreference(detection.manufacturer ?? dominantManufacturer));
