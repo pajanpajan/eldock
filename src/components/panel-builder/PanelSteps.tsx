@@ -12,7 +12,7 @@ const STEPS: { key: PanelStep; label: string; href: (id: string) => string }[] =
 ];
 
 /** Kroky pracovní plochy projektu rozváděče. */
-export function PanelSteps({ projectId, current }: { projectId: string; current: PanelStep }) {
+export function PanelSteps({ projectId, current, design = false }: { projectId: string; current: PanelStep; /** Návrh od nuly: krok 1 = návrh osazení. */ design?: boolean }) {
   return (
     <nav aria-label="Kroky projektu" className="mb-6 flex flex-wrap gap-2 border-b border-border pb-3">
       {STEPS.map((step) => (
@@ -25,7 +25,7 @@ export function PanelSteps({ projectId, current }: { projectId: string; current:
             step.key === current ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground",
           )}
         >
-          {step.label}
+          {design && step.key === "recognition" ? "1. Návrh osazení" : step.label}
         </Link>
       ))}
     </nav>

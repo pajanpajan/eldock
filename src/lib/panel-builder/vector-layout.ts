@@ -53,17 +53,22 @@ export interface VectorLayout {
   width: number;
   height: number;
   capacity: number;
-  rails: { index: number; top: number; y: number; x0: number; x1: number; used: number }[];
+  rails: { index: number; top: number; y: number; x0: number; x1: number; used: number; capacity: number }[];
   rects: Map<string, Rect>;
 }
 
 const rowTop = (rail: number) => VECTOR.top + (rail - 1) * (VECTOR.deviceH + VECTOR.gap);
 
-/** Rozložení přístrojů na lištách (zleva bez mezer v pořadí `positionOnRail`, jako na fotce). */
-export function vectorLayout(items: readonly LayoutItem[], rails: number, modulesPerRail: number): VectorLayout {
+/**
+ * Rozložení přístrojů na lištách (zleva bez mezer v pořadí `positionOnRail`, jako na fotce).
+ * `modulesPerRail` = jedna šířka pro všechny lišty, nebo kapacita každé lišty zvlášť (fáze 43).
+ */
+export function vectorLayout(items: readonly LayoutItem[], rails: number, modulesPerRail: number | readonly number[]): VectorLayout {
   const railCount = Math.max(1, rails, ...items.map((item) => item.dinRailIndex));
   const used = Array.from({ length: railCount }, (_, i) => items.filter((item) => item.dinRailIndex === i + 1).reduce((sum, item) => sum + item.modulesWidth, 0));
-  const capacity = Math.max(modulesPerRail, ...used, 1);
+  const railCapacity = (index: number) => (typeof modulesPerRail === "number" ? modulesPerRail : (modulesPerRail[index] ?? modulesPerRail[modulesPerRail.length - 1] ?? 12));
+  const capacities = Array.from({ length: railCount }, (_, i) => railCapacity(i));
+  const capacity = Math.max(...capacities, ...used, 1);
   const rects = new Map<string, Rect>();
   for (let rail = 1; rail <= railCount; rail++) {
     let cursor = 0;
@@ -85,8 +90,9 @@ export function vectorLayout(items: readonly LayoutItem[], rails: number, module
       top: rowTop(i + 1),
       y: rowTop(i + 1) + VECTOR.deviceH / 2,
       x0: VECTOR.left - 8,
-      x1: VECTOR.left + capacity * VECTOR.moduleW + 8,
+      x1: VECTOR.left + Math.max(capacities[i], used[i]) * VECTOR.moduleW + 8,
       used: used[i],
+      capacity: capacities[i],
     })),
   };
 }

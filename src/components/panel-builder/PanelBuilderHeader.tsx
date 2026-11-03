@@ -48,7 +48,7 @@ export function PanelBuilderHeader({ company }: { company: Pick<PanelCompany, "c
                 <Coins className="size-4" aria-hidden /> Kredity: {company.creditsRemaining}
               </span>
               <Link href="/panel-builder/company" className={`${link} border border-border bg-card/60`}>
-                <Stamp className="size-4" aria-hidden /> Firemní údaje do razítka
+                <Stamp className="size-4" aria-hidden /> Firemní údaje a razítko
               </Link>
               <form action={logoutPanelCompanyAction}>
                 <button type="submit" className={`${link} border border-border bg-card/60`}>

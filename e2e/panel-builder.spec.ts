@@ -133,7 +133,10 @@ test("krok 1: čistá fotka se zoomem, 2D vektorový rozváděč, živá konfigu
 
 test("nový projekt: sloučení 3× 1M → 3P, rozdělení zpět, filtr výrobce a dohledání exotického prvku", async ({ page }) => {
   await page.goto("/panel-builder");
-  await page.getByRole("button", { name: "Nový projekt z fotky" }).click();
+  await page.getByRole("button", { name: "Nový projekt rozváděče" }).click();
+  // Výchozí režim je návrh od nuly – pasportizace z fotky je druhá volba
+  await expect(page.getByRole("button", { name: /Navrhnout nový rozváděč od nuly/, pressed: true })).toBeVisible();
+  await page.getByRole("button", { name: /Pasportizovat rozváděč z fotky/ }).click();
   await page.getByLabel("Název rozváděče").fill("Podružný rozváděč RP2 – dílna");
   await expect(page.getByLabel("Převažující výrobce (nápověda pro AI)")).toHaveValue("MIX");
   await page.getByRole("button", { name: "Ukázková fotka" }).click();
@@ -159,8 +162,12 @@ test("nový projekt: sloučení 3× 1M → 3P, rozdělení zpět, filtr výrobce
   await expect(symbols).toHaveCount(13);
   await expect(page.getByTestId("vector-selected")).toContainText("-F3 · lišta 2, 1M");
 
-  // Filtr výrobce jen pro tento modul: Eaton 1P B10 6 kA → PL6
-  await configurator.getByRole("button", { name: "EATON" }).click();
+  // Kaskáda: jiný výrobce jen pro tento modul – Eaton 1P B10 6 kA → PL6
+  await configurator.getByRole("button", { name: /Vybrat jiného výrobce/ }).click();
+  await configurator.getByLabel("Hledat výrobce podle názvu").fill("eat");
+  await expect(configurator.getByTestId("brand-grid").getByRole("button")).toHaveCount(1);
+  await configurator.getByRole("button", { name: "Eaton", exact: true }).click();
+  await expect(configurator.getByTestId("brand-grid")).toHaveCount(0);
   await expect(page.getByTestId("assigned-device")).toContainText("Eaton PL6-B10/1");
   await expect(page.getByTestId("symbol--F3").getByTestId("symbol-manufacturer")).toHaveText("Eaton");
 
@@ -191,6 +198,9 @@ test("Vision Analyzer 2.0: režim analýzy, přidání a smazání modulu i liš
 
   // Kompaktní dvojitý jistič 2×1P v 1M a rozdělení na 2 obvodové větve
   const configurator = page.getByTestId("item-configurator");
+  // Nový modul bez výrobce: kaskáda začíná kartami výrobců (kategorie až po výběru)
+  await expect(configurator.getByRole("button", { name: "Jistič", exact: true })).toHaveCount(0);
+  await configurator.getByRole("button", { name: "⚡ Obecný přístroj (bez výrobce)" }).click();
   await configurator.getByRole("button", { name: "Jistič", exact: true }).click();
   await configurator.getByRole("button", { name: "⚡ 2×1P Duální (1M)" }).click();
   await expect(page.getByTestId("assigned-device")).toContainText("2x1P B16 kompakt");
@@ -206,7 +216,7 @@ test("Vision Analyzer 2.0: režim analýzy, přidání a smazání modulu i liš
   await page.getByRole("button", { name: "Smazat celou lištu 3" }).click();
   await expect(symbols).toHaveCount(11); // lišta 3 měla -F9, -F10 a jednu větev 2×1P
   await expect(page.getByRole("button", { name: "Přidat modul na lištu 3" })).toHaveCount(0);
-  await page.getByRole("button", { name: "Přidat DIN lištu" }).click();
+  await page.getByRole("button", { name: "Přidat další DIN lištu (řadu)" }).click();
   await expect(page.getByRole("button", { name: "Přidat modul na lištu 3" })).toBeVisible();
 });
 

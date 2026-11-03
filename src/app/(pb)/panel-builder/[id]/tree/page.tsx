@@ -9,6 +9,7 @@ import { TreeEditor } from "@/components/panel-builder/TreeEditor";
 import { treeNodeFrom } from "@/lib/panel-builder/tree";
 import { isIncomerFrom } from "@/lib/panel-builder/vector-layout";
 import { vectorDeviceFrom } from "@/lib/panel-builder/vector-symbols";
+import { railCapacities } from "@/lib/panel-builder/rails";
 import { getPanelProject } from "@/server/queries/panel-builder";
 
 export async function generateMetadata({ params }: PageProps<"/panel-builder/[id]/tree">): Promise<Metadata> {
@@ -26,14 +27,14 @@ export default async function PanelTreePage({ params }: PageProps<"/panel-builde
   return (
     <PageTransition>
       <ProjectHeader project={project} />
-      <PanelSteps projectId={project.id} current="tree" />
+      <PanelSteps projectId={project.id} current="tree" design={project.designMode === "DESIGN"} />
       <TreeEditor
         projectId={project.id}
         initial={project.items.map(treeNodeFrom)}
         devices={project.items.map(vectorDeviceFrom)}
         incomerFrom={isIncomerFrom(project.incomerFrom) ? project.incomerFrom : "TOP"}
         rails={project.dinRailsCount}
-        modulesPerRail={project.modulesPerRail}
+        modulesPerRail={railCapacities(project)}
         simultaneity={project.simultaneityFactor}
         networkSystem={project.networkSystem}
       />

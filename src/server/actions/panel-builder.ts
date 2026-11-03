@@ -6,44 +6,18 @@ import { z } from "zod";
 import { COMPONENT_CATEGORIES } from "@/lib/panel-builder/catalog";
 import { prisma } from "@/lib/prisma";
 import { WorkflowError } from "@/lib/workflow/state-machine";
-import { assertFeature } from "@/server/modules";
 import { analyzePanelPhoto, extractDatasheetComponents, lookupComponent, type AiMode, type AnalysisMode } from "@/server/services/geminiPanelService";
 import { PHASE_OPTIONS, type TreeIssue } from "@/lib/panel-builder/tree";
 import { analyzeProject, assignCatalogComponent, createPanelProject, importDatasheet, addModule, addRail, configureItem, deleteItem, deleteRail, lookupComponentForItem, mergeItems, releaseDocumentation, saveThermalInputs, saveTree, searchCatalog, setIncomer, splitItem, updateItemText, type CatalogHit, type ImportedComponent } from "@/server/services/panel-builder";
-import { getPanelCompany } from "@/server/panel-session";
+import { actionFailure, guardCompany, guardItem, guardProject } from "@/server/panel-guards";
 import { consumeCredit } from "@/server/services/companies";
 import { companyManufacturer } from "@/lib/registered-company";
 import { readStoredFile } from "@/server/storage";
 
 import type { ActionResult } from "./workflow";
 
-/** AI Panel Builder je samostatný produkt (fáze 41): akce jen pro přihlášenou registrovanou firmu. */
-async function guard() {
-  const company = await getPanelCompany();
-  if (!company) throw new WorkflowError("FORBIDDEN", "Přihlaste se do AI Panel Builderu.");
-  await assertFeature("enterprise.ai_panel_builder");
-  return company;
-}
-
-/** Projekt musí patřit přihlášené firmě (cizí projekt = nenalezen). */
-async function guardProject(projectId: string) {
-  const company = await guard();
-  if (!(await prisma.panelBoardProject.count({ where: { id: projectId, companyId: company.id } }))) throw new WorkflowError("NOT_FOUND", "Projekt nebyl nalezen.");
-  return company;
-}
-
-/** Prvek musí patřit do projektu přihlášené firmy. */
-async function guardItem(itemId: string) {
-  const company = await guard();
-  if (!(await prisma.panelBoardItem.count({ where: { id: itemId, project: { companyId: company.id } } }))) throw new WorkflowError("NOT_FOUND", "Prvek nebyl nalezen.");
-  return company;
-}
-
-function failure(error: unknown, fallback: string): { ok: false; error: string } {
-  if (error instanceof WorkflowError) return { ok: false, error: error.message };
-  console.error(error);
-  return { ok: false, error: fallback };
-}
+const guard = guardCompany;
+const failure = actionFailure;
 
 const id = z.string().min(1).max(64);
 const fileUrl = z
@@ -79,25 +53,33 @@ const createSchema = z.object({
   dominantManufacturer: z.string().trim().min(1).max(40),
   dinRailsCount: z.number().int().min(1).max(12),
   modulesPerRail: z.number().int().min(4).max(48),
+  /** Fáze 43: návrh od nuly bez fotky (1× 12M) nebo pasportizace z fotky. */
+  designMode: z.enum(["PHOTO", "DESIGN"]).default("PHOTO"),
 });
 
 const readPhoto = (url: string) => readStoredFile(url);
 
 /** Nový projekt z fotky + okamžitá analýza (krok 1). */
-export async function createPanelProjectAction(input: z.input<typeof createSchema>): Promise<ActionResult<{ id: string; mode: AiMode; warning?: string }>> {
+export async function createPanelProjectAction(input: z.input<typeof createSchema>): Promise<ActionResult<{ id: string; mode: AiMode; warning?: string; design?: boolean }>> {
   const parsed = createSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Zkontrolujte název rozváděče a parametry skříně." };
   try {
     const company = await guard();
-    const { dinRailsCount, modulesPerRail, ...rest } = parsed.data;
+    const { dinRailsCount, modulesPerRail, designMode, ...rest } = parsed.data;
+    if (designMode === "PHOTO" && !rest.photoUrl) return { ok: false, error: "Nahrajte fotku rozváděče, nebo zvolte návrh od nuly." };
     // 1 kredit = 1 nový rozváděč; údaje firmy se propíšou jako výrobce rozváděče
     await consumeCredit(prisma, company.id);
     let project: Awaited<ReturnType<typeof createPanelProject>>;
     try {
-      project = await createPanelProject(prisma, { ...rest, dims: { dinRailsCount, modulesPerRail }, companyId: company.id, manufacturerInfo: companyManufacturer(company) });
+      project = await createPanelProject(prisma, { ...rest, designMode, dims: { dinRailsCount, modulesPerRail }, companyId: company.id, manufacturerInfo: companyManufacturer(company) });
     } catch (error) {
       await prisma.registeredCompany.update({ where: { id: company.id }, data: { creditsRemaining: { increment: 1 } } });
       throw error;
+    }
+    // Návrh od nuly: čisté plátno bez analýzy fotky
+    if (designMode === "DESIGN") {
+      revalidatePath("/panel-builder", "layout");
+      return { ok: true, data: { id: project.id, mode: "DEMO" as AiMode, design: true } };
     }
     const result = await analyzeProject(prisma, project.id, { analyze: analyzePanelPhoto, readPhoto });
     revalidatePath("/panel-builder", "layout");
@@ -238,7 +220,7 @@ export async function releaseDocumentationAction(projectId: string, equipmentId:
 
 const nullableText = (max: number) => z.string().max(max).nullable().optional();
 const configSchema = z.object({
-  category: z.enum(["MCB", "RCD", "RCBO", "MAIN_SWITCH", "SPD", "CONTACTOR", "RELAY", "OTHER"]),
+  category: z.enum(["MCB", "RCD", "RCBO", "MAIN_SWITCH", "SPD", "CONTACTOR", "RELAY", "OTHER", "ACCESSORY"]),
   manufacturer: z.string().trim().max(40).nullable(),
   poles: z.string().max(8),
   modules: z.number().positive().max(12),

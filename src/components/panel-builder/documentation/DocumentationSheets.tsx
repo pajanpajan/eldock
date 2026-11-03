@@ -30,9 +30,25 @@ export interface DocumentationData {
   technical: [string, string][];
   label: { operatingVoltage: string; operatingCurrent: string; shortCircuit: string; ipRating: string; mainBreaker: string; type: string; deviceManufacturer: string };
   qrUrl: string;
+  /** Firemní logo a otisk razítka s podpisem (fáze 43, profil firmy). */
+  logoUrl: string | null;
+  stampUrl: string | null;
 }
 
 const svgUri = (svg: string) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+
+/** Logo firmy (nahrané v profilu) – `<img>`, protože jde i o SVG od uživatele. */
+function CompanyLogo({ url, className }: { url: string; className?: string }) {
+  // eslint-disable-next-line @next/next/no-img-element -- nahraný soubor firmy (/api/files)
+  return <img src={url} alt="Logo výrobce rozváděče" className={`object-contain ${className ?? ""}`} data-testid="doc-logo" />;
+}
+
+/** Otisk razítka a podpisu odpovědné osoby (PNG s průhledným pozadím) přes čáru podpisu. */
+function SignatureStamp({ url }: { url: string | null }) {
+  if (!url) return null;
+  // eslint-disable-next-line @next/next/no-img-element -- nahraný soubor firmy (/api/files)
+  return <img src={url} alt="Razítko a podpis odpovědné osoby výrobce" className="pointer-events-none absolute -top-[22mm] left-1/2 h-[26mm] max-w-[60mm] -translate-x-1/2 object-contain" data-testid="doc-stamp" />;
+}
 
 function Sheet({ data, number, children }: { data: DocumentationData; number: number; children: ReactNode }) {
   return (
@@ -69,10 +85,16 @@ function Sheet({ data, number, children }: { data: DocumentationData; number: nu
               <div>{data.date}</div>
             </td>
             <td className="w-24 border border-black px-1.5 py-1">
-              <div className="flex items-center gap-1 font-bold">
-                <LogoMark className="size-3.5" /> ELDOCK
-              </div>
-              <div className="text-zinc-500">AI Panel Builder</div>
+              {data.logoUrl ? (
+                <CompanyLogo url={data.logoUrl} className="h-7 w-full" />
+              ) : (
+                <>
+                  <div className="flex items-center gap-1 font-bold">
+                    <LogoMark className="size-3.5" /> ELDOCK
+                  </div>
+                  <div className="text-zinc-500">AI Panel Builder</div>
+                </>
+              )}
             </td>
           </tr>
         </tbody>
@@ -99,10 +121,14 @@ export function DocumentationSheets({ data }: { data: DocumentationData }) {
       {/* List 1 – titulní strana a obsah */}
       <Sheet data={data} number={1}>
         <div className="flex flex-1 flex-col justify-center gap-8 py-10">
-          <div className="flex items-center gap-3">
-            <LogoMark className="size-10" />
-            <span className="text-[20pt] font-black tracking-tight">ELDOCK</span>
-          </div>
+          {data.logoUrl ? (
+            <CompanyLogo url={data.logoUrl} className="h-[22mm] max-w-[80mm] self-start" />
+          ) : (
+            <div className="flex items-center gap-3">
+              <LogoMark className="size-10" />
+              <span className="text-[20pt] font-black tracking-tight">ELDOCK</span>
+            </div>
+          )}
           <div>
             <p className="text-[10pt] tracking-[0.15em] text-zinc-600 uppercase">Dokumentace rozváděče nízkého napětí · {data.norm}</p>
             <h1 className="mt-2 text-[24pt] leading-tight font-bold">{data.name}</h1>
@@ -332,8 +358,25 @@ export function DocumentationSheets({ data }: { data: DocumentationData }) {
             <div className="border-t border-black pt-1 text-[8pt] text-zinc-600">
               Datum a místo{m.city ? `: ${data.date}, ${m.city.replace(/^\d{3} ?\d{2} /, "")}` : ""}
             </div>
-            <div className="border-t border-black pt-1 text-[8pt] text-zinc-600" data-testid="declaration-signature">
-              Podpis, jméno a funkce{m.contactName ? `: ${m.contactName}, odpovědná osoba výrobce` : ""}
+            <div className="relative border-t border-black pt-1 text-[8pt] text-zinc-600" data-testid="declaration-signature">
+              <SignatureStamp url={data.stampUrl} />
+              Podpis a razítko odpovědné osoby výrobce{m.contactName ? `: ${m.contactName}` : ""}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded border border-black p-2 text-[8pt]" data-testid="doc-routine-test">
+          <h3 className="mb-1 text-[10pt] font-bold">Protokol o kusové zkoušce (ČSN EN 61439-1, čl. 11)</h3>
+          <p className="text-zinc-700">
+            Rozváděč {data.code} byl podroben kusové zkoušce: stupeň krytí, povrchové a vzdušné vzdálenosti, ochrana před úrazem a spojitost ochranného obvodu, zabudování přístrojů, vnitřní elektrické obvody a
+            spoje, svorky pro vnější vodiče, mechanická funkce, dielektrické vlastnosti a zapojení, provozní funkce.
+          </p>
+          <div className="mt-8 grid grid-cols-2 gap-10">
+            <div className="border-t border-black pt-1 text-zinc-600">Datum zkoušky: {data.date}</div>
+            <div className="relative border-t border-black pt-1 text-zinc-600" data-testid="routine-test-signature">
+              <SignatureStamp url={data.stampUrl} />
+              Zkoušku provedl{m.contactName ? `: ${m.contactName}` : ""}
+              {m.authorizationNumber ? ` (oprávnění ${m.authorizationNumber})` : ""}
             </div>
           </div>
         </div>
@@ -363,6 +406,7 @@ export function DocumentationSheets({ data }: { data: DocumentationData }) {
             <b className="font-mono">{data.code}</b>
           </div>
           <div className="flex w-28 flex-col items-center gap-2">
+            {data.logoUrl ? <CompanyLogo url={data.logoUrl} className="h-8 w-24" /> : null}
             <CeMark className="w-20" />
             <div className="size-24">
               <CeLabelQr value={data.qrUrl} />

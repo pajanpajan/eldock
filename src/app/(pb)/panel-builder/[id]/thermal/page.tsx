@@ -5,7 +5,10 @@ import { PageTransition } from "@/components/layout/PageTransition";
 import { panelBuilderGuard } from "@/components/panel-builder/access";
 import { PanelSteps } from "@/components/panel-builder/PanelSteps";
 import { ProjectHeader } from "@/components/panel-builder/ProjectHeader";
+import { EnclosurePicker } from "@/components/panel-builder/EnclosurePicker";
 import { ThermalWorkspace } from "@/components/panel-builder/ThermalWorkspace";
+import { enclosureNeed } from "@/lib/panel-builder/enclosures";
+import { railCapacities } from "@/lib/panel-builder/rails";
 import { getPanelProject } from "@/server/queries/panel-builder";
 
 export async function generateMetadata({ params }: PageProps<"/panel-builder/[id]/thermal">): Promise<Metadata> {
@@ -23,9 +26,14 @@ export default async function PanelThermalPage({ params }: PageProps<"/panel-bui
   return (
     <PageTransition>
       <ProjectHeader project={project} />
-      <PanelSteps projectId={project.id} current="thermal" />
+      <PanelSteps projectId={project.id} current="thermal" design={project.designMode === "DESIGN"} />
       <ThermalWorkspace
+        // Nová skříň z katalogu = nové vstupy (rozměry, materiál, krytí)
+        key={project.enclosureId ?? "no-enclosure"}
         projectId={project.id}
+        pMaxW={project.enclosurePmaxW}
+        enclosureModel={project.enclosureModel}
+        enclosurePicker={<EnclosurePicker projectId={project.id} need={enclosureNeed(railCapacities(project), project.items)} current={{ model: project.enclosureModel, enclosureId: project.enclosureId }} />}
         initialProject={{
           heightMm: project.heightMm,
           widthMm: project.widthMm,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, Check, CheckCircle2, CircleAlert, Loader2, ThermometerSun, XCircle } from "lucide-react";
 import { toast } from "sonner";
@@ -45,7 +45,22 @@ function NumberField({ id, label, value, onChange, step = 1, min, max, unit }: {
 }
 
 /** Krok 3: vstupy skříně (živý přepočet), verdikt, teplotní křivka, fázová bilance a tabulka. */
-export function ThermalWorkspace({ projectId, initialProject, items }: { projectId: string; initialProject: ThermalProjectInput; items: ThermalItemInput[] }) {
+export function ThermalWorkspace({
+  projectId,
+  initialProject,
+  items,
+  pMaxW = null,
+  enclosureModel = "",
+  enclosurePicker,
+}: {
+  projectId: string;
+  initialProject: ThermalProjectInput;
+  items: ThermalItemInput[];
+  /** Max. ztrátový výkon vybrané skříně [W] (fáze 43). */
+  pMaxW?: number | null;
+  enclosureModel?: string;
+  enclosurePicker?: ReactNode;
+}) {
   const router = useRouter();
   const [project, setProject] = useState(initialProject);
   const [currents, setCurrents] = useState<Record<string, number | null>>(() => Object.fromEntries(items.map((item) => [item.id, item.operatingCurrentA])));
@@ -114,6 +129,22 @@ export function ThermalWorkspace({ projectId, initialProject, items }: { project
           {saveState === "saving" ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : saveState === "saved" ? <Check className="size-3.5 text-emerald-400" aria-hidden /> : <CircleAlert className="size-3.5 text-red-400" aria-hidden />}
           {saveState === "saving" ? "Ukládám…" : saveState === "saved" ? "Uloženo" : "Neuloženo"}
         </span>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-3" data-testid="pmax-check">
+        <div className="flex flex-col text-sm">
+          <span className="text-xs text-muted-foreground">Skříň rozváděče</span>
+          <b>{enclosureModel || "nevybrána z katalogu"}</b>
+        </div>
+        {pMaxW ? (
+          <span className={cn("rounded-full border px-2.5 py-1 text-xs font-semibold", result.totalLossW <= pMaxW ? "border-emerald-500/60 text-emerald-300" : "border-red-500/60 text-red-300")}>
+            P<sub>max</sub> skříně {n(pMaxW, 0)} W · ztráty {n(result.totalLossW)} W ·{" "}
+            {result.totalLossW <= pMaxW ? `✅ rezerva ${n(pMaxW - result.totalLossW, 1)} W` : `❌ překročeno o ${n(result.totalLossW - pMaxW, 1)} W`}
+          </span>
+        ) : (
+          <span className="text-xs text-muted-foreground">P_max skříně neuveden – vyberte skříň z katalogu.</span>
+        )}
+        <div className="ml-auto">{enclosurePicker}</div>
       </div>
 
       <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">

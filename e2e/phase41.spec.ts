@@ -60,8 +60,8 @@ test("úvodní stránka: dva produkty; nepřihlášený do Panel Builderu → re
   await expect(page.getByRole("link", { name: /PB-001/ })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Studio" })).toHaveCount(0);
 
-  // Firemní údaje do razítka: úprava odpovědné osoby
-  await page.getByRole("link", { name: "Firemní údaje do razítka" }).click();
+  // Firemní údaje a razítko: úprava odpovědné osoby
+  await page.getByRole("link", { name: "Firemní údaje a razítko" }).click();
   await expect(page.getByTestId("terms-accepted")).toContainText("1.0-2026-11");
   await page.getByLabel("Jméno a příjmení odpovědné osoby / projektanta").fill("Ing. Petra Nová");
   await page.getByRole("button", { name: "Uložit firemní údaje" }).click();

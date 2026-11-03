@@ -51,7 +51,7 @@ export const getPanelProjects = cache(async () => {
   });
 });
 
-const companyProfile = { companyName: true, ico: true, dic: true, street: true, city: true, zip: true, contactName: true, phone: true, email: true, authorizationNumber: true } as const;
+const companyProfile = { companyName: true, ico: true, dic: true, street: true, city: true, zip: true, contactName: true, phone: true, email: true, authorizationNumber: true, logoUrl: true, stampUrl: true } as const;
 
 /** Detail projektu přihlášené firmy (cizí projekt → `null` = 404): prvky v pořadí lišta → pozice, katalogové kusy, výrobce. */
 export const getPanelProject = cache(async (id: string) => {
@@ -97,3 +97,12 @@ export const getEnclosureComponent = cache(async (enclosureModel: string) => {
   const model = enclosureModel.toLowerCase();
   return enclosures.find((row) => model.includes(row.series.toLowerCase()) || model.includes(row.typeCode.toLowerCase())) ?? null;
 });
+
+/** Počty kusů v databázi prvků podle výrobce (karty kaskádového menu, fáze 43); bez skříní a odhadů IEC. */
+export const getBrandCounts = cache(async (): Promise<Record<string, number>> => {
+  const rows = await prisma.catalogComponent.groupBy({ by: ["manufacturer"], where: { category: { not: "ENCLOSURE" }, dataSource: { not: "IEC_ESTIMATE" } }, _count: { _all: true } });
+  return Object.fromEntries(rows.map((row) => [row.manufacturer, row._count._all]));
+});
+
+/** Vybraná skříň z katalogu rozvodnic (kusovník, P_max). */
+export const getProjectEnclosure = cache((enclosureId: string | null) => (enclosureId ? prisma.panelEnclosure.findUnique({ where: { id: enclosureId } }) : null));

@@ -15,7 +15,7 @@ import { parseManufacturerInfo } from "@/lib/panel-builder/project";
 import { companyManufacturer } from "@/lib/registered-company";
 import { readingOrder } from "@/lib/panel-builder/tree";
 import { equipmentHref } from "@/lib/routes";
-import { getEnclosureComponent, getPanelProject, getReleaseTargets } from "@/server/queries/panel-builder";
+import { getEnclosureComponent, getPanelProject, getProjectEnclosure, getReleaseTargets } from "@/server/queries/panel-builder";
 import { requestOrigin } from "@/server/request-url";
 import { documentationState } from "@/server/services/panel-builder";
 
@@ -32,10 +32,13 @@ export default async function PanelDocumentationPage({ params }: PageProps<"/pan
   if (guard) return guard;
   const project = await getPanelProject((await params).id);
   if (!project) notFound();
-  const [enclosureRow, targets, origin] = await Promise.all([getEnclosureComponent(project.enclosureModel), getReleaseTargets(), requestOrigin()]);
+  const [enclosureRow, picked, targets, origin] = await Promise.all([getEnclosureComponent(project.enclosureModel), getProjectEnclosure(project.enclosureId), getReleaseTargets(), requestOrigin()]);
 
   const { thermal, docItems, blockers } = documentationState(project);
-  const enclosure = enclosureRow
+  // Skříň vybraná z katalogu rozvodnic (fáze 43) má přednost před dohledáním podle názvu modelu
+  const enclosure = picked
+    ? { articleNumber: picked.articleNumber, typeCode: picked.model, manufacturer: picked.manufacturer, description: `Skříň rozváděče ${picked.model}, ${picked.rows}× ${picked.modulesPerRow} M, ${picked.heightMm} × ${picked.widthMm} × ${picked.depthMm} mm, ${picked.ipRating}`, category: "ENCLOSURE" as const }
+    : enclosureRow
     ? { articleNumber: enclosureRow.articleNumber, typeCode: enclosureRow.typeCode, manufacturer: enclosureRow.manufacturer, description: enclosureRow.description, category: enclosureRow.category }
     : null;
   const drawingItems: DrawingItem[] = project.items.map((item) => ({
@@ -85,6 +88,8 @@ export default async function PanelDocumentationPage({ params }: PageProps<"/pan
       type: enclosure?.typeCode ?? (project.enclosureModel || "–"),
       deviceManufacturer: manufacturers.join(", ") || (isMix(project.dominantManufacturer) ? "Různí výrobci" : project.dominantManufacturer),
     },
+    logoUrl: project.company?.logoUrl ?? null,
+    stampUrl: project.company?.stampUrl ?? null,
     qrUrl: project.equipmentId ? `${origin}${equipmentHref(project.equipmentId)}` : `${origin}/panel-builder/${project.id}/documentation`,
   };
 
@@ -103,7 +108,7 @@ export default async function PanelDocumentationPage({ params }: PageProps<"/pan
       `}</style>
       <div className="no-print">
         <ProjectHeader project={project} />
-        <PanelSteps projectId={project.id} current="documentation" />
+        <PanelSteps projectId={project.id} current="documentation" design={project.designMode === "DESIGN"} />
       </div>
       <div className="flex flex-col gap-6">
         <DocumentationActions

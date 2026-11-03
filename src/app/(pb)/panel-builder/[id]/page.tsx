@@ -7,8 +7,10 @@ import { PanelSteps } from "@/components/panel-builder/PanelSteps";
 import { ProjectHeader } from "@/components/panel-builder/ProjectHeader";
 import { RecognitionWorkspace, type WorkspaceItem } from "@/components/panel-builder/RecognitionWorkspace";
 import { configFromComponent, parseConfig } from "@/lib/panel-builder/configurator";
+import { brandOf } from "@/lib/panel-builder/brands";
+import { railCapacities } from "@/lib/panel-builder/rails";
 import { vectorDeviceFrom } from "@/lib/panel-builder/vector-symbols";
-import { getPanelProject } from "@/server/queries/panel-builder";
+import { getBrandCounts, getPanelProject } from "@/server/queries/panel-builder";
 
 export async function generateMetadata({ params }: PageProps<"/panel-builder/[id]">): Promise<Metadata> {
   const project = await getPanelProject((await params).id);
@@ -28,8 +30,14 @@ export default async function PanelProjectPage({ params }: PageProps<"/panel-bui
   const guard = await panelBuilderGuard();
   if (guard) return guard;
   const { id } = await params;
-  const project = await getPanelProject(id);
+  const [project, counts] = await Promise.all([getPanelProject(id), getBrandCounts()]);
   if (!project) notFound();
+  // Počty podle karet výrobců (sloučí zápisy „EATON“ / „Eaton“)
+  const brandCounts: Record<string, number> = {};
+  for (const [manufacturer, count] of Object.entries(counts)) {
+    const key = brandOf(manufacturer)?.value ?? manufacturer;
+    brandCounts[key] = (brandCounts[key] ?? 0) + count;
+  }
 
   const items: WorkspaceItem[] = project.items.map((item) => ({
     id: item.id,
@@ -62,15 +70,17 @@ export default async function PanelProjectPage({ params }: PageProps<"/panel-bui
   return (
     <PageTransition>
       <ProjectHeader project={project} />
-      <PanelSteps projectId={project.id} current="recognition" />
+      <PanelSteps projectId={project.id} current="recognition" design={project.designMode === "DESIGN"} />
       <RecognitionWorkspace
         projectId={project.id}
+        designMode={project.designMode === "DESIGN" ? "DESIGN" : "PHOTO"}
         photoUrl={project.photoUrl}
         items={items}
-        rails={project.dinRailsCount}
-        modulesPerRail={project.modulesPerRail}
+        capacities={railCapacities(project)}
         dominant={project.dominantManufacturer}
         coverState={project.coverState}
+        brandCounts={brandCounts}
+        enclosure={{ model: project.enclosureModel, enclosureId: project.enclosureId }}
       />
     </PageTransition>
   );

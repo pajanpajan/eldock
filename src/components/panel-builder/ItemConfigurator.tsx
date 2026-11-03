@@ -7,14 +7,14 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { CATEGORY_LABELS, PICKER_MANUFACTURERS, formatWatts, isMix } from "@/lib/panel-builder/catalog";
-import { CONFIG_CATEGORIES, CONFIG_FIELDS, catalogCategory, defaultConfig, isOptionActive, toConfigCategory, type ConfigCategory, type ItemConfig } from "@/lib/panel-builder/configurator";
-import { sameManufacturer } from "@/lib/panel-builder/matching";
+import { CATEGORY_LABELS, formatWatts, isMix } from "@/lib/panel-builder/catalog";
+import { catalogCategory, defaultConfig, toConfigCategory, type ConfigCategory, type ItemConfig } from "@/lib/panel-builder/configurator";
 import { RECOGNITION } from "@/lib/panel-builder/project";
 import { cn } from "@/lib/utils";
 import { assignComponentAction, configureItemAction, deleteItemAction, lookupComponentAction, mergeItemsAction, searchCatalogAction, splitItemAction, updateItemTextAction } from "@/server/actions/panel-builder";
 import type { CatalogHit } from "@/server/services/panel-builder";
 
+import { CascadePicker } from "./CascadePicker";
 import type { WorkspaceItem } from "./RecognitionWorkspace";
 
 /** Rychlé štítky funkce obvodu (1 klik = vyplněno a uloženo). */
@@ -37,24 +37,6 @@ export const CIRCUIT_CHIPS = [
 /** Prodleva uložení při rychlém klikání po dlaždicích parametrů (ms). */
 const CONFIGURE_DEBOUNCE_MS = 250;
 
-function Tile({ active, onClick, children, label, disabled }: { active: boolean; onClick: () => void; children: React.ReactNode; label?: string; disabled?: boolean }) {
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      aria-label={label}
-      onClick={onClick}
-      disabled={disabled}
-      className={cn(
-        "touch-target min-h-11 rounded-lg border-2 px-2.5 text-sm font-semibold transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50",
-        active ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card hover:border-primary/60",
-      )}
-    >
-      {children}
-    </button>
-  );
-}
-
 /**
  * Živý konfigurátor vybraného modulu: každý klik (výrobce, kategorie, parametr) modul rovnou uloží,
  * přiřadí nejbližší přesný kus z katalogu a označí ho jako ověřený. Nahoře geometrie na DIN liště
@@ -68,9 +50,12 @@ export function ItemConfigurator({
   onDeleted,
   onPreview,
   onLabel,
+  brandCounts,
 }: {
   item: WorkspaceItem;
   dominant: string;
+  /** Počty kusů v databázi podle výrobce (karty kaskádového menu). */
+  brandCounts: Readonly<Record<string, number>>;
   rightNeighbors: number;
   onChanged: () => void;
   onDeleted: () => void;
@@ -82,6 +67,8 @@ export function ItemConfigurator({
   const initialManufacturer = item.config?.manufacturer ?? item.component?.manufacturer ?? item.detected?.manufacturer ?? (isMix(dominant) ? null : dominant);
   const [config, setConfig] = useState<ItemConfig | null>(item.config);
   const [manufacturer, setManufacturer] = useState<string | null>(initialManufacturer);
+  // Krok A kaskády: výrobce zvolen (i „obecný přístroj“ bez výrobce) → zobrazí se kategorie
+  const [chosen, setChosen] = useState(initialManufacturer !== null || item.config !== null);
   const [mergeRight, setMergeRight] = useState(true);
   const [pending, startTransition] = useTransition();
   const [lookupText, setLookupText] = useState(item.rawOcrText?.replace(/[?б]/g, "") ?? "");
@@ -142,6 +129,7 @@ export function ItemConfigurator({
 
   function pickManufacturer(value: string | null) {
     setManufacturer(value);
+    setChosen(true);
     if (config) apply({ ...config, manufacturer: value });
   }
 
@@ -164,7 +152,7 @@ export function ItemConfigurator({
       const found = await lookupComponentAction({
         itemId: item.id,
         text,
-        hints: { category: config?.category === "OTHER" ? null : (config?.category ?? null), poles: config?.poles ?? null, current: config?.ratedCurrentA ?? null, curve: config?.curve ?? null, manufacturer },
+        hints: { category: config && config.category !== "OTHER" && config.category !== "ACCESSORY" ? config.category : null, poles: config?.poles ?? null, current: config?.ratedCurrentA ?? null, curve: config?.curve ?? null, manufacturer },
       });
       if (!found.ok) return void toast.error(found.error);
       if (!found.data.component) return void toast.error("Přístroj se podle textu nepodařilo dohledat. Zkuste delší úsek typového označení.");
@@ -237,7 +225,6 @@ export function ItemConfigurator({
   // Rozklikaný (zatím neuložený) prvek je hned „ověřený“ – stejně jako po uložení konfigurace.
   const shownStatus = config && config !== item.config ? "VERIFIED" : item.recognitionStatus;
   const suggested = item.recognitionStatus === "PARTIAL" ? item.component : null;
-  const fields = config ? CONFIG_FIELDS[config.category] : [];
 
   return (
     <div className="flex flex-col gap-4" data-testid="item-configurator">
@@ -446,55 +433,23 @@ export function ItemConfigurator({
         ) : null}
       </section>
 
-      <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground" role="group" aria-label="Výrobce přístroje">
-        <span className="mr-1">Výrobce:</span>
-        {PICKER_MANUFACTURERS.map((option) => {
-          const active = option.value === null ? manufacturer === null : sameManufacturer(manufacturer, option.value);
-          return (
-            <button
-              key={option.label}
-              type="button"
-              aria-pressed={active}
-              onClick={() => pickManufacturer(option.value)}
-              className={cn("min-h-8 rounded-md border px-2 font-semibold tracking-wide", active ? "border-primary bg-primary text-primary-foreground" : "border-border hover:text-foreground")}
-            >
-              {option.label}
-            </button>
-          );
-        })}
-      </div>
-
-      <section aria-label="1. Kategorie" className="flex flex-col gap-2">
-        <h3 className="text-xs font-semibold text-muted-foreground uppercase">1. Kategorie</h3>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {CONFIG_CATEGORIES.map((category) => (
-            <Tile key={category.value} active={config?.category === category.value} onClick={() => pickCategory(category.value)}>
-              {category.label}
-            </Tile>
-          ))}
-        </div>
-      </section>
-
-      {fields.map((field, index) => (
-        <section key={field.key} aria-label={field.label} className="flex flex-col gap-2">
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase">
-            {index + 2}. {field.label}
-          </h3>
-          <div className="flex flex-wrap gap-2">
-            {field.options.map((option) => (
-              <Tile key={option.value} active={!!config && isOptionActive(config, option)} onClick={() => config && apply({ ...config, ...option.patch })}>
-                {option.label}
-              </Tile>
-            ))}
-          </div>
-          {field.key === "poles" || field.key === "contacts" ? (
+      <CascadePicker
+        manufacturer={manufacturer}
+        chosen={chosen}
+        config={config}
+        brandCounts={brandCounts}
+        onManufacturer={pickManufacturer}
+        onCategory={pickCategory}
+        onOption={(patch) => config && apply({ ...config, ...patch })}
+        fieldExtra={(field) =>
+          field.key === "poles" || field.key === "contacts" ? (
             <label className="flex items-center gap-2 text-xs text-muted-foreground">
               <input type="checkbox" className="size-4 accent-primary" checked={mergeRight} onChange={(event) => setMergeRight(event.target.checked)} />
               Sloučit se sousedními moduly vpravo (širší přístroj pohltí moduly, které AI rozsekala)
             </label>
-          ) : null}
-        </section>
-      ))}
+          ) : null
+        }
+      />
 
       {/* Přiřazený přístroj */}
       <section aria-label="Přiřazený přístroj" className="flex flex-col gap-3 rounded-lg border border-border bg-card p-3" data-testid="assigned-device">

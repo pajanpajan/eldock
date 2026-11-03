@@ -1,9 +1,10 @@
 "use client";
 
-import { useId, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import { Moon, Plus, Printer, Trash2 } from "lucide-react";
+import { useId, useMemo, useRef, useState, type DragEvent as ReactDragEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { ArrowDown, ArrowUp, Minus, Moon, Plus, Printer, Trash2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { MAX_RAIL_MODULES, MIN_RAIL_MODULES, RAIL_PRESETS } from "@/lib/panel-builder/rails";
 import { pathOf, vectorLayout, wiringPaths, VECTOR, type IncomerFrom, type Rect, type WiringNode } from "@/lib/panel-builder/vector-layout";
 import { symbolTexts, type VectorDevice } from "@/lib/panel-builder/vector-symbols";
 
@@ -16,6 +17,8 @@ export interface SymbolOutline {
 }
 
 const DRAG_THRESHOLD = 6;
+/** MIME přetahované karty „Přiřazený přístroj k osazení“ (HTML5 drag & drop z pravého menu). */
+export const PLACE_MIME = "application/x-eldock-place";
 
 /**
  * 2D vektorový rozváděč (Interactive Vector CAD): DIN lišty se standardizovanými mechanickými
@@ -45,10 +48,16 @@ export function VectorPanel({
   deviceAction,
   toolbar,
   pickHint,
+  onRailCapacity,
+  onMoveRail,
+  activeRail,
+  onActivateRail,
+  onPlaceDrop,
 }: {
   devices: readonly VectorDevice[];
   rails: number;
-  modulesPerRail: number;
+  /** Jedna šířka pro všechny lišty, nebo kapacita každé lišty zvlášť (návrh od nuly). */
+  modulesPerRail: number | readonly number[];
   /** Strom zapojení pro modré spojnice (bez něj se kreslí jen osazení). */
   nodes?: readonly WiringNode[];
   incomer?: IncomerFrom;
@@ -71,6 +80,14 @@ export function VectorPanel({
   toolbar?: ReactNode;
   /** Režim výběru (např. „Klikněte na hlavní vstupní prvek“). */
   pickHint?: string | null;
+  /** Fáze 43 – ovládání kapacity lišty (presety, − / +) přímo u lišty. */
+  onRailCapacity?: (rail: number, modules: number) => void;
+  onMoveRail?: (rail: number, direction: -1 | 1) => void;
+  /** Aktivní lišta pro „➕ Vložit na aktivní lištu“. */
+  activeRail?: number;
+  onActivateRail?: (rail: number) => void;
+  /** Upuštění karty z pravého menu na lištu (pozice = pořadí zleva, kam se přístroj vloží). */
+  onPlaceDrop?: (rail: number, position: number) => void;
 }) {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
   const [theme, setTheme] = useState<VectorTheme>("dark");
@@ -131,6 +148,27 @@ export function VectorPanel({
   const overlay = (rect: Rect) => ({ left: pct(rect.x, layout.width), top: pct(rect.y, layout.height), width: pct(rect.w, layout.width), height: pct(rect.h, layout.height) });
   const editingRect = editing ? layout.rects.get(editing.id) : null;
 
+  // Drag & drop karty z pravého menu: nejbližší lišta a pořadí podle středů přístrojů vlevo od kurzoru
+  const [dropHint, setDropHint] = useState<{ rail: number; position: number; x: number } | null>(null);
+  function dropTarget(event: ReactDragEvent) {
+    const box = svg.current?.getBoundingClientRect();
+    if (!box) return null;
+    const x = ((event.clientX - box.left) / box.width) * layout.width;
+    const y = ((event.clientY - box.top) / box.height) * layout.height;
+    const rail = [...layout.rails].sort((a, b) => Math.abs(a.y - y) - Math.abs(b.y - y))[0];
+    if (!rail) return null;
+    const onRail = devices.filter((device) => device.dinRailIndex === rail.index).sort((a, b) => a.positionOnRail - b.positionOnRail);
+    const before = onRail.filter((device) => {
+      const rect = layout.rects.get(device.id);
+      return rect ? rect.x + rect.w / 2 < x : false;
+    });
+    const next = onRail[before.length];
+    const last = before[before.length - 1];
+    const lineX = next ? layout.rects.get(next.id)!.x : last ? layout.rects.get(last.id)!.x + layout.rects.get(last.id)!.w : VECTOR.left;
+    return { rail: rail.index, position: before.length + 1, x: lineX };
+  }
+  const placing = (event: ReactDragEvent) => !!onPlaceDrop && event.dataTransfer.types.includes(PLACE_MIME);
+
   return (
     <div className="flex flex-col gap-2" data-testid="vector-panel" data-theme={theme}>
       <div className="flex flex-wrap items-center gap-2">
@@ -161,7 +199,28 @@ export function VectorPanel({
       ) : null}
 
       <div className="overflow-x-auto rounded-xl border border-border" style={{ background: colors.bg }}>
-        <div className="relative" style={{ minWidth: Math.max(360, layout.capacity * 30 + 110) }}>
+        <div
+          className="relative"
+          style={{ minWidth: Math.max(onRailCapacity ? 560 : 360, layout.capacity * 30 + 110) }}
+          data-testid="vector-drop-zone"
+          onDragOver={(event) => {
+            if (!placing(event)) return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "copy";
+            const hint = dropTarget(event);
+            if (hint && (hint.rail !== dropHint?.rail || hint.position !== dropHint.position)) setDropHint(hint);
+          }}
+          onDragLeave={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropHint(null);
+          }}
+          onDrop={(event) => {
+            if (!placing(event)) return;
+            event.preventDefault();
+            const hint = dropTarget(event);
+            setDropHint(null);
+            if (hint) onPlaceDrop?.(hint.rail, hint.position);
+          }}
+        >
           <svg
             ref={svg}
             viewBox={`0 0 ${layout.width} ${layout.height}`}
@@ -182,9 +241,12 @@ export function VectorPanel({
 
             {/* DIN lišty (35 mm) a volné pozice */}
             {layout.rails.map((rail) => (
-              <g key={rail.index} data-rail={rail.index}>
+              <g key={rail.index} data-rail={rail.index} data-capacity={rail.capacity} data-active={activeRail === rail.index ? "true" : undefined}>
+                {activeRail === rail.index ? (
+                  <rect x={rail.x0 - 4} y={rail.top - 6} width={rail.x1 - rail.x0 + 8} height={VECTOR.deviceH + 12} rx={6} fill="none" stroke="#fbbf24" strokeWidth={1.5} strokeDasharray="6 4" opacity={0.75} />
+                ) : null}
                 <rect x={rail.x0} y={rail.y - 7} width={rail.x1 - rail.x0} height={14} fill={colors.rail} stroke={colors.railStroke} strokeWidth={0.8} />
-                {Array.from({ length: Math.max(0, layout.capacity - Math.ceil(rail.used)) }, (_, index) => (
+                {Array.from({ length: Math.max(0, rail.capacity - Math.ceil(rail.used)) }, (_, index) => (
                   <rect
                     key={index}
                     x={VECTOR.left + (Math.ceil(rail.used) + index) * VECTOR.moduleW + 2}
@@ -200,8 +262,8 @@ export function VectorPanel({
                 <text x={8} y={rail.y - 4} fontSize={11} fontWeight={700} fill={colors.text} fontFamily="ui-sans-serif, system-ui, sans-serif">
                   Lišta {rail.index}
                 </text>
-                <text x={8} y={rail.y + 10} fontSize={9.5} fill={rail.used > modulesPerRail ? "#ef4444" : colors.muted} fontFamily="ui-monospace, monospace">
-                  {String(rail.used).replace(".", ",")}/{modulesPerRail} M
+                <text x={8} y={rail.y + 10} fontSize={9.5} fill={rail.used > rail.capacity ? "#ef4444" : colors.muted} fontFamily="ui-monospace, monospace" data-testid={`rail-usage-${rail.index}`}>
+                  {String(rail.used).replace(".", ",")}/{rail.capacity} M
                 </text>
               </g>
             ))}
@@ -266,6 +328,14 @@ export function VectorPanel({
               );
             })}
 
+            {/* Místo vložení karty z pravého menu */}
+            {dropHint ? (
+              <g pointerEvents="none" data-testid="drop-indicator">
+                <line x1={dropHint.x} x2={dropHint.x} y1={(layout.rails[dropHint.rail - 1]?.top ?? 0) - 10} y2={(layout.rails[dropHint.rail - 1]?.top ?? 0) + VECTOR.deviceH + 10} stroke="#22d3ee" strokeWidth={4} strokeLinecap="round" />
+                <circle cx={dropHint.x} cy={(layout.rails[dropHint.rail - 1]?.top ?? 0) - 10} r={6} fill="#22d3ee" />
+              </g>
+            ) : null}
+
             {/* Přetahovaný prvek u kurzoru */}
             {drag?.active ? (
               <g pointerEvents="none" data-testid="drag-ghost">
@@ -310,7 +380,63 @@ export function VectorPanel({
                   ▣ lišta
                 </button>
               ) : null}
-              {onDeleteRail ? (
+              {onRailCapacity ? (
+                <div
+                  className="absolute z-10 flex items-center gap-0.5 rounded-md border border-border/80 bg-background/85 px-1 py-0.5 text-[10px] whitespace-nowrap shadow backdrop-blur"
+                  style={{ left: pct(VECTOR.left - 8, layout.width), top: `calc(${pct(rail.top, layout.height)} - 34px)` }}
+                  role="group"
+                  aria-label={`Ovládání lišty ${rail.index}`}
+                  data-testid={`rail-controls-${rail.index}`}
+                >
+                  <button
+                    type="button"
+                    aria-pressed={activeRail === rail.index}
+                    onClick={() => onActivateRail?.(rail.index)}
+                    title="Aktivní lišta pro „Vložit na aktivní lištu“"
+                    className={cn("rounded px-1.5 py-0.5 font-semibold", activeRail === rail.index ? "bg-amber-400 text-black" : "text-muted-foreground hover:text-foreground")}
+                  >
+                    ◉ Lišta {rail.index}
+                  </button>
+                  <span className="mx-0.5 h-4 w-px bg-border" aria-hidden />
+                  {RAIL_PRESETS.map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      disabled={busy}
+                      aria-pressed={rail.capacity === preset}
+                      aria-label={`Lišta ${rail.index}: ${preset}M${preset === 14 ? " (12+2)" : ""}`}
+                      onClick={() => onRailCapacity(rail.index, preset)}
+                      className={cn("rounded px-1 py-0.5 font-mono", rail.capacity === preset ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground")}
+                    >
+                      {preset}M
+                    </button>
+                  ))}
+                  <span className="mx-0.5 h-4 w-px bg-border" aria-hidden />
+                  <button type="button" disabled={busy || rail.capacity <= MIN_RAIL_MODULES} aria-label={`Lišta ${rail.index} o modul užší`} onClick={() => onRailCapacity(rail.index, rail.capacity - 1)} className="rounded p-0.5 hover:bg-muted disabled:opacity-40">
+                    <Minus className="size-3" aria-hidden />
+                  </button>
+                  <button type="button" disabled={busy || rail.capacity >= MAX_RAIL_MODULES} aria-label={`Lišta ${rail.index} o modul širší`} onClick={() => onRailCapacity(rail.index, rail.capacity + 1)} className="rounded p-0.5 hover:bg-muted disabled:opacity-40">
+                    <Plus className="size-3" aria-hidden />
+                  </button>
+                  {onMoveRail ? (
+                    <>
+                      <span className="mx-0.5 h-4 w-px bg-border" aria-hidden />
+                      <button type="button" disabled={busy || rail.index === 1} aria-label={`Posunout lištu ${rail.index} nahoru`} onClick={() => onMoveRail(rail.index, -1)} className="rounded p-0.5 hover:bg-muted disabled:opacity-40">
+                        <ArrowUp className="size-3" aria-hidden />
+                      </button>
+                      <button type="button" disabled={busy || rail.index === layout.rails.length} aria-label={`Posunout lištu ${rail.index} dolů`} onClick={() => onMoveRail(rail.index, 1)} className="rounded p-0.5 hover:bg-muted disabled:opacity-40">
+                        <ArrowDown className="size-3" aria-hidden />
+                      </button>
+                    </>
+                  ) : null}
+                  {onDeleteRail ? (
+                    <button type="button" disabled={busy} aria-label={`Smazat celou lištu ${rail.index}`} title="Smazat celou lištu" onClick={() => onDeleteRail(rail.index)} className="rounded p-0.5 text-red-300 hover:bg-red-500/15 disabled:opacity-40">
+                      <Trash2 className="size-3" aria-hidden />
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+              {onDeleteRail && !onRailCapacity ? (
                 <button
                   type="button"
                   disabled={busy}
@@ -363,7 +489,7 @@ export function VectorPanel({
           onClick={onAddRail}
           className="touch-target flex items-center justify-center gap-1.5 rounded-md border-2 border-dashed border-border text-xs text-muted-foreground hover:border-primary hover:text-foreground disabled:opacity-50"
         >
-          <Plus className="size-4" aria-hidden /> Přidat DIN lištu
+          <Plus className="size-4" aria-hidden /> Přidat další DIN lištu (řadu)
         </button>
       ) : null}
     </div>

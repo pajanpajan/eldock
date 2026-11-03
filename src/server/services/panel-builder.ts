@@ -11,6 +11,7 @@ import { releaseBlockers, type DocItem } from "@/lib/panel-builder/documentation
 import { thermalDevices, thermalEnclosure, type ThermalItemInput } from "@/lib/panel-builder/thermal-input";
 import { ancestors, isConnected, isPhaseAssignment, renumber, treeNodeFrom, validateTree, type TreeAssignment } from "@/lib/panel-builder/tree";
 import { calculateThermal } from "@/lib/thermalCalculation";
+import { DEFAULT_RAIL_MODULES, MAX_RAILS, railCapacities, railColumns, withRailAdded, withRailRemoved } from "@/lib/panel-builder/rails";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 
 import type { AiMode, AnalysisMode, analyzePanelPhoto, lookupComponent } from "./geminiPanelService";
@@ -102,6 +103,8 @@ export interface CreateProjectInput {
   createdById?: string | null;
   /** Registrovaná firma (fáze 41): projekt vidí jen ona, její údaje jsou výrobce rozváděče. */
   companyId?: string | null;
+  /** Fáze 43: „DESIGN“ = návrh od nuly bez fotky (1× 12M), jinak pasportizace z fotky. */
+  designMode?: "PHOTO" | "DESIGN";
 }
 
 export async function createPanelProject(prisma: PrismaClient, input: CreateProjectInput) {
@@ -119,6 +122,7 @@ export async function createPanelProject(prisma: PrismaClient, input: CreateProj
       createdById: input.createdById ?? null,
       companyId: input.companyId ?? null,
       ...input.dims,
+      ...(input.designMode === "DESIGN" ? { designMode: "DESIGN", photoUrl: null, status: "RECOGNIZED" as const, ...railColumns([DEFAULT_RAIL_MODULES]) } : {}),
     },
   });
 }
@@ -437,7 +441,7 @@ export async function releaseDocumentation(prisma: PrismaClient, projectId: stri
 // ---------------------------------------------------------------------------
 
 /** IEC značení celého projektu znovu v pořadí lišt (po sloučení / rozdělení / změně kategorie). */
-async function renumberProject(prisma: PrismaClient, projectId: string) {
+export async function renumberProject(prisma: PrismaClient, projectId: string) {
   const items = await prisma.panelBoardItem.findMany({ where: { projectId }, include: { catalogComponent: { select: { category: true } } } });
   const designations = renumber(items.map((item) => ({ id: item.id, category: item.catalogComponent?.category ?? null, dinRailIndex: item.dinRailIndex, positionOnRail: item.positionOnRail })));
   // Dvoufázově kvůli dočasným kolizím značení není potřeba (značení není unikátní v DB).
@@ -465,22 +469,26 @@ export async function configureItem(prisma: PrismaClient, itemId: string, config
   if (!item) throw new WorkflowError("NOT_FOUND", "Prvek rozváděče neexistuje.");
   if (options.mergeNeighbors && config.modules > item.modulesWidth) await absorbRight(prisma, item.id, config.modules);
 
-  const catalog = await prisma.catalogComponent.findMany({ where: { category: catalogCategory(config) } });
-  let component = matchConfig(catalog, config);
-  if (!component) {
-    const synthesized = synthesizeComponent(config);
-    component = await prisma.catalogComponent.upsert({
-      where: { articleNumber: synthesized.articleNumber },
-      create: { ...synthesized, dataSource: "IEC_ESTIMATE", searchText: buildSearchText(synthesized) },
-      update: {},
-    });
-  }
+  const component = await componentForConfig(prisma, config);
   await prisma.panelBoardItem.update({
     where: { id: itemId },
     data: { catalogComponentId: component.id, recognitionStatus: "VERIFIED", confidence: 1, modulesWidth: config.modules, configJson: JSON.stringify(config) },
   });
   if (DESIGNATION_PREFIX[item.catalogComponent?.category ?? "MCB"] !== DESIGNATION_PREFIX[component.category]) await renumberProject(prisma, item.projectId);
   return { projectId: item.projectId, component: summary(component, "existing"), estimated: component.dataSource === "IEC_ESTIMATE" };
+}
+
+/** Nejbližší přesný kus katalogu pro konfiguraci, jinak uložený odhad IEC (synteticky z parametrů). */
+export async function componentForConfig(prisma: PrismaClient, config: ItemConfig) {
+  const catalog = await prisma.catalogComponent.findMany({ where: { category: catalogCategory(config) } });
+  const component = matchConfig(catalog, config);
+  if (component) return component;
+  const synthesized = synthesizeComponent(config);
+  return prisma.catalogComponent.upsert({
+    where: { articleNumber: synthesized.articleNumber },
+    create: { ...synthesized, dataSource: "IEC_ESTIMATE", searchText: buildSearchText(synthesized) },
+    update: {},
+  });
 }
 
 /** Pohltí sousední moduly vpravo, dokud šířka nedosáhne cíle (chytré sloučení při volbě 3P / 4P). */
@@ -694,7 +702,7 @@ export async function deleteRail(prisma: PrismaClient, projectId: string, rail: 
     ...project.items
       .filter((item) => item.dinRailIndex > rail)
       .map((item) => prisma.panelBoardItem.update({ where: { id: item.id }, data: { dinRailIndex: item.dinRailIndex - 1 } })),
-    prisma.panelBoardProject.update({ where: { id: projectId }, data: { dinRailsCount: Math.max(1, project.dinRailsCount - 1) } }),
+    prisma.panelBoardProject.update({ where: { id: projectId }, data: railColumns(withRailRemoved(railCapacities(project), rail)) }),
   ]);
   await renumberProject(prisma, projectId);
   return { removed: removed.length };
@@ -702,8 +710,8 @@ export async function deleteRail(prisma: PrismaClient, projectId: string, rail: 
 
 /** „+ Přidat DIN lištu“ pod stávající lišty. */
 export async function addRail(prisma: PrismaClient, projectId: string) {
-  const project = await prisma.panelBoardProject.findUnique({ where: { id: projectId }, select: { dinRailsCount: true } });
+  const project = await prisma.panelBoardProject.findUnique({ where: { id: projectId }, select: { dinRailsCount: true, modulesPerRail: true, railModulesJson: true } });
   if (!project) throw new WorkflowError("NOT_FOUND", "Projekt rozváděče neexistuje.");
-  if (project.dinRailsCount >= 12) throw new WorkflowError("VALIDATION", "Rozváděč může mít nejvýše 12 DIN lišt.");
-  return prisma.panelBoardProject.update({ where: { id: projectId }, data: { dinRailsCount: project.dinRailsCount + 1 }, select: { dinRailsCount: true } });
+  if (project.dinRailsCount >= MAX_RAILS) throw new WorkflowError("VALIDATION", `Rozváděč může mít nejvýše ${MAX_RAILS} DIN lišt.`);
+  return prisma.panelBoardProject.update({ where: { id: projectId }, data: railColumns(withRailAdded(railCapacities(project))), select: { dinRailsCount: true } });
 }

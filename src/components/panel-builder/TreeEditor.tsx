@@ -65,7 +65,7 @@ export function TreeEditor({
   initial: TreeNode[];
   devices: VectorDevice[];
   rails: number;
-  modulesPerRail: number;
+  modulesPerRail: number | readonly number[];
   simultaneity: number;
   networkSystem: string;
   incomerFrom: IncomerFrom;

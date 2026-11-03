@@ -730,6 +730,10 @@ model RegisteredCompany {
   termsVersion        String       @default("1.0-2026-11")
   creditsRemaining    Int          @default(5)
   plantId             String? // vlastní závod (PLANT_MANAGEMENT)
+  /// Firemní logo (fáze 43) – titulní list, rohové razítko výkresů a výrobní štítek CE.
+  logoUrl             String?
+  /// Otisk razítka a podpisu odpovědné osoby (PNG s průhledným pozadím) – prohlášení o shodě a kusová zkouška.
+  stampUrl            String?
   createdAt           DateTime     @default(now())
   updatedAt           DateTime     @updatedAt
 
@@ -827,10 +831,19 @@ model CatalogComponent {
   sourcePdfName      String?
   sourcePage         Int?
   searchText         String // lowercase bez diakritiky: výrobce, řada, typ, obj. číslo, popis
+  /// 2D vektorový archetyp z externí databáze („din_mcb_1M_1P“, fáze 43).
+  archetypeId        String?
+  /// ETIM fasety a doplňkové parametry z externí databáze (JSON).
+  facetsJson         String?
+  /// Původ externího záznamu („ai-panel-builder“) – null = vlastní katalog Eldocku.
+  externalSource     String?
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
 
-  items PanelBoardItem[]
+  items     PanelBoardItem[]
+  /// Příslušenství a vazby (pomocné kontakty, spouště, hřebeny, pojistkové vložky).
+  relations CatalogRelation[] @relation("CatalogRelationParent")
+  relatedBy CatalogRelation[] @relation("CatalogRelationChild")
 
   @@index([category, poles, ratedCurrentA, trippingCurve])
   @@index([manufacturer, typeCode])
@@ -869,6 +882,13 @@ model PanelBoardProject {
   coverState           String?
   /// Hlavní přívod rozváděče (fáze 42): "TOP" = přívod shora, "BOTTOM" = zespoda.
   incomerFrom          String             @default("TOP")
+  /// Režim projektu (fáze 43): "PHOTO" = pasportizace z fotky, "DESIGN" = návrh od nuly bez fotky.
+  designMode           String             @default("PHOTO")
+  /// Kapacita jednotlivých DIN lišt v modulech, JSON pole [12, 14, …]; null = všechny `modulesPerRail`.
+  railModulesJson      String?
+  /// Vybraná skříň z katalogu rozvodnic a její max. ztrátový výkon P_max [W].
+  enclosureId          String?
+  enclosurePmaxW       Float?
 
   createdById String?
   /// Registrovaná firma (fáze 41): vidí jen své rozváděče, její údaje se propisují do dokumentace.
@@ -879,10 +899,63 @@ model PanelBoardProject {
 
   equipment Equipment?         @relation(fields: [equipmentId], references: [id], onDelete: SetNull)
   company   RegisteredCompany? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  enclosure PanelEnclosure?    @relation(fields: [enclosureId], references: [id], onDelete: SetNull)
   items     PanelBoardItem[]
 
   @@index([equipmentId])
   @@index([companyId])
+  @@index([enclosureId])
+}
+
+/// Skříň rozváděče / rozvodnice z katalogu (fáze 43) – filtruje se podle počtu řad a modulů návrhu.
+model PanelEnclosure {
+  id            String   @id @default(cuid())
+  manufacturer  String // "ABB", "Eaton", "Hager" …
+  series        String // "Mistral41W", "KLV", "Volta"
+  model         String // "Mistral41W 36M 3×12" / "KLV-36UPS-F"
+  articleNumber String   @unique
+  rows          Int // počet řad (DIN lišt)
+  modulesPerRow Int
+  totalModules  Int
+  widthMm       Int
+  heightMm      Int
+  depthMm       Int
+  ipRating      String // "IP41"
+  /// "FLUSH" (pod omítku) | "SURFACE" (na omítku) | "HOLLOW_WALL" | "FLOOR"
+  installation  String
+  /// "PLASTIC" | "PAINTED_STEEL" | "STAINLESS_STEEL"
+  material      String   @default("PLASTIC")
+  /// Max. ztrátový výkon skříně P_max [W] (výrobce, ΔT 35 K) – null = neuveden.
+  pMaxW         Float?
+  /// "STANDARD_MATRIX" (orientační matice Eldocku) | "EXTERNAL" (databáze ai-panel-builder)
+  dataSource    String   @default("STANDARD_MATRIX")
+  description   String   @default("")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  projects PanelBoardProject[]
+
+  @@index([manufacturer, rows, modulesPerRow])
+}
+
+/// Vazba katalogových kusů (fáze 43): příslušenství k přístroji (boční 0,5M kontakt, spoušť, hřeben, vložka).
+model CatalogRelation {
+  id           String  @id @default(cuid())
+  parentId     String
+  childId      String
+  /// SIDE_LEFT | SIDE_RIGHT | SIDE_UNSPECIFIED | REQUIRES_BOM_ITEM | COMPATIBLE_BUSBAR | ACCESSORY
+  relationType String
+  qty          Float   @default(1)
+  /// "catalog" = uvedeno v katalogu výrobce, "derived" = inženýrské odvození (neověřeno)
+  basis        String  @default("catalog")
+  verified     Boolean @default(false)
+  note         String?
+
+  parent CatalogComponent @relation("CatalogRelationParent", fields: [parentId], references: [id], onDelete: Cascade)
+  child  CatalogComponent @relation("CatalogRelationChild", fields: [childId], references: [id], onDelete: Cascade)
+
+  @@unique([parentId, childId, relationType])
+  @@index([childId])
 }
 
 /// Konkrétní prvek osazený v rozváděči.

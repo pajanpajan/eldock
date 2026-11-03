@@ -17,6 +17,8 @@ import { buildSearchText, iecSymbolFor } from "../src/lib/panel-builder/catalog"
 import { demoDetections } from "../src/lib/panel-builder/matching";
 import { REFERENCE_DEVICES, REFERENCE_DIMS, withPositions } from "../src/lib/panel-builder/reference";
 import { applyDetections } from "../src/server/services/panel-builder";
+import { importExternalCatalog, seedStandardEnclosures } from "../src/server/services/catalog-sync";
+import { readSnapshot } from "./external-catalog-source";
 import { TESTER_COMPANY } from "../src/lib/registered-company";
 import { hashPassword } from "../src/server/password";
 
@@ -339,9 +341,13 @@ export async function seedTesterCompany(prisma: PrismaClient) {
   return { created: !exists, attached: count };
 }
 
-export async function seedPanelBuilder(prisma: PrismaClient) {
+export async function seedPanelBuilder(prisma: PrismaClient, options: { external?: boolean } = {}) {
   const components = await seedCatalog(prisma);
   const project = await seedPanelProject(prisma);
   const tester = await seedTesterCompany(prisma);
-  return { components, project, tester };
+  // Fáze 43: matice standardních rozvodnic a externí databáze prvků z exportu v Gitu (jen při změně otisku)
+  const enclosures = await seedStandardEnclosures(prisma);
+  const snapshot = options.external === false ? null : readSnapshot();
+  const external = snapshot ? await importExternalCatalog(prisma, snapshot) : null;
+  return { components, project, tester, enclosures, external };
 }

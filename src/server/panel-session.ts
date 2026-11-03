@@ -27,6 +27,8 @@ const companySelect = {
   plantId: true,
   termsVersion: true,
   termsAcceptedAt: true,
+  logoUrl: true,
+  stampUrl: true,
 } as const;
 
 /**

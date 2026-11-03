@@ -4,12 +4,14 @@ import type { PrismaClient } from "@/generated/prisma/client";
 import { defaultConfig } from "@/lib/panel-builder/configurator";
 import { proposeTree, treeNodeFrom, type TreeNode } from "@/lib/panel-builder/tree";
 import { WorkflowError } from "@/lib/workflow/state-machine";
+import { standardEnclosureMatrix } from "@/lib/panel-builder/enclosures";
 
 import { CATALOG, seedPanelBuilder } from "../../../prisma/seed-panel-builder";
 import { analyzePanelPhoto, lookupComponent } from "./geminiPanelService";
 import { analyzeProject, assignCatalogComponent, createPanelProject, importDatasheet, lookupComponentForItem, addModule, addRail, configureItem, deleteItem, deleteRail, mergeItems, releaseDocumentation, saveTree, searchCatalog, setIncomer, setItemBox, splitItem, updateItemText } from "./panel-builder";
 import { createTestDb, seedMinimal } from "./test-db";
 
+const STANDARD_COUNT = standardEnclosureMatrix().length;
 let db: Awaited<ReturnType<typeof createTestDb>>;
 let prisma: PrismaClient;
 
@@ -31,8 +33,8 @@ describe("AI Panel Builder – katalog a seed", () => {
   it("seed: ≥ 40 prvků, PB-001 s 13 přístroji (-Q1, -FV1 až -F10) na 3 lištách (1 žlutý, 1 červený), opakovaně bez duplicit", async () => {
     expect(CATALOG.length).toBeGreaterThanOrEqual(40);
     // Fáze 41: demo firma Tester vznikne jednou a převezme PB-001 (projekt bez firmy)
-    expect(await seedPanelBuilder(prisma)).toEqual({ components: CATALOG.length, project: true, tester: { created: true, attached: 1 } });
-    expect(await seedPanelBuilder(prisma)).toEqual({ components: CATALOG.length, project: false, tester: { created: false, attached: 0 } });
+    expect(await seedPanelBuilder(prisma, { external: false })).toEqual({ components: CATALOG.length, project: true, tester: { created: true, attached: 1 }, enclosures: STANDARD_COUNT, external: null });
+    expect(await seedPanelBuilder(prisma, { external: false })).toEqual({ components: CATALOG.length, project: false, tester: { created: false, attached: 0 }, enclosures: STANDARD_COUNT, external: null });
     expect(await prisma.catalogComponent.count()).toBe(CATALOG.length);
     const project = await prisma.panelBoardProject.findUniqueOrThrow({ where: { code: "PB-001" }, include: { items: true } });
     expect(project.items).toHaveLength(13);
@@ -43,7 +45,7 @@ describe("AI Panel Builder – katalog a seed", () => {
   });
 
   it("atomizace PDF: nové přístroje jako samostatné řádky, známá objednací čísla se nepřepisují", async () => {
-    await seedPanelBuilder(prisma);
+    await seedPanelBuilder(prisma, { external: false });
     const first = await importDatasheet(prisma, { fileName: "kusovnik.pdf", pages: REFERENCE_PAGES });
     expect(first.mode).toBe("DEMO");
     expect(first.components.map((c) => [c.articleNumber, c.status])).toEqual([
@@ -66,7 +68,7 @@ describe("AI Panel Builder – projekt a analýza fotky", () => {
   const demo = { analyze: analyzePanelPhoto, readPhoto: async () => null };
 
   it("projekt „Různí výrobci“: AI dostane prázdnou nápovědu a každý modul se páruje podle své značky", async () => {
-    await seedPanelBuilder(prisma);
+    await seedPanelBuilder(prisma, { external: false });
     const project = await createPanelProject(prisma, { name: "Smíšený rozváděč", customerName: null, photoUrl: null, dominantManufacturer: "MIX" });
     const hints: (string | null | undefined)[] = [];
     const base = { dinRailIndex: 1, modules: 1, box: null, rawOcrText: "", poles: null, trippingCurve: null, confidence: 0.8 };
@@ -95,7 +97,7 @@ describe("AI Panel Builder – projekt a analýza fotky", () => {
 
   it("nový projekt dostane další kód a demo analýza rozpozná 13 přístrojů s IEC značením", async () => {
     vi.stubEnv("GEMINI_API_KEY", "");
-    await seedPanelBuilder(prisma);
+    await seedPanelBuilder(prisma, { external: false });
     const project = await createPanelProject(prisma, { name: "  Podružný rozváděč RP2 ", customerName: null, photoUrl: null });
     expect(project.code).toBe("PB-002");
     const result = await analyzeProject(prisma, project.id, demo);
@@ -111,7 +113,7 @@ describe("AI Panel Builder – projekt a analýza fotky", () => {
 
   it("picker: přiřazení zezelená, dohledání najde katalog nebo uloží nový přístroj", async () => {
     vi.stubEnv("GEMINI_API_KEY", "");
-    await seedPanelBuilder(prisma);
+    await seedPanelBuilder(prisma, { external: false });
     const f6 = await prisma.panelBoardItem.findFirstOrThrow({ where: { designation: "-F4", project: { code: "PB-001" } } });
     const s201b10 = await prisma.catalogComponent.findUniqueOrThrow({ where: { articleNumber: "2CDS251001R0105" } });
 
@@ -133,7 +135,7 @@ describe("AI Panel Builder – projekt a analýza fotky", () => {
   });
 
   it("našeptávač databáze prvků: text bez diakritiky + filtr dlaždic výrobce → kategorie → póly; směr přívodu", async () => {
-    await seedPanelBuilder(prisma);
+    await seedPanelBuilder(prisma, { external: false });
     const hits = await searchCatalog(prisma, { q: "s201 b16", manufacturer: "ABB", category: "MCB", poles: "1P" });
     expect(hits[0]).toMatchObject({ manufacturer: "ABB", typeCode: "S201-B16", articleNumber: "2CDS251001R1165" });
     expect(hits[0].powerLossWatts).toBeGreaterThan(0);
@@ -152,7 +154,7 @@ describe("AI Panel Builder – projekt a analýza fotky", () => {
 
 describe("AI Panel Builder – strom zapojení", () => {
   async function pb001() {
-    await seedPanelBuilder(prisma);
+    await seedPanelBuilder(prisma, { external: false });
     const project = await prisma.panelBoardProject.findUniqueOrThrow({ where: { code: "PB-001" }, include: { items: { include: { catalogComponent: true } } } });
     const nodes = project.items.map(treeNodeFrom);
     const proposal = proposeTree(nodes);
@@ -205,7 +207,7 @@ describe("AI Panel Builder – strom zapojení", () => {
 
 describe("AI Panel Builder – živý konfigurátor a geometrie DIN lišty", () => {
   async function pb001Items() {
-    await seedPanelBuilder(prisma);
+    await seedPanelBuilder(prisma, { external: false });
     const project = await prisma.panelBoardProject.findUniqueOrThrow({ where: { code: "PB-001" } });
     const items = () =>
       prisma.panelBoardItem.findMany({ where: { projectId: project.id }, orderBy: [{ dinRailIndex: "asc" }, { positionOnRail: "asc" }], include: { catalogComponent: true } });
@@ -288,7 +290,7 @@ describe("AI Panel Builder – živý konfigurátor a geometrie DIN lišty", () 
 
 describe("AI Panel Builder – Vision Analyzer 2.0 a správa lišt", () => {
   async function pb001() {
-    await seedPanelBuilder(prisma);
+    await seedPanelBuilder(prisma, { external: false });
     const project = await prisma.panelBoardProject.findUniqueOrThrow({ where: { code: "PB-001" } });
     const items = () => prisma.panelBoardItem.findMany({ where: { projectId: project.id }, orderBy: [{ dinRailIndex: "asc" }, { positionOnRail: "asc" }], include: { catalogComponent: true } });
     return { project, items };

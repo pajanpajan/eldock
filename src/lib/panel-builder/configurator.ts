@@ -7,7 +7,7 @@ import type { ComponentCategory } from "@/generated/prisma/enums";
 import { estimatePowerLoss, iecSymbolFor, normalizeSearch } from "./catalog";
 import { sameManufacturer } from "./matching";
 
-export type ConfigCategory = "MCB" | "RCD" | "RCBO" | "MAIN_SWITCH" | "SPD" | "CONTACTOR" | "RELAY" | "OTHER";
+export type ConfigCategory = "MCB" | "RCD" | "RCBO" | "MAIN_SWITCH" | "SPD" | "CONTACTOR" | "RELAY" | "OTHER" | "ACCESSORY";
 
 export interface ItemConfig {
   category: ConfigCategory;
@@ -50,6 +50,7 @@ export const CONFIG_CATEGORIES: { value: ConfigCategory; label: string }[] = [
   { value: "CONTACTOR", label: "Stykač" },
   { value: "RELAY", label: "Relé" },
   { value: "OTHER", label: "Zdroj / Měření / Jiné" },
+  { value: "ACCESSORY", label: "Svorky / Hřebeny / Příslušenství" },
 ];
 
 export const RELAY_SUBTYPES = {
@@ -70,6 +71,22 @@ export const MODULE_SUBTYPES = {
   MAIN_TERMINAL: "Hlavní svorkovnice (HLAK)",
   FUSE_DISCONNECTOR: "Pojistkový odpínač",
 } as const;
+
+/** Svorky, hřebenové lišty a příslušenství přístrojů (fáze 43, externí databáze prvků). */
+export const ACCESSORY_SUBTYPES = {
+  TERMINAL_BLOCK: "Svorka / svorkovnice",
+  BUSBAR: "Hřebenová propojovací lišta",
+  BUSBAR_END_CAP: "Koncovka hřebenu",
+  AUX_CONTACT: "Pomocný kontakt",
+  SHUNT_TRIP: "Vypínací spoušť",
+  UNDERVOLTAGE_TRIP: "Podpěťová spoušť",
+  FUSE_LINK: "Pojistková vložka",
+  DIN_SOCKET: "Zásuvka na DIN",
+  INDICATOR: "Signálka / kontrolka",
+  BLANK_COVER: "Záslepka",
+} as const;
+
+export const isAccessorySubtype = (value: string | null | undefined): value is keyof typeof ACCESSORY_SUBTYPES => !!value && value in ACCESSORY_SUBTYPES;
 
 const RCD_TYPES: Record<string, string> = { AC: "AC (střídavý)", A: "A (pulzní DC)", B: "B (hladký DC)", F: "F (frekvenční)", G: "G (krátkodobě zpožděný)", S: "S (selektivní)" };
 
@@ -172,6 +189,11 @@ export const CONFIG_FIELDS: Record<ConfigCategory, ConfigField[]> = {
       ],
     },
   ],
+  ACCESSORY: [
+    { key: "moduleSubtype", label: "Druh příslušenství", options: Object.entries(ACCESSORY_SUBTYPES).map(([value, label]) => ({ value, label, patch: { moduleSubtype: value } })) },
+    { key: "poles", label: "Póly", options: ["1P", "2P", "3P", "4P"].map((poles) => ({ value: poles, label: poles, patch: { poles } })) },
+    { key: "modules", label: "Šířka v modulech", options: modulesOnly([0.5, 1, 2, 3, 4]) },
+  ],
 };
 
 /** Je dlaždice aktivní pro danou konfiguraci? */
@@ -181,6 +203,7 @@ export function isOptionActive(config: ItemConfig, option: ConfigOption): boolea
 
 /** Kategorie konfigurátoru → kategorie katalogu. */
 export function catalogCategory(config: Pick<ItemConfig, "category" | "moduleSubtype">): ComponentCategory {
+  if (config.category === "ACCESSORY") return config.moduleSubtype === "TERMINAL_BLOCK" ? "TERMINAL" : "OTHER";
   if (config.category !== "OTHER") return config.category;
   switch (config.moduleSubtype) {
     case "PSU_DC":
@@ -195,8 +218,11 @@ export function catalogCategory(config: Pick<ItemConfig, "category" | "moduleSub
   }
 }
 
-export const toConfigCategory = (category: ComponentCategory | null | undefined): ConfigCategory | null =>
-  !category ? null : (["MCB", "RCD", "RCBO", "MAIN_SWITCH", "SPD", "CONTACTOR", "RELAY"] as const).find((value) => value === category) ?? (category === "ENCLOSURE" ? null : "OTHER");
+export const toConfigCategory = (category: ComponentCategory | null | undefined, moduleSubtype?: string | null): ConfigCategory | null =>
+  !category
+    ? null
+    : ((["MCB", "RCD", "RCBO", "MAIN_SWITCH", "SPD", "CONTACTOR", "RELAY"] as const).find((value) => value === category) ??
+      (category === "ENCLOSURE" ? null : isAccessorySubtype(moduleSubtype) ? "ACCESSORY" : "OTHER"));
 
 /** Póly podle šířky (jistič 3M → 3P, chránič 4M → 4P …) – pro sloučení modulů. */
 export function polesForWidth(category: ConfigCategory, modules: number): string {
@@ -227,12 +253,14 @@ export function defaultConfig(category: ConfigCategory, base: { manufacturer: st
       return { ...common, poles: "1P", relaySubtype: "IMPULSE", modules: Math.min(m, 3), ratedCurrentA: 16 };
     case "OTHER":
       return { ...common, poles: "1P", moduleSubtype: "PSU_DC", modules: Math.min(m, 6), power: "15W/24V", ratedCurrentA: null };
+    case "ACCESSORY":
+      return { ...common, poles: "1P", moduleSubtype: "AUX_CONTACT", modules: base.modules < 1 ? base.modules : 0.5, ratedCurrentA: null };
   }
 }
 
 /** Konfigurace z přiřazeného katalogového kusu (prvek bez uložené konfigurace). */
 export function configFromComponent(component: CatalogLike, manufacturerFallback: string | null = null): ItemConfig | null {
-  const category = toConfigCategory(component.category);
+  const category = toConfigCategory(component.category, component.moduleSubtype);
   if (!category) return null;
   return {
     category,
@@ -320,6 +348,7 @@ export function matchConfig<T extends CatalogLike>(catalog: readonly T[], config
       case "RELAY":
         return eq(config.relaySubtype, component.relaySubtype);
       case "OTHER":
+      case "ACCESSORY":
         return eq(config.moduleSubtype, component.moduleSubtype);
     }
   });
@@ -328,7 +357,8 @@ export function matchConfig<T extends CatalogLike>(catalog: readonly T[], config
     Number((config.breakingCapacityKa ?? null) === component.breakingCapacityKa) * 2 +
     Number((config.surgeCurrentKa ?? null) === component.surgeCurrentKa) * 2 +
     Number((config.coilVoltage ?? null) === component.coilVoltage) * 2 +
-    Number(config.ratedCurrentA === null || config.ratedCurrentA === component.ratedCurrentA);
+    Number(config.ratedCurrentA === null || config.ratedCurrentA === component.ratedCurrentA) +
+    Number(component.poles === config.poles) * 3;
   return [...candidates].sort((a, b) => score(b) - score(a) || a.typeCode.localeCompare(b.typeCode))[0] ?? null;
 }
 
@@ -341,6 +371,7 @@ const CATEGORY_NOUN: Record<ConfigCategory, string> = {
   CONTACTOR: "Stykač",
   RELAY: "Relé",
   OTHER: "Modul",
+  ACCESSORY: "Příslušenství",
 };
 
 /** Čitelný popis konfigurace („Jistič 1P B16 6 kA“). */
@@ -363,6 +394,8 @@ export function describeConfig(config: ItemConfig): string {
       return `${RELAY_SUBTYPES[(config.relaySubtype ?? "AUXILIARY") as keyof typeof RELAY_SUBTYPES]}${config.ratedCurrentA ? ` ${config.ratedCurrentA} A` : ""}`;
     case "OTHER":
       return `${MODULE_SUBTYPES[(config.moduleSubtype ?? "PSU_DC") as keyof typeof MODULE_SUBTYPES]}${config.power ? ` ${config.power}` : config.ratedCurrentA ? ` ${config.ratedCurrentA} A` : ""}`;
+    case "ACCESSORY":
+      return `${ACCESSORY_SUBTYPES[(isAccessorySubtype(config.moduleSubtype) ? config.moduleSubtype : "AUX_CONTACT")]} ${config.poles}`;
   }
   return CATEGORY_NOUN[config.category];
 }
