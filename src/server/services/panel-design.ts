@@ -1,6 +1,8 @@
 import type { PrismaClient } from "@/generated/prisma/client";
 import { catalogCategory, matchConfig, synthesizeComponent, type ItemConfig } from "@/lib/panel-builder/configurator";
+import { parseChipSet, type ChipSet } from "@/lib/panel-builder/circuit-chips";
 import { enclosureProjectData } from "@/lib/panel-builder/enclosures";
+import { environmentOf, isEnvironmentId } from "@/lib/panel-builder/environments";
 import { freeOnRail, railCapacities, railColumns, railMoveTarget, withRailCapacity, withRailsSwapped } from "@/lib/panel-builder/rails";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 
@@ -160,4 +162,23 @@ export async function setCompanyBranding(prisma: PrismaClient, companyId: string
     data: { ...(input.logoUrl !== undefined ? { logoUrl: input.logoUrl } : {}), ...(input.stampUrl !== undefined ? { stampUrl: input.stampUrl } : {}) },
     select: { id: true, logoUrl: true, stampUrl: true },
   });
+}
+
+/** Prostředí instalace (fáze 45): uloží prostředí a teplotu okolí pro výpočet oteplení. */
+export async function setEnvironment(prisma: PrismaClient, projectId: string, environmentId: string) {
+  if (!isEnvironmentId(environmentId)) throw new WorkflowError("VALIDATION", "Neznámé prostředí instalace.");
+  const environment = environmentOf(environmentId);
+  return prisma.panelBoardProject.update({ where: { id: projectId }, data: { environment: environment.id, ambientTempC: environment.ambientTempC }, select: { id: true, environment: true, ambientTempC: true } });
+}
+
+/** Štítky funkce obvodu firmy: uloží se jen novější sada (vyhrává novější `updatedAt`). */
+export async function saveCircuitChips(prisma: PrismaClient, companyId: string, set: ChipSet) {
+  const company = await prisma.registeredCompany.findUnique({ where: { id: companyId }, select: { circuitChipsJson: true } });
+  if (!company) throw new WorkflowError("NOT_FOUND", "Firma neexistuje.");
+  const stored = parseChipSet(company.circuitChipsJson);
+  if (stored && stored.updatedAt >= set.updatedAt) return { saved: false, set: stored };
+  const clean = parseChipSet(JSON.stringify(set));
+  if (!clean) throw new WorkflowError("VALIDATION", "Neplatné štítky.");
+  await prisma.registeredCompany.update({ where: { id: companyId }, data: { circuitChipsJson: JSON.stringify(clean) } });
+  return { saved: true, set: clean };
 }

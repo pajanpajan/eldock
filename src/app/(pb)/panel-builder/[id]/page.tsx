@@ -10,7 +10,8 @@ import { configFromComponent, parseConfig } from "@/lib/panel-builder/configurat
 import { brandOf } from "@/lib/panel-builder/brands";
 import { railCapacities } from "@/lib/panel-builder/rails";
 import { vectorDeviceFrom } from "@/lib/panel-builder/vector-symbols";
-import { getBrandCounts, getPanelProject } from "@/server/queries/panel-builder";
+import { ENCLOSURE_TYPES } from "@/lib/panel-builder/project";
+import { getBrandCounts, getPanelProject, getProjectEnclosure } from "@/server/queries/panel-builder";
 
 export async function generateMetadata({ params }: PageProps<"/panel-builder/[id]">): Promise<Metadata> {
   const project = await getPanelProject((await params).id);
@@ -32,6 +33,7 @@ export default async function PanelProjectPage({ params }: PageProps<"/panel-bui
   const { id } = await params;
   const [project, counts] = await Promise.all([getPanelProject(id), getBrandCounts()]);
   if (!project) notFound();
+  const pickedEnclosure = await getProjectEnclosure(project.enclosureId);
   // Počty podle karet výrobců (sloučí zápisy „EATON“ / „Eaton“)
   const brandCounts: Record<string, number> = {};
   for (const [manufacturer, count] of Object.entries(counts)) {
@@ -65,6 +67,7 @@ export default async function PanelProjectPage({ params }: PageProps<"/panel-bui
         }
       : null,
     device: vectorDeviceFrom(item),
+    parentItemId: item.parentItemId,
   }));
 
   return (
@@ -80,7 +83,15 @@ export default async function PanelProjectPage({ params }: PageProps<"/panel-bui
         dominant={project.dominantManufacturer}
         coverState={project.coverState}
         brandCounts={brandCounts}
-        enclosure={{ model: project.enclosureModel, enclosureId: project.enclosureId }}
+        enclosure={{
+          model: project.enclosureModel,
+          enclosureId: project.enclosureId,
+          label: [ENCLOSURE_TYPES[project.enclosureType], project.enclosureModel].filter(Boolean).join(" – "),
+          ipRating: project.ipRating,
+          totalModules: pickedEnclosure?.totalModules ?? null,
+        }}
+        environment={project.environment}
+        chipsJson={project.company?.circuitChipsJson ?? null}
       />
     </PageTransition>
   );

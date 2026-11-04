@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { brandOf } from "@/lib/panel-builder/brands";
-import { ENCLOSURE_MANUFACTURERS, INSTALLATION_LABELS, MOUNTING_FILTERS, fitEnclosures, reservePercent, type EnclosureInstallation, type EnclosureLike, type EnclosureNeed, type MountingFilter } from "@/lib/panel-builder/enclosures";
+import { ENCLOSURE_MANUFACTURERS, INSTALLATION_LABELS, MOUNTING_FILTERS, fitEnclosures, ipNumber, reservePercent, type EnclosureInstallation, type EnclosureLike, type EnclosureNeed, type MountingFilter } from "@/lib/panel-builder/enclosures";
 import { cn } from "@/lib/utils";
 import { listEnclosuresAction, selectEnclosureAction } from "@/server/actions/panel-design";
 
@@ -23,7 +23,22 @@ const badgeOf = (manufacturer: string) => brandOf(manufacturer) ?? (manufacturer
  * které pojmou návrh (řady ≥ lišty, moduly na řadu ≥ nejširší lišta, celkem ≥ obsazeno). Klik propíše
  * rozměry, model a P_max do projektu i výpočtu oteplení.
  */
-export function EnclosurePicker({ projectId, need, current }: { projectId: string; need: EnclosureNeed; current: { model: string; enclosureId: string | null } }) {
+export function EnclosurePicker({
+  projectId,
+  need,
+  current,
+  minIp = 0,
+  triggerLabel = "🗄️ Výběr skříně rozváděče",
+  warning = false,
+}: {
+  projectId: string;
+  need: EnclosureNeed;
+  current: { model: string; enclosureId: string | null };
+  /** Prostředí instalace vyžaduje min. krytí (fáze 45) – nevyhovující skříně se skryjí. */
+  minIp?: number;
+  triggerLabel?: string;
+  warning?: boolean;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [manufacturer, setManufacturer] = useState<string | null>(null);
@@ -51,14 +66,14 @@ export function EnclosurePicker({ projectId, need, current }: { projectId: strin
     });
   }
 
-  const rows = list && list.manufacturer === manufacturer ? fitEnclosures(list.rows, need, { manufacturer, mounting }) : [];
+  const rows = list && list.manufacturer === manufacturer ? fitEnclosures(list.rows, need, { manufacturer, mounting }).filter((row) => ipNumber(row.ipRating) >= minIp) : [];
   const n = (value: number) => String(value).replace(".", ",");
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" className="touch-target gap-2">
-          🗄️ Výběr skříně rozváděče
+        <Button variant="outline" className={cn("touch-target gap-2", warning && "border-amber-500/70 text-amber-200 hover:bg-amber-500/10")}>
+          {triggerLabel}
         </Button>
       </DialogTrigger>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
@@ -67,6 +82,7 @@ export function EnclosurePicker({ projectId, need, current }: { projectId: strin
           <DialogDescription>
             Návrh: {need.rails} {need.rails === 1 ? "řada" : need.rails <= 4 ? "řady" : "řad"}, nejširší lišta {need.maxModulesPerRail} M, obsazeno {n(need.usedModules)} M. Nejdřív vyberte výrobce skříně.
             {current.model ? ` Aktuálně: ${current.model}.` : ""}
+            {minIp ? ` Prostředí vyžaduje krytí min. IP ${minIp}.` : ""}
           </DialogDescription>
         </DialogHeader>
 

@@ -9,7 +9,7 @@ import { WorkflowError } from "@/lib/workflow/state-machine";
 import { seedPanelBuilder } from "../../../prisma/seed-panel-builder";
 import { importExternalCatalog, seedStandardEnclosures } from "./catalog-sync";
 import { addRail, createPanelProject, deleteRail } from "./panel-builder";
-import { listEnclosures, moveRail, placeComponents, previewConfig, selectEnclosure, setCompanyBranding, setRailCapacity } from "./panel-design";
+import { listEnclosures, moveRail, placeComponents, previewConfig, saveCircuitChips, selectEnclosure, setCompanyBranding, setEnvironment, setRailCapacity } from "./panel-design";
 import { createTestDb } from "./test-db";
 
 let db: Awaited<ReturnType<typeof createTestDb>>;
@@ -136,5 +136,23 @@ describe("catalog:sync – import externí databáze", () => {
     // Karta k osazení ukáže příslušenství z databáze
     const preview = await previewConfig(prisma, { ...defaultConfig("MCB", { manufacturer: "Eaton", modules: 1 }), breakingCapacityKa: null });
     expect(preview.accessories.map((accessory) => accessory.typeCode)).toContain("ZP-IHK");
+  });
+});
+
+describe("fáze 45: prostředí instalace a štítky firmy", () => {
+  it("prostředí nastaví teplotu okolí pro oteplení; neznámé odmítne", async () => {
+    const { id } = await design();
+    expect(await setEnvironment(prisma, id, "HOT")).toMatchObject({ environment: "HOT", ambientTempC: 35 });
+    expect(await setEnvironment(prisma, id, "GARAGE")).toMatchObject({ environment: "GARAGE", ambientTempC: 25 });
+    await expect(setEnvironment(prisma, id, "MARS")).rejects.toBeInstanceOf(WorkflowError);
+  });
+
+  it("štítky: uloží se jen novější sada", async () => {
+    const company = await prisma.registeredCompany.findFirstOrThrow();
+    const newer = { chips: [{ id: "sauna", label: "Sauna", preset: { category: "MCB" as const, poles: "3P", ratedCurrentA: 16 } }], updatedAt: 200 };
+    expect((await saveCircuitChips(prisma, company.id, newer)).saved).toBe(true);
+    const older = await saveCircuitChips(prisma, company.id, { chips: [{ id: "x", label: "Starý" }], updatedAt: 100 });
+    expect(older).toMatchObject({ saved: false, set: { updatedAt: 200 } });
+    expect(older.set.chips[0].label).toBe("Sauna");
   });
 });

@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import { Check, Link2, Loader2, Scissors, Search, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CATEGORY_LABELS, formatWatts, isMix } from "@/lib/panel-builder/catalog";
@@ -15,24 +14,9 @@ import { assignComponentAction, configureItemAction, deleteItemAction, lookupCom
 import type { CatalogHit } from "@/server/services/panel-builder";
 
 import { CascadePicker } from "./CascadePicker";
+import { CircuitChips } from "./CircuitChips";
+import { nextChipLabel, presetConfig, type CircuitChip } from "@/lib/panel-builder/circuit-chips";
 import type { WorkspaceItem } from "./RecognitionWorkspace";
-
-/** Rychlé štítky funkce obvodu (1 klik = vyplněno a uloženo). */
-export const CIRCUIT_CHIPS = [
-  "Hlavní vypínač",
-  "Chránič 1",
-  "Chránič 2",
-  "Světla",
-  "Zásuvky",
-  "Kuchyně",
-  "Koupelna",
-  "Varná deska",
-  "Trouba",
-  "Myčka / Pračka",
-  "Bojler / TČ",
-  "Topení",
-  "Venek / Garáž",
-] as const;
 
 /** Prodleva uložení při rychlém klikání po dlaždicích parametrů (ms). */
 const CONFIGURE_DEBOUNCE_MS = 250;
@@ -51,6 +35,11 @@ export function ItemConfigurator({
   onPreview,
   onLabel,
   brandCounts,
+  chips,
+  onChipsChange,
+  existingLabels,
+  placement,
+  absorbNeighbors = true,
 }: {
   item: WorkspaceItem;
   dominant: string;
@@ -63,13 +52,21 @@ export function ItemConfigurator({
   onPreview: (itemId: string, config: ItemConfig | null) => void;
   /** Okamžitý popis obvodu na dlaždici DIN lišty (null = zrušit náhled). */
   onLabel?: (itemId: string, label: string | null) => void;
+  /** Štítky funkce obvodu se Smart Presety (fáze 45) a popisy ostatních přístrojů (číslování). */
+  chips: CircuitChip[];
+  onChipsChange: (chips: CircuitChip[]) => void;
+  existingLabels: string[];
+  /** Sticky karta přiřazeného přístroje (hned pod funkcí obvodu). */
+  placement?: ReactNode;
+  absorbNeighbors?: boolean;
 }) {
   const initialManufacturer = item.config?.manufacturer ?? item.component?.manufacturer ?? item.detected?.manufacturer ?? (isMix(dominant) ? null : dominant);
   const [config, setConfig] = useState<ItemConfig | null>(item.config);
   const [manufacturer, setManufacturer] = useState<string | null>(initialManufacturer);
   // Krok A kaskády: výrobce zvolen (i „obecný přístroj“ bez výrobce) → zobrazí se kategorie
   const [chosen, setChosen] = useState(initialManufacturer !== null || item.config !== null);
-  const [mergeRight, setMergeRight] = useState(true);
+  // Pasportizace: širší přístroj pohltí moduly, které AI rozsekala; návrh od nuly sousedy nepohlcuje
+  const [mergeRight, setMergeRight] = useState(absorbNeighbors);
   const [pending, startTransition] = useTransition();
   const [lookupText, setLookupText] = useState(item.rawOcrText?.replace(/[?б]/g, "") ?? "");
   // Našeptávač z databáze prvků (filtr podle dlaždic výrobce → kategorie → póly)
@@ -287,26 +284,24 @@ export function ItemConfigurator({
             onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
           />
         </label>
-        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Rychlé štítky funkce obvodu">
-          {CIRCUIT_CHIPS.map((chip) => (
-            <button
-              key={chip}
-              type="button"
-              aria-pressed={label === chip}
-              onClick={() => {
-                setLabel(chip);
-                saveText({ circuitLabel: chip });
-              }}
-              className={cn(
-                "min-h-8 rounded-full border px-2.5 text-xs font-medium transition-colors",
-                label === chip ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card hover:border-primary/60",
-              )}
-            >
-              {chip}
-            </button>
-          ))}
-        </div>
+        <CircuitChips
+          chips={chips}
+          onChange={onChipsChange}
+          active={label}
+          onPick={(chip) => {
+            const next = nextChipLabel(chip, existingLabels);
+            setLabel(next);
+            saveText({ circuitLabel: next });
+            // Smart Preset: kategorie, póly, charakteristika a proud jedním klikem
+            if (chip.preset) {
+              setChosen(true);
+              apply(presetConfig(chip.preset, manufacturer));
+            }
+          }}
+        />
       </section>
+
+      {placement}
 
       {/* Geometrie na DIN liště */}
       <section aria-label="Geometrie na DIN liště" className="flex flex-col gap-2 rounded-lg border border-border bg-muted/30 p-3">
@@ -449,53 +444,39 @@ export function ItemConfigurator({
             </label>
           ) : null
         }
+        advanced={
+          <>
+            <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+              Typové označení (ručně)
+              <Input
+                key={`type:${item.id}:${item.customTypeCode ?? ""}`}
+                defaultValue={item.customTypeCode ?? ""}
+                placeholder={item.component?.typeCode ?? "např. S201-B16"}
+                maxLength={80}
+                className="h-10"
+                aria-label="Typové označení"
+                onBlur={(event) => saveText({ customTypeCode: event.target.value.trim() || null })}
+              />
+            </label>
+            <form
+              className="flex flex-wrap items-end gap-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+                lookup();
+              }}
+            >
+              <label className="flex min-w-48 flex-1 flex-col gap-1 text-xs text-muted-foreground">
+                Exotický prvek – text z čela přístroje
+                <Input value={lookupText} onChange={(event) => setLookupText(event.target.value)} placeholder="např. Hager MBN116" className="h-10" aria-label="Text z čela přístroje" />
+              </label>
+              <Button type="submit" variant="secondary" className="touch-target gap-2" disabled={pending}>
+                <Sparkles className="size-4" aria-hidden /> Dohledat přes Gemini AI
+              </Button>
+            </form>
+          </>
+        }
       />
 
-      {/* Přiřazený přístroj */}
-      <section aria-label="Přiřazený přístroj" className="flex flex-col gap-3 rounded-lg border border-border bg-card p-3" data-testid="assigned-device">
-        <h3 className="text-xs font-semibold text-muted-foreground uppercase">Přiřazený přístroj</h3>
-        {item.component ? (
-          <p className="flex flex-wrap items-center gap-2 text-sm">
-            <b>
-              {item.component.manufacturer} {item.customTypeCode || item.component.typeCode}
-            </b>
-            <span className="font-mono text-xs text-muted-foreground">({item.component.articleNumber})</span>
-            <span className="text-muted-foreground">· Šířka: {item.modulesWidth}M · Ztrátový výkon: {formatWatts(item.component.powerLossWatts)}</span>
-            {item.component.estimated ? <Badge variant="outline">odhad IEC</Badge> : null}
-          </p>
-        ) : (
-          <p className="text-sm text-muted-foreground">Zatím nepřiřazeno – ťukněte na kategorii a parametry.</p>
-        )}
-        <div className="grid gap-2">
-          <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-            Typové označení (ručně)
-            <Input
-              key={`type:${item.id}:${item.customTypeCode ?? ""}`}
-              defaultValue={item.customTypeCode ?? ""}
-              placeholder={item.component?.typeCode ?? "např. S201-B16"}
-              maxLength={80}
-              className="h-10"
-              aria-label="Typové označení"
-              onBlur={(event) => saveText({ customTypeCode: event.target.value.trim() || null })}
-            />
-          </label>
-        </div>
-        <form
-          className="flex flex-wrap items-end gap-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            lookup();
-          }}
-        >
-          <label className="flex min-w-48 flex-1 flex-col gap-1 text-xs text-muted-foreground">
-            Exotický prvek – text z čela přístroje
-            <Input value={lookupText} onChange={(event) => setLookupText(event.target.value)} placeholder="např. Hager MBN116" className="h-10" aria-label="Text z čela přístroje" />
-          </label>
-          <Button type="submit" variant="secondary" className="touch-target gap-2" disabled={pending}>
-            <Sparkles className="size-4" aria-hidden /> Dohledat přes Gemini AI
-          </Button>
-        </form>
-      </section>
     </div>
   );
 }

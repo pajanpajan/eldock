@@ -84,7 +84,7 @@ test("návrh od nuly: 1× 12M, presety a další lišta, kaskáda výrobce → k
   await expect(summary).toContainText("Obsazeno: 3 / 27 M");
 
   // Chránič na začátek lišty 1 přetažením karty (vloží se před -F1 a značení se přečísluje)
-  await menu.getByRole("button", { name: "Chránič", exact: true }).click();
+  await menu.getByRole("button", { name: "Chránič", exact: true }).last().click(); // dlaždice kategorie (štítek „Chránič“ je výš)
   await expect(card).toContainText("F202 A-40/0,03");
   const zone = page.getByTestId("vector-drop-zone");
   const zoneBox = (await zone.boundingBox())!;

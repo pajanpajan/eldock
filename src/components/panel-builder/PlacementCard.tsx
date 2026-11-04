@@ -58,18 +58,24 @@ export function PlacementCard({
   label,
   onLabelChange,
   activeRail,
-  freeModules,
+  rails,
   busy,
   onInsert,
+  onAddRailInsert,
+  assigned = null,
 }: {
   config: ItemConfig | null;
   label: string;
   onLabelChange: (label: string) => void;
   activeRail: number;
-  /** Volné moduly na aktivní liště (tlačítka, která se nevejdou, se zablokují). */
-  freeModules: number;
+  /** Volné moduly na každé liště (chytré vložení na jinou lištu, když se na aktivní nevejde). */
+  rails: { index: number; free: number }[];
   busy: boolean;
-  onInsert: (count: number) => void;
+  onInsert: (count: number, rail: number) => void;
+  /** Žádná lišta nemá místo: přidat novou lištu a vložit na ni. */
+  onAddRailInsert: (count: number) => void;
+  /** Vybraný přístroj na liště: uložený katalogový kus (sloučená karta „Přiřazený přístroj“). */
+  assigned?: { manufacturer: string; typeCode: string; articleNumber: string; modules: number; powerLossWatts: number; estimated: boolean } | null;
 }) {
   const key = config ? JSON.stringify(config) : "";
   const [preview, setPreview] = useState<{ key: string; data: ConfigPreview } | null>(null);
@@ -85,7 +91,7 @@ export function PlacementCard({
 
   if (!config) {
     return (
-      <section aria-label="Přiřazený přístroj k osazení" className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground" data-testid="placement-card">
+      <section aria-label="Přiřazený přístroj k osazení" className="sticky top-2 z-20 rounded-xl border border-dashed border-border bg-card p-4 text-sm text-muted-foreground" data-testid="placement-card">
         <h3 className="mb-1 text-xs font-bold tracking-wide uppercase">D. Přiřazený přístroj k osazení</h3>
         Vyberte výrobce a kategorii – karta s přístrojem se objeví tady a půjde přetáhnout na DIN lištu.
       </section>
@@ -100,12 +106,37 @@ export function PlacementCard({
     power: config.category === "ACCESSORY" && isAccessorySubtype(config.moduleSubtype) ? ACCESSORY_SUBTYPES[config.moduleSubtype] : config.power ?? null,
   };
   const width = config.modules * VECTOR.moduleW;
-  const fits = (count: number) => freeModules + 1e-9 >= config.modules * count;
+  const freeOn = (rail: number) => rails.find((entry) => entry.index === rail)?.free ?? 0;
+  /** Kam se `count` kusů vejde: aktivní lišta, jinak první lišta s místem, jinak nová lišta. */
+  const target = (count: number) => {
+    const need = config.modules * count - 1e-9;
+    if (freeOn(activeRail) >= need) return { rail: activeRail, alternative: false };
+    const other = rails.find((entry) => entry.free >= need);
+    return other ? { rail: other.index, alternative: true } : null;
+  };
+  const insert = (count: number) => {
+    const where = target(count);
+    if (where) onInsert(count, where.rail);
+    else onAddRailInsert(count);
+  };
+  const single = target(1);
   const n = (value: number) => String(value).replace(".", ",");
 
   return (
-    <section aria-label="Přiřazený přístroj k osazení" className="flex flex-col gap-3 rounded-xl border-2 border-sky-500/50 bg-sky-500/5 p-3" data-testid="placement-card">
-      <h3 className="text-xs font-bold tracking-wide text-sky-200 uppercase">D. Přiřazený přístroj k osazení</h3>
+    <section aria-label="Přiřazený přístroj k osazení" className="sticky top-2 z-20 flex flex-col gap-3 rounded-xl border-2 border-sky-500/50 bg-card p-3 shadow-lg shadow-black/40" data-testid="placement-card">
+      <h3 className="text-xs font-bold tracking-wide text-sky-200 uppercase">{assigned !== undefined && assigned !== null ? "Přiřazený přístroj" : "Přiřazený přístroj k osazení"}</h3>
+      {assigned ? (
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md bg-muted/40 px-2 py-1.5 text-sm" data-testid="assigned-device">
+          <b>
+            {assigned.manufacturer} {assigned.typeCode}
+          </b>
+          <span className="font-mono text-xs text-muted-foreground">({assigned.articleNumber})</span>
+          <span className="text-xs text-muted-foreground">
+            · Šířka: {assigned.modules}M · Ztrátový výkon: {formatWatts(assigned.powerLossWatts)}
+          </span>
+          {assigned.estimated ? <Badge variant="outline">odhad IEC</Badge> : null}
+        </p>
+      ) : null}
       <div className="flex gap-3">
         <div
           draggable
@@ -154,18 +185,29 @@ export function PlacementCard({
       ) : null}
       <Input value={label} onChange={(event) => onLabelChange(event.target.value)} maxLength={80} placeholder="Popis obvodu, např. Zásuvky kuchyně" aria-label="Popis obvodu nového přístroje" className="h-9" />
       <div className="flex flex-wrap gap-2">
-        <Button className="touch-target flex-1 gap-1.5" disabled={busy || !fits(1)} onClick={() => onInsert(1)}>
-          {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Plus className="size-4" aria-hidden />} Vložit na aktivní lištu (1×)
+        <Button className="touch-target flex-1 gap-1.5" disabled={busy} onClick={() => insert(1)} data-testid="insert-1">
+          {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Plus className="size-4" aria-hidden />}{" "}
+          {!single ? "+ Přidat novou lištu a vložit" : single.alternative ? `Vložit na Lištu ${single.rail} (volno ${n(freeOn(single.rail))} M)` : "Vložit na aktivní lištu (1×)"}
         </Button>
-        <Button variant="secondary" className="touch-target" disabled={busy || !fits(3)} onClick={() => onInsert(3)} aria-label="Vložit 3× na aktivní lištu">
-          +3×
-        </Button>
-        <Button variant="secondary" className="touch-target" disabled={busy || !fits(6)} onClick={() => onInsert(6)} aria-label="Vložit 6× na aktivní lištu">
-          +6×
-        </Button>
+        {[3, 6].map((count) => {
+          const where = target(count);
+          return (
+            <Button
+              key={count}
+              variant="secondary"
+              className="touch-target"
+              disabled={busy}
+              onClick={() => insert(count)}
+              aria-label={`Vložit ${count}× na aktivní lištu`}
+              title={!where ? "Přidá novou lištu a vloží na ni" : where.alternative ? `Na aktivní lištu se nevejde – vloží na lištu ${where.rail}` : undefined}
+            >
+              +{count}×
+            </Button>
+          );
+        })}
       </div>
       <p className="text-[11px] text-muted-foreground" data-testid="placement-target">
-        Aktivní lišta {activeRail} · volno {n(Math.max(0, freeModules))} M
+        Aktivní lišta {activeRail} · volno {n(Math.max(0, freeOn(activeRail)))} M
       </p>
     </section>
   );

@@ -734,6 +734,8 @@ model RegisteredCompany {
   logoUrl             String?
   /// Otisk razítka a podpisu odpovědné osoby (PNG s průhledným pozadím) – prohlášení o shodě a kusová zkouška.
   stampUrl            String?
+  /** Rychlé štítky funkce obvodu se Smart Presety (fáze 45), JSON { chips, updatedAt }. */
+  circuitChipsJson    String?
   createdAt           DateTime     @default(now())
   updatedAt           DateTime     @updatedAt
 
@@ -889,6 +891,8 @@ model PanelBoardProject {
   /// Vybraná skříň z katalogu rozvodnic a její max. ztrátový výkon P_max [W].
   enclosureId          String?
   enclosurePmaxW       Float?
+  /** Prostředí instalace dle ČSN 33 2000-5-51 ed. 3 (fáze 45): INDOOR_DRY | GARAGE | OUTDOOR | TIMBER | HOT. */
+  environment          String             @default("INDOOR_DRY")
 
   createdById String?
   /// Registrovaná firma (fáze 41): vidí jen své rozváděče, její údaje se propisují do dokumentace.

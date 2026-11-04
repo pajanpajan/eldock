@@ -51,7 +51,7 @@ export const getPanelProjects = cache(async () => {
   });
 });
 
-const companyProfile = { companyName: true, ico: true, dic: true, street: true, city: true, zip: true, contactName: true, phone: true, email: true, authorizationNumber: true, logoUrl: true, stampUrl: true } as const;
+const companyProfile = { companyName: true, ico: true, dic: true, street: true, city: true, zip: true, contactName: true, phone: true, email: true, authorizationNumber: true, logoUrl: true, stampUrl: true, circuitChipsJson: true } as const;
 
 /** Detail projektu přihlášené firmy (cizí projekt → `null` = 404): prvky v pořadí lišta → pozice, katalogové kusy, výrobce. */
 export const getPanelProject = cache(async (id: string) => {

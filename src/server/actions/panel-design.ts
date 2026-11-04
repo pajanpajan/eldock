@@ -7,7 +7,8 @@ import { prisma } from "@/lib/prisma";
 import type { ItemConfig } from "@/lib/panel-builder/configurator";
 import { MAX_RAIL_MODULES, MAX_RAILS, MIN_RAIL_MODULES } from "@/lib/panel-builder/rails";
 import { actionFailure, guardCompany, guardProject } from "@/server/panel-guards";
-import { listEnclosures, moveRail, placeComponents, previewConfig, selectEnclosure, setCompanyBranding, setRailCapacity, type ConfigPreview } from "@/server/services/panel-design";
+import { listEnclosures, moveRail, placeComponents, previewConfig, saveCircuitChips, selectEnclosure, setCompanyBranding, setEnvironment, setRailCapacity, type ConfigPreview } from "@/server/services/panel-design";
+import { MAX_CHIPS, type ChipSet } from "@/lib/panel-builder/circuit-chips";
 
 import type { ActionResult } from "./workflow";
 
@@ -142,5 +143,52 @@ export async function setCompanyBrandingAction(input: { logoUrl?: string | null;
     return { ok: true, data: { logoUrl: result.logoUrl, stampUrl: result.stampUrl } };
   } catch (error) {
     return actionFailure(error, "Logo nebo razítko se nepodařilo uložit.");
+  }
+}
+
+/** Prostředí instalace (ČSN 33 2000-5-51 ed. 3) – nastaví i teplotu okolí pro oteplení. */
+export async function setEnvironmentAction(projectId: string, environment: string): Promise<ActionResult<{ ambientTempC: number }>> {
+  if (!id.safeParse(projectId).success || !z.string().max(20).safeParse(environment).success) return { ok: false, error: "Neplatné prostředí." };
+  try {
+    await guardProject(projectId);
+    const result = await setEnvironment(prisma, projectId, environment);
+    revalidatePath(`/panel-builder/${projectId}`, "layout");
+    return { ok: true, data: { ambientTempC: result.ambientTempC } };
+  } catch (error) {
+    return actionFailure(error, "Prostředí se nepodařilo uložit.");
+  }
+}
+
+const chipSchema = z.object({
+  updatedAt: z.number().int().nonnegative(),
+  chips: z
+    .array(
+      z.object({
+        id: z.string().min(1).max(40),
+        label: z.string().trim().min(1).max(40),
+        numbered: z.boolean().optional(),
+        preset: z
+          .object({
+            category: z.enum(["MCB", "RCD", "RCBO", "MAIN_SWITCH", "SPD", "CONTACTOR", "RELAY", "OTHER", "ACCESSORY"]),
+            poles: z.string().max(8).optional(),
+            curve: z.string().max(2).optional(),
+            ratedCurrentA: z.number().positive().max(6300).optional(),
+          })
+          .nullable()
+          .optional(),
+      }),
+    )
+    .max(MAX_CHIPS),
+});
+
+/** Štítky funkce obvodu – synchronizace z prohlížeče do firmy (novější vyhrává). */
+export async function saveCircuitChipsAction(input: z.input<typeof chipSchema>): Promise<ActionResult<{ saved: boolean; set: ChipSet }>> {
+  const parsed = chipSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Neplatné štítky." };
+  try {
+    const company = await guardCompany();
+    return { ok: true, data: await saveCircuitChips(prisma, company.id, parsed.data as ChipSet) };
+  } catch (error) {
+    return actionFailure(error, "Štítky se nepodařilo uložit.");
   }
 }

@@ -53,6 +53,7 @@ export function CascadePicker({
   onCategory,
   onOption,
   fieldExtra,
+  advanced,
 }: {
   /** Vybraný výrobce (null + chosen = obecný přístroj bez výrobce). */
   manufacturer: string | null;
@@ -65,12 +66,17 @@ export function CascadePicker({
   onOption: (patch: Partial<ItemConfig>) => void;
   /** Doplněk pod řádkem dlaždic (např. „Sloučit se sousedními moduly“ u pólů). */
   fieldExtra?: (field: ConfigField) => ReactNode;
+  /** Obsah akordeonu „Pokročilé / Ruční korekce a AI dohledání“ (pod ruční šířkou v modulech). */
+  advanced?: ReactNode;
 }) {
   const [expanded, setExpanded] = useState(!chosen);
   const [query, setQuery] = useState("");
   const brand = brandOf(manufacturer);
   const brands = filterBrands(DEVICE_BRANDS, query);
-  const fields = config ? CONFIG_FIELDS[config.category] : [];
+  const allFields = config ? CONFIG_FIELDS[config.category] : [];
+  // Ruční šířka patří do akordeonu Pokročilé – hlavní kaskáda je o třetinu kratší
+  const fields = allFields.filter((field) => field.key !== "width");
+  const widthField = chosen && !expanded ? allFields.find((field) => field.key === "width") : undefined;
   const countOf = (value: string) => brandCounts[brandOf(value)?.value ?? value] ?? 0;
 
   function pick(value: string | null) {
@@ -169,6 +175,27 @@ export function CascadePicker({
             </section>
           ))}
         </>
+      ) : null}
+
+      {widthField || advanced ? (
+        <details className="group rounded-lg border border-border bg-muted/20 p-3" data-testid="advanced">
+          <summary className="cursor-pointer text-xs font-semibold text-muted-foreground uppercase select-none group-open:mb-3">Pokročilé / Ruční korekce a AI dohledání</summary>
+          <div className="flex flex-col gap-3">
+            {widthField ? (
+              <section aria-label={widthField.label} className="flex flex-col gap-2">
+                <h3 className="text-xs font-semibold text-muted-foreground uppercase">{widthField.label}</h3>
+                <div className="flex flex-wrap gap-2">
+                  {widthField.options.map((option) => (
+                    <Tile key={option.value} active={!!config && isOptionActive(config, option)} onClick={() => onOption(option.patch)}>
+                      {option.label}
+                    </Tile>
+                  ))}
+                </div>
+              </section>
+            ) : null}
+            {advanced}
+          </div>
+        </details>
       ) : null}
     </div>
   );

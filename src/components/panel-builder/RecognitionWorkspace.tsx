@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Loader2, Plus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
@@ -13,11 +13,16 @@ import { formatRailSummary, freeOnRail, railSummary } from "@/lib/panel-builder/
 import { deviceWithConfig, type VectorDevice } from "@/lib/panel-builder/vector-symbols";
 import { RECOGNITION } from "@/lib/panel-builder/project";
 import { cn } from "@/lib/utils";
-import { addModuleAction, addRailAction, analyzePanelProjectAction, deleteRailAction, updateItemTextAction } from "@/server/actions/panel-builder";
-import { moveRailAction, placeComponentsAction, setRailCapacityAction } from "@/server/actions/panel-design";
+import { addModuleAction, addRailAction, analyzePanelProjectAction, configureItemAction, deleteRailAction, updateItemTextAction } from "@/server/actions/panel-builder";
+import { moveRailAction, placeComponentsAction, setEnvironmentAction, setRailCapacityAction } from "@/server/actions/panel-design";
+import { nextChipLabel, presetConfig } from "@/lib/panel-builder/circuit-chips";
+import { ENVIRONMENTS, enclosureFitsEnvironment, environmentOf, ipLabel } from "@/lib/panel-builder/environments";
+import { validateSwitchboardState, type LintIssue } from "@/lib/panel-builder/linter";
 import type { AnalysisMode } from "@/server/services/geminiPanelService";
 
 import { CascadePicker } from "./CascadePicker";
+import { CircuitChips, useCircuitChips } from "./CircuitChips";
+import { LinterPanel } from "./LinterPanel";
 import { EnclosurePicker } from "./EnclosurePicker";
 import { ItemConfigurator } from "./ItemConfigurator";
 import { PhotoViewer } from "./PhotoViewer";
@@ -40,6 +45,8 @@ export interface WorkspaceItem {
   component: { id: string; manufacturer: string; typeCode: string; articleNumber: string; category: ComponentCategory; powerLossWatts: number; estimated: boolean } | null;
   /** Přístroj pro 2D vektorový rozváděč (fáze 42). */
   device: VectorDevice;
+  /** Nadřazený prvek ve stromu zapojení (elektro-linter: okruhy pod chráničem). */
+  parentItemId?: string | null;
 }
 
 /** Obrys symbolu podle stavu rozpoznání (ověřené bez obrysu). */
@@ -72,6 +79,8 @@ export function RecognitionWorkspace({
   coverState,
   brandCounts,
   enclosure,
+  environment,
+  chipsJson = null,
 }: {
   projectId: string;
   designMode: "PHOTO" | "DESIGN";
@@ -82,7 +91,11 @@ export function RecognitionWorkspace({
   dominant: string;
   coverState: string | null;
   brandCounts: Readonly<Record<string, number>>;
-  enclosure: { model: string; enclosureId: string | null };
+  enclosure: { model: string; enclosureId: string | null; label: string; ipRating: string; totalModules: number | null };
+  /** Prostředí instalace (ČSN 33 2000-5-51 ed. 3). */
+  environment: string;
+  /** Štítky funkce obvodu firmy (DB) – synchronizace s localStorage. */
+  chipsJson?: string | null;
 }) {
   const router = useRouter();
   const design = designMode === "DESIGN";
@@ -101,6 +114,9 @@ export function RecognitionWorkspace({
     config: null,
   }));
   const [paletteLabel, setPaletteLabel] = useState("");
+  const [chips, saveChips] = useCircuitChips(chipsJson);
+  const [fixing, startFixing] = useTransition();
+  const env = environmentOf(environment);
   // Popis obvodu psaný v konfigurátoru se hned ukáže na dlaždici lišty
   const [labels, setLabels] = useState<ReadonlyMap<string, string>>(new Map());
   const labelPreview = useCallback(
@@ -157,6 +173,88 @@ export function RecognitionWorkspace({
     });
   }
 
+  /** Žádná lišta nemá místo: přidat lištu a vložit na ni. */
+  function addRailAndPlace(count: number) {
+    startPlacing(async () => {
+      const added = await addRailAction(projectId);
+      if (!added.ok) return void toast.error(added.error);
+      const rail = added.data.dinRailsCount;
+      if (!cardConfig) return;
+      const result = await placeComponentsAction({ projectId, config: cardConfig, rail, count, position: null, circuitLabel: paletteLabel });
+      if (!result.ok) return void toast.error(result.error);
+      setActiveRail(rail);
+      toast.success(`Přidána lišta ${rail} a vloženo ${result.data.placed}× ${result.data.typeCode}.`);
+      router.refresh();
+    });
+  }
+
+  // Elektro-linter nad uloženým stavem (každá změna = nový výpočet)
+  const issues = useMemo(
+    () =>
+      validateSwitchboardState({
+        devices: items.map((item) => ({
+          id: item.id,
+          designation: item.designation,
+          dinRailIndex: item.dinRailIndex,
+          positionOnRail: item.positionOnRail,
+          modulesWidth: item.modulesWidth,
+          category: item.device.category,
+          poles: item.device.poles,
+          ratedCurrentA: item.device.ratedCurrentA,
+          manufacturer: item.device.manufacturer,
+          typeCode: item.device.typeCode,
+          label: item.circuitLabel,
+          parentItemId: item.parentItemId ?? null,
+          config: item.config,
+        })),
+        capacities,
+        enclosureModules: enclosure.totalModules,
+      }),
+    [items, capacities, enclosure.totalModules],
+  );
+
+  function fix(issue: LintIssue) {
+    const action = issue.fix;
+    if (!action) return;
+    if (action.kind === "palette") {
+      setSelectedId(null);
+      setPalette({ manufacturer: action.config.manufacturer, chosen: true, config: action.config });
+      return void toast.info("Chránič připraven v kartě k osazení – vložte ho na lištu.");
+    }
+    startFixing(async () => {
+      if (action.kind === "configure" || action.kind === "configure-many") {
+        for (const job of action.kind === "configure" ? [{ itemId: action.itemId, config: action.config }] : action.items) {
+          const result = await configureItemAction(job.itemId, job.config);
+          if (!result.ok) return void toast.error(result.error);
+        }
+      } else if (action.kind === "sync-text") {
+        const item = items.find((candidate) => candidate.id === action.itemId);
+        if (item?.customTypeCode) {
+          const cleared = await updateItemTextAction(action.itemId, { customTypeCode: null, circuitLabel: item.circuitLabel });
+          if (!cleared.ok) return void toast.error(cleared.error);
+        }
+        if (action.config) {
+          const result = await configureItemAction(action.itemId, action.config);
+          if (!result.ok) return void toast.error(result.error);
+        }
+      } else if (action.kind === "add-rail") {
+        const result = await addRailAction(projectId);
+        if (!result.ok) return void toast.error(result.error);
+      }
+      toast.success(`Opraveno: ${action.label}`);
+      router.refresh();
+    });
+  }
+
+  function chooseEnvironment(value: string) {
+    startEditing(async () => {
+      const result = await setEnvironmentAction(projectId, value);
+      if (!result.ok) return void toast.error(result.error);
+      toast.success(`Prostředí: ${environmentOf(value).label} · teplota okolí ${result.data.ambientTempC} °C`);
+      router.refresh();
+    });
+  }
+
   function place(count: number, rail = activeRail, position: number | null = null) {
     if (!cardConfig) return void toast.error("Nejdřív vyberte výrobce, kategorii a parametry přístroje.");
     startPlacing(async () => {
@@ -179,6 +277,32 @@ export function RecognitionWorkspace({
     const device = draft ? deviceWithConfig(item.device, draft) : item.device;
     return { ...device, label: labels.get(item.id) ?? item.circuitLabel };
   });
+
+  // Jedna sticky karta „Přiřazený přístroj (k osazení)“ hned pod funkcí obvodu
+  const placementCard = (
+    <PlacementCard
+      config={cardConfig}
+      label={paletteLabel}
+      onLabelChange={setPaletteLabel}
+      activeRail={activeRail}
+      rails={capacities.map((_, index) => ({ index: index + 1, free: freeOnRail(capacities, items, index + 1) }))}
+      busy={placing}
+      onInsert={(count, rail) => place(count, rail)}
+      onAddRailInsert={addRailAndPlace}
+      assigned={
+        selected?.component
+          ? {
+              manufacturer: selected.component.manufacturer,
+              typeCode: selected.customTypeCode || selected.component.typeCode,
+              articleNumber: selected.component.articleNumber,
+              modules: selected.modulesWidth,
+              powerLossWatts: selected.component.powerLossWatts,
+              estimated: selected.component.estimated,
+            }
+          : null
+      }
+    />
+  );
 
   const counts = { VERIFIED: 0, PARTIAL: 0, UNRECOGNIZED: 0 };
   for (const item of items) counts[item.recognitionStatus]++;
@@ -234,14 +358,59 @@ export function RecognitionWorkspace({
           <h2 className="font-semibold">{design ? "📐 Návrh rozváděče – 2D vektorové plátno" : "2D vektorový rozváděč"}</h2>
           <span className="text-xs text-muted-foreground">Klik = výběr přístroje · dvojklik na spodní štítek = funkce obvodu{design ? " · kartu z pravého menu přetáhněte na lištu" : ""}</span>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <p className={cn("rounded-md border px-2.5 py-1.5 font-mono text-xs", summary.used > summary.total ? "border-red-500/60 text-red-300" : "border-border text-muted-foreground")} data-testid="rail-summary" role="status">
-            {formatRailSummary(summary)}
-          </p>
-          <div className="ml-auto">
-            <EnclosurePicker projectId={projectId} need={enclosureNeed(capacities, items)} current={enclosure} />
+        <div className="flex flex-wrap items-center gap-2" data-testid="environment-bar">
+          <span className="text-xs text-muted-foreground" data-testid="enclosure-info">
+            {enclosure.label} · <b className="text-foreground">{enclosure.ipRating}</b>
+          </span>
+          <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            Prostředí instalace
+            <select
+              className="h-9 max-w-72 rounded-md border border-input bg-transparent px-2 text-xs text-foreground dark:bg-input/30"
+              value={env.id}
+              disabled={editing}
+              onChange={(event) => chooseEnvironment(event.target.value)}
+              aria-label="Prostředí instalace"
+            >
+              {ENVIRONMENTS.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label} ({option.codes})
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            {enclosureFitsEnvironment(enclosure.ipRating, env) ? (
+              <EnclosurePicker projectId={projectId} need={enclosureNeed(capacities, items)} current={enclosure} minIp={env.minIp} />
+            ) : (
+              <>
+                <span className="rounded-full border border-amber-500/70 bg-amber-500/10 px-2.5 py-1 text-xs font-semibold text-amber-200" data-testid="environment-warning" role="alert">
+                  ⚠ Skříň {enclosure.ipRating} nevyhovuje prostředí (min. {ipLabel(env.minIp)})
+                </span>
+                <EnclosurePicker projectId={projectId} need={enclosureNeed(capacities, items)} current={enclosure} minIp={env.recommendedIp} warning triggerLabel={`Vybrat vhodnou skříň (min. ${ipLabel(env.recommendedIp)})`} />
+              </>
+            )}
           </div>
+          {env.notes.length ? (
+            <p className="w-full text-[11px] text-sky-200" data-testid="environment-notes">
+              {env.notes.join(" ")} Minimální krytí {ipLabel(env.minIp)}
+              {env.minIk ? `, odolnost min. IK ${String(env.minIk).padStart(2, "0")}` : ""}.
+            </p>
+          ) : null}
         </div>
+        <p className={cn("self-start rounded-md border px-2.5 py-1.5 font-mono text-xs", summary.used > summary.total ? "border-red-500/60 text-red-300" : "border-border text-muted-foreground")} data-testid="rail-summary" role="status">
+          {formatRailSummary(summary)}
+        </p>
+        <LinterPanel
+          issues={issues}
+          busy={fixing || editing}
+          onFix={fix}
+          onFocus={(itemId) => {
+            const item = items.find((candidate) => candidate.id === itemId);
+            if (!item) return;
+            setSelectedId(item.id);
+            setActiveRail(item.dinRailIndex);
+          }}
+        />
         <VectorPanel
           devices={devices}
           rails={capacities.length}
@@ -315,6 +484,11 @@ export function RecognitionWorkspace({
               dominant={dominant}
               rightNeighbors={rightNeighbors}
               brandCounts={brandCounts}
+              chips={chips}
+              onChipsChange={saveChips}
+              existingLabels={items.filter((item) => item.id !== selected.id).map((item) => item.circuitLabel)}
+              absorbNeighbors={!design}
+              placement={placementCard}
               onPreview={preview}
               onLabel={labelPreview}
               onChanged={() => router.refresh()}
@@ -343,6 +517,20 @@ export function RecognitionWorkspace({
                 Všechny přístroje jsou ověřené a spárované s katalogem.
               </p>
             ) : null}
+            <section aria-label="Funkce obvodu nového přístroje" className="flex flex-col gap-2">
+              <h3 className="text-xs font-medium text-muted-foreground">Funkce / Popis obvodu</h3>
+              <CircuitChips
+                chips={chips}
+                onChange={saveChips}
+                active={paletteLabel}
+                onPick={(chip) => {
+                  setPaletteLabel(nextChipLabel(chip, items.map((item) => item.circuitLabel)));
+                  const preset = chip.preset;
+                  if (preset) setPalette((current) => ({ manufacturer: current.manufacturer, chosen: true, config: presetConfig(preset, current.manufacturer) }));
+                }}
+              />
+            </section>
+            {placementCard}
             <CascadePicker
               manufacturer={palette.manufacturer}
               chosen={palette.chosen}
@@ -354,15 +542,6 @@ export function RecognitionWorkspace({
             />
           </>
         )}
-        <PlacementCard
-          config={cardConfig}
-          label={paletteLabel}
-          onLabelChange={setPaletteLabel}
-          activeRail={activeRail}
-          freeModules={freeOnRail(capacities, items, activeRail)}
-          busy={placing}
-          onInsert={(count) => place(count)}
-        />
       </section>
     </div>
   );

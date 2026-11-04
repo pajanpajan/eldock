@@ -5,7 +5,7 @@ revize VTZ, změny skutečného provedení mezi údržbou v hale a externími CA
 rozváděčů. Pracovní název byl Digitry, od fáze 20 je to **ELDOCK**. Produkce běží na https://eldock.cz.
 Původní zadání MVP je v `docs/archiv/SPECIFIKACE-MVP.md`, celá historie fází 0–35 v `docs/archiv/PLAN-faze-00-35.md`.
 
-## 1. Milníky (fáze 0–43 nasazené, 44 hotová k nasazení)
+## 1. Milníky (fáze 0–43 nasazené, 44–45 hotové k nasazení)
 
 | Fáze | Milník |
 |---|---|
@@ -25,6 +25,7 @@ Původní zadání MVP je v `docs/archiv/SPECIFIKACE-MVP.md`, celá historie fá
 | 42 | Panel Builder: čistá fotka se zoomem, 2D vektorový rozváděč (mechanické symboly, CAD Dark / Výkres osazení), našeptávač databáze prvků; zapojení drag & drop nad vektorovým rozváděčem s hlavním přívodem a modrými spojnicemi |
 | 43 | Panel Builder: návrh rozváděče od nuly (lišty 8–36M), kaskádový výběr výrobce → kategorie → parametry s drag & drop osazením, výběr skříně podle velikosti, logo a razítko firmy, popisky 1:1, import externí databáze prvků (`npm run catalog:sync`) |
 | 44 | Most „půdorys → rozváděč“ (`src/engine/floorplan-bridge.ts`, `FLOORPLAN_SPEC.md`): kalibrace, řazení vypínačů, okruhy dle ČSN 33 2130 ed. 4, fáze, chrániče, přístroje na lištách a skříň |
+| 45 | Panel Builder, krok 1: štítky funkce se Smart Presety a číslováním, sticky karta přístroje s chytrým vložením, prostředí instalace (ČSN 33 2000-5-51), elektro-linter s opravou 1 klikem |
 
 ## 2. Moduly a klíčová místa v kódu
 
@@ -55,6 +56,7 @@ Server je hlídá přes `assertFeature`, správa je na `/admin/modules`.
 - **Panel Builder – značení a zapojení:** IEC prefixy jen z `DESIGNATION_PREFIX` (`src/lib/panel-builder/matching.ts`); návrh zapojení `proposeTree` = pravidlo DIN lišty (chránič napájí jističe napravo na své liště). Hlídač hlásí jako chybu jen nezapojený prvek, cyklus a 3P pod 1P – součet In nad In chrániče není chyba.
 - **Panel Builder – vektorový rozváděč (fáze 42):** krok 1 i 2 kreslí `VectorPanel` se symboly `VectorModuleSymbol` (texty `symbolTexts`, data `vectorDeviceFrom` v `lib/panel-builder/vector-symbols.ts`, geometrie a spojnice `vectorLayout` / `wiringPaths` v `vector-layout.ts` – čáry jen mezerami mezi lištami a okraji). Na fotce se rámečky nekreslí. Kořen stromu = prvek s `fedFromIncomer` bez rodiče (`currentRoot`; bez volby `chooseRoot`: odpínač, jinak první 3P/4P na 1. liště); `PanelBoardProject.incomerFrom` = TOP / BOTTOM. Drag & drop = `dropOnto` (na koncový přístroj → sourozenec pod jeho rodičem, fáze `rotatePhases`), hlavní vstupní prvek se nepřetahuje, mění se jen přes `setRoot`.
 - **Panel Builder – návrh od nuly a katalog (fáze 43):** `PanelBoardProject.designMode` = PHOTO / DESIGN; kapacita lišt je pole `railModulesJson` (vždy přes `railCapacities` / `railColumns` v `lib/panel-builder/rails.ts`, `modulesPerRail` = nejširší lišta). Osazení z kaskády = `placeComponents` (`services/panel-design.ts`), kaskádové menu `CascadePicker` + `PlacementCard`. Skříně = model `PanelEnclosure` (matice `standardEnclosureMatrix` + externí DB), filtr `fitEnclosures`. Externí databáze `ai-panel-builder` se importuje jen přes `npm run catalog:sync` / export `prisma/external-catalog/catalog.json` (`importExternalCatalog`, upsert, vlastní katalog Eldocku se nepřepisuje); export po synchronizaci commitni.
+- **Panel Builder – krok 1 (fáze 45):** štítky funkce obvodu = `lib/panel-builder/circuit-chips.ts` (localStorage `eldock.pb.circuit-chips` + `RegisteredCompany.circuitChipsJson`, novější `updatedAt` vyhrává); prostředí instalace = `environments.ts` (`PanelBoardProject.environment`, výběr přepíše `ambientTempC`); kontroly rozváděče jen v `validateSwitchboardState` (`linter.ts`) – nové pravidlo = nový `rule` + test, oprava přes existující Server Actions.
 - **Studio:** rozměr budovy v metrech (`GridSpec.widthM/depthM`, osy dopočítané `axisMeters`, bez limitu os), koncept = více budov uložených v jedné transakci (`saveStudioConcept`). Souřadnice v metrech od osy A1, jednotné měřítko (`planFrame`). Každé uložené patro má `Floor.studioLayoutJson` (rastr, zóny, vrata) a jde znovu upravit; starší patra bez JSON se čtou ze SVG (`src/lib/studio-layout.ts`). Pin zařízení je vždy v rámu svého patra (`frameOfFloor`); při úpravě patra se piny přepočítají přes metry. Nabídka kroku 3 = `src/lib/studio-menu.ts` (`TenantSetting` `studio.menu` + localStorage, vyhrává novější `updatedAt`); seskupené štítky místností (`roomInventoryGroups`) se při uložení konceptu kreslí do `floorplanSvg` (`refreshFloorInventory`, skupina `data-room-inventory`). Výchozí obrazovka `/studio` je mapa závodu (bez konceptu); klik na budovu = pohled budovy se 3 režimy, „Uložit změny patra“ zůstane ve Studiu. Uložená zařízení jde ve Studiu přesunout (`equipmentEdits[].pos`) a smazat (`equipmentDeletes`, potvrzení v UI, server odmítne zařízení s otevřeným požadavkem nebo s nepřepojenými odběry).
 
 ## 4. Databáze – bezpečnostní pravidla

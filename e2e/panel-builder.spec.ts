@@ -99,14 +99,18 @@ test("krok 1: čistá fotka se zoomem, 2D vektorový rozváděč, živá konfigu
   // Funkce obvodu: rychlý štítek se hned propíše do spodního štítku symbolu
   await configurator.getByRole("button", { name: "Koupelna", exact: true }).click();
   await expect(page.getByTestId("symbol--F4").getByTestId("symbol-label")).toHaveText("Koupelna");
-  await expect(configurator.getByLabel("Popis obvodu")).toHaveValue("Koupelna");
+  await expect(configurator.getByLabel("Popis obvodu", { exact: true })).toHaveValue("Koupelna");
+  // Smart Preset štítku Koupelna = jistič 1P B16; vrátit 10A (referenční oteplení v kroku 3)
+  await expect(page.getByTestId("symbol--F4").getByTestId("symbol-value")).toHaveText("B16");
+  await configurator.getByRole("button", { name: "10A", exact: true }).click();
+  await expect(page.getByTestId("symbol--F4").getByTestId("symbol-value")).toHaveText("B10");
 
   // Dvojklik na symbol = úprava štítku přímo na rozváděči
   await page.getByTestId("symbol--F5").dblclick();
   await page.getByLabel("Funkce obvodu na štítku").fill("Světla koupelny + terasa");
   await page.getByLabel("Funkce obvodu na štítku").press("Enter");
   await expect(page.getByTestId("symbol--F5").getByTestId("symbol-label")).toHaveText("Světla koupelny + terasa");
-  await expect(configurator.getByLabel("Popis obvodu")).toHaveValue("Světla koupelny + terasa");
+  await expect(configurator.getByLabel("Popis obvodu", { exact: true })).toHaveValue("Světla koupelny + terasa");
 
   // Režim zobrazení: výkres osazení (černobílý CAD)
   await panel.getByRole("button", { name: "Výkres osazení" }).click();
@@ -172,6 +176,8 @@ test("nový projekt: sloučení 3× 1M → 3P, rozdělení zpět, filtr výrobce
   await expect(page.getByTestId("symbol--F3").getByTestId("symbol-manufacturer")).toHaveText("Eaton");
 
   // Exotický prvek přes dohledání (deterministicky bez klíče)
+  // Ruční korekce a AI dohledání jsou v akordeonu Pokročilé
+  await configurator.getByText("Pokročilé / Ruční korekce a AI dohledání").click();
   await configurator.getByLabel("Text z čela přístroje").fill("S203 D25");
   await configurator.getByRole("button", { name: /Dohledat přes Gemini AI/ }).click();
   await expect(page.getByTestId("assigned-device")).toContainText("S203-D25");
