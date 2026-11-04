@@ -30,6 +30,8 @@ test("štítky s presety a číslováním, linter s opravou 1 klikem, prostřed�
   await expect(card).toContainText("ABB S201-B16");
   await card.getByTestId("insert-1").click();
   await expect(page.getByTestId("symbol--F1")).toBeVisible();
+  // Fáze 47: linter je kompaktní odznak „⚠️ X doporučení ▾“, detaily v popoveru
+  await linter.getByTestId("linter-badge").click();
   await expect(linter.locator('[data-rule="rcd-missing"]')).toBeVisible();
 
   // Oprava 1 klikem připraví chránič; vložením chyba zmizí. Číslování: Chránič 1 → Chránič 2
@@ -69,6 +71,7 @@ test("štítky s presety a číslováním, linter s opravou 1 klikem, prostřed�
   await configurator.getByLabel("Popis obvodu", { exact: true }).fill("Chránič 3");
   await configurator.getByLabel("Popis obvodu", { exact: true }).press("Enter");
   const wrong = linter.locator('[data-rule="label-category"]');
+  if ((await linter.getByTestId("linter-badge").getAttribute("aria-expanded")) !== "true") await linter.getByTestId("linter-badge").click();
   await expect(wrong).toBeVisible();
   await wrong.getByRole("button", { name: /Opravit 1 klikem/ }).click();
   await expect(wrong).toHaveCount(0);

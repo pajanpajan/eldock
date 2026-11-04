@@ -32,6 +32,10 @@ export interface SeedComponent {
   powerLossWatts: number;
   description: string;
   dims?: [number, number, number];
+  /** Datasheet výrobce (fáze 47). */
+  datasheetUrl?: string | null;
+  /** Ztrátový výkon výrobce neuvádí – odhad dle IEC (dataSource IEC_ESTIMATE). */
+  lossEstimated?: boolean;
 }
 
 const pad = (value: number, length: number) => String(value).padStart(length, "0");

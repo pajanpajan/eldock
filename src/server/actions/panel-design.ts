@@ -6,7 +6,11 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import type { ItemConfig } from "@/lib/panel-builder/configurator";
 import { MAX_RAIL_MODULES, MAX_RAILS, MIN_RAIL_MODULES } from "@/lib/panel-builder/rails";
-import { actionFailure, guardCompany, guardProject } from "@/server/panel-guards";
+import { actionFailure, guardCompany, guardItem, guardProject } from "@/server/panel-guards";
+import { analyzeRailDetail, insertNextTo } from "@/server/services/panel-design";
+import { analyzeRailPhoto } from "@/server/services/geminiPanelService";
+import { addItemWiring, searchWiringDevices, setItemWiringQuantity, setProjectFan, type WiringHit } from "@/server/services/panel-wiring";
+import { readStoredFile } from "@/server/storage";
 import { saveRoutineTest, setStandardEdition } from "@/server/services/panel-design";
 import { ROUTINE_TEST_POINTS } from "@/lib/legislation-2027";
 import { listEnclosures, moveRail, placeComponents, previewConfig, saveCircuitChips, selectEnclosure, setCompanyBranding, setEnvironment, setRailCapacity, type ConfigPreview } from "@/server/services/panel-design";
@@ -228,5 +232,90 @@ export async function saveRoutineTestAction(projectId: string, test: z.input<typ
     return { ok: true, data: { verdict: saved.verdict, missing: saved.missing } };
   } catch (error) {
     return actionFailure(error, "Protokol se nepodařilo uložit.");
+  }
+}
+
+/** „➕ Přidat prvek vpravo“ / „📑 Duplikovat prvek“ vedle vybraného přístroje. */
+export async function insertNextToAction(itemId: string, mode: "blank" | "duplicate"): Promise<ActionResult<{ id: string }>> {
+  if (!id.safeParse(itemId).success || (mode !== "blank" && mode !== "duplicate")) return { ok: false, error: "Neplatný prvek." };
+  try {
+    await guardItem(itemId);
+    const result = await insertNextTo(prisma, itemId, mode);
+    revalidatePath(`/panel-builder/${result.projectId}`, "layout");
+    return { ok: true, data: { id: result.id } };
+  } catch (error) {
+    return actionFailure(error, mode === "duplicate" ? "Prvek se nepodařilo duplikovat." : "Prvek se nepodařilo přidat.");
+  }
+}
+
+const photoUrl = z.string().max(300).regex(/^\/api\/files\/photos\/[\w./-]+$/);
+
+/** Pravidlo F: detailní fotka DIN lišty / sekce – AI přečte přístroje lišty z ostrého detailu. */
+export async function analyzeRailDetailAction(projectId: string, railIndex: number, url: string): Promise<ActionResult<{ mode: string; total: number; unresolved: number; warning?: string }>> {
+  if (!id.safeParse(projectId).success || !rail.safeParse(railIndex).success || !photoUrl.safeParse(url).success) return { ok: false, error: "Neplatná fotka lišty." };
+  try {
+    await guardProject(projectId);
+    const result = await analyzeRailDetail(prisma, projectId, railIndex, url, { analyze: analyzeRailPhoto, readPhoto: readStoredFile });
+    revalidatePath(`/panel-builder/${projectId}`, "layout");
+    return { ok: true, data: result };
+  } catch (error) {
+    return actionFailure(error, "Detailní fotku lišty se nepodařilo zpracovat.");
+  }
+}
+
+// ---------------------------------------------------------------------------
+//  Fáze 47: domovní instalace obvodu a ventilátor skříně
+// ---------------------------------------------------------------------------
+
+/** Našeptávač katalogu domovní instalace (vypínače, zásuvky, rámečky). */
+export async function searchWiringAction(query: string): Promise<ActionResult<WiringHit[]>> {
+  if (typeof query !== "string" || query.length > 120) return { ok: false, error: "Neplatný dotaz." };
+  try {
+    await guardCompany();
+    return { ok: true, data: await searchWiringDevices(prisma, query) };
+  } catch (error) {
+    return actionFailure(error, "Hledání v katalogu domovní instalace selhalo.");
+  }
+}
+
+const wiringSchema = z.object({ wiringDeviceId: id, quantity: z.number().int().min(1).max(200), room: z.string().max(80).nullish() });
+
+/** Přiřadí vypínač / zásuvku k obvodu (prvku rozváděče). */
+export async function addItemWiringAction(itemId: string, input: z.input<typeof wiringSchema>): Promise<ActionResult> {
+  const parsed = wiringSchema.safeParse(input);
+  if (!id.safeParse(itemId).success || !parsed.success) return { ok: false, error: "Neplatný přístroj domovní instalace." };
+  try {
+    await guardItem(itemId);
+    await addItemWiring(prisma, itemId, parsed.data);
+    revalidatePath("/panel-builder", "layout");
+    return { ok: true, data: undefined };
+  } catch (error) {
+    return actionFailure(error, "Přístroj se nepodařilo přiřadit.");
+  }
+}
+
+/** Změna počtu kusů přiřazeného přístroje (0 = odebrat). */
+export async function setItemWiringQuantityAction(itemId: string, wiringId: string, quantity: number): Promise<ActionResult> {
+  if (!id.safeParse(itemId).success || !id.safeParse(wiringId).success || !z.number().int().min(0).max(200).safeParse(quantity).success) return { ok: false, error: "Neplatný počet." };
+  try {
+    await guardItem(itemId);
+    await setItemWiringQuantity(prisma, itemId, wiringId, quantity);
+    revalidatePath("/panel-builder", "layout");
+    return { ok: true, data: undefined };
+  } catch (error) {
+    return actionFailure(error, "Počet se nepodařilo uložit.");
+  }
+}
+
+/** Ventilátor skříně v kroku oteplení (null = bez ventilátoru). */
+export async function setProjectFanAction(projectId: string, fanId: string | null, count: number): Promise<ActionResult<{ fanId: string | null; fanCount: number }>> {
+  if (!id.safeParse(projectId).success || (fanId !== null && !id.safeParse(fanId).success) || !z.number().int().min(1).max(6).safeParse(count).success) return { ok: false, error: "Neplatný ventilátor." };
+  try {
+    await guardProject(projectId);
+    const data = await setProjectFan(prisma, projectId, fanId, count);
+    revalidatePath(`/panel-builder/${projectId}`, "layout");
+    return { ok: true, data };
+  } catch (error) {
+    return actionFailure(error, "Ventilátor se nepodařilo uložit.");
   }
 }

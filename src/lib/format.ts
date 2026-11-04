@@ -77,6 +77,7 @@ export const EQUIPMENT_TYPE_LABELS: Record<EquipmentType, string> = {
   WELDER: "Svářečka",
   LIGHTNING_ROD: "Hromosvod (LPS)",
   EMERGENCY_LIGHTING: "Nouzové osvětlení",
+  WIRING_DEVICE: "Domovní přístroj (zásuvka, vypínač)",
   OTHER: "Ostatní",
 };
 

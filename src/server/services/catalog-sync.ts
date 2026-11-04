@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import type { PrismaClient } from "@/generated/prisma/client";
 import { standardEnclosureMatrix } from "@/lib/panel-builder/enclosures";
 import { EXTERNAL_SOURCE, deriveRelations, mapExternalProduct, type ExternalProduct, type MappedComponent, type MappedEnclosure } from "@/lib/panel-builder/external-catalog";
+import { mapWiringDevice, type ExternalWiringDevice } from "@/lib/panel-builder/wiring-devices";
 
 // Import externí databáze prvků „ai-panel-builder“ do katalogu Eldocku (fáze 43): dávkový upsert
 // přístrojů (CatalogComponent), skříní (PanelEnclosure) a vazeb příslušenství (CatalogRelation).
@@ -102,4 +103,17 @@ export async function seedStandardEnclosures(prisma: PrismaClient) {
   const matrix = standardEnclosureMatrix();
   await inBatches(matrix, (batch) => prisma.$transaction(batch.map((data) => prisma.panelEnclosure.upsert({ where: { articleNumber: data.articleNumber }, create: data, update: data }))));
   return matrix.length;
+}
+
+export const WIRING_SYNC_MARKER = "catalog.wiring-sync";
+
+/** Domovní vypínače, zásuvky a rámečky (fáze 47): dávkový upsert, stejný otisk se přeskočí. */
+export async function importWiringDevices(prisma: PrismaClient, rows: readonly ExternalWiringDevice[], options: { force?: boolean } = {}) {
+  const hash = catalogHash(rows as unknown as ExternalProduct[]);
+  const marker = await prisma.tenantSetting.findUnique({ where: { key: WIRING_SYNC_MARKER }, select: { value: true } });
+  if (!options.force && marker?.value === hash) return { skipped: true, imported: 0 };
+  const mapped = [...new Map(rows.map(mapWiringDevice).filter((row) => row !== null).map((row) => [row.articleNumber, row])).values()];
+  await inBatches(mapped, (batch) => prisma.$transaction(batch.map((data) => prisma.wiringDevice.upsert({ where: { articleNumber: data.articleNumber }, create: data, update: data }))));
+  await prisma.tenantSetting.upsert({ where: { key: WIRING_SYNC_MARKER }, create: { key: WIRING_SYNC_MARKER, value: hash }, update: { value: hash } });
+  return { skipped: false, imported: mapped.length };
 }

@@ -14,6 +14,8 @@ import { assignComponentAction, configureItemAction, deleteItemAction, lookupCom
 import type { CatalogHit } from "@/server/services/panel-builder";
 
 import { CascadePicker } from "./CascadePicker";
+import { WiringSection } from "./WiringSection";
+import { insertNextToAction } from "@/server/actions/panel-design";
 import { CircuitChips } from "./CircuitChips";
 import { nextChipLabel, presetConfig, type CircuitChip } from "@/lib/panel-builder/circuit-chips";
 import type { WorkspaceItem } from "./RecognitionWorkspace";
@@ -32,6 +34,7 @@ export function ItemConfigurator({
   rightNeighbors,
   onChanged,
   onDeleted,
+  onInserted,
   onPreview,
   onLabel,
   brandCounts,
@@ -48,6 +51,8 @@ export function ItemConfigurator({
   rightNeighbors: number;
   onChanged: () => void;
   onDeleted: () => void;
+  /** Nový prvek vpravo / duplikát – vybrat ho k úpravě. */
+  onInserted?: (itemId: string) => void;
   /** Optimistický náhled na DIN liště (null = zrušit po uložení nebo chybě). */
   onPreview: (itemId: string, config: ItemConfig | null) => void;
   /** Okamžitý popis obvodu na dlaždici DIN lišty (null = zrušit náhled). */
@@ -201,6 +206,16 @@ export function ItemConfigurator({
     });
   }
 
+  /** „➕ Přidat prvek vpravo“ / „📑 Duplikovat prvek“ – nový prvek hned napravo a rovnou vybraný. */
+  function insertNext(mode: "blank" | "duplicate") {
+    startTransition(async () => {
+      const result = await insertNextToAction(item.id, mode);
+      if (!result.ok) return void toast.error(result.error);
+      toast.success(mode === "duplicate" ? `${item.designation} duplikován vpravo.` : "Nový prvek přidán vpravo.");
+      onInserted?.(result.data.id);
+    });
+  }
+
   function saveText(patch: { customTypeCode?: string | null; circuitLabel?: string; designation?: string }) {
     const next = {
       customTypeCode: patch.customTypeCode !== undefined ? patch.customTypeCode : item.customTypeCode,
@@ -263,6 +278,12 @@ export function ItemConfigurator({
           }}
         >
           <Trash2 className="size-3.5" aria-hidden /> Smazat prvek
+        </Button>
+        <Button size="sm" variant="outline" className="touch-target gap-1.5" disabled={pending} onClick={() => insertNext("blank")}>
+          ➕ Přidat prvek vpravo
+        </Button>
+        <Button size="sm" variant="outline" className="touch-target gap-1.5" disabled={pending} onClick={() => insertNext("duplicate")}>
+          📑 Duplikovat prvek
         </Button>
       </div>
 
@@ -477,6 +498,7 @@ export function ItemConfigurator({
         }
       />
 
+      {item.component?.category === "MCB" || item.component?.category === "RCBO" || item.config?.category === "MCB" || item.config?.category === "RCBO" ? <WiringSection itemId={item.id} wiring={item.wiring ?? []} /> : null}
     </div>
   );
 }

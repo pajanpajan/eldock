@@ -56,9 +56,9 @@ export const MANUFACTURER_OPTIONS = [
   { value: "Bonega", label: "Bonega" },
   { value: "Schrack", label: "Schrack" },
   { value: "Saltek", label: "Saltek" },
-  { value: "Finder", label: "Finder" },
-  { value: "Elko EP", label: "Elko EP" },
-  { value: "Mean Well", label: "Mean Well" },
+  { value: "Siemens", label: "Siemens" },
+  { value: "ETI", label: "ETI" },
+  { value: "Legrand", label: "Legrand" },
 ] as const;
 
 /** Rychlé záložky výrobce v Smart Fallback Pickeru (null = všichni). */
@@ -73,9 +73,8 @@ export const PICKER_MANUFACTURERS = [
   { value: "Bonega", label: "BONEGA" },
   { value: "Schrack", label: "SCHRACK" },
   { value: "Saltek", label: "SALTEK" },
-  { value: "Finder", label: "FINDER" },
-  { value: "Elko EP", label: "ELKO EP" },
-  { value: "Mean Well", label: "MEAN WELL" },
+  { value: "Siemens", label: "SIEMENS" },
+  { value: "ETI", label: "ETI" },
 ] as const;
 
 const MANUFACTURER_ALIASES: [RegExp, string][] = [
@@ -89,6 +88,8 @@ const MANUFACTURER_ALIASES: [RegExp, string][] = [
   [/^saltek\b/, "Saltek"],
   [/^finder\b/, "Finder"],
   [/^bonega\b/, "Bonega"],
+  [/^siemens\b/, "Siemens"],
+  [/^legrand\b/, "Legrand"],
   [/^elko\b/, "Elko EP"],
   [/^mean ?well\b/, "Mean Well"],
   [/^(pollock|hlak)\b/, "Pollock"],

@@ -15,6 +15,8 @@ import { cn } from "@/lib/utils";
 import { saveThermalInputsAction } from "@/server/actions/panel-builder";
 
 import { PhaseBalance, ThermalCurve, ThermalTable } from "./ThermalViews";
+import { FanPanel } from "./FanPanel";
+import type { FanSpec } from "@/lib/panel-builder/fans";
 
 const selectClass = "h-10 w-full rounded-md border border-input bg-transparent px-2 text-sm dark:bg-input/30";
 const n = (value: number, digits = 2) => value.toLocaleString("cs-CZ", { minimumFractionDigits: digits, maximumFractionDigits: digits });
@@ -52,6 +54,8 @@ export function ThermalWorkspace({
   pMaxW = null,
   enclosureModel = "",
   enclosurePicker,
+  fans = [],
+  fan = { id: null, count: 1 },
 }: {
   projectId: string;
   initialProject: ThermalProjectInput;
@@ -60,6 +64,9 @@ export function ThermalWorkspace({
   pMaxW?: number | null;
   enclosureModel?: string;
   enclosurePicker?: ReactNode;
+  /** Ventilátory skříně z katalogu a vybraný ventilátor projektu (fáze 47). */
+  fans?: readonly FanSpec[];
+  fan?: { id: string | null; count: number };
 }) {
   const router = useRouter();
   const [project, setProject] = useState(initialProject);
@@ -229,6 +236,10 @@ export function ThermalWorkspace({
           <PhaseBalance result={result} />
         </section>
       </div>
+
+      {fans.length ? (
+        <FanPanel projectId={projectId} fans={fans} fanId={fan.id} fanCount={fan.count} lossW={result.totalLossW} ambientTempC={project.ambientTempC} surfaceM2={result.effectiveAreaM2 * result.materialFactor} />
+      ) : null}
 
       <section aria-label="Tabulka oteplení" className="overflow-x-auto rounded-xl border border-border bg-card p-4">
         <h2 className="mb-1 font-semibold">Výpočet oteplení po přístrojích</h2>

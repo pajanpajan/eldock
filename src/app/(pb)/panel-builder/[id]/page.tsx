@@ -8,8 +8,9 @@ import { ProjectHeader } from "@/components/panel-builder/ProjectHeader";
 import { RecognitionWorkspace, type WorkspaceItem } from "@/components/panel-builder/RecognitionWorkspace";
 import { configFromComponent, parseConfig } from "@/lib/panel-builder/configurator";
 import { brandOf } from "@/lib/panel-builder/brands";
-import { railCapacities } from "@/lib/panel-builder/rails";
+import { railCapacities, railPhotoList } from "@/lib/panel-builder/rails";
 import { vectorDeviceFrom } from "@/lib/panel-builder/vector-symbols";
+import { WIRING_CATEGORIES } from "@/lib/panel-builder/wiring-devices";
 import { ENCLOSURE_TYPES } from "@/lib/panel-builder/project";
 import { getBrandCounts, getPanelProject, getProjectEnclosure } from "@/server/queries/panel-builder";
 
@@ -68,6 +69,14 @@ export default async function PanelProjectPage({ params }: PageProps<"/panel-bui
       : null,
     device: vectorDeviceFrom(item),
     parentItemId: item.parentItemId,
+    wiring: item.wiringDevices.map((row) => ({
+      id: row.id,
+      quantity: row.quantity,
+      room: row.room,
+      title: row.wiringDevice.title,
+      articleNumber: row.wiringDevice.articleNumber.replace(/^[A-Z]+:/, ""),
+      categoryLabel: WIRING_CATEGORIES[row.wiringDevice.category] ?? WIRING_CATEGORIES.WD_OTHER,
+    })),
   }));
 
   return (
@@ -92,6 +101,7 @@ export default async function PanelProjectPage({ params }: PageProps<"/panel-bui
         }}
         environment={project.environment}
         standardEdition={project.standardEdition}
+        railPhotos={railPhotoList(project.railPhotosJson)}
         chipsJson={project.company?.circuitChipsJson ?? null}
       />
     </PageTransition>

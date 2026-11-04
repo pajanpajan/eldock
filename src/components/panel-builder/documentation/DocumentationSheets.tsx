@@ -37,6 +37,8 @@ export interface DocumentationData {
   /** Edice normy rozváděče (fáze 46) a protokol o kusové zkoušce. */
   edition: StandardEdition;
   routineTest: RoutineTest;
+  /** Domovní instalace po obvodech (fáze 47): vypínače, zásuvky, rámečky. */
+  wiring?: { designation: string; circuit: string; room: string | null; quantity: number; articleNumber: string; title: string }[];
 }
 
 const svgUri = (svg: string) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
@@ -328,6 +330,35 @@ export function DocumentationSheets({ data }: { data: DocumentationData }) {
             ))}
           </tbody>
         </table>
+        {data.wiring?.length ? (
+          <>
+            <h3 className="mt-2 font-bold">Domovní instalace po obvodech (Wiring devices)</h3>
+            <table className="w-full border-collapse text-[8pt]" data-testid="doc-wiring">
+              <thead>
+                <tr>
+                  <th className={cell}>Obvod</th>
+                  <th className={cell}>Funkce</th>
+                  <th className={cell}>Místnost</th>
+                  <th className={cell}>Objednací číslo</th>
+                  <th className={cell}>Přístroj</th>
+                  <th className={`${cell} text-right`}>Ks</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.wiring.map((row, index) => (
+                  <tr key={`${row.designation}-${row.articleNumber}-${row.room ?? ""}-${index}`}>
+                    <td className={`${cell} font-mono font-semibold`}>{row.designation}</td>
+                    <td className={cell}>{row.circuit}</td>
+                    <td className={cell}>{row.room ?? "–"}</td>
+                    <td className={`${cell} font-mono`}>{row.articleNumber}</td>
+                    <td className={cell}>{row.title}</td>
+                    <td className={`${cell} text-right font-mono`}>{row.quantity}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        ) : null}
       </Sheet>
 
       {/* List 5 – oteplení a technická data */}

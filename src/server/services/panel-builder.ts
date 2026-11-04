@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@/generated/prisma/client";
+import { HIDDEN_MANUFACTURER_NAMES } from "@/lib/panel-builder/brands";
 import type { ComponentCategory, EnclosureMaterial, EnclosureType } from "@/generated/prisma/enums";
 import { buildSearchText, isMix, normalizeSearch } from "@/lib/panel-builder/catalog";
 import { extractComponents, type ExtractedComponent } from "@/lib/panel-builder/datasheet-extract";
@@ -134,7 +135,7 @@ export async function createPanelProject(prisma: PrismaClient, input: CreateProj
 export async function applyDetections(prisma: PrismaClient, projectId: string, detections: readonly Detection[], mode: AiMode, dominant: string | null) {
   if (!detections.length) throw new WorkflowError("VALIDATION", "Na fotce nebyl rozpoznán žádný přístroj.");
   const catalog = await prisma.catalogComponent.findMany({
-    where: { category: { not: "ENCLOSURE" } },
+    where: { category: { not: "ENCLOSURE" }, manufacturer: { notIn: HIDDEN_MANUFACTURER_NAMES } },
     select: { id: true, manufacturer: true, typeCode: true, articleNumber: true, category: true, poles: true, ratedCurrentA: true, trippingCurve: true, rcdType: true, rcdSensitivityMa: true, modulesCount: true },
   });
   // „Různí výrobci“ (null): bez preference – každý modul se páruje podle vlastního výrobce.
@@ -232,7 +233,7 @@ export async function lookupComponentForItem(
   if (text.length < 3) throw new WorkflowError("VALIDATION", "Opište alespoň část typového označení z čela přístroje (např. S201 B16).");
   if (!(await prisma.panelBoardItem.findUnique({ where: { id: input.itemId }, select: { id: true } }))) throw new WorkflowError("NOT_FOUND", "Prvek rozváděče neexistuje.");
 
-  const local = (await prisma.catalogComponent.findMany({ where: { category: { not: "ENCLOSURE" } } }))
+  const local = (await prisma.catalogComponent.findMany({ where: { category: { not: "ENCLOSURE" }, manufacturer: { notIn: HIDDEN_MANUFACTURER_NAMES } } }))
     .filter((row) => text.includes(compact(row.articleNumber)) || (compact(row.typeCode).length >= 4 && text.includes(compact(row.typeCode))))
     .sort((a, b) => compact(b.typeCode).length - compact(a.typeCode).length);
   if (local[0]) return { mode: "CATALOG", component: summary(local[0], "existing") };
@@ -278,7 +279,7 @@ export async function searchCatalog(prisma: PrismaClient, filter: { q: string; m
   return prisma.catalogComponent.findMany({
     where: {
       category: filter.category ?? { not: "ENCLOSURE" },
-      ...(filter.manufacturer ? { manufacturer: filter.manufacturer } : {}),
+      manufacturer: filter.manufacturer ? { equals: filter.manufacturer, notIn: HIDDEN_MANUFACTURER_NAMES } : { notIn: HIDDEN_MANUFACTURER_NAMES },
       ...(filter.poles ? { poles: filter.poles } : {}),
       AND: terms.map((term) => ({ searchText: { contains: term } })),
     },
@@ -480,7 +481,7 @@ export async function configureItem(prisma: PrismaClient, itemId: string, config
 
 /** Nejbližší přesný kus katalogu pro konfiguraci, jinak uložený odhad IEC (synteticky z parametrů). */
 export async function componentForConfig(prisma: PrismaClient, config: ItemConfig) {
-  const catalog = await prisma.catalogComponent.findMany({ where: { category: catalogCategory(config) } });
+  const catalog = await prisma.catalogComponent.findMany({ where: { category: catalogCategory(config), manufacturer: { notIn: HIDDEN_MANUFACTURER_NAMES } } });
   const component = matchConfig(catalog, config);
   if (component) return component;
   const synthesized = synthesizeComponent(config);

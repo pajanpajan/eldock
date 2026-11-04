@@ -8,8 +8,8 @@ import "dotenv/config";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 
 import { PrismaClient } from "../src/generated/prisma/client";
-import { importExternalCatalog, seedStandardEnclosures } from "../src/server/services/catalog-sync";
-import { DEFAULT_EXTERNAL_DIR, SNAPSHOT_FILE, readExternalFolder, readSnapshot, writeSnapshot } from "../prisma/external-catalog-source";
+import { importExternalCatalog, importWiringDevices, seedStandardEnclosures } from "../src/server/services/catalog-sync";
+import { DEFAULT_EXTERNAL_DIR, SNAPSHOT_FILE, WIRING_SNAPSHOT, readExternalFolder, readSnapshot, readWiringFolder, readWiringSnapshot, writeSnapshot, writeWiringSnapshot } from "../prisma/external-catalog-source";
 
 const args = process.argv.slice(2);
 const option = (name: string) => {
@@ -35,8 +35,22 @@ async function main() {
     console.log(`Složka ${source} není k dispozici – použit lokální export (${products.length} záznamů).`);
   }
 
+  // Domovní přístroje (fáze 47): catalog/wiring ze složky, jinak export
+  let wiring = readWiringFolder(source);
+  if (wiring) {
+    console.log(`Domovní přístroje: ${wiring.length} záznamů.`);
+    if (!args.includes("--no-export")) writeWiringSnapshot(wiring);
+  } else {
+    wiring = readWiringSnapshot();
+    if (wiring) console.log(`Domovní přístroje: lokální export ${WIRING_SNAPSHOT} (${wiring.length} záznamů).`);
+  }
+
   const prisma = new PrismaClient({ adapter: new PrismaBetterSqlite3({ url }) });
   try {
+    if (wiring) {
+      const imported = await importWiringDevices(prisma, wiring, { force: args.includes("--force") });
+      console.log(imported.skipped ? "Domovní přístroje beze změny." : `Domovní přístroje: ${imported.imported} vypínačů, zásuvek, krytů a rámečků.`);
+    }
     const enclosures = await seedStandardEnclosures(prisma);
     const result = await importExternalCatalog(prisma, products, { force: args.includes("--force") });
     console.log(`Matice standardních rozvodnic: ${enclosures} skříní.`);

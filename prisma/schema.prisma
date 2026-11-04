@@ -68,6 +68,7 @@ enum EquipmentType {
   WELDER // Svářečka
   LIGHTNING_ROD // Hromosvod / LPS
   EMERGENCY_LIGHTING // Nouzové osvětlení
+  WIRING_DEVICE // Domovní přístroj – zásuvka, vypínač (fáze 47)
   OTHER
 }
 
@@ -851,6 +852,8 @@ model CatalogComponent {
   facetsJson         String?
   /// Původ externího záznamu („ai-panel-builder“) – null = vlastní katalog Eldocku.
   externalSource     String?
+  /// Odkaz na datasheet / produktovou stránku výrobce (fáze 47).
+  datasheetUrl       String?
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
 
@@ -909,6 +912,11 @@ model PanelBoardProject {
   standardEdition      String             @default("CSN_61439_3_ED2")
   /// Protokol o kusové zkoušce dle čl. 11 ČSN EN IEC 61439-1 ed. 3 – JSON (8 bodů, R_iso, zkoušející, datum).
   routineTestJson      String?
+  /// Detailní fotky jednotlivých DIN lišt / sekcí (fáze 47) – JSON { "1": "/api/files/photos/…" }.
+  railPhotosJson       String?
+  /// Ventilátor rozváděče (nucené chlazení) a počet kusů (fáze 47).
+  fanId                String?
+  fanCount             Int                @default(1)
 
   createdById String?
   /// Registrovaná firma (fáze 41): vidí jen své rozváděče, její údaje se propisují do dokumentace.
@@ -920,6 +928,7 @@ model PanelBoardProject {
   equipment Equipment?         @relation(fields: [equipmentId], references: [id], onDelete: SetNull)
   company   RegisteredCompany? @relation(fields: [companyId], references: [id], onDelete: SetNull)
   enclosure PanelEnclosure?    @relation(fields: [enclosureId], references: [id], onDelete: SetNull)
+  fan       EnclosureFan?      @relation(fields: [fanId], references: [id], onDelete: SetNull)
   items     PanelBoardItem[]
 
   @@index([equipmentId])
@@ -1011,6 +1020,7 @@ model PanelBoardItem {
   catalogComponent CatalogComponent? @relation(fields: [catalogComponentId], references: [id], onDelete: SetNull)
   parent           PanelBoardItem?   @relation("PanelTree", fields: [parentItemId], references: [id], onDelete: SetNull)
   children         PanelBoardItem[]  @relation("PanelTree")
+  wiringDevices    PanelItemWiring[]
 
   @@index([projectId, dinRailIndex, positionOnRail])
   @@index([catalogComponentId])
@@ -1094,4 +1104,82 @@ model SoftwareBackup {
   @@unique([equipmentId, targetUnit, major, minor])
   @@index([equipmentId, targetUnit, status])
   @@index([changeRequestId])
+}
+
+// -----------------------------------------------------------------------------
+//  KATALOG: VENTILÁTORY ROZVÁDĚČŮ A DOMOVNÍ PŘÍSTROJE (fáze 47)
+// -----------------------------------------------------------------------------
+
+/// Filtrační ventilátor rozváděče (nucené chlazení) – parametry z datasheetu výrobce.
+model EnclosureFan {
+  id                    String   @id @default(cuid())
+  manufacturer          String
+  series                String
+  articleNumber         String   @unique
+  typeCode              String
+  /// Průtok vzduchu volně foukající / s výstupním filtrem [m³/h].
+  airflowFreeM3h        Float
+  airflowFilterM3h      Float?
+  ratedVoltage          String
+  powerW                Float?
+  ipRating              String
+  cutoutMm              String?
+  outerDimensionsMm     String?
+  noiseDbA              Float?
+  operatingTempC        String?
+  datasheetUrl          String?
+  source                String   @default("")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  projects PanelBoardProject[]
+
+  @@index([manufacturer, airflowFreeM3h])
+}
+
+/// Domovní vypínač, zásuvka, kryt nebo rámeček (ABB, Schneider, Legrand) – externí databáze prvků.
+model WiringDevice {
+  id            String   @id @default(cuid())
+  /// „ABB:2CKA001754A4438“ – výrobce + objednací číslo (unikátní napříč značkami).
+  articleNumber String   @unique
+  manufacturer  String
+  series        String
+  /// WD_SWITCH | WD_SOCKET | WD_FRAME | WD_COVER | WD_DATA | WD_BLIND | WD_SENSOR | WD_THERMOSTAT | WD_BELL | WD_DIMMER | WD_LIGHT | WD_OTHER
+  category      String
+  /// frame | complete | cover | mechanism | accessory
+  role          String?
+  title         String
+  ean           String?
+  color         String?
+  /// Rámeček: počet míst (1R–6R).
+  frameUnits    Int?
+  ipRating      String?
+  ratedCurrentA Float?
+  widthMm       Float?
+  heightMm      Float?
+  depthMm       Float?
+  productUrl    String?
+  featuresJson  String?
+  searchText    String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  items PanelItemWiring[]
+
+  @@index([manufacturer, series, category])
+}
+
+/// Soupis domovní instalace obvodu: přístroje (vypínače, zásuvky, rámečky) napájené z přístroje rozváděče.
+model PanelItemWiring {
+  id             String  @id @default(cuid())
+  itemId         String
+  wiringDeviceId String
+  quantity       Int     @default(1)
+  room           String?
+
+  item         PanelBoardItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  wiringDevice WiringDevice   @relation(fields: [wiringDeviceId], references: [id], onDelete: Cascade)
+
+  @@unique([itemId, wiringDeviceId, room])
+  @@index([wiringDeviceId])
 }

@@ -85,8 +85,9 @@ describe("návrh rozváděče od nuly (fáze 43)", () => {
     const exact = await previewConfig(prisma, defaultConfig("MCB", { manufacturer: "ABB", modules: 1 }));
     expect(exact).toMatchObject({ manufacturer: "ABB", typeCode: "S201-B16", articleNumber: "2CDS251001R1165", estimated: false });
     const before = await prisma.catalogComponent.count();
-    const estimate = await previewConfig(prisma, defaultConfig("MCB", { manufacturer: "Siemens", modules: 1 }));
-    expect(estimate).toMatchObject({ manufacturer: "Siemens", articleNumber: null, estimated: true });
+    // Siemens má od fáze 47 přesné kusy 5SY6 – odhad IEC ukáže výrobce bez jističů v katalogu
+    const estimate = await previewConfig(prisma, defaultConfig("MCB", { manufacturer: "Legrand", modules: 1 }));
+    expect(estimate).toMatchObject({ manufacturer: "Legrand", articleNumber: null, estimated: true });
     expect(await prisma.catalogComponent.count()).toBe(before);
   });
 
@@ -97,7 +98,8 @@ describe("návrh rozváděče od nuly (fáze 43)", () => {
     const { id } = await design();
     await selectEnclosure(prisma, id, target.id);
     expect(await project(id)).toMatchObject({ enclosureId: target.id, enclosureModel: `ABB ${target.model}`, enclosureType: "FLUSH_MOUNTED", ipRating: "IP 30", widthMm: target.widthMm, heightMm: target.heightMm, enclosurePmaxW: target.pMaxW });
-    expect(await seedStandardEnclosures(prisma)).toBe(abb.length + (await prisma.panelEnclosure.count()) - abb.length);
+    // Standardní matice = všechny skříně kromě ABB CA35R 144M z rešerše (fáze 47)
+    expect(await seedStandardEnclosures(prisma)).toBe((await prisma.panelEnclosure.count()) - 1);
   });
 
   it("logo a razítko firmy", async () => {

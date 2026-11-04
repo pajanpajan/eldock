@@ -8,6 +8,8 @@ import { DEVICE_BRANDS, brandOf, filterBrands, type Brand } from "@/lib/panel-bu
 import { CONFIG_CATEGORIES, CONFIG_FIELDS, isOptionActive, type ConfigCategory, type ConfigField, type ItemConfig } from "@/lib/panel-builder/configurator";
 import { cn } from "@/lib/utils";
 
+import { ManufacturerLogo } from "./ManufacturerLogo";
+
 /** Barevný odznak značky (logo kreslené kódem). */
 export function BrandBadge({ brand, size = "md" }: { brand: Pick<Brand, "color" | "mark">; size?: "sm" | "md" }) {
   return (
@@ -111,11 +113,8 @@ export function CascadePicker({
                       brand?.value === option.value ? "border-primary bg-primary/15" : "border-border bg-card hover:border-primary/60",
                     )}
                   >
-                    <BrandBadge brand={option} />
-                    <span className="flex min-w-0 flex-col">
-                      <b className="truncate text-sm">{option.label}</b>
-                      <span className="text-[10px] text-muted-foreground">{count ? `${count.toLocaleString("cs-CZ")} prvků` : "odhad IEC"}</span>
-                    </span>
+                    <ManufacturerLogo manufacturer={option.value} className="h-7" />
+                    <span className="min-w-0 text-[10px] leading-tight text-muted-foreground">{count ? `${count.toLocaleString("cs-CZ")} prvků` : "odhad IEC"}</span>
                   </button>
                 );
               })}
@@ -136,7 +135,7 @@ export function CascadePicker({
               onClick={() => setExpanded(true)}
               className="flex min-h-10 items-center gap-2 rounded-lg border-2 border-primary bg-primary/15 px-2.5 text-sm font-bold"
             >
-              {brand ? <BrandBadge brand={brand} size="sm" /> : null}
+              {brand ? <ManufacturerLogo manufacturer={brand.value} className="h-6" /> : null}
               {brand?.label ?? manufacturer ?? "⚡ Obecný přístroj"}
             </button>
             <button type="button" onClick={() => setExpanded(true)} className="flex min-h-10 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs font-semibold text-muted-foreground hover:text-foreground">

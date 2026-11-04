@@ -82,6 +82,16 @@ export default async function PanelDocumentationPage({ params }: PageProps<"/pan
     functions: readingOrder(project.items).map((item) => ({ designation: item.designation, label: item.circuitLabel })),
     parts: partsList(docItems, enclosure),
     components: componentsList(docItems, enclosure),
+    wiring: project.items.flatMap((item) =>
+      item.wiringDevices.map((row) => ({
+        designation: item.designation,
+        circuit: item.circuitLabel,
+        room: row.room,
+        quantity: row.quantity,
+        articleNumber: row.wiringDevice.articleNumber.replace(/^[A-Z]+:/, ""),
+        title: row.wiringDevice.title,
+      })),
+    ),
     thermal,
     ambientTempC: project.ambientTempC,
     technical: technicalData(project, thermal, main?.ratedCurrentA ?? null),

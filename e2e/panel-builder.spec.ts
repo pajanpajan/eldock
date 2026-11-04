@@ -19,23 +19,38 @@ test("katalog prvků: navigace, okamžité hledání, filtry a atomizace vzorov�
 
   await page.getByRole("main").getByRole("link", { name: "Katalog prvků" }).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Katalog prvků");
-  await expect(page.getByTestId("catalog-count")).toContainText(/z \d+ prvků/);
 
-  // Hledání bez diakritiky a pomlček
+  // Fáze 47 – krok 1: rozcestník výrobců s logy (odebrané značky v něm nejsou)
+  const brands = page.getByTestId("catalog-brands");
+  await expect(brands.getByRole("link", { name: /^Siemens \(/ })).toBeVisible();
+  await expect(brands.getByRole("link", { name: /^(Finder|Mean Well|Elko)/ })).toHaveCount(0);
+  await expect(brands.locator('[data-logo="ABB"]')).toBeVisible();
+  // Krok 2: kategorie výrobce → krok 3: prvky s dlaždicovými filtry
+  await brands.getByRole("link", { name: /^ABB \(/ }).click();
+  await page.getByTestId("catalog-groups").getByRole("link", { name: /^Proudové chrániče/ }).click();
+  await page.getByTestId("catalog-tiles").getByRole("link", { name: "4P", exact: true }).click();
+  await expect(page).toHaveURL(/poles=4P/);
+  await expect(page.getByRole("cell", { name: "2CSF204102R1400" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "2CDS251001R1165" })).toHaveCount(0);
+  await page.getByRole("link", { name: "Zpět na kategorie" }).click();
+  await page.getByTestId("catalog-groups").getByRole("link", { name: /^Jističochrániče/ }).click();
+  await expect(page.getByRole("cell", { name: "DS301C C16 A30" })).toBeVisible();
+  // Ventilátory rozváděčů s datasheetem (Rittal)
+  await page.getByRole("link", { name: "Zpět na kategorie" }).click();
+  await page.getByRole("link", { name: "Zpět na všechny výrobce" }).click();
+  await page.getByTestId("catalog-brands").getByRole("link", { name: /^Rittal \(/ }).click();
+  await page.getByTestId("catalog-groups").getByRole("link", { name: /^Ventilátory/ }).click();
+  await expect(page.getByTestId("catalog-items").getByTestId("datasheet-link").first()).toBeVisible();
+  await page.getByRole("link", { name: "Zpět na kategorie" }).click();
+  await page.getByRole("link", { name: "Zpět na všechny výrobce" }).click();
+
+  // Globální hledání bez diakritiky a pomlček
   await expect(async () => {
     await page.getByLabel("Hledat v katalogu").fill("jistic s201b16");
     await expect(page).toHaveURL(/q=jistic/, { timeout: 2_000 });
   }).toPass({ timeout: 20_000 });
   await expect(page.getByRole("cell", { name: "2CDS251001R1165" })).toBeVisible();
   await expect(page.getByRole("cell", { name: "2CSF204102R1400" })).toHaveCount(0);
-
-  // Filtr kategorie + póly
-  await page.getByLabel("Hledat v katalogu").fill("");
-  await page.getByLabel("Kategorie").selectOption("RCD");
-  await page.getByLabel("Póly").selectOption("4P");
-  await expect(page).toHaveURL(/category=RCD/);
-  await expect(page.getByRole("cell", { name: "2CSF204102R1400" })).toBeVisible();
-  await expect(page.getByRole("cell", { name: "2CDS251001R1165" })).toHaveCount(0);
 
   // Atomizace vzorového PDF z demo dokumentace
   await page.getByRole("button", { name: /Atomizovat PDF datasheet/ }).click();

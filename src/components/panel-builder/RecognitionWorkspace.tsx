@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useMemo, useState, useTransition } from "react";
+import { useCallback, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Loader2, Plus, RefreshCw } from "lucide-react";
+import { ArrowRight, Camera, Loader2, Plus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,8 @@ import { deviceWithConfig, type VectorDevice } from "@/lib/panel-builder/vector-
 import { RECOGNITION } from "@/lib/panel-builder/project";
 import { cn } from "@/lib/utils";
 import { addModuleAction, addRailAction, analyzePanelProjectAction, configureItemAction, deleteRailAction, updateItemTextAction } from "@/server/actions/panel-builder";
-import { moveRailAction, placeComponentsAction, setEnvironmentAction, setRailCapacityAction } from "@/server/actions/panel-design";
+import { resizeImage, uploadFile } from "@/lib/upload-client";
+import { analyzeRailDetailAction, moveRailAction, placeComponentsAction, setEnvironmentAction, setRailCapacityAction } from "@/server/actions/panel-design";
 import { nextChipLabel, presetConfig } from "@/lib/panel-builder/circuit-chips";
 import { ENVIRONMENTS, enclosureFitsEnvironment, environmentOf, ipLabel } from "@/lib/panel-builder/environments";
 import { validateSwitchboardState, type LintIssue } from "@/lib/panel-builder/linter";
@@ -30,6 +31,7 @@ import { ItemConfigurator } from "./ItemConfigurator";
 import { PhotoViewer } from "./PhotoViewer";
 import { PlacementCard } from "./PlacementCard";
 import { VectorPanel } from "./VectorPanel";
+import type { ItemWiring } from "./WiringSection";
 
 export interface WorkspaceItem {
   id: string;
@@ -49,6 +51,8 @@ export interface WorkspaceItem {
   device: VectorDevice;
   /** Nadřazený prvek ve stromu zapojení (elektro-linter: okruhy pod chráničem). */
   parentItemId?: string | null;
+  /** Domovní přístroje obvodu (fáze 47). */
+  wiring?: ItemWiring[];
 }
 
 /** Obrys symbolu podle stavu rozpoznání (ověřené bez obrysu). */
@@ -84,6 +88,7 @@ export function RecognitionWorkspace({
   environment,
   chipsJson = null,
   standardEdition = "CSN_61439_3_ED2",
+  railPhotos = [],
 }: {
   projectId: string;
   designMode: "PHOTO" | "DESIGN";
@@ -101,6 +106,8 @@ export function RecognitionWorkspace({
   chipsJson?: string | null;
   /** Edice normy rozváděče (fáze 46). */
   standardEdition?: string;
+  /** Detailní fotky lišt / sekcí (fáze 47). */
+  railPhotos?: { rail: number; url: string }[];
 }) {
   const router = useRouter();
   const design = designMode === "DESIGN";
@@ -121,6 +128,31 @@ export function RecognitionWorkspace({
   const [paletteLabel, setPaletteLabel] = useState("");
   const [chips, saveChips] = useCircuitChips(chipsJson);
   const [fixing, startFixing] = useTransition();
+  // Pravidlo F (fáze 47): detailní fotka jedné lišty / sekce velkého rozváděče
+  const railPhotoInput = useRef<HTMLInputElement>(null);
+  const [railPhotoTarget, setRailPhotoTarget] = useState(1);
+  const [railPhotoBusy, startRailPhoto] = useTransition();
+  function pickRailPhoto(rail: number) {
+    setRailPhotoTarget(rail);
+    railPhotoInput.current?.click();
+  }
+  function uploadRailPhoto(file: File) {
+    const rail = railPhotoTarget;
+    startRailPhoto(async () => {
+      try {
+        const resized = file.type.startsWith("image/") && file.type !== "image/svg+xml" ? await resizeImage(file, 2400) : file;
+        const uploaded = await uploadFile("photo", resized);
+        const result = await analyzeRailDetailAction(projectId, rail, uploaded.url);
+        if (!result.ok) return void toast.error(result.error);
+        if (result.data.mode === "DEMO") toast.info(result.data.warning ?? `Detailní fotka lišty ${rail} je uložená.`);
+        else toast.success(`Lišta ${rail} přečtena z detailní fotky: ${result.data.total} prvků${result.data.unresolved ? `, ${result.data.unresolved} k ověření` : ""}.`);
+        setActiveRail(rail);
+        router.refresh();
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Fotku lišty se nepodařilo nahrát.");
+      }
+    });
+  }
   const env = environmentOf(environment);
   // Popis obvodu psaný v konfigurátoru se hned ukáže na dlaždici lišty
   const [labels, setLabels] = useState<ReadonlyMap<string, string>>(new Map());
@@ -350,6 +382,48 @@ export function RecognitionWorkspace({
             {coverState ? <span className="ml-auto">Poslední analýza: {coverState === "UNCOVERED" ? "odkrytovaný" : "zakrytovaný"}</span> : null}
           </div>
 
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-sky-500/40 bg-sky-500/5 px-2.5 py-2 text-xs" data-testid="rail-photo-bar">
+            <Button size="sm" variant="outline" className="touch-target gap-1.5 border-sky-500/60 text-sky-200" disabled={railPhotoBusy} onClick={() => pickRailPhoto(railPhotoTarget)}>
+              {railPhotoBusy ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <Camera className="size-3.5" aria-hidden />} 📷 Nahrát detailní fotku této lišty / sekce
+            </Button>
+            <label className="flex items-center gap-1 text-muted-foreground">
+              lišta
+              <select className="h-8 rounded-md border border-input bg-transparent px-1.5 text-foreground dark:bg-input/30" value={Math.min(railPhotoTarget, capacities.length)} onChange={(event) => setRailPhotoTarget(Number(event.target.value))} aria-label="Lišta pro detailní fotku">
+                {capacities.map((_, index) => (
+                  <option key={index} value={index + 1}>
+                    {index + 1}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <span className="text-muted-foreground">Velký rozváděč? Vyfoťte zblízka jednu lištu – AI přečte jen ji a ostatní lišty nechá.</span>
+            {railPhotos.length ? (
+              <div className="flex w-full flex-wrap gap-1.5" data-testid="rail-photos">
+                {railPhotos.map((photo) => (
+                  <a key={`${photo.rail}-${photo.url}`} href={photo.url} target="_blank" rel="noreferrer" className="flex items-center gap-1 rounded border border-border bg-background/60 p-0.5 pr-1.5 hover:border-sky-400">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={photo.url} alt={`Detail lišty ${photo.rail}`} className="size-9 rounded object-cover" />
+                    Lišta {photo.rail}
+                  </a>
+                ))}
+              </div>
+            ) : null}
+          </div>
+          <input
+            ref={railPhotoInput}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="sr-only"
+            aria-label="Soubor detailní fotky lišty"
+            data-testid="rail-photo-input"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = "";
+              if (file) uploadRailPhoto(file);
+            }}
+          />
+
           {photoUrl ? (
             <PhotoViewer src={photoUrl} />
           ) : (
@@ -403,7 +477,8 @@ export function RecognitionWorkspace({
             </p>
           ) : null}
         </div>
-        <p className={cn("self-start rounded-md border px-2.5 py-1.5 font-mono text-xs", summary.used > summary.total ? "border-red-500/60 text-red-300" : "border-border text-muted-foreground")} data-testid="rail-summary" role="status">
+        <div className="flex flex-wrap items-center gap-2">
+        <p className={cn("rounded-md border px-2.5 py-1.5 font-mono text-xs", summary.used > summary.total ? "border-red-500/60 text-red-300" : "border-border text-muted-foreground")} data-testid="rail-summary" role="status">
           {formatRailSummary(summary)}
         </p>
         <LinterPanel
@@ -417,6 +492,7 @@ export function RecognitionWorkspace({
             setActiveRail(item.dinRailIndex);
           }}
         />
+        </div>
         <VectorPanel
           devices={devices}
           rails={capacities.length}
@@ -456,6 +532,7 @@ export function RecognitionWorkspace({
           activeRail={activeRail}
           onActivateRail={setActiveRail}
           onPlaceDrop={(rail, position) => place(1, rail, position)}
+          onRailPhoto={design ? undefined : pickRailPhoto}
         />
         {selected ? (
           <p className="text-xs text-muted-foreground" data-testid="vector-selected">
@@ -500,6 +577,10 @@ export function RecognitionWorkspace({
               onChanged={() => router.refresh()}
               onDeleted={() => {
                 setSelectedId(null);
+                router.refresh();
+              }}
+              onInserted={(itemId) => {
+                setSelectedId(itemId);
                 router.refresh();
               }}
             />

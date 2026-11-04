@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useMemo, useRef, useState, type DragEvent as ReactDragEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import { ArrowDown, ArrowUp, Minus, Moon, Plus, Printer, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Camera, Minus, Moon, Plus, Printer, Trash2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { MAX_RAIL_MODULES, MIN_RAIL_MODULES, RAIL_PRESETS } from "@/lib/panel-builder/rails";
@@ -53,6 +53,7 @@ export function VectorPanel({
   activeRail,
   onActivateRail,
   onPlaceDrop,
+  onRailPhoto,
 }: {
   devices: readonly VectorDevice[];
   rails: number;
@@ -88,6 +89,8 @@ export function VectorPanel({
   onActivateRail?: (rail: number) => void;
   /** Upuštění karty z pravého menu na lištu (pozice = pořadí zleva, kam se přístroj vloží). */
   onPlaceDrop?: (rail: number, position: number) => void;
+  /** Fáze 47 – detailní fotka jedné lišty / sekce (velké rozváděče). */
+  onRailPhoto?: (rail: number) => void;
 }) {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
   const [theme, setTheme] = useState<VectorTheme>("dark");
@@ -428,6 +431,11 @@ export function VectorPanel({
                         <ArrowDown className="size-3" aria-hidden />
                       </button>
                     </>
+                  ) : null}
+                  {onRailPhoto ? (
+                    <button type="button" disabled={busy} aria-label={`Nahrát detailní fotku lišty ${rail.index}`} title="📷 Nahrát detailní fotku této lišty / sekce" onClick={() => onRailPhoto(rail.index)} className="rounded p-0.5 text-sky-300 hover:bg-sky-500/15 disabled:opacity-40">
+                      <Camera className="size-3" aria-hidden />
+                    </button>
                   ) : null}
                   {onDeleteRail ? (
                     <button type="button" disabled={busy} aria-label={`Smazat celou lištu ${rail.index}`} title="Smazat celou lištu" onClick={() => onDeleteRail(rail.index)} className="rounded p-0.5 text-red-300 hover:bg-red-500/15 disabled:opacity-40">

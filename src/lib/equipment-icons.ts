@@ -11,6 +11,7 @@ import {
   Flame,
   Gauge,
   LampCeiling,
+  Plug,
   Package,
   Wrench,
   Zap,
@@ -35,5 +36,6 @@ export const EQUIPMENT_TYPE_ICONS: Record<EquipmentType, LucideIcon> = {
   WELDER: Flame,
   LIGHTNING_ROD: CloudLightning,
   EMERGENCY_LIGHTING: LampCeiling,
+  WIRING_DEVICE: Plug,
   OTHER: Package,
 };

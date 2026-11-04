@@ -7,16 +7,12 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { brandOf } from "@/lib/panel-builder/brands";
 import { ENCLOSURE_MANUFACTURERS, INSTALLATION_LABELS, MOUNTING_FILTERS, fitEnclosures, ipNumber, reservePercent, type EnclosureInstallation, type EnclosureLike, type EnclosureNeed, type MountingFilter } from "@/lib/panel-builder/enclosures";
 import { cn } from "@/lib/utils";
 import { listEnclosuresAction, selectEnclosureAction } from "@/server/actions/panel-design";
 
-import { BrandBadge } from "./CascadePicker";
+import { ManufacturerLogo } from "./ManufacturerLogo";
 
-const RITTAL = { color: "#e2001a", mark: "R" };
-const HENSEL = { color: "#005ca9", mark: "HE" };
-const badgeOf = (manufacturer: string) => brandOf(manufacturer) ?? (manufacturer === "Rittal" ? RITTAL : manufacturer === "Hensel" ? HENSEL : { color: "#475569", mark: manufacturer.slice(0, 2) });
 
 /**
  * „🗄️ Výběr skříně rozváděče (Rozvodnice)“: nejdřív výrobce skříně (karty + montáž), pak jen skříně,
@@ -95,7 +91,8 @@ export function EnclosurePicker({
               onClick={() => pickManufacturer(value)}
               className={cn("flex min-h-11 items-center gap-2 rounded-lg border px-2 text-sm font-bold", manufacturer === value ? "border-primary bg-primary/15" : "border-border hover:border-primary/60")}
             >
-              <BrandBadge brand={badgeOf(value)} size="sm" /> {value.toUpperCase()}
+              <ManufacturerLogo manufacturer={value} className="h-6" />
+              <span className="sr-only">{value.toUpperCase()}</span>
             </button>
           ))}
         </div>

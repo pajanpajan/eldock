@@ -21,6 +21,7 @@ const TAG_PATTERNS: Record<EquipmentType, { prefix: string; width: number }> = {
   WELDER: { prefix: "SV-", width: 4 },
   LIGHTNING_ROD: { prefix: "LPS-{code}", width: 0 },
   EMERGENCY_LIGHTING: { prefix: "NO-{code}", width: 0 },
+  WIRING_DEVICE: { prefix: "DP-", width: 4 },
   OTHER: { prefix: "X-", width: 2 },
 };
 
@@ -54,6 +55,7 @@ const BASE_NAMES: Partial<Record<EquipmentType, string>> = {
   WELDER: "Svářečka",
   LIGHTNING_ROD: "Hromosvod",
   EMERGENCY_LIGHTING: "Nouzové osvětlení",
+  WIRING_DEVICE: "Zásuvka",
   OTHER: "Zařízení",
 };
 

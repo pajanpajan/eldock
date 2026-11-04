@@ -9,7 +9,7 @@ import { EnclosurePicker } from "@/components/panel-builder/EnclosurePicker";
 import { ThermalWorkspace } from "@/components/panel-builder/ThermalWorkspace";
 import { enclosureNeed } from "@/lib/panel-builder/enclosures";
 import { railCapacities } from "@/lib/panel-builder/rails";
-import { getPanelProject } from "@/server/queries/panel-builder";
+import { getEnclosureFans, getPanelProject } from "@/server/queries/panel-builder";
 
 export async function generateMetadata({ params }: PageProps<"/panel-builder/[id]/thermal">): Promise<Metadata> {
   const project = await getPanelProject((await params).id);
@@ -20,7 +20,7 @@ export async function generateMetadata({ params }: PageProps<"/panel-builder/[id
 export default async function PanelThermalPage({ params }: PageProps<"/panel-builder/[id]/thermal">) {
   const guard = await panelBuilderGuard();
   if (guard) return guard;
-  const project = await getPanelProject((await params).id);
+  const [project, fans] = await Promise.all([getPanelProject((await params).id), getEnclosureFans()]);
   if (!project) notFound();
 
   return (
@@ -33,6 +33,8 @@ export default async function PanelThermalPage({ params }: PageProps<"/panel-bui
         projectId={project.id}
         pMaxW={project.enclosurePmaxW}
         enclosureModel={project.enclosureModel}
+        fans={fans}
+        fan={{ id: project.fanId, count: project.fanCount }}
         enclosurePicker={<EnclosurePicker projectId={project.id} need={enclosureNeed(railCapacities(project), project.items)} current={{ model: project.enclosureModel, enclosureId: project.enclosureId }} />}
         initialProject={{
           heightMm: project.heightMm,

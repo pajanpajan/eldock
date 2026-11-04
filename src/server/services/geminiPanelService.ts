@@ -2,6 +2,7 @@
 // parametrů neznámého přístroje. Bez GEMINI_API_KEY (nebo když Gemini neodpoví) běží deterministický
 // demo režim – služba nikdy nespadne, jen vrátí `mode: "DEMO"` (UI zobrazí štítek Demo AI režimu).
 
+import { normalizeDetection } from "@/lib/panel-builder/detection-rules";
 import type { ComponentCategory } from "@/generated/prisma/enums";
 import { COMPONENT_CATEGORIES, estimateModules, estimatePowerLoss, iecSymbolFor, isMix, isPoles, normalizeManufacturer } from "@/lib/panel-builder/catalog";
 import { extractComponents, parseComponent, type ExtractedComponent } from "@/lib/panel-builder/datasheet-extract";
@@ -210,10 +211,12 @@ const RAILS_SCHEMA = {
 export function railPrompt(cover: CoverState, manufacturerHint: string | null): string {
   const counting =
     cover === "UNCOVERED"
-      ? `Rozváděč je ODKRYTOVANÝ – počítej podle šroubků svorek:
-1) Zleva doprava spočítej všechny šroubky (svorky) v horní nebo spodní linii lišty. Každý šroubek = 1 modulová
-   pozice 18 mm (kromě kompaktních přístrojů, kde jsou 2 šroubky v 1 modulu nebo šroubky ve dvou patrech nad sebou).
-2) Zkontroluj svislé dělicí spáry mezi těly přístrojů a spojovací hrazdičky páček:
+      ? `Rozváděč je ODKRYTOVANÝ – počítej TĚLA PŘÍSTROJŮ A PÁČKY, ne slepě šroubky:
+1) Zleva doprava najdi svislé dělicí spáry mezi plastovými těly přístrojů; šířku každého těla urči v modulech
+   (1M = 17,5–18 mm). Šroubky svorek jsou jen pomůcka – NEPLATÍ „1 šroubek = 1 modul“: kompaktní 1M jističochránič
+   ABB DS301C / DSN201 má nahoře 2 šroubky vedle sebe (1/2 a N) a je to JEDEN přístroj 1P+N široký 1 modul;
+   řídicí moduly KNX / free@home / Loxone mají řadu 16 drobných šroubků a jsou to JEDNY přístroje 4M, 8M nebo 12M.
+2) Zkontroluj spojovací hrazdičky páček:
    - 3 sousední moduly (3 šroubky nahoře) se společnou páčkou / hrazdičkou přes 3 póly nebo s jedním tělem bez spáry
      uprostřed = VŽDY JEDEN přístroj poles "3P", modulesWidth 3. Nikdy je nerozděluj na tři 1P jističe.
    - 4 moduly (4 šroubky) s testovacím tlačítkem "T" = proudový chránič category "RCD", poles "4P", modulesWidth 4.`
@@ -243,6 +246,17 @@ b) CHARAKTERISTIKA B vs. C: písmena B a C se na potisku snadno zamění. V domo
 c) RÁMEČKY: box_2d obepíná POUZE skutečné plastové tělo osazeného přístroje (od levé do pravé hrany tělesa).
    Nikdy neroztahuj rámeček přes prázdnou kovovou DIN lištu, mezery ani kabely napravo od posledního přístroje.
    totalModules je počet modulů SKUTEČNĚ osazených přístroji (ne kapacita lišty).
+d) VELKÉ SKŘÍNĚ: řada může mít 12M, 14M, 18M, 24M i 36M (skříň 144M má v řadě levé pole 24M a pravé 12M oddělené
+   svislou příčkou). Neosazený volný kus DIN lišty (holý kovový profil) NIKDY nevyplňuj smyšlenými moduly.
+e) 3P JISTIČ vs. 4P CHRÁNIČ: nepředpokládej, že lišta začíná chráničem. 4P chránič (ABB FH204 A 40A/0,03A, 4M) má
+   páčku jen vpravo a vlevo bílou plochu s popisem a oválné tlačítko TEST. 3P jistič (ABB S203 B20 / B16, 3M) má
+   širokou černou páčku přes všechny 3 moduly a NEMÁ tlačítko TEST.
+f) INSTALAČNÍ STYKAČ: bílý 2M přístroj bez černé jističové páčky, s malým svislým posuvníkem OFF – AUTO – ON
+   a označením EN25-40N / EN20-20N / EN40-40N / ESB25 = category "CONTACTOR" (-K), NIKDY jistič 25 A.
+g) HODNOTY: u ABB S201 / S203 čti hodnotu přímo pod červeným proužkem a pečlivě rozliš B2, B10, B16 a B20;
+   u chráničů FH204 A rozliš 40A a 25A (IΔn = 0,03A).
+h) ŘADOVÉ SVORKY (šedé úzké svorky se žlutozelenými / modrými vodiči na kraji lišty) = category "TERMINAL", ne jističe.
+   Šedé řídicí moduly KNX / free@home / Loxone (4M, 8M, 12M) = category "PLC".
 ${brand}
 Pro každý přístroj vrať: position (od 1 zleva), box_2d [ymin, xmin, ymax, xmax] 0–1000 v souřadnicích TOHOTO výřezu,
 text (vše čitelné z čela), category, poles, modulesWidth, ratedCurrentA, trippingCurve (B/C/D), u chráničů a jističochráničů
@@ -381,33 +395,10 @@ export function toRailDetections(devices: readonly GeminiRailDevice[], rail: num
       circuitLabel: str(device.label)?.slice(0, 80),
     };
   });
-  const used = detections.reduce((sum, detection) => sum + detection.modules, 0);
-  const missing = Math.round((num(totalModules) ?? 0) - used);
-  if (missing > 0 && detections.length) {
-    // Šířka 1M odhadem z rozpoznaných přístrojů; doplněné pozice navazují vpravo od posledního.
-    // Doplňuje se jen to, co se vejde do výřezu lišty – částečně osazená lišta se nikdy neroztáhne na celou šířku.
-    const perModule = detections.reduce((sum, d) => sum + (d.box ? (d.box[3] - d.box[1]) / d.modules : 0), 0) / detections.length;
-    const last = detections[detections.length - 1].box!;
-    const regionRight = ((region.left + region.width) / region.imageWidth) * 100;
-    for (let i = 0; i < missing; i++) {
-      const xmin = Math.min(99.5, last[3] + i * perModule);
-      if (xmin + perModule * 0.8 > regionRight) break;
-      detections.push({
-        dinRailIndex: rail,
-        positionOnRail: detections.length + 1,
-        modules: 1,
-        box: [last[0], xmin, last[2], Math.min(100, xmin + perModule)],
-        rawOcrText: "(doplněno – AI modul vynechala)",
-        category: null,
-        poles: null,
-        ratedCurrentA: null,
-        trippingCurve: null,
-        manufacturer: null,
-        confidence: 0.2,
-      });
-    }
-  }
-  return detections;
+  // Pravidlo A (fáze 47): volný kus DIN lišty se NEDOPLŇUJE smyšlenými moduly – jen skutečně osazené přístroje.
+  // Pravidla B–E: oprava kategorie, pólů a šířky podle typového kódu z čela (DS301C, EN25-40N, FH204, S203 …).
+  void totalModules;
+  return detections.map(normalizeDetection);
 }
 
 /** Výřez pásu z fotky (sharp) jako JPEG. */
@@ -443,7 +434,29 @@ async function cropRail(image: { bytes: Buffer }, box: readonly number[]): Promi
 async function analyzeSinglePass(image: { bytes: Buffer; mimeType: string }, hint: string | null): Promise<Detection[]> {
   const { visionModel } = geminiConfig();
   const result = await generateJson<{ devices: GeminiDevice[] }>(visionModel, [{ text: photoPrompt(hint) }, { inline_data: { mime_type: image.mimeType, data: image.bytes.toString("base64") } }], PHOTO_SCHEMA);
-  return toDetections(result.devices ?? []);
+  return toDetections(result.devices ?? []).map(normalizeDetection);
+}
+
+/**
+ * Pravidlo F (fáze 47): detailní fotka jedné DIN lišty / sekce – ostrý detail celé fotky = jedna lišta,
+ * AI přečte přesné texty (DS301C B16, EN25-40N, FH204 A 40A, S203 B20). Bez klíče / u SVG null (demo).
+ */
+export async function analyzeRailPhoto(input: { image: { bytes: Buffer; mimeType: string } | null; rail: number; manufacturerHint?: string | null; mode?: AnalysisMode }): Promise<{ mode: AiMode; detections: Detection[]; warning?: string }> {
+  const { visionModel, apiKey } = geminiConfig();
+  if (!apiKey || !input.image || !GEMINI_IMAGE_TYPES.includes(input.image.mimeType)) return { mode: "DEMO", detections: [], warning: "Demo AI režim – detailní fotka je uložená, přístroje lišty zůstaly beze změny." };
+  try {
+    const cover: CoverState = input.mode === "UNCOVERED" ? "UNCOVERED" : "COVERED";
+    const result = await generateJson<{ totalModules?: number; devices?: GeminiRailDevice[] }>(
+      visionModel,
+      [{ text: railPrompt(cover, input.manufacturerHint ?? null) }, { inline_data: { mime_type: input.image.mimeType, data: input.image.bytes.toString("base64") } }],
+      RAIL_SCHEMA,
+    );
+    const region = { left: 0, top: 0, width: 1, height: 1, imageWidth: 1, imageHeight: 1 };
+    return { mode: "GEMINI", detections: toRailDetections(result.devices ?? [], input.rail, region, result.totalModules).map((detection) => ({ ...detection, box: null })) };
+  } catch (error) {
+    console.error("[gemini] detailní fotka lišty selhala:", error);
+    return { mode: "DEMO", detections: [], warning: "Gemini neodpověděl – přístroje lišty zůstaly beze změny." };
+  }
 }
 
 /**

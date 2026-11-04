@@ -1,13 +1,17 @@
 import type { PrismaClient } from "@/generated/prisma/client";
+import { HIDDEN_MANUFACTURER_NAMES } from "@/lib/panel-builder/brands";
 import { catalogCategory, matchConfig, synthesizeComponent, type ItemConfig } from "@/lib/panel-builder/configurator";
 import { parseChipSet, type ChipSet } from "@/lib/panel-builder/circuit-chips";
 import { enclosureProjectData } from "@/lib/panel-builder/enclosures";
 import { environmentOf, isEnvironmentId } from "@/lib/panel-builder/environments";
 import { isStandardEdition, parseRoutineTest, routineTestVerdict, standardEditionOf, type RoutineTest } from "@/lib/legislation-2027";
-import { freeOnRail, railCapacities, railColumns, railMoveTarget, withRailCapacity, withRailsSwapped } from "@/lib/panel-builder/rails";
+import { freeOnRail, parseRailPhotos, railCapacities, railColumns, railMoveTarget, withRailCapacity, withRailsSwapped } from "@/lib/panel-builder/rails";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 
 import { componentForConfig, renumberProject } from "./panel-builder";
+import type { analyzeRailPhoto } from "./geminiPanelService";
+import { isMix } from "@/lib/panel-builder/catalog";
+import { matchDetection, type Detection } from "@/lib/panel-builder/matching";
 
 // Návrh rozváděče od nuly (fáze 43): kapacita a pořadí DIN lišt, osazení přístrojů z kaskádového
 // menu (drag & drop, 1× / +3× / +6×), živá karta přiřazeného přístroje, výběr skříně a razítko firmy.
@@ -117,9 +121,10 @@ export interface ConfigPreview {
 
 /** Živá karta „Přiřazený přístroj k osazení“: přesný kus pro konfiguraci (nic nezapisuje), jinak odhad IEC. */
 export async function previewConfig(prisma: PrismaClient, config: ItemConfig): Promise<ConfigPreview> {
-  const catalog = await prisma.catalogComponent.findMany({ where: { category: catalogCategory(config) } });
+  const catalog = await prisma.catalogComponent.findMany({ where: { category: catalogCategory(config), manufacturer: { notIn: HIDDEN_MANUFACTURER_NAMES } } });
   const component = matchConfig(catalog, config);
-  if (!component || component.dataSource === "IEC_ESTIMATE") {
+  // Syntetický kus z konfigurátoru (CFG-…) = jen odhad; skutečný kus s odhadnutým Pv si MPN ponechá
+  if (!component || component.articleNumber.startsWith("CFG-")) {
     const synthesized = synthesizeComponent(config);
     return { manufacturer: synthesized.manufacturer, typeCode: synthesized.typeCode, articleNumber: null, powerLossWatts: synthesized.powerLossWatts, modules: config.modules, estimated: true, accessories: [], accessoryCount: 0 };
   }
@@ -138,7 +143,7 @@ export async function previewConfig(prisma: PrismaClient, config: ItemConfig): P
     articleNumber: component.articleNumber,
     powerLossWatts: component.powerLossWatts,
     modules: config.modules,
-    estimated: false,
+    estimated: component.dataSource === "IEC_ESTIMATE",
     accessories: relations.map((relation) => ({ ...relation.child, relationType: relation.relationType, verified: relation.verified })),
     accessoryCount,
   };
@@ -195,4 +200,100 @@ export async function saveRoutineTest(prisma: PrismaClient, projectId: string, t
   const clean = parseRoutineTest(JSON.stringify(test));
   await prisma.panelBoardProject.update({ where: { id: projectId }, data: { routineTestJson: JSON.stringify(clean) } });
   return { test: clean, ...routineTestVerdict(clean) };
+}
+
+/**
+ * Pravidlo F (fáze 47): přístroje jedné lišty z ostré detailní fotky – ostatní lišty zůstanou beze změny.
+ * Potomci smazaných přístrojů ve stromu zapojení se odpojí (strom se pak doplní v kroku 2).
+ */
+export async function applyRailDetections(prisma: PrismaClient, projectId: string, rail: number, detections: readonly Detection[], dominant: string | null) {
+  if (!detections.length) return { total: 0, unresolved: 0 };
+  const catalog = await prisma.catalogComponent.findMany({
+    where: { category: { not: "ENCLOSURE" }, manufacturer: { notIn: HIDDEN_MANUFACTURER_NAMES } },
+    select: { id: true, manufacturer: true, typeCode: true, articleNumber: true, category: true, poles: true, ratedCurrentA: true, trippingCurve: true, rcdType: true, rcdSensitivityMa: true, modulesCount: true },
+  });
+  const manufacturer = isMix(dominant) ? null : dominant;
+  const ordered = [...detections].sort((a, b) => a.positionOnRail - b.positionOnRail);
+  const matches = ordered.map((detection) => matchDetection(detection, catalog, manufacturer));
+  const byId = new Map(catalog.map((component) => [component.id, component]));
+  const old = await prisma.panelBoardItem.findMany({ where: { projectId, dinRailIndex: rail }, select: { id: true } });
+  await prisma.$transaction([
+    prisma.panelBoardItem.updateMany({ where: { parentItemId: { in: old.map((item) => item.id) } }, data: { parentItemId: null, fedFromIncomer: false } }),
+    prisma.panelBoardItem.deleteMany({ where: { id: { in: old.map((item) => item.id) } } }),
+    prisma.panelBoardItem.createMany({
+      data: ordered.map((detection, index) => {
+        const match = matches[index];
+        const component = byId.get(match.componentId ?? "");
+        return {
+          projectId,
+          catalogComponentId: match.componentId,
+          dinRailIndex: rail,
+          positionOnRail: index + 1,
+          modulesWidth: detection.modules || component?.modulesCount || 1,
+          recognitionStatus: match.status,
+          confidence: Math.round(match.confidence * 100) / 100,
+          rawOcrText: detection.rawOcrText || null,
+          detectedJson: JSON.stringify({ category: detection.category, poles: detection.poles, ratedCurrentA: detection.ratedCurrentA, trippingCurve: detection.trippingCurve, rcdType: detection.rcdType ?? null, rcdSensitivityMa: detection.rcdSensitivityMa ?? null, manufacturer: detection.manufacturer, modules: detection.modules }),
+          designation: "-X99",
+          circuitLabel: detection.circuitLabel ?? "",
+          sortOrder: rail * 100 + index,
+        };
+      }),
+    }),
+  ]);
+  await renumberProject(prisma, projectId);
+  return { total: ordered.length, unresolved: matches.filter((match) => match.status !== "VERIFIED").length };
+}
+
+/** Detailní fotka lišty / sekce: uloží fotku k liště a (s Gemini) přečte přístroje lišty z ostrého detailu. */
+export async function analyzeRailDetail(
+  prisma: PrismaClient,
+  projectId: string,
+  rail: number,
+  photoUrl: string,
+  deps: { analyze: typeof analyzeRailPhoto; readPhoto: (url: string) => Promise<{ bytes: Buffer; mimeType: string } | null> },
+) {
+  const project = await prisma.panelBoardProject.findUnique({ where: { id: projectId }, select: { railPhotosJson: true, dominantManufacturer: true, dinRailsCount: true, coverState: true } });
+  if (!project) throw new WorkflowError("NOT_FOUND", "Projekt rozváděče neexistuje.");
+  if (rail < 1 || rail > Math.max(project.dinRailsCount, 1)) throw new WorkflowError("VALIDATION", "Neplatná DIN lišta.");
+  const photos = { ...parseRailPhotos(project.railPhotosJson), [String(rail)]: photoUrl };
+  await prisma.panelBoardProject.update({ where: { id: projectId }, data: { railPhotosJson: JSON.stringify(photos) } });
+  const hint = isMix(project.dominantManufacturer) ? null : project.dominantManufacturer;
+  const result = await deps.analyze({ image: await deps.readPhoto(photoUrl), rail, manufacturerHint: hint, mode: project.coverState === "UNCOVERED" ? "UNCOVERED" : "COVERED" });
+  const saved = await applyRailDetections(prisma, projectId, rail, result.detections, hint);
+  return { mode: result.mode, ...saved, warning: result.warning };
+}
+
+/**
+ * „➕ Přidat prvek vpravo“ (prázdný nerozpoznaný 1M modul) a „📑 Duplikovat prvek“ (přesná kopie
+ * se stejným katalogovým kusem a konfigurací) hned napravo od vybraného přístroje; přístroje vpravo se posunou.
+ */
+export async function insertNextTo(prisma: PrismaClient, itemId: string, mode: "blank" | "duplicate") {
+  const item = await prisma.panelBoardItem.findUnique({ where: { id: itemId } });
+  if (!item) throw new WorkflowError("NOT_FOUND", "Prvek rozváděče neexistuje.");
+  const right = await prisma.panelBoardItem.findMany({ where: { projectId: item.projectId, dinRailIndex: item.dinRailIndex, positionOnRail: { gt: item.positionOnRail } }, select: { id: true, positionOnRail: true } });
+  const duplicate = mode === "duplicate";
+  const created = await prisma.$transaction(async (tx) => {
+    for (const row of right) await tx.panelBoardItem.update({ where: { id: row.id }, data: { positionOnRail: row.positionOnRail + 1, sortOrder: item.dinRailIndex * 100 + row.positionOnRail + 1 } });
+    return tx.panelBoardItem.create({
+      data: {
+        projectId: item.projectId,
+        dinRailIndex: item.dinRailIndex,
+        positionOnRail: item.positionOnRail + 1,
+        sortOrder: item.dinRailIndex * 100 + item.positionOnRail + 1,
+        modulesWidth: duplicate ? item.modulesWidth : 1,
+        catalogComponentId: duplicate ? item.catalogComponentId : null,
+        configJson: duplicate ? item.configJson : null,
+        customTypeCode: duplicate ? item.customTypeCode : null,
+        circuitLabel: duplicate ? item.circuitLabel : "",
+        phaseAssignment: duplicate ? item.phaseAssignment : null,
+        recognitionStatus: duplicate ? item.recognitionStatus : "UNRECOGNIZED",
+        confidence: duplicate ? item.confidence : 0,
+        designation: "-X99",
+      },
+      select: { id: true },
+    });
+  });
+  await renumberProject(prisma, item.projectId);
+  return { id: created.id, projectId: item.projectId };
 }

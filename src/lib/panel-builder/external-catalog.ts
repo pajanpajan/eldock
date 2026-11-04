@@ -4,6 +4,7 @@
 
 import type { ComponentCategory } from "@/generated/prisma/enums";
 
+import { isHiddenManufacturer } from "./brands";
 import { buildSearchText, estimatePowerLoss, iecSymbolFor } from "./catalog";
 
 /** Záznam produktu z externí databáze (podmnožina polí, kterou Eldock používá). */
@@ -270,6 +271,7 @@ export function mapExternalProduct(product: ExternalProduct): MappedProduct {
     };
   }
 
+  if (isHiddenManufacturer(manufacturer)) return { kind: "skip", key, reason: `výrobce ${manufacturer} je v AI Panel Builderu vyřazen` };
   const mapped = CATEGORY_MAP[product.category];
   if (!mapped) return { kind: "skip", key, reason: `kategorie ${product.category} není modulový přístroj na DIN lištu` };
 

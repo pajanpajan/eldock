@@ -13,14 +13,16 @@ describe("kategorie zařízení ve Studiu", () => {
       TECH: "#10b981",
       SP: "#ec4899",
       RN: "#06b6d4",
+      DI: "#84cc16",
     });
     expect(new Set(PLACEABLE_TYPES).size).toBe(PLACEABLE_TYPES.length);
     expect(categoryOf("CNC_MACHINE").key).toBe("STR");
     expect(categoryOf("OTHER").label).toBe("Ostatní");
   });
 
-  it("spotřebiče a nářadí (přenosná zařízení) se přiřazují do místnosti, ostatní do jemného rastru", () => {
-    for (const type of PLACEABLE_TYPES) expect(placementOf(type)).toBe(isPortable(type) ? "room" : "grid");
+  it("spotřebiče, nářadí a domovní přístroje se přiřazují do místnosti, ostatní do jemného rastru", () => {
+    for (const type of PLACEABLE_TYPES) expect(placementOf(type)).toBe(isPortable(type) || type === "WIRING_DEVICE" ? "room" : "grid");
+    expect(categoryOf("WIRING_DEVICE").key).toBe("DI");
   });
 
   it("inventář místnosti sečtený podle názvu přístroje (místnost i tag se z názvu odstraní)", () => {

@@ -40,6 +40,7 @@ export const LIGHT_CARD_TYPES: readonly EquipmentType[] = [
   "WELDER",
   "LIGHTNING_ROD",
   "EMERGENCY_LIGHTING",
+  "WIRING_DEVICE",
 ];
 
 /** Přenosná zařízení měřená v rychlé revizi (R_PE, R_iso). */
@@ -112,6 +113,9 @@ export function inspectionRuleFor(input: RuleInput): InspectionRule {
       return { months: 48, standard: "ČSN EN IEC 62305-3 ed. 3", basis: "Hromosvod LPS třídy III – úplná revize 1× za 4 roky (ČSN EN IEC 62305-3 ed. 3)." };
     case "EMERGENCY_LIGHTING":
       return { months: 12, standard: "ČSN EN 50172", basis: "Nouzové osvětlení – roční zkouška plné doby funkce." };
+    case "WIRING_DEVICE":
+      // Zásuvky a vypínače jsou součástí pevné elektroinstalace (ČSN 33 1500)
+      return fixedInstallationRule(input.externalInfluences);
     case "OTHER":
       return { months: DEFAULT_INSPECTION_INTERVAL_MONTHS, standard: "ČSN 33 1500", basis: "Výchozí lhůta 3 roky." };
   }

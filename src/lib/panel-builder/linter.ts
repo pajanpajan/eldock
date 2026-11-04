@@ -49,8 +49,8 @@ export const MAX_CIRCUITS_PER_RCD = 6;
 /** Okruhy vyžadující doplňkovou ochranu proudovým chráničem 30 mA (ČSN 33 2000-4-41 čl. 411.3.3). */
 const RCD_REQUIRED = /zásuv|koupel|kuchy|venek|venk|garáž|dílna|zahrad/i;
 const PROTECTIVE: readonly (ComponentCategory | null)[] = ["MCB", "RCD", "RCBO"];
-/** Přístroje propojované hřebenovou lištou. */
-const BUSBARRED: readonly (ComponentCategory | null)[] = ["MCB", "RCD", "RCBO", "MAIN_SWITCH"];
+/** Přístroje propojované společnou hřebenovou lištou (ne SPD, zdroje, stykače, chytré moduly ani odpínač). */
+const BUSBARRED: readonly (ComponentCategory | null)[] = ["MCB", "RCD", "RCBO"];
 
 const polesInText = (text: string) => /\b([1-4])\s?P(\+N)?\b/i.exec(text)?.slice(1, 3).join("").toUpperCase().replace("P", "") ?? null;
 const normalizePoles = (poles: string | null) => (poles ? poles.toUpperCase().replace(/\s/g, "") : null);

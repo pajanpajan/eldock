@@ -3,7 +3,7 @@ import type { EquipmentType } from "@/generated/prisma/enums";
 // Kategorie zařízení ve Studiu (krok 3): barva banneru, značky na půdorysu, seznamu i legendy
 // a způsob umístění – pevná zařízení do jemného rastru, spotřebiče a nářadí do místnosti.
 
-export type EquipmentCategoryKey = "TR" | "R" | "STR" | "ROB" | "TECH" | "SP" | "RN";
+export type EquipmentCategoryKey = "TR" | "R" | "STR" | "ROB" | "TECH" | "SP" | "RN" | "DI";
 export type PlacementMode = "grid" | "room";
 
 export interface EquipmentCategory {
@@ -35,6 +35,8 @@ export const EQUIPMENT_CATEGORIES: readonly EquipmentCategory[] = [
   },
   { key: "SP", code: "SP", label: "Spotřebič", color: "#ec4899", emoji: "🔌", types: ["APPLIANCE", "EXTENSION_CORD"], placement: "room" },
   { key: "RN", code: "RN", label: "Ruční nářadí", color: "#06b6d4", emoji: "🛠️", types: ["POWER_TOOL", "WELDER"], placement: "room" },
+  // Fáze 47: domovní přístroje ABB (vypínače, zásuvky) z katalogu domovní instalace
+  { key: "DI", code: "DI", label: "Domovní přístroje (zásuvky, vypínače)", color: "#84cc16", emoji: "🔲", types: ["WIRING_DEVICE"], placement: "room" },
 ];
 
 const BY_TYPE = new Map<EquipmentType, EquipmentCategory>(EQUIPMENT_CATEGORIES.flatMap((category) => category.types.map((type) => [type, category] as const)));
@@ -108,6 +110,16 @@ export const PRODUCT_TEMPLATES: Record<EquipmentCategoryKey, readonly ProductTem
     product("heatgun", "Horkovzdušná pistole", "🔥", "POWER_TOOL"),
     product("welder", "Svářečka", "⚡", "WELDER"),
     product("meter", "Měřicí přístroj", "📏", "POWER_TOOL"),
+  ],
+  // Skutečné řady ABB z katalogu domovní instalace (WiringDevice, `npm run catalog:sync`)
+  DI: [
+    product("socket", "Zásuvka 230 V – ABB Tango (5518A-A2359 B)", "🔌", "WIRING_DEVICE", "Zásuvka 230 V"),
+    product("socket2", "Dvojzásuvka – ABB Levit (5513H-C02357 03)", "🔌", "WIRING_DEVICE", "Dvojzásuvka 230 V"),
+    product("socket-ip44", "Zásuvka IP44 – ABB Swing L (5518G-A02989 B)", "💧", "WIRING_DEVICE", "Zásuvka IP44"),
+    product("socket-400", "Zásuvka 400 V / 16 A CEE", "⚡", "WIRING_DEVICE", "Zásuvka 400 V"),
+    product("switch", "Vypínač – ABB Tango (kryt 3558A-A651 B)", "🔘", "WIRING_DEVICE", "Vypínač"),
+    product("switch6", "Přepínač střídavý (řazení 6)", "🔁", "WIRING_DEVICE", "Přepínač střídavý"),
+    product("data", "Datová zásuvka – ABB Tango (5014A-A00410 B)", "🖧", "WIRING_DEVICE", "Datová zásuvka"),
   ],
 };
 

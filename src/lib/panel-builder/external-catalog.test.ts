@@ -56,7 +56,10 @@ describe("most na externí databázi prvků ai-panel-builder", () => {
     const spd = mapExternalProduct({ ...mcb, manufacturer: "HAKEL", category: "SPD", mpn: "10970", poles: "1P", in_a: null, features: { spd_type: "T1", spd_in_ka: 50 } });
     expect(spd.kind === "component" && spd.data).toMatchObject({ manufacturer: "Hakel", spdType: "T1", surgeCurrentKa: 50, articleNumber: "HAKEL:10970" });
     const relay = mapExternalProduct({ ...mcb, manufacturer: "ELKOEP", category: "RELAY", mpn: "7078", features: { relay_kind: "timer", contacts_co: 1 }, coil: { uc_v: 230, uc_kind: "AC" } });
-    expect(relay.kind === "component" && relay.data).toMatchObject({ manufacturer: "Elko EP", relaySubtype: "TIMER", coilVoltage: "230V AC", contactConfig: "1CO" });
+    // Elko EP je od fáze 47 odebraná značka → přeskočí se; stejné relé od ABB projde
+    expect(relay.kind).toBe("skip");
+    const abbRelay = mapExternalProduct({ ...mcb, manufacturer: "ABB", category: "RELAY", mpn: "2CDE110000R0011", features: { relay_kind: "timer", contacts_co: 1 }, coil: { uc_v: 230, uc_kind: "AC" } });
+    expect(abbRelay.kind === "component" && abbRelay.data).toMatchObject({ manufacturer: "ABB", relaySubtype: "TIMER", coilVoltage: "230V AC", contactConfig: "1CO" });
     const aux = mapExternalProduct({ ...mcb, category: "AUX_CONTACT", mpn: "286052", width_modules: 0.5 });
     expect(aux.kind === "component" && aux.data).toMatchObject({ category: "OTHER", moduleSubtype: "AUX_CONTACT", modulesCount: 0.5, archetypeId: "din_accessory_0.5M_1P" });
   });

@@ -28,11 +28,15 @@ describe("katalog 220+ přístrojů", () => {
   it("rozsah, jedinečná objednací čísla a hlavní značky i kategorie", () => {
     expect(CATALOG.length).toBeGreaterThanOrEqual(220);
     expect(new Set(CATALOG.map((c) => c.articleNumber)).size).toBe(CATALOG.length);
-    for (const brand of ["ABB", "Eaton", "OEZ", "Schneider", "Hager", "Noark", "Schrack", "Saltek", "Finder", "Elko EP", "Mean Well"]) expect(CATALOG.some((c) => c.manufacturer === brand)).toBe(true);
-    for (const category of ["MCB", "RCD", "RCBO", "MAIN_SWITCH", "SPD", "CONTACTOR", "RELAY", "PSU"] as const) expect(CATALOG.filter((c) => c.category === category).length).toBeGreaterThan(5);
+    for (const brand of ["ABB", "Eaton", "OEZ", "Schneider", "Hager", "Noark", "Schrack", "Saltek", "Siemens", "Bonega", "Hakel"]) expect(CATALOG.some((c) => c.manufacturer === brand)).toBe(true);
+    for (const category of ["MCB", "RCD", "RCBO", "MAIN_SWITCH", "SPD", "CONTACTOR", "PLC"] as const) expect(CATALOG.filter((c) => c.category === category).length).toBeGreaterThan(5);
+    // Fáze 47: odebrané značky (Finder, Elko EP, Mean Well …) v katalogu nejsou
+    for (const brand of ["Finder", "Elko EP", "Mean Well", "Weidmüller", "Shelly", "Dehn", "Relpol", "Pilz", "Pollmann"]) expect(CATALOG.some((c) => c.manufacturer === brand)).toBe(false);
     expect(CATALOG.find((c) => c.typeCode === "S203-C25")?.articleNumber).toBe("2CDS253001R0254");
     expect(CATALOG.find((c) => c.typeCode === "iC60N 1P B10")?.articleNumber).toBe("A9F03110");
-    expect(CATALOG.find((c) => c.typeCode === "MR-41")).toMatchObject({ category: "RELAY", relaySubtype: "IMPULSE", manufacturer: "Elko EP" });
+    expect(CATALOG.find((c) => c.typeCode === "E290-16-10")).toMatchObject({ category: "RELAY", relaySubtype: "IMPULSE", manufacturer: "ABB" });
+    expect(CATALOG.find((c) => c.typeCode === "DS301C C16 A30")).toMatchObject({ category: "RCBO", manufacturer: "ABB" });
+    expect(CATALOG.find((c) => c.typeCode === "5SY6116-6")).toMatchObject({ category: "MCB", manufacturer: "Siemens" });
   });
 });
 
@@ -62,8 +66,7 @@ describe("konfigurátor – parametry podle kategorie", () => {
     expect(matchConfig(catalog, { ...defaultConfig("MCB", { manufacturer: "Eaton", modules: 3 }), curve: "C", ratedCurrentA: 25 })?.typeCode).toBe("PL7-C25/3");
     expect(matchConfig(catalog, { ...defaultConfig("RCD", { manufacturer: "Hager", modules: 4 }), ratedCurrentA: 40 })?.typeCode).toBe("CDA440D");
     expect(matchConfig(catalog, { ...defaultConfig("RCD", { manufacturer: "ABB", modules: 4 }), rcdType: "B", ratedCurrentA: 40 })?.typeCode).toBe("F204 B-40/0,03");
-    expect(matchConfig(catalog, { ...defaultConfig("RELAY", { manufacturer: "Elko EP", modules: 1 }), relaySubtype: "TIMER" })?.typeCode).toMatch(/^CRM-9/);
-    expect(matchConfig(catalog, { ...defaultConfig("OTHER", { manufacturer: "Mean Well", modules: 2 }), power: "30W/24V" })?.manufacturer).toBe("Mean Well");
+    expect(matchConfig(catalog, { ...defaultConfig("MCB", { manufacturer: "Siemens", modules: 1 }), ratedCurrentA: 16 })?.typeCode).toBe("5SY6116-6");
     // Bonega (fáze 36) má v katalogu řadu P-E-P 6 kA / 10 kA
     const bonega = { ...defaultConfig("MCB", { manufacturer: "Bonega", modules: 1 }), ratedCurrentA: 10 };
     expect(matchConfig(catalog, bonega)?.typeCode).toBe("P-E-P6 1P B10");

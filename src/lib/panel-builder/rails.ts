@@ -91,3 +91,19 @@ export function railSummary(capacities: readonly number[], items: readonly { din
 export function formatRailSummary(summary: RailSummary): string {
   return `Konfigurace: ${summary.rails} ${plural(summary.rails, "DIN lišta", "DIN lišty", "DIN lišt")} × ${summary.modules} M · Obsazeno: ${decimal(summary.used)} / ${summary.total} M (${summary.percent} % · volná rezerva ${summary.reserve} %)`;
 }
+
+/** Detailní fotky lišt projektu (fáze 47): { "1": "/api/files/photos/…" }. */
+export function parseRailPhotos(json: string | null | undefined): Record<string, string> {
+  try {
+    const value = json ? (JSON.parse(json) as Record<string, unknown>) : {};
+    return Object.fromEntries(Object.entries(value).filter((entry): entry is [string, string] => /^\d+$/.test(entry[0]) && typeof entry[1] === "string"));
+  } catch {
+    return {};
+  }
+}
+
+/** Detailní fotky lišt seřazené podle lišty (pro náhledy v kroku 1). */
+export const railPhotoList = (json: string | null | undefined) =>
+  Object.entries(parseRailPhotos(json))
+    .map(([rail, url]) => ({ rail: Number(rail), url }))
+    .sort((a, b) => a.rail - b.rail);

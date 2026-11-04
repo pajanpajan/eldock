@@ -44,6 +44,7 @@ const equipmentType = z.enum([
   "WELDER",
   "LIGHTNING_ROD",
   "EMERGENCY_LIGHTING",
+  "WIRING_DEVICE",
   "OTHER",
 ]);
 

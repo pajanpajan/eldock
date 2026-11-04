@@ -13,12 +13,14 @@ import { fileURLToPath } from "node:url";
 import type { PrismaClient } from "../src/generated/prisma/client";
 import { renderPanelPhotoSvg } from "../src/lib/mock-graphics/panel-photo";
 import { GENERATED_CATALOG, type SeedComponent } from "./seed-catalog-generated";
-import { buildSearchText, iecSymbolFor } from "../src/lib/panel-builder/catalog";
+import { buildSearchText, estimatePowerLoss, iecSymbolFor } from "../src/lib/panel-builder/catalog";
+import { ABB_CA35R, ENCLOSURE_FANS, RESEARCH_COMPONENTS } from "./seed-catalog-research";
+import { isHiddenManufacturer } from "../src/lib/panel-builder/brands";
 import { demoDetections } from "../src/lib/panel-builder/matching";
 import { REFERENCE_DEVICES, REFERENCE_DIMS, withPositions } from "../src/lib/panel-builder/reference";
 import { applyDetections } from "../src/server/services/panel-builder";
-import { importExternalCatalog, seedStandardEnclosures } from "../src/server/services/catalog-sync";
-import { readSnapshot } from "./external-catalog-source";
+import { importExternalCatalog, importWiringDevices, seedStandardEnclosures } from "../src/server/services/catalog-sync";
+import { readSnapshot, readWiringSnapshot } from "./external-catalog-source";
 import { TESTER_COMPANY } from "../src/lib/registered-company";
 import { hashPassword } from "../src/server/password";
 
@@ -222,8 +224,20 @@ const EXPLICIT: SeedComponent[] = [
  */
 export const CATALOG: SeedComponent[] = (() => {
   const seen = new Set<string>();
-  const key = (component: SeedComponent) => `${component.manufacturer.toLowerCase()}|${component.typeCode.toLowerCase().replace(/s+/g, "")}`;
-  return [...EXPLICIT, ...GENERATED_CATALOG].filter((component) => {
+  const key = (component: SeedComponent) => `${component.manufacturer.toLowerCase()}|${component.typeCode.toLowerCase().replace(/\s+/g, "")}`;
+  // Rešerše výrobců (fáze 47): Siemens SENTRON a ABB z reálného 144M rozváděče; chybějící Pv = odhad IEC
+  const research: SeedComponent[] = RESEARCH_COMPONENTS.map((entry) => {
+    const { powerLossWatts, source, ...component } = entry;
+    void source; // zdroj rešerše zůstává jen v souboru s daty
+    return {
+      ...component,
+      powerLossWatts: powerLossWatts ?? estimatePowerLoss(component.category, component.poles, component.ratedCurrentA),
+      lossEstimated: powerLossWatts === null,
+    };
+  });
+  return [...EXPLICIT, ...research, ...GENERATED_CATALOG].filter((component) => {
+    // Vyřazení výrobci (fáze 47) se do katalogu už nedoplňují
+    if (isHiddenManufacturer(component.manufacturer)) return false;
     const keys = [key(component), `article|${component.articleNumber}`];
     if (keys.some((k) => seen.has(k))) return false;
     keys.forEach((k) => seen.add(k));
@@ -273,7 +287,8 @@ export async function seedCatalog(prisma: PrismaClient) {
       powerLossWatts: component.powerLossWatts,
       iecSymbol: iecSymbolFor(component.category, component.poles),
       description: component.description,
-      dataSource: "SEED_CATALOG" as const,
+      datasheetUrl: component.datasheetUrl ?? null,
+      dataSource: component.lossEstimated ? ("IEC_ESTIMATE" as const) : ("SEED_CATALOG" as const),
       searchText: buildSearchText(component),
     };
     return prisma.catalogComponent.upsert({ where: { articleNumber: component.articleNumber }, create: { articleNumber: component.articleNumber, ...data }, update: data });
@@ -347,7 +362,20 @@ export async function seedPanelBuilder(prisma: PrismaClient, options: { external
   const tester = await seedTesterCompany(prisma);
   // Fáze 43: matice standardních rozvodnic a externí databáze prvků z exportu v Gitu (jen při změně otisku)
   const enclosures = await seedStandardEnclosures(prisma);
+  // Fáze 47: ventilátory rozváděčů a rozvodnice ABB CA35R (144M) z rešerší výrobců
+  const fans = await seedFans(prisma);
   const snapshot = options.external === false ? null : readSnapshot();
   const external = snapshot ? await importExternalCatalog(prisma, snapshot) : null;
-  return { components, project, tester, enclosures, external };
+  const wiringRows = options.external === false ? null : readWiringSnapshot();
+  if (wiringRows) await importWiringDevices(prisma, wiringRows);
+  return { components, project, tester, enclosures, external, fans };
+}
+
+/** Filtrační ventilátory rozváděčů a skříň ABB CA35R – upsert podle objednacího čísla. Vrací počet ventilátorů. */
+export async function seedFans(prisma: PrismaClient) {
+  await prisma.$transaction([
+    ...ENCLOSURE_FANS.map((fan) => prisma.enclosureFan.upsert({ where: { articleNumber: fan.articleNumber }, create: fan, update: fan })),
+    prisma.panelEnclosure.upsert({ where: { articleNumber: ABB_CA35R.articleNumber }, create: ABB_CA35R, update: ABB_CA35R }),
+  ]);
+  return ENCLOSURE_FANS.length;
 }

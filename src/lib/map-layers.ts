@@ -15,7 +15,7 @@ export interface MapLayer {
 }
 
 export const MAP_LAYERS: readonly MapLayer[] = [
-  { key: "ENERGY", label: "Rozváděče a energetika", types: ["SWITCHBOARD", "TRANSFORMER", "COMPRESSOR"], defaultOn: true },
+  { key: "ENERGY", label: "Rozváděče a energetika", types: ["SWITCHBOARD", "TRANSFORMER", "COMPRESSOR", "WIRING_DEVICE"], defaultOn: true },
   {
     key: "MACHINES",
     label: "Výrobní stroje a linky",

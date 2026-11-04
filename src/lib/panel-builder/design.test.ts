@@ -170,9 +170,10 @@ describe("popisky 1:1", () => {
 });
 
 describe("kaskádové menu: výrobci a příslušenství", () => {
-  it("27 výrobců z databáze, hledání bez diakritiky", () => {
-    expect(DEVICE_BRANDS).toHaveLength(27);
-    expect(filterBrands(DEVICE_BRANDS, "weidmu").map((brand) => brand.value)).toEqual(["Weidmüller"]);
+  it("21 výrobců z databáze (fáze 47 bez 9 odebraných značek), hledání bez diakritiky", () => {
+    expect(DEVICE_BRANDS).toHaveLength(21);
+    expect(DEVICE_BRANDS.some((brand) => brand.value === "Weidmüller" || brand.value === "Finder")).toBe(false);
+    expect(filterBrands(DEVICE_BRANDS, "siem").map((brand) => brand.value)).toEqual(["Siemens"]);
     expect(filterBrands(DEVICE_BRANDS, "schneider electric")[0].value).toBe("Schneider");
     expect(brandOf("EATON")?.label).toBe("Eaton");
   });

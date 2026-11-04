@@ -109,7 +109,7 @@ describe("Vision Analyzer 2.0 – analýza po DIN lištách", () => {
     expect(toPhotoBox([500, 500, 500, 500], region)).toEqual([45, 50, 45, 50]);
   });
 
-  it("přístroje lišty → detekce; vynechaný konec řady se doplní do totalModules", () => {
+  it("přístroje lišty → detekce; volná lišta se nedoplňuje smyšlenými moduly (pravidlo A)", () => {
     const region = { left: 0, top: 0, width: 1000, height: 1000, imageWidth: 1000, imageHeight: 1000 };
     const devices = [
       { position: 2, box_2d: [100, 300, 900, 600], text: "S203-B16", category: "MCB", poles: "3P", modulesWidth: 3, confidence: 0.9 },
@@ -121,15 +121,20 @@ describe("Vision Analyzer 2.0 – analýza po DIN lištách", () => {
       [1, 1, "1P", 2],
       [2, 3, "3P", 2],
       [3, 1, "2x1P", 2],
-      [4, 1, null, 2],
-      [5, 1, null, 2],
     ]);
-    expect(detections[3]).toMatchObject({ box: [10, 70, 90, 80], rawOcrText: "(doplněno – AI modul vynechala)", confidence: 0.2 });
+    // typový kód z čela opraví charakteristiku a proud (S203-B16 / S201-B10)
+    expect(detections.slice(0, 2).map((d) => [d.trippingCurve, d.ratedCurrentA])).toEqual([
+      ["B", 10],
+      ["B", 16],
+    ]);
   });
 
   it("prompty: lišty bez PE/N svorkovnic, šroubky vs. páčky a kompaktní přístroje", () => {
     expect(RAILS_PROMPT).toContain("NIKDY neoznačuj jako DIN lištu holé mosazné svorkovnice PE/N");
-    expect(railPrompt("UNCOVERED", "ABB")).toContain("spočítej všechny šroubky");
+    expect(railPrompt("UNCOVERED", "ABB")).toContain("NEPLATÍ „1 šroubek = 1 modul“");
+    expect(railPrompt("UNCOVERED", "ABB")).toContain("DS301C");
+    expect(railPrompt("COVERED", null)).toContain("EN25-40N");
+    expect(railPrompt("COVERED", null)).toContain("B2, B10, B16 a B20");
     expect(railPrompt("UNCOVERED", "ABB")).toContain('poles "3P", modulesWidth 3');
     expect(railPrompt("COVERED", null)).toContain("w_1M");
     expect(railPrompt("COVERED", null)).toContain('poles "2x1P", modulesWidth 1');
@@ -148,10 +153,9 @@ describe("Vision Analyzer 2.0 – analýza po DIN lištách", () => {
 
     const result = await analyzePanelPhoto({ image: { bytes: photo, mimeType: "image/jpeg" }, dims: REFERENCE_DIMS, manufacturerHint: null, mode: "UNCOVERED" });
     expect(result).toMatchObject({ mode: "GEMINI", railCount: 2, coverState: "UNCOVERED", dominantManufacturer: "OEZ" });
-    // horní lišta (ymin 200) je Lišta 1 – 3P + doplněný 1M modul do totalModules 4
+    // horní lišta (ymin 200) je Lišta 1 – jen skutečně osazený 3P (žádné dosazování do totalModules 4)
     expect(result.detections.map((d) => [d.dinRailIndex, d.positionOnRail, d.modules])).toEqual([
       [1, 1, 3],
-      [1, 2, 1],
       [2, 1, 1],
     ]);
     // výřez lišty 1: y 200–300 ‰ → 200–300 px ± max(15 px, 40 px) = 160–340 px, x 64–736 px; přístroj 100–900 ‰ výřezu

@@ -14,7 +14,7 @@ export interface Brand {
 
 export const DEVICE_BRANDS: readonly Brand[] = [
   { value: "ABB", label: "ABB", color: "#e30613", mark: "ABB" },
-  { value: "Eaton", label: "Eaton", color: "#0057a6", mark: "E" },
+  { value: "Eaton", label: "Eaton", color: "#005eb8", mark: "E" },
   { value: "OEZ", label: "OEZ", color: "#009fe3", mark: "OEZ" },
   { value: "Schneider", label: "Schneider Electric", color: "#3dcd58", mark: "SE" },
   { value: "Hager", label: "Hager", color: "#00468b", mark: "H" },
@@ -26,21 +26,35 @@ export const DEVICE_BRANDS: readonly Brand[] = [
   { value: "SEZ", label: "SEZ", color: "#004b93", mark: "SEZ" },
   { value: "Saltek", label: "Saltek", color: "#e30613", mark: "SAL" },
   { value: "Hakel", label: "Hakel", color: "#1c63b7", mark: "HK" },
-  { value: "Dehn", label: "Dehn", color: "#e2001a", mark: "D" },
-  { value: "Elko EP", label: "Elko EP", color: "#e4032e", mark: "EP" },
-  { value: "Finder", label: "Finder", color: "#004f9f", mark: "F" },
-  { value: "Relpol", label: "Relpol", color: "#d40f14", mark: "R" },
+  { value: "Legrand", label: "Legrand", color: "#e2231a", mark: "L" },
   { value: "Loxone", label: "Loxone", color: "#69c350", mark: "LX" },
-  { value: "Shelly", label: "Shelly", color: "#4495d1", mark: "SH" },
   { value: "Eastron", label: "Eastron", color: "#1b3e8b", mark: "EA" },
   { value: "Wago", label: "Wago", color: "#6ec800", mark: "W" },
   { value: "Phoenix Contact", label: "Phoenix Contact", color: "#008cd2", mark: "PC" },
-  { value: "Weidmüller", label: "Weidmüller", color: "#ef7d00", mark: "WM" },
-  { value: "Pollmann", label: "Pollmann", color: "#00539f", mark: "P" },
-  { value: "Mean Well", label: "Mean Well", color: "#0060a9", mark: "MW" },
-  { value: "Pilz", label: "Pilz", color: "#f7a600", mark: "PZ" },
   { value: "Omron", label: "Omron", color: "#005eb8", mark: "O" },
+  { value: "Hensel", label: "Hensel", color: "#005ca9", mark: "HE" },
+  { value: "Rittal", label: "Rittal", color: "#e2001a", mark: "R" },
 ];
+
+/**
+ * Značky vyřazené z AI Panel Builderu (fáze 47): skryté v konfigurátoru, katalogu, filtrech, AI párování
+ * i importu. Řádky v databázi zůstávají (vazby starších projektů), jen se nenabízejí.
+ */
+export const HIDDEN_MANUFACTURERS = ["Finder", "Shelly", "Mean Well", "Dehn", "Relpol", "Pilz", "Weidmüller", "Elko EP", "Pollmann"] as const;
+
+/** Varianty zápisu skrytých značek v databázi (seed, externí import, AI). */
+export const HIDDEN_MANUFACTURER_NAMES: string[] = [...HIDDEN_MANUFACTURERS, "FINDER", "SHELLY", "MEANWELL", "MEAN WELL", "MeanWell", "DEHN", "RELPOL", "PILZ", "WEIDMULLER", "Weidmuller", "ELKOEP", "ELKO EP", "Elko", "POLLMANN"];
+
+const hiddenNormalized = new Set(HIDDEN_MANUFACTURERS.map((name) => normalizeSearch(name).replace(/[^a-z]/g, "")));
+/** Je výrobce vyřazený? („Elko EP“, „ELKOEP“, „elko ep“ …) */
+export const isHiddenManufacturer = (name: string | null | undefined) => {
+  const key = normalizeSearch(name ?? "").replace(/[^a-z]/g, "");
+  return !!key && (hiddenNormalized.has(key) || key === "elko" || key === "weidmuller");
+};
+
+/** Podmínka Prismy: jen nabízení výrobci (`where: { ...visibleManufacturers }`). */
+export const visibleManufacturers = { manufacturer: { notIn: HIDDEN_MANUFACTURER_NAMES } };
+
 
 /** Karta značky podle názvu z katalogu (null = mimo seznam). */
 export const brandOf = (manufacturer: string | null | undefined) => {
