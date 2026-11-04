@@ -5,6 +5,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { LogoMark } from "@/components/layout/Logo";
 import { BRAND } from "@/lib/brand";
 import { LABEL_SIZE_MM, formatQrToken } from "@/lib/qr-label";
+import { QR_LEGAL_NOTE } from "@/lib/legislation-2027";
 import { cn } from "@/lib/utils";
 
 export interface LabelData {
@@ -44,6 +45,9 @@ export function QrLabelFace({ label, className }: { label: LabelData; className?
           <span className="truncate">ID {label.equipmentId}</span>
           <span className="truncate">{label.token ? `Kód ${formatQrToken(label.token)}` : "Kód –"}</span>
           <span className="truncate font-sans font-bold">{label.validity}</span>
+        </div>
+        <div className="border-t-[0.3cqw] border-black pt-[0.6cqw] text-[2.15cqw] leading-tight" data-testid="qr-legal-note">
+          {QR_LEGAL_NOTE}
         </div>
       </div>
     </div>

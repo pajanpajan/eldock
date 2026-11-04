@@ -48,7 +48,7 @@ test("rychlá revize: VYHOVUJE uloží kus jedním klikem a přejde na další",
   await expect(card.getByRole("button", { name: /^VYHOVUJE/ })).toBeDisabled();
 
   await page.goto("/equipment/eq-sp-0201");
-  await expect(page.getByRole("tab")).toHaveText(["Revize & Měření (ČSN 33 1600 ed. 2)"]);
+  await expect(page.getByRole("tab")).toHaveText(["Revize & Měření (ČSN 33 1600 ed. 2)", "📚 Návody & Datasheety (0)"]);
   await expect(page.getByRole("heading", { level: 1 }).locator("..")).toContainText("Revize platná do");
 });
 

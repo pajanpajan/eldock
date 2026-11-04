@@ -12,10 +12,12 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import type { MarkupData } from "@/lib/markup";
 import { equipmentHref } from "@/lib/routes";
+import { SAFETY_IMPACT } from "@/lib/legislation-2027";
 import { cn } from "@/lib/utils";
 import { addCommentAction, submitChangeRequestAction } from "@/server/actions/workflow";
 
 import { PhotoStep } from "./PhotoStep";
+import { SafetyClassification } from "./SafetyClassification";
 import { VoiceNote } from "./VoiceNote";
 import {
   STEP_LABELS,
@@ -39,10 +41,12 @@ interface Props {
   canManageModules?: boolean;
   /** Otevřený požadavek → režim „Doplnit k otevřené změně“. */
   openChange: { id: string; number: string } | null;
+  /** Řídicí uzly stroje se zálohou SW (našeptávač v klasifikaci zásahu). */
+  softwareUnits?: string[];
 }
 
 /** Průvodce „Zadat změnu“: Zákres → Fotky → Poznámka → Souhrn (u otevřené změny bez zákresu). */
-export function ChangeRequestWizard({ equipment, schematic, openChange, annotatePhotos = true, canManageModules = false }: Props) {
+export function ChangeRequestWizard({ equipment, schematic, openChange, annotatePhotos = true, canManageModules = false, softwareUnits = [] }: Props) {
   const router = useRouter();
   const mode = openChange ? "comment" : "new";
   const steps = stepsFor(mode).filter((step) => step !== "markup" || schematic);
@@ -115,6 +119,19 @@ export function ChangeRequestWizard({ equipment, schematic, openChange, annotate
             voiceTranscript: state.dictated ? text : null,
             note: state.dictated ? null : text,
             attachments,
+            safetyImpact: state.safetyImpact,
+            requiresSoftwareUpdate: state.softwareChanged,
+            softwareBackup: state.softwareBackup
+              ? {
+                  targetUnit: state.softwareBackup.targetUnit,
+                  platform: state.softwareBackup.platform,
+                  fileUrl: state.softwareBackup.fileUrl,
+                  fileName: state.softwareBackup.fileName,
+                  fileSizeBytes: state.softwareBackup.fileSizeBytes,
+                  isSafetyRelated: state.softwareBackup.isSafetyRelated,
+                  safetyChecksum: state.softwareBackup.safetyChecksum || null,
+                }
+              : null,
           });
       if (!result.ok) {
         toast.error(result.error);
@@ -197,6 +214,7 @@ export function ChangeRequestWizard({ equipment, schematic, openChange, annotate
         ) : null}
         {step === "photos" ? <PhotoStep photos={state.photos} dispatch={dispatch} annotate={annotatePhotos} canManageModules={canManageModules} /> : null}
         {step === "note" ? <VoiceNote text={state.text} priority={state.priority} dispatch={dispatch} showPriority={!openChange} /> : null}
+        {step === "note" && !openChange ? <SafetyClassification state={state} dispatch={dispatch} units={softwareUnits} /> : null}
         {step === "summary" ? (
           <div className="space-y-4">
             {openChange ? (
@@ -239,6 +257,13 @@ export function ChangeRequestWizard({ equipment, schematic, openChange, annotate
                     <h3 className="text-sm font-medium text-muted-foreground">Priorita</h3>
                     <StatusBadge kind="priority" status={state.priority} />
                   </div>
+                ) : null}
+                {!openChange ? (
+                  <p className="text-sm" data-testid="summary-safety">
+                    <span className="text-muted-foreground">Klasifikace (EU 2023/1230): </span>
+                    {SAFETY_IMPACT[state.safetyImpact].label}
+                    {state.softwareChanged ? <span className="block text-muted-foreground">💾 Zásah zahrnuje úpravu řídicího SW{state.softwareBackup ? ` – přiložena záloha ${state.softwareBackup.targetUnit}` : " – záloha čeká na nahrání"}</span> : null}
+                  </p>
                 ) : null}
               </div>
             </div>

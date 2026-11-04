@@ -53,7 +53,7 @@ describe("inspectionRuleFor", () => {
   });
 
   it("hromosvody a nouzové osvětlení", () => {
-    expect(inspectionRuleFor({ type: "LIGHTNING_ROD" })).toMatchObject({ months: 48, standard: "ČSN EN 62305-3" });
+    expect(inspectionRuleFor({ type: "LIGHTNING_ROD" })).toMatchObject({ months: 48, standard: "ČSN EN IEC 62305-3 ed. 3" });
     expect(inspectionRuleFor({ type: "EMERGENCY_LIGHTING" })).toMatchObject({ months: 12, standard: "ČSN EN 50172" });
   });
 });

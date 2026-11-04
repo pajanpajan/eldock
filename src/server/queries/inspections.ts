@@ -270,6 +270,7 @@ async function loadInspectionProtocol(recordId: string) {
           protectionClass: true,
           externalInfluences: true,
           assignedZone: true,
+          batteryPassportJson: true,
           floor: { select: { name: true, building: { select: { name: true, plant: { select: { name: true, code: true, customerName: true, address: true, city: true } } } } } },
         },
       },

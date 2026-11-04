@@ -3,6 +3,7 @@
 
 import type { EquipmentType, InspectionResult, InspectionType } from "@/generated/prisma/enums";
 import { inspectionRuleFor, isPortable, measurementLimits } from "@/lib/inspection-rules";
+import { batteryPassportRows, parseBatteryPassport } from "@/lib/battery-passport";
 
 export type ProtocolVariant = "VTZ" | "APPLIANCE";
 
@@ -98,4 +99,10 @@ export function protocolMeasurements({ record, equipment }: ProtocolInput): Prot
 export function protocolScope(input: ProtocolInput["equipment"]) {
   const rule = inspectionRuleFor(input);
   return { standard: rule.standard, basis: rule.basis, months: rule.months };
+}
+
+/** Sekce „Digitální pas baterie“ (Nařízení (EU) 2023/1542) u UPS / BESS – řádky protokolu, jinak null. */
+export function protocolBatteryPassport(equipment: { batteryPassportJson?: string | null }): [string, string][] | null {
+  const passport = parseBatteryPassport(equipment.batteryPassportJson);
+  return passport ? batteryPassportRows(passport) : null;
 }

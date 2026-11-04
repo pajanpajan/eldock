@@ -7,6 +7,8 @@ import { prisma } from "@/lib/prisma";
 import type { ItemConfig } from "@/lib/panel-builder/configurator";
 import { MAX_RAIL_MODULES, MAX_RAILS, MIN_RAIL_MODULES } from "@/lib/panel-builder/rails";
 import { actionFailure, guardCompany, guardProject } from "@/server/panel-guards";
+import { saveRoutineTest, setStandardEdition } from "@/server/services/panel-design";
+import { ROUTINE_TEST_POINTS } from "@/lib/legislation-2027";
 import { listEnclosures, moveRail, placeComponents, previewConfig, saveCircuitChips, selectEnclosure, setCompanyBranding, setEnvironment, setRailCapacity, type ConfigPreview } from "@/server/services/panel-design";
 import { MAX_CHIPS, type ChipSet } from "@/lib/panel-builder/circuit-chips";
 
@@ -190,5 +192,41 @@ export async function saveCircuitChipsAction(input: z.input<typeof chipSchema>):
     return { ok: true, data: await saveCircuitChips(prisma, company.id, parsed.data as ChipSet) };
   } catch (error) {
     return actionFailure(error, "Štítky se nepodařilo uložit.");
+  }
+}
+
+/** Edice normy rozváděče (krok 1 a krok 4) – propisuje se do Listu 5 a 6 dokumentace. */
+export async function setStandardEditionAction(projectId: string, edition: string): Promise<ActionResult> {
+  if (!id.safeParse(projectId).success || !z.string().max(30).safeParse(edition).success) return { ok: false, error: "Neplatná norma." };
+  try {
+    await guardProject(projectId);
+    await setStandardEdition(prisma, projectId, edition);
+    revalidatePath(`/panel-builder/${projectId}`, "layout");
+    return { ok: true, data: undefined };
+  } catch (error) {
+    return actionFailure(error, "Normu se nepodařilo změnit.");
+  }
+}
+
+const result = z.enum(["PASS", "FAIL"]).nullable();
+const routineSchema = z.object({
+  points: z.object(Object.fromEntries(ROUTINE_TEST_POINTS.map((point) => [point.id, result])) as Record<(typeof ROUTINE_TEST_POINTS)[number]["id"], typeof result>),
+  insulationMOhm: z.number().min(0).max(100_000).nullable(),
+  testedBy: z.string().max(120),
+  testedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
+  note: z.string().max(1000),
+});
+
+/** Protokol o kusové zkoušce – autosave z kroku 4. */
+export async function saveRoutineTestAction(projectId: string, test: z.input<typeof routineSchema>): Promise<ActionResult<{ verdict: string; missing: string[] }>> {
+  const parsed = routineSchema.safeParse(test);
+  if (!id.safeParse(projectId).success || !parsed.success) return { ok: false, error: "Neplatný protokol kusové zkoušky." };
+  try {
+    await guardProject(projectId);
+    const saved = await saveRoutineTest(prisma, projectId, parsed.data);
+    revalidatePath(`/panel-builder/${projectId}/documentation`);
+    return { ok: true, data: { verdict: saved.verdict, missing: saved.missing } };
+  } catch (error) {
+    return actionFailure(error, "Protokol se nepodařilo uložit.");
   }
 }

@@ -17,6 +17,8 @@ import { readingOrder } from "@/lib/panel-builder/tree";
 import { equipmentHref } from "@/lib/routes";
 import { getEnclosureComponent, getPanelProject, getProjectEnclosure, getReleaseTargets } from "@/server/queries/panel-builder";
 import { requestOrigin } from "@/server/request-url";
+import { parseRoutineTest, standardEditionOf, type StandardEditionId } from "@/lib/legislation-2027";
+import { RoutineTestPanel, StandardEditionSelect } from "@/components/panel-builder/documentation/RoutineTestPanel";
 import { documentationState } from "@/server/services/panel-builder";
 
 export async function generateMetadata({ params }: PageProps<"/panel-builder/[id]/documentation">): Promise<Metadata> {
@@ -61,11 +63,15 @@ export default async function PanelDocumentationPage({ params }: PageProps<"/pan
   const manufacturers = [...new Set(project.items.map((item) => item.catalogComponent?.manufacturer).filter(Boolean))];
   const incomer = project.networkSystem.includes("TN-C ") ? "L1,L2,L3,PEN" : "L1,L2,L3,N";
 
+  const edition = standardEditionOf(project.standardEdition);
+  const routineTest = parseRoutineTest(project.routineTestJson);
   const data: DocumentationData = {
     code: project.code,
     name: project.name,
     customerName: project.customerName,
-    norm: project.norm,
+    norm: edition.short,
+    edition,
+    routineTest,
     enclosure: [project.enclosureModel, `${project.heightMm} × ${project.widthMm} × ${project.depthMm} mm`, project.ipRating].filter(Boolean).join(" · "),
     // Registrovaná firma = výrobce rozváděče (vždy aktuální „Firemní údaje do razítka“), jinak údaje projektu
     manufacturer: project.company ? companyManufacturer(project.company) : parseManufacturerInfo(project.manufacturerInfoJson),
@@ -117,6 +123,13 @@ export default async function PanelDocumentationPage({ params }: PageProps<"/pan
           blockers={blockers}
           targets={targets.map((target) => ({ id: target.id, tag: target.tag, label: `${target.name} · ${target.floor.building.plant.name}, ${target.floor.building.name}` }))}
         />
+        <div className="no-print grid gap-4 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
+          <div className="rounded-xl border border-border bg-card p-4">
+            <StandardEditionSelect projectId={project.id} value={edition.id as StandardEditionId} />
+            <p className="mt-2 text-xs text-muted-foreground">Propisuje se do Listu 5 (oteplení) a Listu 6 (EU prohlášení o shodě, štítek CE).</p>
+          </div>
+          <RoutineTestPanel projectId={project.id} initial={routineTest} />
+        </div>
         <DocumentationSheets data={data} />
       </div>
     </PageTransition>

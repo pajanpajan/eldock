@@ -7,6 +7,7 @@ import { LogoMark } from "@/components/layout/Logo";
 import { DOCUMENT_SHEETS, type ComponentRow, type PartsRow } from "@/lib/panel-builder/documentation";
 import type { ManufacturerInfo } from "@/lib/panel-builder/project";
 import type { ThermalResult } from "@/lib/thermalCalculation";
+import { ROUTINE_TEST_POINTS, minInsulationMOhm, routineTestVerdict, type RoutineTest, type StandardEdition } from "@/lib/legislation-2027";
 
 import { PhaseBalance, ThermalCurve, ThermalTable } from "../ThermalViews";
 import { CeLabelQr } from "./DocumentationActions";
@@ -33,6 +34,9 @@ export interface DocumentationData {
   /** Firemní logo a otisk razítka s podpisem (fáze 43, profil firmy). */
   logoUrl: string | null;
   stampUrl: string | null;
+  /** Edice normy rozváděče (fáze 46) a protokol o kusové zkoušce. */
+  edition: StandardEdition;
+  routineTest: RoutineTest;
 }
 
 const svgUri = (svg: string) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
@@ -111,6 +115,46 @@ function CeMark({ className }: { className?: string }) {
       <path d="M58 16a34 34 0 1 0 0 68" fill="none" stroke="#000" strokeWidth={9} />
       <path d="M128 16a34 34 0 1 0 0 68M92 50h32" fill="none" stroke="#000" strokeWidth={9} />
     </svg>
+  );
+}
+
+/** Protokol o kusové zkoušce (čl. 11 ČSN EN IEC 61439-1 ed. 3) – 8 bodů, R_iso a podpis. */
+function RoutineTestSheet({ data }: { data: DocumentationData }) {
+  const m = data.manufacturer;
+  const test = data.routineTest;
+  const evaluation = routineTestVerdict(test);
+  const mark = (value: "PASS" | "FAIL" | null) => (value === "PASS" ? "✓ vyhovuje" : value === "FAIL" ? "✗ nevyhovuje" : "–");
+  return (
+    <div className="mt-4 rounded border border-black p-2 text-[8pt]" data-testid="doc-routine-test">
+      <h3 className="mb-1 text-[10pt] font-bold">Protokol o kusové zkoušce (čl. 11 ČSN EN IEC 61439-1 ed. 3)</h3>
+      <table className="w-full border-collapse">
+        <tbody>
+          {ROUTINE_TEST_POINTS.map((point, index) => (
+            <tr key={point.id}>
+              <td className="border border-zinc-400 px-1 py-0.5 font-mono">{index + 1}.</td>
+              <td className="border border-zinc-400 px-1 py-0.5">
+                {point.label} (čl. {point.clause})
+              </td>
+              <td className="border border-zinc-400 px-1 py-0.5 font-semibold" data-testid={`routine-point-${point.id}`}>
+                {point.id === "dielectric" && test.insulationMOhm !== null ? `R_iso = ${String(test.insulationMOhm).replace(".", ",")} MΩ (min. ${String(minInsulationMOhm()).replace(".", ",")} MΩ) · ` : ""}
+                {mark(test.points[point.id])}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="mt-1 font-bold" data-testid="routine-sheet-verdict">
+        Výsledek: {evaluation.verdict === "PASS" ? "rozváděč VYHOVUJE" : evaluation.verdict === "FAIL" ? "rozváděč NEVYHOVUJE" : "protokol není úplný"}
+      </p>
+      <div className="mt-8 grid grid-cols-2 gap-10">
+        <div className="border-t border-black pt-1 text-zinc-600">Datum zkoušky: {test.testedAt ? test.testedAt.split("-").reverse().join(". ").replace(/^0/, "") : data.date}</div>
+        <div className="relative border-t border-black pt-1 text-zinc-600" data-testid="routine-test-signature">
+          <SignatureStamp url={data.stampUrl} />
+          Zkoušku provedl: {test.testedBy || m.contactName || "–"}
+          {m.authorizationNumber ? ` (oprávnění ${m.authorizationNumber})` : ""}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -295,6 +339,9 @@ export function DocumentationSheets({ data }: { data: DocumentationData }) {
           Celkový ztrátový výkon {data.thermal.totalLossW.toLocaleString("cs-CZ", { maximumFractionDigits: 2 })} W = přístroje {data.thermal.deviceLossW.toLocaleString("cs-CZ", { maximumFractionDigits: 2 })} W + vnitřní vodiče{" "}
           {data.thermal.wiringLossW.toLocaleString("cs-CZ", { maximumFractionDigits: 2 })} W · Ae {data.thermal.effectiveAreaM2.toLocaleString("cs-CZ", { maximumFractionDigits: 3 })} m² · ověření výpočtem dle IEC TR 60890
         </p>
+        <p className="text-[8pt] font-semibold" data-testid="doc-thermal-basis">
+          {data.edition.thermalBasis}
+        </p>
         <ThermalTable result={data.thermal} print />
         <div className="grid grid-cols-[1fr_1fr] gap-4">
           <div>
@@ -320,7 +367,9 @@ export function DocumentationSheets({ data }: { data: DocumentationData }) {
       {/* List 6 – ES prohlášení o shodě a výrobní štítek */}
       <Sheet data={data} number={6}>
         <div className="flex flex-col gap-2 text-[10pt]" data-testid="doc-declaration">
-          <h3 className="text-center text-[14pt] font-bold tracking-wide">ES PROHLÁŠENÍ O SHODĚ</h3>
+          <h3 className="text-center text-[14pt] font-bold tracking-wide" data-testid="declaration-title">
+            {data.edition.declarationTitle}
+          </h3>
           <p>Výrobce</p>
           <p className="pl-6 font-semibold" data-testid="declaration-manufacturer">
             {m.name || "–"}
@@ -342,16 +391,18 @@ export function DocumentationSheets({ data }: { data: DocumentationData }) {
           </p>
           <p>
             který tímto na svou výhradní odpovědnost prohlašuje, že výrobek <b>{data.name}</b> (<span className="font-mono">{data.code}</span>) je ve shodě s ustanoveními následujících
-            směrnic EU:
+            předpisů EU:
           </p>
-          <ul className="list-disc pl-10">
-            <li>Směrnice o elektrických zařízeních nízkého napětí – LVD 2014/35/EU</li>
-            <li>Směrnice o elektromagnetické kompatibilitě – EMC 2014/30/EU</li>
+          <ul className="list-disc pl-10" data-testid="declaration-directives">
+            {data.edition.directives.map((directive) => (
+              <li key={directive}>{directive}</li>
+            ))}
           </ul>
           <p>a že byly použity následující harmonizované normy:</p>
-          <ul className="list-disc pl-10">
-            <li>ČSN EN 61439-1 – Rozváděče nízkého napětí – Část 1: Všeobecná pravidla</li>
-            <li>ČSN EN 61439-3 – Rozváděče nízkého napětí – Část 3: Rozvodnice určené k provozování laiky (DBO)</li>
+          <ul className="list-disc pl-10" data-testid="declaration-norms">
+            {data.edition.norms.map((norm) => (
+              <li key={norm}>{norm}</li>
+            ))}
           </ul>
           <p>Rok, ve kterém bylo připojeno označení CE: {data.year}</p>
           <div className="mt-6 grid grid-cols-2 gap-10">
@@ -365,21 +416,7 @@ export function DocumentationSheets({ data }: { data: DocumentationData }) {
           </div>
         </div>
 
-        <div className="mt-4 rounded border border-black p-2 text-[8pt]" data-testid="doc-routine-test">
-          <h3 className="mb-1 text-[10pt] font-bold">Protokol o kusové zkoušce (ČSN EN 61439-1, čl. 11)</h3>
-          <p className="text-zinc-700">
-            Rozváděč {data.code} byl podroben kusové zkoušce: stupeň krytí, povrchové a vzdušné vzdálenosti, ochrana před úrazem a spojitost ochranného obvodu, zabudování přístrojů, vnitřní elektrické obvody a
-            spoje, svorky pro vnější vodiče, mechanická funkce, dielektrické vlastnosti a zapojení, provozní funkce.
-          </p>
-          <div className="mt-8 grid grid-cols-2 gap-10">
-            <div className="border-t border-black pt-1 text-zinc-600">Datum zkoušky: {data.date}</div>
-            <div className="relative border-t border-black pt-1 text-zinc-600" data-testid="routine-test-signature">
-              <SignatureStamp url={data.stampUrl} />
-              Zkoušku provedl{m.contactName ? `: ${m.contactName}` : ""}
-              {m.authorizationNumber ? ` (oprávnění ${m.authorizationNumber})` : ""}
-            </div>
-          </div>
-        </div>
+        <RoutineTestSheet data={data} />
 
         <h3 className="mt-4 font-bold">Výrobní štítek rozváděče</h3>
         <div className="flex w-[150mm] gap-4 rounded-md border-2 border-black p-3" data-testid="ce-label">

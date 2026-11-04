@@ -5,7 +5,7 @@ import { PrintToolbar } from "@/components/common/PrintToolbar";
 import { LogoMark } from "@/components/layout/Logo";
 import { BRAND } from "@/lib/brand";
 import { EQUIPMENT_TYPE_LABELS, INSPECTION_TYPE_LABELS, formatDate } from "@/lib/format";
-import { PROTOCOL_TITLES, VERDICTS, protocolMeasurements, protocolScope, protocolVariant } from "@/lib/inspection-protocol";
+import { PROTOCOL_TITLES, VERDICTS, protocolBatteryPassport, protocolMeasurements, protocolScope, protocolVariant } from "@/lib/inspection-protocol";
 import { USAGE_GROUP_LABELS, type UsageGroup } from "@/lib/inspection-rules";
 import { getFeatures } from "@/server/modules";
 import { getInspectionProtocol } from "@/server/queries/inspections";
@@ -127,6 +127,22 @@ export default async function InspectionReportPage({ params }: Props) {
           </table>
           {!appliance ? <p className="mt-1 text-[8pt] text-zinc-600">Prohlídka, zkoušení a měření dle ČSN 33 2000-6 ed. 2; spojitost ochranných a pospojovacích vodičů, izolační odpor zkušebním napětím 500 V DC.</p> : null}
         </section>
+
+        {protocolBatteryPassport(equipment) ? (
+          <section className="break-inside-avoid" data-testid="protocol-battery-passport">
+            <h2 className="mb-1.5 text-[8pt] font-semibold tracking-wide text-zinc-600 uppercase">Digitální pas baterie dle Nařízení (EU) 2023/1542</h2>
+            <table className="w-full border-collapse text-[8pt]">
+              <tbody>
+                {protocolBatteryPassport(equipment)!.map(([label, value]) => (
+                  <tr key={label}>
+                    <td className="w-1/3 border border-zinc-400 px-1.5 py-0.5 text-zinc-600">{label}</td>
+                    <td className="border border-zinc-400 px-1.5 py-0.5 font-semibold">{value}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        ) : null}
 
         <section>
           <h2 className="mb-1.5 text-[8pt] font-semibold tracking-wide text-zinc-600 uppercase">Zjištěné závady</h2>

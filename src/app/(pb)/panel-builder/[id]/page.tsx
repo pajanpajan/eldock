@@ -91,6 +91,7 @@ export default async function PanelProjectPage({ params }: PageProps<"/panel-bui
           totalModules: pickedEnclosure?.totalModules ?? null,
         }}
         environment={project.environment}
+        standardEdition={project.standardEdition}
         chipsJson={project.company?.circuitChipsJson ?? null}
       />
     </PageTransition>

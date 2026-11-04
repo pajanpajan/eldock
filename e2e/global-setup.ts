@@ -6,7 +6,7 @@ import { AUTH_COOKIE, PANEL_AUTH_COOKIE, panelSubject, signAuthToken } from "../
 import { TESTER_COMPANY } from "../src/lib/registered-company";
 import { E2E_AUTH_SECRET, E2E_AUTH_STATE } from "./auth";
 
-const UPLOAD_DIRS = ["photos", "revisions", "markups", "voice", "documents"].map((dir) => path.join("storage", "uploads", dir));
+const UPLOAD_DIRS = ["photos", "revisions", "markups", "voice", "documents", "attachments", "software"].map((dir) => path.join("storage", "uploads", dir));
 
 /**
  * Databázi připravuje už příkaz webServeru (`e2e/prepare-db.ts`). Tady podepíšeme přihlašovací cookie

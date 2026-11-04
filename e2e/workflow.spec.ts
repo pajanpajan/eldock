@@ -71,7 +71,9 @@ test("údržba zadá → CAE nahraje → údržba vrátí → CAE nahraje znovu 
   await page.getByRole("button", { name: "Další" }).click();
   await page.getByRole("button", { name: "Odeslat do CAE" }).click();
   await expect(page).toHaveURL(new RegExp(`${EQUIPMENT}$`));
-  await expect(toast(page)).toContainText("ZM-2026-0043");
+  // Číslo změny nezávisle na pořadí testů (jiné testy mohou založit vlastní změny dříve)
+  await expect(toast(page)).toContainText(/ZM-2026-\d{4}/);
+  const ticketNumber = /ZM-2026-\d{4}/.exec((await toast(page).textContent()) ?? "")![0];
   const banner = page.getByRole("alert", { name: "Výstraha: nahlášená změna" });
   await expect(banner).toContainText("Vyměněn stykač K2");
   await expect(banner.getByRole("button", { name: /Nový stykač K2/ })).toBeVisible();
@@ -80,7 +82,7 @@ test("údržba zadá → CAE nahraje → údržba vrátí → CAE nahraje znovu 
   // 2) CAE: ticket na dashboardu, převzetí a nová revize v1.3.
   await switchRole(page, "CAE_ENGINEER");
   await expect(page).toHaveURL(/\/cae$/);
-  await expect(page.getByRole("row", { name: /ZM-2026-0043/ })).toContainText("Nová");
+  await expect(page.getByRole("row", { name: new RegExp(ticketNumber) })).toContainText("Nová");
   await openTicket(page);
   await page.getByRole("button", { name: "Převzít" }).click();
   await expect(toast(page)).toContainText("převzat");

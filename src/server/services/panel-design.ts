@@ -3,6 +3,7 @@ import { catalogCategory, matchConfig, synthesizeComponent, type ItemConfig } fr
 import { parseChipSet, type ChipSet } from "@/lib/panel-builder/circuit-chips";
 import { enclosureProjectData } from "@/lib/panel-builder/enclosures";
 import { environmentOf, isEnvironmentId } from "@/lib/panel-builder/environments";
+import { isStandardEdition, parseRoutineTest, routineTestVerdict, standardEditionOf, type RoutineTest } from "@/lib/legislation-2027";
 import { freeOnRail, railCapacities, railColumns, railMoveTarget, withRailCapacity, withRailsSwapped } from "@/lib/panel-builder/rails";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 
@@ -181,4 +182,17 @@ export async function saveCircuitChips(prisma: PrismaClient, companyId: string, 
   if (!clean) throw new WorkflowError("VALIDATION", "Neplatné štítky.");
   await prisma.registeredCompany.update({ where: { id: companyId }, data: { circuitChipsJson: JSON.stringify(clean) } });
   return { saved: true, set: clean };
+}
+
+/** Edice normy rozváděče (fáze 46): DBO 61439-3 ed. 2, PSC 61439-2 ed. 3, strojní 60204-1 ed. 3. */
+export async function setStandardEdition(prisma: PrismaClient, projectId: string, edition: string) {
+  if (!isStandardEdition(edition)) throw new WorkflowError("VALIDATION", "Neznámá edice normy.");
+  return prisma.panelBoardProject.update({ where: { id: projectId }, data: { standardEdition: edition, norm: standardEditionOf(edition).short }, select: { id: true, standardEdition: true } });
+}
+
+/** Protokol o kusové zkoušce (čl. 11 ČSN EN IEC 61439-1 ed. 3) – uloží normalizovaný JSON. */
+export async function saveRoutineTest(prisma: PrismaClient, projectId: string, test: RoutineTest) {
+  const clean = parseRoutineTest(JSON.stringify(test));
+  await prisma.panelBoardProject.update({ where: { id: projectId }, data: { routineTestJson: JSON.stringify(clean) } });
+  return { test: clean, ...routineTestVerdict(clean) };
 }

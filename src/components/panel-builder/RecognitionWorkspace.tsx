@@ -23,6 +23,8 @@ import type { AnalysisMode } from "@/server/services/geminiPanelService";
 import { CascadePicker } from "./CascadePicker";
 import { CircuitChips, useCircuitChips } from "./CircuitChips";
 import { LinterPanel } from "./LinterPanel";
+import { StandardEditionSelect } from "./documentation/RoutineTestPanel";
+import { standardEditionOf } from "@/lib/legislation-2027";
 import { EnclosurePicker } from "./EnclosurePicker";
 import { ItemConfigurator } from "./ItemConfigurator";
 import { PhotoViewer } from "./PhotoViewer";
@@ -81,6 +83,7 @@ export function RecognitionWorkspace({
   enclosure,
   environment,
   chipsJson = null,
+  standardEdition = "CSN_61439_3_ED2",
 }: {
   projectId: string;
   designMode: "PHOTO" | "DESIGN";
@@ -96,6 +99,8 @@ export function RecognitionWorkspace({
   environment: string;
   /** Štítky funkce obvodu firmy (DB) – synchronizace s localStorage. */
   chipsJson?: string | null;
+  /** Edice normy rozváděče (fáze 46). */
+  standardEdition?: string;
 }) {
   const router = useRouter();
   const design = designMode === "DESIGN";
@@ -378,6 +383,7 @@ export function RecognitionWorkspace({
               ))}
             </select>
           </label>
+          <StandardEditionSelect projectId={projectId} value={standardEditionOf(standardEdition).id} compact />
           <div className="ml-auto flex flex-wrap items-center gap-2">
             {enclosureFitsEnvironment(enclosure.ipRating, env) ? (
               <EnclosurePicker projectId={projectId} need={enclosureNeed(capacities, items)} current={enclosure} minIp={env.minIp} />

@@ -231,3 +231,19 @@ export function getLinkableEquipment(plantId: string) {
     select: { id: true, tag: true, name: true },
   });
 }
+
+/** Návody, datasheety a verzované zálohy SW zařízení (fáze 46) + změny pro spárování zálohy. */
+export const getEquipmentKnowledge = cache(async (equipmentId: string) => {
+  const [documents, backups, changes] = await Promise.all([
+    prisma.equipmentDocument.findMany({ where: { equipmentId }, orderBy: [{ category: "asc" }, { createdAt: "desc" }], include: { uploadedBy: { select: { name: true } } } }),
+    prisma.softwareBackup.findMany({
+      where: { equipmentId },
+      orderBy: [{ targetUnit: "asc" }, { major: "desc" }, { minor: "desc" }],
+      include: { author: { select: { name: true } }, changeRequest: { select: { id: true, number: true } } },
+    }),
+    prisma.changeRequest.findMany({ where: { equipmentId }, orderBy: { submittedAt: "desc" }, take: 12, select: { id: true, number: true, status: true, requiresSoftwareUpdate: true } }),
+  ]);
+  return { documents, backups, changes };
+});
+
+export type EquipmentKnowledge = Awaited<ReturnType<typeof getEquipmentKnowledge>>;

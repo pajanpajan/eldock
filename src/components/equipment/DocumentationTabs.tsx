@@ -6,7 +6,7 @@ import { Box, CalendarClock, FileBadge, FileText, History, ListTree, type Lucide
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-export type TabValue = "schema" | "bom" | "3d" | "history" | "passport" | "inspections" | "diagnostics";
+export type TabValue = "schema" | "bom" | "3d" | "history" | "docs" | "software" | "passport" | "inspections" | "diagnostics";
 
 const TABS: readonly { value: TabValue; label: string; icon: LucideIcon | null }[] = [
   { value: "schema", label: "Schéma", icon: FileText },
@@ -15,6 +15,8 @@ const TABS: readonly { value: TabValue; label: string; icon: LucideIcon | null }
   { value: "history", label: "Historie změn", icon: History },
   { value: "passport", label: "Pasport & Shoda (61439)", icon: FileBadge },
   { value: "inspections", label: "Revize & Lhůtník", icon: CalendarClock },
+  { value: "docs", label: "📚 Návody & Datasheety", icon: null },
+  { value: "software", label: "💾 Software & Zálohy PLC", icon: null },
   { value: "diagnostics", label: "🔍 Diagnostika & Spoje (Údržba)", icon: null },
 ];
 

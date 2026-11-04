@@ -40,6 +40,22 @@ const submitSchema = z.object({
   voiceTranscript: text(4000),
   note: text(4000),
   attachments: z.array(attachment).max(20).optional(),
+  // Fáze 46: klasifikace dle Nařízení (EU) 2023/1230 a úprava řídicího SW
+  safetyImpact: z.enum(["NONE_1_TO_1", "OPERATIONAL_ONLY", "SUBSTANTIAL_SAFETY_MOD"]).optional(),
+  requiresSoftwareUpdate: z.boolean().optional(),
+  softwareBackup: z
+    .object({
+      targetUnit: z.string().trim().min(1).max(120),
+      platform: z.string().trim().min(1).max(80),
+      fileUrl: z.string().max(300).regex(/^\/api\/files\/software\/[\w./-]+$/),
+      fileName: z.string().min(1).max(200),
+      fileSizeBytes: z.number().int().positive(),
+      firmwareVersion: text(40),
+      isSafetyRelated: z.boolean().optional(),
+      safetyChecksum: text(60),
+    })
+    .nullable()
+    .optional(),
 });
 
 const commentSchema = z.object({ changeRequestId: id, comment: text(4000), attachments: z.array(attachment).max(20).optional() });

@@ -5,7 +5,7 @@ revize VTZ, změny skutečného provedení mezi údržbou v hale a externími CA
 rozváděčů. Pracovní název byl Digitry, od fáze 20 je to **ELDOCK**. Produkce běží na https://eldock.cz.
 Původní zadání MVP je v `docs/archiv/SPECIFIKACE-MVP.md`, celá historie fází 0–35 v `docs/archiv/PLAN-faze-00-35.md`.
 
-## 1. Milníky (fáze 0–45 nasazené)
+## 1. Milníky (fáze 0–45 nasazené, 46 hotová k nasazení)
 
 | Fáze | Milník |
 |---|---|
@@ -26,6 +26,7 @@ Původní zadání MVP je v `docs/archiv/SPECIFIKACE-MVP.md`, celá historie fá
 | 43 | Panel Builder: návrh rozváděče od nuly (lišty 8–36M), kaskádový výběr výrobce → kategorie → parametry s drag & drop osazením, výběr skříně podle velikosti, logo a razítko firmy, popisky 1:1, import externí databáze prvků (`npm run catalog:sync`) |
 | 44 | Most „půdorys → rozváděč“ (`src/engine/floorplan-bridge.ts`, `FLOORPLAN_SPEC.md`): kalibrace, řazení vypínačů, okruhy dle ČSN 33 2130 ed. 4, fáze, chrániče, přístroje na lištách a skříň |
 | 45 | Panel Builder, krok 1: štítky funkce se Smart Presety a číslováním, sticky karta přístroje s chytrým vložením, prostředí instalace (ČSN 33 2000-5-51), elektro-linter s opravou 1 klikem |
+| 46 | Legislativa 2027: návody a datasheety zařízení, verzované zálohy PLC / HMI / měničů se Safety CRC a rollbackem, klasifikace zásahu dle EU 2023/1230, normy ČSN EN IEC 61439 ed. 3 a kusová zkouška, LOTO dle ČSN EN 50110-1 ed. 4, pas baterie |
 
 ## 2. Moduly a klíčová místa v kódu
 
@@ -35,7 +36,7 @@ Server je hlídá přes `assertFeature`, správa je na `/admin/modules`.
 
 | Oblast | Trasy | Kód |
 |---|---|---|
-| Mapy a zařízení | `/plant/...`, `/equipment/[id]` | `components/map/*`, `server/queries/*`, `lib/mock-graphics/*` |
+| Mapy a zařízení | `/plant/...`, `/equipment/[id]` | `components/map/*`, `server/queries/*`, `lib/mock-graphics/*`; návody a zálohy SW `server/services/equipment-knowledge.ts`, `lib/{equipment-documents,software-backups}.ts` |
 | CAE workflow | `/cae`, `/equipment/[id]/change-request` | `lib/workflow/state-machine.ts`, `server/services/workflow.ts` |
 | Revize VTZ | `/inspections/*` (plánovač, rychlá revize, audit) | `server/services/inspection.ts`, `lib/inspection-rules.ts` |
 | Studio | `/studio` | `components/studio/*`, `lib/cad-grid.ts`, `lib/campus-layout.ts`, `lib/equipment-categories.ts`, `server/services/studio.ts` |
@@ -52,7 +53,7 @@ Server je hlídá přes `assertFeature`, správa je na `/admin/modules`.
 - **Účty:** `ELDOCK_LOCK_ACCOUNT_SWITCHER=1` (produkce bez dema) = účet určuje jen podepsaná přihlašovací cookie a server přepnutí odmítne; výchozí `0` = obchodní demo s přepínačem. Nastavení účtu bez kontroly je `applyAccount` v `src/server/account-switch.ts` (záměrně mimo `"use server"`).
 - **Dva produkty (fáze 41):** AI Panel Builder má vlastní přihlášení firmy (`RegisteredCompany` PANEL_BUILDER, cookie `eldock-pb` s předmětem `pbc:<id>`, `getPanelCompany`) a vlastní lištu; v navigaci správy závodů není. Každý dotaz i akce Panel Builderu filtruje `companyId`. Registrovaná firma správy závodů (`/register-plant`) má uživatele s `homePlantId` + `companyId`: přihlašuje se heslem firmy, bez přepínače účtů a vidí jen svůj závod (`plantAccessWhere`); demo účty nevidí závody registrovaných firem. Demo firma Tester (`tester@eldock.cz` / `Tester2026!`) vzniká v `db:panel-builder`.
 - **Soubory:** jen ve `storage/uploads`. Upload přes `POST /api/uploads`, čtení přes `GET /api/files/[...path]`. SVG se v UI zobrazuje přes `<img>`; výjimka jsou půdorysy generované aplikací.
-- **Workflow (CAE):** požadavek prochází `SUBMITTED → IN_PROGRESS → WAITING_APPROVAL → APPROVED`. Zamítnutá revize (`REJECTED`, komentář povinný) vrací požadavek do `IN_PROGRESS`; CAE může požadavek zrušit (`CANCELLED`). Každý přechod probíhá v `$transaction` se záznamem `ChangeRequestEvent`. Zařízení má max. 1 otevřený požadavek a 1 aktivní revizi. Stav zařízení se odvozuje přes `deriveEquipmentStatus`. Úplná tabulka přechodů je v archivu plánu, sekce B.
+- **Workflow (CAE):** požadavek prochází `SUBMITTED → IN_PROGRESS → WAITING_APPROVAL → APPROVED`. Zamítnutá revize (`REJECTED`, komentář povinný) vrací požadavek do `IN_PROGRESS`; CAE může požadavek zrušit (`CANCELLED`). Každý přechod probíhá v `$transaction` se záznamem `ChangeRequestEvent`. Zařízení má max. 1 otevřený požadavek a 1 aktivní revizi. Stav zařízení se odvozuje přes `deriveEquipmentStatus`. Úplná tabulka přechodů je v archivu plánu, sekce B. Fáze 46: požadavek nese `safetyImpact` (EU 2023/1230) a `requiresSoftwareUpdate`; zálohy SW (`SoftwareBackup`) se zakládají jen přes `createSoftwareBackupInTx` (předchozí ACTIVE uzlu → ARCHIVED v transakci). Normy 2027, kusová zkouška, LOTO a QR doložka mají jediný zdroj `lib/legislation-2027.ts`.
 - **Panel Builder – značení a zapojení:** IEC prefixy jen z `DESIGNATION_PREFIX` (`src/lib/panel-builder/matching.ts`); návrh zapojení `proposeTree` = pravidlo DIN lišty (chránič napájí jističe napravo na své liště). Hlídač hlásí jako chybu jen nezapojený prvek, cyklus a 3P pod 1P – součet In nad In chrániče není chyba.
 - **Panel Builder – vektorový rozváděč (fáze 42):** krok 1 i 2 kreslí `VectorPanel` se symboly `VectorModuleSymbol` (texty `symbolTexts`, data `vectorDeviceFrom` v `lib/panel-builder/vector-symbols.ts`, geometrie a spojnice `vectorLayout` / `wiringPaths` v `vector-layout.ts` – čáry jen mezerami mezi lištami a okraji). Na fotce se rámečky nekreslí. Kořen stromu = prvek s `fedFromIncomer` bez rodiče (`currentRoot`; bez volby `chooseRoot`: odpínač, jinak první 3P/4P na 1. liště); `PanelBoardProject.incomerFrom` = TOP / BOTTOM. Drag & drop = `dropOnto` (na koncový přístroj → sourozenec pod jeho rodičem, fáze `rotatePhases`), hlavní vstupní prvek se nepřetahuje, mění se jen přes `setRoot`.
 - **Panel Builder – návrh od nuly a katalog (fáze 43):** `PanelBoardProject.designMode` = PHOTO / DESIGN; kapacita lišt je pole `railModulesJson` (vždy přes `railCapacities` / `railColumns` v `lib/panel-builder/rails.ts`, `modulesPerRail` = nejširší lišta). Osazení z kaskády = `placeComponents` (`services/panel-design.ts`), kaskádové menu `CascadePicker` + `PlacementCard`. Skříně = model `PanelEnclosure` (matice `standardEnclosureMatrix` + externí DB), filtr `fitEnclosures`. Externí databáze `ai-panel-builder` se importuje jen přes `npm run catalog:sync` / export `prisma/external-catalog/catalog.json` (`importExternalCatalog`, upsert, vlastní katalog Eldocku se nepřepisuje); export po synchronizaci commitni.
@@ -63,7 +64,7 @@ Server je hlídá přes `assertFeature`, správa je na `/admin/modules`.
 
 - **Na produkci NIKDY** nespouštěj `db:reset`, `prisma migrate reset`, `prisma db push` ani `npm run db:seed` nad daty. Seed nejdřív maže tabulky a je určený jen pro prázdnou databázi.
 - Změna schématu = vždy čistá přírůstková migrace: `npx prisma migrate dev --name <popis>`, pak `npx prisma generate`. Migrace musí projít nad existujícími daty (výchozí hodnoty, žádné destruktivní přejmenování). Kontejner je při startu aplikuje přes `prisma migrate deploy`.
-- Nová demo nebo katalogová data patří do přírůstkových skriptů (`upsert`, nic nemazat), stejně jako `db:demo-docs`, `db:demo-plant` (vzorové závody v metrech, jednorázově přes značku `demo.plant-layout`, patra upravená ve Studiu nemění) a `db:panel-builder`, které entrypoint pouští nad neprázdnou DB. `ELDOCK_SEED_DEMO=1` plní demo daty jen prázdnou databázi.
+- Nová demo nebo katalogová data patří do přírůstkových skriptů (`upsert`, nic nemazat), stejně jako `db:demo-docs`, `db:demo-legislation` (návody, zálohy SW, pas baterie – značka `demo.legislation-2027`), `db:demo-plant` (vzorové závody v metrech, jednorázově přes značku `demo.plant-layout`, patra upravená ve Studiu nemění) a `db:panel-builder`, které entrypoint pouští nad neprázdnou DB. `ELDOCK_SEED_DEMO=1` plní demo daty jen prázdnou databázi.
 - Lokálně: seed se spouští ručně (`npm run db:seed`). `db:reset` (smaže `dev.db`) jen po výslovném souhlasu uživatele.
 
 ## 5. Gemini (AI Panel Builder)

@@ -2,7 +2,7 @@ import path from "node:path";
 
 // Soubory aplikace leží ve storage/uploads a servíruje je GET /api/files/[...path].
 
-export const UPLOAD_KINDS = ["photos", "revisions", "markups", "voice", "documents"] as const;
+export const UPLOAD_KINDS = ["photos", "revisions", "markups", "voice", "documents", "attachments", "software"] as const;
 export type UploadKind = (typeof UPLOAD_KINDS)[number];
 
 export const CONTENT_TYPES: Record<string, string> = {
@@ -18,6 +18,24 @@ export const CONTENT_TYPES: Record<string, string> = {
   ".ogg": "audio/ogg",
   ".mp3": "audio/mpeg",
   ".m4a": "audio/mp4",
+  // Návody a datasheety (fáze 46)
+  ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ".txt": "text/plain; charset=utf-8",
+  // Zálohy PLC / HMI / měničů (fáze 46) – stahují se jako binární soubory
+  ".zip": "application/zip",
+  ".7z": "application/x-7z-compressed",
+  ".rar": "application/vnd.rar",
+  ".zap16": "application/octet-stream",
+  ".zap17": "application/octet-stream",
+  ".zap18": "application/octet-stream",
+  ".zap19": "application/octet-stream",
+  ".s7p": "application/octet-stream",
+  ".acd": "application/octet-stream",
+  ".xml": "application/xml",
+  ".par": "application/octet-stream",
+  ".bin": "application/octet-stream",
+  ".hex": "application/octet-stream",
 };
 
 /**
@@ -55,6 +73,13 @@ export const UPLOAD_RULES = {
   markup: { dir: "markups", maxBytes: 10 * MB, extensions: [".png", ".json"], label: "PNG nebo JSON" },
   voice: { dir: "voice", maxBytes: 15 * MB, extensions: [".webm", ".ogg", ".mp3", ".m4a"], label: "WebM, OGG, MP3 nebo M4A" },
   document: { dir: "documents", maxBytes: 25 * MB, extensions: [".pdf", ".svg", ".png", ".jpg", ".jpeg"], label: "PDF, SVG, PNG nebo JPG" },
+  attachment: { dir: "attachments", maxBytes: 30 * MB, extensions: [".pdf", ".png", ".jpg", ".jpeg", ".webp", ".svg", ".docx", ".xlsx", ".csv", ".txt"], label: "PDF, obrázek, DOCX, XLSX, CSV nebo TXT" },
+  software: {
+    dir: "software",
+    maxBytes: 50 * MB,
+    extensions: [".zip", ".7z", ".rar", ".zap16", ".zap17", ".zap18", ".zap19", ".s7p", ".acd", ".xml", ".json", ".par", ".bin", ".hex", ".csv", ".pdf"],
+    label: "ZIP, 7Z, RAR, TIA (.zap16–19), Step7 (.s7p), Rockwell (.acd), XML, JSON, PAR, BIN, HEX, CSV nebo PDF",
+  },
 } as const satisfies Record<string, { dir: UploadKind; maxBytes: number; extensions: readonly string[]; label: string }>;
 
 export type UploadRequestKind = keyof typeof UPLOAD_RULES;

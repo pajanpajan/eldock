@@ -204,6 +204,8 @@ model User {
   assignedChangeRequests ChangeRequest[]      @relation("ChangeRequestAssignee")
   changeRequestEvents    ChangeRequestEvent[]
   uploadedAttachments    Attachment[]
+  equipmentDocuments     EquipmentDocument[]
+  softwareBackups        SoftwareBackup[]
 
   @@index([role])
   @@index([accountType])
@@ -338,6 +340,8 @@ model Equipment {
   // Vizuální karta a QR štítek
   photoUrl String? // fotografie zařízení (/api/files/photos/…)
   qrToken  String? @unique // kód fyzického QR štítku – přegenerováním přestane starý štítek platit
+  /// Digitální pas baterie dle Nařízení (EU) 2023/1542 (UPS, BESS > 2 kWh) – JSON (fáze 46).
+  batteryPassportJson String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -353,6 +357,8 @@ model Equipment {
   defects             InspectionDefect[]
   temporaryMods       TemporaryModification[]
   panelProjects       PanelBoardProject[]
+  documents           EquipmentDocument[]
+  softwareBackups     SoftwareBackup[]
 
   @@unique([floorId, tag])
   @@index([floorId])
@@ -517,6 +523,11 @@ model ChangeRequest {
   // Odpověď CAE / výsledek
   engineerSummary String?
 
+  /// Klasifikace zásahu dle Nařízení (EU) 2023/1230 (fáze 46).
+  safetyImpact           SafetyImpactLevel @default(NONE_1_TO_1)
+  /// Zásah vyžaduje i úpravu / zálohu řídicího SW nebo parametrů měniče.
+  requiresSoftwareUpdate Boolean           @default(false)
+
   submittedAt DateTime  @default(now())
   assignedAt  DateTime?
   resolvedAt  DateTime? // nahrání revize k potvrzení
@@ -531,6 +542,7 @@ model ChangeRequest {
   attachments        Attachment[]
   events             ChangeRequestEvent[]
   temporaryMods      TemporaryModification[]
+  softwareBackups    SoftwareBackup[]
 
   @@index([equipmentId, status])
   @@index([status])
@@ -893,6 +905,10 @@ model PanelBoardProject {
   enclosurePmaxW       Float?
   /** Prostředí instalace dle ČSN 33 2000-5-51 ed. 3 (fáze 45): INDOOR_DRY | GARAGE | OUTDOOR | TIMBER | HOT. */
   environment          String             @default("INDOOR_DRY")
+  /// Edice normy rozváděče (fáze 46): CSN_61439_3_ED2 (DBO) | CSN_61439_2_ED3 (PSC) | CSN_60204_1_ED3 (stroje, EU 2023/1230).
+  standardEdition      String             @default("CSN_61439_3_ED2")
+  /// Protokol o kusové zkoušce dle čl. 11 ČSN EN IEC 61439-1 ed. 3 – JSON (8 bodů, R_iso, zkoušející, datum).
+  routineTestJson      String?
 
   createdById String?
   /// Registrovaná firma (fáze 41): vidí jen své rozváděče, její údaje se propisují do dokumentace.
@@ -999,4 +1015,83 @@ model PanelBoardItem {
   @@index([projectId, dinRailIndex, positionOnRail])
   @@index([catalogComponentId])
   @@index([parentItemId])
+}
+
+// -----------------------------------------------------------------------------
+//  LEGISLATIVNÍ PAKET 2027 (fáze 46) – knihovna návodů a verzované zálohy SW
+// -----------------------------------------------------------------------------
+
+enum AttachmentCategory {
+  MANUAL // Návod k obsluze a údržbě
+  DATASHEET // Katalogový list / datasheet dílu
+  DRIVE_PARAMS // Manuál a chybové kódy měniče / pohonu
+  FLUID_SCHEMA // Schéma hydrauliky / pneumatiky
+  CERTIFICATE // Certifikát / ATEX / prohlášení o shodě
+  OTHER
+}
+
+enum SoftwareBackupStatus {
+  ACTIVE // aktuálně ve stroji
+  ARCHIVED // starší záloha pro rollback
+}
+
+enum SafetyImpactLevel {
+  NONE_1_TO_1 // běžná údržba, výměna kus za kus
+  OPERATIONAL_ONLY // provozní úprava bez vlivu na bezpečnost
+  SUBSTANTIAL_SAFETY_MOD // zásah do bezpečnostního obvodu – podstatná změna dle čl. 18 Nařízení (EU) 2023/1230
+}
+
+/// Návod, datasheet nebo technická příloha zařízení (volitelně navázaná na prvek schématu -U1, -K4 …).
+model EquipmentDocument {
+  id            String             @id @default(cuid())
+  equipmentId   String
+  category      AttachmentCategory
+  title         String
+  componentTag  String? // "-U1", "-A1", "-K4" – vazba na prvek ve schématu
+  manufacturer  String?
+  modelNumber   String?
+  version       String             @default("1.0")
+  language      String             @default("cs")
+  fileUrl       String
+  fileName      String
+  fileSizeBytes Int
+  uploadedById  String?
+  createdAt     DateTime           @default(now())
+
+  equipment  Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  uploadedBy User?     @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([equipmentId, category])
+  @@index([equipmentId, componentTag])
+}
+
+/// Verzovaná záloha řídicího SW / parametrů (PLC, HMI, robot, měnič) – jeden ACTIVE na řídicí uzel.
+model SoftwareBackup {
+  id              String               @id @default(cuid())
+  equipmentId     String
+  targetUnit      String // "PLC -A1 (Siemens S7-1500)", "Frekvenční měnič -U1"
+  platform        String // "TIA Portal V19", "Codesys", "Parametry měniče VFD"
+  major           Int
+  minor           Int
+  status          SoftwareBackupStatus @default(ACTIVE)
+  /// Evidence firmwaru dle Cyber Resilience Act (EU) 2024/2847.
+  firmwareVersion String?
+  /// Bezpečnostní logika dle Nařízení (EU) 2023/1230 (Safety PLC / F-CPU).
+  isSafetyRelated Boolean              @default(false)
+  safetyChecksum  String? // "CRC: 0x8F4A-2C91" / F-Signature
+  changeSummary   String
+  fileUrl         String
+  fileName        String
+  fileSizeBytes   Int
+  changeRequestId String?
+  authorId        String?
+  createdAt       DateTime             @default(now())
+
+  equipment     Equipment      @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  changeRequest ChangeRequest? @relation(fields: [changeRequestId], references: [id], onDelete: SetNull)
+  author        User?          @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@unique([equipmentId, targetUnit, major, minor])
+  @@index([equipmentId, targetUnit, status])
+  @@index([changeRequestId])
 }

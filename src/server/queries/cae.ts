@@ -59,6 +59,7 @@ async function loadTicketDetail(id: string) {
       assignee: { select: { id: true, name: true } },
       baseRevision: { select: { id: true, version: true, schematicUrl: true, schematicFormat: true, status: true } },
       attachments: { orderBy: { createdAt: "asc" }, include: { uploadedBy: { select: { name: true } } } },
+      softwareBackups: { orderBy: { createdAt: "desc" }, select: { id: true, targetUnit: true, major: true, minor: true, safetyChecksum: true, isSafetyRelated: true } },
       resolvingRevisions: {
         orderBy: [{ major: "desc" }, { minor: "desc" }],
         select: {

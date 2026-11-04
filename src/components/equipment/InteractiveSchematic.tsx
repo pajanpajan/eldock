@@ -13,6 +13,9 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { documentsForComponent } from "@/lib/equipment-documents";
+
+import { DocumentPreview } from "./DocumentLibrary";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import type { SchematicFormat } from "@/generated/prisma/enums";
@@ -61,12 +64,16 @@ export function InteractiveSchematic({
   references,
   linkable,
   canEdit,
+  datasheets = [],
 }: {
   revision: { id: string; version: string; url: string; format: SchematicFormat; sheetCount: number };
   references: SchematicReferenceView[];
   linkable: { id: string; tag: string; name: string }[];
   canEdit: boolean;
+  /** Datasheety a návody zařízení navázané na prvek schématu (fáze 46). */
+  datasheets?: { componentTag: string | null; title: string; fileUrl: string; fileName: string; createdAt: string }[];
 }) {
+  const [datasheet, setDatasheet] = useState<{ title: string; fileUrl: string; fileName: string } | null>(null);
   const router = useRouter();
   const pdf = revision.format === "PDF";
   const [page, setPage] = useState(references[0]?.page ?? 1);
@@ -273,6 +280,12 @@ export function InteractiveSchematic({
               </SheetHeader>
               <div className="space-y-4 px-4 pb-6">
                 {active.description ? <p className="text-sm">{active.description}</p> : null}
+                {documentsForComponent(datasheets, active.designation).map((document) => (
+                  <Button key={document.fileUrl} variant="outline" className="touch-target w-full justify-start gap-2 border-sky-500/60 text-sky-100" onClick={() => setDatasheet(document)} data-testid="component-datasheet">
+                    📄 Otevřít datasheet komponenty
+                    <span className="truncate text-xs text-muted-foreground">{document.title}</span>
+                  </Button>
+                ))}
                 {active.linked ? (
                   <section className="space-y-3 rounded-xl border border-border p-3">
                     <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Propojené zařízení</p>
@@ -344,6 +357,7 @@ export function InteractiveSchematic({
           ) : null}
         </SheetContent>
       </Sheet>
+      <DocumentPreview document={datasheet} onClose={() => setDatasheet(null)} />
 
       <Dialog open={draft !== null} onOpenChange={(open) => !open && !pending && setDraft(null)}>
         <DialogContent className="sm:max-w-md">

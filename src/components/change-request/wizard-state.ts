@@ -1,4 +1,4 @@
-import type { ChangeRequestPriority } from "@/generated/prisma/enums";
+import type { ChangeRequestPriority, SafetyImpactLevel } from "@/generated/prisma/enums";
 import type { MarkupStroke } from "@/lib/markup";
 
 // Stav průvodce „Zadat změnu“ (useReducer) + koncept v sessionStorage. Čisté funkce (testy).
@@ -44,6 +44,22 @@ export interface WizardState {
   /** Text vznikl (i částečně) diktováním → ukládá se jako přepis hlasové poznámky. */
   dictated: boolean;
   priority: ChangeRequestPriority;
+  /** Klasifikace zásahu dle Nařízení (EU) 2023/1230 (fáze 46). */
+  safetyImpact: SafetyImpactLevel;
+  /** Součástí zásahu byla i úprava řídicího SW / parametrů měniče. */
+  softwareChanged: boolean;
+  /** Záloha SW přiložená rovnou v průvodci (nepovinná). */
+  softwareBackup: WizardSoftwareBackup | null;
+}
+
+export interface WizardSoftwareBackup {
+  targetUnit: string;
+  platform: string;
+  fileUrl: string;
+  fileName: string;
+  fileSizeBytes: number;
+  isSafetyRelated: boolean;
+  safetyChecksum: string;
 }
 
 export const initialWizardState: WizardState = {
@@ -54,6 +70,9 @@ export const initialWizardState: WizardState = {
   text: "",
   dictated: false,
   priority: "NORMAL",
+  safetyImpact: "NONE_1_TO_1",
+  softwareChanged: false,
+  softwareBackup: null,
 };
 
 export type WizardAction =
@@ -65,6 +84,9 @@ export type WizardAction =
   | { type: "removePhoto"; key: string }
   | { type: "setText"; text: string; dictated?: boolean }
   | { type: "setPriority"; priority: ChangeRequestPriority }
+  | { type: "setSafetyImpact"; safetyImpact: SafetyImpactLevel }
+  | { type: "setSoftwareChanged"; value: boolean }
+  | { type: "setSoftwareBackup"; backup: WizardSoftwareBackup | null }
   | { type: "restore"; state: Partial<WizardState> }
   | { type: "reset" };
 
@@ -87,6 +109,13 @@ export function wizardReducer(state: WizardState, action: WizardAction): WizardS
       return { ...state, text: action.text, dictated: state.dictated || !!action.dictated || false };
     case "setPriority":
       return { ...state, priority: action.priority };
+    case "setSafetyImpact":
+      // Podstatná změna bezpečnosti = vysoká priorita (schválení vedoucím údržby)
+      return { ...state, safetyImpact: action.safetyImpact, priority: action.safetyImpact === "SUBSTANTIAL_SAFETY_MOD" && (state.priority === "LOW" || state.priority === "NORMAL") ? "HIGH" : state.priority };
+    case "setSoftwareChanged":
+      return { ...state, softwareChanged: action.value, softwareBackup: action.value ? state.softwareBackup : null };
+    case "setSoftwareBackup":
+      return { ...state, softwareBackup: action.backup, softwareChanged: state.softwareChanged || !!action.backup };
     case "restore":
       return { ...state, ...action.state };
     case "reset":
@@ -102,6 +131,7 @@ export function canSubmit(state: WizardState, mode: "new" | "comment"): { ok: tr
   if (isUploading(state)) return { ok: false, reason: "Počkejte, než se dokončí nahrávání fotek." };
   const hasContent =
     (mode === "new" && state.strokes.length > 0) || uploadedPhotos(state).length > 0 || state.text.trim().length > 0;
+  if (state.softwareBackup?.isSafetyRelated && !state.softwareBackup.safetyChecksum.trim()) return { ok: false, reason: "Bezpečnostní program vyžaduje kontrolní součet (Safety CRC)." };
   if (!hasContent) {
     return {
       ok: false,
@@ -136,6 +166,9 @@ export function parseDraft(json: string | null): Partial<WizardState> | null {
       text: typeof data.text === "string" ? data.text : "",
       dictated: data.dictated === true,
       priority: data.priority ?? "NORMAL",
+      safetyImpact: data.safetyImpact === "OPERATIONAL_ONLY" || data.safetyImpact === "SUBSTANTIAL_SAFETY_MOD" ? data.safetyImpact : "NONE_1_TO_1",
+      softwareChanged: data.softwareChanged === true,
+      softwareBackup: data.softwareBackup && typeof data.softwareBackup.fileUrl === "string" ? data.softwareBackup : null,
     };
   } catch {
     return null;

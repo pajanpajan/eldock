@@ -32,6 +32,7 @@ import { ACCOUNTS } from "./seed-accounts";
 import { seedDemoDocs } from "./seed-demo-docs";
 import { demoFloorSvg, demoLayoutJson, demoLayoutOf, seedDemoPlant } from "./seed-demo-plant";
 import { seedPanelBuilder } from "./seed-panel-builder";
+import { seedLegislation2027 } from "./seed-legislation-2027";
 import { LIGHT_EQUIPMENT } from "./seed-appliances";
 import { TEMPORARY_MODS } from "./seed-temporary-mods";
 import { FEEDS, INSPECTORS, type DefectSeed, complianceFor, externalInfluencesFor, inspectionsFor, intervalFor } from "./seed-compliance";
@@ -439,6 +440,7 @@ async function main() {
   // Vzorové závody v metrové architektuře Studia: piny v metrech, bohaté vybavení, štítky v místnostech
   await seedDemoPlant(prisma, { force: true });
   await seedPanelBuilder(prisma);
+  await seedLegislation2027(prisma);
   // Kódy QR štítků (stejně jako migrace 20261030190000)
   await prisma.$executeRaw`UPDATE "Equipment" SET "qrToken" = upper(hex(randomblob(5))) WHERE "qrToken" IS NULL`;
 

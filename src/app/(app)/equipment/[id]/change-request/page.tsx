@@ -9,7 +9,7 @@ import { StatusBadge } from "@/components/common/StatusBadge";
 import { ChangeRequestWizard } from "@/components/change-request/ChangeRequestWizard";
 import { SwitchRoleButton } from "@/components/common/SwitchRoleButton";
 import { equipmentHref, floorHref, plantHref } from "@/lib/routes";
-import { getEquipmentDetail } from "@/server/queries/equipment";
+import { getEquipmentDetail, getEquipmentKnowledge } from "@/server/queries/equipment";
 import { getFeatures } from "@/server/modules";
 import { getCurrentAccount } from "@/server/session";
 
@@ -24,7 +24,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 // Průvodce „Zadat změnu“ (jen pohled Údržba).
 export default async function ChangeRequestPage({ params }: Props) {
   const { id } = await params;
-  const [equipment, account, modules] = await Promise.all([getEquipmentDetail(id), getCurrentAccount(), getFeatures()]);
+  const [equipment, account, modules, knowledge] = await Promise.all([getEquipmentDetail(id), getCurrentAccount(), getFeatures(), getEquipmentKnowledge(id)]);
   if (!equipment) notFound();
 
   const { floor } = equipment;
@@ -68,6 +68,7 @@ export default async function ChangeRequestPage({ params }: Props) {
     <>
       {header}
       <ChangeRequestWizard
+        softwareUnits={[...new Set(knowledge.backups.map((backup) => backup.targetUnit))]}
         equipment={{ id: equipment.id, tag: equipment.tag, name: equipment.name }}
         schematic={active ? { url: active.schematicUrl, version: active.version, sheetCount: active.sheetCount, pdf: active.schematicFormat === "PDF" } : null}
         annotatePhotos={modules.on("cae.canvas_annotation") ? true : modules.upsell ? "locked" : false}

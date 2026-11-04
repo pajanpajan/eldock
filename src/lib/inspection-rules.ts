@@ -109,7 +109,7 @@ export function inspectionRuleFor(input: RuleInput): InspectionRule {
     case "WELDER":
       return { months: 12, standard: "ČSN EN 60974-4", basis: "Zařízení pro obloukové svařování – periodická kontrola 1× ročně." };
     case "LIGHTNING_ROD":
-      return { months: 48, standard: "ČSN EN 62305-3", basis: "Hromosvod LPS třídy III – úplná revize 1× za 4 roky." };
+      return { months: 48, standard: "ČSN EN IEC 62305-3 ed. 3", basis: "Hromosvod LPS třídy III – úplná revize 1× za 4 roky (ČSN EN IEC 62305-3 ed. 3)." };
     case "EMERGENCY_LIGHTING":
       return { months: 12, standard: "ČSN EN 50172", basis: "Nouzové osvětlení – roční zkouška plné doby funkce." };
     case "OTHER":

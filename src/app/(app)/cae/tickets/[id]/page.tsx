@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { SAFETY_IMPACT, SUBSTANTIAL_MOD_WARNING } from "@/lib/legislation-2027";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ExternalLink, FileText, Inbox, Mic, MessageSquareWarning, StickyNote } from "lucide-react";
@@ -74,10 +75,36 @@ export default async function TicketDetailPage({ params }: Props) {
         <>
           <StatusBadge kind="changeRequest" status={ticket.status} />
           <StatusBadge kind="priority" status={ticket.priority} />
+          {ticket.safetyImpact !== "NONE_1_TO_1" ? (
+            <span
+              className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${ticket.safetyImpact === "SUBSTANTIAL_SAFETY_MOD" ? "border-red-500 bg-red-500/15 text-red-200" : "border-amber-400 bg-amber-400/10 text-amber-200"}`}
+              data-testid="ticket-safety-impact"
+            >
+              {SAFETY_IMPACT[ticket.safetyImpact].short}
+            </span>
+          ) : null}
         </>
       }
     />
   );
+  // Fáze 46: úprava řídicího SW – úkol, dokud k ticketu nepřibude záloha
+  const softwareTask = ticket.requiresSoftwareUpdate ? (
+    ticket.softwareBackups.length ? (
+      <p className="rounded-xl border border-emerald-500/50 bg-emerald-500/10 p-3 text-sm text-emerald-200" data-testid="ticket-software-done">
+        💾 Záloha SW nahrána: {ticket.softwareBackups.map((backup) => `${backup.targetUnit} v${backup.major}.${backup.minor}${backup.isSafetyRelated && backup.safetyChecksum ? ` (Safety ${backup.safetyChecksum})` : ""}`).join(", ")}
+      </p>
+    ) : (
+      <p className="rounded-xl border border-orange-500/60 bg-orange-500/10 p-3 text-sm font-semibold text-orange-200" role="alert" data-testid="ticket-software-task">
+        ⚠️ Čeká na nahrání aktualizované zálohy SW – zásah zahrnoval úpravu řídicího SW / parametrů měniče. Zálohu nahrajte na kartě zařízení v záložce „💾 Software & Zálohy PLC“.
+      </p>
+    )
+  ) : null;
+  const safetyNote =
+    ticket.safetyImpact === "SUBSTANTIAL_SAFETY_MOD" ? (
+      <p className="rounded-xl border-2 border-red-500 bg-red-500/10 p-3 text-sm text-red-100" data-testid="ticket-substantial">
+        🔴 {SUBSTANTIAL_MOD_WARNING}
+      </p>
+    ) : null;
 
   if (role !== "CAE_ENGINEER") {
     return (
@@ -96,6 +123,12 @@ export default async function TicketDetailPage({ params }: Props) {
   return (
     <>
       {header}
+      {safetyNote || softwareTask ? (
+        <div className="mb-6 space-y-2">
+          {safetyNote}
+          {softwareTask}
+        </div>
+      ) : null}
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,26rem)]">
         <div className="space-y-6">
           <Section title="Zákres technika" icon={FileText}>

@@ -3,6 +3,8 @@
 // změna stavu běží v transakci a zapisuje `ChangeRequestEvent`. Pravidla přechodů jsou
 // v `src/lib/workflow/state-machine.ts`. Záměrně bez `server-only` (běží i přes tsx).
 
+import type { SafetyImpactLevel } from "@/generated/prisma/enums";
+import { createSoftwareBackupInTx, type SoftwareBackupInput } from "./equipment-knowledge";
 import type {
   AttachmentType,
   ChangeRequestPriority,
@@ -132,6 +134,12 @@ export interface SubmitChangeRequestInput {
   voiceTranscript?: string | null;
   note?: string | null;
   attachments?: AttachmentInput[];
+  /** Klasifikace zásahu dle Nařízení (EU) 2023/1230 (fáze 46). */
+  safetyImpact?: SafetyImpactLevel;
+  /** Zásah zahrnuje úpravu řídicího SW / parametrů měniče. */
+  requiresSoftwareUpdate?: boolean;
+  /** Záloha SW přiložená rovnou v průvodci (Minor +0.1 řídicího uzlu). */
+  softwareBackup?: Omit<SoftwareBackupInput, "equipmentId" | "bump" | "changeRequestId" | "changeSummary"> & { changeSummary?: string | null } | null;
 }
 
 export async function submitChangeRequest(prisma: PrismaClient, actor: Actor, input: SubmitChangeRequestInput) {
@@ -184,10 +192,21 @@ export async function submitChangeRequestInTx(tx: Tx, actor: Actor, input: Submi
       note,
       reporterId: actor.id,
       submittedAt: now,
+      safetyImpact: input.safetyImpact ?? "NONE_1_TO_1",
+      requiresSoftwareUpdate: !!(input.requiresSoftwareUpdate || input.softwareBackup),
       attachments: { create: attachmentRows(input.attachments, actor.id) },
     },
   });
   await addEvent(tx, { changeRequestId: changeRequest.id, type: "SUBMITTED", actorId: actor.id, from: null, to, at: now });
+  if (input.softwareBackup) {
+    await createSoftwareBackupInTx(tx, actor, {
+      ...input.softwareBackup,
+      equipmentId: equipment.id,
+      bump: "minor",
+      changeRequestId: changeRequest.id,
+      changeSummary: clean(input.softwareBackup.changeSummary) ?? `Záloha ze změny ${number}: ${note ?? voiceTranscript ?? "úprava řídicího SW / parametrů"}`,
+    });
+  }
   await syncEquipment(tx, equipment.id);
   return changeRequest;
 }

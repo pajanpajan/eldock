@@ -19,6 +19,7 @@ import { CompliancePassport } from "@/components/inspections/CompliancePassport"
 import { InspectionLogbook } from "@/components/inspections/InspectionLogbook";
 import { InspectionStatusBadge } from "@/components/inspections/InspectionStatusBadge";
 import { LotoCard } from "@/components/inspections/LotoCard";
+import { BatteryPassportCard } from "@/components/inspections/BatteryPassportCard";
 import { TemporaryModArchive } from "@/components/temporary-mods/TemporaryModArchive";
 import { TemporaryModBanner } from "@/components/temporary-mods/TemporaryModBanner";
 import { TemporaryModDialog } from "@/components/temporary-mods/TemporaryModDialog";
@@ -35,7 +36,10 @@ import { buildingHref, caeTicketHref, equipmentHref, floorHref, plantHref } from
 import { checkLabel } from "@/lib/qr-label";
 import { hasPanelBook } from "@/lib/sheet-nav";
 import { buildLabelData } from "@/server/equipment-label";
-import { getEquipmentDetail, getLinkableEquipment, getPowerNodes, getRevisionBom, getSchematicReferences } from "@/server/queries/equipment";
+import { getEquipmentDetail, getEquipmentKnowledge, getLinkableEquipment, getPowerNodes, getRevisionBom, getSchematicReferences } from "@/server/queries/equipment";
+import { DocumentLibrary } from "@/components/equipment/DocumentLibrary";
+import { SoftwareBackups } from "@/components/equipment/SoftwareBackups";
+import { hasSoftwareTab } from "@/lib/software-backups";
 import { getFeatures } from "@/server/modules";
 import { getEquipmentPassports } from "@/server/queries/panel-builder";
 import { getCurrentAccount } from "@/server/session";
@@ -86,14 +90,70 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
   const canEditReferences = account.can("caeOffice") || account.can("studio");
   const withReferences = !!selected && !isLightCard(equipment.type) && modules.on("cae.hotspots");
   // Nezávislé dotazy po ověření přístupu najednou: napájení (LOTO), štítek, kusovník vybrané revize, reference.
-  const [powerNodes, label, bom, references, linkable, passports] = await Promise.all([
+  const [powerNodes, label, bom, references, linkable, passports, knowledge] = await Promise.all([
     getPowerNodes(plantId),
     buildLabelData(equipment, inspection),
     selected ? getRevisionBom(selected.id) : Promise.resolve([]),
     withReferences ? getSchematicReferences(selected.id, now) : Promise.resolve([]),
     withReferences && canEditReferences ? getLinkableEquipment(plantId) : Promise.resolve([]),
     equipment.type === "SWITCHBOARD" ? getEquipmentPassports(equipment.id) : Promise.resolve([]),
+    getEquipmentKnowledge(equipment.id),
   ]);
+  // Fáze 46: knihovna návodů / datasheetů a verzované zálohy řídicího SW
+  const libraryDocuments = knowledge.documents.map((document) => ({
+    id: document.id,
+    category: document.category,
+    title: document.title,
+    componentTag: document.componentTag,
+    manufacturer: document.manufacturer,
+    modelNumber: document.modelNumber,
+    version: document.version,
+    language: document.language,
+    fileUrl: document.fileUrl,
+    fileName: document.fileName,
+    fileSizeBytes: document.fileSizeBytes,
+    createdAt: document.createdAt.toISOString(),
+    uploadedBy: document.uploadedBy?.name ?? null,
+  }));
+  const docsPanel = (
+    <DocumentLibrary
+      equipmentId={equipment.id}
+      documents={libraryDocuments}
+      canUpload={account.can("submitChange") || account.can("recordInspection") || account.can("caeOffice")}
+      canDelete={account.can("submitChange") || account.can("caeOffice")}
+    />
+  );
+  const softwarePanel = hasSoftwareTab(equipment.type) ? (
+    <SoftwareBackups
+      equipmentId={equipment.id}
+      backups={knowledge.backups.map((backup) => ({
+        id: backup.id,
+        targetUnit: backup.targetUnit,
+        platform: backup.platform,
+        major: backup.major,
+        minor: backup.minor,
+        status: backup.status,
+        firmwareVersion: backup.firmwareVersion,
+        isSafetyRelated: backup.isSafetyRelated,
+        safetyChecksum: backup.safetyChecksum,
+        changeSummary: backup.changeSummary,
+        fileUrl: backup.fileUrl,
+        fileName: backup.fileName,
+        fileSizeBytes: backup.fileSizeBytes,
+        createdAt: backup.createdAt.toISOString(),
+        author: backup.author?.name ?? null,
+        changeRequest: backup.changeRequest,
+      }))}
+      changes={knowledge.changes.map((change) => ({
+        id: change.id,
+        number: change.number,
+        requiresSoftwareUpdate: change.requiresSoftwareUpdate,
+        hasBackup: knowledge.backups.some((backup) => backup.changeRequest?.id === change.id),
+      }))}
+      canUpload={account.can("submitChange") || account.can("caeOffice")}
+      ticketBase={role === "CAE_ENGINEER" && modules.on("cae.ticketing") ? "/cae/tickets/" : null}
+    />
+  ) : null;
   const today = pragueToday(now);
   // Spotřebiče, nářadí a bezpečnostní zařízení: lehká karta jen s revizemi a měřením.
   const light = isLightCard(equipment.type);
@@ -290,14 +350,14 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
 
         {light ? (
           <DocumentationTabs
-            panels={{ inspections: inspectionsPanel }}
+            panels={{ inspections: inspectionsPanel, docs: docsPanel }}
             defaultTab="inspections"
-            labels={{ inspections: `Revize & Měření (${rule.standard})` }}
+            labels={{ inspections: `Revize & Měření (${rule.standard})`, docs: `📚 Návody & Datasheety (${libraryDocuments.length})` }}
           />
         ) : (
           <div id="dokumentace" className="scroll-mt-24">
           <DocumentationTabs
-            labels={fieldView ? { passport: "LOTO – bezpečné odpojení" } : undefined}
+            labels={{ ...(fieldView ? { passport: "LOTO – bezpečné odpojení" } : {}), docs: `📚 Návody & Datasheety (${libraryDocuments.length})` }}
             panels={{
               schema: (
                 <SchematicViewer
@@ -315,6 +375,7 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
                               references={references}
                               linkable={linkable}
                               canEdit={canEditReferences}
+                              datasheets={libraryDocuments}
                             />
                           ),
                         }
@@ -344,6 +405,8 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
                 </div>
               ) : null,
               "3d": selected ? <LazyCabinet3D bom={bom} tag={equipment.tag} /> : null,
+              docs: docsPanel,
+              ...(softwarePanel ? { software: softwarePanel } : {}),
               history: (
                 <div className="space-y-8">
                   <RevisionTimeline revisions={equipment.revisions} basePath={basePath} selectedId={selected?.id ?? null} />
@@ -355,6 +418,7 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
               ) : (
                 <div className="space-y-8">
                   <LotoCard equipment={equipment} nodes={powerNodes} />
+                  <BatteryPassportCard json={equipment.batteryPassportJson} />
                   <CompliancePassport equipment={equipment} />
                 </div>
               ),
