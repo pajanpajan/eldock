@@ -7,6 +7,7 @@ import { cache } from "react";
 import type { Prisma } from "@/generated/prisma/client";
 import { normalizeSearch, type CatalogFilter } from "@/lib/panel-builder/catalog";
 import { prisma } from "@/lib/prisma";
+import { SAMPLE_PROJECT_CODE } from "@/lib/panel-builder/project-admin";
 import { getPanelCompany } from "@/server/panel-session";
 
 // Čtení dat AI Panel Builderu: katalog prvků, seznam projektů a detail projektu.
@@ -45,7 +46,8 @@ export const getPanelProjects = cache(async () => {
   if (!company) return [];
   return prisma.panelBoardProject.findMany({
     where: { companyId: company.id },
-    orderBy: { code: "asc" },
+    // Naposledy upravené nahoře (index companyId + updatedAt, fáze 48)
+    orderBy: { updatedAt: "desc" },
     include: {
       equipment: { select: { id: true, tag: true, name: true } },
       items: { select: { recognitionStatus: true, parentItemId: true, fedFromIncomer: true } },
@@ -55,22 +57,24 @@ export const getPanelProjects = cache(async () => {
 
 const companyProfile = { companyName: true, ico: true, dic: true, street: true, city: true, zip: true, contactName: true, phone: true, email: true, authorizationNumber: true, logoUrl: true, stampUrl: true, circuitChipsJson: true } as const;
 
+const projectDetail = {
+  equipment: { select: { id: true, tag: true, name: true } },
+  company: { select: companyProfile },
+  items: {
+    orderBy: [{ dinRailIndex: "asc" as const }, { positionOnRail: "asc" as const }],
+    include: { catalogComponent: true, wiringDevices: { include: { wiringDevice: { select: { title: true, articleNumber: true, category: true } } }, orderBy: { id: "asc" as const } } },
+  },
+};
+
 /** Detail projektu přihlášené firmy (cizí projekt → `null` = 404): prvky v pořadí lišta → pozice, katalogové kusy, výrobce. */
 export const getPanelProject = cache(async (id: string) => {
   const company = await getPanelCompany();
   if (!company) return null;
-  return prisma.panelBoardProject.findFirst({
-    where: { id, companyId: company.id },
-    include: {
-      equipment: { select: { id: true, tag: true, name: true } },
-      company: { select: companyProfile },
-      items: {
-        orderBy: [{ dinRailIndex: "asc" }, { positionOnRail: "asc" }],
-        include: { catalogComponent: true, wiringDevices: { include: { wiringDevice: { select: { title: true, articleNumber: true, category: true } } }, orderBy: { id: "asc" } } },
-      },
-    },
-  });
+  return prisma.panelBoardProject.findFirst({ where: { id, companyId: company.id }, include: projectDetail });
 });
+
+/** Vzorový projekt PB-001 pro veřejnou ukázku elaborátu na úvodní stránce (fáze 48) – bez přihlášení. */
+export const getShowcaseProject = cache(() => prisma.panelBoardProject.findUnique({ where: { code: SAMPLE_PROJECT_CODE }, include: projectDetail }));
 
 export type PanelProjectDetail = NonNullable<Awaited<ReturnType<typeof getPanelProject>>>;
 export type PanelItemDetail = PanelProjectDetail["items"][number];

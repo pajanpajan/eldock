@@ -26,7 +26,7 @@ export default async function PanelThermalPage({ params }: PageProps<"/panel-bui
   return (
     <PageTransition>
       <ProjectHeader project={project} />
-      <PanelSteps projectId={project.id} current="thermal" design={project.designMode === "DESIGN"} />
+      <PanelSteps project={project} current="thermal" />
       <ThermalWorkspace
         // Nová skříň z katalogu = nové vstupy (rozměry, materiál, krytí)
         key={project.enclosureId ?? "no-enclosure"}

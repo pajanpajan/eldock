@@ -35,7 +35,7 @@ export default async function PanelLabelsPage({ params }: PageProps<"/panel-buil
       `}</style>
       <div className="no-print">
         <ProjectHeader project={project} />
-        <PanelSteps projectId={project.id} current="documentation" design={project.designMode === "DESIGN"} />
+        <PanelSteps project={project} current="documentation" />
       </div>
       <LabelSheet
         code={project.code}

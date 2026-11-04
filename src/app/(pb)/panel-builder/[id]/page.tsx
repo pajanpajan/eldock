@@ -82,7 +82,7 @@ export default async function PanelProjectPage({ params }: PageProps<"/panel-bui
   return (
     <PageTransition>
       <ProjectHeader project={project} />
-      <PanelSteps projectId={project.id} current="recognition" design={project.designMode === "DESIGN"} />
+      <PanelSteps project={project} current="recognition" />
       <RecognitionWorkspace
         projectId={project.id}
         designMode={project.designMode === "DESIGN" ? "DESIGN" : "PHOTO"}

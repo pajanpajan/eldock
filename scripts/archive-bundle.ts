@@ -1,5 +1,6 @@
 // Sjednocený archiv dokumentace: všechny samostatné soubory `docs/archiv/*.md` zůstávají,
-// a navíc se z nich skládá jeden soubor `docs/archiv/ARCHIV-KOMPLET.md` (např. pro rozbor v jiném AI).
+// a navíc se z nich (+ z aktuálního `docs/PLAN.md` s deníkem posledních fází) skládá jeden soubor
+// `docs/archiv/ARCHIV-KOMPLET.md` (např. pro rozbor v jiném AI).
 // Spuštění: `npm run docs:bundle`. Test `archive-bundle.test.ts` hlídá, že je sjednocený soubor aktuální.
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -29,20 +30,25 @@ export function archiveFiles(dir = ARCHIVE_DIR): string[] {
     });
 }
 
-export function buildArchiveBundle(dir = ARCHIVE_DIR): string {
+/** Aktuální rotující plán (tabulka fází a deník posledních fází) – fáze 48: přidává se na konec. */
+export const PLAN_FILE = path.join(ARCHIVE_DIR, "..", "PLAN.md");
+
+export function buildArchiveBundle(dir = ARCHIVE_DIR, planFile: string | null = PLAN_FILE): string {
   const files = archiveFiles(dir);
   const parts = [
     "# ELDOCK – sjednocený archiv dokumentace",
     "",
-    `> Generováno skriptem \`npm run docs:bundle\` ze souborů v \`docs/archiv\` – needitujte ručně, upravte jednotlivé soubory a skript spusťte znovu. Aktuální stav projektu je v \`CLAUDE.md\` a \`docs/PLAN.md\`.`,
+    `> Generováno skriptem \`npm run docs:bundle\` ze souborů v \`docs/archiv\` a z \`docs/PLAN.md\` – needitujte ručně, upravte jednotlivé soubory a skript spusťte znovu. Aktuální pravidla projektu jsou v \`CLAUDE.md\`.`,
     "",
     "## Obsah",
     "",
     ...files.map((name, index) => `${index + 1}. ${name}`),
+    ...(planFile ? [`${files.length + 1}. docs/PLAN.md (aktuální plán a deník posledních fází)`] : []),
   ];
   for (const name of files) {
     parts.push("", "---", "", `# 📄 ${name}`, "", normalize(readFileSync(path.join(dir, name), "utf8")));
   }
+  if (planFile) parts.push("", "---", "", "# 📄 docs/PLAN.md", "", normalize(readFileSync(planFile, "utf8")));
   return `${parts.join("\n")}\n`;
 }
 

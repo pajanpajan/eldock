@@ -31,18 +31,23 @@ import {
 } from "lucide-react";
 
 import { ProductPreview } from "@/components/landing/ProductPreview";
+import { SampleElaborateDialog } from "@/components/landing/SampleElaborateDialog";
 import { LazyPromoVideo } from "@/components/lazy";
 import { Logo } from "@/components/layout/Logo";
 import { Button } from "@/components/ui/button";
 import { BRAND } from "@/lib/brand";
 import { COMPANY_INFO } from "@/lib/company";
+import { OG_IMAGE, SEO_DESCRIPTION, SEO_KEYWORDS, SEO_TITLE, SITE_URL, jsonLdScript, landingJsonLd } from "@/lib/seo";
 import { APP_HOME } from "@/lib/routes";
 import { getAuthSession } from "@/server/session";
 
 export const metadata: Metadata = {
-  title: { absolute: `${BRAND.name} – ${BRAND.tagline}` },
-  description:
-    "Digitální dvojče elektrodokumentace výrobního závodu: schémata u stroje přes QR kód, řízené změnové řízení s CAE projekcí, plánovač revizí VTZ a auditní stopa.",
+  title: { absolute: SEO_TITLE },
+  description: SEO_DESCRIPTION,
+  keywords: SEO_KEYWORDS,
+  alternates: { canonical: SITE_URL },
+  openGraph: { type: "website", locale: "cs_CZ", siteName: "ELDOCK", url: SITE_URL, title: SEO_TITLE, description: SEO_DESCRIPTION, images: [OG_IMAGE] },
+  twitter: { card: "summary_large_image", title: SEO_TITLE, description: SEO_DESCRIPTION, images: [OG_IMAGE.url] },
 };
 
 const NAV = [
@@ -110,6 +115,8 @@ export default async function LandingPage() {
 
   return (
     <div className="landing bg-blueprint flex flex-1 flex-col">
+      {/* Strukturovaná data pro vyhledávače (SoftwareApplication + Organization) */}
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(landingJsonLd()) }} />
       <header className="sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur">
         <div className="mx-auto flex min-h-16 w-full max-w-6xl items-center gap-6 px-4 sm:px-6">
           <Link href="/" className="rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50" aria-label="Eldock – úvodní stránka">
@@ -196,6 +203,7 @@ export default async function LandingPage() {
                     <Rocket data-icon="inline-start" aria-hidden /> 🚀 Spustit AI Panel Builder (Registrace / Přihlášení)
                   </Link>
                 </Button>
+                <SampleElaborateDialog />
               </div>
             </article>
             <article className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-6" data-testid="product-plant">

@@ -8,6 +8,8 @@ import { cn } from "@/lib/utils";
 import type { PanelProjectDetail } from "@/server/queries/panel-builder";
 import { isGeminiConfigured } from "@/server/services/geminiPanelService";
 
+import { DeleteProjectButton } from "./ProjectAdmin";
+
 /** Hlavička projektu rozváděče: kód, stav, skříň a štítek demo AI režimu. */
 export function ProjectHeader({ project }: { project: PanelProjectDetail }) {
   const status = PROJECT_STATUS[project.status];
@@ -39,6 +41,7 @@ export function ProjectHeader({ project }: { project: PanelProjectDetail }) {
       }
       description={[
         project.customerName,
+        project.installationSite ? `📍 ${project.installationSite}` : null,
         `${ENCLOSURE_TYPES[project.enclosureType]} ${project.enclosureModel || "rozváděč"}`,
         `${project.heightMm} × ${project.widthMm} × ${project.depthMm} mm`,
         project.ipRating,
@@ -47,13 +50,16 @@ export function ProjectHeader({ project }: { project: PanelProjectDetail }) {
         .filter(Boolean)
         .join(" · ")}
       actions={
-        <Link
-          href={`/panel-builder/${project.id}/labels`}
-          className="touch-target flex items-center gap-1.5 rounded-md border border-border px-3 text-sm font-medium hover:border-primary"
-          data-testid="labels-link"
-        >
-          🏷️ Tisk popisků a štítků (1:1)
-        </Link>
+        <>
+          <Link
+            href={`/panel-builder/${project.id}/labels`}
+            className="touch-target flex items-center gap-1.5 rounded-md border border-border px-3 text-sm font-medium hover:border-primary"
+            data-testid="labels-link"
+          >
+            🏷️ Tisk popisků a štítků (1:1)
+          </Link>
+          <DeleteProjectButton project={{ id: project.id, code: project.code, name: project.name, customerName: project.customerName, installationSite: project.installationSite, status: project.status }} variant="full" redirectTo="/panel-builder" />
+        </>
       }
     />
   );

@@ -873,6 +873,8 @@ model PanelBoardProject {
   code                 String             @unique // "PB-001"
   equipmentId          String? // propuštěno do provozu = karta rozváděče v Eldocku
   customerName         String?
+  /// Místo instalace rozváděče (fáze 48) – hlavička projektu a titulní list dokumentace.
+  installationSite     String?
   manufacturerInfoJson String             @default("{}") // výrobce rozváděče: { name, address, city, phone }
   status               PanelProjectStatus @default(DRAFT)
 
@@ -932,7 +934,7 @@ model PanelBoardProject {
   items     PanelBoardItem[]
 
   @@index([equipmentId])
-  @@index([companyId])
+  @@index([companyId, updatedAt])
   @@index([enclosureId])
 }
 

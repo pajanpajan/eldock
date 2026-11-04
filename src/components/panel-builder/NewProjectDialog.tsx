@@ -14,16 +14,25 @@ import { DEFAULT_RAIL_MODULES } from "@/lib/panel-builder/rails";
 import { resizeImage, uploadFile } from "@/lib/upload-client";
 import { cn } from "@/lib/utils";
 import { createPanelProjectAction } from "@/server/actions/panel-builder";
+import { createScheduleProjectAction } from "@/server/actions/panel-projects";
+import { SAMPLE_SCHEDULE, type ScheduleRoom } from "@/engine/room-schedule";
+
+import { ScheduleEditor } from "./ScheduleEditor";
 
 const selectClass = "h-10 rounded-md border border-input bg-transparent px-2 text-sm dark:bg-input/30";
 /** Ukázková fotka referenčního rozváděče (seed PB-001). */
 export const SAMPLE_PHOTO = "/api/files/photos/seed/panel-pb-001.svg";
 
-type Mode = "DESIGN" | "PHOTO";
+type Mode = "DESIGN" | "PHOTO" | "SCHEDULE";
 
 const MODES: { value: Mode; label: string; hint: string }[] = [
   { value: "DESIGN", label: "📐 Navrhnout nový rozváděč od nuly (bez fotky)", hint: "Čisté 2D vektorové plátno s 1 DIN lištou 12M – přístroje vkládáte z databáze prvků." },
   { value: "PHOTO", label: "📷 Pasportizovat rozváděč z fotky (AI Vision)", hint: "Vyfoťte otevřený rozváděč (dvířka pryč, celé DIN lišty v záběru). AI rozpozná přístroje zleva doprava." },
+  {
+    value: "SCHEDULE",
+    label: "🏠 Vygenerovat rozváděč ze soupisu okruhů / místností (ČSN 33 2130 ed. 4)",
+    hint: "Zadejte místnosti, vzdálenost od rozváděče, zásuvky, světla a spotřebiče. Okruhy, chrániče, fáze, lišty i skříň navrhne výpočet dle ČSN 33 2130 ed. 4.",
+  },
 ];
 
 /** Nový projekt rozváděče: návrh od nuly (výchozí pro projekci) nebo pasportizace z fotky s okamžitou analýzou. */
@@ -35,7 +44,10 @@ export function NewProjectDialog({ credits = null }: { credits?: number | null }
   const [photo, setPhoto] = useState<{ url: string; name: string } | null>(null);
   const [uploading, setUploading] = useState(false);
   const [pending, startTransition] = useTransition();
+  const [rooms, setRooms] = useState<ScheduleRoom[]>(SAMPLE_SCHEDULE);
+  const [installMode, setInstallMode] = useState<"classic" | "bus_loxone">("classic");
   const design = mode === "DESIGN";
+  const schedule = mode === "SCHEDULE";
 
   async function pickPhoto(file: File) {
     setUploading(true);
@@ -50,10 +62,21 @@ export function NewProjectDialog({ credits = null }: { credits?: number | null }
   }
 
   function submit(form: FormData) {
+    const header = { name: String(form.get("name") ?? ""), customerName: String(form.get("customer") ?? "") || null, installationSite: String(form.get("site") ?? "") || null };
+    if (schedule) {
+      startTransition(async () => {
+        const result = await createScheduleProjectAction({ ...header, mode: installMode, rooms });
+        if (!result.ok) return void toast.error(result.error);
+        toast.success(`Rozváděč vygenerován: ${result.data.circuits} okruhů, ${result.data.devices} přístrojů${result.data.enclosure ? `, skříň ${result.data.enclosure}` : ""}.`);
+        for (const warning of result.data.warnings.slice(0, 3)) toast.warning(warning);
+        setOpen(false);
+        router.push(`/panel-builder/${result.data.id}`);
+      });
+      return;
+    }
     startTransition(async () => {
       const result = await createPanelProjectAction({
-        name: String(form.get("name") ?? ""),
-        customerName: String(form.get("customer") ?? "") || null,
+        ...header,
         photoUrl: design ? null : (photo?.url ?? null),
         dominantManufacturer: design ? MIX : String(form.get("manufacturer") ?? MIX),
         dinRailsCount: design ? 1 : Number(form.get("rails")),
@@ -76,7 +99,7 @@ export function NewProjectDialog({ credits = null }: { credits?: number | null }
           <Plus className="size-4" aria-hidden /> Nový projekt rozváděče
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className={cn("max-h-[92vh] overflow-y-auto", schedule ? "sm:max-w-3xl" : "sm:max-w-lg")}>
         <DialogHeader>
           <DialogTitle>Nový projekt rozváděče</DialogTitle>
           <DialogDescription>{MODES.find((option) => option.value === mode)?.hint}</DialogDescription>
@@ -106,7 +129,22 @@ export function NewProjectDialog({ credits = null }: { credits?: number | null }
             <Label htmlFor="pb-customer">Zákazník / objekt</Label>
             <Input id="pb-customer" name="customer" maxLength={120} placeholder="nepovinné" />
           </div>
-          {design ? (
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="pb-site">Místo instalace</Label>
+            <Input id="pb-site" name="site" maxLength={120} placeholder="nepovinné, např. Liberec, Husova 5 – technická místnost" />
+          </div>
+          {schedule ? (
+            <div className="flex flex-col gap-2">
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <Label htmlFor="pb-install">Ovládání světel</Label>
+                <select id="pb-install" className={selectClass} value={installMode} onChange={(event) => setInstallMode(event.target.value as "classic" | "bus_loxone")}>
+                  <option value="classic">Klasická instalace (vypínače, impulzní relé)</option>
+                  <option value="bus_loxone">Sběrnice Loxone (Tree, Miniserver)</option>
+                </select>
+              </div>
+              <ScheduleEditor rooms={rooms} onChange={setRooms} />
+            </div>
+          ) : design ? (
             <p className="rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
               Začínáte s <b className="text-foreground">1 DIN lištou na 12 modulů</b>. Šířku řady (8–36M) i další lišty nastavíte přímo na plátně, skříň vyberete podle velikosti návrhu.
             </p>
@@ -161,8 +199,8 @@ export function NewProjectDialog({ credits = null }: { credits?: number | null }
             </>
           )}
 
-          <Button type="submit" className="touch-target gap-2" disabled={pending || uploading || (!design && !photo)}>
-            {pending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null} {design ? "📐 Založit návrh rozváděče" : "Založit a analyzovat fotku"}
+          <Button type="submit" className="touch-target gap-2" disabled={pending || uploading || (mode === "PHOTO" && !photo) || (schedule && !rooms.length)}>
+            {pending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null} {schedule ? "🏠 Vygenerovat rozváděč" : design ? "📐 Založit návrh rozváděče" : "Založit a analyzovat fotku"}
           </Button>
         </form>
       </DialogContent>

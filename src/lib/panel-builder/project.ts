@@ -59,3 +59,20 @@ export function nextProjectCode(codes: readonly string[]): string {
   const max = codes.reduce((top, code) => Math.max(top, Number(/^PB-(\d+)$/.exec(code)?.[1] ?? 0)), 0);
   return `PB-${String(max + 1).padStart(3, "0")}`;
 }
+
+export type StepKey = "recognition" | "tree" | "thermal" | "documentation";
+
+/**
+ * Stav kroků projektu (fáze 48): ✓ Hotovo / Rozpracováno. Krok 1 = všechny prvky rozpoznané nebo
+ * potvrzené, krok 2 = kompletní strom zapojení, krok 3 = vyhovující oteplení, krok 4 = propuštěno.
+ */
+export function stepProgress(input: { items: readonly { recognitionStatus: RecognitionStatus }[]; status: PanelProjectStatus; connected: boolean; thermalOk: boolean }): Record<StepKey, boolean> {
+  const hasItems = input.items.length > 0;
+  const recognition = hasItems && input.items.every((item) => item.recognitionStatus !== "UNRECOGNIZED");
+  return {
+    recognition,
+    tree: recognition && input.connected,
+    thermal: hasItems && input.thermalOk,
+    documentation: input.status === "COMPLETED",
+  };
+}

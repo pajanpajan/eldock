@@ -43,7 +43,7 @@ test("návrh od nuly: 1× 12M, presety a další lišta, kaskáda výrobce → k
   await expect(page).toHaveURL(/\/panel-builder\/[^/]+$/, { timeout: 30_000 });
   projectUrl = page.url();
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Rozvodnice RD1");
-  await expect(page.getByRole("link", { name: "1. Návrh osazení" })).toBeVisible();
+  await expect(page.getByRole("link", { name: /1. Návrh a osazení/ })).toBeVisible();
   // Čisté plátno bez fotky
   await expect(page.getByTestId("panel-photo")).toHaveCount(0);
   const summary = page.getByTestId("rail-summary");

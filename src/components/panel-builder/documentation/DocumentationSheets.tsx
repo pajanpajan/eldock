@@ -16,6 +16,8 @@ export interface DocumentationData {
   code: string;
   name: string;
   customerName: string | null;
+  /** Místo instalace (fáze 48). */
+  installationSite?: string | null;
   norm: string;
   enclosure: string;
   manufacturer: ManufacturerInfo;
@@ -58,7 +60,7 @@ function SignatureStamp({ url }: { url: string | null }) {
 
 function Sheet({ data, number, children }: { data: DocumentationData; number: number; children: ReactNode }) {
   return (
-    <section className="doc-sheet mx-auto flex w-full max-w-[210mm] flex-col bg-white p-[10mm] text-[9pt] leading-snug text-black shadow-2xl shadow-black/50 sm:min-h-[297mm]" data-testid={`doc-sheet-${number}`} aria-label={`List ${number}: ${DOCUMENT_SHEETS[number - 1]}`}>
+    <section id={`list-${number}`} className="doc-sheet mx-auto flex w-full max-w-[210mm] flex-col bg-white p-[10mm] text-[9pt] leading-snug text-black shadow-2xl shadow-black/50 sm:min-h-[297mm]" data-testid={`doc-sheet-${number}`} aria-label={`List ${number}: ${DOCUMENT_SHEETS[number - 1]}`}>
       <header className="mb-3 flex items-baseline justify-between border-b-2 border-black pb-1.5">
         <h2 className="text-[13pt] font-bold">{DOCUMENT_SHEETS[number - 1]}</h2>
         <span className="font-mono text-[8pt]">
@@ -183,6 +185,12 @@ export function DocumentationSheets({ data }: { data: DocumentationData }) {
           <dl className="grid max-w-md grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-[10pt]">
             <dt className="text-zinc-600">Zákazník</dt>
             <dd>{data.customerName ?? "–"}</dd>
+            {data.installationSite ? (
+              <>
+                <dt className="text-zinc-600">Místo instalace</dt>
+                <dd data-testid="doc-site">{data.installationSite}</dd>
+              </>
+            ) : null}
             <dt className="text-zinc-600">Skříň</dt>
             <dd>{data.enclosure}</dd>
             <dt className="text-zinc-600">Datum</dt>

@@ -5,13 +5,14 @@ import { APP_HOME } from "@/lib/routes";
 
 /**
  * Přihlašovací brána se dvěma oddělenými produkty (fáze 41):
- * - veřejné: úvodní stránka `/`, `/login`, registrace závodu `/register-plant`, přihlášení / registrace
+ * - veřejné: úvodní stránka `/`, ukázka elaborátu `/ukazka-elaboratu`, SEO soubory, `/login`, registrace závodu `/register-plant`, přihlášení / registrace
  *   AI Panel Builderu `/panel-builder/auth` a dotaz do registru ARES `/api/ares`;
  * - AI Panel Builder (`/panel-builder/*`) jen s přihlášenou firmou (cookie `eldock-pb`), jinak `/panel-builder/auth`;
  * - Správa závodů (vše ostatní) jen s přihlášením do závodu (cookie `digitry-auth`), jinak `/login`.
  * API přijme kterékoli přihlášení; firma Panel Builderu smí jen nahrávat a číst fotky.
  */
-const PUBLIC_PATHS = new Set(["/", "/login", "/register-plant", "/panel-builder/auth", "/api/ares"]);
+// Fáze 48: veřejná ukázka elaborátu a SEO soubory (sitemap.xml, náhled odkazu opengraph-image)
+const PUBLIC_PATHS = new Set(["/", "/login", "/register-plant", "/panel-builder/auth", "/api/ares", "/ukazka-elaboratu", "/sitemap.xml", "/robots.txt"]);
 const PANEL_PREFIX = "/panel-builder";
 
 /** Reálné PDF projekty (public/demo-docs): přihlášený prohlížeč je drží den, pak ověří na pozadí. */
@@ -30,7 +31,7 @@ function redirectTo(request: NextRequest, pathname: string, next?: string) {
 export async function proxy(request: NextRequest) {
   if (isAuthBypassed()) return NextResponse.next();
   const { pathname, search } = request.nextUrl;
-  if (PUBLIC_PATHS.has(pathname)) return NextResponse.next();
+  if (PUBLIC_PATHS.has(pathname) || pathname.startsWith("/opengraph-image")) return NextResponse.next();
   // Cron (avízo lhůt revizí) se ověřuje vlastním tajným tokenem v Route Handleru.
   if (pathname.startsWith("/api/cron/")) return NextResponse.next();
 

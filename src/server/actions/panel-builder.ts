@@ -49,6 +49,7 @@ export async function importDatasheetAction(input: z.input<typeof datasheetSchem
 const createSchema = z.object({
   name: z.string().trim().min(1).max(120),
   customerName: z.string().trim().max(120).nullable(),
+  installationSite: z.string().trim().max(120).nullable().optional(),
   photoUrl: fileUrl.nullable(),
   dominantManufacturer: z.string().trim().min(1).max(40),
   dinRailsCount: z.number().int().min(1).max(12),

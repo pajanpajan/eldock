@@ -97,6 +97,8 @@ export async function importDatasheet(prisma: PrismaClient, input: DatasheetInpu
 export interface CreateProjectInput {
   name: string;
   customerName: string | null;
+  /** Místo instalace (fáze 48). */
+  installationSite?: string | null;
   photoUrl: string | null;
   dominantManufacturer?: string;
   manufacturerInfo?: ManufacturerInfo;
@@ -117,6 +119,7 @@ export async function createPanelProject(prisma: PrismaClient, input: CreateProj
       code: nextProjectCode(codes),
       name: name.slice(0, 120),
       customerName: input.customerName?.trim().slice(0, 120) || null,
+      installationSite: input.installationSite?.trim().slice(0, 120) || null,
       photoUrl: input.photoUrl,
       dominantManufacturer: input.dominantManufacturer ?? "ABB",
       manufacturerInfoJson: JSON.stringify(input.manufacturerInfo ?? {}),

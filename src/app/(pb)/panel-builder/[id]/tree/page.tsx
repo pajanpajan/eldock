@@ -27,7 +27,7 @@ export default async function PanelTreePage({ params }: PageProps<"/panel-builde
   return (
     <PageTransition>
       <ProjectHeader project={project} />
-      <PanelSteps projectId={project.id} current="tree" design={project.designMode === "DESIGN"} />
+      <PanelSteps project={project} current="tree" />
       <TreeEditor
         projectId={project.id}
         initial={project.items.map(treeNodeFrom)}

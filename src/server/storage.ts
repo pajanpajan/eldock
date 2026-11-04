@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { contentTypeFor, resolveUploadPath, type UploadKind } from "@/lib/files";
+import { isDeletableUpload } from "@/lib/panel-builder/project-admin";
 
 // Zápis souborů do `storage/uploads` (servíruje je `GET /api/files/...`).
 
@@ -30,5 +31,18 @@ export async function readStoredFile(url: string): Promise<{ bytes: Buffer; mime
     return { bytes: await readFile(/* turbopackIgnore: true */ filePath), mimeType: contentTypeFor(filePath) };
   } catch {
     return null;
+  }
+}
+
+/** Fyzicky smaže nahraný soubor podle URL (nikdy nic ze složky `seed/`); true = smazáno, false = nebyl nebo nesmí. */
+export async function removeStoredFile(url: string): Promise<boolean> {
+  if (!isDeletableUpload(url)) return false;
+  const filePath = resolveUploadPath(UPLOAD_ROOT, url.slice("/api/files/".length).split("/").map(decodeURIComponent));
+  if (!filePath) return false;
+  try {
+    await unlink(/* turbopackIgnore: true */ filePath);
+    return true;
+  } catch {
+    return false;
   }
 }

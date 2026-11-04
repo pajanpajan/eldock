@@ -48,14 +48,17 @@ export function DocumentationTabs({ panels, defaultTab = "schema", labels }: Pro
 
   return (
     <Tabs value={current} onValueChange={onChange} className="gap-4">
-      <TabsList className="h-auto! w-full flex-wrap justify-start gap-1 bg-card p-1 sm:w-fit">
-        {tabs.map(({ value, label, icon: Icon }) => (
-          <TabsTrigger key={value} value={value} className="touch-target flex-none gap-2 px-4 data-active:bg-primary data-active:text-primary-foreground">
-            {Icon ? <Icon className="size-4" aria-hidden /> : null}
-            {labels?.[value] ?? label}
-          </TabsTrigger>
-        ))}
-      </TabsList>
+      {/* Jeden řádek i na noteboocích 1280–1440 px: vodorovný posun místo zalomení do dvou řádků (fáze 48) */}
+      <div className="-mx-1 max-w-full overflow-x-auto px-1 pb-1 [scrollbar-width:thin]" data-testid="equipment-tabs">
+        <TabsList className="h-auto! w-max flex-nowrap justify-start gap-1 bg-card p-1">
+          {tabs.map(({ value, label, icon: Icon }) => (
+            <TabsTrigger key={value} value={value} className="touch-target flex-none gap-1.5 px-3 whitespace-nowrap data-active:bg-primary data-active:text-primary-foreground">
+              {Icon ? <Icon className="size-4" aria-hidden /> : null}
+              {labels?.[value] ?? label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </div>
       {tabs.map(({ value }) => (
         <TabsContent key={value} value={value}>
           {panels[value]}
