@@ -21,6 +21,7 @@
     "db:demo-plant": "tsx prisma/demo-plant.ts",
     "db:demo-legislation": "tsx prisma/demo-legislation.ts",
     "catalog:sync": "tsx scripts/sync-external-catalog.ts",
+    "docs:bundle": "tsx scripts/archive-bundle.ts",
     "video:preview": "remotion studio src/remotion/index.ts",
     "video:render": "remotion render src/remotion/index.ts EldockPromo public/eldock-promo.mp4",
     "smoke": "tsx scripts/smoke-workflow.ts",

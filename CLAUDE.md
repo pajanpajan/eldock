@@ -3,7 +3,7 @@
 B2B webová aplikace a PWA pro výrobní závody: elektro dokumentace (schémata, kusovníky, půdorysy),
 revize VTZ, změny skutečného provedení mezi údržbou v hale a externími CAE projektanty a AI pasportizace
 rozváděčů. Pracovní název byl Digitry, od fáze 20 je to **ELDOCK**. Produkce běží na https://eldock.cz.
-Původní zadání MVP je v `docs/archiv/SPECIFIKACE-MVP.md`, celá historie fází 0–35 v `docs/archiv/PLAN-faze-00-35.md`.
+Původní zadání MVP je v `docs/archiv/SPECIFIKACE-MVP.md`, celá historie fází 0–35 v `docs/archiv/PLAN-faze-00-35.md`, celý archiv v jednom souboru `docs/archiv/ARCHIV-KOMPLET.md`.
 
 ## 1. Milníky (fáze 0–45 nasazené, 46–47 hotové k nasazení)
 
@@ -79,6 +79,7 @@ Server je hlídá přes `assertFeature`, správa je na `/admin/modules`.
 ## 6. Pracovní postup
 
 - Plán je v `docs/PLAN.md` (rotující: hotové fáze jednořádkově, podrobně jen otevřená fáze). `/faze` = další otevřená fáze, `/faze N` = konkrétní fáze. Jedna fáze = jeden commit, pak se zastav a shrň. `/overit` = kompletní kontrola.
+- Archiv `docs/archiv/*.md` zůstává po souborech, ale vedle něj se udržuje sjednocený `docs/archiv/ARCHIV-KOMPLET.md` (generuje `npm run docs:bundle`, ručně needitovat). Po každé změně archivu (nové `ZADANI-faze-N.md`, přesun deníku) skript spusť; test `scripts/archive-bundle.test.ts` ve `verify` neaktuální soubor odhalí.
 - Uživatel občas vloží nové zadání místo obsahu `docs/PLAN.md`. Plán pak obnov z gitu a zadání doplň jako novou fázi. **Čísla fází v zadání ověř proti `git log`**, zadání někdy uvádí zastaralé číslo.
 - Před každým commitem musí projít `npm run verify` (typecheck, lint, vitest, build). U UI změn spusť i dotčené E2E (`npx playwright test e2e/<soubor>`; vlastní server na portu 3200 s `e2e.db` a `.next-e2e`). Ruční dev server při testování spouštěj s jiným `NEXT_DIST_DIR` (např. `.next/shots`). Dva servery se sdíleným `.next-e2e` si rozbijí cache a stránky se pak přenačítají dokola.
 - Prostředí je Windows: používej npm a Node/TS skripty. Pozor na CRLF po `git stash`. Regexy a `\b` nepiš přes bash heredoc do JS řetězců (vznikne řídicí znak) – použij Edit nebo `String.raw`. `git push` dělej jen při nasazení. Na mazání mimo projekt a nevratné operace se nejdřív zeptej.
