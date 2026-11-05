@@ -2,6 +2,9 @@ import { spiderLinks, type SpiderItem } from "@/lib/power-tree";
 
 const LINE = "#facc15";
 const REMOTE = "#38bdf8";
+/** Barva popisku kabelu podle vytížení (fáze 53). */
+const CABLE_COLOR = { OK: "#6ee7b7", WARNING: "#fcd34d", CRITICAL: "#fca5a5" } as const;
+const cableText = (item: SpiderItem) => (item.cable ? `${item.cable.label.replace(" mm²", "")} · ${Math.round(item.cable.loadPercent)} % Iz` : null);
 
 /** Popisek vývodu s tmavým podkladem (šířka odhadnutá z počtu znaků). */
 function Label({ x, y, text, color }: { x: number; y: number; text: string; color: string }) {
@@ -50,6 +53,11 @@ export function PowerSpiderOverlay({ items, viewBox }: { items: readonly SpiderI
             <g key={`remote-${link.to.id}`} data-spider-link={`${link.sourceTag}>${link.to.tag}`}>
               <line x1={sx} y1={sy} x2={tx - 6} y2={ty - 6} stroke={REMOTE} strokeWidth={2} strokeDasharray="6 4" markerEnd="url(#spider-arrow-remote)" />
               <Label x={sx} y={sy - 12} text={`↗ ${link.sourceTag}${link.circuit ? ` · ${link.circuit}` : ""}`} color={REMOTE} />
+              {link.to.cable ? (
+                <g data-spider-cable={link.to.cable.status}>
+                  <Label x={sx} y={sy + 10} text={cableText(link.to)!} color={CABLE_COLOR[link.to.cable.status]} />
+                </g>
+              ) : null}
             </g>
           );
         }
@@ -61,6 +69,11 @@ export function PowerSpiderOverlay({ items, viewBox }: { items: readonly SpiderI
           <g key={`${link.from.id}-${link.to.id}`} data-spider-link={`${link.from.tag}>${link.to.tag}`}>
             <path d={`M${fx} ${fy} Q${mx} ${my} ${tx} ${ty}`} fill="none" stroke={LINE} strokeWidth={2.5} strokeOpacity={0.85} markerEnd="url(#spider-arrow)" />
             {link.circuit ? <Label x={(fx + 2 * mx + tx) / 4} y={(fy + 2 * my + ty) / 4} text={link.circuit} color={LINE} /> : null}
+            {link.to.cable ? (
+              <g data-spider-cable={link.to.cable.status}>
+                <Label x={(fx + 2 * mx + tx) / 4} y={(fy + 2 * my + ty) / 4 + 19} text={cableText(link.to)!} color={CABLE_COLOR[link.to.cable.status]} />
+              </g>
+            ) : null}
           </g>
         );
       })}

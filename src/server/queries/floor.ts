@@ -5,6 +5,8 @@ import { cache } from "react";
 import { DEADLINE_TYPES, pragueToday, summarizeInspections } from "@/lib/inspection";
 import type { EquipmentType } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/prisma";
+import { cableLabel } from "@/lib/cable-sizing";
+import { getPlantCableChecks } from "@/server/queries/health";
 
 const OPEN_STATUSES = ["SUBMITTED", "IN_PROGRESS", "WAITING_APPROVAL"] as const;
 
@@ -73,6 +75,8 @@ async function loadFloorView(plantId: string, buildingId: string, floorId: strin
   });
   if (!floor) return null;
   const now = new Date();
+  // Fáze 53: kabel a % jeho zatížení na spojnicích pavouka napájení
+  const cables = await getPlantCableChecks(plantId);
 
   return {
     id: floor.id,
@@ -88,6 +92,10 @@ async function loadFloorView(plantId: string, buildingId: string, floorId: strin
       inspection: summarizeInspections(inspections, now),
       activeRevision: revisions[0] ?? null,
       openChange: changeRequests[0] ?? null,
+      cable: (() => {
+        const entry = cables.get(equipment.id);
+        return entry ? { label: cableLabel(entry.cable), loadPercent: entry.check.loadPercent, status: entry.check.status } : null;
+      })(),
     })),
   };
 }

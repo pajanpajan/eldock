@@ -6,6 +6,8 @@ import { ModuleDisabled } from "@/components/common/ModuleDisabled";
 import { NoAccess } from "@/components/common/NoAccess";
 import { PageHeader } from "@/components/common/PageHeader";
 import { DigestPanel } from "@/components/inspections/DigestPanel";
+import { PredictiveWatch } from "@/components/inspections/PredictiveWatch";
+import { getPredictiveSummary } from "@/server/queries/health";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { Button } from "@/components/ui/button";
 import { brandEnv } from "@/lib/auth";
@@ -27,7 +29,7 @@ export default async function InspectionAlertsPage() {
   const plant = plants.find((entry) => entry.id === rememberedId) ?? plants[0];
   if (!plant) return <NoAccess title="Notifikace a hlídač lhůt" current={account.accountType} suggest="PLANT_ADMIN" />;
 
-  const [preview, log] = await Promise.all([getDigestPreview(plant.id, await requestOrigin()), getDigestLog(plant.id)]);
+  const [preview, log, predictive] = await Promise.all([getDigestPreview(plant.id, await requestOrigin()), getDigestLog(plant.id), getPredictiveSummary(plant.id, account.types)]);
   const groups = groupDigest(preview.items);
 
   return (
@@ -52,6 +54,9 @@ export default async function InspectionAlertsPage() {
           </>
         }
       />
+      <div className="mb-6">
+        <PredictiveWatch summary={predictive} detailed />
+      </div>
       <DigestPanel
         plantId={plant.id}
         groups={groups}

@@ -10,6 +10,8 @@ import { PageHeader } from "@/components/common/PageHeader";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { StatusLegend } from "@/components/common/StatusLegend";
 import { InspectionWatcher } from "@/components/inspections/InspectionWatcher";
+import { PredictiveWatch } from "@/components/inspections/PredictiveWatch";
+import { getPredictiveSummary } from "@/server/queries/health";
 import { CampusExplorer } from "@/components/map/campus/CampusExplorer";
 import { Button } from "@/components/ui/button";
 import { EQUIPMENT_STATUS } from "@/lib/status";
@@ -27,7 +29,7 @@ export async function generateMetadata({ params }: PageProps<"/plant/[plantId]">
 // Level 1 – Půdorys areálu.
 export default async function PlantPage({ params }: PageProps<"/plant/[plantId]">) {
   const [{ plantId }, account, modules] = await Promise.all([params, getCurrentAccount(), getFeatures()]);
-  const [plant, watch] = await Promise.all([getPlantOverview(plantId, account.types), getInspectionWatch(plantId, new Date(), account.types)]);
+  const [plant, watch, predictive] = await Promise.all([getPlantOverview(plantId, account.types), getInspectionWatch(plantId, new Date(), account.types), getPredictiveSummary(plantId, account.types)]);
   if (!plant) notFound();
 
   return (
@@ -93,6 +95,11 @@ export default async function PlantPage({ params }: PageProps<"/plant/[plantId]"
       {account.definition.showInspections && !account.definition.fieldView ? (
         <div className="mb-6">
           <InspectionWatcher watch={watch} />
+          {predictive.components.length || predictive.cables.length ? (
+            <div className="mt-3">
+              <PredictiveWatch summary={predictive} />
+            </div>
+          ) : null}
         </div>
       ) : null}
 

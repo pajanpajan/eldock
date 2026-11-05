@@ -7,6 +7,7 @@
 #      metrové rozvržení a vybavení vzorových závodů (`npm run db:demo-plant`, upravená patra nemění)
 #      a katalog AI Panel Builderu se vzorovým rozváděčem PB-001 (`npm run db:panel-builder`)
 #      a ukázky legislativy 2027 – návody, zálohy SW, pas baterie (`npm run db:demo-legislation`)
+#      a životnost součástek + kabelové pasporty (`npm run db:demo-lifespan`, fáze 53)
 #   4. spustí aplikaci (CMD, výchozí `node server.js`)
 set -eu
 
@@ -46,6 +47,7 @@ else
     npm run db:demo-plant --silent || echo "[eldock] Varování: doplnění vzorových závodů (Studio) selhalo."
     npm run db:panel-builder --silent || echo "[eldock] Varování: doplnění katalogu AI Panel Builderu selhalo."
     npm run db:demo-legislation --silent || echo "[eldock] Varování: doplnění ukázek legislativy 2027 selhalo."
+    npm run db:demo-lifespan --silent || echo "[eldock] Varování: doplnění ukázek životnosti součástek a kabelů selhalo."
   fi
 fi
 

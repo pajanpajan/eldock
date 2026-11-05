@@ -78,6 +78,8 @@ export interface SpiderItem {
   fedFromEquipmentId: string | null;
   fedFromCircuit: string | null;
   fedFrom: { id: string; tag: string } | null;
+  /** Fáze 53: přívodní kabel a jeho zatížení (% Iz) pro popisek spojnice. */
+  cable?: { label: string; loadPercent: number; status: "OK" | "WARNING" | "CRITICAL" } | null;
 }
 
 export type SpiderLink =

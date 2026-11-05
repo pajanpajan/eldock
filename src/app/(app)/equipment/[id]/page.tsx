@@ -42,6 +42,11 @@ import { SoftwareBackups } from "@/components/equipment/SoftwareBackups";
 import { hasSoftwareTab } from "@/lib/software-backups";
 import { getFeatures } from "@/server/modules";
 import { getEquipmentPassports } from "@/server/queries/panel-builder";
+import { getEquipmentHealth } from "@/server/queries/health";
+import { ComponentLifespan } from "@/components/equipment/ComponentLifespan";
+import { FeederCableCard } from "@/components/equipment/FeederCableCard";
+import { CABLE_STATUS } from "@/lib/cable-sizing";
+import { LIFESPAN_STATUS, assessComponent } from "@/lib/component-lifespan";
 import { getCurrentAccount } from "@/server/session";
 
 type Props = PageProps<"/equipment/[id]">;
@@ -90,7 +95,7 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
   const canEditReferences = account.can("caeOffice") || account.can("studio");
   const withReferences = !!selected && !isLightCard(equipment.type) && modules.on("cae.hotspots");
   // Nezávislé dotazy po ověření přístupu najednou: napájení (LOTO), štítek, kusovník vybrané revize, reference.
-  const [powerNodes, label, bom, references, linkable, passports, knowledge] = await Promise.all([
+  const [powerNodes, label, bom, references, linkable, passports, knowledge, health] = await Promise.all([
     getPowerNodes(plantId),
     buildLabelData(equipment, inspection),
     selected ? getRevisionBom(selected.id) : Promise.resolve([]),
@@ -98,6 +103,7 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
     withReferences && canEditReferences ? getLinkableEquipment(plantId) : Promise.resolve([]),
     equipment.type === "SWITCHBOARD" ? getEquipmentPassports(equipment.id) : Promise.resolve([]),
     getEquipmentKnowledge(equipment.id),
+    isLightCard(equipment.type) ? Promise.resolve(null) : getEquipmentHealth(equipment.id, plantId),
   ]);
   // Fáze 46: knihovna návodů / datasheetů a verzované zálohy řídicího SW
   const libraryDocuments = knowledge.documents.map((document) => ({
@@ -173,6 +179,35 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
       })
     : null;
   const book = panelModel ? { sheets: panelModel.sheets.map((sheet) => ({ ...sheet, svg: renderPanelSheetSvg(panelModel, sheet.number) })) } : undefined;
+  // Fáze 53: prediktivní údržba – životnost součástek a přívodní kabel (záložka Diagnostika + indikátor v hlavičce)
+  const canEditHealth = account.can("submitChange") || account.can("recordInspection");
+  const wornComponents = health ? health.components.map((component) => assessComponent(component, health.profile, now)).filter((assessment) => assessment.status !== "OK") : [];
+  const worstWear = wornComponents.some((assessment) => assessment.status === "CRITICAL_EXPIRED") ? "CRITICAL_EXPIRED" : wornComponents.length ? "PLAN_REPLACEMENT" : null;
+  const cableStatus = health?.feeder.check?.status ?? null;
+  const healthPanel = health ? (
+    <div className="space-y-6">
+      <ComponentLifespan
+        equipmentId={equipment.id}
+        profile={health.profile}
+        components={health.components.map((component) => ({ ...component, installedAt: component.installedAt.toISOString() }))}
+        bom={bom.map((item) => ({ designation: item.designation, description: item.description, manufacturer: item.manufacturer, partNumber: item.partNumber }))}
+        now={now.toISOString()}
+        canEdit={canEditHealth}
+      />
+      <FeederCableCard
+        equipmentId={equipment.id}
+        tag={equipment.tag}
+        parentTag={health.feeder.parentTag}
+        cable={health.feeder.cable}
+        check={health.feeder.check}
+        nominalCurrentA={health.feeder.nominalCurrentA}
+        measuredCurrentA={health.feeder.measuredCurrentA}
+        nodes={health.nodes}
+        canEdit={canEditHealth}
+      />
+      {panelModel ? <LazyPanelDiagnostics model={panelModel} /> : null}
+    </div>
+  ) : null;
   const inspectionsPanel = (
     <InspectionLogbook
       equipmentId={equipment.id}
@@ -247,6 +282,16 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
           badges={
             <>
               {light ? null : <StatusBadge kind="equipment" status={equipment.status} className="text-sm" />}
+              {worstWear ? (
+                <Link href={`${basePath}?tab=diagnostics`} className={`rounded-full border border-current px-2.5 py-0.5 text-sm font-semibold ${LIFESPAN_STATUS[worstWear].text}`} data-testid="health-wear-badge">
+                  ⏳ {wornComponents.length}× součástka před koncem životnosti
+                </Link>
+              ) : null}
+              {cableStatus && cableStatus !== "OK" ? (
+                <Link href={`${basePath}?tab=diagnostics`} className={`rounded-full border border-current px-2.5 py-0.5 text-sm font-semibold ${CABLE_STATUS[cableStatus].text}`} data-testid="health-cable-badge">
+                  🔌 {cableStatus === "CRITICAL" ? "Přetížený / nejištěný přívod" : "Přívod s nízkou rezervou"}
+                </Link>
+              ) : null}
               {showInspections ? (
                 <Link href={`${basePath}?tab=inspections`} className="rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
                   <InspectionStatusBadge summary={inspection} className="text-sm" />
@@ -424,7 +469,7 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
               ),
               // CAE projektant lhůtník revizí nevidí, terénní pohled ho nemá jako záložku (stav je v hlavičce).
               ...(showInspections && !fieldView ? { inspections: inspectionsPanel } : {}),
-              ...(panelModel ? { diagnostics: <LazyPanelDiagnostics model={panelModel} /> } : {}),
+              ...(healthPanel ? { diagnostics: healthPanel } : panelModel ? { diagnostics: <LazyPanelDiagnostics model={panelModel} /> } : {}),
             }}
           />
           </div>

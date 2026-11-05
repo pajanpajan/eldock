@@ -344,6 +344,21 @@ model Equipment {
   /// Digitální pas baterie dle Nařízení (EU) 2023/1542 (UPS, BESS > 2 kWh) – JSON (fáze 46).
   batteryPassportJson String?
 
+  // Fáze 53: provozní profil (prediktivní údržba) a přívodní kabel (ČSN 33 2000-5-52 ed. 2)
+  shiftRegime             Int     @default(2) // 1 = 1 směna, 2 = 2 směny, 3 = 3 směny, 4 = 24/7
+  internalTempC           Float? // vnitřní teplota rozváděče [°C] (Arrhenius), bez údaje 35 °C
+  feederCableType         String? // "CYKY-J", "1-CXKH-R", "AYKY", "ÖLFLEX CLASSIC 110"
+  feederConductorMaterial String  @default("CU") // "CU" | "AL"
+  feederCrossSectionMm2   Float? // průřez fázového vodiče [mm²]
+  feederParallelRuns      Int     @default(1) // paralelní kabely na fázi
+  feederLengthM           Float? // délka trasy [m]
+  feederInstallMethod     String  @default("E") // B2 / C / E / D
+  feederGroupingCount     Int     @default(1) // souběžné zatížené kabely v trase
+  feederAmbientTempC      Float   @default(30) // teplota okolí trasy [°C]
+  feederUpstreamBreakerA  Float? // In předřazeného jističe [A]
+  nominalCurrentA         Float? // výpočtový odběr Ib [A]
+  measuredCurrentA        Float? // proud naměřený klešťovým ampérmetrem [A]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -360,6 +375,7 @@ model Equipment {
   panelProjects       PanelBoardProject[]
   documents           EquipmentDocument[]
   softwareBackups     SoftwareBackup[]
+  monitoredComponents MonitoredComponent[]
 
   @@unique([floorId, tag])
   @@index([floorId])
@@ -1241,4 +1257,37 @@ model AiFeedbackReport {
   @@index([status, createdAt])
   @@index([projectId])
   @@index([companyId])
+}
+
+/// Kategorie opotřebení sledované součástky (fáze 53).
+enum ComponentWearCategory {
+  SWITCHING_CONTACTOR // silový stykač / relé / ventil – počet sepnutí
+  SAFETY_ELEMENT // bezpečnostní prvek ČSN EN ISO 13849-1 – B10d a doba mise T_M
+  POWER_ELECTRONICS // zdroj 24 V DC / měnič / kondenzátory – motohodiny + Arrhenius
+  COOLING_FAN_FILTER // ventilátor / filtrační vložka / baterie UPS a PLC
+}
+
+/// Sledovaná kritická součástka s omezenou životností (fáze 53, prediktivní údržba).
+model MonitoredComponent {
+  id                    String                @id @default(cuid())
+  equipmentId           String
+  designation           String // "-K4", "-T1", "-U1"
+  name                  String
+  manufacturer          String?
+  modelNumber           String?
+  wearCategory          ComponentWearCategory
+  installedAt           DateTime // instalace nebo poslední výměna kusu
+  cyclesPerHour         Float?
+  manualCyclesOffset    Int                   @default(0)
+  maxElectricalCycles   Int? // AC-3 / AC-4 nebo B10d
+  maxOperatingHours     Int? // při referenční teplotě 40 °C
+  maxCalendarMonths     Int? // T_M, filtr, baterie
+  replacementStockCount Int                   @default(0)
+  notes                 String?
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  equipment Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+
+  @@index([equipmentId])
 }
