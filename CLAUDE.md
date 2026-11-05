@@ -112,6 +112,8 @@ Když uživatel řekne **„nasaď to na produkci“** nebo **„deploy“**:
 4. Pokaždé po nasazení ukliď mezivrstvy: `ssh root@91.99.148.62 "docker image prune -f && df -h /"`. Maže jen obrazy bez tagu, kontejnery, data ani `.env` neovlivní.
 5. Ověř výsledek: výstup buildu, `docker-compose ps` (`healthy`), odpověď https://eldock.cz (hned po startu chvíli vrací 503) a volné místo na disku. Pak ho shrň.
 
+**Změna `Caddyfile`:** `docker-compose up -d --build` kontejner Caddy nerestartuje a jednotlivě připojený soubor po `git pull` v kontejneru zůstane ve staré verzi (ověřeno 2026-11-05). Postup bez výpadku (jen se souhlasem uživatele): `docker cp /root/eldock/Caddyfile eldock-caddy:/tmp/Caddyfile.new`, `docker exec eldock-caddy caddy validate --config /tmp/Caddyfile.new --adapter caddyfile`, pak `docker exec eldock-caddy caddy reload --config /tmp/Caddyfile.new --adapter caddyfile`. Při příštím restartu kontejneru Caddy načte `/etc/caddy/Caddyfile` už v nové verzi.
+
 **Pozor:** na serveru je v `/root/eldock` ručně vytvořený `.env` s produkčními hesly. Nikdy ho nečti do výstupu, nepřepisuj a nedávej do Gitu. Na serveru nespouštěj nic jiného než výše uvedené příkazy a čtecí kontroly; cokoli dalšího (mazání, reset, změny konfigurace) jen po výslovném souhlasu.
 Data na serveru: `./data/db` (SQLite) a `./data/storage` (soubory) jako svazky a `./data/caddy` (certifikáty). Caddy publikuje porty 80 a 443.
 
