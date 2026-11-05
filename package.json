@@ -28,6 +28,7 @@
     "video:preview": "remotion studio src/remotion/index.ts",
     "video:render": "remotion render src/remotion/index.ts EldockPromo public/eldock-promo.mp4",
     "smoke": "tsx scripts/smoke-workflow.ts",
+    "eval:recognition": "tsx scripts/eval-recognition.ts",
     "test:e2e": "playwright test",
     "verify": "npm run typecheck && npm run lint && npm run test && npm run build"
   },

@@ -6,7 +6,7 @@ test.describe("nepřihlášený návštěvník", () => {
   test("úvodní stránka je veřejná a klientská zóna vede přes /login do /app", async ({ page }) => {
     await page.goto("/");
     await expect(page).toHaveURL(/\/$/);
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Eldock – Průmyslový dok dokumentace a revizí");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Eldock – elektrodokumentace od rodinného domu po výrobní závod");
     for (const name of ["Čtyři pilíře systému", "Jeden systém pro celý závod", "Ukážeme vám Eldock přímo ve vašem závodě"]) {
       await expect(page.getByRole("heading", { name })).toBeVisible();
     }

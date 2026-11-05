@@ -57,6 +57,15 @@ export const sameManufacturer = (a: string | null | undefined, b: string | null 
   return left !== null && left === normalizeManufacturer(b);
 };
 
+/** Řada z typového označení („S201-B16“ → „s201“, „PL7-B16/1“ → „pl7“, „MBN116“ → „mbn116“). */
+export const seriesOf = (typeCode: string) => compact(typeCode.trim().split(/[\s/-]/)[0] ?? "");
+
+/** Délka řady přístroje nalezené v textu z čela (0 = nenalezena); delší shoda = konkrétnější řada (DS201 > S201). */
+export const seriesHit = (component: Pick<MatchableComponent, "typeCode">, ocr: string) => {
+  const series = seriesOf(component.typeCode);
+  return series.length >= 3 && ocr.includes(series) ? series.length : 0;
+};
+
 const byPreference = (preferred: string | null) => (a: MatchableComponent, b: MatchableComponent) =>
   Number(sameManufacturer(b.manufacturer, preferred)) - Number(sameManufacturer(a.manufacturer, preferred)) || a.typeCode.localeCompare(b.typeCode);
 
@@ -87,8 +96,9 @@ export function matchDetection(detection: Detection, catalog: readonly Matchable
           (!detection.rcdSensitivityMa || component.rcdSensitivityMa === undefined || component.rcdSensitivityMa === detection.rcdSensitivityMa) &&
           (!detection.manufacturer || sameManufacturer(component.manufacturer, detection.manufacturer)),
       )
-      .sort(byPreference(detection.manufacturer ?? dominantManufacturer));
-    if (candidates[0]) return { componentId: candidates[0].id, status: "PARTIAL", confidence: Math.min(detection.confidence, 0.7) };
+      // Fáze 56: řada přečtená z čela (PL6 vs. PL7, SH201 vs. S201, LTN vs. LTE) má přednost před abecedou.
+      .sort((a, b) => seriesHit(b, ocr) - seriesHit(a, ocr) || byPreference(detection.manufacturer ?? dominantManufacturer)(a, b));
+    if (candidates[0]) return { componentId: candidates[0].id, status: "PARTIAL", confidence: Math.min(detection.confidence, seriesHit(candidates[0], ocr) ? 0.8 : 0.7) };
   }
   return { componentId: null, status: "UNRECOGNIZED", confidence: Math.min(detection.confidence, 0.3) };
 }

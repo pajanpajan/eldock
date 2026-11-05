@@ -11,7 +11,7 @@ export function LandingMobileNav({ items, clientZone }: { items: readonly { href
   return (
     <Sheet>
       <SheetTrigger asChild>
-        <Button type="button" variant="outline" size="icon" className="touch-target md:hidden" aria-label="Otevřít menu" data-testid="landing-menu">
+        <Button type="button" variant="outline" size="icon" className="touch-target lg:hidden" aria-label="Otevřít menu" data-testid="landing-menu">
           <Menu aria-hidden />
         </Button>
       </SheetTrigger>

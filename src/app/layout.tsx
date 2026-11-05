@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
+import { ConsentManager } from "@/components/consent/ConsentManager";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { BRAND } from "@/lib/brand";
@@ -53,6 +54,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="bg-blueprint flex min-h-full flex-col">
         <TooltipProvider delayDuration={200}>{children}</TooltipProvider>
         <Toaster position="top-center" />
+        {/* Fáze 56: souhlas s cookies – volitelné služby podle konfigurace serveru (ELDOCK_GA4_ID přes /api/consent) */}
+        <ConsentManager />
       </body>
     </html>
   );

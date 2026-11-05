@@ -5,9 +5,16 @@
 
 import { COMPANY_INFO } from "./company";
 
-export const PRIVACY_VERSION = "1.0 – 5. 11. 2026";
+export const PRIVACY_VERSION = "1.1 – 5. 11. 2026";
+
+/** Text souhlasu s newsletterem – ukládá se k odběrateli (verze níže), změna textu = nová verze. */
+export const NEWSLETTER_CONSENT_VERSION = "1";
+export const NEWSLETTER_CONSENT_TEXT =
+  "Souhlasím se zasíláním novinek Eldock (zhruba 1× měsíčně) na uvedený e-mail. Souhlas mohu kdykoli odvolat odkazem v každém e-mailu nebo zprávou na kontaktní e-mail.";
 
 export interface LegalSection {
+  /** Kotva sekce (např. #cookies). */
+  id?: string;
   title: string;
   paragraphs: string[];
   list?: string[];
@@ -38,7 +45,9 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
       "poskytování platformy a plnění smlouvy s vaší firmou (čl. 6 odst. 1 písm. b) GDPR),",
       "vedení účetnictví a daňových dokladů k objednávkám kreditů (čl. 6 odst. 1 písm. c) GDPR),",
       "zabezpečení platformy, auditní stopa a obrana právních nároků (oprávněný zájem, čl. 6 odst. 1 písm. f) GDPR),",
-      "e-mailová avíza o blížících se lhůtách revizí, pokud si je ve své firmě zapnete (plnění smlouvy).",
+      "e-mailová avíza o blížících se lhůtách revizí, pokud si je ve své firmě zapnete (plnění smlouvy),",
+      "zasílání newsletteru s novinkami jen na základě vašeho souhlasu (čl. 6 odst. 1 písm. a) GDPR),",
+      "statistika návštěvnosti webu, jen pokud k ní dáte souhlas v liště cookies (čl. 6 odst. 1 písm. a) GDPR).",
     ],
   },
   {
@@ -47,7 +56,8 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
     list: [
       "Hetzner Online GmbH (Německo) – hosting serveru a databáze v EU,",
       "Google (Gemini API) – rozpoznání přístrojů z fotografií rozváděčů a čtení technických listů; odesílá se jen fotografie nebo dokument určený k analýze, který jste nahráli,",
-      "poskytovatel odesílání e-mailů – doručení avíz a systémových zpráv.",
+      "poskytovatel odesílání e-mailů – doručení avíz, systémových zpráv a newsletteru,",
+      "Google Ireland Ltd. (Google Analytics 4) – jen pokud je na webu zapnutá statistika návštěvnosti a dáte k ní souhlas.",
     ],
   },
   {
@@ -63,9 +73,20 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
     ],
   },
   {
+    id: "cookies",
     title: "7. Cookies a místní úložiště",
     paragraphs: [
-      "Používáme jen technicky nezbytné cookies pro přihlášení (podepsaný token relace) a místní úložiště prohlížeče pro uložení rozpracovaného nákresu a nastavení zobrazení. Nepoužíváme analytické ani reklamní cookies, proto nevyžadujeme souhlas s cookies.",
+      "Technicky nezbytné cookies používáme bez souhlasu: podepsaný token relace pro přihlášení a cookie eldock_consent, která si pamatuje vaši volbu (platí 6 měsíců). Místní úložiště prohlížeče slouží k uložení rozpracovaného nákresu a nastavení zobrazení.",
+      "Volitelné cookies (analytické, případně marketingové) zapneme jen s vaším výslovným souhlasem v liště cookies. Odmítnutí je stejně snadné jako přijetí a volbu můžete kdykoli změnit odkazem „Nastavení cookies“ v patičce webu. Pokud web volitelné cookies nepoužívá, lišta se nezobrazuje.",
+      "Volbu souhlasu evidujeme kvůli jeho prokázání (náhodný identifikátor, kategorie, verze a čas) – bez IP adresy a bez vazby na váš účet.",
+    ],
+  },
+  {
+    id: "newsletter",
+    title: "7a. Newsletter",
+    paragraphs: [
+      "Pokud se přihlásíte k odběru novinek, zpracováváme váš e-mail, volitelně profesi (elektrikář, revizní technik, technický ředitel, údržba), text a čas udělení souhlasu a stav odběru. Odběr potvrzujete odkazem v e-mailu (dvojí potvrzení), bez potvrzení vám nic dalšího nepošleme a nepotvrzenou žádost po 30 dnech smažeme.",
+      "Newsletter posíláme zhruba jednou měsíčně. Odhlásit se můžete jedním kliknutím v každém e-mailu; e-mail pak zůstane jen jako záznam odhlášení, abychom vám už nic neposlali.",
     ],
   },
   {

@@ -14,11 +14,18 @@ export type AiMode = "GEMINI" | "DEMO";
 const API = "https://generativelanguage.googleapis.com/v1beta/models";
 const TIMEOUT_MS = 90_000;
 
+/**
+ * Fáze 56: výchozí model pro fotky. Měření `npm run eval:recognition` na fotce osazeného rozváděče ABB (3+1 lišty):
+ * gemini-3.1-pro-preview 20/21 přístrojů se správnou strukturou (95 %), gemini-2.5-pro 4–5/21 (19–24 %) – řadu LED
+ * signálek považoval za další lištu s „přepěťovkami“. Preview model může Google stáhnout – pak záložní FALLBACK_MODEL.
+ */
+export const DEFAULT_VISION_MODEL = "gemini-3.1-pro-preview";
+
 export function geminiConfig() {
   const apiKey = process.env.GEMINI_API_KEY?.trim() || null;
   return {
     apiKey,
-    visionModel: process.env.GEMINI_VISION_MODEL?.trim() || "gemini-2.5-pro",
+    visionModel: process.env.GEMINI_VISION_MODEL?.trim() || DEFAULT_VISION_MODEL,
     datasheetModel: process.env.GEMINI_DATASHEET_MODEL?.trim() || "gemini-2.5-flash",
   };
 }
@@ -27,23 +34,59 @@ export const isGeminiConfigured = () => Boolean(geminiConfig().apiKey);
 
 type Part = { text: string } | { inline_data: { mime_type: string; data: string } };
 
-/** Jedno volání generateContent se strukturovanou odpovědí (JSON podle schématu). */
-async function generateJson<T>(model: string, parts: Part[], schema: object): Promise<T> {
+/** Záložní model, když nastavený model API nezná (404) nebo odmítne konfiguraci (400). */
+export const FALLBACK_MODEL = "gemini-2.5-pro";
+
+/** Gemini 3 a novější (i aliasy *-latest): vlastní přemýšlení, doporučená výchozí teplota a vysoké rozlišení obrázků. */
+export const isNextGenModel = (model: string) => /gemini-(?:[3-9]|\d{2,}|pro-latest|flash-latest)/.test(model);
+
+/**
+ * Konfigurace generování podle generace modelu. Gemini 2.5: nízká teplota (deterministické čtení).
+ * Gemini 3+: teplota se nenastavuje (výrobce varuje před zacyklením při nízké teplotě) a obrázky jdou ve
+ * vysokém rozlišení, aby se přečetly drobné potisky (B16 vs. C16, 30 mA, typ A).
+ */
+export function generationConfigFor(model: string, schema: object) {
+  return isNextGenModel(model)
+    ? { responseMimeType: "application/json", responseSchema: schema, mediaResolution: "MEDIA_RESOLUTION_HIGH" }
+    : { temperature: 0.1, responseMimeType: "application/json", responseSchema: schema };
+}
+
+class GeminiHttpError extends Error {
+  constructor(
+    readonly model: string,
+    readonly status: number,
+  ) {
+    super(`Gemini ${model}: HTTP ${status}`);
+  }
+}
+
+async function requestJson<T>(model: string, parts: Part[], schema: object): Promise<T> {
   const { apiKey } = geminiConfig();
   if (!apiKey) throw new Error("GEMINI_API_KEY není nastaven.");
   const response = await fetch(`${API}/${encodeURIComponent(model)}:generateContent`, {
     method: "POST",
     headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
-    body: JSON.stringify({
-      contents: [{ role: "user", parts }],
-      generationConfig: { temperature: 0.1, responseMimeType: "application/json", responseSchema: schema },
-    }),
+    body: JSON.stringify({ contents: [{ role: "user", parts }], generationConfig: generationConfigFor(model, schema) }),
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
-  if (!response.ok) throw new Error(`Gemini ${model}: HTTP ${response.status}`);
-  const body = (await response.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
-  const text = body.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("") ?? "";
+  if (!response.ok) throw new GeminiHttpError(model, response.status);
+  const body = (await response.json()) as { candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] } }[] };
+  // Gemini 3 může vrátit i části s myšlenkami – do JSON patří jen text odpovědi.
+  const text = body.candidates?.[0]?.content?.parts?.filter((part) => !part.thought).map((part) => part.text ?? "").join("") ?? "";
   return JSON.parse(text) as T;
+}
+
+/** Jedno volání generateContent se strukturovanou odpovědí (JSON podle schématu); neznámý model → záložní model. */
+async function generateJson<T>(model: string, parts: Part[], schema: object): Promise<T> {
+  try {
+    return await requestJson<T>(model, parts, schema);
+  } catch (error) {
+    if (error instanceof GeminiHttpError && (error.status === 404 || error.status === 400) && model !== FALLBACK_MODEL) {
+      console.warn(`[gemini] model ${model} odmítl požadavek (HTTP ${error.status}) – použit ${FALLBACK_MODEL}`);
+      return requestJson<T>(FALLBACK_MODEL, parts, schema);
+    }
+    throw error;
+  }
 }
 
 const CATEGORY_ENUM = { type: "STRING", enum: [...COMPONENT_CATEGORIES] };
@@ -157,7 +200,6 @@ export function toDetections(devices: readonly GeminiDevice[]): Detection[] {
         poles: poles && isPoles(poles) ? poles : null,
         ratedCurrentA: num(device.ratedCurrentA),
         trippingCurve: curve && ["B", "C", "D"].includes(curve) ? curve : null,
-      ...rcdFields(device),
         ...rcdFields(device),
         manufacturer: normalizeManufacturer(device.manufacturer),
         confidence: Math.min(1, Math.max(0, Number(device.confidence) || 0.5)),
@@ -195,7 +237,9 @@ export const RAILS_PROMPT = `Jsi zkušený elektrotechnik. Na fotce je rozvádě
    jen osazenou řadu přístrojů včetně páček – NE prázdný konec kovové DIN lišty ani kabely napravo
    od posledního přístroje.
 NIKDY neoznačuj jako DIN lištu holé mosazné svorkovnice PE/N (zemnicí a nulové můstky se šroubky),
-prázdné DIN lišty bez přístrojů, kabelové žlaby, svazky vodičů ani štítky. Když si nejsi jistý, lištu nevracej.`;
+prázdné DIN lišty bez přístrojů, kabelové žlaby, svazky vodičů ani štítky. Když si nejsi jistý, lištu nevracej.
+Řada LED signálek, kontrolek nebo pomocných kontaktů nasazených přímo NAD přístroji (nebo pod nimi) patří k TÉ SAMÉ liště –
+nevracej ji jako samostatnou lištu; rámeček lišty ji zahrne.`;
 
 const RAILS_SCHEMA = {
   type: "OBJECT",
@@ -390,6 +434,8 @@ export function toRailDetections(devices: readonly GeminiRailDevice[], rail: num
       poles: poles && isPoles(poles) ? poles : null,
       ratedCurrentA: num(device.ratedCurrentA),
       trippingCurve: curve && ["B", "C", "D"].includes(curve) ? curve : null,
+      // Fáze 56: typ a citlivost chrániče se dřív v hlavní (lištové) cestě ztrácely – párování s katalogem je potřebuje.
+      ...rcdFields(device),
       manufacturer: normalizeManufacturer(device.manufacturer),
       confidence: Math.min(1, Math.max(0, Number(device.confidence) || 0.5)),
       circuitLabel: str(device.label)?.slice(0, 80),
@@ -430,6 +476,202 @@ async function cropRail(image: { bytes: Buffer }, box: readonly number[]): Promi
   return { bytes, region };
 }
 
+// ---------------------------------------------------------------------------
+//  Fáze C (fáze 56): „lupa“ – každý nalezený přístroj se vyřízne z PLNÉHO rozlišení fotky, zvětší
+//  a přečte zvlášť. Výřez lišty přes celou šířku skříně má na jeden modul jen pár desítek pixelů, takže
+//  potisk B16 / C16, 30 mA nebo typ A model čte špatně; na výřezu jednoho přístroje je čitelný.
+// ---------------------------------------------------------------------------
+
+/** Kolik výřezů přístrojů jde v jednom dotazu (víc obrázků = delší odpověď a horší přiřazení). */
+export const ZOOM_BATCH = 6;
+
+/** Minimální šířka jednoho modulu v pixelech PŮVODNÍ fotky, aby mělo smysl ho číst lupou. */
+export const MIN_ZOOM_PX_PER_MODULE = 40;
+
+/** Kolik pixelů původní fotky připadá na jeden modul přístroje (box v %). */
+export const zoomPixelsPerModule = (detection: Pick<Detection, "box" | "modules">, imageWidth: number) =>
+  detection.box ? (((detection.box[3] - detection.box[1]) / 100) * imageWidth) / Math.max(detection.modules || 1, 0.5) : 0;
+
+/**
+ * Pojistka po fázi A: řada LED signálek / pomocných kontaktů nasazená těsně NAD přístroji lišty se nesmí počítat
+ * jako další lišta. Pásy, které se svisle dotýkají nebo překrývají (mezera < 15 % výšky) a vodorovně se z většiny
+ * kryjí, se sloučí do jednoho.
+ */
+export function mergeTouchingRails(boxes: readonly number[][]): number[][] {
+  const sorted = [...boxes].sort((a, b) => a[0] - b[0]);
+  const merged: number[][] = [];
+  for (const box of sorted) {
+    const last = merged[merged.length - 1];
+    if (last) {
+      const gap = box[0] - last[2];
+      const overlap = Math.min(last[3], box[3]) - Math.max(last[1], box[1]);
+      const narrower = Math.min(last[3] - last[1], box[3] - box[1]);
+      if (gap < 0.15 * Math.max(last[2] - last[0], box[2] - box[0]) && overlap > 0.5 * narrower) {
+        merged[merged.length - 1] = [Math.min(last[0], box[0]), Math.min(last[1], box[1]), Math.max(last[2], box[2]), Math.max(last[3], box[3])];
+        continue;
+      }
+    }
+    merged.push([...box]);
+  }
+  return merged;
+}
+
+/** Fázi C lze vypnout proměnnou GEMINI_ZOOM_PASS=0 (např. kvůli kvótám API). */
+export const zoomPassEnabled = () => process.env.GEMINI_ZOOM_PASS?.trim() !== "0";
+
+/** Výřez jednoho přístroje (box v % fotky) s okrajem pro potisk nad a pod tělem, v px plné fotky. */
+export function zoomRegionFor(box: readonly number[], imageWidth: number, imageHeight: number): CropRegion {
+  const [ymin, xmin, ymax, xmax] = box.map((value) => clamp(value, 0, 100) / 100);
+  const padX = Math.max(0.12 * (xmax - xmin) * imageWidth, 0.004 * imageWidth);
+  const padY = Math.max(0.1 * (ymax - ymin) * imageHeight, 0.004 * imageHeight);
+  const left = Math.floor(clamp(xmin * imageWidth - padX, 0, imageWidth - 1));
+  const right = Math.ceil(clamp(xmax * imageWidth + padX, left + 1, imageWidth));
+  const top = Math.floor(clamp(ymin * imageHeight - padY, 0, imageHeight - 1));
+  const bottom = Math.ceil(clamp(ymax * imageHeight + padY, top + 1, imageHeight));
+  return { left, top, width: right - left, height: bottom - top, imageWidth, imageHeight };
+}
+
+export const zoomPrompt = (manufacturerHint: string | null) => `Jsi zkušený elektrotechnik. Každý přiložený obrázek je ZVĚTŠENÝ VÝŘEZ JEDNOHO modulového přístroje
+z DIN lišty rozváděče (okraje sousedních přístrojů ignoruj). Obrázky jsou očíslované textem „Výřez N“ před každým z nich.
+U každého výřezu pečlivě přečti potisk čela a vrať: index (číslo výřezu), text (vše čitelné: výrobce, řada, typ, objednací číslo),
+typeCode (typové označení, např. S201-B16, DS301C B16 A30, PL7-C20/1, LTN-16B-1, FH204 AC-40/0,03, MBN116, iC60N C16),
+manufacturer, category, poles (1P, 1P+N, 2P, 3P, 3P+N, 4P, 2x1P), ratedCurrentA, trippingCurve (B/C/D),
+u chráničů a jističochráničů rcdType (AC/A/F/B) a rcdSensitivityMa (10/30/100/300) a confidence 0–1.
+Pravidla: písmeno charakteristiky čti přímo z potisku před číslem proudu (B16, C10) – nehádej; „/25“ u odpínače SHD/SD je proud 25 A;
+„0,03 A“ nebo „30 mA“ je citlivost 30 mA; symbol vlnovky a impulzu = typ A, jen vlnovka = typ AC.
+Hodnotu, kterou na výřezu nepřečteš, vynech a sniž confidence – nevymýšlej ji podle sousedních přístrojů.
+${manufacturerHint && !isMix(manufacturerHint) ? `Převažující výrobce rozváděče je pravděpodobně ${manufacturerHint}, ale u každého přístroje ho ověř.` : "V rozváděči mohou být přístroje různých výrobců."}`;
+
+const ZOOM_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    readings: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          index: { type: "INTEGER" },
+          text: { type: "STRING" },
+          typeCode: { type: "STRING" },
+          manufacturer: { type: "STRING" },
+          category: CATEGORY_ENUM,
+          poles: { type: "STRING" },
+          ratedCurrentA: { type: "NUMBER" },
+          trippingCurve: { type: "STRING" },
+          rcdType: { type: "STRING" },
+          rcdSensitivityMa: { type: "NUMBER" },
+          confidence: { type: "NUMBER" },
+        },
+        required: ["index", "confidence"],
+      },
+    },
+  },
+  required: ["readings"],
+};
+
+export interface ZoomReading {
+  index: number;
+  text?: string;
+  typeCode?: string;
+  manufacturer?: string;
+  category?: string;
+  poles?: string;
+  ratedCurrentA?: number;
+  trippingCurve?: string;
+  rcdType?: string;
+  rcdSensitivityMa?: number;
+  confidence: number;
+}
+
+/**
+ * Sloučení čtení „lupou“ do detekce z lišty. Šířka a rámeček zůstávají ze segmentace lišty; hodnoty z potisku
+ * (proud, charakteristika, typ a citlivost chrániče, výrobce) má přednost čtení lupou s jistotou ≥ 0,4,
+ * kategorie a póly až od jistoty 0,6. Přečtený typ jde na začátek textu – párování podle typu / objednacího čísla.
+ */
+export function mergeZoomReading(detection: Detection, reading: ZoomReading | undefined): Detection {
+  const confidence = clamp(Number(reading?.confidence) || 0, 0, 1);
+  if (!reading || confidence < 0.4) return detection;
+  const sure = confidence >= 0.6;
+  const text = [str(reading.typeCode), str(reading.text)].filter((part): part is string => Boolean(part)).join(" ");
+  const poles = str(reading.poles);
+  const curve = str(reading.trippingCurve)?.toUpperCase() ?? null;
+  const kind = sure ? (category(reading.category) ?? detection.category) : detection.category;
+  const rcd = rcdFields({ category: kind ?? undefined, rcdType: reading.rcdType, rcdSensitivityMa: reading.rcdSensitivityMa });
+  const merged: Detection = {
+    ...detection,
+    rawOcrText: (text ? [text, detection.rawOcrText].filter(Boolean).join(" | ") : detection.rawOcrText).slice(0, 200),
+    category: kind,
+    poles: sure && poles && isPoles(poles) ? poles : detection.poles,
+    ratedCurrentA: num(reading.ratedCurrentA) ?? detection.ratedCurrentA,
+    trippingCurve: curve && ["B", "C", "D"].includes(curve) ? curve : detection.trippingCurve,
+    rcdType: rcd.rcdType ?? detection.rcdType ?? null,
+    rcdSensitivityMa: rcd.rcdSensitivityMa ?? detection.rcdSensitivityMa ?? null,
+    manufacturer: normalizeManufacturer(reading.manufacturer) ?? detection.manufacturer,
+    confidence: Math.max(detection.confidence, confidence),
+  };
+  // Odpínač s červenou páčkou: „SHD203/25“ = 25 A, žádná charakteristika (stejná pojistka jako u lišty).
+  const disconnector = switchDisconnectorFromText(text);
+  const fixed = disconnector ? { ...merged, category: "MAIN_SWITCH" as const, poles: disconnector.poles, ratedCurrentA: disconnector.ratedCurrentA, trippingCurve: null } : merged;
+  return normalizeDetection(fixed);
+}
+
+/** Oriented (EXIF) obrázek jako sharp vstup + rozměry. */
+async function orientedImage(bytes: Buffer) {
+  const sharp = (await import("sharp")).default;
+  const meta = await sharp(bytes).rotate().metadata();
+  const width = meta.autoOrient?.width ?? meta.width ?? 0;
+  const height = meta.autoOrient?.height ?? meta.height ?? 0;
+  return { sharp, width, height };
+}
+
+/**
+ * Fáze C: přečte přístroje s rámečkem (box v % `image`) lupou po dávkách ZOOM_BATCH a sloučí výsledky.
+ * Chyba jedné dávky nevadí – ty přístroje zůstanou tak, jak je přečetla fáze B.
+ */
+export async function readDevicesZoomed(image: { bytes: Buffer }, detections: readonly Detection[], hint: string | null): Promise<Detection[]> {
+  const targets = detections.map((detection, index) => ({ detection, index })).filter(({ detection }) => detection.box);
+  if (!targets.length) return [...detections];
+  let oriented: Awaited<ReturnType<typeof orientedImage>>;
+  try {
+    oriented = await orientedImage(image.bytes);
+  } catch (error) {
+    console.error("[gemini] lupa (fáze C) – fotku nelze načíst, ponechány hodnoty z lišty:", error);
+    return [...detections];
+  }
+  const { sharp, width, height } = oriented;
+  if (!width || !height) return [...detections];
+  // Na málo pixelech lupa nic nepřečte, jen si hodnoty „domyslí“ (ověřeno na fotce 995 px: všech 11 jističů „C20“).
+  const readable = targets.filter(({ detection }) => zoomPixelsPerModule(detection, width) >= MIN_ZOOM_PX_PER_MODULE);
+  targets.splice(0, targets.length, ...readable);
+  if (!targets.length) return [...detections];
+  const { visionModel } = geminiConfig();
+  const batches: (typeof targets)[] = [];
+  for (let start = 0; start < targets.length; start += ZOOM_BATCH) batches.push(targets.slice(start, start + ZOOM_BATCH));
+  const result = [...detections];
+  await mapWithConcurrency(batches, RAIL_CONCURRENCY, async (batch) => {
+    try {
+      const parts: Part[] = [{ text: zoomPrompt(hint) }];
+      for (const [order, { detection }] of batch.entries()) {
+        const region = zoomRegionFor(detection.box!, width, height);
+        const crop = await sharp(image.bytes)
+          .rotate()
+          .extract({ left: region.left, top: region.top, width: region.width, height: region.height })
+          .resize({ width: 1280, height: 960, fit: "inside", kernel: "lanczos3" })
+          .jpeg({ quality: 92, chromaSubsampling: "4:4:4" })
+          .toBuffer();
+        parts.push({ text: `Výřez ${order + 1} (lišta ${detection.dinRailIndex}, pozice ${detection.positionOnRail}, šířka ${detection.modules} M):` });
+        parts.push({ inline_data: { mime_type: "image/jpeg", data: crop.toString("base64") } });
+      }
+      const reply = await generateJson<{ readings?: ZoomReading[] }>(visionModel, parts, ZOOM_SCHEMA);
+      const byIndex = new Map((reply.readings ?? []).map((reading) => [Math.round(Number(reading.index)), reading]));
+      for (const [order, { detection, index }] of batch.entries()) result[index] = mergeZoomReading(detection, byIndex.get(order + 1));
+    } catch (error) {
+      console.error("[gemini] lupa (fáze C) – dávka selhala, ponechány hodnoty z lišty:", error);
+    }
+  });
+  return result;
+}
+
 /** Jednoprůchodová analýza celé fotky (pojistka, když fáze A nenajde lištu). */
 async function analyzeSinglePass(image: { bytes: Buffer; mimeType: string }, hint: string | null): Promise<Detection[]> {
   const { visionModel } = geminiConfig();
@@ -452,7 +694,11 @@ export async function analyzeRailPhoto(input: { image: { bytes: Buffer; mimeType
       RAIL_SCHEMA,
     );
     const region = { left: 0, top: 0, width: 1, height: 1, imageWidth: 1, imageHeight: 1 };
-    return { mode: "GEMINI", detections: toRailDetections(result.devices ?? [], input.rail, region, result.totalModules).map((detection) => ({ ...detection, box: null })) };
+    // Rámečky jsou v % detailní fotky – lupa (fáze C) z nich vyřízne přístroje, do projektu se pak neukládají
+    // (nejsou v souřadnicích celkové fotky).
+    const railDetections = toRailDetections(result.devices ?? [], input.rail, region, result.totalModules);
+    const read = zoomPassEnabled() ? await readDevicesZoomed(input.image, railDetections, input.manufacturerHint ?? null) : railDetections;
+    return { mode: "GEMINI", detections: read.map((detection) => ({ ...detection, box: null })) };
   } catch (error) {
     console.error("[gemini] detailní fotka lišty selhala:", error);
     return { mode: "DEMO", detections: [], warning: "Gemini neodpověděl – přístroje lišty zůstaly beze změny." };
@@ -476,16 +722,16 @@ export async function analyzePanelPhoto(input: { image: { bytes: Buffer; mimeTyp
       [{ text: RAILS_PROMPT }, { inline_data: { mime_type: image.mimeType, data: image.bytes.toString("base64") } }],
       RAILS_SCHEMA,
     );
-    const rails = (phaseA.rails ?? [])
-      .map((rail) => rail.box_2d)
-      .filter((box) => Array.isArray(box) && box.length === 4 && box[2] - box[0] >= 20 && box[3] - box[1] >= 50)
-      .sort((a, b) => a[0] - b[0]);
+    const rails = mergeTouchingRails(
+      (phaseA.rails ?? []).map((rail) => rail.box_2d).filter((box) => Array.isArray(box) && box.length === 4 && box[2] - box[0] >= 20 && box[3] - box[1] >= 50),
+    );
     const detected: CoverState = phaseA.coverState === "UNCOVERED" ? "UNCOVERED" : "COVERED";
     const cover: CoverState = input.mode && input.mode !== "AUTO" ? input.mode : detected;
 
     if (!rails.length) {
-      const detections = await analyzeSinglePass(image, hint);
-      if (!detections.length) return demo("Gemini na fotce nenašel žádnou DIN lištu s přístroji – zobrazena ukázková detekce.");
+      const single = await analyzeSinglePass(image, hint);
+      if (!single.length) return demo("Gemini na fotce nenašel žádnou DIN lištu s přístroji – zobrazena ukázková detekce.");
+      const detections = zoomPassEnabled() ? await readDevicesZoomed(image, single, hint) : single;
       return { mode: "GEMINI", detections, dominantManufacturer: normalizeManufacturer(phaseA.dominantManufacturer), railCount: null, coverState: cover, warning: "Lišty se nepodařilo vymezit – použita analýza celé fotky." };
     }
 
@@ -501,8 +747,10 @@ export async function analyzePanelPhoto(input: { image: { bytes: Buffer; mimeTyp
       );
       return toRailDetections(result.devices ?? [], index + 1, crop.region, result.totalModules);
     });
-    const detections: Detection[] = perRail.flat();
-    if (!detections.length) return demo("Gemini na lištách nenašel žádný přístroj – zobrazena ukázková detekce.");
+    const segmented: Detection[] = perRail.flat();
+    if (!segmented.length) return demo("Gemini na lištách nenašel žádný přístroj – zobrazena ukázková detekce.");
+    // Fáze C: lupa na každý přístroj z plného rozlišení fotky
+    const detections = zoomPassEnabled() ? await readDevicesZoomed(image, segmented, hint) : segmented;
     return { mode: "GEMINI", detections, dominantManufacturer: normalizeManufacturer(phaseA.dominantManufacturer), railCount: rails.length, coverState: cover };
   } catch (error) {
     console.error("[gemini] analýza fotky selhala:", error);

@@ -9,6 +9,8 @@ export interface MailMessage {
   subject: string;
   html: string;
   text: string;
+  /** Doplňkové hlavičky (fáze 56: List-Unsubscribe u newsletteru). */
+  headers?: Record<string, string>;
 }
 
 export type MailTransport = (message: MailMessage) => Promise<void>;
@@ -19,7 +21,7 @@ export function smtpTransportFromEnv(): MailTransport | null {
   if (!url) return null;
   const from = brandEnv("MAIL_FROM") ?? "Eldock <noreply@eldock.cz>";
   const transporter = nodemailer.createTransport(url);
-  return async ({ to, subject, html, text }) => {
-    await transporter.sendMail({ from, to, subject, html, text });
+  return async ({ to, subject, html, text, headers }) => {
+    await transporter.sendMail({ from, to, subject, html, text, headers });
   };
 }

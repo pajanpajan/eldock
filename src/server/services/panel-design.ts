@@ -12,6 +12,7 @@ import { componentForConfig, renumberProject } from "./panel-builder";
 import type { analyzeRailPhoto } from "./geminiPanelService";
 import { isMix } from "@/lib/panel-builder/catalog";
 import { matchDetection, type Detection } from "@/lib/panel-builder/matching";
+import { planRailMerge, signatureFromItem, signatureOf } from "@/lib/panel-builder/rail-merge";
 
 // Návrh rozváděče od nuly (fáze 43): kapacita a pořadí DIN lišt, osazení přístrojů z kaskádového
 // menu (drag & drop, 1× / +3× / +6×), živá karta přiřazeného přístroje, výběr skříně a razítko firmy.
@@ -207,7 +208,7 @@ export async function saveRoutineTest(prisma: PrismaClient, projectId: string, t
  * Potomci smazaných přístrojů ve stromu zapojení se odpojí (strom se pak doplní v kroku 2).
  */
 export async function applyRailDetections(prisma: PrismaClient, projectId: string, rail: number, detections: readonly Detection[], dominant: string | null) {
-  if (!detections.length) return { total: 0, unresolved: 0 };
+  if (!detections.length) return { total: 0, unresolved: 0, merged: false, unmatched: false };
   const catalog = await prisma.catalogComponent.findMany({
     where: { category: { not: "ENCLOSURE" }, manufacturer: { notIn: HIDDEN_MANUFACTURER_NAMES } },
     select: { id: true, manufacturer: true, typeCode: true, articleNumber: true, category: true, poles: true, ratedCurrentA: true, trippingCurve: true, rcdType: true, rcdSensitivityMa: true, modulesCount: true },
@@ -216,7 +217,36 @@ export async function applyRailDetections(prisma: PrismaClient, projectId: strin
   const ordered = [...detections].sort((a, b) => a.positionOnRail - b.positionOnRail);
   const matches = ordered.map((detection) => matchDetection(detection, catalog, manufacturer));
   const byId = new Map(catalog.map((component) => [component.id, component]));
-  const old = await prisma.panelBoardItem.findMany({ where: { projectId, dinRailIndex: rail }, select: { id: true } });
+  const old = await prisma.panelBoardItem.findMany({
+    where: { projectId, dinRailIndex: rail },
+    orderBy: { positionOnRail: "asc" },
+    select: { id: true, modulesWidth: true, detectedJson: true, recognitionStatus: true, confidence: true, circuitLabel: true },
+  });
+  const detectedJsonOf = (detection: Detection) =>
+    JSON.stringify({ category: detection.category, poles: detection.poles, ratedCurrentA: detection.ratedCurrentA, trippingCurve: detection.trippingCurve, rcdType: detection.rcdType ?? null, rcdSensitivityMa: detection.rcdSensitivityMa ?? null, manufacturer: detection.manufacturer, modules: detection.modules });
+
+  // Fáze 56: detail jen části lišty přístroje zpřesní, nic nemaže (zapojení stromu zůstane).
+  const plan = planRailMerge(old.map(signatureFromItem), ordered.map(signatureOf));
+  if (plan.mode === "enrich") {
+    // Přístroj potvrzený uživatelem (výběr z katalogu = VERIFIED s jistotou 1) se nepřepisuje.
+    const pairs = plan.pairs.filter(([existing]) => !(old[existing].recognitionStatus === "VERIFIED" && old[existing].confidence >= 1));
+    await prisma.$transaction(
+      pairs.map(([existing, index]) =>
+        prisma.panelBoardItem.update({
+          where: { id: old[existing].id },
+          data: {
+            catalogComponentId: matches[index].componentId,
+            recognitionStatus: matches[index].status,
+            confidence: Math.round(matches[index].confidence * 100) / 100,
+            rawOcrText: ordered[index].rawOcrText || null,
+            detectedJson: detectedJsonOf(ordered[index]),
+            ...(old[existing].circuitLabel ? {} : { circuitLabel: ordered[index].circuitLabel ?? "" }),
+          },
+        }),
+      ),
+    );
+    return { total: pairs.length, unresolved: pairs.filter(([, index]) => matches[index].status !== "VERIFIED").length, merged: true, unmatched: plan.pairs.length === 0 };
+  }
   await prisma.$transaction([
     prisma.panelBoardItem.updateMany({ where: { parentItemId: { in: old.map((item) => item.id) } }, data: { parentItemId: null, fedFromIncomer: false } }),
     prisma.panelBoardItem.deleteMany({ where: { id: { in: old.map((item) => item.id) } } }),
@@ -233,7 +263,7 @@ export async function applyRailDetections(prisma: PrismaClient, projectId: strin
           recognitionStatus: match.status,
           confidence: Math.round(match.confidence * 100) / 100,
           rawOcrText: detection.rawOcrText || null,
-          detectedJson: JSON.stringify({ category: detection.category, poles: detection.poles, ratedCurrentA: detection.ratedCurrentA, trippingCurve: detection.trippingCurve, rcdType: detection.rcdType ?? null, rcdSensitivityMa: detection.rcdSensitivityMa ?? null, manufacturer: detection.manufacturer, modules: detection.modules }),
+          detectedJson: detectedJsonOf(detection),
           designation: "-X99",
           circuitLabel: detection.circuitLabel ?? "",
           sortOrder: rail * 100 + index,
@@ -242,7 +272,7 @@ export async function applyRailDetections(prisma: PrismaClient, projectId: strin
     }),
   ]);
   await renumberProject(prisma, projectId);
-  return { total: ordered.length, unresolved: matches.filter((match) => match.status !== "VERIFIED").length };
+  return { total: ordered.length, unresolved: matches.filter((match) => match.status !== "VERIFIED").length, merged: false, unmatched: false };
 }
 
 /** Detailní fotka lišty / sekce: uloží fotku k liště a (s Gemini) přečte přístroje lišty z ostrého detailu. */
@@ -261,7 +291,8 @@ export async function analyzeRailDetail(
   const hint = isMix(project.dominantManufacturer) ? null : project.dominantManufacturer;
   const result = await deps.analyze({ image: await deps.readPhoto(photoUrl), rail, manufacturerHint: hint, mode: project.coverState === "UNCOVERED" ? "UNCOVERED" : "COVERED" });
   const saved = await applyRailDetections(prisma, projectId, rail, result.detections, hint);
-  return { mode: result.mode, ...saved, warning: result.warning };
+  const warning = saved.unmatched ? `Detail lišty ${rail} neodpovídá žádnému úseku lišty – přístroje zůstaly beze změny (zkontrolujte číslo lišty u fotky).` : result.warning;
+  return { mode: result.mode, ...saved, warning };
 }
 
 /**
@@ -278,10 +309,11 @@ export async function analyzeRailDetails(
   const project = await prisma.panelBoardProject.findUnique({ where: { id: projectId }, select: { dinRailsCount: true } });
   if (!project) throw new WorkflowError("NOT_FOUND", "Projekt rozváděče neexistuje.");
   const rails = Math.max(project.dinRailsCount, 1);
-  const unique = [...new Map(photos.map((photo) => [photo.rail, photo])).values()].sort((a, b) => a.rail - b.rail);
+  // Fáze 56: víc detailů jedné lišty (dlouhá řada po kouscích) se přečte VŠECHNY – dřív zůstal jen poslední.
+  const ordered = [...new Map(photos.map((photo) => [photo.url, photo])).values()].sort((a, b) => a.rail - b.rail);
   const warnings: string[] = [];
   let analyzed = 0;
-  for (const photo of unique) {
+  for (const photo of ordered) {
     if (photo.rail > rails) {
       warnings.push(`Detail lišty ${photo.rail} přeskočen – AI rozpoznala jen ${rails} ${rails === 1 ? "lištu" : rails < 5 ? "lišty" : "lišt"}.`);
       continue;

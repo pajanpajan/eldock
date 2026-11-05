@@ -58,7 +58,7 @@ describe("Gemini – demo režim bez GEMINI_API_KEY", () => {
     expect(result.detections.map((d) => d.rawOcrText)).toEqual(["SD203/40", "S201-B16"]);
     expect(result.detections[1]).toMatchObject({ box: [40, 20, 56, 26], trippingCurve: "B", category: "MCB" });
     expect(result.detections[0].circuitLabel).toBe("Odpínač");
-    expect(String((fetchMock.mock.calls[0] as unknown[])[0])).toContain("gemini-2.5-pro:generateContent");
+    expect(String((fetchMock.mock.calls[0] as unknown[])[0])).toContain("gemini-3.1-pro-preview:generateContent");
   });
 
   it("pomocné převody", () => {

@@ -34,9 +34,11 @@ services:
       # Velín /superadmin (fáze 50): bez vlastního hesla je v produkci vypnutý; IBAN pro QR platbu kreditů
       ELDOCK_SUPERADMIN_PASSWORD: ${ELDOCK_SUPERADMIN_PASSWORD:-}
       ELDOCK_BANK_IBAN: ${ELDOCK_BANK_IBAN:-}
+      # Fáze 56: Google Analytics 4 (ID měření G-…) – načte se jen po souhlasu s analytickými cookies; prázdné = bez analytiky a bez lišty
+      ELDOCK_GA4_ID: ${ELDOCK_GA4_ID:-}
       # AI Panel Builder: bez klíče běží deterministický demo režim
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      GEMINI_VISION_MODEL: ${GEMINI_VISION_MODEL:-gemini-2.5-pro}
+      GEMINI_VISION_MODEL: ${GEMINI_VISION_MODEL:-gemini-3.1-pro-preview}
       GEMINI_DATASHEET_MODEL: ${GEMINI_DATASHEET_MODEL:-gemini-2.5-flash}
     volumes:
       - ./data/db:/app/data/db

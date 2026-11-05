@@ -6,9 +6,9 @@ import { COMPANY_INFO } from "./company";
 
 export const SITE_URL = `https://${BRAND.domain}`;
 
-export const SEO_TITLE = "ELDOCK – AI Panel Builder & Průmyslový dok dokumentace a revizí";
+export const SEO_TITLE = "ELDOCK – návrh rozváděčů, revize a elektrodokumentace od domu po závod";
 export const SEO_DESCRIPTION =
-  "Návrh rozváděčů a výrobní dokumentace dle ČSN EN IEC 61439 z fotky nebo od nuly: výpočet oteplení IEC TR 60890, štítek rozváděče CE a prohlášení o shodě. Pasportizace rozváděčů, správa elektrorevizí ČSN 33 1500 a dokumentace výrobních závodů.";
+  "Návrh rozváděčů a domovní elektroinstalace s výrobní dokumentací dle ČSN EN IEC 61439 z fotky nebo od nuly: výpočet oteplení IEC TR 60890, štítek rozváděče CE a prohlášení o shodě. Lhůtník a podklady revizí pro revizní techniky, živá elektrodokumentace pro údržbu a technické vedení závodů.";
 
 export const SEO_KEYWORDS = [
   "návrh rozváděčů",
@@ -21,6 +21,10 @@ export const SEO_KEYWORDS = [
   "revize VTZ",
   "elektrodokumentace výrobního závodu",
   "AI Panel Builder",
+  "návrh domovní elektroinstalace",
+  "chytrá domácnost rozváděč",
+  "software pro revizní techniky",
+  "dokumentace údržby elektro",
 ];
 
 /** Veřejné vstupní stránky do sitemap.xml (cesta, priorita, četnost změn). */

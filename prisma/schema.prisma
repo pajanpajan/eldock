@@ -1293,3 +1293,61 @@ model MonitoredComponent {
 
   @@index([equipmentId])
 }
+
+/// Fáze 56: záznam souhlasu s volitelnými cookies (čl. 7 odst. 1 GDPR – prokázání souhlasu). Bez IP adresy
+/// a bez vazby na účet; `consentId` je náhodný identifikátor uložený v cookie `eldock_consent`.
+model ConsentRecord {
+  id        String   @id @default(cuid())
+  consentId String
+  version   Int
+  analytics Boolean
+  marketing Boolean
+  /// banner | settings
+  source    String
+  createdAt DateTime @default(now())
+
+  @@index([consentId, createdAt])
+}
+
+/// Stav odběratele newsletteru (double opt-in).
+enum NewsletterStatus {
+  PENDING
+  CONFIRMED
+  UNSUBSCRIBED
+}
+
+/// Fáze 56: odběratel měsíčního newsletteru. Souhlas (text, verze, čas) se ukládá kvůli prokázání (čl. 7 GDPR);
+/// potvrzovací token jen jako otisk SHA-256.
+model NewsletterSubscriber {
+  id               String           @id @default(cuid())
+  email            String           @unique
+  status           NewsletterStatus @default(PENDING)
+  /// elektrikar | revizni-technik | technicky-reditel | udrzba | jine
+  audience         String?
+  source           String           @default("web")
+  consentText      String
+  consentVersion   String
+  consentAt        DateTime         @default(now())
+  confirmTokenHash String?          @unique
+  confirmSentAt    DateTime?
+  confirmedAt      DateTime?
+  unsubscribeToken String           @unique
+  unsubscribedAt   DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@index([status, audience])
+}
+
+/// Fáze 56: rozeslané vydání newsletteru (cca 1× měsíčně).
+model NewsletterIssue {
+  id         String    @id @default(cuid())
+  subject    String
+  body       String
+  /// null = všem potvrzeným, jinak jen dané cílové skupině
+  audience   String?
+  recipients Int       @default(0)
+  failed     Int       @default(0)
+  sentAt     DateTime?
+  createdAt  DateTime  @default(now())
+}

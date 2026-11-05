@@ -15,7 +15,7 @@ import { APP_HOME, isPlantRoute } from "@/lib/routes";
  */
 // Fáze 48: veřejná ukázka elaborátu a SEO soubory (sitemap.xml, náhled odkazu opengraph-image)
 // Fáze 54: právní stránky (zásady zpracování osobních údajů, obchodní podmínky)
-const PUBLIC_PATHS = new Set(["/", "/login", "/register-plant", "/panel-builder/auth", "/api/ares", "/ukazka-elaboratu", "/ochrana-osobnich-udaju", "/obchodni-podminky", "/sitemap.xml", "/robots.txt", "/superadmin/login"]);
+const PUBLIC_PATHS = new Set(["/", "/login", "/register-plant", "/panel-builder/auth", "/api/ares", "/ukazka-elaboratu", "/ochrana-osobnich-udaju", "/obchodni-podminky", "/sitemap.xml", "/robots.txt", "/superadmin/login", "/api/consent", "/newsletter/potvrzeni", "/newsletter/odhlaseni", "/api/newsletter/unsubscribe"]);
 const SUPERADMIN_PREFIX = "/superadmin";
 const PANEL_PREFIX = "/panel-builder";
 

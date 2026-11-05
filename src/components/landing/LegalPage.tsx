@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
+import { ConsentSettingsLink } from "@/components/consent/ConsentManager";
 import { Logo } from "@/components/layout/Logo";
 import { Button } from "@/components/ui/button";
 import type { LegalSection } from "@/lib/legal";
@@ -28,7 +29,7 @@ export function LegalPage({ title, version, intro, sections }: { title: string; 
           {intro ? <p className="text-muted-foreground">{intro}</p> : null}
         </div>
         {sections.map((section) => (
-          <section key={section.title} className="space-y-2">
+          <section key={section.title} id={section.id} className="scroll-mt-20 space-y-2">
             <h2 className="text-lg font-semibold">{section.title}</h2>
             {section.paragraphs.map((paragraph) => (
               <p key={paragraph} className="text-sm leading-relaxed text-muted-foreground">
@@ -44,6 +45,9 @@ export function LegalPage({ title, version, intro, sections }: { title: string; 
             ) : null}
           </section>
         ))}
+        <p className="border-t border-border pt-4 text-sm text-muted-foreground">
+          <ConsentSettingsLink className="text-primary underline-offset-2 hover:underline" />
+        </p>
       </main>
     </div>
   );

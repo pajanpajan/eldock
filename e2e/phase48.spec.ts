@@ -66,7 +66,8 @@ test("☑️ hromadný výběr: vzorový PB-001 je chráněný, vybrané testova
     await page.goto("/panel-builder");
   }
   await expect(page.getByTestId("project-PB-001")).toContainText("Vzorový projekt");
-  await page.getByRole("radio", { name: "Rozpracované" }).click();
+  // Od fáze 55 má PB-001 hotový strom zapojení – už není mezi rozpracovanými, ochranu ověřujeme ve „Vše“
+  await page.getByRole("radio", { name: "Vše" }).click();
   await page.getByRole("button", { name: /Hromadný výběr/ }).click();
   await expect(page.getByRole("checkbox", { name: "Vybrat projekt PB-001" })).toBeDisabled();
   await page.getByRole("textbox", { name: "Hledat projekt" }).fill("test-48");

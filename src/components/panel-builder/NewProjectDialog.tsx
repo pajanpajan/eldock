@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MANUFACTURER_OPTIONS, MIX } from "@/lib/panel-builder/catalog";
 import { DEFAULT_RAIL_MODULES } from "@/lib/panel-builder/rails";
-import { resizeImage, uploadFile } from "@/lib/upload-client";
+import { PANEL_PHOTO_MAX_PX, PANEL_PHOTO_QUALITY, resizeImage, uploadFile } from "@/lib/upload-client";
 import { cn } from "@/lib/utils";
 import { VIDEO_ACCEPT, captureFrame, extractVideoFrames, loadVideo } from "@/lib/video-frames";
 import { createPanelProjectAction } from "@/server/actions/panel-builder";
@@ -97,7 +97,7 @@ export function NewProjectDialog({ credits = null }: { credits?: number | null }
     try {
       const uploaded = [];
       for (const file of files) {
-        const resized = await resizeImage(file, 2400, 0.92);
+        const resized = await resizeImage(file, PANEL_PHOTO_MAX_PX, PANEL_PHOTO_QUALITY);
         const result = await uploadFile("photo", resized);
         uploaded.push({ id: shotId(), url: result.url, preview: result.url, name: file.name, source: "photo" as const });
       }

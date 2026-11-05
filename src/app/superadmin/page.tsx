@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Bug, Building2, CircuitBoard, Download, Receipt } from "lucide-react";
+import { Bug, Building2, CircuitBoard, Download, Mail, Receipt } from "lucide-react";
 
 import { KpiTile } from "@/components/common/KpiTile";
+import { NewsletterComposer } from "@/components/superadmin/NewsletterComposer";
 import { CreditControls, OrderActions, ResolveFeedback } from "@/components/superadmin/SuperadminControls";
 import { ORDER_STATUS, creditPackage, formatCzk } from "@/lib/credits";
 import { formatDate } from "@/lib/format";
@@ -11,7 +12,10 @@ import { PROJECT_STATUS } from "@/lib/panel-builder/project";
 import { parseRailPhotos } from "@/lib/panel-builder/rails";
 import { cn } from "@/lib/utils";
 import { getSuperadminCompanies, getSuperadminFeedback, getSuperadminOrders, getSuperadminOverview } from "@/server/queries/superadmin";
+import { prisma } from "@/lib/prisma";
+import { audienceLabel } from "@/lib/newsletter";
 import { parseFeedbackSnapshot } from "@/server/services/credits";
+import { newsletterOverview } from "@/server/services/newsletter";
 import { isSuperadmin } from "@/server/superadmin-session";
 
 export const metadata: Metadata = { title: "Přehled" };
@@ -20,6 +24,7 @@ const TABS = [
   { id: "companies", label: "Registrované firmy a kredity" },
   { id: "orders", label: "Objednávky kreditů a fakturace" },
   { id: "feedback", label: "Hlášení chyb AI a fotky" },
+  { id: "newsletter", label: "Newsletter" },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
@@ -49,7 +54,7 @@ export default async function SuperadminPage({ searchParams }: PageProps<"/super
           </Link>
         ))}
       </nav>
-      {tab === "companies" ? <CompaniesTab /> : tab === "orders" ? <OrdersTab /> : <FeedbackTab />}
+      {tab === "companies" ? <CompaniesTab /> : tab === "orders" ? <OrdersTab /> : tab === "newsletter" ? <NewsletterTab /> : <FeedbackTab />}
     </div>
   );
 }
@@ -246,5 +251,55 @@ async function FeedbackTab() {
         );
       })}
     </ul>
+  );
+}
+
+/** Fáze 56: newsletter – počty odběratelů, export CSV, nové vydání a historie rozeslání. */
+async function NewsletterTab() {
+  const overview = await newsletterOverview(prisma);
+  return (
+    <div className="grid gap-6 lg:grid-cols-[1fr_1.4fr]" data-testid="superadmin-newsletter">
+      <div className="flex flex-col gap-4">
+        <div className="grid grid-cols-3 gap-3">
+          <KpiTile label="Potvrzení" value={overview.confirmed} hint="dostávají vydání" icon={Mail} />
+          <KpiTile label="Čekají" value={overview.pending} hint="nepotvrdili e-mail" icon={Mail} />
+          <KpiTile label="Odhlášení" value={overview.unsubscribed} hint="souhlas odvolán" icon={Mail} />
+        </div>
+        <ul className="flex flex-col gap-1 rounded-xl border border-border p-3 text-sm">
+          {overview.byAudience.length ? (
+            overview.byAudience.map((row) => (
+              <li key={row.audience ?? "none"} className="flex justify-between">
+                <span>{audienceLabel(row.audience)}</span>
+                <span className="font-mono">{row.count}</span>
+              </li>
+            ))
+          ) : (
+            <li className="text-muted-foreground">Zatím žádný potvrzený odběratel.</li>
+          )}
+        </ul>
+        <a href="/superadmin/newsletter-export" className="flex w-fit items-center gap-1.5 text-sm text-primary hover:underline">
+          <Download className="size-4" aria-hidden /> Export potvrzených (CSV)
+        </a>
+        <div className="rounded-xl border border-border p-3 text-sm">
+          <h2 className="mb-2 font-semibold">Rozeslaná vydání</h2>
+          {overview.issues.length ? (
+            <ul className="flex flex-col gap-1">
+              {overview.issues.map((issue) => (
+                <li key={issue.id} className="flex justify-between gap-2">
+                  <span className="truncate">{issue.subject}</span>
+                  <span className="shrink-0 font-mono text-xs text-muted-foreground">
+                    {issue.sentAt ? formatDate(issue.sentAt) : "neodesláno"} · {issue.recipients}
+                    {issue.failed ? ` (+${issue.failed} chyb)` : ""}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-muted-foreground">Zatím nic.</p>
+          )}
+        </div>
+      </div>
+      <NewsletterComposer confirmed={overview.confirmed} />
+    </div>
   );
 }

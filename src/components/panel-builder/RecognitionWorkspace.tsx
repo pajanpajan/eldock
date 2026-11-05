@@ -14,7 +14,7 @@ import { deviceWithConfig, type VectorDevice } from "@/lib/panel-builder/vector-
 import { RECOGNITION } from "@/lib/panel-builder/project";
 import { cn } from "@/lib/utils";
 import { addModuleAction, addRailAction, analyzePanelProjectAction, configureItemAction, deleteRailAction, updateItemTextAction } from "@/server/actions/panel-builder";
-import { resizeImage, uploadFile } from "@/lib/upload-client";
+import { PANEL_PHOTO_MAX_PX, PANEL_PHOTO_QUALITY, resizeImage, uploadFile } from "@/lib/upload-client";
 import { analyzeRailDetailAction, moveRailAction, placeComponentsAction, setEnvironmentAction, setRailCapacityAction } from "@/server/actions/panel-design";
 import { nextChipLabel, presetConfig } from "@/lib/panel-builder/circuit-chips";
 import { ENVIRONMENTS, enclosureFitsEnvironment, environmentOf, ipLabel } from "@/lib/panel-builder/environments";
@@ -140,7 +140,7 @@ export function RecognitionWorkspace({
     const rail = railPhotoTarget;
     startRailPhoto(async () => {
       try {
-        const resized = file.type.startsWith("image/") && file.type !== "image/svg+xml" ? await resizeImage(file, 2400) : file;
+        const resized = file.type.startsWith("image/") && file.type !== "image/svg+xml" ? await resizeImage(file, PANEL_PHOTO_MAX_PX, PANEL_PHOTO_QUALITY) : file;
         const uploaded = await uploadFile("photo", resized);
         const result = await analyzeRailDetailAction(projectId, rail, uploaded.url);
         if (!result.ok) return void toast.error(result.error);

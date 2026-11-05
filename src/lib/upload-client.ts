@@ -7,6 +7,13 @@ export interface UploadedFile {
   sizeBytes: number;
 }
 
+/**
+ * Fotky rozváděče pro AI rozpoznávání (fáze 56): delší strana až 4096 px a JPEG 0,92. Při 2400 px měl
+ * jeden modul na celkové fotce velké skříně jen ~80 px a potisk B16 / C16 nebyl čitelný ani pro „lupu“.
+ */
+export const PANEL_PHOTO_MAX_PX = 4096;
+export const PANEL_PHOTO_QUALITY = 0.92;
+
 /** Zmenší fotku na max. `maxSize` px delší strany a převede na JPEG (kvalita 0,85). */
 export async function resizeImage(file: File, maxSize = 2000, quality = 0.85): Promise<File> {
   const bitmap = await createImageBitmap(file);

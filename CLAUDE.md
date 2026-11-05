@@ -88,10 +88,16 @@ Server je hlídá přes `assertFeature`, správa je na `/admin/modules`.
 
 ## 5. Gemini (AI Panel Builder)
 
-- Proměnné prostředí: `GEMINI_API_KEY`, `GEMINI_VISION_MODEL` (výchozí `gemini-2.5-pro`, analýza fotky po DIN lištách) a `GEMINI_DATASHEET_MODEL` (výchozí `gemini-2.5-flash`, datasheety a parametry). Čte je `src/server/services/geminiPanelService.ts`, v produkci přicházejí přes `docker-compose.yml`.
+- Proměnné prostředí: `GEMINI_API_KEY`, `GEMINI_VISION_MODEL` (výchozí `gemini-3.1-pro-preview` od fáze 56, záložní `gemini-2.5-pro`; analýza fotky po DIN lištách + lupa na přístroje, `GEMINI_ZOOM_PASS=0` ji vypne; přesnost měří `npm run eval:recognition`) a `GEMINI_DATASHEET_MODEL` (výchozí `gemini-2.5-flash`, datasheety a parametry). Čte je `src/server/services/geminiPanelService.ts`, v produkci přicházejí přes `docker-compose.yml`.
 - **Stav (ověřeno 2026-11-01):** klíč je nastavený lokálně v `.env` i na produkci (kontejner `eldock-app`), takže **AI běží naostro přes Gemini**.
 - Demo režim (deterministická analýza a Smart Fallback Picker) je jen záložní: zapne se bez klíče, u SVG ukázek nebo při chybě volání (klíč, kvóta, výpadek); UI pak ukáže štítek „Demo AI režim“. E2E testy běží záměrně s prázdným klíčem.
 - Klíč nikdy nevypisuj do výstupu a nedávej ho do Gitu.
+- Fáze 56: produkční `.env` může mít `GEMINI_VISION_MODEL` nastavený napevno – výchozí hodnotu z `docker-compose.yml` pak přebije; změnu modelu na serveru dělá uživatel (soubor `.env` nečteme ani nepřepisujeme).
+
+## 5a. Souhlas s cookies a newsletter (fáze 56)
+
+- Lišta cookies se zobrazí jen tehdy, když web používá volitelnou službu: dnes jen Google Analytics 4 přes `ELDOCK_GA4_ID` (`G-…`). Bez ID web používá jen nezbytné cookies a lišta se nezobrazí. Odkaz „Nastavení cookies“ je v patičce. Volby se evidují v `ConsentRecord` (bez IP).
+- Newsletter = dvojí potvrzení: e-mail s odkazem `/newsletter/potvrzeni`, odhlášení `/newsletter/odhlaseni` a jedním kliknutím `POST /api/newsletter/unsubscribe` (RFC 8058). Bez `ELDOCK_SMTP_URL` se potvrzovací odkaz jen zapíše do logu serveru – odběratel zůstane „čeká“. Rozesílání, export CSV a zkušební e-mail jsou ve velínu `/superadmin?tab=newsletter`.
 
 ## 6. Pracovní postup
 
