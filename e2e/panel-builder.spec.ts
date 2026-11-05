@@ -260,10 +260,14 @@ test("krok 2: hlavní přívod, AI návrh na 1 klik, drag & drop na vektorovém 
   await page.getByRole("link", { name: /PB-001/ }).click();
   await page.getByRole("link", { name: "2. Zapojení a hierarchie" }).click();
   const summary = page.getByTestId("tree-summary");
-  await expect(summary).toContainText("Zapojeno 0/13");
+  // Fáze 55: vzorový PB-001 má strom zapojení už ze seedu (úplný elaborát) – AI návrh ho jen potvrdí
+  await expect(summary).toContainText("Zapojeno 13/13");
   const wires = page.getByTestId("vector-wires");
-  await expect(wires.locator("path")).toHaveCount(0);
-  await expect(page.getByTestId("incomer-root")).toContainText("zatím není určen");
+  await expect(page.getByTestId("incomer-root")).toContainText("-Q1");
+  // Svorkovnice PE / N0 / N-FIx nad rozváděčem (přívod shora) s rozpisem po kliknutí
+  await expect(page.getByTestId("busbar-strip")).toBeVisible();
+  await expect(page.getByTestId("busbar-PE")).toBeVisible();
+  await expect(page.getByTestId("busbar-N1")).toBeVisible();
 
   await expect(async () => {
     await page.getByRole("button", { name: "AI návrh zapojení na 1 klik" }).click();

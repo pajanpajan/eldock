@@ -18,7 +18,8 @@ import { ABB_CA35R, ENCLOSURE_FANS, RESEARCH_COMPONENTS } from "./seed-catalog-r
 import { isHiddenManufacturer } from "../src/lib/panel-builder/brands";
 import { demoDetections } from "../src/lib/panel-builder/matching";
 import { REFERENCE_DEVICES, REFERENCE_DIMS, withPositions } from "../src/lib/panel-builder/reference";
-import { applyDetections } from "../src/server/services/panel-builder";
+import { applyDetections, applyProposedTree } from "../src/server/services/panel-builder";
+import { ROUTINE_TEST_POINTS } from "../src/lib/legislation-2027";
 import { importExternalCatalog, importWiringDevices, seedStandardEnclosures } from "../src/server/services/catalog-sync";
 import { readSnapshot, readWiringSnapshot } from "./external-catalog-source";
 import { TESTER_COMPANY } from "../src/lib/registered-company";
@@ -319,7 +320,35 @@ export async function seedPanelProject(prisma: PrismaClient): Promise<boolean> {
     },
   });
   await applyDetections(prisma, project.id, demoDetections(PB001.dims), "DEMO", "ABB");
+  await completeShowcase(prisma, project.id);
   return true;
+}
+
+/** Ukázkový protokol o kusové zkoušce PB-001 (List 6 vzorového elaborátu) – všech 8 bodů vyhovuje. */
+const SHOWCASE_ROUTINE_TEST = JSON.stringify({
+  points: Object.fromEntries(ROUTINE_TEST_POINTS.map((point) => [point.id, "PASS"])),
+  insulationMOhm: 500,
+  testedBy: "Vzorový projekt – ukázka výstupu",
+  testedAt: "2026-11-03",
+  note: "Ukázková data vzorového rozváděče PB-001.",
+});
+
+/**
+ * Fáze 55: vzorový PB-001 má sestavený strom zapojení (List 2 spojnice, List 3 jednopólové schéma bez chyb) a vyplněnou
+ * kusovou zkoušku. Strom se navrhne jen u nezapojeného projektu – úpravy firmy Tester se nepřepisují.
+ */
+async function completeShowcase(prisma: PrismaClient, projectId: string) {
+  const items = await prisma.panelBoardItem.findMany({ where: { projectId }, select: { parentItemId: true, fedFromIncomer: true } });
+  const pristine = items.length > 0 && items.every((item) => !item.parentItemId && !item.fedFromIncomer);
+  if (pristine) await applyProposedTree(prisma, projectId);
+  await prisma.panelBoardProject.updateMany({ where: { id: projectId, routineTestJson: null }, data: { routineTestJson: SHOWCASE_ROUTINE_TEST } });
+  return pristine;
+}
+
+/** Oprava existující databáze (produkce): PB-001 založený před fází 55 dostane strom a kusovou zkoušku. */
+export async function repairShowcaseProject(prisma: PrismaClient): Promise<boolean> {
+  const project = await prisma.panelBoardProject.findUnique({ where: { code: PB001.code }, select: { id: true } });
+  return project ? completeShowcase(prisma, project.id) : false;
 }
 
 /**
@@ -373,6 +402,8 @@ export async function seedPanelBuilder(prisma: PrismaClient, options: { external
   };
   const components = await step("katalog prvků", () => seedCatalog(prisma), 0);
   const project = await step("vzorový projekt PB-001", () => seedPanelProject(prisma), false);
+  // Fáze 55: PB-001 z dřívějších verzí bez stromu zapojení a kusové zkoušky (List 2 a 3 vzorového elaborátu)
+  await step("strom vzorového PB-001", () => repairShowcaseProject(prisma), false);
   const tester = options.demo === false ? { created: false, attached: 0 } : await step("demo firma Tester", () => seedTesterCompany(prisma), { created: false, attached: 0 });
   // Fáze 43: matice standardních rozvodnic a externí databáze prvků z exportu v Gitu (jen při změně otisku)
   const enclosures = await step("standardní rozvodnice", () => seedStandardEnclosures(prisma), 0);

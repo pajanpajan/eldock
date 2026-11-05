@@ -25,6 +25,7 @@ import {
 } from "@/engine/floorplan-bridge";
 
 import { DEFAULT_COLOR, appearanceLabel, designColor } from "./wiring-designs";
+import { DEFAULT_SUPPLY, supplyById, type SupplySystem } from "./supply";
 
 export type PaletteGroup = "panel" | "sockets" | "lights" | "appliances";
 
@@ -157,6 +158,8 @@ export interface FloorplanDraft {
   installMethod: InstallMethod;
   groupedCables: number;
   countDoubleAsTwo: boolean;
+  /** Fáze 55: soustava přívodu rozváděče (1f / 3f, TN-C-S / TN-S / TT). */
+  supplySystem: SupplySystem["id"];
   updatedAt: number;
 }
 
@@ -176,6 +179,7 @@ export const emptyDraft = (): FloorplanDraft => ({
   installMethod: "C",
   groupedCables: 1,
   countDoubleAsTwo: true,
+  supplySystem: DEFAULT_SUPPLY.id,
   updatedAt: 0,
 });
 
@@ -219,6 +223,7 @@ export function parseDraft(value: unknown): FloorplanDraft | null {
     installMethod: isInstallMethod(draft.installMethod) ? draft.installMethod : base.installMethod,
     groupedCables: Math.round(num(draft.groupedCables, 1, 1, 20)),
     countDoubleAsTwo: typeof draft.countDoubleAsTwo === "boolean" ? draft.countDoubleAsTwo : true,
+    supplySystem: supplyById(draft.supplySystem).id,
     updatedAt: num(draft.updatedAt, 0, 0, 1e15),
   };
 }

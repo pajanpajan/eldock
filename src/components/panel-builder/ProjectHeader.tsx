@@ -8,8 +8,9 @@ import { cn } from "@/lib/utils";
 import type { PanelProjectDetail } from "@/server/queries/panel-builder";
 import { isGeminiConfigured } from "@/server/services/geminiPanelService";
 
-import { DeleteProjectButton } from "./ProjectAdmin";
+import { DeleteProjectButton, EditProjectButton } from "./ProjectAdmin";
 import { ReportAiErrorButton } from "./ReportAiErrorButton";
+import { supplyOf } from "@/lib/panel-builder/supply";
 
 /** Hlavička projektu rozváděče: kód, stav, skříň a štítek demo AI režimu. */
 export function ProjectHeader({ project }: { project: PanelProjectDetail }) {
@@ -43,6 +44,8 @@ export function ProjectHeader({ project }: { project: PanelProjectDetail }) {
       description={[
         project.customerName,
         project.installationSite ? `📍 ${project.installationSite}` : null,
+        // Fáze 55: soustava přívodu (1f / 3f, TN-C-S / TN-S / TT)
+        `⚡ ${supplyOf(project).label}`,
         `${ENCLOSURE_TYPES[project.enclosureType]} ${project.enclosureModel || "rozváděč"}`,
         `${project.heightMm} × ${project.widthMm} × ${project.depthMm} mm`,
         project.ipRating,
@@ -60,6 +63,7 @@ export function ProjectHeader({ project }: { project: PanelProjectDetail }) {
             🏷️ Tisk popisků a štítků (1:1)
           </Link>
           <ReportAiErrorButton projectId={project.id} />
+          <EditProjectButton project={{ id: project.id, code: project.code, name: project.name, customerName: project.customerName, installationSite: project.installationSite, status: project.status, supplySystem: supplyOf(project).id }} />
           <DeleteProjectButton project={{ id: project.id, code: project.code, name: project.name, customerName: project.customerName, installationSite: project.installationSite, status: project.status }} variant="full" redirectTo="/panel-builder" />
         </>
       }

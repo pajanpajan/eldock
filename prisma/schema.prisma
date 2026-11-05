@@ -906,6 +906,8 @@ model PanelBoardProject {
   depthMm              Int               @default(120)
   ipRating             String            @default("IP 41")
   networkSystem        String            @default("3 x 230/400 V, 50Hz, TN-S")
+  /// Fáze 55: počet fází přívodu (1 = 1× 230 V, 3 = 3× 230/400 V); typ sítě TN-C-S / TN-S / TT je v `networkSystem` (lib/panel-builder/supply.ts).
+  supplyPhases         Int               @default(3)
   shortCircuitKa       Float             @default(6)
   ambientTempC         Float             @default(30)
   simultaneityFactor   Float             @default(0.5)

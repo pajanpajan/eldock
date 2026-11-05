@@ -37,6 +37,7 @@ export default async function PanelTreePage({ params }: PageProps<"/panel-builde
         modulesPerRail={railCapacities(project)}
         simultaneity={project.simultaneityFactor}
         networkSystem={project.networkSystem}
+        supplyPhases={project.supplyPhases}
       />
     </PageTransition>
   );

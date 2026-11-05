@@ -46,6 +46,7 @@ export default async function PanelThermalPage({ params }: PageProps<"/panel-bui
           ambientTempC: project.ambientTempC,
           simultaneityFactor: project.simultaneityFactor,
           internalWiringLossW: project.internalWiringLossW,
+          supplyPhases: project.supplyPhases,
         }}
         items={project.items.map((item) => ({
           id: item.id,

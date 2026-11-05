@@ -92,10 +92,11 @@ describe("🎥 snímky z videa rozváděče", () => {
 describe("🎨 kaskáda výrobce → řada → barva", () => {
   it("řady výrobců ze zadání a převod na řady katalogu", () => {
     expect(DESIGN_BRANDS.map((brand) => brand.manufacturer)).toEqual(["ABB", "Schneider", "Legrand", "Hager"]);
-    expect(DESIGN_BRANDS[0].series).toHaveLength(12);
-    expect(dbSeriesFor("ABB|Swing / Swing L")).toEqual({ manufacturer: "ABB", series: ["Swing", "Swing L"] });
-    // starší klíč z databáze se přiřadí k řadě kaskády
-    expect(designSeriesOf("ABB|Swing L")?.series.name).toBe("Swing / Swing L");
+    // Fáze 55: 14 řad pod omítku + 3 nástěnné (Katalog ABB 2026), Swing a Swing L zvlášť
+    expect(DESIGN_BRANDS[0].series).toHaveLength(17);
+    // starší klíč nákresu „Swing / Swing L“ se přiřadí k řadě Swing
+    expect(dbSeriesFor("ABB|Swing / Swing L")).toEqual({ manufacturer: "ABB", series: ["Swing"] });
+    expect(designSeriesOf("ABB|Swing L")?.series.name).toBe("Swing L");
     expect(dbSeriesFor("Neznámý|X")).toEqual({ manufacturer: "Neznámý", series: ["X"] });
     expect(appearanceLabel("Legrand|Valena Life", "black")).toBe("Legrand Valena Life · Černá matná / Antracit");
   });

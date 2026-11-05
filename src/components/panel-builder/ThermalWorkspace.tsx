@@ -233,7 +233,7 @@ export function ThermalWorkspace({
 
         <section aria-label="Fázová bilance" className="rounded-xl border border-border bg-card p-4">
           <h2 className="mb-3 font-semibold">Fázová bilance (Imax × SF)</h2>
-          <PhaseBalance result={result} />
+          <PhaseBalance result={result} singlePhase={project.supplyPhases === 1} />
         </section>
       </div>
 

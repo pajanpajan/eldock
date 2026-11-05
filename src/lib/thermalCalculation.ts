@@ -42,6 +42,8 @@ export interface ThermalEnclosure {
   simultaneityFactor: number;
   internalWiringLossW: number;
   limitTempC?: number;
+  /** Fáze 55: 1 = jednofázový přívod 230 V – nesymetrie L1 / L2 / L3 se nehodnotí (vše na L1). */
+  supplyPhases?: number;
 }
 
 export interface ThermalDevice {
@@ -274,7 +276,7 @@ export function calculateThermal(devices: readonly ThermalDevice[], enclosure: T
   const phaseLoads = { L1: state.incoming.L1 * sf, L2: state.incoming.L2 * sf, L3: state.incoming.L3 * sf, N: state.incoming.N * sf };
   const loads = [phaseLoads.L1, phaseLoads.L2, phaseLoads.L3];
   const average = loads.reduce((sum, value) => sum + value, 0) / 3;
-  const phaseImbalancePct = average > 0 ? ((Math.max(...loads) - Math.min(...loads)) / average) * 100 : 0;
+  const phaseImbalancePct = enclosure.supplyPhases === 1 ? 0 : average > 0 ? ((Math.max(...loads) - Math.min(...loads)) / average) * 100 : 0;
   const operatingCurrentA = Math.max(...loads);
 
   const ok = topTempC <= limit;

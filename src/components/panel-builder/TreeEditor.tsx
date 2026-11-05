@@ -27,6 +27,8 @@ import {
   type TreeIssue,
   type TreeNode,
 } from "@/lib/panel-builder/tree";
+import { planBusbars } from "@/lib/panel-builder/pe-n-busbars";
+import { supplyOf } from "@/lib/panel-builder/supply";
 import type { IncomerFrom } from "@/lib/panel-builder/vector-layout";
 import type { VectorDevice } from "@/lib/panel-builder/vector-symbols";
 import { cn } from "@/lib/utils";
@@ -59,6 +61,7 @@ export function TreeEditor({
   modulesPerRail,
   simultaneity,
   networkSystem,
+  supplyPhases = 3,
   incomerFrom,
 }: {
   projectId: string;
@@ -68,6 +71,8 @@ export function TreeEditor({
   modulesPerRail: number | readonly number[];
   simultaneity: number;
   networkSystem: string;
+  /** Fáze 55: počet fází přívodu (1 / 3) – sběrnice PE / N a soustava. */
+  supplyPhases?: number;
   incomerFrom: IncomerFrom;
 }) {
   const router = useRouter();
@@ -77,6 +82,8 @@ export function TreeEditor({
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [picking, setPicking] = useState(false);
   const [incomer, setIncomer] = useState<IncomerFrom>(incomerFrom);
+  // Fáze 55: svorkovnice PE / N0 / N-FIx podle soustavy přívodu a aktuálního stromu
+  const busbars = useMemo(() => planBusbars(nodes, supplyOf({ networkSystem, supplyPhases })), [nodes, networkSystem, supplyPhases]);
   const [, startIncomer] = useTransition();
   // Počítadlo úprav: každá změna stromu (i Zpět / Vpřed) spustí průběžné uložení
   const [revision, setRevision] = useState(0);
@@ -364,6 +371,7 @@ export function TreeEditor({
             modulesPerRail={modulesPerRail}
             nodes={nodes}
             incomer={incomer}
+            busbars={busbars}
             selectedIds={selected}
             pickHint={picking ? "🎯 Klikněte na přístroj, do kterého vede hlavní přívod (odpínač, 3P jistič nebo hlavní chránič). Esc = zrušit." : null}
             outlineFor={(device) => (device.id === root?.id ? { color: "#38bdf8" } : connected.has(device.id) ? null : { color: "#ef4444", dashed: true })}

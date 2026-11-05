@@ -806,7 +806,7 @@ export interface PanelDevice {
   /** Konfigurace pro konfigurátor / `placeComponents` AI Panel Builderu. */
   config: ItemConfig;
   powerLossW: number;
-  phase: Phase | "L1,L2,L3" | null;
+  phase: Phase | "L1,L2,L3" | "L1,N" | null;
   /** Okruh, který přístroj jistí (null = hlavní vypínač, SPD, chránič, svorkovnice, chytré moduly). */
   circuitId: string | null;
 }
@@ -907,11 +907,18 @@ const config = (partial: Partial<ItemConfig> & Pick<ItemConfig, "category" | "po
 /** Přístroje rozváděče, rozložení na lišty (skupina chrániče se nedělí), 25% rezerva a výběr skříně. */
 export function buildSwitchboardFromCircuits(
   plan: Pick<CircuitPlan, "circuits" | "io" | "bom">,
-  options: { mode: InstallMode; enclosures: readonly EnclosureLike[]; mainSwitchA?: number; railModules?: number; centralStop?: boolean },
+  options: { mode: InstallMode; enclosures: readonly EnclosureLike[]; mainSwitchA?: number; railModules?: number; centralStop?: boolean; supplyPhases?: 1 | 3 },
 ): Switchboard {
   const warnings: string[] = [];
   const bom = new Map(plan.bom.map((entry) => [entry.item, entry.count]));
-  const { phaseOf, load } = balancePhases(plan.circuits);
+  // Fáze 55: jednofázový přívod 1× 230 V – 2P hlavní vypínač, 1f svodič, 2P chrániče a všechny okruhy na L1
+  const single = options.supplyPhases === 1;
+  const balanced = balancePhases(plan.circuits);
+  const phaseOf = single ? Object.fromEntries(plan.circuits.map((circuit) => [circuit.id, "L1" as Phase])) : balanced.phaseOf;
+  const load = single ? { L1: Math.round(plan.circuits.reduce((sum, circuit) => sum + circuit.designW, 0)), L2: 0, L3: 0 } : balanced.load;
+  if (single) {
+    for (const circuit of plan.circuits.filter((c) => c.phases === 3)) warnings.push(`${circuit.label}: třífázový spotřebič nelze napájet z 1f přívodu – zvolte 3f soustavu nebo jednofázovou variantu spotřebiče.`);
+  }
   const rcdGroups = groupUnderRcds(plan.circuits);
   const byId = new Map(plan.circuits.map((circuit) => [circuit.id, circuit]));
   const counters = new Map<string, number>();
@@ -936,11 +943,19 @@ export function buildSwitchboardFromCircuits(
   /** Skupiny přístrojů (na liště se nedělí). */
   const groups: PanelDevice[][] = [];
   const mainA = options.mainSwitchA ?? 40;
-  groups.push([
-    device("Q", "Hlavní vypínač", "MAIN_SWITCH", "3P", 3, mainA, config({ category: "MAIN_SWITCH", poles: "3P", modules: 3, ratedCurrentA: mainA }), null, "L1,L2,L3"),
-    device("FV", "Svodič přepětí T1+T2 bez předjištění", "SPD", "3P+N", 4, null, config({ category: "SPD", poles: "3P+N", modules: 4, spdType: "T1+T2", surgeCurrentKa: 25 }), null, "L1,L2,L3"),
-    device("X", "Rozbočovací svorkovnice (HLAK)", "TERMINAL", "4P", 4, null, config({ category: "ACCESSORY", poles: "4P", modules: 4, moduleSubtype: "TERMINAL_BLOCK" })),
-  ]);
+  groups.push(
+    single
+      ? [
+          device("Q", "Hlavní vypínač 2P (1× 230 V)", "MAIN_SWITCH", "2P", 2, mainA, config({ category: "MAIN_SWITCH", poles: "2P", modules: 2, ratedCurrentA: mainA }), null, "L1,N"),
+          device("FV", "Svodič přepětí T1+T2 1f bez předjištění", "SPD", "1P+N", 2, null, config({ category: "SPD", poles: "1P+N", modules: 2, spdType: "T1+T2", surgeCurrentKa: 25 }), null, "L1,N"),
+          device("X", "Rozbočovací svorkovnice (HLAK)", "TERMINAL", "2P", 2, null, config({ category: "ACCESSORY", poles: "2P", modules: 2, moduleSubtype: "TERMINAL_BLOCK" })),
+        ]
+      : [
+          device("Q", "Hlavní vypínač", "MAIN_SWITCH", "3P", 3, mainA, config({ category: "MAIN_SWITCH", poles: "3P", modules: 3, ratedCurrentA: mainA }), null, "L1,L2,L3"),
+          device("FV", "Svodič přepětí T1+T2 bez předjištění", "SPD", "3P+N", 4, null, config({ category: "SPD", poles: "3P+N", modules: 4, spdType: "T1+T2", surgeCurrentKa: 25 }), null, "L1,L2,L3"),
+          device("X", "Rozbočovací svorkovnice (HLAK)", "TERMINAL", "4P", 4, null, config({ category: "ACCESSORY", poles: "4P", modules: 4, moduleSubtype: "TERMINAL_BLOCK" })),
+        ],
+  );
 
   const mcb = (circuit: Circuit) => {
     const { protection } = circuit;
@@ -954,11 +969,12 @@ export function buildSwitchboardFromCircuits(
   for (const group of rcdGroups) {
     const circuits = group.circuitIds.map((id) => byId.get(id)!);
     const ratedA = 40;
-    const rcd: PanelDevice = { ...device("FI", `Proudový chránič 30 mA typ ${group.type}${group.lightingOnly ? " – jen světla" : ""}`, "RCD", "4P", 4, ratedA, config({ category: "RCD", poles: "4P", modules: 4, ratedCurrentA: ratedA, rcdType: group.type, rcdSensitivityMa: 30 }), null, "L1,L2,L3") };
+    const rcdPoles = single ? "2P" : "4P";
+    const rcd: PanelDevice = { ...device("FI", `Proudový chránič 30 mA typ ${group.type}${group.lightingOnly ? " – jen světla" : ""}`, "RCD", rcdPoles, single ? 2 : 4, ratedA, config({ category: "RCD", poles: rcdPoles, modules: single ? 2 : 4, ratedCurrentA: ratedA, rcdType: group.type, rcdSensitivityMa: 30 }), null, single ? "L1,N" : "L1,L2,L3") };
     rcd.designation = group.designation;
     groups.push([rcd, ...circuits.map(mcb)]);
     addBom(bom, "Izolovaný N-můstek (pod chránič)");
-    addBom(bom, "Hřebenová propojovací lišta 3P (pod chránič)");
+    addBom(bom, single ? "Hřebenová propojovací lišta 1P+N (pod chránič)" : "Hřebenová propojovací lišta 3P (pod chránič)");
   }
   const own = plan.circuits.filter((circuit) => circuit.rcd === "own");
   if (own.length) groups.push(own.map(mcb));
@@ -1037,7 +1053,8 @@ export function buildSwitchboardFromCircuits(
   const rails = layout(enclosure?.modulesPerRow ?? options.railModules ?? 12);
 
   const spread = Math.max(load.L1, load.L2, load.L3) - Math.min(load.L1, load.L2, load.L3);
-  if (spread > 3680) warnings.push(`Nesymetrie fází ${spread} W – zvažte přesun spotřebičů.`);
+  // Fáze 55: u 1f přívodu je vše na L1 – nesymetrie se nehodnotí
+  if (!single && spread > 3680) warnings.push(`Nesymetrie fází ${spread} W – zvažte přesun spotřebičů.`);
 
   return {
     devices,

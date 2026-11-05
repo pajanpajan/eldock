@@ -13,6 +13,8 @@ export interface ThermalProjectInput {
   ambientTempC: number;
   simultaneityFactor: number;
   internalWiringLossW: number;
+  /** Fáze 55: počet fází přívodu (1 = 1× 230 V). */
+  supplyPhases?: number;
 }
 
 export interface ThermalItemInput {
@@ -36,6 +38,8 @@ export const thermalEnclosure = (project: Omit<ThermalProjectInput, "ipRating">)
   ambientTempC: project.ambientTempC,
   simultaneityFactor: project.simultaneityFactor,
   internalWiringLossW: project.internalWiringLossW,
+  // Fáze 55: u 1f přívodu se nesymetrie fází nehodnotí
+  supplyPhases: project.supplyPhases ?? 3,
 });
 
 export const thermalDevices = (items: readonly ThermalItemInput[]): ThermalDevice[] =>

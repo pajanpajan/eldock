@@ -12,6 +12,7 @@ import { railColumns } from "@/lib/panel-builder/rails";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 
 import { componentForConfig, createPanelProject, renumberProject, type CreateProjectInput } from "./panel-builder";
+import { supplyById, supplyColumns } from "@/lib/panel-builder/supply";
 
 // Správa projektů AI Panel Builderu (fáze 48): smazání (jednotlivě i hromadně) s vrácením kreditu
 // a úklidem fotek, úprava hlavičky projektu přímo z přehledu.
@@ -68,6 +69,8 @@ export interface ProjectHeaderInput {
   name: string;
   customerName: string | null;
   installationSite: string | null;
+  /** Fáze 55: soustava přívodu – mění `supplyPhases` a `networkSystem`. */
+  supplySystem?: string;
 }
 
 /** Rychlá úprava hlavičky z přehledu: název rozváděče, zákazník a místo instalace. */
@@ -77,7 +80,7 @@ export async function updateProjectHeader(prisma: PrismaClient, projectId: strin
   const clean = (value: string | null) => value?.trim().slice(0, 120) || null;
   return prisma.panelBoardProject.update({
     where: { id: projectId },
-    data: { name, customerName: clean(input.customerName), installationSite: clean(input.installationSite) },
+    data: { name, customerName: clean(input.customerName), installationSite: clean(input.installationSite), ...(input.supplySystem ? supplyColumns(supplyById(input.supplySystem)) : {}) },
     select: { id: true, name: true, customerName: true, installationSite: true },
   });
 }
@@ -105,7 +108,7 @@ export async function createProjectFromSchedule(prisma: PrismaClient, input: Sch
   const circuits = generateCircuitsFromFloorplan(plan, calibration, { installMethod: input.installMethod, countDoubleAsTwo: input.countDoubleAsTwo });
   if (!circuits.circuits.length) throw new WorkflowError("VALIDATION", "Soupis neobsahuje žádný vývod (zásuvky, světla nebo spotřebiče).");
   const enclosures = (await prisma.panelEnclosure.findMany({ orderBy: { totalModules: "asc" } })).filter((row) => !isHiddenManufacturer(row.manufacturer));
-  const board = buildSwitchboardFromCircuits(circuits, { mode: input.mode, enclosures });
+  const board = buildSwitchboardFromCircuits(circuits, { mode: input.mode, enclosures, supplyPhases: supplyById(input.supplySystem).phases });
 
   return createPlanProject(prisma, input, circuits, board);
 }
@@ -205,8 +208,10 @@ export async function createProjectFromFloorplan(prisma: PrismaClient, input: Fl
   const { build, circuits, summary } = analyzeFloorplan(draft);
   if (!circuits.circuits.length) throw new WorkflowError("VALIDATION", "V půdorysu není žádný silový vývod (zásuvka, světlo nebo spotřebič).");
   const enclosures = (await prisma.panelEnclosure.findMany({ orderBy: { totalModules: "asc" } })).filter((row) => !isHiddenManufacturer(row.manufacturer));
-  const board = buildSwitchboardFromCircuits(circuits, { mode: draft.installation, enclosures });
-  const header = { name: input.name, customerName: input.customerName, installationSite: input.installationSite, companyId: input.companyId, manufacturerInfo: input.manufacturerInfo, createdById: input.createdById };
+  // Fáze 55: soustava z nákresu půdorysu (přepínač v editoru), jinak z dialogu
+  const supply = supplyById(draft.supplySystem ?? input.supplySystem);
+  const board = buildSwitchboardFromCircuits(circuits, { mode: draft.installation, enclosures, supplyPhases: supply.phases });
+  const header = { name: input.name, customerName: input.customerName, installationSite: input.installationSite, companyId: input.companyId, manufacturerInfo: input.manufacturerInfo, createdById: input.createdById, supplySystem: supply.id };
   return createPlanProject(prisma, header, circuits, board, {
     data: { floorplanJson: JSON.stringify(draft), cableReportJson: JSON.stringify(cableReportOf(summary, draft.profile)) },
     afterItems: (items) => assignWiringDevices(prisma, items, circuits, build, draft),

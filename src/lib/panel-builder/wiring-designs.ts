@@ -2,6 +2,8 @@
 // Řady jsou pojmenované podle katalogů výrobců; `dbSeries` = názvy řad v databázi `WiringDevice`
 // (externí katalog), barvy = skupiny `wd_color_family`. Čisté funkce.
 
+import { ABB_SERIES_2026, type SeriesColor, type SeriesShape } from "./abb-catalog-2026";
+
 export interface DesignSeries {
   /** Název v kaskádě (a v klíči „výrobce|řada“). */
   name: string;
@@ -9,6 +11,14 @@ export interface DesignSeries {
   dbSeries: string[];
   /** Řada pro vlhké prostory (IP44 / IP55). */
   ip?: string;
+  /** Fáze 55: skutečné barvy řady s kódem z katalogu (ABB 2026); bez nich obecné skupiny `DESIGN_COLORS`. */
+  colors?: SeriesColor[];
+  /** Tvar pro 2D náhled rámečku a klapky. */
+  shape?: SeriesShape;
+  /** Písmeno řady v objednacím čísle (ABB: T, A, H, E/F …). */
+  letter?: string | null;
+  /** Starší názvy řady (klíče uložených nákresů). */
+  aliases?: string[];
 }
 
 export interface DesignBrand {
@@ -22,20 +32,16 @@ export const DESIGN_BRANDS: DesignBrand[] = [
   {
     manufacturer: "ABB",
     label: "ABB",
-    series: [
-      { name: "Tango", dbSeries: ["Tango"] },
-      { name: "Levit", dbSeries: ["Levit"] },
-      { name: "Zoni", dbSeries: ["Zoni"] },
-      { name: "Time", dbSeries: ["Time", "Element/Time"] },
-      { name: "Element", dbSeries: ["Element", "Element/Time"] },
-      { name: "Swing / Swing L", dbSeries: ["Swing", "Swing L"] },
-      { name: "Future Linear", dbSeries: ["Future Linear"] },
-      { name: "Busch-axcent", dbSeries: ["Busch-axcent"] },
-      { name: "Decento", dbSeries: ["Decento"] },
-      { name: "Solo", dbSeries: ["Solo"] },
-      { name: "Basic55", dbSeries: ["Basic55", "Basic 55"] },
-      { name: "Garant (IP44)", dbSeries: ["Garant"], ip: "IP44" },
-    ],
+    // Fáze 55: 14 řad pro zapuštěnou montáž + 3 nástěnné IP44 / IP54 se skutečnými barvami (Katalog ABB 2026)
+    series: ABB_SERIES_2026.map((series) => ({
+      name: series.name,
+      dbSeries: series.dbSeries,
+      ip: series.ip,
+      colors: series.colors,
+      shape: series.shape,
+      letter: series.letter,
+      aliases: series.name === "Swing" ? ["Swing / Swing L"] : series.name === "future linear" ? ["Future Linear"] : series.name === "solo / solo carat" ? ["Solo"] : undefined,
+    })),
   },
   {
     manufacturer: "Schneider",
@@ -90,14 +96,37 @@ export const DESIGN_COLORS: DesignColor[] = [
 export const DEFAULT_COLOR = "white";
 
 export const designBrand = (manufacturer: string | null | undefined) => DESIGN_BRANDS.find((brand) => brand.manufacturer === manufacturer) ?? null;
-export const designColor = (id: string | null | undefined) => DESIGN_COLORS.find((color) => color.id === id) ?? null;
+
+/** Fáze 55: barva řady jako obecná barva (výběr přístrojů z katalogu podle `wd_color_family`). */
+const asDesignColor = (color: SeriesColor): DesignColor => ({ id: color.id, label: color.label, swatch: color.swatch, families: [color.family] });
+const SERIES_COLORS = DESIGN_BRANDS.flatMap((brand) => brand.series.flatMap((series) => (series.colors ?? []).map(asDesignColor)));
+
+/** Obecná barva (white, ivory …) nebo barva konkrétní řady (abb-zoni-500 …). */
+export const designColor = (id: string | null | undefined) => DESIGN_COLORS.find((color) => color.id === id) ?? SERIES_COLORS.find((color) => color.id === id) ?? null;
+
+/** Barvy nabízené pro řadu: skutečné barvy řady (ABB 2026), jinak obecné skupiny. */
+export function seriesColors(seriesKey: string | null | undefined): DesignColor[] {
+  const found = designSeriesOf(seriesKey);
+  return found?.series.colors?.length ? found.series.colors.map(asDesignColor) : DESIGN_COLORS;
+}
+
+/**
+ * Po přepnutí řady: barva zůstane, jen pokud v nové řadě existuje; jinak první (výchozí) barva nové řady.
+ * Obecná barva (white …) se u řady se skutečnými barvami převede na první barvu stejné skupiny.
+ */
+export function colorForSeries(seriesKey: string | null | undefined, colorId: string | null | undefined): string {
+  const colors = seriesColors(seriesKey);
+  if (colors.some((color) => color.id === colorId)) return colorId!;
+  const family = designColor(colorId)?.families[0];
+  return (family ? colors.find((color) => color.families.includes(family)) : undefined)?.id ?? colors[0].id;
+}
 
 /** Řada podle klíče „výrobce|řada“ – i starší klíče z databáze („ABB|Swing L“ → „Swing / Swing L“). */
 export function designSeriesOf(key: string | null | undefined): { brand: DesignBrand; series: DesignSeries } | null {
   const [manufacturer, name] = (key ?? "").split("|");
   const brand = designBrand(manufacturer);
   if (!brand || !name) return null;
-  const series = brand.series.find((row) => row.name === name) ?? brand.series.find((row) => row.dbSeries.includes(name));
+  const series = brand.series.find((row) => row.name === name) ?? brand.series.find((row) => row.aliases?.includes(name)) ?? brand.series.find((row) => row.dbSeries.includes(name));
   return series ? { brand, series } : null;
 }
 

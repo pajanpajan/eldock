@@ -15,6 +15,8 @@ import type { ActionResult } from "./workflow";
 
 // Správa projektů AI Panel Builderu (fáze 48): smazání, úprava hlavičky a návrh ze soupisu místností.
 
+// Fáze 55: soustava přívodu (1f / 3f, TN-C-S / TN-S / TT)
+const supplySchema = z.enum(["3F_TNCS", "3F_TNS", "3F_TT", "1F_TNS", "1F_TNCS"]).optional();
 const id = z.string().min(1).max(64);
 const text = z.string().trim().max(120);
 
@@ -32,7 +34,7 @@ export async function deletePanelProjectsAction(ids: string[], bulk = false): Pr
   }
 }
 
-const headerSchema = z.object({ name: text.min(1), customerName: text.nullable(), installationSite: text.nullable() });
+const headerSchema = z.object({ name: text.min(1), customerName: text.nullable(), installationSite: text.nullable(), supplySystem: supplySchema });
 
 /** ✏️ Přejmenovat / upravit hlavičku projektu. */
 export async function updateProjectHeaderAction(projectId: string, input: z.input<typeof headerSchema>): Promise<ActionResult> {
@@ -56,6 +58,7 @@ const scheduleSchema = z.object({
   mode: z.enum(["classic", "bus_loxone", "smart_retrofit"]),
   installMethod: z.enum(["C", "B2", "A2", "A1"]).default("C"),
   countDoubleAsTwo: z.boolean().default(true),
+  supplySystem: supplySchema,
   rooms: z
     .array(
       z.object({

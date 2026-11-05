@@ -8,6 +8,9 @@ import { MAX_RAIL_MODULES, MIN_RAIL_MODULES, RAIL_PRESETS } from "@/lib/panel-bu
 import { pathOf, vectorLayout, wiringPaths, VECTOR, type IncomerFrom, type Rect, type WiringNode } from "@/lib/panel-builder/vector-layout";
 import { symbolTexts, type VectorDevice } from "@/lib/panel-builder/vector-symbols";
 
+import type { BusbarPlan } from "@/lib/panel-builder/pe-n-busbars";
+
+import { BusbarStrip } from "./BusbarStrip";
 import { VECTOR_THEMES, VectorModuleSymbol, type VectorTheme } from "./VectorModuleSymbol";
 
 export interface SymbolOutline {
@@ -54,6 +57,7 @@ export function VectorPanel({
   onActivateRail,
   onPlaceDrop,
   onRailPhoto,
+  busbars,
 }: {
   devices: readonly VectorDevice[];
   rails: number;
@@ -91,6 +95,8 @@ export function VectorPanel({
   onPlaceDrop?: (rail: number, position: number) => void;
   /** Fáze 47 – detailní fotka jedné lišty / sekce (velké rozváděče). */
   onRailPhoto?: (rail: number) => void;
+  /** Fáze 55 – svorkovnice PE / N0 / N-FIx (nahoře nebo dole podle přívodu). */
+  busbars?: BusbarPlan | null;
 }) {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
   const [theme, setTheme] = useState<VectorTheme>("dark");
@@ -224,6 +230,7 @@ export function VectorPanel({
             if (hint) onPlaceDrop?.(hint.rail, hint.position);
           }}
         >
+          {busbars && incomer === "TOP" ? <BusbarStrip plan={busbars} position="TOP" /> : null}
           <svg
             ref={svg}
             viewBox={`0 0 ${layout.width} ${layout.height}`}
@@ -349,6 +356,7 @@ export function VectorPanel({
               </g>
             ) : null}
           </svg>
+          {busbars && incomer !== "TOP" ? <BusbarStrip plan={busbars} position="BOTTOM" /> : null}
 
           {/* HTML vrstva: tlačítka u přístrojů, správa lišt a úprava štítku */}
           {deviceAction

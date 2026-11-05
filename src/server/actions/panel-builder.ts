@@ -59,6 +59,8 @@ const createSchema = z.object({
   designMode: z.enum(["PHOTO", "DESIGN"]).default("PHOTO"),
   /** Fáze 51: detailní fotky lišt / snímky z videa (lišta → fotka) ke kombinované analýze. */
   railPhotos: z.array(z.object({ rail: z.number().int().min(1).max(12), url: z.string().max(300).regex(/^\/api\/files\/photos\/[\w./-]+$/) })).max(12).default([]),
+  /** Fáze 55: soustava přívodu (1f / 3f, TN-C-S / TN-S / TT). */
+  supplySystem: z.enum(["3F_TNCS", "3F_TNS", "3F_TT", "1F_TNS", "1F_TNCS"]).optional(),
 });
 
 const readPhoto = (url: string) => readStoredFile(url);

@@ -50,7 +50,6 @@ export const LOGO_SOURCES: Record<string, string[]> = {
   eaton: ["Eaton_Corporation_logo.svg"],
   legrand: ["Logo_Legrand_SA.svg"],
   wago: ["Logo_WAGO_2020.svg", "WAGO_Logo.svg"],
-  hager: ["Hager_Group_logo.svg"],
   schrack: ["Schrack_Technik_logo.svg"],
   rittal: ["Rittal-Logo_2010.svg"],
   loxone: ["Loxone.svg"],
@@ -103,6 +102,8 @@ export const WORDMARKS: Record<string, WordmarkStyle> = {
   omron: { text: "OMRON", color: "#005eb8", weight: 800, spacing: 2 },
   pfannenberg: { text: "PFANNENBERG", color: "#00539f", weight: 800, spacing: 0.5 },
   stego: { text: "STEGO", color: "#004a8f", weight: 900, spacing: 2.5 },
+  // Fáze 55: modrý wordmark „hager“ (#005CA9) místo šedého korporátního loga Hager Group
+  hager: { text: "hager", color: "#005CA9", weight: 800, spacing: -0.5 },
 };
 
 const escapeXml = (value: string) => value.replace(/[<>&"']/g, (char) => `&#${char.charCodeAt(0)};`);

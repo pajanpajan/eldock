@@ -6,10 +6,13 @@ import { isMix } from "@/lib/panel-builder/catalog";
 import { componentsList, partsList, technicalData } from "@/lib/panel-builder/documentation";
 import { renderPanelDrawingSvg, renderSingleLineDiagramSvg, type DrawingItem } from "@/lib/panel-builder/drawings";
 import { LEGAL_FRAMEWORK, externalInfluencesProtocol, isFlushEnclosure } from "@/lib/panel-builder/external-influences";
-import { parseCableReport } from "@/lib/panel-builder/floorplan-editor";
+import { parseCableReport, parseDraft } from "@/lib/panel-builder/floorplan-editor";
+import { compileFloorplanBom } from "@/lib/panel-builder/wiring-bom";
 import { parseManufacturerInfo } from "@/lib/panel-builder/project";
 import { companyManufacturer } from "@/lib/registered-company";
-import { readingOrder } from "@/lib/panel-builder/tree";
+import { isConnected, proposeTree, readingOrder, treeNodeFrom } from "@/lib/panel-builder/tree";
+import { supplyOf } from "@/lib/panel-builder/supply";
+import { busbarPartsRows, planBusbars } from "@/lib/panel-builder/pe-n-busbars";
 import { equipmentHref } from "@/lib/routes";
 import { parseRoutineTest, standardEditionOf } from "@/lib/legislation-2027";
 import { getEnclosureComponent, getProjectEnclosure, type PanelProjectDetail } from "@/server/queries/panel-builder";
@@ -17,6 +20,14 @@ import { documentationState } from "@/server/services/panel-builder";
 
 // Sestavení 6listového elaborátu rozváděče (krok 4) – sdílí ho dokumentace projektu i veřejná
 // ukázka vzorového PB-001 na úvodní stránce (fáze 48).
+
+const safeJson = (text: string): unknown => {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+};
 
 const n = (value: number, digits = 2) => value.toLocaleString("cs-CZ", { minimumFractionDigits: digits, maximumFractionDigits: digits });
 
@@ -44,11 +55,28 @@ export async function buildDocumentationData(project: PanelProjectDetail, origin
     phaseAssignment: item.phaseAssignment,
     circuitLabel: item.circuitLabel,
   }));
+  // Fáze 55: veřejná ukázka má vždy úplný strom – nezapojené prvky dostanou navržené zapojení jen pro vykreslení
+  // (List 2 spojnice, List 3 jednopólové schéma bez „Nezapojeno ve stromu“); databáze se nemění.
+  if (options.showcase) {
+    const nodes = project.items.map(treeNodeFrom);
+    const byId = new Map(nodes.map((node) => [node.id, node]));
+    if (!nodes.every((node) => isConnected(node.id, byId))) {
+      const proposal = proposeTree(nodes, null, { supplyPhases: supplyOf(project).phases });
+      for (const item of drawingItems) Object.assign(item, proposal.get(item.id));
+    }
+  }
   const main = project.items.find((item) => item.catalogComponent?.category === "MAIN_SWITCH" && !item.parentItemId)?.catalogComponent ?? null;
   const date = project.releasedAt ?? project.updatedAt;
   const manufacturers = [...new Set(project.items.map((item) => item.catalogComponent?.manufacturer).filter(Boolean))];
-  const incomer = project.networkSystem.includes("TN-C ") ? "L1,L2,L3,PEN" : "L1,L2,L3,N";
+  // Fáze 55: vodiče přívodu podle soustavy (1f / 3f, TN-C-S = PEN)
+  const supply = supplyOf(project);
+  const incomer = supply.conductors;
+  const busbars = planBusbars(drawingItems, supply);
 
+  // Fáze 55: kusovník domovní instalace z uloženého nákresu 2D půdorysu (projekt z půdorysu)
+  const cableReport = parseCableReport(project.cableReportJson);
+  const draft = project.floorplanJson ? parseDraft(safeJson(project.floorplanJson)) : null;
+  const homeBom = draft ? compileFloorplanBom(draft, { installation: draft.installation, cables: cableReport?.byCable ?? [] }) : [];
   const edition = standardEditionOf(project.standardEdition);
   const routineTest = parseRoutineTest(project.routineTestJson);
   const data: DocumentationData = {
@@ -56,7 +84,7 @@ export async function buildDocumentationData(project: PanelProjectDetail, origin
     name: project.name,
     customerName: project.customerName,
     installationSite: project.installationSite,
-    cableReport: parseCableReport(project.cableReportJson),
+    cableReport,
     // Fáze 52: legislativní rámec (vyhl. 131/2024 Sb.) a protokol o určení vnějších vlivů z prostředí instalace
     legalFramework: LEGAL_FRAMEWORK,
     influences: externalInfluencesProtocol(project.environment),
@@ -69,11 +97,13 @@ export async function buildDocumentationData(project: PanelProjectDetail, origin
     manufacturer: project.company ? companyManufacturer(project.company) : parseManufacturerInfo(project.manufacturerInfoJson),
     date: formatDate(date),
     year: String(date.getFullYear()),
-    panelDrawingSvg: renderPanelDrawingSvg(project, drawingItems, project.enclosureModel),
+    panelDrawingSvg: renderPanelDrawingSvg(project, drawingItems, project.enclosureModel, { plan: busbars, position: project.incomerFrom === "BOTTOM" ? "BOTTOM" : "TOP" }),
     singleLineSvg: renderSingleLineDiagramSvg(drawingItems, { incomer, network: project.networkSystem }),
     functions: readingOrder(project.items).map((item) => ({ designation: item.designation, label: item.circuitLabel })),
-    parts: partsList(docItems, enclosure),
+    // Fáze 55: sběrnice PE / N0 / N-FIx a propojka PEN v kusovníku (List 4)
+    parts: [...partsList(docItems, enclosure), ...busbarPartsRows(busbars)],
     components: componentsList(docItems, enclosure),
+    homeBom,
     wiring: project.items.flatMap((item) =>
       item.wiringDevices.map((row) => ({
         designation: item.designation,
@@ -86,6 +116,7 @@ export async function buildDocumentationData(project: PanelProjectDetail, origin
     ),
     thermal,
     ambientTempC: project.ambientTempC,
+    singlePhase: supply.phases === 1,
     technical: technicalData(project, thermal, main?.ratedCurrentA ?? null),
     label: {
       operatingVoltage: project.networkSystem,

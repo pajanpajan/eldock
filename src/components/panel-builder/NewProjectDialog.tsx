@@ -21,6 +21,8 @@ import { INSTALL_LEVELS, INSTALL_METHODS, type InstallLevel, type InstallMethod 
 import { SAMPLE_SCHEDULE, type ScheduleRoom } from "@/engine/room-schedule";
 
 import { ScheduleEditor } from "./ScheduleEditor";
+import { DEFAULT_SUPPLY, type SupplySystem } from "@/lib/panel-builder/supply";
+import { SupplySelect } from "./ProjectAdmin";
 
 const selectClass = "h-10 rounded-md border border-input bg-transparent px-2 text-sm dark:bg-input/30";
 /** Ukázková fotka referenčního rozváděče (seed PB-001). */
@@ -61,6 +63,7 @@ export function NewProjectDialog({ credits = null }: { credits?: number | null }
   const photoInput = useRef<HTMLInputElement>(null);
   const videoInput = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [supply, setSupply] = useState<SupplySystem["id"]>(DEFAULT_SUPPLY.id);
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<Mode>("DESIGN");
   const [shots, setShots] = useState<Shot[]>([]);
@@ -163,7 +166,7 @@ export function NewProjectDialog({ credits = null }: { credits?: number | null }
   }
 
   function submit(form: FormData) {
-    const header = { name: String(form.get("name") ?? ""), customerName: String(form.get("customer") ?? "") || null, installationSite: String(form.get("site") ?? "") || null };
+    const header = { name: String(form.get("name") ?? ""), customerName: String(form.get("customer") ?? "") || null, installationSite: String(form.get("site") ?? "") || null, supplySystem: supply };
     if (schedule) {
       startTransition(async () => {
         const result = await createScheduleProjectAction({ ...header, mode: installMode, installMethod, countDoubleAsTwo, rooms });
@@ -271,6 +274,8 @@ export function NewProjectDialog({ credits = null }: { credits?: number | null }
               <Input id="pb-site" name="site" maxLength={120} placeholder="nepovinné, např. Liberec, Husova 5" />
             </div>
           </div>
+          {/* Fáze 55: soustava a počet fází přívodu (1f = 2P hlavní vypínač, 1f svodič, 2P chrániče, vše na L1) */}
+          <SupplySelect id="pb-supply" value={supply} onChange={setSupply} />
           {schedule ? (
             <div className="flex flex-col gap-2">
               <div className="flex flex-wrap items-center gap-2 text-sm">

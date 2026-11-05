@@ -89,7 +89,9 @@ export const currentRoot = <T extends Pick<TreeNode, "id" | "parentItemId" | "fe
  *    vývody – typicky chránič na horní liště napájející lišty pod ním), patří pod něj; jinak pod -Q1.
  * 6. Jednofázové vývody se v každé skupině střídají L1 → L2 → L3 → L1 …; pod 2P chráničem dědí jeho fázi.
  */
-export function proposeTree(nodes: readonly TreeNode[], rootId: string | null = null): Map<string, Omit<TreeAssignment, "id" | "circuitLabel" | "designation">> {
+/** Fáze 55: `supplyPhases: 1` = jednofázový přívod (1× 230 V) – všechny jednofázové okruhy na L1, bez rotace fází. */
+export function proposeTree(nodes: readonly TreeNode[], rootId: string | null = null, options: { supplyPhases?: number } = {}): Map<string, Omit<TreeAssignment, "id" | "circuitLabel" | "designation">> {
+  const singlePhase = options.supplyPhases === 1;
   const ordered = readingOrder(nodes);
   const result = new Map<string, Omit<TreeAssignment, "id" | "circuitLabel" | "designation">>();
   const main = (rootId ? ordered.find((node) => node.id === rootId) : null) ?? chooseRoot(ordered);
@@ -127,7 +129,7 @@ export function proposeTree(nodes: readonly TreeNode[], rootId: string | null = 
     const group = assignment.parentItemId ?? "__incomer__";
     const index = rotation.get(group) ?? 0;
     rotation.set(group, index + 1);
-    const phase = SINGLE_PHASES[index % 3];
+    const phase = singlePhase ? "L1" : SINGLE_PHASES[index % 3];
     // 2P chránič (L + N) dostane fázi s nulou, jednofázové vývody jen fázi
     assignment.phaseAssignment = node.category === "RCD" && hasNeutral(node) ? `${phase},N` : phase;
   }

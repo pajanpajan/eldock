@@ -10,9 +10,10 @@ import { DESIGNATION_PREFIX, compact, designationsInOrder, matchDetection, type 
 import { nextProjectCode, type ManufacturerInfo } from "@/lib/panel-builder/project";
 import { releaseBlockers, type DocItem } from "@/lib/panel-builder/documentation";
 import { thermalDevices, thermalEnclosure, type ThermalItemInput } from "@/lib/panel-builder/thermal-input";
-import { ancestors, isConnected, isPhaseAssignment, renumber, treeNodeFrom, validateTree, type TreeAssignment } from "@/lib/panel-builder/tree";
+import { ancestors, isConnected, isPhaseAssignment, proposeTree, renumber, treeNodeFrom, validateTree, type TreeAssignment } from "@/lib/panel-builder/tree";
 import { calculateThermal } from "@/lib/thermalCalculation";
 import { DEFAULT_RAIL_MODULES, MAX_RAILS, railCapacities, railColumns, withRailAdded, withRailRemoved } from "@/lib/panel-builder/rails";
+import { supplyById, supplyColumns } from "@/lib/panel-builder/supply";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 
 import type { AiMode, AnalysisMode, analyzePanelPhoto, lookupComponent } from "./geminiPanelService";
@@ -108,6 +109,8 @@ export interface CreateProjectInput {
   companyId?: string | null;
   /** Fáze 43: „DESIGN“ = návrh od nuly bez fotky (1× 12M), jinak pasportizace z fotky. */
   designMode?: "PHOTO" | "DESIGN";
+  /** Fáze 55: soustava přívodu (`SUPPLY_SYSTEMS`), výchozí 3f TN-S. */
+  supplySystem?: string;
 }
 
 export async function createPanelProject(prisma: PrismaClient, input: CreateProjectInput) {
@@ -120,6 +123,7 @@ export async function createPanelProject(prisma: PrismaClient, input: CreateProj
       name: name.slice(0, 120),
       customerName: input.customerName?.trim().slice(0, 120) || null,
       installationSite: input.installationSite?.trim().slice(0, 120) || null,
+      ...supplyColumns(supplyById(input.supplySystem)),
       photoUrl: input.photoUrl,
       dominantManufacturer: input.dominantManufacturer ?? "ABB",
       manufacturerInfoJson: JSON.stringify(input.manufacturerInfo ?? {}),
@@ -345,6 +349,20 @@ export async function saveTree(prisma: PrismaClient, projectId: string, assignme
   return { status, connected, issues: validateTree(nodes) };
 }
 
+/**
+ * Fáze 55: navržený strom zapojení (`proposeTree` – chránič napájí jističe napravo, fáze L1 → L2 → L3, u 1f přívodu vše L1)
+ * uložený přes `saveTree`. Použití: vzorový PB-001 (seed i oprava existující databáze).
+ */
+export async function applyProposedTree(prisma: PrismaClient, projectId: string, options: { supplyPhases?: number } = {}) {
+  const items = await prisma.panelBoardItem.findMany({ where: { projectId }, include: { catalogComponent: true } });
+  const proposal = proposeTree(items.map(treeNodeFrom), null, options);
+  return saveTree(
+    prisma,
+    projectId,
+    items.map((item) => ({ id: item.id, designation: item.designation, circuitLabel: item.circuitLabel, ...proposal.get(item.id)! })),
+  );
+}
+
 // ---------------------------------------------------------------------------
 //  Výpočet oteplení (krok 3) – vstupy skříně a výpočtové proudy vývodů
 // ---------------------------------------------------------------------------
@@ -390,6 +408,8 @@ export function documentationState(project: {
   ambientTempC: number;
   simultaneityFactor: number;
   internalWiringLossW: number;
+  /** Fáze 55: 1 = jednofázový přívod (bez hodnocení nesymetrie fází). */
+  supplyPhases?: number;
   items: (ThermalItemInput & DocItemSource)[];
 }) {
   const nodes = project.items.map(treeNodeFrom);

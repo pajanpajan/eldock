@@ -10,6 +10,7 @@ import { ROUTING_LABEL, type CableReport } from "@/lib/panel-builder/floorplan-e
 import type { ManufacturerInfo } from "@/lib/panel-builder/project";
 import type { ThermalResult } from "@/lib/thermalCalculation";
 import { ROUTINE_TEST_POINTS, minInsulationMOhm, routineTestVerdict, type RoutineTest, type StandardEdition } from "@/lib/legislation-2027";
+import type { WiringBomRow } from "@/lib/panel-builder/wiring-bom";
 
 import { PhaseBalance, ThermalCurve, ThermalTable } from "../ThermalViews";
 import { CeLabelQr } from "./DocumentationActions";
@@ -32,6 +33,8 @@ export interface DocumentationData {
   components: ComponentRow[];
   thermal: ThermalResult;
   ambientTempC: number;
+  /** Fáze 55: jednofázový přívod (fázová bilance jen L1 + N). */
+  singlePhase?: boolean;
   technical: [string, string][];
   label: { operatingVoltage: string; operatingCurrent: string; shortCircuit: string; ipRating: string; mainBreaker: string; type: string; deviceManufacturer: string };
   qrUrl: string;
@@ -43,6 +46,8 @@ export interface DocumentationData {
   routineTest: RoutineTest;
   /** Domovní instalace po obvodech (fáze 47): vypínače, zásuvky, rámečky. */
   wiring?: { designation: string; circuit: string; room: string | null; quantity: number; articleNumber: string; title: string }[];
+  /** Fáze 55: kusovník domovní instalace z 2D půdorysu (přístroj + kryt + rámeček, krabice, kabely). */
+  homeBom?: WiringBomRow[];
   /** Výkaz kabeláže z 2D půdorysu (fáze 49). */
   cableReport?: CableReport | null;
   /** Fáze 52: právní a normativní rámec, protokol o určení vnějších vlivů, rozvodnice pod omítku (úplný kryt). */
@@ -386,6 +391,35 @@ export function DocumentationSheets({ data }: { data: DocumentationData }) {
             </table>
           </>
         ) : null}
+        {data.homeBom?.length ? (
+          <>
+            <h3 className="mt-2 font-bold">Kusovník domovní instalace (objednací čísla)</h3>
+            <table className="w-full border-collapse text-[8pt]" data-testid="doc-home-bom">
+              <thead>
+                <tr>
+                  <th className={cell}>Kategorie</th>
+                  <th className={cell}>Objednací číslo</th>
+                  <th className={cell}>Název a specifikace</th>
+                  <th className={cell}>Řada a barva</th>
+                  <th className={`${cell} text-right`}>Počet</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.homeBom.map((row) => (
+                  <tr key={`${row.category}-${row.mpn ?? row.name}-${row.appearance}`}>
+                    <td className={cell}>{row.category}</td>
+                    <td className={`${cell} font-mono`}>{row.mpn ? `${row.mpn}${row.verified ? "" : " (ověřit)"}` : "doplnit"}</td>
+                    <td className={cell}>{row.name}</td>
+                    <td className={cell}>{row.appearance}</td>
+                    <td className={`${cell} text-right font-mono`}>
+                      {row.quantity} {row.unit}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        ) : null}
         {data.cableReport ? <CableReportTable report={data.cableReport} /> : null}
       </Sheet>
 
@@ -418,7 +452,7 @@ export function DocumentationSheets({ data }: { data: DocumentationData }) {
           </div>
           <div className="flex flex-col gap-3">
             <ThermalCurve result={data.thermal} ambientTempC={data.ambientTempC} print />
-            <PhaseBalance result={data.thermal} print />
+            <PhaseBalance result={data.thermal} print singlePhase={data.singlePhase} />
           </div>
         </div>
         {data.influences ? <InfluencesProtocol protocol={data.influences} /> : null}

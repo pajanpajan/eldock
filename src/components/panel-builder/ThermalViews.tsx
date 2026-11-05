@@ -75,13 +75,19 @@ export function ThermalCurve({ result, ambientTempC, print = false }: { result: 
 }
 
 /** Zatížení fází L1 / L2 / L3 / N (Imax × SF) s nesymetrií. */
-export function PhaseBalance({ result, print = false }: { result: ThermalResult; print?: boolean }) {
-  const entries = [
-    ["L1", result.phaseLoads.L1],
-    ["L2", result.phaseLoads.L2],
-    ["L3", result.phaseLoads.L3],
-    ["N", result.phaseLoads.N],
-  ] as const;
+export function PhaseBalance({ result, print = false, singlePhase = false }: { result: ThermalResult; print?: boolean; singlePhase?: boolean }) {
+  // Fáze 55: u 1f přívodu (1× 230 V) jen L1 a N, bez hodnocení nesymetrie
+  const entries = (singlePhase
+    ? [
+        ["L1", result.phaseLoads.L1],
+        ["N", result.phaseLoads.N],
+      ]
+    : [
+        ["L1", result.phaseLoads.L1],
+        ["L2", result.phaseLoads.L2],
+        ["L3", result.phaseLoads.L3],
+        ["N", result.phaseLoads.N],
+      ]) as readonly (readonly [string, number])[];
   const max = Math.max(1, ...entries.map(([, value]) => value)) * 1.1;
   return (
     <div className="flex flex-col gap-2" data-testid="phase-balance">
@@ -94,7 +100,9 @@ export function PhaseBalance({ result, print = false }: { result: ThermalResult;
           <span className="w-20 text-right font-mono">{n(value)} A</span>
         </div>
       ))}
-      <p className={cn("text-xs", print ? "text-zinc-600" : "text-muted-foreground")}>Nesymetrie fází: {n(result.phaseImbalancePct, 0)} % · provozní proud {n(result.operatingCurrentA)} A</p>
+      <p className={cn("text-xs", print ? "text-zinc-600" : "text-muted-foreground")}>
+        {singlePhase ? `Jednofázový přívod 1× 230 V · provozní proud L1 ${n(result.operatingCurrentA)} A` : `Nesymetrie fází: ${n(result.phaseImbalancePct, 0)} % · provozní proud ${n(result.operatingCurrentA)} A`}
+      </p>
     </div>
   );
 }

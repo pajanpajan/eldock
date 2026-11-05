@@ -5,6 +5,7 @@ import type { ComponentCategory } from "@/generated/prisma/enums";
 import { esc } from "@/lib/mock-graphics/svg";
 
 import { DEVICE_HEIGHT_MM, MODULE_MM, railFraction, slotOffsets, type EnclosureDims } from "./layout";
+import type { BusbarPlan } from "./pe-n-busbars";
 import { phasesOf, readingOrder } from "./tree";
 
 export interface DrawingItem {
@@ -32,7 +33,31 @@ const FONT = "Arial, Helvetica, sans-serif";
 //  Výkres osazení (1 jednotka = 1 mm)
 // ---------------------------------------------------------------------------
 
-export function renderPanelDrawingSvg(dims: EnclosureDims & { depthMm?: number }, items: readonly DrawingItem[], enclosureLabel = ""): string {
+/** Fáze 55: lišta svorkovnic PE / N0 / N-FIx uvnitř skříně (nahoře u přívodu shora, jinak dole), šroubky a obsazenost. */
+function busbarStripSvg(plan: BusbarPlan, x: number, y: number, width: number): string {
+  const bars = [plan.pe, plan.n0, ...plan.groups];
+  const gap = 4;
+  const bridge = plan.penBridge ? 14 : 0;
+  const unit = Math.min(2.6, (width - gap * (bars.length - 1) - bridge) / bars.reduce((sum, bar) => sum + bar.size + 6, 0));
+  const out: string[] = [];
+  let cursor = x;
+  bars.forEach((bar, index) => {
+    if (index === 1 && plan.penBridge) {
+      out.push(`<line x1="${cursor - gap + 1}" y1="${y + 5}" x2="${cursor + bridge - 1}" y2="${y + 5}" stroke="${INK}" stroke-width="1.2"/><text x="${cursor + bridge / 2 - 1}" y="${y - 1.5}" font-size="3.6" text-anchor="middle">PEN</text>`);
+      cursor += bridge;
+    }
+    const w = (bar.size + 6) * unit;
+    const fill = bar.kind === "PE" ? "url(#pe-stripes)" : "#2563eb";
+    out.push(`<rect x="${cursor}" y="${y}" width="${w}" height="10" rx="1" fill="${fill}" stroke="${INK}" stroke-width="0.4"/>`);
+    const screws = Math.min(bar.size, Math.floor((w - 4) / 2.2));
+    for (let i = 0; i < screws; i++) out.push(`<circle cx="${cursor + 2 + (i + 0.5) * ((w - 4) / screws)}" cy="${y + 3}" r="0.7" fill="${i < Math.round((bar.used / bar.size) * screws) ? INK : "#fff"}"/>`);
+    out.push(`<text x="${cursor + w / 2}" y="${y + 8.6}" font-size="3.6" font-weight="700" text-anchor="middle" fill="${bar.kind === "PE" ? INK : "#fff"}">${esc(bar.kind === "PE" ? "PE" : bar.id)} ${bar.used}/${bar.size}</text>`);
+    cursor += w + gap;
+  });
+  return `<defs><pattern id="pe-stripes" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="2" height="4" fill="#16a34a"/><rect x="2" width="2" height="4" fill="#facc15"/></pattern></defs>${out.join("")}`;
+}
+
+export function renderPanelDrawingSvg(dims: EnclosureDims & { depthMm?: number }, items: readonly DrawingItem[], enclosureLabel = "", busbars?: { plan: BusbarPlan; position: "TOP" | "BOTTOM" }): string {
   const margin = 34;
   const W = dims.widthMm;
   const H = dims.heightMm;
@@ -98,6 +123,7 @@ export function renderPanelDrawingSvg(dims: EnclosureDims & { depthMm?: number }
 ${rails}
 ${links.join("\n")}
 ${devices}
+${busbars ? busbarStripSvg(busbars.plan, margin + 10, busbars.position === "TOP" ? margin + 10 : margin + H - 20, W - 20) : ""}
 <line x1="${margin}" y1="${margin + H + 14}" x2="${margin + W}" y2="${margin + H + 14}" stroke="${INK}" stroke-width="0.4"/>
 <text x="${margin + W / 2}" y="${margin + H + 24}" font-size="6" text-anchor="middle">${W} mm</text>
 <line x1="${margin + W + 14}" y1="${margin}" x2="${margin + W + 14}" y2="${margin + H}" stroke="${INK}" stroke-width="0.4"/>

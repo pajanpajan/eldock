@@ -34,14 +34,17 @@ import {
   type FloorplanDraft,
   type RoomHandle,
 } from "@/lib/panel-builder/floorplan-editor";
-import { DESIGN_BRANDS, DESIGN_COLORS, appearanceLabel } from "@/lib/panel-builder/wiring-designs";
+import { DESIGN_BRANDS, appearanceLabel, colorForSeries, designColor, seriesColors } from "@/lib/panel-builder/wiring-designs";
 import { renderPdfPage } from "@/lib/pdf-client";
 import { resizeImage, uploadFile } from "@/lib/upload-client";
 import { cn } from "@/lib/utils";
+import { compileFloorplanBom } from "@/lib/panel-builder/wiring-bom";
 import { createFloorplanProjectAction } from "@/server/actions/panel-projects";
 
 import { CablePanel } from "./CablePanel";
 import { DeviceAppearance } from "./DeviceAppearance";
+import { FloorSymbol } from "./FloorSymbol";
+import { WiringBomDialog } from "./WiringBomDialog";
 
 // 2D editor půdorysu elektroinstalace (fáze 49): podklad (obrázek / PDF / rastr), kalibrace na 2 kliky,
 // osazení značek, párování vypínačů se světly, trasy kabelů a výkaz kabeláže v reálném čase.
@@ -137,6 +140,7 @@ export function FloorplanEditor({ series }: { series: SeriesOption[] }) {
       return { ok: false as const, error: error instanceof Error ? error.message : "Neplatný půdorys." };
     }
   }, [draft]);
+  const bom = useMemo(() => compileFloorplanBom(draft, { installation: draft.installation, cables: analysis.ok ? analysis.summary.byCable : [] }), [draft, analysis]);
 
   const selected = draft.elements.find((element) => element.id === selectedId) ?? null;
   const selectedRoom = draft.rooms.find((room) => room.id === selectedRoomId) ?? null;
@@ -290,6 +294,11 @@ export function FloorplanEditor({ series }: { series: SeriesOption[] }) {
       } else image = file;
       const resized = await resizeImage(image, 2400, 0.9);
       const bitmap = await createImageBitmap(resized);
+      // Fáze 55: nevykreslená / prázdná stránka PDF by dala nesmyslné měřítko (plocha 0 × 0 m)
+      if (!bitmap.width || !bitmap.height) {
+        bitmap.close();
+        throw new Error("Podklad se nepodařilo vykreslit (prázdná stránka). Zkuste jinou stránku nebo obrázek PNG / JPG.");
+      }
       const uploaded = await uploadFile("photo", resized);
       // Výchozí odhad měřítka: šířka podkladu ≈ 15 m – přesně ho nastaví kalibrace
       const mmPerPx = 15_000 / bitmap.width;
@@ -468,25 +477,34 @@ export function FloorplanEditor({ series }: { series: SeriesOption[] }) {
         </label>
       </div>
 
+      {/* Fáze 55: výrobce → řada (náhled tvaru) → barvy řady a soustava přívodu v horní liště nad rastrem */}
+      <DeviceAppearance
+        seriesKey={draft.series}
+        color={draft.color}
+        available={available}
+        selectedRoom={selectedRoom?.name ?? null}
+        supply={draft.supplySystem}
+        onSupply={(supplySystem) => update((current) => ({ ...current, supplySystem }))}
+        onChange={(patch) =>
+          update((current) => {
+            const series = patch.series ?? current.series;
+            return { ...current, series, color: colorForSeries(series, patch.color ?? current.color) };
+          })
+        }
+        onApplyAll={() => {
+          update((current) => applyAppearance(current));
+          toast.success(`Vzhled ${appearanceLabel(draft.series, draft.color)} použit na celý půdorys.`);
+        }}
+        onApplyRoom={() => {
+          if (!selectedRoom) return;
+          update((current) => applyAppearance(current, { room: selectedRoom.name }));
+          toast.success(`Vzhled použit v místnosti ${selectedRoom.name}.`);
+        }}
+      />
+
       <div className="grid gap-3 xl:grid-cols-[15rem_minmax(0,1fr)_24rem]">
         {/* Paleta značek */}
         <aside className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3" aria-label="Paleta elektroinstalačních značek">
-          <DeviceAppearance
-            seriesKey={draft.series}
-            color={draft.color}
-            available={available}
-            selectedRoom={selectedRoom?.name ?? null}
-            onChange={(patch) => update((current) => ({ ...current, ...patch }))}
-            onApplyAll={() => {
-              update((current) => applyAppearance(current));
-              toast.success(`Vzhled ${appearanceLabel(draft.series, draft.color)} použit na celý půdorys.`);
-            }}
-            onApplyRoom={() => {
-              if (!selectedRoom) return;
-              update((current) => applyAppearance(current, { room: selectedRoom.name }));
-              toast.success(`Vzhled použit v místnosti ${selectedRoom.name}.`);
-            }}
-          />
           {PALETTE_GROUPS.map((group) => (
             <div key={group.id} className="flex flex-col gap-1">
               <h3 className="text-xs font-bold text-muted-foreground">{group.label}</h3>
@@ -656,10 +674,17 @@ export function FloorplanEditor({ series }: { series: SeriesOption[] }) {
                 const fill = isPanel ? "#facc15" : item.kind === "light" ? "#fde68a" : item.kind === "switch" ? "#93c5fd" : item.kind === "appliance" ? "#fca5a5" : item.kind === "data_socket" ? "#86efac" : "#e4e4e7";
                 return (
                   <g key={element.id} transform={`translate(${element.x} ${element.y})`} onPointerDown={(event) => onElementDown(event, element)} className="cursor-pointer" data-element={item.id} aria-label={`${item.label} – ${element.room}`} role="button">
-                    {isPanel ? <rect x={-symbol * 0.9} y={-symbol * 0.6} width={symbol * 1.8} height={symbol * 1.2} rx={symbol * 0.15} fill={fill} stroke={active ? "#fff" : "#09090b"} strokeWidth={stroke * (active ? 5 : 2)} /> : <circle r={symbol * 0.55} fill={fill} stroke={active ? "#facc15" : "#09090b"} strokeWidth={stroke * (active ? 6 : 2)} />}
-                    <text textAnchor="middle" dominantBaseline="central" fontSize={symbol * (item.symbol.length > 2 ? 0.42 : 0.55)} fontWeight={800} fill="#09090b">
-                      {item.symbol}
-                    </text>
+                    {isPanel ? (
+                      <>
+                        <rect x={-symbol * 0.9} y={-symbol * 0.6} width={symbol * 1.8} height={symbol * 1.2} rx={symbol * 0.15} fill={fill} stroke={active ? "#fff" : "#09090b"} strokeWidth={stroke * (active ? 5 : 2)} />
+                        <text textAnchor="middle" dominantBaseline="central" fontSize={symbol * 0.55} fontWeight={800} fill="#09090b">
+                          {item.symbol}
+                        </text>
+                      </>
+                    ) : (
+                      // Fáze 55: elektrotechnická značka (ČSN EN 60617) s lemem v barvě domovních přístrojů
+                      <FloorSymbol item={item} size={symbol} stroke={stroke} active={active} lem={designColor(element.color ?? draft.color)?.swatch ?? null} />
+                    )}
                     {element.frameUnits > 1 ? (
                       <text x={symbol * 0.6} y={symbol * 0.75} fontSize={symbol * 0.45} fill="#facc15" fontWeight={700}>
                         {element.frameUnits}R
@@ -697,6 +722,8 @@ export function FloorplanEditor({ series }: { series: SeriesOption[] }) {
             />
           ) : null}
           <CablePanel analysis={analysis} mode={draft.mode} pending={pending} onGenerate={generate} />
+          {/* Fáze 55: kusovník domovní instalace s objednacími čísly */}
+          <WiringBomDialog rows={bom} />
           {inventory.length ? (
             <section className="flex flex-col gap-1.5 rounded-xl border border-border bg-card p-3 text-sm" aria-label="Soupis domovní instalace" data-testid="wiring-inventory">
               <h3 className="font-bold">Soupis domovní instalace</h3>
@@ -819,7 +846,7 @@ function ElementDetail({
             <div className="grid grid-cols-2 gap-2">
               <label className="flex flex-col gap-1 text-xs text-muted-foreground">
                 Designová řada
-                <select value={element.series ?? ""} onChange={(event) => onChange({ series: event.target.value || null })} className="h-8 rounded-md border border-input bg-transparent px-2 text-sm text-foreground dark:bg-input/30" aria-label="Designová řada prvku">
+                <select value={element.series ?? ""} onChange={(event) => onChange({ series: event.target.value || null, ...(element.color ? { color: colorForSeries(event.target.value || draft.series, element.color) } : {}) })} className="h-8 rounded-md border border-input bg-transparent px-2 text-sm text-foreground dark:bg-input/30" aria-label="Designová řada prvku">
                   <option value="">podle nákresu</option>
                   {DESIGN_BRANDS.map((brand) => (
                     <optgroup key={brand.manufacturer} label={brand.label}>
@@ -836,7 +863,8 @@ function ElementDetail({
                 Barva
                 <select value={element.color ?? ""} onChange={(event) => onChange({ color: event.target.value || null })} className="h-8 rounded-md border border-input bg-transparent px-2 text-sm text-foreground dark:bg-input/30" aria-label="Barva prvku">
                   <option value="">podle nákresu</option>
-                  {DESIGN_COLORS.map((option) => (
+                  {/* Fáze 55: jen barvy řady prvku (ABB 2026 s kódy), jinak obecné skupiny */}
+                  {seriesColors(element.series ?? draft.series).map((option) => (
                     <option key={option.id} value={option.id}>
                       {option.label}
                     </option>
