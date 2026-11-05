@@ -11,7 +11,7 @@ export const DOCUMENT_SHEETS = [
   "Výkres osazení rozváděče a výpis funkcí přístrojů",
   "Jednopólové schéma (Single Line Diagram)",
   "Kusovník a seznam komponent",
-  "Výpočet oteplení a technická data",
+  "Výpočet oteplení, technická data a vnější vlivy",
   "ES prohlášení o shodě a výrobní štítek CE",
 ] as const;
 

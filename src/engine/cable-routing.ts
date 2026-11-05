@@ -11,6 +11,7 @@ import {
   type CableRoutingMode,
   type Circuit,
   type ElevationProfile,
+  type InstallMode,
 } from "./floorplan-bridge";
 
 /** Prvek trasy v mm půdorysu (osa krabice). */
@@ -110,6 +111,21 @@ export const DOUBLE_TWO_WAY_CABLE = "CYKY-O 5×1,5";
 export const BLIND_CABLE = "CYKY-J 5×1,5";
 /** Pokojový termostat → topný okruh (spínaný vodič k tepelnému zdroji / relé v rozváděči). */
 export const THERMOSTAT_CABLE = "CYKY-J 3×1,5";
+/** Fáze 52 – sběrnicová Smart Home: tlačítka a čidla na sběrnici 24 V DC místo svodů 230 V. */
+export const BUS_LEG_CABLE = "CAT7 / KNX J-Y(St)Y 2×2×0,8 (sběrnice 24 V DC)";
+/** Fáze 52 – sběrnicová Smart Home: každý světelný vývod samostatně do rozváděče (hvězda). */
+export const STAR_LIGHT_CABLE = "CYKY-J 3×1,5";
+
+/**
+ * Svod k vypínači podle úrovně instalace (fáze 52): klasika CYKY-O (bez N), retrofit vždy CYKY-J
+ * s průběžným N (modul pod vypínač), sběrnice = sběrnicový kabel 24 V DC.
+ */
+export function switchLegCable(installation: InstallMode | undefined, cable: string = SWITCH_LEG_CABLE): string {
+  if (installation === "bus_loxone") return BUS_LEG_CABLE;
+  if (installation === "smart_retrofit") return cable.replace("CYKY-O", "CYKY-J");
+  return cable;
+}
+
 /** Výška nadpraží okna nad vypínačem + přívod k pohonu v překladu [mm]. */
 export const BLIND_MOTOR_RUN_MM = 1000;
 
@@ -153,6 +169,24 @@ export interface CablingInput {
   controlRuns?: readonly { id: string; kind: "blind" | "thermostat"; targetId?: string | null }[];
   /** Datové zásuvky – každá samostatný UTP z rozváděče / racku. */
   dataNodeIds?: readonly string[];
+  /** Fáze 52: úroveň instalace – hvězda světel (sběrnice), CYKY-J ke každému vypínači (retrofit). */
+  installation?: InstallMode;
+}
+
+/** Hvězdicová topologie: každý prvek samostatným kabelem do rozváděče, trasy sečtené do jedné. */
+function starRoutes(nodes: readonly RouteNode[], panel: { x: number; y: number }, profile: ElevationProfile): Record<CableRoutingMode, CircuitRoute> {
+  const merge = (routes: CircuitRoute[], mode: "BOTTOM" | "TOP"): CircuitRoute => ({
+    mode,
+    segments: routes.flatMap((route) => route.segments),
+    rawMm: routes.reduce((sum, route) => sum + route.rawMm, 0),
+    totalMm: routes.reduce((sum, route) => sum + route.totalMm, 0),
+    longestMm: Math.max(0, ...routes.map((route) => route.longestMm)),
+  });
+  const per = nodes.map((node) => circuitRoutes([node], panel, profile));
+  const bottom = merge(per.map((routes) => routes.BOTTOM), "BOTTOM");
+  const top = merge(per.map((routes) => routes.TOP), "TOP");
+  const optimized = per.map((routes) => routes.OPTIMIZED);
+  return { BOTTOM: bottom, TOP: top, OPTIMIZED: merge(optimized, optimized.filter((route) => route.mode === "TOP").length > optimized.length / 2 ? "TOP" : "BOTTOM") };
 }
 
 /** Výkaz kabeláže: porovnání 3 režimů, rozpis podle kabelů, ΔU na nejdelší větvi každého okruhu. */
@@ -169,10 +203,11 @@ export function summarizeCabling(input: CablingInput): CableSummary {
     .map((circuit): CircuitCabling | null => {
       const nodes = circuit.nodeIds.map((id) => byId.get(id)).filter((node): node is RouteNode => Boolean(node));
       if (!nodes.length) return null;
-      const routes = circuitRoutes(nodes, input.panel, profile);
+      const star = input.installation === "bus_loxone" && circuit.kind === "lighting";
+      const routes = star ? starRoutes(nodes, input.panel, profile) : circuitRoutes(nodes, input.panel, profile);
       for (const mode of ["BOTTOM", "TOP", "OPTIMIZED"] as const) totals[mode] += routes[mode].totalMm;
       const route = routes[input.selected];
-      const cable = cableLabel(circuit.cable);
+      const cable = star ? STAR_LIGHT_CABLE : cableLabel(circuit.cable);
       add(cable, route.totalMm);
       const limitPct: number = circuit.kind === "lighting" ? VOLTAGE_DROP_LIMIT.lighting : VOLTAGE_DROP_LIMIT.other;
       const voltageDropPct = voltageDropPercent({ lengthMm: route.longestMm, currentA: circuit.protection.ratedA, crossSectionMm2: circuit.crossSectionMm2, phases: circuit.phases });
@@ -192,14 +227,20 @@ export function summarizeCabling(input: CablingInput): CableSummary {
     })
     .filter((row): row is CircuitCabling => row !== null);
 
-  // Svody k vypínačům: ze stropní krabice světla dolů k vypínači (stejné ve všech režimech)
+  // Svody k vypínačům: ze stropní krabice světla dolů k vypínači (stejné ve všech režimech);
+  // sběrnice = jeden sběrnicový kabel na ovládací místo
+  const busSwitches = new Set<string>();
   for (const link of input.switchLinks ?? []) {
     const light = byId.get(link.lightId);
     const switchNode = byId.get(link.switchId);
     if (!light || !switchNode) continue;
+    if (input.installation === "bus_loxone") {
+      if (busSwitches.has(link.switchId)) continue;
+      busSwitches.add(link.switchId);
+    }
     const mm = Math.round((manhattan(light, switchNode) + Math.max(0, profile.ceilingHeightMm - switchNode.heightMm)) * slack + profile.boxAllowanceMm * 2);
     for (const mode of ["BOTTOM", "TOP", "OPTIMIZED"] as const) totals[mode] += mm;
-    add(link.cable ?? SWITCH_LEG_CABLE, mm);
+    add(switchLegCable(input.installation, link.cable ?? SWITCH_LEG_CABLE), mm);
   }
   // Žaluzie: z ovladače vzhůru do nadpraží k pohonu; termostat: k tepelnému zdroji, jinak do rozváděče
   for (const run of input.controlRuns ?? []) {

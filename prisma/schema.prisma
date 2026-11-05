@@ -407,6 +407,7 @@ model InspectionRecord {
   insulationResistance          Float? // R_iso [MΩ]
   leakageCurrent                Float? // unikající / rozdílový proud I_PE / I_Δ [mA]
   functionalTest                Boolean? // funkční zkouška vyhověla (null = neprováděla se)
+  rcdTestJson                   String? // fáze 52: zkoušky RCD dle ČSN EN 61557-6 ed. 2 (0,5·IΔn, tΔ, IΔ, Zsm) – lib/rcd-test.ts
 
   // Termovize
   maxTempC   Float? // nejvyšší naměřená teplota [°C]

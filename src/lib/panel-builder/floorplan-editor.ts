@@ -8,7 +8,12 @@ import {
   calibrateFloorplanScale,
   elevationProfile,
   generateCircuitsFromFloorplan,
+  isInstallLevel,
+  isInstallMethod,
   mountHeight,
+  type DesignOptions,
+  type InstallLevel,
+  type InstallMethod,
   type ApplianceTag,
   type CableRoutingMode,
   type Calibration,
@@ -74,8 +79,16 @@ export const PALETTE: PaletteItem[] = [
   { id: "blind", group: "lights", label: "Žaluziový spínač / tlačítko (nahoru / dolů)", symbol: "ZAL", kind: "switch", control: "blind", wiringCategory: "WD_BLIND" },
   { id: "dimmer", group: "lights", label: "Stmívač (otočný / tlačítkový LED)", symbol: "STM", kind: "switch", wiringCategory: "WD_DIMMER" },
   { id: "pir", group: "lights", label: "Pohybové čidlo (PIR nástěnné / stropní)", symbol: "PIR", kind: "switch", wiringCategory: "WD_SENSOR", heightMm: 2200 },
-  { id: "switch-led", group: "lights", label: "Vypínač s orientační doutnavkou / LED (řazení 1S / 6S)", symbol: "S1S", kind: "switch", switchNo: "1S", led: true },
+  { id: "switch-led", group: "lights", label: "Vypínač s orientační doutnavkou / LED (řazení 1So / 6So)", symbol: "S1S", kind: "switch", switchNo: "1So", led: true },
   { id: "switch-ip44", group: "lights", label: "Vypínač IP44 (do vlhka / venkovní)", symbol: "S44", kind: "switch", switchNo: "1", ip44: true },
+  // Fáze 52: přesná katalogová řazení ABB (Tango / Levit / Time)
+  { id: "abb-1so", group: "lights", label: "ABB řazení 1So – jednopólový s orientační doutnavkou", symbol: "1So", kind: "switch", switchNo: "1So", fixedSwitchNo: "1So", led: true },
+  { id: "abb-1s", group: "lights", label: "ABB řazení 1S – jednopólový se signalizační doutnavkou", symbol: "1S", kind: "switch", switchNo: "1S", fixedSwitchNo: "1S", led: true },
+  { id: "abb-1sso", group: "lights", label: "ABB řazení 1SSo – signalizační + orientační doutnavka", symbol: "1SSo", kind: "switch", switchNo: "1SSo", fixedSwitchNo: "1SSo", led: true },
+  { id: "abb-1-1", group: "lights", label: "ABB řazení 1+1 – dvojitý s blokováním proti současnému stisku", symbol: "1+1", kind: "switch", switchNo: "1+1", fixedSwitchNo: "1+1" },
+  { id: "abb-6-6-0", group: "lights", label: "ABB řazení 6+6/0 – dvojitý střídavý s nulovou polohou", symbol: "6+6/0", kind: "switch", switchNo: "6+6/0", fixedSwitchNo: "6+6/0" },
+  { id: "abb-7so", group: "lights", label: "ABB řazení 7So – křížový s orientační doutnavkou", symbol: "7So", kind: "switch", switchNo: "7So", fixedSwitchNo: "7So", led: true },
+  { id: "abb-10so", group: "lights", label: "ABB řazení 1/0So – zapínací tlačítko s orientační doutnavkou", symbol: "1/0So", kind: "switch", variant: "button", switchNo: "1/0So", fixedSwitchNo: "1/0So", led: true },
   { id: "thermostat", group: "lights", label: "Pokojový termostat", symbol: "TER", kind: "switch", control: "thermostat", wiringCategory: "WD_THERMOSTAT", heightMm: 1500 },
   { id: "cooktop", group: "appliances", label: "Varná deska 3f (400 V)", symbol: "VD", kind: "appliance", tag: "cooktop_3p" },
   { id: "oven", group: "appliances", label: "Trouba", symbol: "TR", kind: "appliance", tag: "oven" },
@@ -86,6 +99,7 @@ export const PALETTE: PaletteItem[] = [
   { id: "boiler", group: "appliances", label: "Bojler", symbol: "BO", kind: "appliance", tag: "boiler" },
   { id: "heat-pump", group: "appliances", label: "Tepelné čerpadlo", symbol: "TČ", kind: "appliance", tag: "heat_pump" },
   { id: "wallbox", group: "appliances", label: "Wallbox EV", symbol: "EV", kind: "appliance", tag: "ev_charger" },
+  { id: "pv-inverter", group: "appliances", label: "Střídač FVE (chránič typ B)", symbol: "FVE", kind: "appliance", tag: "pv_inverter" },
 ];
 
 export const paletteItem = (id: string) => PALETTE.find((item) => item.id === id) ?? null;
@@ -138,6 +152,11 @@ export interface FloorplanDraft {
   series: string | null;
   /** Výchozí barva přístrojů (fáze 51). */
   color: string;
+  /** Fáze 52: úroveň instalace, způsob uložení kabelů, souběh kabelů a počítání dvojzásuvky. */
+  installation: InstallLevel;
+  installMethod: InstallMethod;
+  groupedCables: number;
+  countDoubleAsTwo: boolean;
   updatedAt: number;
 }
 
@@ -153,6 +172,10 @@ export const emptyDraft = (): FloorplanDraft => ({
   mode: "OPTIMIZED",
   series: "ABB|Levit",
   color: DEFAULT_COLOR,
+  installation: "classic",
+  installMethod: "C",
+  groupedCables: 1,
+  countDoubleAsTwo: true,
   updatedAt: 0,
 });
 
@@ -192,6 +215,10 @@ export function parseDraft(value: unknown): FloorplanDraft | null {
     mode: draft.mode === "BOTTOM" || draft.mode === "TOP" || draft.mode === "OPTIMIZED" ? draft.mode : "OPTIMIZED",
     series: typeof draft.series === "string" ? draft.series.slice(0, 80) : null,
     color: typeof draft.color === "string" && designColor(draft.color) ? draft.color : DEFAULT_COLOR,
+    installation: isInstallLevel(draft.installation) ? draft.installation : base.installation,
+    installMethod: isInstallMethod(draft.installMethod) ? draft.installMethod : base.installMethod,
+    groupedCables: Math.round(num(draft.groupedCables, 1, 1, 20)),
+    countDoubleAsTwo: typeof draft.countDoubleAsTwo === "boolean" ? draft.countDoubleAsTwo : true,
     updatedAt: num(draft.updatedAt, 0, 0, 1e15),
   };
 }
@@ -291,7 +318,7 @@ export function buildPlan(draft: FloorplanDraft): PlanBuild {
   });
   const panel = { x: panelElement.x, y: panelElement.y };
   const calibration = calibrateFloorplanScale({ walls: [{ px: [0, 0, 1000, 0], lengthMm: 1000 }], panelPx: [panel.x, panel.y], elevation: profile, routing: draft.mode });
-  return { plan: { rooms, nodes, mode: "classic" }, calibration, panel, routeNodes, switchLinks, controlRuns, dataNodeIds, elementOf };
+  return { plan: { rooms, nodes, mode: draft.installation }, calibration, panel, routeNodes, switchLinks, controlRuns, dataNodeIds, elementOf };
 }
 
 /** Kalibrace na 2 kliky: úsečka v mm současného měřítka a skutečná délka → nové měřítko a přepočet prvků. */
@@ -345,11 +372,14 @@ export function parseCableReport(json: string | null | undefined): CableReport |
   }
 }
 
+/** Volby návrhu dle ČSN 33 2130 ed. 4 z nákresu (fáze 52). */
+export const designOptionsOf = (draft: Pick<FloorplanDraft, "installMethod" | "groupedCables" | "countDoubleAsTwo">): DesignOptions => ({ installMethod: draft.installMethod, groupedCables: draft.groupedCables, countDoubleAsTwo: draft.countDoubleAsTwo });
+
 /** Živý výpočet nad nákresem (klient i server): okruhy dle ČSN 33 2130 ed. 4 a výkaz kabeláže ve 3 režimech. */
 export function analyzeDraft(draft: FloorplanDraft) {
   const build = buildPlan(draft);
-  const circuits = generateCircuitsFromFloorplan(build.plan, build.calibration);
-  const summary = summarizeCabling({ circuits: circuits.circuits, nodes: build.routeNodes, panel: build.panel, profile: draft.profile, selected: draft.mode, switchLinks: build.switchLinks, controlRuns: build.controlRuns, dataNodeIds: build.dataNodeIds });
+  const circuits = generateCircuitsFromFloorplan(build.plan, build.calibration, designOptionsOf(draft));
+  const summary = summarizeCabling({ circuits: circuits.circuits, nodes: build.routeNodes, panel: build.panel, profile: draft.profile, selected: draft.mode, switchLinks: build.switchLinks, controlRuns: build.controlRuns, dataNodeIds: build.dataNodeIds, installation: draft.installation });
   return { build, circuits, summary };
 }
 

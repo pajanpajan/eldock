@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { analyzeDraft } from "@/lib/panel-builder/floorplan-editor";
 import { ROUTING_LABEL } from "@/lib/panel-builder/floorplan-editor";
-import type { CableRoutingMode } from "@/engine/floorplan-bridge";
+import type { CableRoutingMode, Protection } from "@/engine/floorplan-bridge";
 import { cn } from "@/lib/utils";
 
 type Analysis = ({ ok: true } & ReturnType<typeof analyzeDraft>) | { ok: false; error: string };
@@ -16,7 +16,14 @@ const m = (value: number) => `${value.toLocaleString("cs-CZ", { maximumFractionD
 const SHORT: Record<CableRoutingMode, string> = { BOTTOM: "Spodem", TOP: "Vrchem", OPTIMIZED: "Optimalizovaně" };
 
 /** Živý výkaz kabeláže a okruhů (ČSN 33 2130 ed. 4) + „⚡ Vygenerovat rozváděč z tohoto půdorysu“. */
+/** „RCBO B10 typ A 30 mA“ / „B16 → chránič typ B“. */
+function protectionLabel(protection: Protection): string {
+  const base = `${protection.curve}${protection.ratedA}${protection.poles === "3P" ? " 3P" : ""}`;
+  return protection.device === "RCBO" ? `RCBO ${base} typ ${protection.rcd?.type ?? "A"} ${protection.rcd?.sensitivityMa ?? 30} mA` : base;
+}
+
 export function CablePanel({ analysis, mode, pending, onGenerate }: { analysis: Analysis; mode: CableRoutingMode; pending: boolean; onGenerate: (form: FormData) => void }) {
+  const circuitById = new Map(analysis.ok ? analysis.circuits.circuits.map((circuit) => [circuit.id, circuit]) : []);
   return (
     <section className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3 text-sm" aria-label="Výkaz kabeláže a okruhů" data-testid="cable-panel">
       <h3 className="font-bold">Výkaz kabeláže a okruhů (ČSN 33 2130 ed. 4)</h3>
@@ -49,6 +56,7 @@ export function CablePanel({ analysis, mode, pending, onGenerate }: { analysis: 
             </ul>
           </div>
           <div className="max-h-72 overflow-y-auto">
+            {/* Fáze 52: jištění a doplňková ochrana dle ČSN 33 2130 ed. 4, Iz v zadaném uložení, Zs v teplém stavu */}
             <table className="w-full text-xs" data-testid="cable-circuits">
               <thead className="text-muted-foreground">
                 <tr>
@@ -59,11 +67,18 @@ export function CablePanel({ analysis, mode, pending, onGenerate }: { analysis: 
                 </tr>
               </thead>
               <tbody>
-                {analysis.summary.circuits.map((row) => (
-                  <tr key={row.id} className="border-t border-border">
+                {analysis.summary.circuits.map((row) => {
+                  const circuit = circuitById.get(row.id);
+                  return (
+                  <tr key={row.id} className="border-t border-border" data-circuit={row.id}>
                     <td className="py-0.5 pr-1">
                       {row.label}
                       <span className="block font-mono text-[10px] text-muted-foreground">{row.cable}</span>
+                      {circuit ? (
+                        <span className={cn("block font-mono text-[10px]", circuit.loop.ok ? "text-muted-foreground" : "font-bold text-red-300")} data-testid="circuit-protection">
+                          {protectionLabel(circuit.protection)} · Iz {circuit.izA.toLocaleString("cs-CZ")} A · Zs {circuit.loop.zsOhm.toLocaleString("cs-CZ")} Ω ≤ {circuit.loop.zsMaxOhm.toLocaleString("cs-CZ")} Ω
+                        </span>
+                      ) : null}
                     </td>
                     <td className="text-center" title={row.routing === "TOP" ? "Vrchem" : "Spodem"}>
                       {row.routing === "TOP" ? <ArrowUp className="mx-auto size-3.5 text-sky-300" aria-label="vrchem" /> : <ArrowDown className="mx-auto size-3.5 text-amber-300" aria-label="spodem" />}
@@ -71,7 +86,8 @@ export function CablePanel({ analysis, mode, pending, onGenerate }: { analysis: 
                     <td className="text-right font-mono tabular-nums">{row.lengthsM[mode].toLocaleString("cs-CZ")} m</td>
                     <td className={cn("text-right font-mono tabular-nums", row.ok ? "text-emerald-300" : "font-bold text-red-300")}>{row.voltageDropPct.toLocaleString("cs-CZ")} %</td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

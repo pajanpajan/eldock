@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { VIDEO_ACCEPT, captureFrame, extractVideoFrames, loadVideo } from "@/lib/video-frames";
 import { createPanelProjectAction } from "@/server/actions/panel-builder";
 import { createScheduleProjectAction } from "@/server/actions/panel-projects";
+import { INSTALL_LEVELS, INSTALL_METHODS, type InstallLevel, type InstallMethod } from "@/engine/floorplan-bridge";
 import { SAMPLE_SCHEDULE, type ScheduleRoom } from "@/engine/room-schedule";
 
 import { ScheduleEditor } from "./ScheduleEditor";
@@ -68,7 +69,9 @@ export function NewProjectDialog({ credits = null }: { credits?: number | null }
   const [busy, setBusy] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [rooms, setRooms] = useState<ScheduleRoom[]>(SAMPLE_SCHEDULE);
-  const [installMode, setInstallMode] = useState<"classic" | "bus_loxone">("classic");
+  const [installMode, setInstallMode] = useState<InstallLevel>("classic");
+  const [installMethod, setInstallMethod] = useState<InstallMethod>("C");
+  const [countDoubleAsTwo, setCountDoubleAsTwo] = useState(true);
   const design = mode === "DESIGN";
   const schedule = mode === "SCHEDULE";
   const main = shots.find((shot) => shot.id === mainId) ?? null;
@@ -163,7 +166,7 @@ export function NewProjectDialog({ credits = null }: { credits?: number | null }
     const header = { name: String(form.get("name") ?? ""), customerName: String(form.get("customer") ?? "") || null, installationSite: String(form.get("site") ?? "") || null };
     if (schedule) {
       startTransition(async () => {
-        const result = await createScheduleProjectAction({ ...header, mode: installMode, rooms });
+        const result = await createScheduleProjectAction({ ...header, mode: installMode, installMethod, countDoubleAsTwo, rooms });
         if (!result.ok) return void toast.error(result.error);
         toast.success(`Rozváděč vygenerován: ${result.data.circuits} okruhů, ${result.data.devices} přístrojů${result.data.enclosure ? `, skříň ${result.data.enclosure}` : ""}.`);
         for (const warning of result.data.warnings.slice(0, 3)) toast.warning(warning);
@@ -271,12 +274,28 @@ export function NewProjectDialog({ credits = null }: { credits?: number | null }
           {schedule ? (
             <div className="flex flex-col gap-2">
               <div className="flex flex-wrap items-center gap-2 text-sm">
-                <Label htmlFor="pb-install">Ovládání světel</Label>
-                <select id="pb-install" className={selectClass} value={installMode} onChange={(event) => setInstallMode(event.target.value as "classic" | "bus_loxone")}>
-                  <option value="classic">Klasická instalace (vypínače, impulzní relé)</option>
-                  <option value="bus_loxone">Sběrnice Loxone (Tree, Miniserver)</option>
+                <Label htmlFor="pb-install">Úroveň instalace</Label>
+                <select id="pb-install" className={selectClass} value={installMode} onChange={(event) => setInstallMode(event.target.value as InstallLevel)}>
+                  {INSTALL_LEVELS.map((level) => (
+                    <option key={level.id} value={level.id}>
+                      {level.label}
+                    </option>
+                  ))}
                 </select>
+                <Label htmlFor="pb-method">Uložení kabelů</Label>
+                <select id="pb-method" className={selectClass} value={installMethod} onChange={(event) => setInstallMethod(event.target.value as InstallMethod)}>
+                  {INSTALL_METHODS.map((method) => (
+                    <option key={method.id} value={method.id}>
+                      {method.label}
+                    </option>
+                  ))}
+                </select>
+                <label className="flex items-center gap-1.5 text-xs">
+                  <input type="checkbox" checked={countDoubleAsTwo} onChange={(event) => setCountDoubleAsTwo(event.target.checked)} />
+                  Počítat dvojzásuvku jako 2 zásuvky dle ČSN 33 2130 ed. 4
+                </label>
               </div>
+              <p className="text-xs text-muted-foreground">{INSTALL_LEVELS.find((level) => level.id === installMode)?.description}</p>
               <ScheduleEditor rooms={rooms} onChange={setRooms} />
             </div>
           ) : design ? (

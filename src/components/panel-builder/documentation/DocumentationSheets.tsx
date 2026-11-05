@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 
 import { LogoMark } from "@/components/layout/Logo";
 import { DOCUMENT_SHEETS, type ComponentRow, type PartsRow } from "@/lib/panel-builder/documentation";
+import { FULL_COVER_NOTE, type ExternalInfluencesProtocol } from "@/lib/panel-builder/external-influences";
 import { ROUTING_LABEL, type CableReport } from "@/lib/panel-builder/floorplan-editor";
 import type { ManufacturerInfo } from "@/lib/panel-builder/project";
 import type { ThermalResult } from "@/lib/thermalCalculation";
@@ -44,6 +45,10 @@ export interface DocumentationData {
   wiring?: { designation: string; circuit: string; room: string | null; quantity: number; articleNumber: string; title: string }[];
   /** Výkaz kabeláže z 2D půdorysu (fáze 49). */
   cableReport?: CableReport | null;
+  /** Fáze 52: právní a normativní rámec, protokol o určení vnějších vlivů, rozvodnice pod omítku (úplný kryt). */
+  legalFramework?: readonly string[];
+  influences?: ExternalInfluencesProtocol;
+  fullCover?: boolean;
 }
 
 const svgUri = (svg: string) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
@@ -241,6 +246,17 @@ export function DocumentationSheets({ data }: { data: DocumentationData }) {
               ) : null}
             </dl>
           </section>
+          {data.legalFramework?.length ? (
+            <section className="text-[8pt]" data-testid="doc-legal" aria-label="Právní a normativní rámec">
+              <h2 className="mb-1 text-[10pt] font-bold">Právní a normativní rámec dokumentace</h2>
+              <ul className="list-disc pl-5">
+                {data.legalFramework.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+                {data.fullCover ? <li data-testid="doc-full-cover">{FULL_COVER_NOTE}</li> : null}
+              </ul>
+            </section>
+          ) : null}
           <div>
             <h2 className="mb-2 border-b border-black text-[11pt] font-bold">Obsah</h2>
             <ol className="flex flex-col gap-1 text-[10pt]">
@@ -405,6 +421,7 @@ export function DocumentationSheets({ data }: { data: DocumentationData }) {
             <PhaseBalance result={data.thermal} print />
           </div>
         </div>
+        {data.influences ? <InfluencesProtocol protocol={data.influences} /> : null}
       </Sheet>
 
       {/* List 6 – ES prohlášení o shodě a výrobní štítek */}
@@ -496,6 +513,54 @@ export function DocumentationSheets({ data }: { data: DocumentationData }) {
         </div>
       </Sheet>
     </div>
+  );
+}
+
+/** List 5 – protokol o určení vnějších vlivů (fáze 52) pro výchozí a pravidelné revize. */
+function InfluencesProtocol({ protocol }: { protocol: ExternalInfluencesProtocol }) {
+  return (
+    <section className="break-inside-avoid text-[7.5pt]" data-testid="doc-influences" aria-label="Protokol o určení vnějších vlivů">
+      <h3 className="text-[9pt] font-bold">Protokol o určení vnějších vlivů dle {protocol.basis}</h3>
+      <p>
+        Prostředí: <b>{protocol.environment}</b> ({protocol.codes}) · požadované krytí <b>{protocol.requiredIp}</b> (doporučeno {protocol.recommendedIp})
+        {protocol.requiredIk ? (
+          <>
+            {" "}
+            · odolnost <b>{protocol.requiredIk}</b>
+          </>
+        ) : null}
+      </p>
+      <table className="mt-1 w-full border-collapse">
+        <thead>
+          <tr>
+            <th className={cell}>Vliv</th>
+            <th className={cell}>Třída</th>
+            <th className={cell}>Charakteristika</th>
+            <th className={cell}>Stanovené opatření</th>
+          </tr>
+        </thead>
+        <tbody>
+          {protocol.rows.map((row) => (
+            <tr key={row.code} data-influence={row.code}>
+              <td className={cell}>
+                <b>{row.code}</b> {row.name}
+              </td>
+              <td className={`${cell} font-mono font-semibold`}>{row.value}</td>
+              <td className={cell}>{row.description}</td>
+              <td className={cell}>{row.measure}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {protocol.notes.length || protocol.construction.length ? (
+        <ul className="mt-1 list-disc pl-5" data-testid="doc-construction">
+          {[...protocol.notes, ...protocol.construction].map((note) => (
+            <li key={note}>{note}</li>
+          ))}
+        </ul>
+      ) : null}
+      <p className="mt-1 text-zinc-600">Protokol je součástí dokumentace pro výchozí a pravidelné revize (ČSN 33 2000-6 ed. 2). Určil: odpovědný projektant / komise dle TNI 33 2000-5-51:2022.</p>
+    </section>
   );
 }
 

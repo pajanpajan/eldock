@@ -141,7 +141,8 @@ describe("🎨 kaskáda výrobce → řada → barva", () => {
 describe("💡 paleta světel a vypínačů + kabeláž", () => {
   it("paleta obsahuje všech 13 běžných ovladačů", () => {
     const symbols = PALETTE.filter((item) => item.group === "lights" && item.kind === "switch").map((item) => item.symbol);
-    expect(symbols).toEqual(["S1", "S5", "S6", "S6+6", "S7", "T1", "T2", "ZAL", "STM", "PIR", "S1S", "S44", "TER"]);
+    // Fáze 52: + přesná katalogová řazení ABB (1So, 1S, 1SSo, 1+1, 6+6/0, 7So, 1/0So)
+    expect(symbols).toEqual(["S1", "S5", "S6", "S6+6", "S7", "T1", "T2", "ZAL", "STM", "PIR", "S1S", "S44", "1So", "1S", "1SSo", "1+1", "6+6/0", "7So", "1/0So", "TER"]);
   });
 
   it("S6+6 = korespondence pro obě větve, ZAL = CYKY-J 5×1,5 k pohonu, TER = kabel k topnému zdroji", () => {

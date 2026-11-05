@@ -1,5 +1,5 @@
 import type { CableSummary } from "@/engine/cable-routing";
-import { buildSwitchboardFromCircuits, generateCircuitsFromFloorplan, type InstallMode } from "@/engine/floorplan-bridge";
+import { buildSwitchboardFromCircuits, generateCircuitsFromFloorplan, type InstallLevel, type InstallMethod } from "@/engine/floorplan-bridge";
 import { floorplanFromSchedule, sanitizeSchedule, type ScheduleRoom } from "@/engine/room-schedule";
 import type { PrismaClient } from "@/generated/prisma/client";
 import { isHiddenManufacturer } from "@/lib/panel-builder/brands";
@@ -88,7 +88,10 @@ export async function updateProjectHeader(prisma: PrismaClient, projectId: strin
 
 export interface ScheduleProjectInput extends Omit<CreateProjectInput, "photoUrl" | "designMode" | "dims"> {
   rooms: readonly ScheduleRoom[];
-  mode: Extract<InstallMode, "classic" | "bus_loxone">;
+  mode: InstallLevel;
+  /** Fáze 52: způsob uložení kabelů a počítání dvojzásuvky jako 2 zásuvek (ČSN 33 2130 ed. 4). */
+  installMethod?: InstallMethod;
+  countDoubleAsTwo?: boolean;
 }
 
 /**
@@ -99,7 +102,7 @@ export async function createProjectFromSchedule(prisma: PrismaClient, input: Sch
   const rooms = sanitizeSchedule(input.rooms);
   if (!rooms.length) throw new WorkflowError("VALIDATION", "Zadejte alespoň jednu místnost.");
   const { plan, calibration } = floorplanFromSchedule(rooms, input.mode);
-  const circuits = generateCircuitsFromFloorplan(plan, calibration);
+  const circuits = generateCircuitsFromFloorplan(plan, calibration, { installMethod: input.installMethod, countDoubleAsTwo: input.countDoubleAsTwo });
   if (!circuits.circuits.length) throw new WorkflowError("VALIDATION", "Soupis neobsahuje žádný vývod (zásuvky, světla nebo spotřebiče).");
   const enclosures = (await prisma.panelEnclosure.findMany({ orderBy: { totalModules: "asc" } })).filter((row) => !isHiddenManufacturer(row.manufacturer));
   const board = buildSwitchboardFromCircuits(circuits, { mode: input.mode, enclosures });
@@ -202,7 +205,7 @@ export async function createProjectFromFloorplan(prisma: PrismaClient, input: Fl
   const { build, circuits, summary } = analyzeFloorplan(draft);
   if (!circuits.circuits.length) throw new WorkflowError("VALIDATION", "V půdorysu není žádný silový vývod (zásuvka, světlo nebo spotřebič).");
   const enclosures = (await prisma.panelEnclosure.findMany({ orderBy: { totalModules: "asc" } })).filter((row) => !isHiddenManufacturer(row.manufacturer));
-  const board = buildSwitchboardFromCircuits(circuits, { mode: "classic", enclosures });
+  const board = buildSwitchboardFromCircuits(circuits, { mode: draft.installation, enclosures });
   const header = { name: input.name, customerName: input.customerName, installationSite: input.installationSite, companyId: input.companyId, manufacturerInfo: input.manufacturerInfo, createdById: input.createdById };
   return createPlanProject(prisma, header, circuits, board, {
     data: { floorplanJson: JSON.stringify(draft), cableReportJson: JSON.stringify(cableReportOf(summary, draft.profile)) },

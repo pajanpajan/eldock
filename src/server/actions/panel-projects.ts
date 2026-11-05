@@ -53,7 +53,9 @@ const scheduleSchema = z.object({
   name: text.min(1),
   customerName: text.nullable(),
   installationSite: text.nullable(),
-  mode: z.enum(["classic", "bus_loxone"]),
+  mode: z.enum(["classic", "bus_loxone", "smart_retrofit"]),
+  installMethod: z.enum(["C", "B2", "A2", "A1"]).default("C"),
+  countDoubleAsTwo: z.boolean().default(true),
   rooms: z
     .array(
       z.object({

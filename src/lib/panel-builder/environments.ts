@@ -31,7 +31,7 @@ export const ENVIRONMENTS: readonly InstallEnvironment[] = [
     ambientTempC: 40,
     notes: ["UV stabilní skříň (polykarbonát / ocel s nátěrem).", "Teplota okolí −25 až +40 °C – oteplení se počítá pro +40 °C."],
   },
-  { id: "TIMBER", label: "Dřevostavba / Hořlavý podklad", codes: "CA2/CB1", minIp: 30, recommendedIp: 41, minIk: null, ambientTempC: 25, notes: ["Skříň se zkouškou žhavou smyčkou 850 °C (ČSN EN 60695-2-11).", "Doporučení: ochrana před obloukovou poruchou AFDD (ČSN 33 2000-4-42)."] },
+  { id: "TIMBER", label: "Dřevostavba / Pasivní dům / Hořlavý podklad", codes: "CA2/CB1", minIp: 30, recommendedIp: 41, minIk: null, ambientTempC: 25, notes: ["Skříň se zkouškou žhavou smyčkou 850 °C (ČSN EN 60695-2-11).", "Doporučení: ochrana před obloukovou poruchou AFDD (ČSN 33 2000-4-42)."] },
   { id: "HOT", label: "Kotelna / Střídačovna FVE / Průmysl", codes: "Zvýšená teplota – AA6", minIp: 30, recommendedIp: 41, minIk: null, ambientTempC: 35, notes: ["Teplota okolí 35 °C – výpočet oteplení započítá derating jističů."] },
 ];
 
@@ -46,3 +46,20 @@ export function enclosureFitsEnvironment(ipRating: string, environment: InstallE
 
 /** „IP 54“ – text pro tlačítko výběru vhodné skříně. */
 export const ipLabel = (value: number) => `IP ${String(value).padStart(2, "0")}`;
+
+
+/**
+ * Stavební detaily instalace (fáze 52): dřevostavba / pasivní dům a venkovní prostupy – vzduchotěsné
+ * krabice, manžety a obvodový zemnič V4A (ČSN 33 2000-5-54 ed. 3). Položky kusovníku a technické zprávy.
+ */
+export function constructionDetails(environment: string | null | undefined): string[] {
+  const timber = [
+    "Vzduchotěsná membránová přístrojová krabice (parotěsná vrstva dřevostavby)",
+    "EPDM manžeta pro vzduchotěsný prostup kabelu (např. ProClima ROFLEX)",
+  ];
+  const outdoor = ["Krabice do zateplení fasády (např. Kopos KEZ_KB)", "EPDM manžeta pro vzduchotěsný prostup kabelu (např. ProClima ROFLEX)"];
+  const earthing = "Obvodový zemnič z nerezové oceli V4A (AISI 316Ti) pod hydroizolací základové desky (ČSN 33 2000-5-54 ed. 3)";
+  if (environment === "TIMBER") return [...timber, outdoor[0], earthing];
+  if (environment === "OUTDOOR") return [...outdoor, earthing];
+  return [];
+}

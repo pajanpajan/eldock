@@ -1268,6 +1268,39 @@ export const RESEARCH_COMPONENTS: ResearchComponent[] = [
     source:
       "ABB SK catalogue variant list (2CDG110262/263/264R0011 = 4/8/12-fold); mapping R0264 -> 12-fold by elimination, not directly confirmed",
   },
+  // Fáze 52: kombinované svodiče T1+T2 bez předjištění (vnitřní nadproudový odpojovač, dálková signalizace)
+  {
+    manufacturer: "Saltek",
+    series: "FLP",
+    typeCode: "FLP-25-T1-VSF",
+    articleNumber: "FLP-25-T1-VSF",
+    category: "SPD",
+    poles: "3P+N",
+    ratedCurrentA: 0,
+    spdType: "T1+T2",
+    surgeCurrentKa: 25,
+    modulesCount: 8,
+    powerLossWatts: null,
+    description: "Kombinovaný svodič T1+T2 3+1, Iimp 25 kA/pól, bez nutnosti předjištění – vnitřní nadproudový odpojovač, dálková signalizace (VS)",
+    datasheetUrl: "https://www.saltek.eu/cs/produkty/svodice-prepeti-pro-silove-site",
+    source: "Fáze 52 – metodika ČSN 33 2130 ed. 4 (kombinovaný svodič T1+T2 bez nutnosti předjištění s vnitřním nadproudovým odpojovačem a dálkovou signalizací); šířka a Iimp orientačně, ověřte v katalogu Saltek",
+  },
+  {
+    manufacturer: "Saltek",
+    series: "FLP",
+    typeCode: "FLP-B+C-MAXI-VSF",
+    articleNumber: "FLP-B+C-MAXI-VSF",
+    category: "SPD",
+    poles: "3P+N",
+    ratedCurrentA: 0,
+    spdType: "T1+T2",
+    surgeCurrentKa: 25,
+    modulesCount: 8,
+    powerLossWatts: null,
+    description: "Kombinovaný svodič T1+T2 (B+C) MAXI 3+1, bez nutnosti předjištění – vnitřní nadproudový odpojovač, dálková signalizace (VS)",
+    datasheetUrl: "https://www.saltek.eu/cs/produkty/svodice-prepeti-pro-silove-site",
+    source: "Fáze 52 – metodika ČSN 33 2130 ed. 4 (kombinovaný svodič T1+T2 bez nutnosti předjištění s vnitřním nadproudovým odpojovačem a dálkovou signalizací); šířka a Iimp orientačně, ověřte v katalogu Saltek",
+  },
 ];
 
 /** ABB ComfortLine CA35R – nástěnná rozvodnice 144M (4 řady × 36M = 3 pole × 12M), 800 × 800 × 160 mm, IP44. */

@@ -31,6 +31,19 @@ const measurements = {
   insulationResistance: z.number().min(0).max(100_000).optional().nullable(),
   leakageCurrent: z.number().min(0).max(100).optional().nullable(),
   functionalTest: z.boolean().optional().nullable(),
+  rcdTest: z
+    .object({
+      ratedMa: z.number().min(6).max(1000),
+      type: z.enum(["AC", "A", "F", "B"]),
+      noTripAtHalf: z.boolean().nullable(),
+      tripTimeMs: z.number().min(0).max(5000).nullable(),
+      tripCurrentMa: z.number().min(0).max(5000).nullable(),
+      loopOhm: z.number().min(0).max(100).nullable(),
+      breakerA: z.number().min(1).max(630).nullable(),
+      breakerCurve: z.enum(["B", "C"]),
+    })
+    .optional()
+    .nullable(),
 };
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const defects = z.string().max(4000).optional().nullable();

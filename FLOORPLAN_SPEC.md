@@ -144,3 +144,22 @@ Výsledek vzorového domu z testu (klasická instalace):
 - `calibrateFloorplanScale({ elevation, routing })` počítá délku přívodu 3D modelem – generátor okruhů z ní bere ΔU a průřez.
 - Editor `/panel-builder/floorplan` (`lib/panel-builder/floorplan-editor.ts`: paleta, nákres v mm, `buildPlan`, `analyzeDraft`)
   a projekt z půdorysu `createProjectFromFloorplan` (domovní přístroje řady přes `pickWiringDevice`, výkaz v `cableReportJson`).
+
+## Metodika ČSN 33 2130 ed. 4 (fáze 52)
+
+- **Úrovně instalace** (`InstallMode`, `INSTALL_LEVELS`): `classic` (stromová topologie, svody CYKY-O, krabice KU 68),
+  `bus_loxone` (hvězda – každé svítidlo samostatným `CYKY-J 3×1,5` do rozváděče na vícepatrové svorkovnice, tlačítka na sběrnici
+  24 V DC `CAT7 / J-Y(St)Y 2×2×0,8`, u EV / TČ / FVE elektroměr RS-485 a 2× zakončovací rezistor 120 Ω) a `smart_retrofit`
+  (v každé krabici vypínače N → svody vždy CYKY-J, hluboké krabice KPR 68 min. 65 mm, modul pod vypínač na větev; od 4 míst tlačítka
+  bez impulzního relé). `smart_relay` zůstává jen pro API / testy.
+- **Chrániče:** nikdy typ AC. Světla B10 nikdy na společném chrániči se zásuvkami – výchozí RCBO 1P+N B10 typ A 30 mA na každý
+  světelný okruh (`rcd: "own"`), volitelně chrániče typ A jen pro světla (`lightingProtection: "rcd_group"`, `rcd: "A30L"`).
+  EV / TČ / FVE (`RCD_TYPE_B_TAGS`) každý vlastní chránič typ B.
+- **Zásuvky:** limit 10 skutečných zásuvek na okruh B16, dvojzásuvka = 2 (`countDoubleAsTwo`, výchozí ano).
+- **Průřez** (`sized`): nejmenší od výchozího, který splní ΔU (3 / 5 %), koordinaci IB ≤ In ≤ Iz a I2 ≤ 1,45 · Iz
+  (`checkCoordination`, `cableAmpacity` – uložení C / B2 / A2 / A1, 1f 2 / 3f 3 zatížené žíly, souběh `groupingFactor`,
+  tab. 9: 1,5 mm² v B2 / A1 / A2 max. 10 A) a impedanci smyčky (`loopImpedanceCheck`: Zs = 0,3 Ω přívodu + 2·L·ρ20/S,
+  Ik,min = 0,8·U0 / (1,5·Zs) ≥ Ia a Zsm ≤ 2·U0 / (3·Ia)). Každé zvětšení = varování s důvodem.
+- **Synergie:** FVE + TČ → SG Ready relé; EV + (FVE nebo TČ) → elektroměr pro DLM; `centralStop` → tlačítko TOTAL STOP.
+- **Stavební detaily** (`constructionDetails` v `environments.ts`): dřevostavba / venkovní prostupy → membránové krabice,
+  ROFLEX, Kopos KEZ_KB a zemnič V4A do kusovníku.

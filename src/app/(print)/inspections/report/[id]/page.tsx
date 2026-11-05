@@ -125,7 +125,7 @@ export default async function InspectionReportPage({ params }: Props) {
               ))}
             </tbody>
           </table>
-          {!appliance ? <p className="mt-1 text-[8pt] text-zinc-600">Prohlídka, zkoušení a měření dle ČSN 33 2000-6 ed. 2; spojitost ochranných a pospojovacích vodičů, izolační odpor zkušebním napětím 500 V DC.</p> : null}
+          {!appliance ? <p className="mt-1 text-[8pt] text-zinc-600">Prohlídka, zkoušení a měření dle ČSN 33 2000-6 ed. 2; spojitost ochranných a pospojovacích vodičů, izolační odpor zkušebním napětím 500 V DC; proudové chrániče dle ČSN EN 61557-6 ed. 2 (0,5 · IΔn, tΔ při 1 · IΔn, IΔ) a impedance smyčky Zsm ≤ ⅔ · Zs,max.</p> : null}
         </section>
 
         {protocolBatteryPassport(equipment) ? (

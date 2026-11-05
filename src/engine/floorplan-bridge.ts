@@ -7,6 +7,7 @@ import type { ComponentCategory } from "@/generated/prisma/enums";
 import { estimatePowerLoss } from "@/lib/panel-builder/catalog";
 import type { ItemConfig } from "@/lib/panel-builder/configurator";
 import type { EnclosureLike } from "@/lib/panel-builder/enclosures";
+import { constructionDetails } from "@/lib/panel-builder/environments";
 
 // ===========================================================================
 //  1. Kalibrace měřítka půdorysu a délky kabelů
@@ -197,6 +198,8 @@ export function homeRunLength(panel: { x: number; y: number }, point: { x: numbe
 
 /** Měrný odpor mědi při provozní teplotě 70 °C [Ω·mm²/m]. */
 export const COPPER_RESISTIVITY = 0.0225;
+/** Měrný odpor mědi při 20 °C [Ω·mm²/m] – impedance smyčky ve studeném stavu (měření při revizi). */
+export const COPPER_RESISTIVITY_20 = 0.0178;
 /** Max. úbytek napětí: světelné obvody 3 %, ostatní (zásuvky, spotřebiče) 5 %. */
 export const VOLTAGE_DROP_LIMIT = { lighting: 3, other: 5 } as const;
 
@@ -207,11 +210,111 @@ export function voltageDropPercent(input: { lengthMm: number; currentA: number; 
   return Math.round((volts / (input.phases === 3 ? 400 : 230)) * 10000) / 100;
 }
 
+// ---------------------------------------------------------------------------
+//  1c. Dimenzování vodičů podle způsobu uložení a impedance smyčky (fáze 52)
+// ---------------------------------------------------------------------------
+
+/**
+ * Referenční způsob uložení (ČSN 33 2000-5-52 ed. 2, ČSN 33 2130 ed. 4 tab. 9): C = přímo ve zdi pod
+ * omítkou, B2 = v trubce / liště, A2 / A1 = v tepelně izolační stěně (dřevostavba, zateplený podhled).
+ */
+export type InstallMethod = "C" | "B2" | "A2" | "A1";
+export const INSTALL_METHODS: readonly { id: InstallMethod; label: string }[] = [
+  { id: "C", label: "C – ve zdi pod omítkou (zdivo)" },
+  { id: "B2", label: "B2 – v trubce / liště ve zdi" },
+  { id: "A2", label: "A2 – kabel v tepelné izolaci (dřevostavba)" },
+  { id: "A1", label: "A1 – vodiče v trubce v tepelné izolaci" },
+];
+export const isInstallMethod = (value: unknown): value is InstallMethod => INSTALL_METHODS.some((method) => method.id === value);
+
+/** Proudová zatížitelnost Cu / PVC při 30 °C [A]: 2 zatížené žíly (1f) a 3 zatížené žíly (3f). */
+const AMPACITY: Record<InstallMethod, Record<1 | 3, Record<number, number>>> = {
+  C: { 1: { 1.5: 19.5, 2.5: 27, 4: 36, 6: 46, 10: 63, 16: 85 }, 3: { 1.5: 17.5, 2.5: 24, 4: 32, 6: 41, 10: 57, 16: 76 } },
+  B2: { 1: { 1.5: 16.5, 2.5: 23, 4: 30, 6: 38, 10: 52, 16: 69 }, 3: { 1.5: 15, 2.5: 20, 4: 27, 6: 34, 10: 46, 16: 62 } },
+  A2: { 1: { 1.5: 14, 2.5: 18.5, 4: 25, 6: 32, 10: 43, 16: 57 }, 3: { 1.5: 13, 2.5: 17.5, 4: 23, 6: 29, 10: 39, 16: 52 } },
+  A1: { 1: { 1.5: 14.5, 2.5: 18.5, 4: 26, 6: 34, 10: 46, 16: 61 }, 3: { 1.5: 13.5, 2.5: 18, 4: 24, 6: 31, 10: 42, 16: 56 } },
+};
+/** ČSN 33 2130 ed. 4 tab. 9: 1,5 mm² v trubce nebo v tepelné izolaci jistit nejvýš 10 A. */
+const TAB9_MAX_BREAKER: Partial<Record<InstallMethod, Partial<Record<number, number>>>> = { B2: { 1.5: 10 }, A2: { 1.5: 10 }, A1: { 1.5: 10 } };
+
+/** Součinitel seskupení kabelů ve svazku / v izolaci (ČSN 33 2000-5-52 tab. B.52.17, řádek 1). */
+export function groupingFactor(cables: number): number {
+  const count = Math.max(1, Math.round(cables));
+  return ([1, 1, 0.8, 0.7, 0.65, 0.6, 0.57, 0.54, 0.52] as const)[count] ?? 0.5;
+}
+
+/** Skutečná zatížitelnost Iz [A] průřezu v daném uložení po korekci seskupením. */
+export function cableAmpacity(input: { crossSectionMm2: number; method: InstallMethod; phases: 1 | 3; groupedCables?: number }): number {
+  const base = AMPACITY[input.method][input.phases][input.crossSectionMm2] ?? 0;
+  return Math.round(base * groupingFactor(input.groupedCables ?? 1) * 10) / 10;
+}
+
+const BREAKER_SERIES = [6, 10, 13, 16, 20, 25, 32, 40, 50, 63] as const;
+
+/** Nejvyšší jmenovitý proud jističe pro průřez a uložení (In ≤ Iz a omezení tab. 9). */
+export function maxBreakerFor(input: { crossSectionMm2: number; method: InstallMethod; phases: 1 | 3; groupedCables?: number }): number {
+  const iz = cableAmpacity(input);
+  const cap = TAB9_MAX_BREAKER[input.method]?.[input.crossSectionMm2] ?? Infinity;
+  return [...BREAKER_SERIES].reverse().find((rating) => rating <= iz && rating <= cap) ?? 0;
+}
+
+/**
+ * Koordinace vodiče a jističe (ČSN 33 2000-4-43 čl. 433.1): IB ≤ In ≤ Iz a I2 ≤ 1,45 · Iz, kde pro
+ * jistič dle ČSN EN 60898 je I2 = 1,45 · In. Navíc omezení tab. 9 ČSN 33 2130 ed. 4.
+ */
+export function checkCoordination(input: { designCurrentA: number; ratedA: number; crossSectionMm2: number; method: InstallMethod; phases: 1 | 3; groupedCables?: number }) {
+  const iz = cableAmpacity(input);
+  const i2 = 1.45 * input.ratedA;
+  const maxBreakerA = maxBreakerFor(input);
+  const ok = input.designCurrentA <= input.ratedA && input.ratedA <= iz && i2 <= 1.45 * iz && input.ratedA <= maxBreakerA;
+  return { izA: iz, i2A: Math.round(i2 * 10) / 10, maxBreakerA, ok };
+}
+
+/** Výchozí impedance smyčky přívodu (distribuční síť + přípojka) na svorkách rozváděče [Ω]. */
+export const DEFAULT_SUPPLY_LOOP_OHM = 0.3;
+export const NOMINAL_U0 = 230;
+
+/**
+ * Impedance poruchové smyčky (ČSN 33 2000-4-41, ČSN 33 2000-6 ed. 2): Zs = Z přívodu + R smyčky vedení
+ * (fázový a ochranný vodič stejného průřezu, 20 °C). Teplý stav = 1,5 × Zs, pokles napětí na 0,8 · U0:
+ * Ik,min = 0,8 · U0 / (1,5 · Zs) ≥ Ia a měřená hodnota Zsm ≤ 2 · U0 / (3 · Ia); Ia = 5 · In (B) / 10 · In (C).
+ */
+export function loopImpedanceCheck(input: { lengthMm: number; crossSectionMm2: number; ratedA: number; curve: "B" | "C"; supplyLoopOhm?: number }) {
+  const loopOhm = (2 * (input.lengthMm / 1000) * COPPER_RESISTIVITY_20) / input.crossSectionMm2;
+  const zs = (input.supplyLoopOhm ?? DEFAULT_SUPPLY_LOOP_OHM) + loopOhm;
+  const ia = (input.curve === "C" ? 10 : 5) * input.ratedA;
+  const ikMin = (0.8 * NOMINAL_U0) / (1.5 * zs);
+  const zsMax = (2 * NOMINAL_U0) / (3 * ia);
+  const round = (value: number, digits = 3) => Math.round(value * 10 ** digits) / 10 ** digits;
+  return { zsOhm: round(zs), zsMaxOhm: round(zsMax), iaA: ia, ikMinA: Math.round(ikMin), ok: ikMin >= ia && zs <= zsMax };
+}
+
 // ===========================================================================
 //  2. Ovládání světel – matice řazení vypínačů
 // ===========================================================================
 
-export type InstallMode = "classic" | "smart_relay" | "bus_loxone";
+/**
+ * Úroveň architektury instalace (fáze 52): klasika 230/400 V, plně sběrnicová Smart Home (hvězda
+ * silnoproudu do rozváděče + sběrnice 24 V DC) a hybridní retrofit (moduly pod vypínač – v každé
+ * krabici vypínače povinný N). `smart_relay` = chytrá relé v rozváděči (fáze 44, jen API / testy).
+ */
+export type InstallMode = "classic" | "smart_relay" | "bus_loxone" | "smart_retrofit";
+export type InstallLevel = Exclude<InstallMode, "smart_relay">;
+export const INSTALL_LEVELS: readonly { id: InstallLevel; label: string; description: string }[] = [
+  { id: "classic", label: "1. Klasická instalace 230/400 V", description: "Okruhová / stromová topologie, lokální vypínače, CYKY-J / CYKY-O, krabice KU 68." },
+  { id: "bus_loxone", label: "2. Plně sběrnicová Smart Home – Loxone / KNX / TapHome / ABB-free@home", description: "Každý spínaný vývod samostatným kabelem do rozváděče (hvězda), tlačítka a čidla na sběrnici 24 V DC." },
+  { id: "smart_retrofit", label: "3. Hybridní / Retrofit – Zigbee / Matter / Home Assistant", description: "Klasická kabeláž, v každé krabici vypínače nulový vodič N (CYKY-J), hluboké krabice min. 65 mm a moduly pod vypínač." },
+];
+export const isInstallLevel = (value: unknown): value is InstallLevel => INSTALL_LEVELS.some((level) => level.id === value);
+
+/** Prvky kusovníku podle úrovně instalace (fáze 52). */
+export const RETROFIT_MODULE = "Lokální chytrý modul pod vypínač (Zigbee / Matter, s nulovým vodičem N)";
+export const BOX_STANDARD = "Přístrojová krabice KU 68 (standardní)";
+export const BOX_DEEP = "Hluboká přístrojová krabice KPR 68 / KU 68 hluboká (min. 65 mm)";
+export const BUS_TERMINALS = "Vícepatrová instalační svorkovnice L / N / PE (hvězda do rozváděče)";
+export const BUS_CABLE = "Sběrnicový kabel 24 V DC (CAT7 / KNX TP J-Y(St)Y 2×2×0,8)";
+export const RS485_TERMINATOR = "Zakončovací rezistor 120 Ω (sběrnice RS-485)";
+export const RS485_METER = "Elektroměr 3f Modbus RS-485 (např. Eastron SDM630)";
 
 export interface WiringItem {
   /** Kde přístroj je: na stěně (krabice) nebo v rozváděči (DIN lišta). */
@@ -264,8 +367,22 @@ export function resolveSwitchWiring(input: { groups: 1 | 2; switchCount: number;
       note: "Loxone Tree: ovládání po sběrnici Tree, světla a žaluzie na reléové výstupy Miniserveru / Relay Extension.",
     };
   }
-  // Klasická instalace
   const wall = (name: string, razeni: string, count: number): WiringItem => ({ place: "wall", name, razeni, count });
+  if (input.mode === "smart_retrofit") {
+    // Retrofit: klasické řazení, od 4 míst tlačítka na vstup modulu (bez impulzního relé); modul pod vypínač na každou větev
+    const items =
+      S >= 4 || (S === 3 && G === 2)
+        ? [wall(G === 2 ? "Dvojité tlačítko" : "Tlačítko", G === 2 ? "1/0+1/0" : "1/0", S)]
+        : S === 1
+          ? [G === 1 ? wall("Jednopólový spínač", "1", 1) : wall("Sériový (lustrový) spínač", "5", 1)]
+          : S === 2
+            ? [G === 1 ? wall("Střídavý přepínač", "6", 2) : wall("Dvojitý střídavý přepínač", "6+6 / 5B", 2)]
+            : [wall("Střídavý přepínač", "6", 2), wall("Křížový přepínač", "7", 1)];
+    items.push({ place: "wall", name: RETROFIT_MODULE, razeni: null, count: G + blinds });
+    if (blinds) items.push(wall("Žaluziové tlačítko (nahoru / dolů)", "1/0+1/0", blinds));
+    return { items, io: { di: 0, do: 0 }, impulseRelays: 0, treeDevices: 0, note: "Retrofit: v každé krabici vypínače nulový vodič N (CYKY-J, ne CYKY-O), hluboká krabice min. 65 mm pro modul pod vypínač." };
+  }
+  // Klasická instalace
   let items: WiringItem[];
   let impulseRelays = 0;
   let note: string;
@@ -291,7 +408,9 @@ export function resolveSwitchWiring(input: { groups: 1 | 2; switchCount: number;
 //  3. Normativní shlukovač okruhů (ČSN 33 2130 ed. 4)
 // ===========================================================================
 
-export type ApplianceTag = "oven" | "dishwasher" | "washer" | "dryer" | "boiler" | "microwave_builtin" | "cooktop_3p" | "fridge" | "ev_charger" | "heat_pump";
+export type ApplianceTag = "oven" | "dishwasher" | "washer" | "dryer" | "boiler" | "microwave_builtin" | "cooktop_3p" | "fridge" | "ev_charger" | "heat_pump" | "pv_inverter";
+/** Spotřebiče s výkonovou elektronikou (DC složka) – proudový chránič typ B (příp. F), nikdy A / AC. */
+export const RCD_TYPE_B_TAGS: readonly ApplianceTag[] = ["ev_charger", "heat_pump", "pv_inverter"];
 
 /** Výchozí příkon [W] a součinitel soudobosti podle štítku. */
 export const APPLIANCES: Record<ApplianceTag, { label: string; powerW: number; simultaneity: number }> = {
@@ -305,12 +424,13 @@ export const APPLIANCES: Record<ApplianceTag, { label: string; powerW: number; s
   fridge: { label: "Lednice", powerW: 300, simultaneity: 1 },
   ev_charger: { label: "Nabíječka elektromobilu", powerW: 11000, simultaneity: 1 },
   heat_pump: { label: "Tepelné čerpadlo", powerW: 6000, simultaneity: 1 },
+  pv_inverter: { label: "Střídač FVE", powerW: 10000, simultaneity: 1 },
 };
 
 /** Spotřebiče s vlastním 1f okruhem B16A (od 2 000 W, mikrovlnka jen vestavná ≥ 2 000 W). */
 const DEDICATED_1P = new Set<ApplianceTag>(["oven", "dishwasher", "washer", "dryer", "boiler", "microwave_builtin"]);
 const DEDICATED_MIN_W = 2000;
-/** Max. zásuvkových vývodů na okruh (dvojzásuvka = 1 vývod). */
+/** Max. zásuvek na zásuvkový okruh B16A (ČSN 33 2130 ed. 4: skutečné zásuvky, dvojzásuvka = 2). */
 export const MAX_OUTLETS_PER_CIRCUIT = 10;
 /** Max. světelných bodů na světelný okruh. */
 export const MAX_LIGHTS_PER_CIRCUIT = 10;
@@ -340,7 +460,7 @@ export interface Circuit {
   crossSectionMm2: number;
   rooms: string[];
   nodeIds: string[];
-  /** Zásuvkové vývody (dvojzásuvka = 1). */
+  /** Zásuvky okruhu (dvojzásuvka = 2 dle ČSN 33 2130 ed. 4, nebo 1 při vypnutém přepínači). */
   outlets: number;
   /** Instalovaný a soudobý příkon [W]. */
   installedW: number;
@@ -348,8 +468,32 @@ export interface Circuit {
   /** Nejdelší kabel okruhu [mm] a úbytek napětí při In [%]. */
   lengthMm: number;
   voltageDropPct: number;
-  /** Pod jakou proudovou ochranu okruh patří: společný chránič 30 mA typ A, vlastní typ B, nebo vlastní RCBO. */
-  rcd: "A30" | "B30" | "own";
+  /**
+   * Pod jakou proudovou ochranu okruh patří: společný chránič 30 mA typ A (zásuvky, spotřebiče),
+   * chránič typ A vyhrazený jen pro světla (`A30L`), vlastní typ B (EV / TČ / FVE), nebo vlastní RCBO.
+   */
+  rcd: "A30" | "A30L" | "B30" | "own";
+  /** Spotřebič vyhrazeného okruhu (fáze 52 – synergický energetický management). */
+  tag?: ApplianceTag;
+  /** Fáze 52: zatížitelnost Iz [A] v zadaném uložení a impedance smyčky. */
+  izA: number;
+  loop: { zsOhm: number; zsMaxOhm: number; iaA: number; ikMinA: number; ok: boolean };
+}
+
+/** Volby návrhu dle metodiky ČSN 33 2130 ed. 4 (fáze 52). */
+export interface DesignOptions {
+  /** Způsob uložení kabelů v budově (výchozí C – ve zdi pod omítkou). */
+  installMethod?: InstallMethod;
+  /** Počet souběžně uložených kabelů (svazek v izolaci / liště) – korekce seskupením. */
+  groupedCables?: number;
+  /** Počítat dvojzásuvku jako 2 zásuvky (výchozí ano). */
+  countDoubleAsTwo?: boolean;
+  /** Doplňková ochrana světel: RCBO 1P+N typ A na každý okruh (výchozí), nebo chránič typ A jen pro světla. */
+  lightingProtection?: "rcbo" | "rcd_group";
+  /** Impedance smyčky přívodu na svorkách rozváděče [Ω]. */
+  supplyLoopOhm?: number;
+  /** Prostředí instalace (`environments.ts`) – stavební detaily do kusovníku. */
+  environment?: string | null;
 }
 
 export interface BomItem {
@@ -398,8 +542,12 @@ const threePhaseSection = (ratedA: number) => (ratedA <= 16 ? 2.5 : ratedA <= 25
  * rozváděče nejbližší první) a světla po místnostech do min. 2 nezávislých okruhů. Délka kabelu
  * a úbytek napětí z kalibrace; při překročení se průřez zvětší.
  */
-export function generateCircuitsFromFloorplan(plan: Floorplan, calibration: Calibration): CircuitPlan {
+export function generateCircuitsFromFloorplan(plan: Floorplan, calibration: Calibration, options: DesignOptions = {}): CircuitPlan {
   const warnings: string[] = [];
+  const method: InstallMethod = options.installMethod ?? "C";
+  const grouped = Math.max(1, Math.round(options.groupedCables ?? 1));
+  const countDoubleAsTwo = options.countDoubleAsTwo ?? true;
+  const lightingProtection = options.lightingProtection ?? "rcbo";
   const bom = new Map<string, number>();
   const circuits: Circuit[] = [];
   const roomName = new Map(plan.rooms.map((room) => [room.id, room.name]));
@@ -412,24 +560,46 @@ export function generateCircuitsFromFloorplan(plan: Floorplan, calibration: Cali
     return `${kind}-${value}`;
   };
 
-  /** Úbytek napětí při In; při překročení limitu větší průřez (max. 2 kroky). */
-  function sized(phases: 1 | 3, ratedA: number, startMm2: number, lengthMm: number, limit: number, label: string) {
+  /**
+   * Průřez okruhu (fáze 52): nejmenší od výchozího, který splní úbytek napětí (příloha A / E ČSN 33 2130
+   * ed. 4: světla ≤ 3 %, ostatní ≤ 5 %), koordinaci IB ≤ In ≤ Iz a I2 ≤ 1,45 · Iz v zadaném uložení
+   * se seskupením (tab. 9) a impedanci smyčky v teplém stavu. Nejvýš 3 stupně, každý důvod = varování.
+   */
+  function sized(protection: Protection, phases: 1 | 3, designA: number, startMm2: number, lengthMm: number, limit: number, label: string) {
+    const ratedA = protection.ratedA;
+    const evaluate = (mm2: number) => ({
+      drop: voltageDropPercent({ lengthMm, currentA: ratedA, crossSectionMm2: mm2, phases }),
+      coordination: checkCoordination({ designCurrentA: designA, ratedA, crossSectionMm2: mm2, method, phases, groupedCables: grouped }),
+      loop: loopImpedanceCheck({ lengthMm, crossSectionMm2: mm2, ratedA, curve: protection.curve, supplyLoopOhm: options.supplyLoopOhm }),
+    });
     let mm2 = startMm2;
-    let drop = voltageDropPercent({ lengthMm, currentA: ratedA, crossSectionMm2: mm2, phases });
-    for (let step = 0; step < 2 && drop > limit; step++) {
+    let result = evaluate(mm2);
+    const first = result;
+    for (let step = 0; step < 3 && (result.drop > limit || !result.coordination.ok || !result.loop.ok) && nextSize(mm2) !== mm2; step++) {
       mm2 = nextSize(mm2);
-      drop = voltageDropPercent({ lengthMm, currentA: ratedA, crossSectionMm2: mm2, phases });
+      result = evaluate(mm2);
     }
-    if (mm2 !== startMm2) warnings.push(`${label}: úbytek napětí nad ${limit} % – průřez zvětšen na ${String(mm2).replace(".", ",")} mm².`);
-    if (drop > limit) warnings.push(`${label}: úbytek napětí ${String(drop).replace(".", ",")} % překračuje ${limit} % i po zvětšení průřezu – zkraťte trasu.`);
-    return { mm2, drop };
+    const size = (value: number) => String(value).replace(".", ",");
+    if (mm2 !== startMm2) {
+      const reasons = [
+        first.drop > limit ? `úbytek napětí nad ${limit} %` : null,
+        !first.coordination.ok ? `Iz ${size(first.coordination.izA)} A v uložení ${method}${grouped > 1 ? ` (souběh ${grouped} kabelů)` : ""} < In ${ratedA} A – alternativa: jistič ${first.coordination.maxBreakerA || "–"} A` : null,
+        !first.loop.ok ? `impedance smyčky ${size(first.loop.zsOhm)} Ω > ${size(Math.min(first.loop.zsMaxOhm, (0.8 * NOMINAL_U0) / (1.5 * first.loop.iaA)))} Ω (Ia ${first.loop.iaA} A)` : null,
+      ].filter(Boolean);
+      warnings.push(`${label}: ${reasons.join("; ")} – průřez zvětšen na ${size(mm2)} mm².`);
+    }
+    if (result.drop > limit) warnings.push(`${label}: úbytek napětí ${size(result.drop)} % překračuje ${limit} % i po zvětšení průřezu – zkraťte trasu.`);
+    if (!result.coordination.ok) warnings.push(`${label}: nesplněna podmínka IB ≤ In ≤ Iz (Iz ${size(result.coordination.izA)} A) – snižte jištění nebo změňte uložení.`);
+    if (!result.loop.ok) warnings.push(`${label}: impedance smyčky ${size(result.loop.zsOhm)} Ω nevyhoví samočinnému odpojení (Ik,min ${result.loop.ikMinA} A < Ia ${result.loop.iaA} A) – zkraťte trasu.`);
+    return { mm2, drop: result.drop, izA: result.coordination.izA, loop: result.loop };
   }
 
-  function push(base: Omit<Circuit, "id" | "cable" | "crossSectionMm2" | "voltageDropPct" | "lengthMm">, nodes: readonly FloorNode[], startMm2: number) {
+  function push(base: Omit<Circuit, "id" | "cable" | "crossSectionMm2" | "voltageDropPct" | "lengthMm" | "izA" | "loop">, nodes: readonly FloorNode[], startMm2: number) {
     const lengthMm = Math.max(0, ...nodes.map(length));
     const limit = base.kind === "lighting" ? VOLTAGE_DROP_LIMIT.lighting : VOLTAGE_DROP_LIMIT.other;
-    const { mm2, drop } = sized(base.phases, base.protection.ratedA, startMm2, lengthMm, limit, base.label);
-    circuits.push({ ...base, id: nextId(base.kind), cable: cableFor(base.phases, mm2), crossSectionMm2: mm2, lengthMm, voltageDropPct: drop });
+    const designA = base.phases === 3 ? base.designW / (Math.sqrt(3) * 400) : base.designW / NOMINAL_U0;
+    const { mm2, drop, izA, loop } = sized(base.protection, base.phases, Math.min(designA, base.protection.ratedA), startMm2, lengthMm, limit, base.label);
+    circuits.push({ ...base, id: nextId(base.kind), cable: cableFor(base.phases, mm2), crossSectionMm2: mm2, lengthMm, voltageDropPct: drop, izA, loop });
   }
 
   const sockets: FloorNode[] = [];
@@ -455,7 +625,7 @@ export function generateCircuitsFromFloorplan(plan: Floorplan, calibration: Cali
 
     if (tag && DEDICATED_1P.has(tag) && powerW >= DEDICATED_MIN_W) {
       push(
-        { label: `${appliance!.label} – ${room}`, kind: "dedicated", phases: 1, protection: { device: "MCB", poles: "1P", curve: "B", ratedA: 16 }, rooms: [node.room], nodeIds: [node.id], outlets: 1, installedW: powerW, designW: powerW * appliance!.simultaneity, rcd: "A30" },
+        { label: `${appliance!.label} – ${room}`, kind: "dedicated", phases: 1, protection: { device: "MCB", poles: "1P", curve: "B", ratedA: 16 }, rooms: [node.room], nodeIds: [node.id], outlets: 1, installedW: powerW, designW: powerW * appliance!.simultaneity, rcd: "A30", tag },
         [node],
         2.5,
       );
@@ -488,7 +658,7 @@ export function generateCircuitsFromFloorplan(plan: Floorplan, calibration: Cali
       );
       continue;
     }
-    if (tag === "ev_charger" || tag === "heat_pump") {
+    if (tag && RCD_TYPE_B_TAGS.includes(tag)) {
       const ratedA = threePhaseRating(powerW);
       push(
         {
@@ -502,6 +672,7 @@ export function generateCircuitsFromFloorplan(plan: Floorplan, calibration: Cali
           installedW: powerW,
           designW: powerW * appliance!.simultaneity,
           rcd: "B30",
+          tag,
         },
         [node],
         threePhaseSection(ratedA),
@@ -518,15 +689,18 @@ export function generateCircuitsFromFloorplan(plan: Floorplan, calibration: Cali
     for (const node of [...nodes].sort((a, b) => length(a) - length(b))) groups.set(node.room, [...(groups.get(node.room) ?? []), node]);
     return [...groups.entries()].sort((a, b) => Math.min(...a[1].map(length)) - Math.min(...b[1].map(length)) || (roomOrder.get(a[0]) ?? 0) - (roomOrder.get(b[0]) ?? 0));
   };
+  // ČSN 33 2130 ed. 4: limit 10 platí pro skutečné zásuvky – dvojzásuvka = 2 (přepínač `countDoubleAsTwo`)
+  const outletsOf = (node: FloorNode) => (node.kind === "double_socket" && countDoubleAsTwo ? 2 : 1);
+  const weight = (nodes: readonly FloorNode[]) => nodes.reduce((sum, node) => sum + outletsOf(node), 0);
   const socketGroups: FloorNode[][] = [];
   for (const [, nodes] of byRoom(sockets)) {
     let current = socketGroups[socketGroups.length - 1];
-    if (!current || current.length + nodes.length > MAX_OUTLETS_PER_CIRCUIT) {
+    if (!current || weight(current) + weight(nodes) > MAX_OUTLETS_PER_CIRCUIT) {
       current = [];
       socketGroups.push(current);
     }
     for (const node of nodes) {
-      if (current.length >= MAX_OUTLETS_PER_CIRCUIT) {
+      if (current.length && weight(current) + outletsOf(node) > MAX_OUTLETS_PER_CIRCUIT) {
         current = [];
         socketGroups.push(current);
       }
@@ -544,7 +718,7 @@ export function generateCircuitsFromFloorplan(plan: Floorplan, calibration: Cali
         protection: { device: "MCB", poles: "1P", curve: "B", ratedA: 16 },
         rooms,
         nodeIds: group.map((node) => node.id),
-        outlets: group.length,
+        outlets: weight(group),
         installedW,
         designW: Math.min(installedW * SOCKET_SIMULTANEITY + OUTLET_POWER_W, 3680),
         rcd: "A30",
@@ -572,13 +746,13 @@ export function generateCircuitsFromFloorplan(plan: Floorplan, calibration: Cali
         label: `Světla – ${rooms.map((room) => roomName.get(room) ?? room).join(", ")}`,
         kind: "lighting",
         phases: 1,
-        protection: { device: "MCB", poles: "1P", curve: "B", ratedA: 10 },
+        protection: lightingProtection === "rcbo" ? { device: "RCBO", poles: "1P+N", curve: "B", ratedA: 10, rcd: { type: "A", sensitivityMa: 30 } } : { device: "MCB", poles: "1P", curve: "B", ratedA: 10 },
         rooms,
         nodeIds: group.map((node) => node.id),
         outlets: 0,
         installedW,
         designW: installedW * LIGHT_SIMULTANEITY,
-        rcd: "A30",
+        rcd: lightingProtection === "rcbo" ? "own" : "A30L",
       },
       group,
       1.5,
@@ -596,6 +770,22 @@ export function generateCircuitsFromFloorplan(plan: Floorplan, calibration: Cali
     io.treeDevices += wiring.treeDevices;
     for (const item of wiring.items) addBom(bom, item.razeni ? `${item.name} (řazení ${item.razeni})` : item.name, item.count);
   }
+
+  // Fáze 52: krabice a prvky podle úrovně instalace
+  const switchPlaces = plan.rooms.reduce((sum, room) => sum + (room.lighting ? room.lighting.switchCount + (room.lighting.blinds ?? 0) : 0), 0);
+  const socketBoxes = plan.nodes.filter((node) => node.kind === "single_socket" || node.kind === "double_socket" || node.kind === "data_socket").length;
+  addBom(bom, BOX_STANDARD, socketBoxes + (plan.mode === "smart_retrofit" ? 0 : switchPlaces));
+  if (plan.mode === "smart_retrofit") addBom(bom, BOX_DEEP, switchPlaces);
+  if (plan.mode === "bus_loxone") {
+    // Hvězda: každý spínaný vývod (světelná větev, žaluzie) na vlastní patro svorkovnice v rozváděči
+    addBom(bom, BUS_TERMINALS, Math.max(io.do, lights.length));
+    addBom(bom, BUS_CABLE, switchPlaces ? 1 : 0);
+    if (circuits.some((circuit) => circuit.tag && RCD_TYPE_B_TAGS.includes(circuit.tag))) {
+      addBom(bom, RS485_METER);
+      addBom(bom, RS485_TERMINATOR, 2);
+    }
+  }
+  for (const item of constructionDetails(options.environment)) addBom(bom, item);
 
   return { circuits, bom: [...bom.entries()].map(([item, count]) => ({ item, count })), switching, io, warnings };
 }
@@ -623,8 +813,10 @@ export interface PanelDevice {
 
 export interface RcdGroup {
   designation: string;
-  type: "A" | "B";
+  type: "A" | "B" | "F";
   circuitIds: string[];
+  /** Fáze 52: chránič vyhrazený jen pro světelné okruhy. */
+  lightingOnly?: boolean;
 }
 
 export interface Switchboard {
@@ -676,12 +868,21 @@ export function balancePhases(circuits: readonly Pick<Circuit, "id" | "phases" |
 }
 
 /**
- * Okruhy pod chrániče 30 mA typ A: nejvýš 6 na chránič a světla a zásuvky stejné místnosti nikdy na
- * stejném chrániči (výpadek jednoho chrániče nezhasne místnost i bez zásuvek). Světelné okruhy se
- * rozkládají na různé chrániče. EV / TČ dostanou každý vlastní chránič typ B.
+ * Okruhy pod chrániče 30 mA typ A (nikdy AC): nejvýš 6 na chránič. Fáze 52 (ČSN 33 2130 ed. 4): světla
+ * nikdy na společném chrániči se zásuvkami – buď RCBO na každém světelném okruhu (mimo chrániče), nebo
+ * vyhrazené chrániče jen pro světla (`A30L`). EV / TČ / FVE dostanou každý vlastní chránič typ B.
  */
 export function groupUnderRcds(circuits: readonly Circuit[]): RcdGroup[] {
-  const shared = circuits.filter((circuit) => circuit.rcd === "A30");
+  const result: RcdGroup[] = [];
+  const pool = (rcd: "A30" | "A30L") => groupPool(circuits.filter((circuit) => circuit.rcd === rcd));
+  for (const group of pool("A30")) result.push({ designation: `-FI${result.length + 1}`, type: "A", circuitIds: group.map((c) => c.id) });
+  for (const group of pool("A30L")) result.push({ designation: `-FI${result.length + 1}`, type: "A", circuitIds: group.map((c) => c.id), lightingOnly: true });
+  for (const circuit of circuits.filter((c) => c.rcd === "B30")) result.push({ designation: `-FI${result.length + 1}`, type: "B", circuitIds: [circuit.id] });
+  return result;
+}
+
+/** Rozdělení okruhů jednoho druhu chráničů: max. 6 na chránič, světla rozprostřít, bez konfliktu místností. */
+function groupPool(shared: readonly Circuit[]): Circuit[][] {
   const order: Record<CircuitKind, number> = { lighting: 0, sockets: 1, dedicated: 2, cooktop: 3, fridge: 9, three_phase_rcd_b: 9 };
   const sorted = [...shared].sort((a, b) => order[a.kind] - order[b.kind] || a.id.localeCompare(b.id));
   const minimum = Math.max(shared.some((c) => c.kind === "lighting") && shared.some((c) => c.kind !== "lighting") ? 2 : 1, Math.ceil(shared.length / MAX_CIRCUITS_PER_RCD));
@@ -698,9 +899,7 @@ export function groupUnderRcds(circuits: readonly Circuit[]): RcdGroup[] {
     if (pick) pick.circuits.push(circuit);
     else groups.push({ circuits: [circuit] });
   }
-  const result: RcdGroup[] = groups.filter((group) => group.circuits.length).map((group, index) => ({ designation: `-FI${index + 1}`, type: "A", circuitIds: group.circuits.map((c) => c.id) }));
-  for (const circuit of circuits.filter((c) => c.rcd === "B30")) result.push({ designation: `-FI${result.length + 1}`, type: "B", circuitIds: [circuit.id] });
-  return result;
+  return groups.filter((group) => group.circuits.length).map((group) => group.circuits);
 }
 
 const config = (partial: Partial<ItemConfig> & Pick<ItemConfig, "category" | "poles" | "modules">): ItemConfig => ({ manufacturer: null, ratedCurrentA: null, ...partial });
@@ -708,7 +907,7 @@ const config = (partial: Partial<ItemConfig> & Pick<ItemConfig, "category" | "po
 /** Přístroje rozváděče, rozložení na lišty (skupina chrániče se nedělí), 25% rezerva a výběr skříně. */
 export function buildSwitchboardFromCircuits(
   plan: Pick<CircuitPlan, "circuits" | "io" | "bom">,
-  options: { mode: InstallMode; enclosures: readonly EnclosureLike[]; mainSwitchA?: number; railModules?: number },
+  options: { mode: InstallMode; enclosures: readonly EnclosureLike[]; mainSwitchA?: number; railModules?: number; centralStop?: boolean },
 ): Switchboard {
   const warnings: string[] = [];
   const bom = new Map(plan.bom.map((entry) => [entry.item, entry.count]));
@@ -739,7 +938,7 @@ export function buildSwitchboardFromCircuits(
   const mainA = options.mainSwitchA ?? 40;
   groups.push([
     device("Q", "Hlavní vypínač", "MAIN_SWITCH", "3P", 3, mainA, config({ category: "MAIN_SWITCH", poles: "3P", modules: 3, ratedCurrentA: mainA }), null, "L1,L2,L3"),
-    device("FV", "Svodič přepětí T1+T2", "SPD", "3P+N", 4, null, config({ category: "SPD", poles: "3P+N", modules: 4, spdType: "T1+T2", surgeCurrentKa: 25 }), null, "L1,L2,L3"),
+    device("FV", "Svodič přepětí T1+T2 bez předjištění", "SPD", "3P+N", 4, null, config({ category: "SPD", poles: "3P+N", modules: 4, spdType: "T1+T2", surgeCurrentKa: 25 }), null, "L1,L2,L3"),
     device("X", "Rozbočovací svorkovnice (HLAK)", "TERMINAL", "4P", 4, null, config({ category: "ACCESSORY", poles: "4P", modules: 4, moduleSubtype: "TERMINAL_BLOCK" })),
   ]);
 
@@ -755,7 +954,7 @@ export function buildSwitchboardFromCircuits(
   for (const group of rcdGroups) {
     const circuits = group.circuitIds.map((id) => byId.get(id)!);
     const ratedA = 40;
-    const rcd: PanelDevice = { ...device("FI", `Proudový chránič 30 mA typ ${group.type}`, "RCD", "4P", 4, ratedA, config({ category: "RCD", poles: "4P", modules: 4, ratedCurrentA: ratedA, rcdType: group.type, rcdSensitivityMa: 30 }), null, "L1,L2,L3") };
+    const rcd: PanelDevice = { ...device("FI", `Proudový chránič 30 mA typ ${group.type}${group.lightingOnly ? " – jen světla" : ""}`, "RCD", "4P", 4, ratedA, config({ category: "RCD", poles: "4P", modules: 4, ratedCurrentA: ratedA, rcdType: group.type, rcdSensitivityMa: 30 }), null, "L1,L2,L3") };
     rcd.designation = group.designation;
     groups.push([rcd, ...circuits.map(mcb)]);
     addBom(bom, "Izolovaný N-můstek (pod chránič)");
@@ -782,6 +981,19 @@ export function buildSwitchboardFromCircuits(
     const shelly = SMART_MODULES.shellyPro4pm;
     const count = Math.ceil(Math.max(plan.io.do / shelly.outputs, plan.io.di / shelly.inputs));
     for (let i = 0; i < count; i++) control.push(device("A", shelly.label, "PLC", "1P", shelly.modules, null, config({ category: "OTHER", poles: "1P", modules: shelly.modules, moduleSubtype: "PLC" })));
+  }
+  // Fáze 52: synergický energetický management (FVE + TČ + EV, čl. 10 ČSN 33 2130 ed. 4)
+  const tags = new Set(plan.circuits.map((circuit) => circuit.tag).filter(Boolean));
+  if (tags.has("pv_inverter") && tags.has("heat_pump")) {
+    control.push(device("KA", "SG Ready bezpotenciálové relé (FVE → TČ)", "RELAY", "1P", 1, 16, config({ category: "RELAY", poles: "1P", modules: 1, ratedCurrentA: 16, relaySubtype: "AUXILIARY" })));
+  }
+  if (tags.has("ev_charger") && (tags.has("pv_inverter") || tags.has("heat_pump"))) {
+    control.push(device("P", "Elektroměr 3f pro dynamické řízení zátěže (DLM) wallboxu", "OTHER", "3P+N", 4, null, config({ category: "OTHER", poles: "3P+N", modules: 4, moduleSubtype: "METER" })));
+    addBom(bom, "Měřicí transformátory proudu pro DLM (3×) / přímé měření do 65 A");
+  }
+  if (options.centralStop) {
+    control.push(device("S", "Tlačítko TOTAL STOP / CENTRAL STOP", "OTHER", "1P", 1, null, config({ category: "OTHER", poles: "1P", modules: 1 })));
+    addBom(bom, "Vypínací spoušť hlavního vypínače (pro TOTAL STOP)");
   }
   if (control.length) groups.push(control);
 

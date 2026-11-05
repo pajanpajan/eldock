@@ -36,7 +36,7 @@ export type LintFix =
 export interface LintIssue {
   id: string;
   severity: "error" | "warning";
-  rule: "label-category" | "label-poles" | "rcd-missing" | "rcd-overload" | "reserve" | "mixed-busbar" | "rating";
+  rule: "label-category" | "label-poles" | "rcd-missing" | "rcd-overload" | "reserve" | "mixed-busbar" | "rating" | "rcd-type-ac" | "rcd-lighting-mixed" | "rcd-type-b";
   itemIds: string[];
   message: string;
   fix: LintFix | null;
@@ -49,6 +49,11 @@ export const MAX_CIRCUITS_PER_RCD = 6;
 /** Okruhy vyžadující doplňkovou ochranu proudovým chráničem 30 mA (ČSN 33 2000-4-41 čl. 411.3.3). */
 const RCD_REQUIRED = /zásuv|koupel|kuchy|venek|venk|garáž|dílna|zahrad/i;
 const PROTECTIVE: readonly (ComponentCategory | null)[] = ["MCB", "RCD", "RCBO"];
+/** Fáze 52 (ČSN 33 2130 ed. 4): světelné a zásuvkové okruhy podle funkce obvodu. */
+export const LIGHTING_LABEL = /světl|osvětl|svítid|lustr/i;
+export const SOCKET_LABEL = /zásuv/i;
+/** Okruhy s výkonovou elektronikou (DC složka) – chránič typ B nebo F. */
+export const TYPE_B_LABEL = /wallbox|nabíje|elektromobil|\bEV\b|tepeln\S* čerpadl|\bTČ\b|\bFVE\b|fotovolt|střídač/i;
 /** Přístroje propojované společnou hřebenovou lištou (ne SPD, zdroje, stykače, chytré moduly ani odpínač). */
 const BUSBARRED: readonly (ComponentCategory | null)[] = ["MCB", "RCD", "RCBO"];
 
@@ -112,6 +117,59 @@ export function validateSwitchboardState(state: { devices: readonly LintDevice[]
     if (children.length > MAX_CIRCUITS_PER_RCD) {
       add({ severity: "warning", rule: "rcd-overload", itemIds: [rcd.id], message: `Pod chráničem ${rcd.designation} je ${children.length} koncových okruhů (doporučeno nejvýš ${MAX_CIRCUITS_PER_RCD}) – rozdělte je na další chránič.`, fix: { kind: "palette", config: defaultConfig("RCD", { manufacturer: rcd.manufacturer, modules: 4 }), label: "Připravit další chránič" } });
     }
+  }
+
+  // 3b. Fáze 52 – typ chráničů a oddělení světel od zásuvek (ČSN 33 2130 ed. 4)
+  for (const rcd of devices.filter((device) => (device.category === "RCD" || device.category === "RCBO") && device.config?.rcdType === "AC")) {
+    add({
+      severity: "warning",
+      rule: "rcd-type-ac",
+      itemIds: [rcd.id],
+      message: `Chránič ${rcd.designation} je typu AC – dle ČSN 33 2130 ed. 4 musí být u koncových obvodů s elektronikou a LED osvětlením použit typ A (příp. B/F).`,
+      fix: { kind: "configure", itemId: rcd.id, config: { ...rcd.config!, rcdType: "A" }, label: "Opravit 1 klikem: Přepnout na Typ A" },
+    });
+  }
+  for (const rcd of devices.filter((device) => device.category === "RCD")) {
+    const children = rcdChildren(rcd, devices);
+    const lights = children.filter((child) => LIGHTING_LABEL.test(child.label) && !SOCKET_LABEL.test(child.label));
+    const sockets = children.filter((child) => SOCKET_LABEL.test(child.label));
+    if (lights.length && sockets.length) {
+      add({
+        severity: "warning",
+        rule: "rcd-lighting-mixed",
+        itemIds: [rcd.id, ...lights.map((device) => device.id)],
+        message: `Pod chráničem ${rcd.designation} jsou společně zapojené světelné i zásuvkové okruhy – dle ČSN 33 2130 ed. 4 nesmí světla viset na společném chrániči se zásuvkami!`,
+        fix: {
+          kind: "configure-many",
+          // Světelný jistič → jističochránič RCBO 1P+N typ A 30 mA stejné šířky a jmenovitého proudu
+          items: lights.map((device) => ({
+            itemId: device.id,
+            config: { ...defaultConfig("RCBO", { manufacturer: device.manufacturer, modules: device.modulesWidth, ratedCurrentA: device.ratedCurrentA ?? 10, curve: device.config?.curve ?? "B" }), rcdType: "A", rcdSensitivityMa: 30 },
+          })),
+          label: "Opravit 1 klikem: Oddělit světla na RCBO / samostatný chránič",
+        },
+      });
+    }
+    const special = children.filter((child) => TYPE_B_LABEL.test(child.label));
+    const type = rcd.config?.rcdType ?? "A";
+    if (special.length && (type === "A" || type === "AC")) {
+      add({
+        severity: "warning",
+        rule: "rcd-type-b",
+        itemIds: [rcd.id, ...special.map((device) => device.id)],
+        message: `Okruh Wallbox / TČ / FVE (${special.map((device) => device.designation).join(", ")}) je za chráničem ${rcd.designation} typu ${type} – vyžadován chránič typu B nebo F.`,
+        fix: rcd.config ? { kind: "configure", itemId: rcd.id, config: { ...rcd.config, rcdType: "B" }, label: "Přepnout chránič na typ B" } : null,
+      });
+    }
+  }
+  for (const rcbo of devices.filter((device) => device.category === "RCBO" && TYPE_B_LABEL.test(device.label) && (device.config?.rcdType ?? "A") !== "B" && device.config?.rcdType !== "F")) {
+    add({
+      severity: "warning",
+      rule: "rcd-type-b",
+      itemIds: [rcbo.id],
+      message: `Okruh Wallbox / TČ / FVE ${rcbo.designation} je za chráničem typu ${rcbo.config?.rcdType ?? "A"} – vyžadován chránič typu B nebo F.`,
+      fix: rcbo.config ? { kind: "configure", itemId: rcbo.id, config: { ...rcbo.config, rcdType: "B" }, label: "Přepnout na typ B" } : null,
+    });
   }
 
   // 4. Rezerva modulů a společné hřebeny

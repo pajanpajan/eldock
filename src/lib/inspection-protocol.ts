@@ -4,6 +4,7 @@
 import type { EquipmentType, InspectionResult, InspectionType } from "@/generated/prisma/enums";
 import { inspectionRuleFor, isPortable, measurementLimits } from "@/lib/inspection-rules";
 import { batteryPassportRows, parseBatteryPassport } from "@/lib/battery-passport";
+import { parseRcdTest, rcdTestRows } from "@/lib/rcd-test";
 
 export type ProtocolVariant = "VTZ" | "APPLIANCE";
 
@@ -24,6 +25,8 @@ export interface ProtocolInput {
     insulationResistance: number | null;
     leakageCurrent: number | null;
     functionalTest: boolean | null;
+    /** Fáze 52: zkoušky RCD (JSON `lib/rcd-test.ts`). */
+    rcdTestJson?: string | null;
   };
   equipment: { type: EquipmentType; usageGroup: string | null; protectionClass: string | null; externalInfluences?: string | null };
 }
@@ -62,6 +65,7 @@ export function protocolMeasurements({ record, equipment }: ProtocolInput): Prot
   const rpe = record.protectiveConductorResistance;
   const riso = record.insulationResistance;
   const leakage = record.leakageCurrent;
+  const rcdTest = parseRcdTest(record.rcdTestJson);
 
   return [
     {
@@ -92,6 +96,8 @@ export function protocolMeasurements({ record, equipment }: ProtocolInput): Prot
       limit: "bez závad",
       ok: record.functionalTest,
     },
+    // Fáze 52: 3 zkoušky proudového chrániče dle ČSN EN 61557-6 ed. 2 + impedance smyčky (jen VTZ)
+    ...(variant !== "APPLIANCE" && rcdTest ? rcdTestRows(rcdTest) : []),
   ];
 }
 

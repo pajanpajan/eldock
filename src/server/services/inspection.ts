@@ -9,6 +9,7 @@ import { formatDateShort } from "@/lib/format";
 import { computeValidUntil, daysUntil, defaultValidityMonths, pragueToday } from "@/lib/inspection";
 import { evaluateMeasurements, inspectionRuleFor, isPortable } from "@/lib/inspection-rules";
 import { renderBatchProtocolSvg, renderInspectionReportSvg } from "@/lib/mock-graphics/compliance";
+import { sanitizeRcdTest, type RcdTest } from "@/lib/rcd-test";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 
 import type { Actor } from "./workflow";
@@ -23,6 +24,8 @@ export interface MeasurementFields {
   leakageCurrent?: number | null;
   /** Funkční zkouška vyhověla (null = neprováděla se). */
   functionalTest?: boolean | null;
+  /** Fáze 52: zkoušky proudového chrániče (ČSN EN 61557-6 ed. 2). */
+  rcdTest?: Partial<RcdTest> | null;
 }
 
 export interface ThermalFields {
@@ -96,6 +99,10 @@ function cleanMeasurements(input: MeasurementFields) {
     insulationResistance: riso,
     leakageCurrent: leakage,
     functionalTest: typeof input.functionalTest === "boolean" ? input.functionalTest : null,
+    rcdTestJson: (() => {
+      const test = sanitizeRcdTest(input.rcdTest);
+      return test ? JSON.stringify(test) : null;
+    })(),
   };
 }
 
@@ -223,6 +230,7 @@ export async function recordInspection(prisma: PrismaClient, input: RecordInspec
       insulationResistance: data.insulationResistance,
       leakageCurrent: data.leakageCurrent,
       functionalTest: data.functionalTest,
+      rcdTestJson: data.rcdTestJson,
       maxTempC: data.maxTempC,
       deltaTempC: data.deltaTempC,
       defects: { create: defectRows(equipment.id, data.inspectionDate, input.result, data.defects, input.defectSeverity) },
@@ -375,6 +383,7 @@ export async function recordQuickInspection(prisma: PrismaClient, input: QuickIn
       insulationResistance: data.insulationResistance,
       leakageCurrent: data.leakageCurrent,
       functionalTest: data.functionalTest,
+      rcdTestJson: data.rcdTestJson,
       defects: { create: defectRows(equipment.id, data.inspectionDate, record.result, data.defects) },
     },
   });

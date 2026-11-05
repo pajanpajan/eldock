@@ -25,6 +25,7 @@ import { INSPECTION_TYPE_LABELS, formatDateShort } from "@/lib/format";
 import { computeValidUntil, defaultValidityMonths } from "@/lib/inspection";
 import { evaluateMeasurements, measurementLimits } from "@/lib/inspection-rules";
 import { leakageLimitMa } from "@/lib/inspection-protocol";
+import { MAX_TRIP_TIME_MS, RCD_TEST_TYPES, maxMeasuredLoopOhm, tripCurrentRange, type RcdTestType } from "@/lib/rcd-test";
 import { DEFECT_DEADLINE_DAYS, severityForResult, thermalLevel } from "@/lib/defects";
 import { DEFECT_SEVERITY, INSPECTION_RESULT, THERMAL_LEVEL } from "@/lib/status";
 import { uploadFile, type UploadedFile } from "@/lib/upload-client";
@@ -62,6 +63,8 @@ export function RecordInspectionDialog({ equipmentId, tag, intervalMonths, today
   const [leakage, setLeakage] = useState(measurable ? "0,4" : "");
   // Funkční zkouška: "ok" / "fail" / "" (neprováděla se)
   const [functional, setFunctional] = useState<"ok" | "fail" | "">(measurable ? "ok" : "");
+  // Fáze 52: zkoušky proudového chrániče (ČSN EN 61557-6 ed. 2) u pevných instalací / rozváděčů
+  const [rcd, setRcd] = useState({ ratedMa: "30", type: "A" as RcdTestType, noTrip: "" as "" | "ok" | "trip", tripTime: "", tripCurrent: "", loop: "", breakerA: "16", curve: "B" as "B" | "C" });
   const [maxTemp, setMaxTemp] = useState("");
   const [deltaTemp, setDeltaTemp] = useState("");
   const [severity, setSeverity] = useState<DefectSeverity | null>(null);
@@ -134,6 +137,20 @@ export function RecordInspectionDialog({ equipmentId, tag, intervalMonths, today
           ? { measuringInstrument: instrument || null, protectiveConductorResistance: toNumber(rpe), insulationResistance: toNumber(riso), leakageCurrent: toNumber(leakage) }
           : {}),
         ...(type === "THERMOVISION" ? {} : { functionalTest: functional === "" ? null : functional === "ok" }),
+        ...(!measurable && type !== "THERMOVISION" && (rcd.noTrip || rcd.tripTime || rcd.tripCurrent || rcd.loop)
+          ? {
+              rcdTest: {
+                ratedMa: toNumber(rcd.ratedMa) ?? 30,
+                type: rcd.type,
+                noTripAtHalf: rcd.noTrip === "" ? null : rcd.noTrip === "ok",
+                tripTimeMs: toNumber(rcd.tripTime),
+                tripCurrentMa: toNumber(rcd.tripCurrent),
+                loopOhm: toNumber(rcd.loop),
+                breakerA: toNumber(rcd.breakerA),
+                breakerCurve: rcd.curve,
+              },
+            }
+          : {}),
       });
       if (!response.ok) {
         toast.error(response.error);
@@ -303,6 +320,60 @@ export function RecordInspectionDialog({ equipmentId, tag, intervalMonths, today
                   <p className="text-sm text-red-300 sm:col-span-3">{measurement.failures.join(" ")}</p>
                 ) : null}
               </div>
+            ) : null}
+
+            {!measurable && type !== "THERMOVISION" ? (
+              <details className="rounded-md border border-border p-3" data-testid="rcd-test">
+                <summary className="cursor-pointer text-sm font-semibold">Zkouška proudového chrániče (ČSN EN 61557-6 ed. 2) a impedance smyčky</summary>
+                <div className="mt-3 grid gap-3 sm:grid-cols-4">
+                  <div className="space-y-1">
+                    <Label htmlFor="rcd-rated">I<sub>Δn</sub> [mA]</Label>
+                    <Input id="rcd-rated" inputMode="decimal" value={rcd.ratedMa} onChange={(event) => setRcd({ ...rcd, ratedMa: event.target.value })} className="h-11 font-mono" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="rcd-type">Typ chrániče</Label>
+                    <select id="rcd-type" value={rcd.type} onChange={(event) => setRcd({ ...rcd, type: event.target.value as RcdTestType })} className="h-11 w-full rounded-md border border-input bg-transparent px-3 text-sm dark:bg-input/30">
+                      {RCD_TEST_TYPES.map((value) => (
+                        <option key={value} value={value}>
+                          {value}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1 sm:col-span-2">
+                    <Label htmlFor="rcd-notrip">1) 0,5 · I<sub>Δn</sub> po dobu ≥ 300 ms</Label>
+                    <select id="rcd-notrip" value={rcd.noTrip} onChange={(event) => setRcd({ ...rcd, noTrip: event.target.value as "" | "ok" | "trip" })} className="h-11 w-full rounded-md border border-input bg-transparent px-3 text-sm dark:bg-input/30">
+                      <option value="">Neměřeno</option>
+                      <option value="ok">Nevybavil (vyhovuje)</option>
+                      <option value="trip">Vybavil (nevyhovuje)</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="rcd-time">2) t<sub>Δ</sub> při 1 · I<sub>Δn</sub> [ms] ≤ {MAX_TRIP_TIME_MS}</Label>
+                    <Input id="rcd-time" inputMode="decimal" value={rcd.tripTime} onChange={(event) => setRcd({ ...rcd, tripTime: event.target.value })} className="h-11 font-mono" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="rcd-current">
+                      3) I<sub>Δ</sub> [mA] {tripCurrentRange(rcd.type).min.toLocaleString("cs-CZ")}–{tripCurrentRange(rcd.type).max.toLocaleString("cs-CZ")} · I<sub>Δn</sub>
+                    </Label>
+                    <Input id="rcd-current" inputMode="decimal" value={rcd.tripCurrent} onChange={(event) => setRcd({ ...rcd, tripCurrent: event.target.value })} className="h-11 font-mono" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="rcd-loop">Z<sub>sm</sub> [Ω]{toNumber(rcd.breakerA) ? ` ≤ ${maxMeasuredLoopOhm(toNumber(rcd.breakerA)!, rcd.curve).toLocaleString("cs-CZ")}` : ""}</Label>
+                    <Input id="rcd-loop" inputMode="decimal" value={rcd.loop} onChange={(event) => setRcd({ ...rcd, loop: event.target.value })} className="h-11 font-mono" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="rcd-breaker">Jistič okruhu</Label>
+                    <div className="flex gap-1">
+                      <select aria-label="Charakteristika jističe" value={rcd.curve} onChange={(event) => setRcd({ ...rcd, curve: event.target.value as "B" | "C" })} className="h-11 rounded-md border border-input bg-transparent px-2 text-sm dark:bg-input/30">
+                        <option value="B">B</option>
+                        <option value="C">C</option>
+                      </select>
+                      <Input id="rcd-breaker" inputMode="decimal" value={rcd.breakerA} onChange={(event) => setRcd({ ...rcd, breakerA: event.target.value })} className="h-11 font-mono" />
+                    </div>
+                  </div>
+                </div>
+              </details>
             ) : null}
 
             {type !== "THERMOVISION" ? (

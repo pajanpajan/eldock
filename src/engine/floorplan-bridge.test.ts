@@ -135,13 +135,13 @@ describe("3. + 4. vzorový rodinný dům: od půdorysu po přístroje na DIN li�
       ["Nabíječka elektromobilu – Garáž", "B", "B30"],
       ["Tepelné čerpadlo – Garáž", "C", "B30"],
     ]);
-    // Zásuvky: max. 10 vývodů, dvojzásuvka = 1 vývod; mikrovlnka 900 W zůstane na zásuvkovém okruhu
+    // Zásuvky: max. 10 skutečných zásuvek (fáze 52: dvojzásuvka = 2); mikrovlnka 900 W zůstane na zásuvkovém okruhu
     const sockets = of("sockets");
     expect(sockets.every((c) => c.outlets <= MAX_OUTLETS_PER_CIRCUIT && c.protection.ratedA === 16)).toBe(true);
-    expect(sockets.reduce((sum, c) => sum + c.outlets, 0)).toBe(2 + 4 + 1 + 6 + 3 + 4 + 4 + 1 + 2);
-    // Světla: min. 2 nezávislé okruhy B10, CYKY-J 3x1,5
+    expect(sockets.reduce((sum, c) => sum + c.outlets, 0)).toBe(2 + 4 * 2 + 1 + 6 + 3 * 2 + 4 * 2 + 4 * 2 + 2 + 2);
+    // Světla: min. 2 nezávislé okruhy B10 na RCBO typ A (fáze 52), CYKY-J 3x1,5
     expect(of("lighting").length).toBeGreaterThanOrEqual(2);
-    expect(of("lighting").every((c) => c.protection.ratedA === 10 && c.cable === "CYKY-J 3x1,5" && c.voltageDropPct <= 3)).toBe(true);
+    expect(of("lighting").every((c) => c.protection.ratedA === 10 && c.protection.device === "RCBO" && c.rcd === "own" && c.cable === "CYKY-J 3x1,5" && c.voltageDropPct <= 3)).toBe(true);
     expect(plan.circuits.filter((c) => c.kind !== "lighting").every((c) => c.voltageDropPct <= 5)).toBe(true);
   });
 

@@ -7,7 +7,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ROUTING_MODES, mountHeight, type CableRoutingMode, type ElevationProfile } from "@/engine/floorplan-bridge";
+import { INSTALL_LEVELS, INSTALL_METHODS, ROUTING_MODES, mountHeight, type CableRoutingMode, type ElevationProfile, type InstallLevel, type InstallMethod } from "@/engine/floorplan-bridge";
 import {
   PALETTE,
   PALETTE_GROUPS,
@@ -416,6 +416,56 @@ export function FloorplanEditor({ series }: { series: SeriesOption[] }) {
             </label>
           ))}
         </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-2 text-xs" role="group" aria-label="Metodika ČSN 33 2130 ed. 4" data-testid="install-methodology">
+        <label className="flex items-center gap-1 text-muted-foreground">
+          Úroveň instalace:
+          <select
+            className="h-8 rounded-md border border-input bg-transparent px-1.5 text-sm text-foreground dark:bg-input/30"
+            value={draft.installation}
+            onChange={(event) => update((current) => ({ ...current, installation: event.target.value as InstallLevel }))}
+            aria-label="Úroveň instalace"
+            title={INSTALL_LEVELS.find((level) => level.id === draft.installation)?.description}
+          >
+            {INSTALL_LEVELS.map((level) => (
+              <option key={level.id} value={level.id}>
+                {level.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex items-center gap-1 text-muted-foreground">
+          Uložení kabelů:
+          <select
+            className="h-8 rounded-md border border-input bg-transparent px-1.5 text-sm text-foreground dark:bg-input/30"
+            value={draft.installMethod}
+            onChange={(event) => update((current) => ({ ...current, installMethod: event.target.value as InstallMethod }))}
+            aria-label="Způsob uložení kabelů"
+          >
+            {INSTALL_METHODS.map((method) => (
+              <option key={method.id} value={method.id}>
+                {method.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex items-center gap-1 text-muted-foreground">
+          Souběh kabelů:
+          <input
+            type="number"
+            min={1}
+            max={20}
+            value={draft.groupedCables}
+            onChange={(event) => update((current) => ({ ...current, groupedCables: Math.min(20, Math.max(1, Math.round(Number(event.target.value) || 1))) }))}
+            className="h-8 w-14 rounded-md border border-input bg-transparent px-1.5 text-right text-sm text-foreground tabular-nums dark:bg-input/30"
+            aria-label="Počet souběžných kabelů"
+          />
+        </label>
+        <label className="flex items-center gap-1.5 text-muted-foreground">
+          <input type="checkbox" checked={draft.countDoubleAsTwo} onChange={(event) => update((current) => ({ ...current, countDoubleAsTwo: event.target.checked }))} />
+          Počítat dvojzásuvku jako 2 zásuvky dle ČSN 33 2130 ed. 4
+        </label>
       </div>
 
       <div className="grid gap-3 xl:grid-cols-[15rem_minmax(0,1fr)_24rem]">

@@ -5,6 +5,7 @@ import { formatDate } from "@/lib/format";
 import { isMix } from "@/lib/panel-builder/catalog";
 import { componentsList, partsList, technicalData } from "@/lib/panel-builder/documentation";
 import { renderPanelDrawingSvg, renderSingleLineDiagramSvg, type DrawingItem } from "@/lib/panel-builder/drawings";
+import { LEGAL_FRAMEWORK, externalInfluencesProtocol, isFlushEnclosure } from "@/lib/panel-builder/external-influences";
 import { parseCableReport } from "@/lib/panel-builder/floorplan-editor";
 import { parseManufacturerInfo } from "@/lib/panel-builder/project";
 import { companyManufacturer } from "@/lib/registered-company";
@@ -56,6 +57,10 @@ export async function buildDocumentationData(project: PanelProjectDetail, origin
     customerName: project.customerName,
     installationSite: project.installationSite,
     cableReport: parseCableReport(project.cableReportJson),
+    // Fáze 52: legislativní rámec (vyhl. 131/2024 Sb.) a protokol o určení vnějších vlivů z prostředí instalace
+    legalFramework: LEGAL_FRAMEWORK,
+    influences: externalInfluencesProtocol(project.environment),
+    fullCover: isFlushEnclosure([project.enclosureModel, enclosure?.description].filter(Boolean).join(" ")),
     norm: edition.short,
     edition,
     routineTest,
