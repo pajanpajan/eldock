@@ -5,7 +5,7 @@
 #   3. je-li databáze prázdná a ELDOCK_SEED_DEMO=1, naplní ji demo daty (`npm run db:seed`),
 #      jinak jen doplní chybějící demo zařízení s PDF projekty (`npm run db:demo-docs`), jednorázově
 #      metrové rozvržení a vybavení vzorových závodů (`npm run db:demo-plant`, upravená patra nemění)
-#      a katalog AI Panel Builderu se vzorovým rozváděčem PB-001 (`npm run db:panel-builder`)
+#      a katalog AI Panel Builderu se vzorovým rozváděčem PB-001 (`npm run db:panel-builder` – vždy, i bez dema; fáze 54)
 #      a ukázky legislativy 2027 – návody, zálohy SW, pas baterie (`npm run db:demo-legislation`)
 #      a životnost součástek + kabelové pasporty (`npm run db:demo-lifespan`, fáze 53)
 #   4. spustí aplikaci (CMD, výchozí `node server.js`)
@@ -45,10 +45,18 @@ else
   if [ "${ELDOCK_SEED_DEMO:-1}" = "1" ]; then
     npm run db:demo-docs --silent || echo "[eldock] Varování: doplnění demo dokumentace PDF selhalo."
     npm run db:demo-plant --silent || echo "[eldock] Varování: doplnění vzorových závodů (Studio) selhalo."
-    npm run db:panel-builder --silent || echo "[eldock] Varování: doplnění katalogu AI Panel Builderu selhalo."
-    npm run db:demo-legislation --silent || echo "[eldock] Varování: doplnění ukázek legislativy 2027 selhalo."
-    npm run db:demo-lifespan --silent || echo "[eldock] Varování: doplnění ukázek životnosti součástek a kabelů selhalo."
   fi
+fi
+
+# Katalog AI Panel Builderu a vzorový elaborát PB-001 (veřejná /ukazka-elaboratu) jsou součást produktu – doplní se vždy,
+# i bez demo dat (fáze 54). Demo firmu Tester založí jen s ELDOCK_SEED_DEMO=1; selhaný krok vypíše a ostatní doběhnou.
+if [ "$PLANTS" != "0" ] || [ "${ELDOCK_SEED_DEMO:-1}" != "1" ]; then
+  npm run db:panel-builder --silent || echo "[eldock] Varování: některý krok katalogu AI Panel Builderu selhal (viz výpis výše)."
+fi
+
+if [ "$PLANTS" != "0" ] && [ "${ELDOCK_SEED_DEMO:-1}" = "1" ]; then
+  npm run db:demo-legislation --silent || echo "[eldock] Varování: doplnění ukázek legislativy 2027 selhalo."
+  npm run db:demo-lifespan --silent || echo "[eldock] Varování: doplnění ukázek životnosti součástek a kabelů selhalo."
 fi
 
 cd /app

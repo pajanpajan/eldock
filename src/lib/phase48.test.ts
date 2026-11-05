@@ -74,7 +74,15 @@ describe("technické SEO", () => {
 
   it("sitemap.xml jen s veřejnými absolutními URL", () => {
     const urls = sitemap().map((entry) => entry.url);
-    expect(urls).toEqual(["https://eldock.cz", "https://eldock.cz/ukazka-elaboratu", "https://eldock.cz/panel-builder/auth", "https://eldock.cz/register-plant"]);
+    // Fáze 54: + právní stránky
+    expect(urls).toEqual([
+      "https://eldock.cz",
+      "https://eldock.cz/ukazka-elaboratu",
+      "https://eldock.cz/panel-builder/auth",
+      "https://eldock.cz/register-plant",
+      "https://eldock.cz/obchodni-podminky",
+      "https://eldock.cz/ochrana-osobnich-udaju",
+    ]);
   });
 
   it("JSON-LD SoftwareApplication + Organization s klíčovými slovy, bezpečné do <script>", () => {

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ExternalLink, FileText } from "lucide-react";
+import { ExternalLink, FileText, Rocket } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -11,8 +11,8 @@ export function SampleElaborateDialog() {
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button type="button" variant="outline" className="touch-target h-11 gap-2 px-5 text-sm" data-testid="sample-elaborate">
-          <FileText className="size-4" aria-hidden /> 📄 Prohlédnout vzorový 6listový PDF elaborát rozváděče
+        <Button type="button" variant="outline" className="touch-target h-auto min-h-11 shrink gap-2 px-5 py-2 text-left text-sm whitespace-normal" data-testid="sample-elaborate">
+          <FileText className="size-4" aria-hidden /> Prohlédnout vzorový 6listový PDF elaborát rozváděče
         </Button>
       </DialogTrigger>
       <DialogContent className="flex h-[92vh] flex-col gap-3 p-4 sm:max-w-5xl">
@@ -30,7 +30,9 @@ export function SampleElaborateDialog() {
             </Link>
           </Button>
           <Button asChild>
-            <Link href="/panel-builder/auth">🚀 Vytvořit vlastní elaborát</Link>
+            <Link href="/panel-builder/auth">
+              <Rocket data-icon="inline-start" aria-hidden /> Vytvořit vlastní elaborát
+            </Link>
           </Button>
         </div>
       </DialogContent>

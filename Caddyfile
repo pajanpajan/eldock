@@ -22,6 +22,11 @@
 	import security_headers
 	encode zstd gzip
 
+	# Fáze 54: www.* → hlavní doména (301), aby web neexistoval dvakrát. Matcher podle hlavičky Host
+	# funguje s jakýmkoli ELDOCK_DOMAINS (certifikát pro www Caddy vystaví dál, jen přesměruje).
+	@www header_regexp www Host ^www\.(.+)$
+	redir @www https://{re.www.1}{uri} permanent
+
 	# Nahrávání fotek a revizí z haly (výchozí limit Next.js server actions je menší)
 	request_body {
 		max_size 50MB

@@ -72,9 +72,10 @@ test("úvodní stránka: dva produkty; nepřihlášený do Panel Builderu → re
   await page.getByRole("button", { name: "Odhlásit" }).click();
   await expect(page).toHaveURL(/\/$/);
 
-  // Předvyplněný Tester účet → vlastní projekty včetně PB-001
+  // Ukázková firma Tester (fáze 54: přihlášení na serveru, heslo není na stránce) → vlastní projekty včetně PB-001
   await page.goto("/panel-builder/auth");
-  await page.getByRole("button", { name: "Vyzkoušet předvyplněný Tester účet" }).click();
+  await expect(page.getByText("Tester2026!")).toHaveCount(0);
+  await page.getByRole("button", { name: "Vyzkoušet ukázkovou firmu" }).click();
   await expect(page).toHaveURL(/\/panel-builder$/);
   await expect(page.getByTestId("panel-company")).toContainText("Elektro Tester s.r.o.");
   await expect(page.getByRole("link", { name: /PB-001/ })).toBeVisible();

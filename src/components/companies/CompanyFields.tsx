@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { DatabaseZap, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -162,6 +163,10 @@ export function TermsConsent({ text, checked, onChange, invalid }: { text: strin
           </div>
         </DialogContent>
       </Dialog>
+      {/* Fáze 54: informace o zpracování osobních údajů (čl. 13 GDPR) přímo u registrace */}
+      <Link href="/ochrana-osobnich-udaju" target="_blank" className="ml-3 text-xs font-semibold text-primary underline underline-offset-2">
+        Zásady zpracování osobních údajů
+      </Link>
     </div>
   );
 }

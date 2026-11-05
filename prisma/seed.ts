@@ -440,7 +440,9 @@ async function main() {
   await seedDemoDocs(prisma);
   // Vzorové závody v metrové architektuře Studia: piny v metrech, bohaté vybavení, štítky v místnostech
   await seedDemoPlant(prisma, { force: true });
-  await seedPanelBuilder(prisma);
+  // Plný seed nesmí tiše přejít selhaný krok Panel Builderu (fáze 54: kroky běží samostatně a hlásí se ve `failures`)
+  const panelBuilder = await seedPanelBuilder(prisma);
+  if (panelBuilder.failures.length) throw new Error(`Seed AI Panel Builderu selhal: ${panelBuilder.failures.join("; ")}`);
   await seedLegislation2027(prisma);
   await seedLifespanCables(prisma, { force: true });
   // Kódy QR štítků (stejně jako migrace 20261030190000)

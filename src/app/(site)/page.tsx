@@ -30,6 +30,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+import { LandingMobileNav } from "@/components/landing/LandingMobileNav";
 import { ProductPreview } from "@/components/landing/ProductPreview";
 import { SampleElaborateDialog } from "@/components/landing/SampleElaborateDialog";
 import { LazyPromoVideo } from "@/components/lazy";
@@ -39,6 +40,7 @@ import { BRAND } from "@/lib/brand";
 import { COMPANY_INFO } from "@/lib/company";
 import { OG_IMAGE, SEO_DESCRIPTION, SEO_KEYWORDS, SEO_TITLE, SITE_URL, jsonLdScript, landingJsonLd } from "@/lib/seo";
 import { APP_HOME } from "@/lib/routes";
+import { hasShowcaseProject } from "@/server/queries/panel-builder";
 import { getAuthSession } from "@/server/session";
 
 export const metadata: Metadata = {
@@ -107,10 +109,12 @@ const ROLES: { icon: LucideIcon; role: string; benefit: string }[] = [
   { icon: PencilRuler, role: "CAE projektant", benefit: "Jasné zadání v ticketingu bez šumu: zákres, fotky a poznámka z haly na jednom místě." },
 ];
 
-const anchorButton = "touch-target h-11 px-5 text-sm";
+// Fáze 54: tlačítka se na úzkém displeji zalamují místo přetékání karty
+const anchorButton = "touch-target h-auto min-h-11 shrink whitespace-normal px-5 py-2 text-left text-sm";
 
 export default async function LandingPage() {
-  const signedIn = Boolean(await getAuthSession());
+  const [session, showcase] = await Promise.all([getAuthSession(), hasShowcaseProject()]);
+  const signedIn = Boolean(session);
   const clientZone = signedIn ? { href: APP_HOME, label: "Vstoupit do aplikace" } : { href: "/login", label: "Klientská zóna / Přihlášení" };
 
   return (
@@ -132,9 +136,11 @@ export default async function LandingPage() {
           <Button asChild variant="outline" className="touch-target ml-auto h-9 px-3 text-sm">
             <Link href={clientZone.href}>
               <LogIn data-icon="inline-start" aria-hidden />
-              {clientZone.label}
+              <span className="hidden sm:inline">{clientZone.label}</span>
+              <span className="sm:hidden">{signedIn ? "Aplikace" : "Přihlášení"}</span>
             </Link>
           </Button>
+          <LandingMobileNav items={NAV} clientZone={clientZone} />
         </div>
       </header>
 
@@ -193,24 +199,24 @@ export default async function LandingPage() {
               <span className="inline-flex w-fit items-center gap-2 rounded-full bg-primary px-3 py-1 font-mono text-xs font-bold text-primary-foreground">
                 <CircuitBoard className="size-3.5" aria-hidden /> Samostatný produkt
               </span>
-              <h2 className="text-2xl font-bold tracking-tight text-balance">⚡ ELDOCK AI Panel Builder – Výrobní dokumentace, oteplení a CE štítek rozváděče z fotky za 3 minuty</h2>
+              <h2 className="text-2xl font-bold tracking-tight text-balance">ELDOCK AI Panel Builder – Výrobní dokumentace, oteplení a CE štítek rozváděče z fotky za 3 minuty</h2>
               <p className="text-muted-foreground">
                 Vyfoťte osazený rozváděč, AI rozpozná přístroje, navrhne zapojení, spočítá oteplení dle IEC TR 60890 a připraví 6 listů dokumentace s vaší firmou v razítku, prohlášením o shodě a výrobním štítkem CE.
               </p>
               <div className="mt-auto flex flex-wrap gap-3">
                 <Button asChild className={anchorButton}>
                   <Link href="/panel-builder/auth">
-                    <Rocket data-icon="inline-start" aria-hidden /> 🚀 Spustit AI Panel Builder (Registrace / Přihlášení)
+                    <Rocket data-icon="inline-start" aria-hidden /> Spustit AI Panel Builder (registrace / přihlášení)
                   </Link>
                 </Button>
-                <SampleElaborateDialog />
+                {showcase ? <SampleElaborateDialog /> : null}
               </div>
             </article>
             <article className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-6" data-testid="product-plant">
               <span className="inline-flex w-fit items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 font-mono text-xs text-primary">
                 <Factory className="size-3.5" aria-hidden /> Celozávodní platforma
               </span>
-              <h2 className="text-2xl font-bold tracking-tight text-balance">🏭 ELDOCK Průmyslový dok – Správa výrobních závodů, dokumentace a revizí</h2>
+              <h2 className="text-2xl font-bold tracking-tight text-balance">ELDOCK Průmyslový dok – Správa výrobních závodů, dokumentace a revizí</h2>
               <p className="text-muted-foreground">
                 Mapa areálu, budovy a půdorysy se zařízeními, elektrodokumentace s historií verzí, červenky z haly do CAE, lhůtník a plánovač revizí VTZ, spotřebičů a nářadí.
               </p>
@@ -374,6 +380,8 @@ export default async function LandingPage() {
           </dl>
           <div className="flex flex-col gap-2">
             <Link href={clientZone.href} className="hover:text-foreground">{clientZone.label}</Link>
+            <Link href="/obchodni-podminky" className="hover:text-foreground">Obchodní podmínky</Link>
+            <Link href="/ochrana-osobnich-udaju" className="hover:text-foreground">Ochrana osobních údajů</Link>
             <span>© {new Date().getFullYear()} {BRAND.name}</span>
           </div>
         </div>

@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
 import { AUTH_COOKIE, AUTH_TTL_SECONDS, PANEL_AUTH_COOKIE, PANEL_AUTH_TTL_SECONDS, brandEnv, panelSubject, safeNextPath, signAuthToken } from "@/lib/auth";
-import { companyDetailsSchema, companyLoginSchema, panelRegistrationSchema, plantRegistrationSchema } from "@/lib/registered-company";
+import { TESTER_COMPANY, companyDetailsSchema, companyLoginSchema, panelRegistrationSchema, plantRegistrationSchema } from "@/lib/registered-company";
 import { prisma } from "@/lib/prisma";
 import { PLANT_COOKIE } from "@/lib/roles";
 import { plantHref } from "@/lib/routes";
@@ -65,6 +65,17 @@ export async function loginPanelCompanyAction(input: unknown, next?: string): Pr
   if (!parsed.success) return { ok: false, error: "Zadejte e-mail a heslo." };
   const company = await authenticateCompany(prisma, parsed.data.email, parsed.data.password, "PANEL_BUILDER");
   if (!company) return { ok: false, error: "Nesprávný e-mail nebo heslo." };
+  await signInCompany(company.id);
+  return { ok: true, data: { href: panelNext(next) } };
+}
+
+/**
+ * Fáze 54: „Vyzkoušet ukázkovou firmu“ – přihlášení demo firmy Tester na serveru. Heslo se do prohlížeče ani na stránku
+ * nedostane; bez demo dat (ELDOCK_SEED_DEMO=0) firma neexistuje a akce nabídne registraci.
+ */
+export async function loginDemoCompanyAction(next?: string): Promise<ActionResult<{ href: string }>> {
+  const company = await prisma.registeredCompany.findFirst({ where: { id: TESTER_COMPANY.id, productScope: "PANEL_BUILDER" }, select: { id: true } });
+  if (!company) return { ok: false, error: "Ukázková firma teď není k dispozici – zaregistrujte prosím vlastní firmu (5 kreditů zdarma)." };
   await signInCompany(company.id);
   return { ok: true, data: { href: panelNext(next) } };
 }

@@ -22,7 +22,9 @@
 16. ZADANI-faze-51.md
 17. ZADANI-faze-52.md
 18. ZADANI-faze-53.md
-19. docs/PLAN.md (aktuální plán a deník posledních fází)
+19. ZADANI-faze-54.md
+20. ZADANI-faze-55.md
+21. docs/PLAN.md (aktuální plán a deník posledních fází)
 
 ---
 
@@ -1917,6 +1919,167 @@ Doplň do seedu (i do přírůstkového produkčního seedu volaného z `docker-
 
 ---
 
+# 📄 ZADANI-faze-54.md
+
+# Zadání fází 54–58 – opravy webu, normový registr, nový web a bytový projekt (2026-11-05)
+
+Vzniklo z analýzy webu eldock.cz (2026-11-05) a z normového registru `C:\Users\janou\Desktop\Claude\eldock-normovy-registr`
+(181 položek, 135 ověřených proti zakonyprolidi.cz a katalogu ČSN). Uživatel schválil pořadí 54 → nasazení 50–54 → 55 → 56 → 57 → 58.
+
+## Nálezy z analýzy produkce (2026-11-05)
+
+- `/ukazka-elaboratu` vrací 404 (stránka „Stránka nenalezena“ i v náhledu na úvodní stránce) → na produkci chybí vzorový projekt PB-001.
+  `seedPanelBuilder` zakládá PB-001 až po katalogu; když import katalogu selže, PB-001 nevznikne (příčina na serveru neověřena).
+- `/panel-builder/auth` vypisuje e-mail i heslo firmy Tester a stránka je v sitemap.xml.
+- `/login` vypisuje demo účty (produkce běží s `ELDOCK_LOCK_ACCOUNT_SWITCHER=0`) – změna je v serverovém `.env`, jen se souhlasem uživatele.
+- Neexistující adresy (`/llms.txt`, `/.well-known/security.txt`, překlepy) přesměrují 307 na `/login` místo 404.
+- `www.eldock.cz` vrací 200 (duplicita), `/favicon.ico` 404.
+- Mobil: chybí navigace (odkazy sekcí zmizí), dvě tlačítka v kartě AI Panel Builderu přetékají kartu, ikony jsou zdvojené (SVG + emoji 🚀 📄).
+- Chybí zásady zpracování osobních údajů; souhlas při registraci firmy uvádí „NV č. 116/2016 Sb.“ (ATEX) místo NV 118/2016 Sb. (nízké napětí),
+  nápověda EU prohlášení o shodě jen 117/2016 Sb. (EMC).
+
+## Fáze 54 – opravy webu před nasazením
+
+1. PB-001 nezávisle na katalogu: každý krok `seedPanelBuilder` samostatně (selhání jednoho kroku nezastaví ostatní, skript vrátí chybový kód),
+   vzorový projekt jako první. Úvodní stránka nabídne „vzorový elaborát“ jen tehdy, když PB-001 existuje.
+2. Tester bez vypsaného hesla: tlačítko „Vyzkoušet demo“ přihlásí demo firmu na serveru; e-mail ani heslo se na stránce neukazují.
+3. 404 místo přesměrování: na přihlášení přesměrovávají jen skutečné trasy aplikace; neznámá adresa = 404 s cestou na úvodní stránku.
+   `www.eldock.cz` → 301 na `eldock.cz` (Caddyfile).
+4. Mobil: navigační menu úvodní stránky, tlačítka v kartách produktů se zalamují, bez zdvojených ikon.
+5. Právní texty: NV 118/2016 Sb. (LVD) a 117/2016 Sb. (EMC), veřejná stránka `/ochrana-osobnich-udaju` (návrh k právní kontrole)
+   a `/obchodni-podminky` (stávající podmínky z registrace), odkazy v patičce a u registračních formulářů.
+
+## Fáze 55 – normový registr v Eldocku
+
+- Prisma modely `NormRegistryItem`, `NormRule` (přírůstková migrace), import přes `npm run catalog:sync`
+  (zdroj `ai-panel-builder/catalog/norms/registr.json`, export `prisma/external-catalog/norms.json`).
+- `src/lib/norms.ts` = jediný zdroj označení a vydání; postupná náhrada ~330 natvrdo psaných odkazů (elaborát, `external-influences.ts`,
+  `legislation-2027.ts`, lhůtník).
+- Test ve `verify`: kód nesmí citovat normu, která v registru chybí nebo je zrušená.
+- Normový základ projektu: při vystavení elaborátu uložit použitá vydání (`PanelBoardProject.normBasisJson`).
+- Velín: přehled registru (neověřené položky, kontroly po termínu).
+
+## Fáze 56 – nový veřejný web
+
+- Rozcestník Dům a byt / Rozváděče / Průmysl; `/dum` (klasika / sběrnice / retrofit), `/rozvadece`, `/prumysl` (vč. prediktivní údržby),
+  `/cenik` (balíčky kreditů), `/ukazky`, `/normy-a-kvalita` (z registru, bez textů norem).
+- Veřejné kalkulačky nad hotovým engine (`cableAmpacity`, `checkCoordination`, úbytek napětí).
+- SEO po stránkách (`src/lib/seo.ts`): kratší description, H1 s klíčovými slovy, sitemap bez přihlašovacích stránek, statické `lastmod`.
+
+## Fáze 57 – Projekt elektroinstalace jako samostatný produkt
+
+- Vlastní vstup z `/dum` (dnes `/panel-builder/floorplan`), průvodce, balíčky (realizační projekt / s podpisem autorizované osoby / doplňky).
+- Výstupy: technická zpráva dle vyhl. 131/2024 Sb., PDF výkresy, datová kabeláž (ČSN EN 50173-4), topologie chytré domácnosti.
+- Fronta „ověření autorizovanou osobou“ ve velínu.
+
+## Fáze 58 – normový hlídač v Průmyslovém doku
+
+- Lhůty revizí VTZ z registru (po doplnění pravidla PR-016 z přílohy č. 4 NV 190/2022 Sb.).
+- Posuzování zařízení podle norem platných v době zřízení.
+- Upozornění na nová vydání norem (např. ČSN 33 2000-7-701 ed. 3, ČSN EN IEC 62305 ed. 3).
+
+## Mimo kód (rozhodnutí uživatele)
+
+- Nasazení fází 50–54 („nasaď to na produkci“), vypnutí demo režimu na produkci nebo demo na samostatné doméně.
+- B2C prodej projektů: autorizovaná osoba ČKAIT, pojištění odpovědnosti, zápis s.r.o., obchodní podmínky pro spotřebitele, GDPR.
+
+---
+
+# 📄 ZADANI-faze-55.md
+
+# Zadání fáze 55 – AI Panel Builder a 2D půdorys (vloženo 2026-11-05)
+
+Původní znění vložené do `docs/PLAN.md` během práce na fázi 54 (opravy veřejného webu). V textu je uvedené jako „Fáze 54“;
+číslo 54 už nese fáze oprav webu, proto je zařazené jako fáze 55. **Text končí uprostřed bodu 6** (poslední slova „varné plotýnky pro“) –
+zbytek bodu 6 (oprava nahrání PDF půdorysu „Plocha 0 × 0 m“) chybí. Realizace čeká na potvrzení uživatele.
+
+Bod 1 se částečně překrývá s fází 54: zdvojené emoji 🚀 / 📄 na úvodní stránce odstranila fáze 54; sestavení stromu PB-001
+(List 3 „Nezapojeno ve stromu“, chybějící spojnice na Listu 2) zůstává pro fázi 55.
+
+---
+
+Na základě kontroly nasazené aplikace a Katalogu ABB 2026 provedeme v AI Panel Builderu a 2D půdorysu 6 zásadních oprav a vylepšení (Fáze 54). Zapiš tuto fázi do docs/PLAN.md a kompletně ji naimplementuj:
+
+1. OPRAVA VZOROVÉHO 6LISTOVÉHO ELABORÁTU NA ÚVODNÍ STRÁNCE (`/ukazka-elaboratu` a `PB-001`) + DUPLICITNÍ IKONY:
+- V `image_3c1c24.png` je na Listu 3 vzorového elaborátu `PB-001` prázdné jednopólové schéma s červenou chybou `"Nezapojeno ve stromu: -Q1, -FV..."` a na Listu 2 chybí modré spojnice, protože položky `PB-001` nemají v databázi sestavený strom (`fedFromIncomer` / `parentItemId`).
+- Oprav to na dvou místech:
+  a) V `prisma/seed-panel-builder.ts` u vzorového projektu `PB-001` po vytvoření položek automaticky aplikuj `proposeTree()`, aby `-Q1` měl `fedFromIncomer = true`, `-FV1` a `-FI1` visely pod `-Q1` a všechny jističe `-F1` až `-F10` byly řádně zapojené s rozvrženými fázemi a vyplněným `routineTestJson`.
+  b) V `src/server/panel-documentation.ts` ve funkci `buildDocumentationData`: pokud má projekt v režimu `showcase: true` (nebo `PB-001`) některé prvky nezapojené ve stromu, automaticky nad daty před vykreslením `renderSingleLineDiagramSvg` a `renderPanelDrawingSvg` spusť `proposeTree()`, aby veřejná ukázka na úvodní stránce měla VŽDY 100% kompletní jednopólové schéma na Listu 3, modré propojky na Listu 2 a nula chyb!
+- Na úvodní stránce (`src/app/(site)/page.tsx` a `SampleElaborateDialog.tsx`) odstraň z textu tlačítek duplicitní textové emotikony `🚀` a `📄`, když už tlačítko obsahuje Lucide ikonu `<Rocket />` / `<FileText />`.
+
+2. VOLBA 1FÁZOVÉ / 3FÁZOVÉ INSTALACE A AUTOMATICKÁ PRÁCE S VODIČI A SBĚRNICEMI `PE` A `N` (`TN-C-S` vs. `TN-S`):
+Rozšiř datový model projektu (`PanelBoardProject`), 2D půdorys, soupis místností, vektorové plátno i PDF dokumentaci o volbu fází a správu `PE` / `N` vodičů:
+- **Volba soustavy a počtu fází (`supplyPhases` & `networkSystem`):**
+  * V hlavičce projektu rozváděče, v modalu Nový projekt i v 2D půdorysu přidej jasný přepínač:
+    1) **`3f soustava (3× 230/400 V AC)`** se třemi variantami přívodu:
+       - `TN-C-S (přívod 4-vodič L1, L2, L3, PEN -> rozdělení PEN na PE a N v tomto rozváděči)`
+       - `TN-S (přívod 5-vodič L1, L2, L3, N, PE -> PE a N již rozděleny před rozváděčem)`
+       - `TT (L1, L2, L3, N + vlastní uzemnění PE)`
+    2) **`1f soustava (1× 230 V AC)`** se dvěma variantami přívodu:
+       - `1f TN-S (přívod 3-vodič L, N, PE – 230 V)`
+       - `1f TN-C-S (přívod 2-vodič L, PEN -> rozdělení PEN na PE a N v rozváděči)`
+  * Pokud je zvolena **1f soustava (230 V)**:
+    - Automatický generátor rozváděče osazuje **2P hlavní vypínač (`2M`)**, **1f přepěťovku (`2M`)** a **2P proudové chrániče (`2M`)** (nebo `1P+N` RCBO).
+    - Všechny okruhy jsou přiřazeny na fázi `L1` (v fázové bilanci se hodnotí proud 1f přívodu bez falešného varování na nesymetrii L2/L3!).
+- **Automatický model a vizualizace `PE` a `N` sběrnic (můstků) v rozváděči (`src/lib/panel-builder/pe-n-busbars.ts`):**
+  * Vytvoř deterministický výpočet svorkovnic `PE` a `N` pro každý rozváděč:
+    1) **Hlavní ochranná sběrnice `PE` (zeleno-žlutá):** Spočítej potřebný počet přípojných míst (`1× přívod PE/PEN` + `1× uzemnění/MET` + `1× SPD` + `počet všech koncových jisticích vývodů` + `20 % rezerva`) a vyber odpovídající PE sběrnici (např. `PE sběrnice 12 / 18 / 24 / 36 otvorů`).
+    2) **Bod rozdělení `PEN -> PE + N` (pouze u `TN-C-S`):** Pokud je soustava `TN-C-S`, vykresli a zapiš do schématu i kusovníku **propojku (klemu) mezi sběrnicí `PE` a hlavní nulovou sběrnicí `N0`** s popisem `"Bod rozdělení PEN -> PE + N (ČSN 33 2000-5-54 ed. 3)"`. U soustavy `TN-S` jsou `PE` a `N0` plně izolované bez propojky!
+    3) **Hlavní nulová sběrnice `N0` (modrá – před chrániči):** Pro přívod `N`, napájení `N` pólů jednotlivých proudových chráničů (`-FI1`, `-FI2`...), `1P+N` jističochráničů (`-FA1`...) a okruhů mimo skupinové chrániče.
+    4) **Izolované skupinové nulové můstky `N-FI1`, `N-FI2`, `N-FI3`... (modré – ZA každým proudovým chráničem!):**
+       - Pro KAŽDÝ proudový chránič (`RCD`, `-FIx`) v rozváděči automaticky vytvoř samostatný, elektricky oddělený modrý nulový můstek `N-FIx`, do kterého jsou přivedeny nulové vodiče výhradně těch koncových jističů (`-Fy`), které mají `parentItemId = FIx.id`!
+       - Zobraz počet obsazených a volných svorek na každém můstku (např. `Můstek N1 (za -FI1): 7 / 10 svorek`).
+  * **Vizualizace na 2D vektorovém rozváděči, v 1P schématu a v kusovníku (BOM):**
+    - Přímo na 2D vektorovém plátně (`VectorPanel.tsx`) i na Listu 2 PDF dokumentace vykresli v horní nebo spodní části skříně (podle směru přívodu) grafickou lištu svorkovnic: zeleno-žlutý blok **`PE`** (s propojkou na `N0` při `TN-C-S`), modrý blok **`N0`** a samostatné modré bloky **`N1 (za -FI1)`**, **`N2 (za -FI2)`** se šroubky a počtem připojených vodičů!
+    - Kliknutím na blok `PE / N svorkovnice` na plátně zobraz přehledné vysvětlení a rozpis, který okruh je na který N-můstek připojen.
+    - Všechny vypočtené `PE` a `N` můstky automaticky přidej jako položky do Kusovníku (List 4).
+
+3. OPRAVA LOGA HAGER (`hager` MÍSTO `hagergroup`):
+- V `public/brands/hager.svg` a `ManufacturerLogo.tsx` nahraď šedé korporátní logo `hagergroup` oficiálním modrým logem **`hager`** (`#005CA9`, čistá tučná typografie `hager`).
+
+4. 2D PŮDORYS (`/panel-builder/floorplan`): PŘESUN VÝBĚRU VÝROBCE A ŘADY ÚPLNĚ NAHORU + 15 DESIGNOVÝCH ŘAD ABB S NÁHLEDY A DYNAMICKÝMI BARVAMI DLE KATALOGU 2026:
+- **Přesun z levého panelu do horní lišty:**
+  * Odstraň velký blok `🎨 Domovní přístroje` z levého bočního panelu (kde teď zabírá polovinu výšky a vytlačuje rozváděč, zásuvky a vypínače mimo obrazovku!).
+  * Umísti výběr **Výrobce -> Designová řada (s grafickým náhledem tvaru) -> Barva (s přesnými barvami dané řady)** do **horní vodorovné lišty přímo nad rastr půdorysu**! Levý panel tak bude od samého vrchu patřit výhradně osazovaným prvkům (`⚡ Rozváděč`, `🔌 Zásuvky`, `💡 Světla a vypínače`, `🔥 Samostatné spotřebiče`).
+- **Kompletní designové řady ABB a jejich přesné barvy dle Katalogu ABB 2026 (`src/lib/panel-builder/abb-catalog-2026.ts`):**
+  * Když uživatel vybere výrobce **ABB**, zobraz všech **14 designových řad pro zapuštěnou montáž + 3 nástěnné řady IP44/IP54**, každou s **2D SVG náhledem typického tvaru rámečku a klapky** (např. *Tango* zaoblený rámeček, *Levit* vrstvený čtvercový s barevnou spárou, *Zoni* moderní tenký matný, *Decento* kulatý porcelánový retro, *Time* s kovovým proužkem):
+    1) `Zoni` (`T`) -> barvy: `Bílá (500)`, `Matná bílá (240)`, `Šedá / bílá (241/141)`, `Pudrová / bílá (242/142)`, `Olivová / bílá (243/143)`, `Greige / bílá (244/144)`, `Matná černá (237)`, `Matná černá / bílá (137)`.
+    2) `Tango` (`A`) -> barvy: `Bílá (B)`, `Slonová kost (C)`, `Šedá (S)`, `Béžová (D)`, `Hnědá (H)`, `Černá (N)`, `Kouřová šedá (S2)`, `Vřesová červená (R2)`.
+    3) `Levit` (`H`) -> barvy: `Bílá / ledová bílá (01)`, `Bílá / bílá (03)`, `Šedá / bílá (16)`, `Slonová kost / bílá (17)`, `Macchiato / bílá (18)`, `Bílá / kouřová černá (62)`, `Žlutá / kouřová černá (64)`, `Červená / kouřová černá (65)`, `Oranžová / kouřová černá (66)`, `Zelená / kouřová černá (67)`.
+    4) `Levit M` (`H`) -> barvy: `Onyx / kouřová černá (63)`, `Perleťová / ledová bílá (68)`, `Ocelová / kouřová černá (69)`, `Titanová / kouřová černá (70)`.
+    5) `Time` (`E/F`) -> barvy: `Bílá / ledová bílá (01)`, `Bílá / bílá (03)`, `Titanová (08)`, `Starostříbrná (32)`, `Šampaňská (33)`, `Antracitová (34)`, `Ocelová (36)`.
+    6) `Time Arbo` (`E/F`) -> barvy: `Starostříbrná / přírodní javor`, `Starostříbrná / olše`, `Starostříbrná / třešeň`, `Titanová / třešeň`, `Antracitová / mahagon`, `Antracitová / wenge`.
+    7) `Element` (`E`) -> barvy: `Bílá / ledová bílá`, `Bílá / bílá`, `Agáve`, `Karmínová`, `Karamelová`, `Titanová`, `Platinová`.
+    8) `Swing` (`G`) -> barvy: `Jasně bílá (B1)`, `Krémová (C1)`, `Béžová (D1)`, `Světle šedá (S1)`, `Hnědá (H1)`.
+    9) `Swing L` (`G/J`) -> barvy: `Jasně bílá (B1)`, `Krémová (C1)`, `Mocca (C3)`, `Světle šedá (S1)`, `Cihlová (R3)`.
+    10) `Classic` (`3553`) -> barvy: `Jasně bílá (B1)`, `Béžová (D2)`, `Hnědá (H3)`.
+    11) `Decento` (`K`) -> barvy: `Porcelán bílá`, `Porcelán černá`, `Porcelán bílá / dřevo buk`, `Porcelán bílá / dřevo třešeň`, `Porcelán černá / dřevo wenge`.
+    12) `future linear` -> barvy: `Alpská bílá (84)`, `Matná alpská bílá (884)`, `Slonová kost (82)`, `Antracitová (81)`, `Matná černá (885)`, `Hliníková (83)`.
+    13) `solo / solo carat` -> barvy: `Studio bílá`, `Slonová kost`, `Šedá metalíza`, `Chrom`, `Zlato`, `Bronz`, `Břidlice`.
+    14) `Busch-axcent` -> barvy: `Studio bílá`, `Černá`, `Červená`, `Modrá`, `Zelená`, `Žlutá`, `Beton`, `Břidlice`, `Dřevo`.
+    15) `Garant (IP44)` / `Variant+ (IP54)` / `Praktik (IP44)` -> barvy: `Bílá`, `Šedá`, `Béžová`, `Hnědá`.
+  * **DŮLEŽITÉ:** Jakmile uživatel klikne na jinou designovou řadu (např. přepne z `Tango` na `Zoni` nebo `Classic` nebo `Levit M`), nabídka barev se OKAMŽITĚ PŘEPNE na skutečné barvy dané řady (a pokud předchozí barva v nové řadě neexistuje, automaticky se vybere první výchozí barva nové řady)! Totéž udělej pro řady Schneider Electric (`Nová Unica`, `Sedna`, `Asfora`, `Mureva Styl`), Legrand (`Valena Life`, `Valena Allure`, `Céliane`, `Niloé`, `Plexo`) a Hager (`lumina`, `berker`).
+
+5. GENERÁTOR KUSOVNÍKU DOMOVNÍ INSTALACE (BOM S MNOŽSTVÍM A PŘESNÝMI OBJEDNACÍMI KÓDY DLE KOMPLETNOSTI):
+- Podle Katalogu ABB 2026 (str. 26 "Sestavování přístrojů") se stavebnicový vypínač skládá z **Přístroje (strojku 1)** + **Krytu v barvě (4)** + **Rámečku 1R–5R v barvě (5)**, jednonásobná zásuvka z **Přístroje s krytem (2)** + **Rámečku (5)** a dvojzásuvka z **Kompletního přístroje (3)**.
+- Vytvoř v `src/lib/panel-builder/wiring-bom.ts` funkci `compileFloorplanBom(nodes, mode)`, která pro celý naklikaný projekt v 2D půdorysu vygeneruje **kompletní položkový kusovník (BOM) s přesnými objednacími čísly (MPN) a součty kusů**:
+  * Spočítá samostatně **Přístroje spínačů pod omítku** (např. `3559-A01345` pro řazení 1, `3559-A06345` pro ř. 6, `3559-A07345` pro ř. 7, `3559-A05345` pro ř. 5, `3559-A52345` pro ř. 6+6, `3559-A87345` pro 1/0+1/0, `3559-A89345` pro žaluziový spínač).
+  * Spočítá **Kryty spínačů v přesné zvolené řadě a kódu barvy** (např. u Zoni bílá `3559T-A00651 500` jednoduchý / `3559T-A00652 500` dělený / `3559T-A00662 500` žaluziový; u Tango `3558A-A651 B`; u Levit `3559H-A00651 03`; u Time `3558E-A00651 03` – podloženo daty v `WiringDevice` + deterministickou maticí z Katalogu ABB 2026).
+  * Spočítá **Zásuvky 1N a 2N** v přesné řadě a kódu barvy (`6619T-A06657 500`, `5513T-C02157 500`, `6619A-A06357 B`, `5513A-C02357 B`, `6619H-A06357 03`, `5513H-C02357 03`...).
+  * Spočítá **Rámečky podle násobnosti (1R až 5R)** v přesné řadě a barvě (`3901T-A00010 500` až `A00050`, `3901A-B10 B` až `B50`, `3901H-A05010 03` až `A05050`...).
+  * Spočítá **Instalační krabice KOPOS** (`KU 68-1901` pro běžnou montáž nebo `KPR 68 / KPRL 68-70/LD` hluboké krabice) a **Kabely CYKY** po metrech.
+- V pravém panelu 2D půdorysu (a v samostatném modalu **`[ 📋 Zobrazit kompletní kusovník (BOM) a objednací čísla ]`** s exportem do **CSV / XLSX a tiskem PDF**) zobraz tuto kompletní tabulku se sloupci: **Kategorie · Objednací číslo (MPN) · Název a specifikace · Řada a barva · Počet ks / m**. Stejný kusovník přenes i do vygenerovaného projektu v AI Panel Builderu!
+
+6. INTERAKTIVNÍ SCHEMATICKÉ ZNAČKY NA PŮDORYSU + OPRAVA NAHRÁNÍ PDF PŮDORYSU (`Plocha 0 × 0 m`):
+- **Interaktivní schematické značky místo obyčejných teček:**
+  * V 2D půdorysu (`/panel-builder/floorplan`) nahraď malé kruhové tečky skutečnými, čitelnými **interaktivními SVG elektrotechnickými značkami (dle ČSN EN 60617 / ČSN 01 3481)**:
+    - **Zásuvky (1Z, 2Z, ZL, IP44, RJ45):** Půlkruhová značka zásuvky se svislou čarou (u 2Z s dvojitou ryskou / číslem `2`, u IP44 se stříškou) + barevný lem podle barvy přístroje.
+    - **Vypínače (S1, S5, S6, S6+6, S7, T1, T2, ZAL, STM, PIR, TER):** Kruh spínače se šikmým praporkem podle počtu klapek a směru (1 praporek = ř. 1, 2 praporky = ř. 5, protilehlé praporky = ř. 6 / 6+6, 4 praporky = ř. 7, trojúhelník = tlačítko, šipky = žaluzie).
+    - **Svítidla:** Křížek v kruhu (`⊗`) pro stropní svítidlo, nástěnná konzola pro nástěnné svítidlo.
+    - **Samostatné spotřebiče (VD, TR, MY, PR, SU, CH, BO, TČ, EV, FVE):** Výrazný čtvercový technologický symbol s vnitřní piktogramovou ikonou spotřebiče (varné plotýnky pro
+
+---
+
 # 📄 docs/PLAN.md
 
 # ELDOCK – rotující plán
@@ -1989,27 +2152,35 @@ a postup nasazení jsou v `CLAUDE.md`. Soubor drž pod 150 řádky.
 | 51 | Oficiální loga výrobců z `public/brands/` (`npm run brands:fetch`, vlastní PNG / WebP / SVG má přednost), rozcestník katalogu bez ORNO / POLLOCK / LOVATO a výrobců ventilátorů, dialog nového projektu jako 2×2 dlaždice s více fotkami a videem (6 ostrých snímků v prohlížeči, kombinovaná analýza celek + detaily lišt), 2D půdorys: kaskáda výrobce → řada → barva domovních přístrojů, 13 typů ovladačů (S6+6, ZAL, TER …) s kabeláží, živé kóty, přesun / změna rozměru / smazání místnosti | 🟦 |
 | 52 | Metodika ČSN 33 2130 ed. 4: 3 úrovně instalace (klasika / sběrnicová Smart Home – hvězda + 24 V DC / retrofit s N v každé krabici vypínače, CYKY-J a KPR 68), světla na RCBO typ A nikdy se zásuvkami, chrániče min. typ A a typ B pro EV / TČ / FVE, dvojzásuvka = 2 zásuvky, Iz podle uložení C / B2 / A2 / A1 se souběhem, koordinace IB ≤ In ≤ Iz a impedance smyčky v teplém stavu, 3 nová pravidla linteru s opravou 1 klikem, řazení ABB (1So … 1/0So), Saltek FLP bez předjištění, SG Ready / DLM / TOTAL STOP, legislativní rámec a protokol o určení vnějších vlivů v elaborátu, 3 zkoušky RCD v revizním protokolu | 🟦 |
 | 53 | Prediktivní údržba ve Správě závodů: sledované součástky (`MonitoredComponent` – cykly ze směnnosti, B10d a doba mise T_M, motohodiny s Arrheniovou korekcí, kalendářní limity filtrů / baterií, sklad náhradních dílů, výměna kusu na 1 klik), kabelový pasport přívodu (`Equipment.feeder*`, Iz dle ČSN 33 2000-5-52 ed. 2 s korekcí teplotou a seskupením, IB ≤ In ≤ Iz, ΔU), simulátor připojení nového stroje kaskádou až k TR1, % Iz v pavoukovi napájení, odznaky v hlídači lhůt a přehledu areálu, ukázková data Závodu Jablonec (`db:demo-lifespan`) | 🟦 |
+| 54 | Opravy veřejného webu z analýzy eldock.cz: vzorový PB-001 nezávisle na katalogu (kroky `seedPanelBuilder` samostatně, `failures`, `db:panel-builder` vždy – firma Tester jen s demem), úvodní stránka nabízí elaborát jen s PB-001, „Vyzkoušet ukázkovou firmu“ bez hesla v prohlížeči, 404 místo přesměrování na `/login` (`PLANT_ROUTE_PREFIXES`), `www.*` → 301 (Caddyfile), mobilní menu, tlačítka bez přetečení a bez zdvojených emoji, NV 118/2016 + 117/2016 Sb. v podmínkách, `/ochrana-osobnich-udaju` a `/obchodni-podminky` | 🟦 |
 
 Fáze 36–38 jsou nasazené 2026-11-02 (commit `e9bfd76`), oprava kmitání plátna „Celé“ (`bd37aeb`) také; fáze 39 nasazena 2026-11-02 (commit `3c99981`). Fáze 40 a 41 nasazeny 2026-11-03 (commit `2ad82e4`), fáze 42 nasazena 2026-11-03 (commit `41e823d`), fáze 43 nasazena 2026-11-03 (commit `cd0910a`), fáze 44 a 45 nasazeny 2026-11-04 (commit `6e697a3`). Fáze 46 a 47 nasazeny 2026-11-04 (commit `7568296`). Fáze 48 a 49 nasazeny 2026-11-05 (commit `f118289`).
 
 ## B. Otevřená fáze
 
-**Fáze 54 – zatím nezadaná** ⬜
+**Fáze 55 – AI Panel Builder a 2D půdorys (vložené zadání)** ⬜ čeká na potvrzení uživatele
+Plné znění: `docs/archiv/ZADANI-faze-55.md` (vloženo do plánu během fáze 54, v textu jako „Fáze 54“, **text končí uprostřed bodu 6**):
+strom PB-001 pro List 2 a 3 vzorového elaborátu, volba 1f / 3f a TN-C-S / TN-S / TT se sběrnicemi PE / N0 / N-FIx, logo Hager,
+výběr výrobce → řada → barva v horní liště půdorysu s 15 řadami ABB 2026, kusovník domovní instalace s objednacími čísly, značky ČSN EN 60617 na půdorysu.
+
+Další plánované fáze z analýzy webu (`docs/archiv/ZADANI-faze-54.md`, uvedené tam jako 55–58): normový registr, nový veřejný web,
+Projekt elektroinstalace jako produkt, normový hlídač – čísla se posunou podle pořadí, které určí uživatel.
 
 Šablona pro nové zadání (vložte sem, nepřepisujte celý soubor):
 
 ```
-### Fáze 54 – <název>
+### Fáze 56 – <název>
 **Cíl:** <jedna věta>
 - [ ] <úkol>
 **Hotovo když:** <ověřitelná kritéria> · `npm run verify` OK
-**Commit:** `feat(faze54): <popis>`
+**Commit:** `feat(faze56): <popis>`
 ```
 
 ## C. Deník (jen poslední záznamy, starší jsou v archivu)
 
 | Fáze | Datum | Poznámky |
 |---|---|---|
+| 54 | 2026-11-05 | Zadání z analýzy webu a normového registru (`docs/archiv/ZADANI-faze-54.md`, plán fází 55–58). **PB-001:** na produkci `/ukazka-elaboratu` vracela 404 (v DB chyběl PB-001 – příčina na serveru neověřena; `seedPanelBuilder` ho zakládal až po katalogu a selhání kroku vše zastavilo). Teď každý krok běží samostatně a chyby vrací ve `failures` (`db:panel-builder` je vypíše a skončí kódem 1, plný seed spadne), entrypoint pouští `db:panel-builder` vždy (Tester jen s `ELDOCK_SEED_DEMO=1`), úvodní stránka nabízí elaborát jen při `hasShowcaseProject()`. **Demo:** `TESTER_COMPANY` (včetně hesla) byl v klientském balíčku `PanelAuthForms` – nově `loginDemoCompanyAction` přihlásí firmu na serveru. **404:** proxy přesměruje na `/login` jen `PLANT_ROUTE_PREFIXES` (`lib/routes.ts`, test hlídá všechny složky `(app)` / `(print)`), ostatní projde do Next.js (soubor nebo 404); 404 stránka vede primárně na úvodní stránku. **Caddy:** `@www header_regexp` → 301 na doménu bez www (funguje s jakýmkoli `ELDOCK_DOMAINS`; neověřeno na serveru). **Mobil:** `LandingMobileNav` (Sheet), tlačítka `whitespace-normal`, bez emoji v nadpisech a tlačítkách. **Právo:** podmínky odkazovaly na NV 116/2016 Sb. (ATEX) → 118/2016 + 117/2016 Sb., zásady zpracování osobních údajů `lib/legal.ts` (Hetzner, Gemini, e-mail, jen nezbytné cookies – **před ostrým prodejem právní kontrola**), veřejné obchodní podmínky, odkazy v patičce a u registrace, obě stránky v sitemap. **Vložené zadání:** během práce se do plánu vložilo další zadání („Fáze 54“ – AI Panel Builder a 2D půdorys) → archivováno jako `ZADANI-faze-55.md`, čeká na potvrzení. Testy: `lib/phase54.test.ts` (5), `panel-builder.test.ts` (+1), E2E `phase54.spec.ts` (2); `npm run verify` 591 testů OK, E2E landing, phase41, phase48, phase54 OK. |
 | 53 | 2026-11-05 | Zadání z `docs/archiv/ZADANI-faze-53.md` (vloženo spolu s fází 52, v textu jako „Fáze 52“). Před začátkem vrácen `.env.example` – obsahoval skutečné heslo velínu (na pokyn uživatele, do Gitu se nedostalo). **Model:** migrace `lifespan_cables` – `Equipment.shiftRegime` (výchozí 2), `internalTempC`, `feederCableType / ConductorMaterial / CrossSectionMm2 / ParallelRuns / LengthM / InstallMethod (E) / GroupingCount / AmbientTempC (30) / UpstreamBreakerA`, `nominalCurrentA`, `measuredCurrentA`; model `MonitoredComponent` + enum `ComponentWearCategory` (Cascade se zařízením). **Engine:** `lib/component-lifespan.ts` (směny 2 000 / 4 000 / 6 000 / 8 760 h/rok, cykly = offset + hodiny × sepnutí/h, Arrhenius `max · 2^−(T−40)/10` jen pro výkonovou elektroniku, výchozí 35 °C, limity cykly / B10d, motohodiny, kalendář T_M; nejhorší rozhoduje; 🟢 < 75 %, 🟡 75–95 % nebo < 90 dní, 🔴 ≥ 95 % / po termínu; chybějící náhradní díl) a `lib/cable-sizing.ts` (Itab Cu PVC / XLPE pro B2 / C / E / D 1,5–240 mm², Al = 0,78 × Cu, k_temp nejbližší vyšší teplota tabulky, k_group dle metodiky 1 / 0,88 / 0,82 / 0,77 / 0,73 / 0,70, Iz = Itab · běhy · k1 · k2, IB = naměřeno klešťákem > součet podřízených × 0,8 > jmenovitý, NEJIŠTĚNÝ KABEL při In > Iz, ΔU 3f 400 V ≤ 5 %, doporučený průřez, `simulateAddedLoad` – přírůstek na cílovém přívodu, výš se soudobostí 0,8, zdroj TR1 podle jmenovitého proudu). **UI:** záložka „🔍 Diagnostika & Spoje“ je u všech pevných zařízení (rozváděče a stroje): `ComponentLifespan` (směnnost, T rozváděče, karty s progress barem, cykly / motohodiny, Arrhenius, Skladem / ⚠️ Chybí na skladě, datum výměny, 🔄 výměna = reset 0 % + odpis ze skladu + záznam do poznámky, + Přidat sledovanou součástku s rychlým výběrem z kusovníku revize) a `FeederCableCard` (Itab → Iz → In → IB, ΔU, ✏️ úprava pasportu a měření klešťákem, 🧪 simulátor kW / A s posuvníkem); kniha PCSCHEMATIC (diagnostika spojů) pod nimi. Odznaky v hlavičce karty (⏳ součástky, 🔌 přívod). Pavouk napájení: popisek „CYKY-J 50 · 78 % Iz“ barevně podle stavu. `PredictiveWatch` – odznaky „⏳ Součástky před koncem životnosti (N)“ a „🔌 Přetížené / nejištěné kabely (N)“ v `/inspections/alerts` (se seznamem) a v přehledu areálu (jen když je co hlásit), výřez účtu se respektuje. Akce `actions/lifespan.ts` (údržba a revizní technici), služba `services/lifespan.ts`, dotazy `queries/health.ts`. **Seed:** `prisma/seed-lifespan-cables.ts` (plný seed + `npm run db:demo-lifespan` v entrypointu, značka `demo.lifespan-cables`, vlastní pasport ani sledované součástky nepřepisuje): TR1 ➔ RM1 3× 1-CXKH-R 240 (Iz 1 614 A), R-LIS-01 🟡, R-CNC-04 🔴 (In 125 A > Iz 105 A), R-ML-01 / LIS-01 / CNC-04 🟢; součástky -K1 94 %, -K_SAF1 42 %, -T1 97 % (Arrhenius 50 000 → 28 717 h, 0 ks), -FAN1 po termínu, -U1 58 %. **Odchylky:** (1) R-LIS-01 má kabel 3×120+70 místo 3×95+50 – s tabulkami ČSN by 3×95 při 7 kabelech a 38 °C mělo Iz ≈ 151 A < In 160 A (nejištěný), ne „86 % Iz“; teď vytížení ≈ 79 % = 🟡. (2) R-CNC-04 vychází Iz 105 A (zadání uvádí 112 A) – závěr In 125 A > Iz platí. (3) Zdroj -T1 je kvůli 97 % starší než rozváděč (2021) – v poznámce „převzatý z předchozího stroje“. (4) Výměna kusu nezakládá samostatný historický záznam, datum výměny se připíše do poznámky součástky. Testy: `lib/phase53.test.ts` (6), `services/phase53.test.ts` (3), E2E `phase53.spec.ts` (2); `npm run verify` 585 testů OK, E2E phase53, phase19 + phase24, phase21 OK. |
 | 52 | 2026-11-05 | Do plánu vložena 2 zadání najednou → plná znění v `docs/archiv/ZADANI-faze-52.md` (metodika ČSN 33 2130 ed. 4, kritické opravy návrhu) a `ZADANI-faze-53.md` (životnost součástek a kabely – v zadání jako „Fáze 52“, uživatel určil pořadí: metodika = 52). Fáze 50 a 51 zatím nenasazené. **Engine** (`floorplan-bridge.ts`): `InstallMode` + `smart_retrofit`, `INSTALL_LEVELS` (UI nabízí 3 úrovně, `smart_relay` jen API); `DesignOptions` (`installMethod` C / B2 / A2 / A1, `groupedCables`, `countDoubleAsTwo` výchozí ano, `lightingProtection` rcbo / rcd_group, `supplyLoopOhm` 0,3 Ω, `environment`). Světla B10 = RCBO 1P+N typ A 30 mA na každý okruh (`rcd: "own"`), nebo chrániče jen pro světla (`A30L`, `RcdGroup.lightingOnly`); zásuvkové chrániče typ A, EV / TČ / nový štítek `pv_inverter` (Střídač FVE) = vlastní typ B (`RCD_TYPE_B_TAGS`). Zásuvky po max. 10 skutečných zásuvkách (dvojzásuvka = 2). Průřez: `cableAmpacity` (tabulky IEC 60364-5-52 Cu/PVC, 1f 2 a 3f 3 zatížené žíly), `groupingFactor` (B.52.17), tab. 9 (1,5 mm² v B2 / A1 / A2 max. 10 A), `checkCoordination` (IB ≤ In ≤ Iz, I2 = 1,45 · In ≤ 1,45 · Iz), `loopImpedanceCheck` (Zs = přívod + 2·L·ρ20/S; Ik,min = 0,8·U0/(1,5·Zs) ≥ Ia a Zsm ≤ 2·U0/(3·Ia), Ia = 5 / 10 · In) – nejmenší vyhovující průřez, každé zvětšení s důvodem a alternativou jističe (např. A2 + souběh 2 kabelů → 4 mm² nebo 13 A). `Circuit.izA`, `Circuit.loop`, `Circuit.tag`. Kusovník: KU 68 / KPR 68 (65 mm), modul pod vypínač (retrofit), vícepatrové svorkovnice, sběrnicový kabel, elektroměr RS-485 + 2× 120 Ω (sběrnice s EV / TČ / FVE), stavební detaily dřevostavby / venkovních prostupů (`constructionDetails`: membránové krabice, ProClima ROFLEX, Kopos KEZ_KB, zemnič V4A AISI 316Ti). Rozváděč: SPD „T1+T2 bez předjištění“, SG Ready relé (FVE + TČ), elektroměr DLM (EV + FVE / TČ), volba `centralStop` (tlačítko TOTAL STOP + vypínací spoušť). **Kabeláž** (`cable-routing.ts`): `installation` – sběrnice = hvězda světel (`starRoutes`, `CYKY-J 3×1,5`) a 1 sběrnicový kabel na ovládací místo (`BUS_LEG_CABLE`), retrofit = `switchLegCable` mění CYKY-O na CYKY-J (i 6+6 → `CYKY-J 5×1,5`). **UI:** 2D půdorys – lišta „Metodika ČSN 33 2130 ed. 4“ (úroveň instalace, uložení kabelů, souběh, přepínač dvojzásuvky; uloženo v nákresu), výkaz okruhů ukazuje jištění (RCBO … typ A 30 mA), Iz a Zs ≤ Zs,max; dialog soupisu místností – úroveň instalace (3), uložení kabelů, přepínač dvojzásuvky. Paleta: ABB řazení 1So, 1S, 1SSo, 1+1, 6+6/0, 7So, 1/0So (+ stávající 1, 5, 6, 6+6, 7, 1/0) a Střídač FVE. **Linter:** `rcd-type-ac` (oprava na typ A), `rcd-lighting-mixed` (světelné jističe pod chráničem se zásuvkami → RCBO 1P+N typ A 30 mA stejné šířky, `configure-many`), `rcd-type-b` (Wallbox / TČ / FVE za A / AC → přepnout na B; i RCBO). **Katalog:** Saltek FLP-25-T1-VSF a FLP-B+C-MAXI-VSF (T1+T2 3+1 bez předjištění, vnitřní odpojovač, dálková signalizace) v `seed-catalog-research.ts` – **odchylka:** šířka 8M a Iimp 25 kA orientačně (zdroj = zadání), ověřit v katalogu Saltek. **Dokumentace:** list 1 – právní a normativní rámec (zákon 283/2021 Sb., vyhl. 131/2024 Sb. příl. 9 D.2.5, zákon 250/2021 Sb., NV 190/2022 Sb., ČSN 33 2130 ed. 4 …, u rozvodnice pod omítku „Úplný kryt“ dle ČSN EN 60670-24); list 5 přejmenován na „Výpočet oteplení, technická data a vnější vlivy“ a obsahuje protokol o určení vnějších vlivů (`lib/panel-builder/external-influences.ts`: 15 vlivů AA … CB s třídou a opatřením podle prostředí instalace, krytí IP / IK, stavební detaily) – elaborát zůstává 6listový. Prostředí TIMBER = „Dřevostavba / Pasivní dům / Hořlavý podklad“. **Revize:** migrace `inspection_rcd_tests` (`InspectionRecord.rcdTestJson`), `lib/rcd-test.ts` (0,5 · IΔn nesmí vybavit, tΔ ≤ 300 ms, IΔ v pásmu podle typu – A / F 0,35–1,4, AC 0,5–1, B 0,5–2 · IΔn, Zsm ≤ ⅔ · U0/Ia), formulář revize pevných zařízení (rozbalovací „Zkouška proudového chrániče“) a 4 řádky v revizním protokolu, jen když se měřilo. **Odchylka:** test podle zadání `phase53-methodology.test.ts` je pojmenovaný `src/lib/phase52-methodology.test.ts` (číslo fáze). Testy: `phase52-methodology.test.ts` (12), upravené `floorplan-bridge.test.ts` (dvojzásuvka = 2, světla na RCBO) a `phase51.test.ts` (paleta), E2E `phase52.spec.ts` (2); `npm run verify` 576 testů OK, E2E phase52 + phase49 a phase48 + phase45 OK. |
 | 51 | 2026-11-05 | Zadání opět vloženo místo plánu → plné znění v `docs/archiv/ZADANI-faze-51.md`, plán obnoven z gitu (fáze 50 zatím nenasazena). **Loga:** `lib/panel-builder/brand-logos.ts` (slugy 18 značek, zdroje na Wikimedia Commons, `sanitizeSvg` – žádné skripty, obsluhy událostí ani externí odkazy, generovaný wordmark), skript `scripts/fetch-brand-logos.ts` (`npm run brands:fetch`, `--force`, `--offline`; existující soubory nepřepisuje) stáhl 11 oficiálních SVG (ABB, Siemens, Schneider, Eaton, Legrand, WAGO, Hager, Schrack, Rittal, Loxone, Hensel), pro Noark, OEZ, ETI, Hakel, Bonega, Saltek, SEZ (bez veřejného SVG) a 5 dalších výrobců vygeneroval vektorový wordmark bez bílého obdélníku. Route `GET /api/brand-logo/[slug]` vrací první existující `public/brands/<slug>.webp|png|svg` (vlastní logo nahrané uživatelem má přednost, cache 5 min → propíše se bez buildu), jinak wordmark; `/brands/*` a `/api/brand-logo/*` jsou v proxy veřejné. `ManufacturerLogo` = `<img>` na světlé podložce (`data-logo` zůstal). **Odchylka:** loga jsou ochranné známky výrobců – použití jen k označení katalogu jejich výrobků; přesné „věrné podle manuálu značky“ u generovaných wordmarků nelze zaručit, oficiální soubor stačí vložit do `public/brands/`. ORNO / Pollock / Lovato přidány do `HIDDEN_MANUFACTURERS`, Pfannenberg a STEGO = `FAN_ONLY_MANUFACTURERS` (mimo rozcestník, dál ve výběru ventilátoru v kroku 3). **Nový projekt:** 2×2 dlaždice (📐 od nuly, 📷 pasport z fotek / 🎥 videa, 🏠 soupis místností, 🗺️ 2D půdorys = odkaz), bez hranatých závorek; více fotek najednou (1. celkový pohled, ostatní detaily lišt 1, 2, 3 … – u každého náhledu volba celkový pohled / lišta / nepoužít) nebo video MP4 / MOV / WebM: `src/lib/video-frames.ts` vybere v prohlížeči 6 rovnoměrně rozložených snímků, v okolí každého nejostřejší ze 3 kandidátů (rozptyl Laplaceova operátoru), JPEG 1920 px 0,92; náhled videa s „📸 Zachytit aktuální snímek z videa“. Video se na server neposílá, jen snímky. `createPanelProjectAction` přijímá `railPhotos` → po analýze celkové fotky `analyzeRailDetails` (`services/panel-design.ts`) přečte každý detail jako svou lištu (`railPhotosJson`), lištu mimo rozpoznaný rozváděč přeskočí s upozorněním. **2D půdorys:** `lib/panel-builder/wiring-designs.ts` (ABB 12 řad, Schneider 4, Legrand 6, Hager 2; `dbSeries` = názvy řad v katalogu, 6 barev → `wd_color_family`), kaskáda `DeviceAppearance` nahoře v levém panelu (karty s logy, řady s počtem přístrojů, barevné kroužky; „🔄 Použít na celý půdorys“ / „Použít na vybranou místnost“), nové prvky dostanou aktuální řadu a barvu, detail prvku má řadu i barvu, „Soupis domovní instalace“ s výrobcem, řadou a barvou; spodní select řady odstraněn. Paleta: S1, S5, S6, S6+6, S7, T1, T2, ZAL, STM, PIR, S1S, S44, TER (`control`, `fixedSwitchNo`, `wiringCategory`, `led`, `ip44`, `heightMm` – termostat 1,5 m, PIR 2,2 m). Kabeláž (`cable-routing.ts`): S6+6 = svody `CYKY-O 5×1,5` (L + korespondenční pár pro obě větve), ZAL = `CYKY-J 5×1,5` k pohonu (z vypínače do nadpraží + 1 m), TER = `CYKY-J 3×1,5` k nejbližšímu tepelnému čerpadlu / bojleru, jinak do rozváděče. `pickWiringDevice` má preferenci barvy, kategorii (žaluzie, stmívač, čidlo, termostat) a IP44; ZAL a TER se v projektu přiřadí k jističi světel své místnosti. **Místnosti:** živé kóty X / Y / plocha při kreslení i úpravě, místnost se po nakreslení rovnou vybere (bez `prompt`), výběr klikem, přesun tažením i s prvky (`moveRoom`), žlutý roh a 4 stěny (`resizeRect`, min. 0,5 m), detail místnosti s rychlými štítky názvu, `Šířka X` / `Hloubka Y` v m a 🗑️ Smazat (i Delete / Backspace a v plovoucí liště nad místností; prvky zůstanou). Testy: `lib/phase51.test.ts` (15), `services/phase51.test.ts` (2), E2E `phase51.spec.ts`; selektory dialogu v E2E 43 / 48 / panel-builder upraveny. |

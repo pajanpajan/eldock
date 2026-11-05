@@ -34,8 +34,8 @@ describe("AI Panel Builder – katalog a seed", () => {
   it("seed: ≥ 40 prvků, PB-001 s 13 přístroji (-Q1, -FV1 až -F10) na 3 lištách (1 žlutý, 1 červený), opakovaně bez duplicit", async () => {
     expect(CATALOG.length).toBeGreaterThanOrEqual(40);
     // Fáze 41: demo firma Tester vznikne jednou a převezme PB-001 (projekt bez firmy)
-    expect(await seedPanelBuilder(prisma, { external: false })).toEqual({ components: CATALOG.length, project: true, tester: { created: true, attached: 1 }, enclosures: STANDARD_COUNT, external: null, fans: ENCLOSURE_FANS.length });
-    expect(await seedPanelBuilder(prisma, { external: false })).toEqual({ components: CATALOG.length, project: false, tester: { created: false, attached: 0 }, enclosures: STANDARD_COUNT, external: null, fans: ENCLOSURE_FANS.length });
+    expect(await seedPanelBuilder(prisma, { external: false })).toEqual({ components: CATALOG.length, project: true, tester: { created: true, attached: 1 }, enclosures: STANDARD_COUNT, external: null, fans: ENCLOSURE_FANS.length, failures: [] });
+    expect(await seedPanelBuilder(prisma, { external: false })).toEqual({ components: CATALOG.length, project: false, tester: { created: false, attached: 0 }, enclosures: STANDARD_COUNT, external: null, fans: ENCLOSURE_FANS.length, failures: [] });
     expect(await prisma.catalogComponent.count()).toBe(CATALOG.length);
     const project = await prisma.panelBoardProject.findUniqueOrThrow({ where: { code: "PB-001" }, include: { items: true } });
     expect(project.items).toHaveLength(13);
@@ -43,6 +43,27 @@ describe("AI Panel Builder – katalog a seed", () => {
     expect(project.items.filter((item) => item.recognitionStatus === "PARTIAL").map((item) => item.designation)).toEqual(["-F7"]);
     expect(project.items.filter((item) => item.recognitionStatus === "UNRECOGNIZED").map((item) => item.designation)).toEqual(["-F4"]);
     expect(project.items.find((item) => item.designation === "-F4")?.catalogComponentId).toBeNull();
+  });
+
+  it("fáze 54: selhání katalogu nezastaví vzorový projekt PB-001, bez dema nevznikne firma Tester", async () => {
+    // První $transaction (upsert katalogu) selže, ostatní kroky musí proběhnout.
+    let failNext = true;
+    const flaky = new Proxy(prisma, {
+      get(target, prop) {
+        if (prop === "$transaction" && failNext) {
+          failNext = false;
+          return () => Promise.reject(new Error("katalog nedostupný"));
+        }
+        const value = Reflect.get(target, prop);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const result = await seedPanelBuilder(flaky, { external: false, demo: false });
+    expect(result.failures).toEqual(["katalog prvků: katalog nedostupný"]);
+    expect(result.project).toBe(true);
+    expect(result.tester).toEqual({ created: false, attached: 0 });
+    expect(await prisma.panelBoardProject.count({ where: { code: "PB-001" } })).toBe(1);
+    expect(await prisma.registeredCompany.count()).toBe(0);
   });
 
   it("atomizace PDF: nové přístroje jako samostatné řádky, známá objednací čísla se nepřepisují", async () => {

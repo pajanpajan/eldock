@@ -76,6 +76,9 @@ export const getPanelProject = cache(async (id: string) => {
 /** Vzorový projekt PB-001 pro veřejnou ukázku elaborátu na úvodní stránce (fáze 48) – bez přihlášení. */
 export const getShowcaseProject = cache(() => prisma.panelBoardProject.findUnique({ where: { code: SAMPLE_PROJECT_CODE }, include: projectDetail }));
 
+/** Fáze 54: úvodní stránka nabízí vzorový elaborát jen tehdy, když PB-001 v databázi je (jinak by náhled ukázal 404). */
+export const hasShowcaseProject = cache(async () => (await prisma.panelBoardProject.count({ where: { code: SAMPLE_PROJECT_CODE } })) > 0);
+
 export type PanelProjectDetail = NonNullable<Awaited<ReturnType<typeof getPanelProject>>>;
 export type PanelItemDetail = PanelProjectDetail["items"][number];
 

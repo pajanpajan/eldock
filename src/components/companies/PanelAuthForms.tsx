@@ -8,9 +8,9 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { TERMS_CONSENT, TESTER_COMPANY } from "@/lib/registered-company";
+import { TERMS_CONSENT } from "@/lib/registered-company";
 import { cn } from "@/lib/utils";
-import { loginPanelCompanyAction, registerPanelCompanyAction } from "@/server/actions/companies";
+import { loginDemoCompanyAction, loginPanelCompanyAction, registerPanelCompanyAction } from "@/server/actions/companies";
 
 import { CompanyFields, EMPTY_COMPANY, TermsConsent, type CompanyForm } from "./CompanyFields";
 
@@ -27,10 +27,21 @@ export function PanelAuthForms({ next, initialTab = "login" }: { next?: string; 
   const [terms, setTerms] = useState(false);
   const [error, setError] = useState<{ text: string; field?: string } | null>(null);
 
-  function submitLogin(credentials = login) {
+  function submitLogin() {
     setError(null);
     startTransition(async () => {
-      const result = await loginPanelCompanyAction(credentials, next);
+      const result = await loginPanelCompanyAction(login, next);
+      if (!result.ok) return setError({ text: result.error });
+      router.replace(result.data.href);
+      router.refresh();
+    });
+  }
+
+  // Fáze 54: ukázková firma se přihlásí na serveru – e-mail ani heslo demo účtu nejsou v prohlížeči
+  function tryDemo() {
+    setError(null);
+    startTransition(async () => {
+      const result = await loginDemoCompanyAction(next);
       if (!result.ok) return setError({ text: result.error });
       router.replace(result.data.href);
       router.refresh();
@@ -97,23 +108,11 @@ export function PanelAuthForms({ next, initialTab = "login" }: { next?: string; 
             <Button type="submit" className="touch-target gap-2" disabled={pending}>
               {pending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <LogIn className="size-4" aria-hidden />} Přihlásit se
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="touch-target gap-2"
-              disabled={pending}
-              onClick={() => {
-                const tester = { email: TESTER_COMPANY.email, password: TESTER_COMPANY.password };
-                setLogin(tester);
-                submitLogin(tester);
-              }}
-            >
-              <FlaskConical className="size-4" aria-hidden /> Vyzkoušet předvyplněný Tester účet
+            <Button type="button" variant="outline" className="touch-target gap-2" disabled={pending} onClick={tryDemo}>
+              <FlaskConical className="size-4" aria-hidden /> Vyzkoušet ukázkovou firmu
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Tester účet: <span className="font-mono">{TESTER_COMPANY.email}</span> / <span className="font-mono">{TESTER_COMPANY.password}</span> – vzorová firma s rozváděčem PB-001.
-          </p>
+          <p className="text-xs text-muted-foreground">Ukázková firma se vzorovým rozváděčem PB-001 – bez registrace a bez zadávání hesla.</p>
         </form>
       ) : (
         <form

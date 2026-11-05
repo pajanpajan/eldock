@@ -29,6 +29,9 @@ export const PUBLIC_PAGES = [
   { path: "/ukazka-elaboratu", priority: 0.8, changeFrequency: "monthly" },
   { path: "/panel-builder/auth", priority: 0.8, changeFrequency: "monthly" },
   { path: "/register-plant", priority: 0.6, changeFrequency: "monthly" },
+  // Fáze 54: právní stránky
+  { path: "/obchodni-podminky", priority: 0.3, changeFrequency: "yearly" },
+  { path: "/ochrana-osobnich-udaju", priority: 0.3, changeFrequency: "yearly" },
 ] as const;
 
 /** Interní aplikační trasy – vyhledávače je neindexují (za přihlášením stejně nejsou vidět). */

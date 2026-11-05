@@ -19,12 +19,13 @@ export default function NotFound() {
         title="Stránka nenalezena"
         description="Tato adresa neexistuje nebo zařízení už není v systému."
         action={
+          // Fáze 54: neznámé veřejné adresy končí tady (ne na přihlášení) → úvodní stránka je hlavní cesta zpět
           <div className="flex flex-wrap justify-center gap-2">
             <Button asChild className="touch-target">
-              <Link href={APP_HOME}>Zpět na mapu závodu</Link>
+              <Link href="/">Úvodní stránka</Link>
             </Button>
             <Button asChild variant="outline" className="touch-target">
-              <Link href="/">Úvodní stránka</Link>
+              <Link href={APP_HOME}>Mapa závodu (přihlášení)</Link>
             </Button>
           </div>
         }

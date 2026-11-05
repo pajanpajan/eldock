@@ -109,7 +109,7 @@ export const INSPECTION_TYPE_LABELS: Record<InspectionType, string> = {
 
 export const COMPLIANCE_CATEGORY_LABELS: Record<ComplianceCategory, { label: string; hint: string }> = {
   SINGLE_LINE_DIAGRAM: { label: "Liniové schéma", hint: "Jednopólové schéma rozvodu a vývodů" },
-  CONFORMITY_DECLARATION: { label: "EU prohlášení o shodě", hint: "ČSN EN 61439-1/-2, nařízení vlády 117/2016 Sb." },
+  CONFORMITY_DECLARATION: { label: "EU prohlášení o shodě", hint: "ČSN EN IEC 61439-1/-2, nařízení vlády 118/2016 Sb. (LVD) a 117/2016 Sb. (EMC)" },
   ROUTINE_VERIFICATION: { label: "Kusová zkouška", hint: "Kusové ověření dle čl. 11 ČSN EN 61439-1" },
   THERMAL_CALCULATION: { label: "Výpočet oteplení", hint: "Ověření oteplení výpočtem, čl. 10.10.4" },
   EXTERNAL_INFLUENCES: { label: "Vnější vlivy", hint: "Protokol o určení vnějších vlivů (ČSN 33 2000-5-51)" },

@@ -356,19 +356,33 @@ export async function seedTesterCompany(prisma: PrismaClient) {
   return { created: !exists, attached: count };
 }
 
-export async function seedPanelBuilder(prisma: PrismaClient, options: { external?: boolean } = {}) {
-  const components = await seedCatalog(prisma);
-  const project = await seedPanelProject(prisma);
-  const tester = await seedTesterCompany(prisma);
+/**
+ * Fáze 54: každý krok běží samostatně – selhání jednoho (např. importu externí databáze) nezastaví ostatní,
+ * hlavně vzorový projekt PB-001 pro veřejnou `/ukazka-elaboratu`. Chyby vrací ve `failures` (skript pak skončí kódem 1).
+ * `demo: false` (ELDOCK_SEED_DEMO=0) vynechá demo firmu Tester; katalog a PB-001 jsou součást produktu.
+ */
+export async function seedPanelBuilder(prisma: PrismaClient, options: { external?: boolean; demo?: boolean } = {}) {
+  const failures: string[] = [];
+  const step = async <T,>(name: string, run: () => Promise<T>, fallback: T): Promise<T> => {
+    try {
+      return await run();
+    } catch (error) {
+      failures.push(`${name}: ${error instanceof Error ? error.message : String(error)}`);
+      return fallback;
+    }
+  };
+  const components = await step("katalog prvků", () => seedCatalog(prisma), 0);
+  const project = await step("vzorový projekt PB-001", () => seedPanelProject(prisma), false);
+  const tester = options.demo === false ? { created: false, attached: 0 } : await step("demo firma Tester", () => seedTesterCompany(prisma), { created: false, attached: 0 });
   // Fáze 43: matice standardních rozvodnic a externí databáze prvků z exportu v Gitu (jen při změně otisku)
-  const enclosures = await seedStandardEnclosures(prisma);
+  const enclosures = await step("standardní rozvodnice", () => seedStandardEnclosures(prisma), 0);
   // Fáze 47: ventilátory rozváděčů a rozvodnice ABB CA35R (144M) z rešerší výrobců
-  const fans = await seedFans(prisma);
+  const fans = await step("ventilátory rozváděčů", () => seedFans(prisma), 0);
   const snapshot = options.external === false ? null : readSnapshot();
-  const external = snapshot ? await importExternalCatalog(prisma, snapshot) : null;
+  const external = snapshot ? await step("externí databáze prvků", () => importExternalCatalog(prisma, snapshot), null) : null;
   const wiringRows = options.external === false ? null : readWiringSnapshot();
-  if (wiringRows) await importWiringDevices(prisma, wiringRows);
-  return { components, project, tester, enclosures, external, fans };
+  if (wiringRows) await step("domovní přístroje", () => importWiringDevices(prisma, wiringRows), null);
+  return { components, project, tester, enclosures, external, fans, failures };
 }
 
 /** Filtrační ventilátory rozváděčů a skříň ABB CA35R – upsert podle objednacího čísla. Vrací počet ventilátorů. */

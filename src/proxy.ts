@@ -1,19 +1,21 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { AUTH_COOKIE, PANEL_AUTH_COOKIE, SUPERADMIN_COOKIE, companyIdOf, isAuthBypassed, isSuperadminToken, verifyAuthToken } from "@/lib/auth";
-import { APP_HOME } from "@/lib/routes";
+import { APP_HOME, isPlantRoute } from "@/lib/routes";
 
 /**
  * Přihlašovací brána se dvěma oddělenými produkty (fáze 41):
  * - veřejné: úvodní stránka `/`, ukázka elaborátu `/ukazka-elaboratu`, SEO soubory, `/login`, registrace závodu `/register-plant`, přihlášení / registrace
  *   AI Panel Builderu `/panel-builder/auth` a dotaz do registru ARES `/api/ares`;
  * - AI Panel Builder (`/panel-builder/*`) jen s přihlášenou firmou (cookie `eldock-pb`), jinak `/panel-builder/auth`;
- * - Správa závodů (vše ostatní) jen s přihlášením do závodu (cookie `digitry-auth`), jinak `/login`.
+ * - Správa závodů (`PLANT_ROUTE_PREFIXES`) jen s přihlášením do závodu (cookie `digitry-auth`), jinak `/login`;
+ *   ostatní adresy (veřejné soubory, neexistující stránky) projdou a Next.js vrátí soubor nebo 404 (fáze 54).
  * - velín `/superadmin` jen s cookie `eldock-superadmin` (fáze 50), jinak `/superadmin/login`.
  * API přijme kterékoli přihlášení; firma Panel Builderu a velín smí jen nahrávat a číst fotky.
  */
 // Fáze 48: veřejná ukázka elaborátu a SEO soubory (sitemap.xml, náhled odkazu opengraph-image)
-const PUBLIC_PATHS = new Set(["/", "/login", "/register-plant", "/panel-builder/auth", "/api/ares", "/ukazka-elaboratu", "/sitemap.xml", "/robots.txt", "/superadmin/login"]);
+// Fáze 54: právní stránky (zásady zpracování osobních údajů, obchodní podmínky)
+const PUBLIC_PATHS = new Set(["/", "/login", "/register-plant", "/panel-builder/auth", "/api/ares", "/ukazka-elaboratu", "/ochrana-osobnich-udaju", "/obchodni-podminky", "/sitemap.xml", "/robots.txt", "/superadmin/login"]);
 const SUPERADMIN_PREFIX = "/superadmin";
 const PANEL_PREFIX = "/panel-builder";
 
@@ -65,6 +67,9 @@ export async function proxy(request: NextRequest) {
     if (pathname.startsWith("/demo-docs/")) response.headers.set("Cache-Control", DEMO_DOCS_CACHE);
     return response;
   }
+  // Fáze 54: na přihlášení vedou jen trasy Správy závodů; cokoli jiného (veřejný soubor nebo neexistující adresa)
+  // projde do Next.js, který vrátí soubor nebo 404 – žádné 307 na /login pro /llms.txt a překlepy.
+  if (!isPlantRoute(pathname)) return NextResponse.next();
   return redirectTo(request, "/login", pathname === APP_HOME ? undefined : pathname + search);
 }
 
