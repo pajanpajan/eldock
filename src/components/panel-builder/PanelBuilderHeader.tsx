@@ -43,13 +43,14 @@ export function PanelBuilderHeader({ company }: { company: Pick<PanelCompany, "c
                   <span className="block font-mono text-[11px] text-muted-foreground">IČO {company.ico}</span>
                 </span>
               </div>
-              <span
-                className="flex items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/10 px-2.5 py-1.5 text-sm font-semibold text-primary"
-                title="Testovací kredity: 1 kredit = 1 nový rozváděč"
+              <Link
+                href="/panel-builder/credits"
+                className="flex items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/10 px-2.5 py-1.5 text-sm font-semibold text-primary outline-none hover:bg-primary/20 focus-visible:ring-3 focus-visible:ring-ring/50"
+                title="1 kredit = 1 nový rozváděč – dobít balíčkem kreditů"
                 data-testid="panel-credits"
               >
-                <Coins className="size-4" aria-hidden /> Kredity: {company.creditsRemaining}
-              </span>
+                <Coins className="size-4" aria-hidden /> 🪙 Kredity: {company.creditsRemaining} (+ Dobít)
+              </Link>
               <Link href="/panel-builder/company" className={`${link} border border-border bg-card/60`}>
                 <Stamp className="size-4" aria-hidden /> Firemní údaje a razítko
               </Link>

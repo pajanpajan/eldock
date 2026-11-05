@@ -93,10 +93,21 @@ export function NewProjectDialog({ credits = null }: { credits?: number | null }
     });
   }
 
+  // Bez kreditů: místo dialogu rovnou dobití kreditů (fáze 50)
+  if (credits !== null && credits <= 0) {
+    return (
+      <Button asChild className="touch-target gap-2" title="Došly kredity – dobijte balíček">
+        <Link href="/panel-builder/credits?reason=no-credits">
+          <Plus className="size-4" aria-hidden /> Nový projekt rozváděče
+        </Link>
+      </Button>
+    );
+  }
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button className="touch-target gap-2" disabled={credits !== null && credits <= 0} title={credits !== null && credits <= 0 ? "Došly testovací kredity" : credits !== null ? `Spotřebuje 1 kredit (zbývá ${credits})` : undefined}>
+        <Button className="touch-target gap-2" title={credits !== null ? `Spotřebuje 1 kredit (zbývá ${credits})` : undefined}>
           <Plus className="size-4" aria-hidden /> Nový projekt rozváděče
         </Button>
       </DialogTrigger>

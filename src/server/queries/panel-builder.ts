@@ -262,3 +262,20 @@ export const getWiringSeries = cache(async () => {
   const rows = await prisma.wiringDevice.groupBy({ by: ["manufacturer", "series"], where: { category: { in: ["WD_SOCKET", "WD_SWITCH"] } }, _count: { _all: true }, orderBy: [{ manufacturer: "asc" }, { series: "asc" }] });
   return rows.filter((row) => row._count._all >= 5).map((row) => ({ key: `${row.manufacturer}|${row.series}`, label: `${row.manufacturer} ${row.series}`, count: row._count._all }));
 });
+
+/** Objednávky kreditů přihlášené firmy (fáze 50), nejnovější nahoře. */
+export const getCreditOrders = cache(async () => {
+  const company = await getPanelCompany();
+  if (!company) return [];
+  return prisma.creditOrder.findMany({ where: { companyId: company.id }, orderBy: { createdAt: "desc" }, take: 50 });
+});
+
+/** Objednávka přihlášené firmy s fakturačními údaji odběratele (cizí objednávka → null). */
+export const getCreditOrder = cache(async (id: string) => {
+  const company = await getPanelCompany();
+  if (!company) return null;
+  return prisma.creditOrder.findFirst({
+    where: { id, companyId: company.id },
+    include: { company: { select: { companyName: true, ico: true, dic: true, street: true, city: true, zip: true, email: true, contactName: true, phone: true } } },
+  });
+});

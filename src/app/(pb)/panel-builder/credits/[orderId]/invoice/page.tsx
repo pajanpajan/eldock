@@ -1,0 +1,140 @@
+import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+
+import { LogoMark } from "@/components/layout/Logo";
+import { PrintButton } from "@/components/landing/PrintButton";
+import { PaymentQr } from "@/components/panel-builder/credits/PaymentQr";
+import { panelBuilderGuard } from "@/components/panel-builder/access";
+import { COMPANY_INFO } from "@/lib/company";
+import { VAT_RATE, creditPackage, formatCzk, formatIban, spdPayload } from "@/lib/credits";
+import { formatDate } from "@/lib/format";
+import { getCreditOrder } from "@/server/queries/panel-builder";
+import { bankIban } from "@/server/services/credits";
+
+export const metadata: Metadata = { title: "Zálohová faktura" };
+
+const PRINT_CSS = `
+  @page { size: A4 portrait; margin: 12mm; }
+  @media print {
+    html, body { background: #fff !important; }
+    .no-print, [data-testid="panel-builder-header"] { display: none !important; }
+    main { padding: 0 !important; max-width: none !important; }
+    .invoice { box-shadow: none !important; max-width: none !important; padding: 0 !important; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  }
+`;
+
+const DUE_DAYS = 14;
+const cell = "border border-zinc-400 px-2 py-1.5 text-left";
+
+// Fáze 50: zálohová faktura (výzva k platbě) za balíček kreditů – A4 k tisku / uložení do PDF.
+export default async function InvoicePage({ params }: PageProps<"/panel-builder/credits/[orderId]/invoice">) {
+  const guard = await panelBuilderGuard();
+  if (guard) return guard;
+  const order = await getCreditOrder((await params).orderId);
+  if (!order) notFound();
+  const iban = bankIban();
+  const customer = order.company;
+  const pkg = creditPackage(order.packageCode);
+  const due = new Date(order.createdAt.getTime() + DUE_DAYS * 24 * 3600 * 1000);
+  const vat = order.priceCzkInclVat - order.priceCzkExclVat;
+  const payload = spdPayload({ iban, amountCzk: order.priceCzkInclVat, variableSymbol: order.variableSymbol, message: `ELDOCK Kredity ${customer.companyName}` });
+
+  return (
+    <div className="flex flex-col items-center gap-4 py-4">
+      <style>{PRINT_CSS}</style>
+      <div className="no-print">
+        <PrintButton />
+      </div>
+      <article className="invoice w-full max-w-[210mm] bg-white p-[14mm] text-[10pt] leading-snug text-black shadow-2xl shadow-black/50" data-testid="invoice">
+        <header className="flex items-start justify-between gap-6 border-b-2 border-black pb-3">
+          <div className="flex items-center gap-2">
+            <LogoMark className="size-9" />
+            <span className="text-[18pt] font-black tracking-tight">ELDOCK</span>
+          </div>
+          <div className="text-right">
+            <h1 className="text-[16pt] font-bold">Zálohová faktura</h1>
+            <p className="text-[9pt] text-zinc-600">výzva k platbě – není daňovým dokladem</p>
+            <p className="mt-1 font-mono text-[12pt] font-bold">č. {order.variableSymbol}</p>
+          </div>
+        </header>
+
+        <section className="mt-4 grid grid-cols-2 gap-6">
+          <div>
+            <h2 className="mb-1 text-[9pt] font-bold tracking-wide text-zinc-600 uppercase">Dodavatel</h2>
+            <p className="font-semibold">{COMPANY_INFO.name}</p>
+            <p>{COMPANY_INFO.street}</p>
+            <p>
+              {COMPANY_INFO.zip} {COMPANY_INFO.city}
+            </p>
+            <p>IČO: {COMPANY_INFO.ico}</p>
+            <p>DIČ: {COMPANY_INFO.dic}</p>
+            <p>{COMPANY_INFO.email}</p>
+          </div>
+          <div data-testid="invoice-customer">
+            <h2 className="mb-1 text-[9pt] font-bold tracking-wide text-zinc-600 uppercase">Odběratel</h2>
+            <p className="font-semibold">{customer.companyName}</p>
+            <p>{customer.street}</p>
+            <p>
+              {customer.zip} {customer.city}
+            </p>
+            <p>IČO: {customer.ico}</p>
+            {customer.dic ? <p>DIČ: {customer.dic}</p> : null}
+            <p>
+              {customer.contactName} · {customer.email}
+            </p>
+          </div>
+        </section>
+
+        <section className="mt-4 grid grid-cols-[1fr_auto] gap-6">
+          <dl className="grid grid-cols-[auto_1fr] content-start gap-x-6 gap-y-1">
+            <dt className="text-zinc-600">Datum vystavení</dt>
+            <dd>{formatDate(order.createdAt)}</dd>
+            <dt className="text-zinc-600">Datum splatnosti</dt>
+            <dd>{formatDate(due)}</dd>
+            <dt className="text-zinc-600">Forma úhrady</dt>
+            <dd>bankovní převod / QR platba</dd>
+            <dt className="text-zinc-600">Účet (IBAN)</dt>
+            <dd className="font-mono">{formatIban(iban)}</dd>
+            <dt className="text-zinc-600">Variabilní symbol</dt>
+            <dd className="font-mono font-bold">{order.variableSymbol}</dd>
+          </dl>
+          <PaymentQr payload={payload} size={130} />
+        </section>
+
+        <table className="mt-5 w-full border-collapse" data-testid="invoice-items">
+          <thead className="bg-zinc-100">
+            <tr>
+              <th className={cell}>Položka</th>
+              <th className={`${cell} text-right`}>Množství</th>
+              <th className={`${cell} text-right`}>Cena bez DPH</th>
+              <th className={`${cell} text-right`}>DPH {Math.round(VAT_RATE * 100)} %</th>
+              <th className={`${cell} text-right`}>Celkem s DPH</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className={cell}>
+                ELDOCK AI Panel Builder – {pkg?.title ?? order.packageCode} ({pkg?.name ?? order.packageCode}), {order.creditsCount} kreditů
+              </td>
+              <td className={`${cell} text-right`}>1</td>
+              <td className={`${cell} text-right tabular-nums`}>{formatCzk(order.priceCzkExclVat)}</td>
+              <td className={`${cell} text-right tabular-nums`}>{formatCzk(vat)}</td>
+              <td className={`${cell} text-right tabular-nums`}>{formatCzk(order.priceCzkInclVat)}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div className="mt-3 ml-auto w-72 border-2 border-black p-2 text-right">
+          <p className="text-[9pt] text-zinc-600">Celkem k úhradě</p>
+          <p className="text-[16pt] font-black tabular-nums" data-testid="invoice-total">
+            {formatCzk(order.priceCzkInclVat)}
+          </p>
+        </div>
+
+        <footer className="mt-8 border-t border-zinc-300 pt-2 text-[8pt] text-zinc-600">
+          Zálohová faktura slouží jako výzva k platbě. Daňový doklad k přijaté platbě vystavíme po připsání úhrady na účet; kredity se připíší automaticky po potvrzení platby.
+        </footer>
+      </article>
+    </div>
+  );
+}

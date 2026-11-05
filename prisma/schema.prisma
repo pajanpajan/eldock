@@ -755,6 +755,8 @@ model RegisteredCompany {
   plant         Plant?              @relation(fields: [plantId], references: [id], onDelete: SetNull)
   panelProjects PanelBoardProject[]
   users         User[]
+  creditOrders  CreditOrder[]
+  aiFeedback    AiFeedbackReport[]
 
   @@index([productScope])
   @@index([ico])
@@ -936,6 +938,7 @@ model PanelBoardProject {
   enclosure PanelEnclosure?    @relation(fields: [enclosureId], references: [id], onDelete: SetNull)
   fan       EnclosureFan?      @relation(fields: [fanId], references: [id], onDelete: SetNull)
   items     PanelBoardItem[]
+  feedback  AiFeedbackReport[]
 
   @@index([equipmentId])
   @@index([companyId, updatedAt])
@@ -1188,4 +1191,53 @@ model PanelItemWiring {
 
   @@unique([itemId, wiringDeviceId, room])
   @@index([wiringDeviceId])
+}
+
+/// Stav objednávky kreditů AI Panel Builderu (fáze 50).
+enum CreditOrderStatus {
+  PENDING // čeká na úhradu
+  PAID // uhrazeno, kredity připsány
+  CANCELLED // stornováno
+}
+
+/// Objednávka balíčku kreditů (fáze 50): QR platba SPD + zálohová faktura, potvrzení úhrady ve velínu /superadmin.
+model CreditOrder {
+  id              String            @id @default(cuid())
+  companyId       String
+  /// Variabilní symbol "RRRRNNNN" (rok + pořadí), jednoznačný napříč objednávkami.
+  variableSymbol  String            @unique
+  /// START_10 | PROFI_30 | UNLIMITED_YEAR
+  packageCode     String
+  creditsCount    Int
+  priceCzkExclVat Int
+  priceCzkInclVat Int
+  status          CreditOrderStatus @default(PENDING)
+  paidAt          DateTime?
+  createdAt       DateTime          @default(now())
+
+  company RegisteredCompany @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, createdAt])
+  @@index([status])
+}
+
+/// Hlášení chyby AI rozpoznání od testera (fáze 50) – snímek lišt a prvků v okamžiku hlášení.
+model AiFeedbackReport {
+  id                   String   @id @default(cuid())
+  projectId            String?
+  companyId            String?
+  photoUrl             String?
+  detectedSnapshotJson String
+  message              String
+  /// OPEN | RESOLVED
+  status               String   @default("OPEN")
+  adminNote            String?
+  createdAt            DateTime @default(now())
+
+  project PanelBoardProject? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  company RegisteredCompany? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([projectId])
+  @@index([companyId])
 }

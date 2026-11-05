@@ -9,6 +9,7 @@ import type { PanelProjectDetail } from "@/server/queries/panel-builder";
 import { isGeminiConfigured } from "@/server/services/geminiPanelService";
 
 import { DeleteProjectButton } from "./ProjectAdmin";
+import { ReportAiErrorButton } from "./ReportAiErrorButton";
 
 /** Hlavička projektu rozváděče: kód, stav, skříň a štítek demo AI režimu. */
 export function ProjectHeader({ project }: { project: PanelProjectDetail }) {
@@ -58,6 +59,7 @@ export function ProjectHeader({ project }: { project: PanelProjectDetail }) {
           >
             🏷️ Tisk popisků a štítků (1:1)
           </Link>
+          <ReportAiErrorButton projectId={project.id} />
           <DeleteProjectButton project={{ id: project.id, code: project.code, name: project.name, customerName: project.customerName, installationSite: project.installationSite, status: project.status }} variant="full" redirectTo="/panel-builder" />
         </>
       }

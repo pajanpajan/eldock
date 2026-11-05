@@ -31,6 +31,9 @@ services:
       ELDOCK_MAIL_FROM: ${ELDOCK_MAIL_FROM:-Eldock <noreply@eldock.cz>}
       ELDOCK_CRON_SECRET: ${ELDOCK_CRON_SECRET:-}
       ELDOCK_PUBLIC_URL: ${ELDOCK_PUBLIC_URL:-https://eldock.cz}
+      # Velín /superadmin (fáze 50): bez vlastního hesla je v produkci vypnutý; IBAN pro QR platbu kreditů
+      ELDOCK_SUPERADMIN_PASSWORD: ${ELDOCK_SUPERADMIN_PASSWORD:-}
+      ELDOCK_BANK_IBAN: ${ELDOCK_BANK_IBAN:-}
       # AI Panel Builder: bez klíče běží deterministický demo režim
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_VISION_MODEL: ${GEMINI_VISION_MODEL:-gemini-2.5-pro}

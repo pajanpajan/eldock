@@ -32,7 +32,7 @@ export const PUBLIC_PAGES = [
 ] as const;
 
 /** Interní aplikační trasy – vyhledávače je neindexují (za přihlášením stejně nejsou vidět). */
-export const PRIVATE_PATHS = ["/plant/", "/equipment/", "/cae/", "/inspections/", "/admin/", "/api/", "/studio", "/app$", "/app/", "/panel-builder/", "/login"];
+export const PRIVATE_PATHS = ["/plant/", "/equipment/", "/cae/", "/inspections/", "/admin/", "/api/", "/studio", "/app$", "/app/", "/panel-builder/", "/login", "/superadmin"];
 
 export const absoluteUrl = (pathname: string) => (pathname === "/" ? SITE_URL : `${SITE_URL}${pathname}`);
 

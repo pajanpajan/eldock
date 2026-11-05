@@ -108,3 +108,31 @@ export function safeNextPath(value: string | null | undefined): string | undefin
   if (value === "/login" || value.startsWith("/login?") || value.startsWith("/api/")) return undefined;
   return value;
 }
+
+// ---------------------------------------------------------------------------
+//  Velín /superadmin (fáze 50) – vlastní cookie a vlastní odvozené tajemství podpisu,
+//  takže token velínu neplatí jako přihlášení do závodu ani do Panel Builderu (a naopak).
+// ---------------------------------------------------------------------------
+
+export const SUPERADMIN_COOKIE = "eldock-superadmin";
+export const SUPERADMIN_TTL_SECONDS = 60 * 60 * 8;
+const SUPERADMIN_SUBJECT = "superadmin";
+
+/**
+ * Heslo velínu: `ELDOCK_SUPERADMIN_PASSWORD`. Mimo produkci se použije přístupové heslo (`ELDOCK_ACCESS_PASSWORD`).
+ * V produkci bez vlastního hesla je velín vypnutý (`null`) – přístupové heslo dema znají i zákazníci.
+ */
+export function superadminPassword(nodeEnv = process.env.NODE_ENV): string | null {
+  const own = brandEnv("SUPERADMIN_PASSWORD");
+  if (own) return own;
+  return nodeEnv === "production" ? null : accessPassword();
+}
+
+const superadminSecret = () => `${authSecret()}:superadmin`;
+
+export const signSuperadminToken = (options: { now?: number } = {}) => signAuthToken(SUPERADMIN_SUBJECT, { ...options, ttl: SUPERADMIN_TTL_SECONDS, secret: superadminSecret() });
+
+export async function isSuperadminToken(token: string | undefined, options: { now?: number } = {}): Promise<boolean> {
+  const session = await verifyAuthToken(token, { ...options, secret: superadminSecret() });
+  return session?.userId === SUPERADMIN_SUBJECT;
+}
