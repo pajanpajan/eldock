@@ -16,7 +16,7 @@ test("🏠 rozváděč ze soupisu místností, ✓ stav kroků, ✏️ hlavička
   const before = await credits(page);
 
   await page.getByRole("button", { name: "Nový projekt rozváděče" }).click();
-  await page.getByRole("button", { name: /Vygenerovat rozváděč ze soupisu okruhů/ }).click();
+  await page.getByRole("button", { name: /Ze soupisu místností/ }).click();
   await expect(page.getByTestId("schedule-editor")).toBeVisible();
   await page.getByLabel("Název rozváděče").fill("RD48 ze soupisu");
   await page.getByLabel("Místo instalace").fill("Jablonec, Mírové nám. 1");

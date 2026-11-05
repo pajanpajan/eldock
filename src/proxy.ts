@@ -33,7 +33,8 @@ function redirectTo(request: NextRequest, pathname: string, next?: string) {
 export async function proxy(request: NextRequest) {
   if (isAuthBypassed()) return NextResponse.next();
   const { pathname, search } = request.nextUrl;
-  if (PUBLIC_PATHS.has(pathname) || pathname.startsWith("/opengraph-image")) return NextResponse.next();
+  // Loga výrobců (fáze 51) nejsou tajná – soubory public/brands a /api/brand-logo bez přihlášení
+  if (PUBLIC_PATHS.has(pathname) || pathname.startsWith("/opengraph-image") || pathname.startsWith("/brands/") || pathname.startsWith("/api/brand-logo/")) return NextResponse.next();
   // Cron (avízo lhůt revizí) se ověřuje vlastním tajným tokenem v Route Handleru.
   if (pathname.startsWith("/api/cron/")) return NextResponse.next();
 

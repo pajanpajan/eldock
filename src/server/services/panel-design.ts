@@ -265,6 +265,39 @@ export async function analyzeRailDetail(
 }
 
 /**
+ * Fáze 51: kombinovaná analýza při založení projektu – po celkové fotce (topologie lišt) se každá
+ * detailní fotka / snímek z videa přečte jako detail své lišty (ostré hodnoty B10 / B16 / DS301C …).
+ * Lišta mimo rozpoznaný rozváděč se přeskočí s upozorněním; chyba jedné lišty nezastaví ostatní.
+ */
+export async function analyzeRailDetails(
+  prisma: PrismaClient,
+  projectId: string,
+  photos: readonly { rail: number; url: string }[],
+  deps: Parameters<typeof analyzeRailDetail>[4],
+) {
+  const project = await prisma.panelBoardProject.findUnique({ where: { id: projectId }, select: { dinRailsCount: true } });
+  if (!project) throw new WorkflowError("NOT_FOUND", "Projekt rozváděče neexistuje.");
+  const rails = Math.max(project.dinRailsCount, 1);
+  const unique = [...new Map(photos.map((photo) => [photo.rail, photo])).values()].sort((a, b) => a.rail - b.rail);
+  const warnings: string[] = [];
+  let analyzed = 0;
+  for (const photo of unique) {
+    if (photo.rail > rails) {
+      warnings.push(`Detail lišty ${photo.rail} přeskočen – AI rozpoznala jen ${rails} ${rails === 1 ? "lištu" : rails < 5 ? "lišty" : "lišt"}.`);
+      continue;
+    }
+    try {
+      const result = await analyzeRailDetail(prisma, projectId, photo.rail, photo.url, deps);
+      analyzed++;
+      if (result.warning) warnings.push(`Lišta ${photo.rail}: ${result.warning}`);
+    } catch (error) {
+      warnings.push(`Lišta ${photo.rail}: ${error instanceof Error ? error.message : "detail se nepodařilo zpracovat"}`);
+    }
+  }
+  return { analyzed, warnings: [...new Set(warnings)] };
+}
+
+/**
  * „➕ Přidat prvek vpravo“ (prázdný nerozpoznaný 1M modul) a „📑 Duplikovat prvek“ (přesná kopie
  * se stejným katalogovým kusem a konfigurací) hned napravo od vybraného přístroje; přístroje vpravo se posunou.
  */

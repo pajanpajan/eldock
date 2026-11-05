@@ -1,6 +1,6 @@
 import "server-only";
 
-import { HIDDEN_MANUFACTURER_NAMES, brandOf, isHiddenManufacturer } from "@/lib/panel-builder/brands";
+import { HIDDEN_MANUFACTURER_NAMES, brandOf, isFanOnlyManufacturer, isHiddenManufacturer } from "@/lib/panel-builder/brands";
 import { catalogGroupOf, componentGroup, componentGroupWhere, type CatalogGroupId } from "@/lib/panel-builder/catalog-groups";
 import { cache } from "react";
 
@@ -133,7 +133,7 @@ async function manufacturerNames() {
   ]);
   const brands = new Map<string, { names: Set<string>; count: number }>();
   for (const row of [...components, ...enclosures, ...wiring, ...fans]) {
-    if (isHiddenManufacturer(row.manufacturer)) continue;
+    if (isHiddenManufacturer(row.manufacturer) || isFanOnlyManufacturer(row.manufacturer)) continue;
     const key = brandKey(row.manufacturer);
     const entry = brands.get(key) ?? { names: new Set<string>(), count: 0 };
     entry.names.add(row.manufacturer);

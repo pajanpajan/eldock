@@ -40,17 +40,24 @@ export const DEVICE_BRANDS: readonly Brand[] = [
  * Značky vyřazené z AI Panel Builderu (fáze 47): skryté v konfigurátoru, katalogu, filtrech, AI párování
  * i importu. Řádky v databázi zůstávají (vazby starších projektů), jen se nenabízejí.
  */
-export const HIDDEN_MANUFACTURERS = ["Finder", "Shelly", "Mean Well", "Dehn", "Relpol", "Pilz", "Weidmüller", "Elko EP", "Pollmann"] as const;
+export const HIDDEN_MANUFACTURERS = ["Finder", "Shelly", "Mean Well", "Dehn", "Relpol", "Pilz", "Weidmüller", "Elko EP", "Pollmann", "Orno", "Pollock", "Lovato"] as const;
 
 /** Varianty zápisu skrytých značek v databázi (seed, externí import, AI). */
-export const HIDDEN_MANUFACTURER_NAMES: string[] = [...HIDDEN_MANUFACTURERS, "FINDER", "SHELLY", "MEANWELL", "MEAN WELL", "MeanWell", "DEHN", "RELPOL", "PILZ", "WEIDMULLER", "Weidmuller", "ELKOEP", "ELKO EP", "Elko", "POLLMANN"];
+export const HIDDEN_MANUFACTURER_NAMES: string[] = [...HIDDEN_MANUFACTURERS, "FINDER", "SHELLY", "MEANWELL", "MEAN WELL", "MeanWell", "DEHN", "RELPOL", "PILZ", "WEIDMULLER", "Weidmuller", "ELKOEP", "ELKO EP", "Elko", "POLLMANN", "ORNO", "POLLOCK", "LOVATO", "Lovato Electric"];
 
 const hiddenNormalized = new Set(HIDDEN_MANUFACTURERS.map((name) => normalizeSearch(name).replace(/[^a-z]/g, "")));
 /** Je výrobce vyřazený? („Elko EP“, „ELKOEP“, „elko ep“ …) */
 export const isHiddenManufacturer = (name: string | null | undefined) => {
   const key = normalizeSearch(name ?? "").replace(/[^a-z]/g, "");
-  return !!key && (hiddenNormalized.has(key) || key === "elko" || key === "weidmuller");
+  return !!key && (hiddenNormalized.has(key) || key === "elko" || key === "weidmuller" || key === "lovatoelectric");
 };
+
+/**
+ * Výrobci samotných ventilátorů skříní (fáze 51): v rozcestníku katalogu ani v konfigurátoru nejsou,
+ * nabízí je jen výběr ventilátoru v kroku 3 (Oteplení).
+ */
+export const FAN_ONLY_MANUFACTURERS = ["Pfannenberg", "STEGO"] as const;
+export const isFanOnlyManufacturer = (name: string | null | undefined) => FAN_ONLY_MANUFACTURERS.some((brand) => normalizeSearch(brand) === normalizeSearch(name ?? "").trim());
 
 /** Podmínka Prismy: jen nabízení výrobci (`where: { ...visibleManufacturers }`). */
 export const visibleManufacturers = { manufacturer: { notIn: HIDDEN_MANUFACTURER_NAMES } };

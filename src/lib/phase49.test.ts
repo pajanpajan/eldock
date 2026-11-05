@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { analyzeDraft, buildPlan, emptyDraft, parseDraft, parseLength, recalibrate, roomAt, switchingFor, type EditorElement } from "@/lib/panel-builder/floorplan-editor";
 import { pickWiringDevice, type PickableDevice } from "@/lib/panel-builder/wiring-picker";
 
-const el = (id: string, item: string, x: number, y: number, room = "Obývák", patch: Partial<EditorElement> = {}): EditorElement => ({ id, item, x, y, room, mountHeightMm: null, frameUnits: 1, series: null, controls: [], ...patch });
+const el = (id: string, item: string, x: number, y: number, room = "Obývák", patch: Partial<EditorElement> = {}): EditorElement => ({ id, item, x, y, room, mountHeightMm: null, frameUnits: 1, series: null, color: null, controls: [], ...patch }) as EditorElement;
 
 describe("2D editor půdorysu – model nákresu", () => {
   it("kalibrace na 2 kliky: délka z textu a přepočet měřítka i prvků", () => {

@@ -26,7 +26,7 @@ export default async function FloorplanPage() {
         title="📐 2D půdorys & kabeláž"
         description="Nahrajte půdorys (obrázek / PDF) nebo nakreslete místnosti, zkalibrujte měřítko, osaďte zásuvky, světla, vypínače a spotřebiče. Výkaz kabeláže porovná vedení spodem, vrchem a optimalizovaně; rozváděč vygenerujete jedním klikem."
       />
-      <FloorplanEditorLoader series={series.map(({ key, label }) => ({ key, label }))} />
+      <FloorplanEditorLoader series={series.map(({ key, label, count }) => ({ key, label, count }))} />
     </PageTransition>
   );
 }

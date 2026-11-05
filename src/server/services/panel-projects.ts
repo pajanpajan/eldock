@@ -5,7 +5,8 @@ import type { PrismaClient } from "@/generated/prisma/client";
 import { isHiddenManufacturer } from "@/lib/panel-builder/brands";
 import { enclosureProjectData } from "@/lib/panel-builder/enclosures";
 import { analyzeDraft, paletteItem, parseDraft, type CableReport, type EditorElement, type FloorplanDraft, type PlanBuild } from "@/lib/panel-builder/floorplan-editor";
-import { parseSeriesKey, pickWiringDevice, type WiringNeed } from "@/lib/panel-builder/wiring-picker";
+import { pickWiringDevice, type WiringNeed } from "@/lib/panel-builder/wiring-picker";
+import { DEFAULT_COLOR, dbSeriesFor, designColor } from "@/lib/panel-builder/wiring-designs";
 import { isSampleProject, projectUploads, refundsCredit } from "@/lib/panel-builder/project-admin";
 import { railColumns } from "@/lib/panel-builder/rails";
 import { WorkflowError } from "@/lib/workflow/state-machine";
@@ -209,20 +210,25 @@ export async function createProjectFromFloorplan(prisma: PrismaClient, input: Fl
   });
 }
 
-/** Domovní přístroje řady ke každému jističi: zásuvky, rámečky a vypínače světel po místnostech. */
+/**
+ * Domovní přístroje řady a barvy ke každému jističi (fáze 49, rozšířeno ve fázi 51): zásuvky, rámečky,
+ * vypínače světel po místnostech (S5, S6+6, tlačítka, LED, IP44, stmívač, PIR), žaluziové ovladače
+ * a termostaty (k okruhu světel své místnosti).
+ */
 async function assignWiringDevices(prisma: PrismaClient, items: { id: string; device: SwitchboardResult["devices"][number] }[], circuits: CircuitPlanResult, build: PlanBuild, draft: FloorplanDraft): Promise<string[]> {
-  const keys = new Set([draft.series, ...draft.elements.map((element) => element.series)].filter((key): key is string => Boolean(parseSeriesKey(key))));
-  const devices = keys.size
-    ? await prisma.wiringDevice.findMany({ where: { OR: [...keys].map((key) => parseSeriesKey(key)!) }, select: { id: true, manufacturer: true, series: true, category: true, title: true, frameUnits: true, ipRating: true, featuresJson: true } })
+  const keys = [...new Set([draft.series, ...draft.elements.map((element) => element.series)])].map((key) => dbSeriesFor(key)).filter((key): key is NonNullable<typeof key> => key !== null);
+  const devices = keys.length
+    ? await prisma.wiringDevice.findMany({ where: { OR: keys.map((key) => ({ manufacturer: key.manufacturer, series: { in: key.series } })) }, select: { id: true, manufacturer: true, series: true, category: true, title: true, frameUnits: true, ipRating: true, featuresJson: true } })
     : [];
   const ofSeries = (key: string | null) => {
-    const parsed = parseSeriesKey(key ?? draft.series);
-    return parsed ? devices.filter((device) => device.manufacturer === parsed.manufacturer && device.series === parsed.series) : [];
+    const parsed = dbSeriesFor(key ?? draft.series);
+    return parsed ? devices.filter((device) => device.manufacturer === parsed.manufacturer && parsed.series.includes(device.series)) : [];
   };
   const rows = new Map<string, { itemId: string; wiringDeviceId: string; room: string; quantity: number }>();
   const missing = new Set<string>();
   const add = (itemId: string, element: EditorElement, need: WiringNeed, quantity: number, label: string) => {
-    const device = pickWiringDevice(ofSeries(element.series), need);
+    const color = designColor(element.color ?? draft.color) ?? designColor(DEFAULT_COLOR)!;
+    const device = pickWiringDevice(ofSeries(element.series), need, { colorFamilies: color.families });
     if (!device) return void missing.add(label);
     const key = `${itemId}|${device.id}|${element.room}`;
     const row = rows.get(key) ?? { itemId, wiringDeviceId: device.id, room: element.room, quantity: 0 };
@@ -230,28 +236,42 @@ async function assignWiringDevices(prisma: PrismaClient, items: { id: string; de
     rows.set(key, row);
   };
   const byCircuit = new Map(circuits.circuits.map((circuit) => [circuit.id, circuit]));
+  /** Jistič okruhu světel místnosti (žaluzie, termostat), jinak první jistič. */
+  const roomItem = new Map<string, string>();
   for (const { id: itemId, device } of items) {
     const circuit = device.circuitId ? byCircuit.get(device.circuitId) : null;
     if (!circuit) continue;
     const elements = [...new Map(circuit.nodeIds.map((nodeId) => build.elementOf.get(nodeId)).filter((element): element is EditorElement => Boolean(element)).map((element) => [element.id, element])).values()];
     for (const element of elements) {
       const item = paletteItem(element.item);
+      if (item?.kind === "light" && !roomItem.has(element.room)) roomItem.set(element.room, itemId);
       if (item?.kind === "single_socket" || item?.kind === "double_socket") {
         add(itemId, element, { kind: "socket", double: item.kind === "double_socket", ip44: item.variant === "ip44" }, element.frameUnits, item.label);
         if (element.frameUnits > 1) add(itemId, element, { kind: "frame", units: element.frameUnits }, 1, `rámeček ${element.frameUnits}R`);
       }
       if (item?.kind === "light") {
-        // Vypínače, které světlo ovládají: 1 místo = č. 1, 2 místa = č. 6, další = č. 7 (sériový č. 5 zůstane)
+        // Ovladače světla: 1 místo = č. 1, 2 místa = č. 6, další = č. 7; pevné typy (S5, S6+6, tlačítka, stmívač, PIR) zůstanou
         const controllers = draft.elements.filter((candidate) => candidate.controls.includes(element.id));
         controllers.forEach((controller, index) => {
           const palette = paletteItem(controller.item);
-          if (!palette || palette.variant === "button") return;
-          const switchNo = palette.switchNo === "5" ? "5" : controllers.length === 1 ? "1" : index < 2 ? "6" : "7";
-          add(itemId, controller, { kind: "switch", switchNo }, 1, `vypínač č. ${switchNo}`);
+          if (!palette) return;
+          if (palette.wiringCategory) return add(itemId, controller, { kind: "category", category: palette.wiringCategory }, 1, palette.label);
+          const base = palette.fixedSwitchNo ?? (controllers.length === 1 ? "1" : index < 2 ? "6" : "7");
+          const switchNo = palette.led && (base === "1" || base === "6" || base === "7") ? `${base}So` : base;
+          add(itemId, controller, { kind: "switch", switchNo, ip44: palette.ip44 }, 1, `vypínač č. ${switchNo.replace("So", "S")}`);
         });
       }
     }
   }
+  // Žaluziové ovladače a termostaty (nejsou na silovém okruhu) → jistič světel své místnosti
+  const fallbackItem = items[0]?.id;
+  for (const element of draft.elements) {
+    const palette = paletteItem(element.item);
+    if (!palette?.wiringCategory || (palette.control !== "blind" && palette.control !== "thermostat")) continue;
+    const itemId = roomItem.get(element.room) ?? fallbackItem;
+    if (itemId) add(itemId, element, { kind: "category", category: palette.wiringCategory }, element.frameUnits, palette.label);
+  }
   if (rows.size) await prisma.panelItemWiring.createMany({ data: [...rows.values()] });
   return missing.size ? [`Ve zvolené řadě chybí: ${[...missing].join(", ")} – doplňte je v konfigurátoru jističe.`] : [];
 }
+

@@ -104,6 +104,14 @@ export function circuitRoutes(nodes: readonly RouteNode[], panel: { x: number; y
 export const cableLabel = (cable: string) => cable.replace(/(\d)x(\d)/, "$1×$2");
 export const SWITCH_LEG_CABLE = "CYKY-O 3×1,5";
 export const DATA_CABLE = "UTP Cat6";
+/** Fáze 51: dvojitý střídavý přepínač č. 6+6 – L + korespondenční pár pro každou ze 2 větví. */
+export const DOUBLE_TWO_WAY_CABLE = "CYKY-O 5×1,5";
+/** Žaluziový ovladač → pohon žaluzie (L, N, PE, nahoru, dolů). */
+export const BLIND_CABLE = "CYKY-J 5×1,5";
+/** Pokojový termostat → topný okruh (spínaný vodič k tepelnému zdroji / relé v rozváděči). */
+export const THERMOSTAT_CABLE = "CYKY-J 3×1,5";
+/** Výška nadpraží okna nad vypínačem + přívod k pohonu v překladu [mm]. */
+export const BLIND_MOTOR_RUN_MM = 1000;
 
 const meters = (mm: number) => Math.round(mm / 100) / 10;
 
@@ -140,7 +148,9 @@ export interface CablingInput {
   profile?: ElevationProfile;
   selected: CableRoutingMode;
   /** Vypínač → světlo, které ovládá (svod CYKY-O ze stropní krabice k vypínači). */
-  switchLinks?: readonly { switchId: string; lightId: string }[];
+  switchLinks?: readonly { switchId: string; lightId: string; cable?: string }[];
+  /** Fáze 51: žaluziové ovladače (kabel k pohonu) a termostaty (kabel k topnému okruhu / zdroji tepla). */
+  controlRuns?: readonly { id: string; kind: "blind" | "thermostat"; targetId?: string | null }[];
   /** Datové zásuvky – každá samostatný UTP z rozváděče / racku. */
   dataNodeIds?: readonly string[];
 }
@@ -189,7 +199,30 @@ export function summarizeCabling(input: CablingInput): CableSummary {
     if (!light || !switchNode) continue;
     const mm = Math.round((manhattan(light, switchNode) + Math.max(0, profile.ceilingHeightMm - switchNode.heightMm)) * slack + profile.boxAllowanceMm * 2);
     for (const mode of ["BOTTOM", "TOP", "OPTIMIZED"] as const) totals[mode] += mm;
-    add(SWITCH_LEG_CABLE, mm);
+    add(link.cable ?? SWITCH_LEG_CABLE, mm);
+  }
+  // Žaluzie: z ovladače vzhůru do nadpraží k pohonu; termostat: k tepelnému zdroji, jinak do rozváděče
+  for (const run of input.controlRuns ?? []) {
+    const node = byId.get(run.id);
+    if (!node) continue;
+    const runs = { BOTTOM: 0, TOP: 0, OPTIMIZED: 0 } as Record<CableRoutingMode, number>;
+    if (run.kind === "blind") {
+      const mm = Math.round((Math.max(0, profile.ceilingHeightMm - node.heightMm) + BLIND_MOTOR_RUN_MM) * slack + profile.boxAllowanceMm * 2);
+      runs.BOTTOM = runs.TOP = runs.OPTIMIZED = mm;
+    } else {
+      const target = run.targetId ? byId.get(run.targetId) : null;
+      for (const mode of ["BOTTOM", "TOP"] as const) {
+        const vertical = target
+          ? mode === "BOTTOM"
+            ? node.heightMm + target.heightMm + 2 * profile.floorDepthMm
+            : Math.max(0, profile.ceilingHeightMm - node.heightMm) + Math.max(0, profile.ceilingHeightMm - target.heightMm)
+          : panelVertical(node.heightMm, mode, profile);
+        runs[mode] = Math.round((manhattan(target ?? input.panel, node) + vertical) * slack + (target ? profile.boxAllowanceMm : profile.panelAllowanceMm) + profile.boxAllowanceMm);
+      }
+      runs.OPTIMIZED = Math.min(runs.BOTTOM, runs.TOP);
+    }
+    for (const mode of ["BOTTOM", "TOP", "OPTIMIZED"] as const) totals[mode] += runs[mode];
+    add(run.kind === "blind" ? BLIND_CABLE : THERMOSTAT_CABLE, runs[input.selected]);
   }
   // Datové zásuvky: samostatný UTP z rozváděče, každá kratší cestou v režimu OPTIMIZED
   for (const id of input.dataNodeIds ?? []) {

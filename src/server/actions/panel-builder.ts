@@ -6,13 +6,14 @@ import { z } from "zod";
 import { COMPONENT_CATEGORIES } from "@/lib/panel-builder/catalog";
 import { prisma } from "@/lib/prisma";
 import { WorkflowError } from "@/lib/workflow/state-machine";
-import { analyzePanelPhoto, extractDatasheetComponents, lookupComponent, type AiMode, type AnalysisMode } from "@/server/services/geminiPanelService";
+import { analyzePanelPhoto, analyzeRailPhoto, extractDatasheetComponents, lookupComponent, type AiMode, type AnalysisMode } from "@/server/services/geminiPanelService";
 import { PHASE_OPTIONS, type TreeIssue } from "@/lib/panel-builder/tree";
 import { analyzeProject, assignCatalogComponent, createPanelProject, importDatasheet, addModule, addRail, configureItem, deleteItem, deleteRail, lookupComponentForItem, mergeItems, releaseDocumentation, saveThermalInputs, saveTree, searchCatalog, setIncomer, splitItem, updateItemText, type CatalogHit, type ImportedComponent } from "@/server/services/panel-builder";
 import { actionFailure, guardCompany, guardItem, guardProject } from "@/server/panel-guards";
 import { consumeCredit } from "@/server/services/companies";
 import { companyManufacturer } from "@/lib/registered-company";
 import { readStoredFile } from "@/server/storage";
+import { analyzeRailDetails } from "@/server/services/panel-design";
 
 import type { ActionResult } from "./workflow";
 
@@ -56,17 +57,19 @@ const createSchema = z.object({
   modulesPerRail: z.number().int().min(4).max(48),
   /** Fáze 43: návrh od nuly bez fotky (1× 12M) nebo pasportizace z fotky. */
   designMode: z.enum(["PHOTO", "DESIGN"]).default("PHOTO"),
+  /** Fáze 51: detailní fotky lišt / snímky z videa (lišta → fotka) ke kombinované analýze. */
+  railPhotos: z.array(z.object({ rail: z.number().int().min(1).max(12), url: z.string().max(300).regex(/^\/api\/files\/photos\/[\w./-]+$/) })).max(12).default([]),
 });
 
 const readPhoto = (url: string) => readStoredFile(url);
 
 /** Nový projekt z fotky + okamžitá analýza (krok 1). */
-export async function createPanelProjectAction(input: z.input<typeof createSchema>): Promise<ActionResult<{ id: string; mode: AiMode; warning?: string; design?: boolean }>> {
+export async function createPanelProjectAction(input: z.input<typeof createSchema>): Promise<ActionResult<{ id: string; mode: AiMode; warning?: string; design?: boolean; details?: number }>> {
   const parsed = createSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Zkontrolujte název rozváděče a parametry skříně." };
   try {
     const company = await guard();
-    const { dinRailsCount, modulesPerRail, designMode, ...rest } = parsed.data;
+    const { dinRailsCount, modulesPerRail, designMode, railPhotos, ...rest } = parsed.data;
     if (designMode === "PHOTO" && !rest.photoUrl) return { ok: false, error: "Nahrajte fotku rozváděče, nebo zvolte návrh od nuly." };
     // 1 kredit = 1 nový rozváděč; údaje firmy se propíšou jako výrobce rozváděče
     await consumeCredit(prisma, company.id);
@@ -83,8 +86,11 @@ export async function createPanelProjectAction(input: z.input<typeof createSchem
       return { ok: true, data: { id: project.id, mode: "DEMO" as AiMode, design: true } };
     }
     const result = await analyzeProject(prisma, project.id, { analyze: analyzePanelPhoto, readPhoto });
+    // Kombinovaná analýza: celková topologie + ostré hodnoty z detailních fotek lišt
+    const details = railPhotos.length ? await analyzeRailDetails(prisma, project.id, railPhotos, { analyze: analyzeRailPhoto, readPhoto }) : null;
     revalidatePath("/panel-builder", "layout");
-    return { ok: true, data: { id: project.id, mode: result.mode, warning: result.warning } };
+    const warning = [result.warning, ...(details?.warnings ?? [])].filter(Boolean).join(" ") || undefined;
+    return { ok: true, data: { id: project.id, mode: result.mode, warning, details: details?.analyzed ?? 0 } };
   } catch (error) {
     return failure(error, "Projekt se nepodařilo založit.");
   }

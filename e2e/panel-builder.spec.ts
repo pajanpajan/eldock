@@ -154,8 +154,8 @@ test("nový projekt: sloučení 3× 1M → 3P, rozdělení zpět, filtr výrobce
   await page.goto("/panel-builder");
   await page.getByRole("button", { name: "Nový projekt rozváděče" }).click();
   // Výchozí režim je návrh od nuly – pasportizace z fotky je druhá volba
-  await expect(page.getByRole("button", { name: /Navrhnout nový rozváděč od nuly/, pressed: true })).toBeVisible();
-  await page.getByRole("button", { name: /Pasportizovat rozváděč z fotky/ }).click();
+  await expect(page.getByRole("button", { name: /Navrhnout od nuly/, pressed: true })).toBeVisible();
+  await page.getByRole("button", { name: /Pasport z fotek/ }).click();
   await page.getByLabel("Název rozváděče").fill("Podružný rozváděč RP2 – dílna");
   await expect(page.getByLabel("Převažující výrobce (nápověda pro AI)")).toHaveValue("MIX");
   await page.getByRole("button", { name: "Ukázková fotka" }).click();

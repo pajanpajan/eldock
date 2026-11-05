@@ -22,7 +22,7 @@ beforeEach(async () => {
 });
 afterEach(() => db.cleanup());
 
-const el = (id: string, item: string, x: number, y: number, room: string, patch: Partial<EditorElement> = {}): EditorElement => ({ id, item, x, y, room, mountHeightMm: null, frameUnits: 1, series: null, controls: [], ...patch });
+const el = (id: string, item: string, x: number, y: number, room: string, patch: Partial<EditorElement> = {}): EditorElement => ({ id, item, x, y, room, mountHeightMm: null, frameUnits: 1, series: null, color: null, controls: [], ...patch }) as EditorElement;
 
 function house(): FloorplanDraft {
   return {

@@ -36,7 +36,7 @@ test("návrh od nuly: 1× 12M, presety a další lišta, kaskáda výrobce → k
   // studený dev server stránku během kompilace přenačítá – dialog otevřít opakovaně
   await expect(async () => {
     await page.getByRole("button", { name: "Nový projekt rozváděče" }).click({ timeout: 5_000 });
-    await expect(page.getByRole("button", { name: /Navrhnout nový rozváděč od nuly/, pressed: true })).toBeVisible({ timeout: 3_000 });
+    await expect(page.getByRole("button", { name: /Navrhnout od nuly/, pressed: true })).toBeVisible({ timeout: 3_000 });
   }).toPass({ timeout: 60_000 });
   await page.getByLabel("Název rozváděče").fill("Rozvodnice RD1 – rodinný dům");
   await page.getByRole("button", { name: "📐 Založit návrh rozváděče" }).click();
