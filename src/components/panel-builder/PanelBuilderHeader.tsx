@@ -31,6 +31,9 @@ export function PanelBuilderHeader({ company }: { company: Pick<PanelCompany, "c
               <Link href="/panel-builder/catalog" className={link}>
                 Katalog prvků
               </Link>
+              <Link href="/panel-builder/floorplan" className={link}>
+                📐 2D Půdorys & Kabeláž
+              </Link>
             </nav>
             <div className="ml-auto flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-2 rounded-lg border border-border bg-card/60 px-3 py-1.5 text-sm" data-testid="panel-company">

@@ -8,7 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { companyManufacturer } from "@/lib/registered-company";
 import { actionFailure, guardCompany, guardProject } from "@/server/panel-guards";
 import { consumeCredit } from "@/server/services/companies";
-import { createProjectFromSchedule, deletePanelProjects, updateProjectHeader, type DeleteResult } from "@/server/services/panel-projects";
+import { createProjectFromFloorplan, createProjectFromSchedule, deletePanelProjects, updateProjectHeader, type DeleteResult } from "@/server/services/panel-projects";
 import { removeStoredFile } from "@/server/storage";
 
 import type { ActionResult } from "./workflow";
@@ -93,5 +93,27 @@ export async function createScheduleProjectAction(input: z.input<typeof schedule
     }
   } catch (error) {
     return actionFailure(error, "Rozváděč ze soupisu se nepodařilo vygenerovat.");
+  }
+}
+
+const floorplanSchema = z.object({ name: text.min(1), customerName: text.nullable(), installationSite: text.nullable(), draft: z.unknown() });
+
+/** ⚡ Vygenerovat rozváděč z 2D půdorysu (fáze 49) – 1 kredit; nepovedený návrh kredit vrátí. */
+export async function createFloorplanProjectAction(input: z.input<typeof floorplanSchema>): Promise<ActionResult<{ id: string; devices: number; circuits: number; enclosure: string | null; warnings: string[] }>> {
+  const parsed = floorplanSchema.safeParse(input);
+  if (!parsed.success || JSON.stringify(parsed.data.draft ?? null).length > 400_000) return { ok: false, error: "Zadejte název rozváděče; půdorys je příliš velký nebo neplatný." };
+  try {
+    const company = await guardCompany();
+    await consumeCredit(prisma, company.id);
+    try {
+      const result = await createProjectFromFloorplan(prisma, { ...parsed.data, companyId: company.id, manufacturerInfo: companyManufacturer(company) });
+      revalidatePath("/panel-builder", "layout");
+      return { ok: true, data: result };
+    } catch (error) {
+      await prisma.registeredCompany.update({ where: { id: company.id }, data: { creditsRemaining: { increment: 1 } } });
+      throw error;
+    }
+  } catch (error) {
+    return actionFailure(error, "Rozváděč z půdorysu se nepodařilo vygenerovat.");
   }
 }

@@ -121,9 +121,26 @@ Klasická instalace (`classic`), G = nezávislé větve, S = ovládací místa:
 - `rcdGroups`, `bom`, `totalModules`, `requiredModules`, `totalPowerLossW`,
 - `enclosure` a `warnings`.
 
-Napojení na editor půdorysu a založení projektu rozváděče z výstupu (`placeComponents` po lištách,
-`selectEnclosure`) je navazující krok.
+Projekt rozváděče z výstupu zakládá `createPlanProject` (`src/server/services/panel-projects.ts`): ze soupisu místností
+(fáze 48, `src/engine/room-schedule.ts`) nebo z 2D půdorysu (fáze 49, `/panel-builder/floorplan`).
 
 Výsledek vzorového domu z testu (klasická instalace):
 - 13 okruhů, 5 chráničů (3× typ A, 2× typ B), fáze 10,6 / 10,6 / 10,5 kW.
 - 52 M + 25 % = 65 M → skříň 5 × 14 M s P_max 74 W při ztrátách 55,7 W.
+
+## 3D výpočet kabeláže (fáze 49, `src/engine/cable-routing.ts`)
+
+- **Výškový profil** `ElevationProfile` (mm od čisté podlahy): strop 2600, hloubka v podlaze 50, rozváděč 1500,
+  zásuvky 300, zásuvky nad linkou / v koupelně 1150, vypínače 1050, rezerva 10 % + 600 mm v rozváděči + 150 mm v každé krabici KU68.
+- **Výška prvku** `mountHeight`: vlastní `FloorNode.mountHeightMm`, jinak podle druhu (stropní světlo = strop, nástěnné 2000,
+  bojler 1800, wallbox 1200).
+- **Trasa okruhu** = řetěz rozváděč → nejbližší prvek → další (`chainOrder`, Manhattan).
+  - `BOTTOM`: svod rozváděče do podlahy (výška rozváděče + hloubka), trasa v podlaze, výstup ke krabici (výška + hloubka);
+    mezi krabicemi 2 × (výška + hloubka), ve společném rámečku (`frame`) bez svodu.
+  - `TOP`: výstup do stropu (strop − rozváděč), trasa v podhledu, spuštění k prvku (strop − výška).
+  - `OPTIMIZED`: pro každý okruh kratší z obou; sousední prvky ve stejné místnosti a výšce ≥ 900 mm (linka) propojí přímo ve zdi.
+- **Výkaz** `summarizeCabling`: metráž ve 3 režimech, úspora, rozpis podle kabelu (okruhy, svody k vypínačům `CYKY-O 3×1,5`,
+  datové zásuvky `UTP Cat6` samostatně z rozváděče) a ΔU na nejdelší větvi (světla 3 %, ostatní 5 %).
+- `calibrateFloorplanScale({ elevation, routing })` počítá délku přívodu 3D modelem – generátor okruhů z ní bere ΔU a průřez.
+- Editor `/panel-builder/floorplan` (`lib/panel-builder/floorplan-editor.ts`: paleta, nákres v mm, `buildPlan`, `analyzeDraft`)
+  a projekt z půdorysu `createProjectFromFloorplan` (domovní přístroje řady přes `pickWiringDevice`, výkaz v `cableReportJson`).

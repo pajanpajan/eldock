@@ -34,7 +34,10 @@ export const INSTALLATION_ZONES = {
   panelEntryHeightMm: 1700,
 } as const;
 
-export type NodeKind = "single_socket" | "double_socket" | "light" | "switch" | "appliance";
+export type NodeKind = "single_socket" | "double_socket" | "light" | "switch" | "appliance" | "data_socket";
+
+/** Upřesnění prvku (fáze 49): zásuvka nad linkou, IP44, nástěnné svítidlo, tlačítko. */
+export type NodeVariant = "worktop" | "ip44" | "wall" | "button";
 
 /** Bod půdorysu (zásuvka, svítidlo, spínač nebo pevně připojený spotřebič). */
 export interface FloorNode {
@@ -46,6 +49,11 @@ export interface FloorNode {
   tag?: ApplianceTag;
   /** Příkon [W]; bez údaje výchozí hodnota podle druhu / štítku. */
   powerW?: number;
+  /** Fáze 49: vlastní montážní výška osy krabice od čisté podlahy [mm]; jinak výchozí podle druhu (`mountHeight`). */
+  mountHeightMm?: number;
+  variant?: NodeVariant;
+  /** Společný vícenásobný rámeček (1R–5R): prvky se stejným `frame` se propojují přímo v krabici. */
+  frame?: string;
 }
 
 export interface Calibration {
@@ -54,7 +62,7 @@ export interface Calibration {
   /** Hlavní rozváděč v mm od počátku podkladu. */
   panelMm: { x: number; y: number };
   /** Ortogonální (Manhattan) délka kabelu z rozváděče k bodu včetně svislých úseků [mm]. */
-  calculateCableLength: (node: Pick<FloorNode, "px" | "kind">) => number;
+  calculateCableLength: (node: Pick<FloorNode, "px" | "kind"> & Partial<Pick<FloorNode, "mountHeightMm" | "variant" | "tag">>) => number;
 }
 
 const segment = (wall: ReferenceWall) => ({ dx: Math.abs(wall.px[2] - wall.px[0]), dy: Math.abs(wall.px[3] - wall.px[1]) });
@@ -64,7 +72,15 @@ const segment = (wall: ReferenceWall) => ({ dx: Math.abs(wall.px[2] - wall.px[0]
  * (ideálně vodorovná a svislá) = řešení soustavy dx²·sx² + dy²·sy² = L² pro každou stěnu, takže
  * sken natažený jen v jedné ose se vyrovná. Nesmyslné řešení → průměrné jednotné měřítko.
  */
-export function calibrateFloorplanScale(input: { walls: readonly ReferenceWall[]; panelPx: Point; ceilingHeightMm?: number; panelEntryHeightMm?: number }): Calibration {
+export function calibrateFloorplanScale(input: {
+  walls: readonly ReferenceWall[];
+  panelPx: Point;
+  ceilingHeightMm?: number;
+  panelEntryHeightMm?: number;
+  /** Fáze 49: 3D výškový profil – délka kabelu podle montážních výšek a režimu vedení (jinak instalační zóny fáze 44). */
+  elevation?: Partial<ElevationProfile>;
+  routing?: CableRoutingMode;
+}): Calibration {
   const walls = input.walls.filter((wall) => wall.lengthMm > 0 && Math.hypot(segment(wall).dx, segment(wall).dy) > 0);
   if (!walls.length || walls.length > 2) throw new Error("Kalibrace potřebuje 1 nebo 2 referenční stěny s nenulovou délkou.");
   const uniform = walls.reduce((sum, wall) => sum + wall.lengthMm / Math.hypot(segment(wall).dx, segment(wall).dy), 0) / walls.length;
@@ -92,10 +108,91 @@ export function calibrateFloorplanScale(input: { walls: readonly ReferenceWall[]
     pxToMm: { x, y },
     panelMm,
     calculateCableLength: (node) => {
+      if (input.elevation) {
+        const profile = elevationProfile(input.elevation);
+        const point = { x: node.px[0] * x, y: node.px[1] * y };
+        return homeRunLength(panelMm, point, mountHeight(node, profile), input.routing ?? "OPTIMIZED", profile);
+      }
       const horizontal = Math.abs(node.px[0] * x - panelMm.x) + Math.abs(node.px[1] * y - panelMm.y);
       return Math.round(horizontal + Math.max(0, trace - zones.panelEntryHeightMm) + drop(node.kind));
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+//  1b. 3D výškový model a režimy vedení kabelů (fáze 49)
+// ---------------------------------------------------------------------------
+
+/** Výškové parametry podlaží v mm od čisté podlahy. */
+export interface ElevationProfile {
+  /** Světlá výška stropu / podhledu – vedení vrchem. */
+  ceilingHeightMm: number;
+  /** Hloubka uložení kabelu v podlaze / mazanině – vedení spodem. */
+  floorDepthMm: number;
+  /** Výška středu / vstupu rozváděče. */
+  switchboardHeightMm: number;
+  defaultSocketHeightMm: number;
+  /** Zásuvky nad kuchyňskou linkou a v koupelně. */
+  worktopSocketHeightMm: number;
+  defaultSwitchHeightMm: number;
+  /** Technologická rezerva na ohyby a nepřesnost trasy [%]. */
+  slackPercent: number;
+  /** Pevný přídavek na zapojení v rozváděči a v každé krabici KU68 [mm]. */
+  panelAllowanceMm: number;
+  boxAllowanceMm: number;
+}
+
+export const DEFAULT_ELEVATION: ElevationProfile = {
+  ceilingHeightMm: 2600,
+  floorDepthMm: 50,
+  switchboardHeightMm: 1500,
+  defaultSocketHeightMm: 300,
+  worktopSocketHeightMm: 1150,
+  defaultSwitchHeightMm: 1050,
+  slackPercent: 10,
+  panelAllowanceMm: 600,
+  boxAllowanceMm: 150,
+};
+
+export const elevationProfile = (partial: Partial<ElevationProfile> = {}): ElevationProfile => ({ ...DEFAULT_ELEVATION, ...Object.fromEntries(Object.entries(partial).filter(([, value]) => typeof value === "number" && Number.isFinite(value))) });
+
+/** "BOTTOM" = spodem v podlaze, "TOP" = vrchem v podhledu, "OPTIMIZED" = pro každý okruh kratší z obou. */
+export type CableRoutingMode = "BOTTOM" | "TOP" | "OPTIMIZED";
+export const ROUTING_MODES: readonly CableRoutingMode[] = ["BOTTOM", "TOP", "OPTIMIZED"];
+
+/** Pevné výšky spotřebičů (vývod / přípojka) – ostatní spotřebiče jako běžná zásuvka. */
+const APPLIANCE_HEIGHT_MM: Partial<Record<ApplianceTag, number>> = { boiler: 1800, ev_charger: 1200, microwave_builtin: 1150 };
+
+/** Montážní výška prvku: vlastní `mountHeightMm`, jinak výchozí podle druhu a varianty. */
+export function mountHeight(node: Pick<FloorNode, "kind"> & Partial<Pick<FloorNode, "mountHeightMm" | "variant" | "tag">>, profile: ElevationProfile = DEFAULT_ELEVATION): number {
+  if (typeof node.mountHeightMm === "number" && Number.isFinite(node.mountHeightMm)) return Math.min(Math.max(0, node.mountHeightMm), profile.ceilingHeightMm);
+  switch (node.kind) {
+    case "light":
+      return node.variant === "wall" ? Math.min(2000, profile.ceilingHeightMm) : profile.ceilingHeightMm;
+    case "switch":
+      return profile.defaultSwitchHeightMm;
+    case "appliance":
+      return (node.tag && APPLIANCE_HEIGHT_MM[node.tag]) ?? profile.defaultSocketHeightMm;
+    default:
+      return node.variant === "worktop" || node.variant === "ip44" ? profile.worktopSocketHeightMm : profile.defaultSocketHeightMm;
+  }
+}
+
+export const manhattan = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+
+/** Svislé úseky trasy rozváděč → prvek: spodem (svod do podlahy + výstup) nebo vrchem (výstup do stropu + spuštění). */
+export function panelVertical(heightMm: number, mode: Exclude<CableRoutingMode, "OPTIMIZED">, profile: ElevationProfile): number {
+  return mode === "BOTTOM"
+    ? profile.switchboardHeightMm + profile.floorDepthMm + heightMm + profile.floorDepthMm
+    : Math.max(0, profile.ceilingHeightMm - profile.switchboardHeightMm) + Math.max(0, profile.ceilingHeightMm - heightMm);
+}
+
+/** Délka samostatného přívodu rozváděč → prvek (bez rezerv); OPTIMIZED = kratší z obou režimů. */
+export function homeRunLength(panel: { x: number; y: number }, point: { x: number; y: number }, heightMm: number, mode: CableRoutingMode, profile: ElevationProfile): number {
+  const horizontal = manhattan(panel, point);
+  const bottom = horizontal + panelVertical(heightMm, "BOTTOM", profile);
+  const top = horizontal + panelVertical(heightMm, "TOP", profile);
+  return Math.round(mode === "BOTTOM" ? bottom : mode === "TOP" ? top : Math.min(bottom, top));
 }
 
 /** Měrný odpor mědi při provozní teplotě 70 °C [Ω·mm²/m]. */
@@ -350,6 +447,11 @@ export function generateCircuitsFromFloorplan(plan: Floorplan, calibration: Cali
       continue;
     }
     if (node.kind === "switch") continue; // spínače vyplývají z ovládání místností (bod 2)
+    if (node.kind === "data_socket") {
+      // Datová zásuvka RJ45 = slaboproud (UTP Cat6 z rozváděče / racku), žádný silový okruh
+      addBom(bom, "Datová zásuvka RJ45 (UTP Cat6)");
+      continue;
+    }
 
     if (tag && DEDICATED_1P.has(tag) && powerW >= DEDICATED_MIN_W) {
       push(

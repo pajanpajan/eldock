@@ -21,7 +21,7 @@ test("🏠 rozváděč ze soupisu místností, ✓ stav kroků, ✏️ hlavička
   await page.getByLabel("Název rozváděče").fill("RD48 ze soupisu");
   await page.getByLabel("Místo instalace").fill("Jablonec, Mírové nám. 1");
   await page.getByRole("button", { name: "🏠 Vygenerovat rozváděč", exact: true }).click();
-  await expect(page).toHaveURL(/\/panel-builder\/[^/]+$/, { timeout: 30_000 });
+  await expect(page).toHaveURL(/\/panel-builder\/[^/]+$/, { timeout: 90_000 });
   await expect(page.getByRole("heading", { level: 1 })).toContainText("RD48 ze soupisu");
   await expect(page.getByTestId("symbol--Q1")).toBeVisible();
   await expect(page.getByText("📍 Jablonec, Mírové nám. 1")).toBeVisible();

@@ -256,3 +256,9 @@ export const getEnclosureFans = cache(async () =>
     select: { id: true, manufacturer: true, typeCode: true, articleNumber: true, airflowFreeM3h: true, airflowFilterM3h: true, ratedVoltage: true, powerW: true, ipRating: true, cutoutMm: true, noiseDbA: true, datasheetUrl: true },
   }),
 );
+
+/** Designové řady domovních přístrojů s vypínači nebo zásuvkami (2D půdorys, fáze 49): „výrobce|řada“ + počet kusů. */
+export const getWiringSeries = cache(async () => {
+  const rows = await prisma.wiringDevice.groupBy({ by: ["manufacturer", "series"], where: { category: { in: ["WD_SOCKET", "WD_SWITCH"] } }, _count: { _all: true }, orderBy: [{ manufacturer: "asc" }, { series: "asc" }] });
+  return rows.filter((row) => row._count._all >= 5).map((row) => ({ key: `${row.manufacturer}|${row.series}`, label: `${row.manufacturer} ${row.series}`, count: row._count._all }));
+});

@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 
 import { LogoMark } from "@/components/layout/Logo";
 import { DOCUMENT_SHEETS, type ComponentRow, type PartsRow } from "@/lib/panel-builder/documentation";
+import { ROUTING_LABEL, type CableReport } from "@/lib/panel-builder/floorplan-editor";
 import type { ManufacturerInfo } from "@/lib/panel-builder/project";
 import type { ThermalResult } from "@/lib/thermalCalculation";
 import { ROUTINE_TEST_POINTS, minInsulationMOhm, routineTestVerdict, type RoutineTest, type StandardEdition } from "@/lib/legislation-2027";
@@ -41,6 +42,8 @@ export interface DocumentationData {
   routineTest: RoutineTest;
   /** Domovní instalace po obvodech (fáze 47): vypínače, zásuvky, rámečky. */
   wiring?: { designation: string; circuit: string; room: string | null; quantity: number; articleNumber: string; title: string }[];
+  /** Výkaz kabeláže z 2D půdorysu (fáze 49). */
+  cableReport?: CableReport | null;
 }
 
 const svgUri = (svg: string) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
@@ -367,6 +370,7 @@ export function DocumentationSheets({ data }: { data: DocumentationData }) {
             </table>
           </>
         ) : null}
+        {data.cableReport ? <CableReportTable report={data.cableReport} /> : null}
       </Sheet>
 
       {/* List 5 – oteplení a technická data */}
@@ -492,5 +496,61 @@ export function DocumentationSheets({ data }: { data: DocumentationData }) {
         </div>
       </Sheet>
     </div>
+  );
+}
+
+const num = (value: number) => value.toLocaleString("cs-CZ", { maximumFractionDigits: 1 });
+const cellRight = cell + " text-right font-mono";
+const cellMono = cell + " font-mono";
+
+/** List 4 – výkaz kabeláže z 2D půdorysu: režim vedení, porovnání metráže, kabely k nákupu a ΔU okruhů. */
+function CableReportTable({ report }: { report: CableReport }) {
+  return (
+    <section className="mt-2" data-testid="doc-cables" aria-label="Výkaz kabeláže">
+      <h3 className="font-bold">Výkaz kabeláže a okruhů (ČSN 33 2130 ed. 4) – {ROUTING_LABEL[report.mode]}</h3>
+      <p className="text-[8pt]">
+        Spodem {num(report.totals.BOTTOM)} m · Vrchem {num(report.totals.TOP)} m · Optimalizovaně {num(report.totals.OPTIMIZED)} m (úspora {num(Math.max(report.savingVsBottomM, report.savingVsTopM))} m). Strop {report.profile.ceilingHeightMm} mm, rozváděč {report.profile.switchboardHeightMm} mm, zásuvky {report.profile.defaultSocketHeightMm} / {report.profile.worktopSocketHeightMm} mm, vypínače {report.profile.defaultSwitchHeightMm} mm, rezerva {report.profile.slackPercent} % + přídavky na zapojení.
+      </p>
+      <div className="mt-1 grid grid-cols-[1fr_2fr] gap-2">
+        <table className="w-full border-collapse text-[8pt]">
+          <thead>
+            <tr>
+              <th className={cell}>Kabel</th>
+              <th className={cellRight}>Metráž</th>
+            </tr>
+          </thead>
+          <tbody>
+            {report.byCable.map((row) => (
+              <tr key={row.cable}>
+                <td className={cellMono}>{row.cable}</td>
+                <td className={cellRight}>{row.meters} m</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <table className="w-full border-collapse text-[8pt]">
+          <thead>
+            <tr>
+              <th className={cell}>Okruh</th>
+              <th className={cell}>Kabel</th>
+              <th className={cell}>Trasa</th>
+              <th className={cellRight}>Délka</th>
+              <th className={cellRight}>ΔU</th>
+            </tr>
+          </thead>
+          <tbody>
+            {report.circuits.map((row, index) => (
+              <tr key={row.label + "-" + index}>
+                <td className={cell}>{row.label}</td>
+                <td className={cellMono}>{row.cable}</td>
+                <td className={cell}>{row.routing === "TOP" ? "vrchem" : "spodem"}</td>
+                <td className={cellRight}>{num(row.lengthM)} m</td>
+                <td className={row.ok ? cellRight : cellRight + " font-bold"}>{num(row.voltageDropPct)} % {row.ok ? "✓" : "✗"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }

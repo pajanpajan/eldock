@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Camera, ImageIcon, Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
@@ -119,6 +120,13 @@ export function NewProjectDialog({ credits = null }: { credits?: number | null }
               [ {option.label} ]
             </button>
           ))}
+          <Link
+            href="/panel-builder/floorplan"
+            className="touch-target flex min-h-12 items-center rounded-lg border-2 border-dashed border-border px-3 text-left text-sm font-bold text-muted-foreground transition-colors hover:border-primary/60 hover:text-foreground"
+            onClick={() => setOpen(false)}
+          >
+            [ 📐 Nakreslit 2D půdorys elektroinstalace a vygenerovat rozváděč ]
+          </Link>
         </div>
         <form action={submit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">

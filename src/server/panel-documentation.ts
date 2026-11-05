@@ -5,6 +5,7 @@ import { formatDate } from "@/lib/format";
 import { isMix } from "@/lib/panel-builder/catalog";
 import { componentsList, partsList, technicalData } from "@/lib/panel-builder/documentation";
 import { renderPanelDrawingSvg, renderSingleLineDiagramSvg, type DrawingItem } from "@/lib/panel-builder/drawings";
+import { parseCableReport } from "@/lib/panel-builder/floorplan-editor";
 import { parseManufacturerInfo } from "@/lib/panel-builder/project";
 import { companyManufacturer } from "@/lib/registered-company";
 import { readingOrder } from "@/lib/panel-builder/tree";
@@ -54,6 +55,7 @@ export async function buildDocumentationData(project: PanelProjectDetail, origin
     name: project.name,
     customerName: project.customerName,
     installationSite: project.installationSite,
+    cableReport: parseCableReport(project.cableReportJson),
     norm: edition.short,
     edition,
     routineTest,

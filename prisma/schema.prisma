@@ -919,6 +919,10 @@ model PanelBoardProject {
   /// Ventilátor rozváděče (nucené chlazení) a počet kusů (fáze 47).
   fanId                String?
   fanCount             Int                @default(1)
+  /// 2D půdorys elektroinstalace (fáze 49) – nákres editoru, ze kterého projekt vznikl (JSON `FloorplanDraft`).
+  floorplanJson        String?
+  /// Výkaz kabeláže z půdorysu (fáze 49) – 3 režimy vedení, rozpis kabelů, ΔU okruhů (JSON) pro dokumentaci.
+  cableReportJson      String?
 
   createdById String?
   /// Registrovaná firma (fáze 41): vidí jen své rozváděče, její údaje se propisují do dokumentace.
