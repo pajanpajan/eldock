@@ -26,8 +26,13 @@ import {
 
 import { DEFAULT_COLOR, appearanceLabel, designColor } from "./wiring-designs";
 import { DEFAULT_SUPPLY, supplyById, type SupplySystem } from "./supply";
+import { isEnvironmentId, type EnvironmentId } from "./environments";
+import { CALIBRATION_TOLERANCE_PCT, emptyCalibration, isRotation, planExtent, rotatedSize, type CalibrationRecord, type FloorplanBackground, type Rotation } from "./floorplan-pdf";
 
-export type PaletteGroup = "panel" | "sockets" | "lights" | "appliances";
+export type PaletteGroup = "panel" | "sockets" | "lights" | "controls" | "appliances";
+
+/** Fáze 57: role sběrnicového prvku (KNX / Loxone Tree / free@home) – kreslí se v rámečku „sběrnice“. */
+export type BusRole = "button" | "presence" | "room_unit" | "sensor" | "display" | "blind";
 
 export interface PaletteItem {
   id: string;
@@ -40,8 +45,14 @@ export interface PaletteItem {
   tag?: ApplianceTag;
   /** Číslo řazení vypínače (1 / 5 / 6 / 7) – jen informativně, skutečné řazení určí párování. */
   switchNo?: string;
-  /** Fáze 51 – co ovladač řídí: světla (párování), pohon žaluzie nebo topný okruh. Výchozí u vypínačů = světla. */
-  control?: "light" | "blind" | "thermostat";
+  /** Fáze 51 – co ovladač řídí: světla (párování), pohon žaluzie nebo topný okruh; „none“ = čidlo / panel bez párování. */
+  control?: "light" | "blind" | "thermostat" | "none";
+  /** Fáze 57: úrovně instalace, ve kterých se prvek nabízí v paletě (bez = všechny). */
+  levels?: readonly InstallLevel[];
+  /** Fáze 57: sběrnicový prvek – počet kanálů (tlačítek) a role. */
+  bus?: { channels: number; role: BusRole };
+  /** Fáze 57: bezdrátové tlačítko / čidlo na baterii – bez kabelu a bez krabice (retrofit). */
+  wireless?: boolean;
   /** Pevné řazení / typ přístroje pro výběr z katalogu (S5, S6+6, tlačítka). */
   fixedSwitchNo?: string;
   /** Kategorie katalogu domovních přístrojů mimo vypínače. */
@@ -57,9 +68,21 @@ export interface PaletteItem {
 export const PALETTE_GROUPS: { id: PaletteGroup; label: string }[] = [
   { id: "panel", label: "⚡ Rozváděč" },
   { id: "sockets", label: "🔌 Zásuvky" },
-  { id: "lights", label: "💡 Světla a vypínače" },
+  { id: "lights", label: "💡 Světla" },
+  { id: "controls", label: "🎛️ Ovládání" },
   { id: "appliances", label: "🔥 Samostatné spotřebiče (vlastní jisticí okruh)" },
 ];
+
+/** Nadpis skupiny ovládání podle úrovně instalace (fáze 57). */
+export const CONTROLS_LABEL: Record<InstallLevel, string> = {
+  classic: "🎛️ Vypínače a ovladače 230 V (řazení dle ČSN)",
+  bus_loxone: "🎛️ Sběrnicové ovládání 24 V DC (KNX / Loxone Tree / free@home)",
+  smart_retrofit: "🎛️ Vypínače s chytrým modulem a bezdrátová tlačítka (Zigbee / Matter)",
+};
+
+const CLASSIC: readonly InstallLevel[] = ["classic", "smart_retrofit"];
+const BUS: readonly InstallLevel[] = ["bus_loxone"];
+const RETROFIT: readonly InstallLevel[] = ["smart_retrofit"];
 
 export const PALETTE: PaletteItem[] = [
   { id: "panel", group: "panel", label: "Hlavní domovní / bytový rozváděč", symbol: "RH", kind: "panel" },
@@ -70,27 +93,41 @@ export const PALETTE: PaletteItem[] = [
   { id: "data-socket", group: "sockets", label: "Datová zásuvka RJ45", symbol: "RJ", kind: "data_socket" },
   { id: "ceiling-light", group: "lights", label: "Stropní svítidlo", symbol: "⊗", kind: "light" },
   { id: "wall-light", group: "lights", label: "Nástěnné svítidlo", symbol: "◐", kind: "light", variant: "wall" },
-  { id: "switch-1", group: "lights", label: "Vypínač č. 1 (jednopólový)", symbol: "S1", kind: "switch", switchNo: "1" },
-  { id: "switch-5", group: "lights", label: "Sériový přepínač č. 5 (lustrový – 2 klapky)", symbol: "S5", kind: "switch", switchNo: "5", fixedSwitchNo: "5" },
-  { id: "switch-6", group: "lights", label: "Střídavý přepínač č. 6 (schodový)", symbol: "S6", kind: "switch", switchNo: "6" },
-  { id: "switch-6-6", group: "lights", label: "Dvojitý střídavý přepínač č. 6+6 (řazení 5B – 2 klapky)", symbol: "S6+6", kind: "switch", switchNo: "6+6", fixedSwitchNo: "6+6" },
-  { id: "switch-7", group: "lights", label: "Křížový přepínač č. 7", symbol: "S7", kind: "switch", switchNo: "7" },
-  { id: "button", group: "lights", label: "Tlačítko č. 1/0 (impulzní / zvonkové)", symbol: "T1", kind: "switch", variant: "button", switchNo: "1/0", fixedSwitchNo: "1/0" },
-  { id: "button-2", group: "lights", label: "Dvojtlačítko č. 1/0+1/0 (2 klapky)", symbol: "T2", kind: "switch", variant: "button", switchNo: "1/0+1/0", fixedSwitchNo: "1/0+1/0" },
-  { id: "blind", group: "lights", label: "Žaluziový spínač / tlačítko (nahoru / dolů)", symbol: "ZAL", kind: "switch", control: "blind", wiringCategory: "WD_BLIND" },
-  { id: "dimmer", group: "lights", label: "Stmívač (otočný / tlačítkový LED)", symbol: "STM", kind: "switch", wiringCategory: "WD_DIMMER" },
-  { id: "pir", group: "lights", label: "Pohybové čidlo (PIR nástěnné / stropní)", symbol: "PIR", kind: "switch", wiringCategory: "WD_SENSOR", heightMm: 2200 },
-  { id: "switch-led", group: "lights", label: "Vypínač s orientační doutnavkou / LED (řazení 1So / 6So)", symbol: "S1S", kind: "switch", switchNo: "1So", led: true },
-  { id: "switch-ip44", group: "lights", label: "Vypínač IP44 (do vlhka / venkovní)", symbol: "S44", kind: "switch", switchNo: "1", ip44: true },
+  { id: "switch-1", group: "controls", levels: CLASSIC, label: "Vypínač č. 1 (jednopólový)", symbol: "S1", kind: "switch", switchNo: "1" },
+  { id: "switch-5", group: "controls", levels: CLASSIC, label: "Sériový přepínač č. 5 (lustrový – 2 klapky)", symbol: "S5", kind: "switch", switchNo: "5", fixedSwitchNo: "5" },
+  { id: "switch-6", group: "controls", levels: CLASSIC, label: "Střídavý přepínač č. 6 (schodový)", symbol: "S6", kind: "switch", switchNo: "6" },
+  { id: "switch-6-6", group: "controls", levels: CLASSIC, label: "Dvojitý střídavý přepínač č. 6+6 (řazení 5B – 2 klapky)", symbol: "S6+6", kind: "switch", switchNo: "6+6", fixedSwitchNo: "6+6" },
+  { id: "switch-7", group: "controls", levels: CLASSIC, label: "Křížový přepínač č. 7", symbol: "S7", kind: "switch", switchNo: "7" },
+  { id: "button", group: "controls", levels: CLASSIC, label: "Tlačítko č. 1/0 (impulzní / zvonkové)", symbol: "T1", kind: "switch", variant: "button", switchNo: "1/0", fixedSwitchNo: "1/0" },
+  { id: "button-2", group: "controls", levels: CLASSIC, label: "Dvojtlačítko č. 1/0+1/0 (2 klapky)", symbol: "T2", kind: "switch", variant: "button", switchNo: "1/0+1/0", fixedSwitchNo: "1/0+1/0" },
+  { id: "blind", group: "controls", levels: CLASSIC, label: "Žaluziový spínač / tlačítko (nahoru / dolů)", symbol: "ZAL", kind: "switch", control: "blind", wiringCategory: "WD_BLIND" },
+  { id: "dimmer", group: "controls", levels: CLASSIC, label: "Stmívač (otočný / tlačítkový LED)", symbol: "STM", kind: "switch", wiringCategory: "WD_DIMMER" },
+  { id: "pir", group: "controls", levels: CLASSIC, label: "Pohybové čidlo (PIR nástěnné / stropní)", symbol: "PIR", kind: "switch", wiringCategory: "WD_SENSOR", heightMm: 2200 },
+  { id: "switch-led", group: "controls", levels: CLASSIC, label: "Vypínač s orientační doutnavkou / LED (řazení 1So / 6So)", symbol: "S1S", kind: "switch", switchNo: "1So", led: true },
+  { id: "switch-ip44", group: "controls", levels: CLASSIC, label: "Vypínač IP44 (do vlhka / venkovní)", symbol: "S44", kind: "switch", switchNo: "1", ip44: true },
   // Fáze 52: přesná katalogová řazení ABB (Tango / Levit / Time)
-  { id: "abb-1so", group: "lights", label: "ABB řazení 1So – jednopólový s orientační doutnavkou", symbol: "1So", kind: "switch", switchNo: "1So", fixedSwitchNo: "1So", led: true },
-  { id: "abb-1s", group: "lights", label: "ABB řazení 1S – jednopólový se signalizační doutnavkou", symbol: "1S", kind: "switch", switchNo: "1S", fixedSwitchNo: "1S", led: true },
-  { id: "abb-1sso", group: "lights", label: "ABB řazení 1SSo – signalizační + orientační doutnavka", symbol: "1SSo", kind: "switch", switchNo: "1SSo", fixedSwitchNo: "1SSo", led: true },
-  { id: "abb-1-1", group: "lights", label: "ABB řazení 1+1 – dvojitý s blokováním proti současnému stisku", symbol: "1+1", kind: "switch", switchNo: "1+1", fixedSwitchNo: "1+1" },
-  { id: "abb-6-6-0", group: "lights", label: "ABB řazení 6+6/0 – dvojitý střídavý s nulovou polohou", symbol: "6+6/0", kind: "switch", switchNo: "6+6/0", fixedSwitchNo: "6+6/0" },
-  { id: "abb-7so", group: "lights", label: "ABB řazení 7So – křížový s orientační doutnavkou", symbol: "7So", kind: "switch", switchNo: "7So", fixedSwitchNo: "7So", led: true },
-  { id: "abb-10so", group: "lights", label: "ABB řazení 1/0So – zapínací tlačítko s orientační doutnavkou", symbol: "1/0So", kind: "switch", variant: "button", switchNo: "1/0So", fixedSwitchNo: "1/0So", led: true },
-  { id: "thermostat", group: "lights", label: "Pokojový termostat", symbol: "TER", kind: "switch", control: "thermostat", wiringCategory: "WD_THERMOSTAT", heightMm: 1500 },
+  { id: "abb-1so", group: "controls", levels: CLASSIC, label: "ABB řazení 1So – jednopólový s orientační doutnavkou", symbol: "1So", kind: "switch", switchNo: "1So", fixedSwitchNo: "1So", led: true },
+  { id: "abb-1s", group: "controls", levels: CLASSIC, label: "ABB řazení 1S – jednopólový se signalizační doutnavkou", symbol: "1S", kind: "switch", switchNo: "1S", fixedSwitchNo: "1S", led: true },
+  { id: "abb-1sso", group: "controls", levels: CLASSIC, label: "ABB řazení 1SSo – signalizační + orientační doutnavka", symbol: "1SSo", kind: "switch", switchNo: "1SSo", fixedSwitchNo: "1SSo", led: true },
+  { id: "abb-1-1", group: "controls", levels: CLASSIC, label: "ABB řazení 1+1 – dvojitý s blokováním proti současnému stisku", symbol: "1+1", kind: "switch", switchNo: "1+1", fixedSwitchNo: "1+1" },
+  { id: "abb-6-6-0", group: "controls", levels: CLASSIC, label: "ABB řazení 6+6/0 – dvojitý střídavý s nulovou polohou", symbol: "6+6/0", kind: "switch", switchNo: "6+6/0", fixedSwitchNo: "6+6/0" },
+  { id: "abb-7so", group: "controls", levels: CLASSIC, label: "ABB řazení 7So – křížový s orientační doutnavkou", symbol: "7So", kind: "switch", switchNo: "7So", fixedSwitchNo: "7So", led: true },
+  { id: "abb-10so", group: "controls", levels: CLASSIC, label: "ABB řazení 1/0So – zapínací tlačítko s orientační doutnavkou", symbol: "1/0So", kind: "switch", variant: "button", switchNo: "1/0So", fixedSwitchNo: "1/0So", led: true },
+  { id: "thermostat", group: "controls", levels: CLASSIC, label: "Pokojový termostat", symbol: "TER", kind: "switch", control: "thermostat", wiringCategory: "WD_THERMOSTAT", heightMm: 1500 },
+  // Fáze 57: sběrnicová instalace – tlačítka a čidla na sběrnici 24 V DC, světla hvězdou z aktorů v rozváděči
+  { id: "bus-1", group: "controls", levels: BUS, label: "Sběrnicové tlačítko 1násobné", symbol: "B1", kind: "switch", variant: "button", bus: { channels: 1, role: "button" } },
+  { id: "bus-2", group: "controls", levels: BUS, label: "Sběrnicové tlačítko 2násobné", symbol: "B2", kind: "switch", variant: "button", bus: { channels: 2, role: "button" } },
+  { id: "bus-4", group: "controls", levels: BUS, label: "Sběrnicové tlačítko 4násobné", symbol: "B4", kind: "switch", variant: "button", bus: { channels: 4, role: "button" } },
+  { id: "bus-6", group: "controls", levels: BUS, label: "Sběrnicové tlačítko 6násobné", symbol: "B6", kind: "switch", variant: "button", bus: { channels: 6, role: "button" } },
+  { id: "bus-blind", group: "controls", levels: BUS, label: "Sběrnicové žaluziové tlačítko (nahoru / dolů)", symbol: "BŽ", kind: "switch", variant: "button", control: "blind", bus: { channels: 2, role: "blind" } },
+  { id: "bus-presence", group: "controls", levels: BUS, label: "Detektor přítomnosti stropní (sběrnice)", symbol: "DP", kind: "switch", bus: { channels: 1, role: "presence" }, heightMm: 2600 },
+  { id: "bus-room", group: "controls", levels: BUS, label: "Prostorová jednotka s termostatem (sběrnice)", symbol: "PJ", kind: "switch", control: "thermostat", bus: { channels: 1, role: "room_unit" }, heightMm: 1500 },
+  { id: "bus-sensor", group: "controls", levels: BUS, label: "Čidlo teploty a vlhkosti (sběrnice)", symbol: "ČT", kind: "switch", control: "none", bus: { channels: 1, role: "sensor" }, heightMm: 1500 },
+  { id: "bus-display", group: "controls", levels: BUS, label: "Dotykový panel / vizualizace (sběrnice)", symbol: "DTP", kind: "switch", control: "none", bus: { channels: 1, role: "display" }, heightMm: 1500 },
+  // Fáze 57: hybridní retrofit – klasická kabeláž s modulem pod vypínač (výše) a bezdrátová tlačítka bez kabelu
+  { id: "wireless-1", group: "controls", levels: RETROFIT, label: "Bezdrátové tlačítko 1násobné (baterie, bez kabelu)", symbol: "BT1", kind: "switch", variant: "button", wireless: true },
+  { id: "wireless-2", group: "controls", levels: RETROFIT, label: "Bezdrátové tlačítko 2násobné (baterie, bez kabelu)", symbol: "BT2", kind: "switch", variant: "button", wireless: true },
+  { id: "wireless-pir", group: "controls", levels: RETROFIT, label: "Bezdrátové pohybové čidlo (baterie)", symbol: "BPIR", kind: "switch", wireless: true, heightMm: 2200 },
   { id: "cooktop", group: "appliances", label: "Varná deska 3f (400 V)", symbol: "VD", kind: "appliance", tag: "cooktop_3p" },
   { id: "oven", group: "appliances", label: "Trouba", symbol: "TR", kind: "appliance", tag: "oven" },
   { id: "dishwasher", group: "appliances", label: "Myčka", symbol: "MY", kind: "appliance", tag: "dishwasher" },
@@ -104,6 +141,10 @@ export const PALETTE: PaletteItem[] = [
 ];
 
 export const paletteItem = (id: string) => PALETTE.find((item) => item.id === id) ?? null;
+
+/** Paleta pro úroveň instalace (fáze 57): ovládání se mění, zásuvky / světla / spotřebiče zůstávají. */
+export const paletteFor = (level: InstallLevel) => PALETTE.filter((item) => !item.levels || item.levels.includes(level));
+export const availableIn = (item: PaletteItem, level: InstallLevel) => !item.levels || item.levels.includes(level);
 
 /** Ovladač, který se páruje se světly (ne žaluzie ani termostat). */
 export const controlsLights = (item: PaletteItem | null | undefined) => item?.kind === "switch" && (item.control ?? "light") === "light";
@@ -125,7 +166,18 @@ export interface EditorElement {
   color: string | null;
   /** Vypínač: světla, která ovládá. */
   controls: string[];
+  /** Fáze 57: otočení značky (zásuvka „nožičkou“ ke stěně) a vlastní měřítko značky (null = měřítko nákresu). */
+  rotation: Rotation;
+  scale: number | null;
 }
+
+/** Základní velikost značky v půdorysu [mm] (≈ 6 mm na výkresu 1 : 50); násobí ji měřítko značek. */
+export const SYMBOL_MM = 300;
+export const SYMBOL_SCALE_MIN = 0.4;
+export const SYMBOL_SCALE_MAX = 4;
+export const clampSymbolScale = (value: number) => Math.min(SYMBOL_SCALE_MAX, Math.max(SYMBOL_SCALE_MIN, Math.round(value * 100) / 100));
+/** Velikost značky prvku [mm]. */
+export const symbolSizeOf = (draft: Pick<FloorplanDraft, "symbolScale">, element: Pick<EditorElement, "scale">) => SYMBOL_MM * draft.symbolScale * (element.scale ?? 1);
 
 export interface EditorRoom {
   id: string;
@@ -138,8 +190,14 @@ export interface EditorRoom {
 
 export interface FloorplanDraft {
   version: 1;
-  /** Podklad: nahraný obrázek / PDF převedený na PNG; null = čistý rastr. */
-  background: { url: string; widthPx: number; heightPx: number } | null;
+  /** Podklad: nahraný obrázek / PDF převedený na obrázek (otočení a ořez fáze 57); null = čistý rastr. */
+  background: FloorplanBackground | null;
+  /** Fáze 57: kalibrace měřítka a její ověření druhou kótou / měřítkem výkresu. */
+  calibration: CalibrationRecord;
+  /** Fáze 57: měřítko značek (1 = 300 mm v půdorysu). */
+  symbolScale: number;
+  /** Fáze 57: prostředí instalace dle ČSN 33 2000-5-51 ed. 3 – povinná volba před generováním; null = nezvoleno. */
+  environment: EnvironmentId | null;
   /** Měřítko podkladu [mm / px] po kalibraci. */
   mmPerPx: number;
   /** Velikost plochy v mm (rastr bez podkladu). */
@@ -166,6 +224,9 @@ export interface FloorplanDraft {
 export const emptyDraft = (): FloorplanDraft => ({
   version: 1,
   background: null,
+  calibration: emptyCalibration(),
+  symbolScale: 1,
+  environment: null,
   mmPerPx: 10,
   widthMm: 14_000,
   heightMm: 10_000,
@@ -190,12 +251,19 @@ export function parseDraft(value: unknown): FloorplanDraft | null {
   if (draft.version !== 1 || !Array.isArray(draft.elements) || !Array.isArray(draft.rooms)) return null;
   const base = emptyDraft();
   const num = (input: unknown, fallback: number, min: number, max: number) => (typeof input === "number" && Number.isFinite(input) ? Math.min(max, Math.max(min, input)) : fallback);
+  const background = parseBackground(draft.background, num);
+  const mmPerPx = num(draft.mmPerPx, base.mmPerPx, 0.01, 1000);
+  // S podkladem plyne plocha výkresu z ořezu a měřítka (fáze 57), jinak z uloženého rastru
+  const extent = background ? planExtent(background, mmPerPx) : null;
   return {
     ...base,
-    background: draft.background && typeof draft.background.url === "string" && /^\/api\/files\/photos\/[\w.-]+$/.test(draft.background.url) ? { url: draft.background.url, widthPx: num(draft.background.widthPx, 1000, 1, 20_000), heightPx: num(draft.background.heightPx, 1000, 1, 20_000) } : null,
-    mmPerPx: num(draft.mmPerPx, base.mmPerPx, 0.01, 1000),
-    widthMm: num(draft.widthMm, base.widthMm, 1000, 200_000),
-    heightMm: num(draft.heightMm, base.heightMm, 1000, 200_000),
+    background,
+    calibration: parseCalibration(draft.calibration, num),
+    symbolScale: clampSymbolScale(num(draft.symbolScale, 1, SYMBOL_SCALE_MIN, SYMBOL_SCALE_MAX)),
+    environment: isEnvironmentId(draft.environment) ? draft.environment : null,
+    mmPerPx,
+    widthMm: extent ? Math.max(100, extent.widthMm) : num(draft.widthMm, base.widthMm, 1000, 200_000),
+    heightMm: extent ? Math.max(100, extent.heightMm) : num(draft.heightMm, base.heightMm, 1000, 200_000),
     rooms: draft.rooms
       .filter((room) => room && typeof room.id === "string" && typeof room.name === "string")
       .slice(0, 60)
@@ -214,6 +282,8 @@ export function parseDraft(value: unknown): FloorplanDraft | null {
         series: typeof element.series === "string" ? element.series.slice(0, 80) : null,
         color: typeof element.color === "string" && designColor(element.color) ? element.color : null,
         controls: Array.isArray(element.controls) ? element.controls.filter((id): id is string => typeof id === "string").slice(0, 20) : [],
+        rotation: isRotation(element.rotation) ? element.rotation : 0,
+        scale: typeof element.scale === "number" && Number.isFinite(element.scale) ? clampSymbolScale(element.scale) : null,
       })),
     profile: elevationProfile(draft.profile ?? {}),
     mode: draft.mode === "BOTTOM" || draft.mode === "TOP" || draft.mode === "OPTIMIZED" ? draft.mode : "OPTIMIZED",
@@ -228,6 +298,69 @@ export function parseDraft(value: unknown): FloorplanDraft | null {
   };
 }
 
+type Num = (input: unknown, fallback: number, min: number, max: number) => number;
+
+function parseBackground(value: unknown, num: Num): FloorplanBackground | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Partial<FloorplanBackground>;
+  if (typeof raw.url !== "string" || !/^\/api\/files\/photos\/[\w.-]+$/.test(raw.url)) return null;
+  const background: FloorplanBackground = {
+    url: raw.url,
+    widthPx: num(raw.widthPx, 1000, 1, 20_000),
+    heightPx: num(raw.heightPx, 1000, 1, 20_000),
+    rotation: isRotation(raw.rotation) ? raw.rotation : 0,
+    crop: null,
+    pagePt: raw.pagePt && typeof raw.pagePt === "object" ? { width: num(raw.pagePt.width, 0, 1, 20_000), height: num(raw.pagePt.height, 0, 1, 20_000) } : null,
+  };
+  if (background.pagePt && (!background.pagePt.width || !background.pagePt.height)) background.pagePt = null;
+  const size = rotatedSize(background);
+  if (raw.crop && typeof raw.crop === "object") {
+    const x = num(raw.crop.x, 0, 0, size.w - 1);
+    const y = num(raw.crop.y, 0, 0, size.h - 1);
+    const w = num(raw.crop.w, size.w, 1, size.w - x);
+    const h = num(raw.crop.h, size.h, 1, size.h - y);
+    background.crop = { x, y, w, h };
+  }
+  return background;
+}
+
+function parseCalibration(value: unknown, num: Num): CalibrationRecord {
+  if (!value || typeof value !== "object") return emptyCalibration();
+  const raw = value as Partial<CalibrationRecord>;
+  const state = raw.state === "set" || raw.state === "verified" ? raw.state : "none";
+  const check = raw.check && typeof raw.check === "object" && typeof raw.check.measuredMm === "number" && typeof raw.check.expectedMm === "number" ? { measuredMm: num(raw.check.measuredMm, 0, 0, 1e7), expectedMm: num(raw.check.expectedMm, 0, 0, 1e7), deviationPct: num(raw.check.deviationPct, 0, -1000, 1000) } : null;
+  return {
+    state,
+    referenceMm: typeof raw.referenceMm === "number" ? num(raw.referenceMm, 0, 0, 1e7) : null,
+    check,
+    drawingScale: typeof raw.drawingScale === "number" ? num(raw.drawingScale, 0, 1, 10_000) : null,
+    scaleDeviationPct: typeof raw.scaleDeviationPct === "number" ? num(raw.scaleDeviationPct, 0, -1000, 1000) : null,
+    at: typeof raw.at === "number" ? num(raw.at, 0, 0, 1e15) : null,
+  };
+}
+
+/** Kalibrace ověřená (druhá kóta v toleranci) nebo podklad bez měřítka (čistý rastr) – podmínka generování. */
+export const calibrationConfirmed = (draft: Pick<FloorplanDraft, "background" | "calibration">) => !draft.background || draft.calibration.state === "verified";
+
+/** Kontrolní seznam před generováním rozváděče a dokumentace (fáze 57). */
+export function generationChecklist(draft: Pick<FloorplanDraft, "background" | "calibration" | "environment">) {
+  const items = [
+    {
+      id: "calibration",
+      ok: calibrationConfirmed(draft),
+      label: !draft.background
+        ? "Měřítko: čistý rastr 1 dílek = 1 m"
+        : draft.calibration.state === "verified"
+          ? `Měřítko ověřeno${draft.calibration.check ? ` (odchylka ${Math.abs(draft.calibration.check.deviationPct).toLocaleString("cs-CZ")} % ≤ ${CALIBRATION_TOLERANCE_PCT} %)` : ""}`
+          : draft.calibration.state === "set"
+            ? "Měřítko nastaveno – ověřte ho druhou známou kótou (Úprava PDF → Ověřit měřítko)"
+            : "Zkalibrujte měřítko podkladu (Úprava PDF → Kalibrovat měřítko)",
+    },
+    { id: "environment", ok: draft.environment !== null, label: draft.environment ? "Prostředí dle ČSN 33 2000-5-51 ed. 3 zvoleno" : "Zvolte prostředí instalace dle ČSN 33 2000-5-51 ed. 3" },
+  ];
+  return { items, ready: items.every((item) => item.ok) };
+}
+
 /** Řazení vypínače podle počtu ovládacích míst jednoho světla: 1 → č. 1, 2 → č. 6, 3+ → č. 6 + 7. */
 export function switchingFor(count: number): string {
   if (count <= 0) return "–";
@@ -238,6 +371,133 @@ export function switchingFor(count: number): string {
 
 /** Počet vypínačů ovládajících dané světlo. */
 export const controllersOf = (draft: Pick<FloorplanDraft, "elements">, lightId: string) => draft.elements.filter((element) => element.controls.includes(lightId)).length;
+
+/**
+ * Skutečné řazení klasického vypínače v nákresu (fáze 57 – podle něj se kreslí značka): pevné řazení palety
+ * (S5, S6+6, tlačítka), jinak z párování – jediné ovládací místo světla = č. 1, dvě = č. 6, třetí a další = č. 7.
+ */
+export function effectiveSwitchNo(draft: Pick<FloorplanDraft, "elements">, element: Pick<EditorElement, "id" | "item">): string {
+  const item = paletteItem(element.item);
+  if (item?.fixedSwitchNo) return item.fixedSwitchNo;
+  const light = draft.elements.find((candidate) => draft.elements.some((other) => other.id === element.id && other.controls.includes(candidate.id)));
+  if (!light) return item?.switchNo ?? "1";
+  const controllers = draft.elements.filter((other) => other.controls.includes(light.id) && !paletteItem(other.item)?.wireless && !paletteItem(other.item)?.bus);
+  const index = controllers.findIndex((other) => other.id === element.id);
+  const base = controllers.length <= 1 ? "1" : index < 2 ? "6" : "7";
+  return item?.led && base !== "1" ? `${base}So` : item?.led ? (item.switchNo ?? "1So") : base;
+}
+
+/** Ovladač s kabelem 230 V k vypínači (ne sběrnice, ne bezdrátový). */
+export const isWiredSwitch = (item: PaletteItem | null | undefined) => item?.kind === "switch" && !item.bus && !item.wireless;
+
+/** Značka, která se natáčí „nožičkou“ ke stěně: zásuvky, datové zásuvky a nástěnná svítidla. */
+export const isWallMounted = (item: PaletteItem | null | undefined) => item?.kind === "single_socket" || item?.kind === "double_socket" || item?.kind === "data_socket" || (item?.kind === "light" && item.variant === "wall");
+
+/** Otočení ke nejbližší stěně místnosti (0 = stěna nahoře, 90 = vpravo, 180 = dole, 270 = vlevo). */
+export function wallRotation(room: Pick<EditorRoom, "x" | "y" | "w" | "h"> | null, x: number, y: number): Rotation {
+  if (!room) return 0;
+  const distances: [Rotation, number][] = [
+    [0, Math.abs(y - room.y)],
+    [90, Math.abs(room.x + room.w - x)],
+    [180, Math.abs(room.y + room.h - y)],
+    [270, Math.abs(x - room.x)],
+  ];
+  return distances.sort((a, b) => a[1] - b[1])[0][0];
+}
+
+/** Bod na nejbližší stěně místnosti (zásuvka se „přicvakne“ ke stěně, je-li blíž než `snapMm`). */
+export function snapToWall(room: Pick<EditorRoom, "x" | "y" | "w" | "h"> | null, x: number, y: number, snapMm = 600): { x: number; y: number } {
+  if (!room) return { x, y };
+  const rotation = wallRotation(room, x, y);
+  const target = rotation === 0 ? { x, y: room.y } : rotation === 90 ? { x: room.x + room.w, y } : rotation === 180 ? { x, y: room.y + room.h } : { x: room.x, y };
+  return Math.hypot(target.x - x, target.y - y) <= snapMm ? target : { x, y };
+}
+
+// ---------------------------------------------------------------------------
+//  Fáze 57: převod ovládání při změně úrovně instalace
+// ---------------------------------------------------------------------------
+
+const TO_BUS: Record<string, string> = {
+  "switch-1": "bus-1",
+  "switch-6": "bus-1",
+  "switch-7": "bus-1",
+  "switch-led": "bus-1",
+  "switch-ip44": "bus-1",
+  "abb-1so": "bus-1",
+  "abb-1s": "bus-1",
+  "abb-1sso": "bus-1",
+  "abb-7so": "bus-1",
+  button: "bus-1",
+  "abb-10so": "bus-1",
+  "wireless-1": "bus-1",
+  "switch-5": "bus-2",
+  "switch-6-6": "bus-2",
+  "button-2": "bus-2",
+  "abb-1-1": "bus-2",
+  "abb-6-6-0": "bus-2",
+  dimmer: "bus-2",
+  "wireless-2": "bus-2",
+  blind: "bus-blind",
+  pir: "bus-presence",
+  "wireless-pir": "bus-presence",
+  thermostat: "bus-room",
+};
+
+const TO_WIRED: Record<string, string> = {
+  "bus-1": "switch-1",
+  "bus-2": "switch-5",
+  "bus-4": "button-2",
+  "bus-6": "button-2",
+  "bus-blind": "blind",
+  "bus-presence": "pir",
+  "bus-room": "thermostat",
+  "wireless-1": "switch-1",
+  "wireless-2": "switch-5",
+  "wireless-pir": "pir",
+};
+
+export interface LevelConversion {
+  draft: FloorplanDraft;
+  /** Převedené ovladače („Vypínač č. 1 → Sběrnicové tlačítko 1násobné“ × počet). */
+  changes: { from: string; to: string; count: number }[];
+  /** Prvky bez ekvivalentu (dotykový panel, čidlo) – odstraněny. */
+  removed: number;
+}
+
+/**
+ * Změna úrovně instalace (fáze 57): ovladače se převedou na ekvivalent nové úrovně (klasický vypínač ↔ sběrnicové
+ * tlačítko ↔ bezdrátové tlačítko), párování se světly zůstává. Prvky, které v nové úrovni nemají obdobu, se odstraní.
+ */
+export function convertForLevel(draft: FloorplanDraft, level: InstallLevel): LevelConversion {
+  const changes = new Map<string, { from: string; to: string; count: number }>();
+  const removedIds = new Set<string>();
+  const elements = draft.elements.flatMap((element): EditorElement[] => {
+    const item = paletteItem(element.item);
+    if (!item || availableIn(item, level)) return [element];
+    const target = level === "bus_loxone" ? TO_BUS[item.id] : TO_WIRED[item.id];
+    const next = target ? paletteItem(target) : null;
+    if (!next) {
+      removedIds.add(element.id);
+      return [];
+    }
+    const key = `${item.id}>${next.id}`;
+    const row = changes.get(key) ?? { from: item.label, to: next.label, count: 0 };
+    row.count += 1;
+    changes.set(key, row);
+    return [{ ...element, item: next.id, controls: controlsLights(next) ? element.controls : [] }];
+  });
+  return {
+    draft: { ...draft, installation: level, elements: elements.map((element) => ({ ...element, controls: element.controls.filter((id) => !removedIds.has(id)) })) },
+    changes: [...changes.values()],
+    removed: removedIds.size,
+  };
+}
+
+/** Co změna úrovně udělá s nákresem (náhled pro potvrzení) – bez změny stavu. */
+export const levelConversionPreview = (draft: FloorplanDraft, level: InstallLevel) => {
+  const result = convertForLevel(draft, level);
+  return { changes: result.changes, removed: result.removed, count: result.changes.reduce((sum, row) => sum + row.count, 0) };
+};
 
 /** Místnost podle obdélníku, do kterého bod padne (nejmenší vyhrává). */
 export function roomAt(rooms: readonly EditorRoom[], x: number, y: number): EditorRoom | null {
@@ -256,6 +516,8 @@ export interface PlanBuild {
   /** Žaluziové ovladače a termostaty (fáze 51). */
   controlRuns: { id: string; kind: "blind" | "thermostat"; targetId: string | null }[];
   dataNodeIds: string[];
+  /** Fáze 57: sběrnicové prvky (tlačítka, čidla, jednotky) – jedna sběrnicová linka z rozváděče. */
+  busNodeIds: string[];
   /** Uzel výpočtu → prvek nákresu (vícenásobný rámeček = víc uzlů). */
   elementOf: Map<string, EditorElement>;
 }
@@ -274,6 +536,7 @@ export function buildPlan(draft: FloorplanDraft): PlanBuild {
   const routeNodes: RouteNode[] = [];
   const elementOf = new Map<string, EditorElement>();
   const dataNodeIds: string[] = [];
+  const busNodeIds: string[] = [];
   for (const element of draft.elements) {
     const item = paletteItem(element.item);
     if (!item || item.kind === "panel") continue;
@@ -294,12 +557,14 @@ export function buildPlan(draft: FloorplanDraft): PlanBuild {
       elementOf.set(id, element);
       routeNodes.push({ id, x: node.px[0], y: node.px[1], heightMm: mountHeight(node, profile), room: node.room, ...(units > 1 ? { frame: element.id } : {}) });
       if (item.kind === "data_socket") dataNodeIds.push(id);
+      if (item.bus && draft.installation === "bus_loxone") busNodeIds.push(id);
     }
   }
   // Ovládání světel po místnostech: počet ovládacích míst = vypínače spárované se světly místnosti
   const switchLinks = draft.elements.flatMap((element) => {
     const item = paletteItem(element.item);
-    if (!controlsLights(item)) return [];
+    // Bezdrátové tlačítko nemá kabel ani ovládací místo v zapojení (spíná modul u svítidla)
+    if (!controlsLights(item) || item?.wireless) return [];
     // Dvojitý střídavý č. 6+6: korespondenční pár pro obě větve (L + 2 × 2 žíly)
     const cable = item?.fixedSwitchNo === "6+6" ? { cable: DOUBLE_TWO_WAY_CABLE } : {};
     return element.controls.filter((lightId) => draft.elements.some((light) => light.id === lightId)).map((lightId) => ({ switchId: element.id, lightId, ...cable }));
@@ -323,7 +588,7 @@ export function buildPlan(draft: FloorplanDraft): PlanBuild {
   });
   const panel = { x: panelElement.x, y: panelElement.y };
   const calibration = calibrateFloorplanScale({ walls: [{ px: [0, 0, 1000, 0], lengthMm: 1000 }], panelPx: [panel.x, panel.y], elevation: profile, routing: draft.mode });
-  return { plan: { rooms, nodes, mode: draft.installation }, calibration, panel, routeNodes, switchLinks, controlRuns, dataNodeIds, elementOf };
+  return { plan: { rooms, nodes, mode: draft.installation }, calibration, panel, routeNodes, switchLinks, controlRuns, dataNodeIds, busNodeIds, elementOf };
 }
 
 /** Kalibrace na 2 kliky: úsečka v mm současného měřítka a skutečná délka → nové měřítko a přepočet prvků. */
@@ -378,13 +643,13 @@ export function parseCableReport(json: string | null | undefined): CableReport |
 }
 
 /** Volby návrhu dle ČSN 33 2130 ed. 4 z nákresu (fáze 52). */
-export const designOptionsOf = (draft: Pick<FloorplanDraft, "installMethod" | "groupedCables" | "countDoubleAsTwo">): DesignOptions => ({ installMethod: draft.installMethod, groupedCables: draft.groupedCables, countDoubleAsTwo: draft.countDoubleAsTwo });
+export const designOptionsOf = (draft: Pick<FloorplanDraft, "installMethod" | "groupedCables" | "countDoubleAsTwo"> & Partial<Pick<FloorplanDraft, "environment">>): DesignOptions => ({ installMethod: draft.installMethod, groupedCables: draft.groupedCables, countDoubleAsTwo: draft.countDoubleAsTwo, environment: draft.environment ?? null });
 
 /** Živý výpočet nad nákresem (klient i server): okruhy dle ČSN 33 2130 ed. 4 a výkaz kabeláže ve 3 režimech. */
 export function analyzeDraft(draft: FloorplanDraft) {
   const build = buildPlan(draft);
   const circuits = generateCircuitsFromFloorplan(build.plan, build.calibration, designOptionsOf(draft));
-  const summary = summarizeCabling({ circuits: circuits.circuits, nodes: build.routeNodes, panel: build.panel, profile: draft.profile, selected: draft.mode, switchLinks: build.switchLinks, controlRuns: build.controlRuns, dataNodeIds: build.dataNodeIds, installation: draft.installation });
+  const summary = summarizeCabling({ circuits: circuits.circuits, nodes: build.routeNodes, panel: build.panel, profile: draft.profile, selected: draft.mode, switchLinks: build.switchLinks, controlRuns: build.controlRuns, dataNodeIds: build.dataNodeIds, busNodeIds: build.busNodeIds, installation: draft.installation });
   return { build, circuits, summary };
 }
 

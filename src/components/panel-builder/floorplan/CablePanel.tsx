@@ -1,11 +1,12 @@
 "use client";
 
-import { AlertTriangle, ArrowDown, ArrowUp, Loader2 } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, CheckCircle2, CircleAlert, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { analyzeDraft } from "@/lib/panel-builder/floorplan-editor";
+import type { analyzeDraft, generationChecklist } from "@/lib/panel-builder/floorplan-editor";
+import { ENVIRONMENTS, environmentOf, type EnvironmentId } from "@/lib/panel-builder/environments";
 import { ROUTING_LABEL } from "@/lib/panel-builder/floorplan-editor";
 import type { CableRoutingMode, Protection } from "@/engine/floorplan-bridge";
 import { cn } from "@/lib/utils";
@@ -22,7 +23,25 @@ function protectionLabel(protection: Protection): string {
   return protection.device === "RCBO" ? `RCBO ${base} typ ${protection.rcd?.type ?? "A"} ${protection.rcd?.sensitivityMa ?? 30} mA` : base;
 }
 
-export function CablePanel({ analysis, mode, pending, onGenerate }: { analysis: Analysis; mode: CableRoutingMode; pending: boolean; onGenerate: (form: FormData) => void }) {
+export function CablePanel({
+  analysis,
+  mode,
+  pending,
+  onGenerate,
+  slackPercent,
+  environment,
+  onEnvironment,
+  checklist,
+}: {
+  analysis: Analysis;
+  mode: CableRoutingMode;
+  pending: boolean;
+  onGenerate: (form: FormData) => void;
+  slackPercent: number;
+  environment: EnvironmentId | null;
+  onEnvironment: (environment: EnvironmentId | null) => void;
+  checklist: ReturnType<typeof generationChecklist>;
+}) {
   const circuitById = new Map(analysis.ok ? analysis.circuits.circuits.map((circuit) => [circuit.id, circuit]) : []);
   return (
     <section className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3 text-sm" aria-label="Výkaz kabeláže a okruhů" data-testid="cable-panel">
@@ -45,7 +64,7 @@ export function CablePanel({ analysis, mode, pending, onGenerate }: { analysis: 
             Optimalizovaně: {m(analysis.summary.totals.OPTIMIZED)} – ušetřeno {m(analysis.summary.savingVsBottomM)} oproti vedení spodem a {m(analysis.summary.savingVsTopM)} oproti vedení vrchem.
           </p>
           <div>
-            <p className="mb-1 text-xs font-semibold text-muted-foreground">Kabely k nákupu – {ROUTING_LABEL[mode]} (vč. rezervy a přídavků na zapojení)</p>
+            <p className="mb-1 text-xs font-semibold text-muted-foreground">Kabely k nákupu – {ROUTING_LABEL[mode]} (vč. rezervy {slackPercent} % a přídavků na zapojení)</p>
             <ul className="flex flex-col gap-0.5" data-testid="cable-buy">
               {analysis.summary.byCable.map((row) => (
                 <li key={row.cable} className="flex justify-between gap-2 rounded bg-muted/40 px-2 py-0.5 font-mono text-xs">
@@ -113,7 +132,34 @@ export function CablePanel({ analysis, mode, pending, onGenerate }: { analysis: 
             <Input id="fp-site" name="site" maxLength={120} placeholder="nepovinné" />
           </div>
         </div>
-        <Button type="submit" className="touch-target gap-2" disabled={pending || !analysis.ok || !analysis.summary.circuits.length} data-testid="generate-from-floorplan">
+        {/* Fáze 57: prostředí dle ČSN 33 2000-5-51 ed. 3 – povinně před generováním rozváděče a dokumentace */}
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="fp-environment">Prostředí dle ČSN 33 2000-5-51 ed. 3 *</Label>
+          <select
+            id="fp-environment"
+            value={environment ?? ""}
+            onChange={(event) => onEnvironment((event.target.value || null) as EnvironmentId | null)}
+            className="h-9 rounded-md border border-input bg-transparent px-2 text-sm dark:bg-input/30"
+            data-testid="floorplan-environment"
+          >
+            <option value="">– zvolte prostředí instalace –</option>
+            {ENVIRONMENTS.map((env) => (
+              <option key={env.id} value={env.id}>
+                {env.label} – {env.codes}
+              </option>
+            ))}
+          </select>
+          {environment ? <p className="text-[11px] text-muted-foreground">Protokol o určení vnějších vlivů, min. krytí IP {environmentOf(environment).minIp} a teplota okolí {environmentOf(environment).ambientTempC} °C se propíšou do dokumentace.</p> : null}
+        </div>
+        <ul className="flex flex-col gap-1 rounded-lg border border-border p-2 text-xs" aria-label="Kontrola před generováním" data-testid="generation-checklist">
+          {checklist.items.map((item) => (
+            <li key={item.id} className={cn("flex items-start gap-1.5", item.ok ? "text-emerald-300" : "text-amber-200")} data-ok={item.ok}>
+              {item.ok ? <CheckCircle2 className="mt-0.5 size-3.5 shrink-0" aria-hidden /> : <CircleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />}
+              {item.label}
+            </li>
+          ))}
+        </ul>
+        <Button type="submit" className="touch-target gap-2" disabled={pending || !analysis.ok || !analysis.summary.circuits.length || !checklist.ready} data-testid="generate-from-floorplan">
           {pending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null} [ ⚡ Vygenerovat rozváděč z tohoto půdorysu ]
         </Button>
         <p className="text-[11px] text-muted-foreground">1 kredit · jističe, chrániče, fáze, skříň, domovní přístroje zvolené řady a výkaz kabeláže v dokumentaci.</p>

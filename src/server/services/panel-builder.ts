@@ -14,6 +14,7 @@ import { ancestors, isConnected, isPhaseAssignment, proposeTree, renumber, treeN
 import { calculateThermal } from "@/lib/thermalCalculation";
 import { DEFAULT_RAIL_MODULES, MAX_RAILS, railCapacities, railColumns, withRailAdded, withRailRemoved } from "@/lib/panel-builder/rails";
 import { supplyById, supplyColumns } from "@/lib/panel-builder/supply";
+import { ENVIRONMENT_BLOCKER } from "@/lib/panel-builder/environments";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 
 import type { AiMode, AnalysisMode, analyzePanelPhoto, lookupComponent } from "./geminiPanelService";
@@ -455,6 +456,8 @@ export async function releaseDocumentation(prisma: PrismaClient, projectId: stri
   if (!equipment) throw new WorkflowError("NOT_FOUND", "Zařízení neexistuje.");
   if (equipment.type !== "SWITCHBOARD") throw new WorkflowError("VALIDATION", `${equipment.tag} není rozváděč – pasport lze přiřadit jen ke kartě rozváděče.`);
   const { blockers } = documentationState(project);
+  // Fáze 57: prostředí dle ČSN 33 2000-5-51 ed. 3 musí být výslovně zvolené (protokol o vnějších vlivech)
+  if (!project.environmentConfirmedAt) blockers.unshift(ENVIRONMENT_BLOCKER);
   if (blockers.length) throw new WorkflowError("VALIDATION", `Dokumentaci zatím nelze propustit: ${blockers.join(" ")}`);
   await prisma.panelBoardProject.update({ where: { id: projectId }, data: { equipmentId, status: "COMPLETED", releasedAt: now } });
   return equipment;

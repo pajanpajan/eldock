@@ -171,11 +171,11 @@ export async function setCompanyBranding(prisma: PrismaClient, companyId: string
   });
 }
 
-/** Prostředí instalace (fáze 45): uloží prostředí a teplotu okolí pro výpočet oteplení. */
+/** Prostředí instalace (fáze 45): uloží prostředí a teplotu okolí pro výpočet oteplení; výslovná volba = potvrzení (fáze 57). */
 export async function setEnvironment(prisma: PrismaClient, projectId: string, environmentId: string) {
   if (!isEnvironmentId(environmentId)) throw new WorkflowError("VALIDATION", "Neznámé prostředí instalace.");
   const environment = environmentOf(environmentId);
-  return prisma.panelBoardProject.update({ where: { id: projectId }, data: { environment: environment.id, ambientTempC: environment.ambientTempC }, select: { id: true, environment: true, ambientTempC: true } });
+  return prisma.panelBoardProject.update({ where: { id: projectId }, data: { environment: environment.id, ambientTempC: environment.ambientTempC, environmentConfirmedAt: new Date() }, select: { id: true, environment: true, ambientTempC: true } });
 }
 
 /** Štítky funkce obvodu firmy: uloží se jen novější sada (vyhrává novější `updatedAt`). */

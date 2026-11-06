@@ -23,7 +23,7 @@ import { DESIGN_BRANDS, appearanceLabel, dbSeriesFor, designSeriesOf } from "@/l
 import { pickWiringDevice, type PickableDevice } from "@/lib/panel-builder/wiring-picker";
 import { candidateTimes, keyframeTimes, scaledSize, sharpnessScore } from "@/lib/video-frames";
 
-const el = (id: string, item: string, x: number, y: number, room = "Obývák", patch: Partial<EditorElement> = {}): EditorElement => ({ id, item, x, y, room, mountHeightMm: null, frameUnits: 1, series: null, color: null, controls: [], ...patch });
+const el = (id: string, item: string, x: number, y: number, room = "Obývák", patch: Partial<EditorElement> = {}): EditorElement => ({ id, item, x, y, room, mountHeightMm: null, frameUnits: 1, series: null, color: null, rotation: 0, scale: null, controls: [], ...patch });
 
 describe("loga výrobců z public/brands", () => {
   it("slug souboru podle značky katalogu – 18 oficiálních značek + neznámý výrobce", () => {
@@ -141,7 +141,8 @@ describe("🎨 kaskáda výrobce → řada → barva", () => {
 
 describe("💡 paleta světel a vypínačů + kabeláž", () => {
   it("paleta obsahuje všech 13 běžných ovladačů", () => {
-    const symbols = PALETTE.filter((item) => item.group === "lights" && item.kind === "switch").map((item) => item.symbol);
+    // Fáze 57: ovladače mají vlastní skupinu „Ovládání“ a klasické vypínače platí pro klasiku i retrofit
+    const symbols = PALETTE.filter((item) => item.group === "controls" && item.kind === "switch" && (!item.levels || item.levels.includes("classic"))).map((item) => item.symbol);
     // Fáze 52: + přesná katalogová řazení ABB (1So, 1S, 1SSo, 1+1, 6+6/0, 7So, 1/0So)
     expect(symbols).toEqual(["S1", "S5", "S6", "S6+6", "S7", "T1", "T2", "ZAL", "STM", "PIR", "S1S", "S44", "1So", "1S", "1SSo", "1+1", "6+6/0", "7So", "1/0So", "TER"]);
   });

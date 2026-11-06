@@ -5,11 +5,11 @@
 // u řady, kde zadání uvádí jen jednoduchý kryt, dvoubarevný kód) má `verified: false`; bez podkladu je MPN null (doplnit).
 // Čisté funkce.
 
-import { paletteItem, type FloorplanDraft } from "./floorplan-editor";
+import { effectiveSwitchNo, isWiredSwitch, paletteItem, type FloorplanDraft } from "./floorplan-editor";
 import { appearanceLabel, designSeriesOf } from "./wiring-designs";
 
-export type BomCategory = "Přístroje spínačů" | "Kryty spínačů" | "Zásuvky" | "Rámečky" | "Ostatní přístroje" | "Instalační krabice" | "Kabely";
-export const BOM_CATEGORIES: readonly BomCategory[] = ["Přístroje spínačů", "Kryty spínačů", "Zásuvky", "Rámečky", "Ostatní přístroje", "Instalační krabice", "Kabely"];
+export type BomCategory = "Přístroje spínačů" | "Kryty spínačů" | "Sběrnicové prvky" | "Chytré moduly" | "Zásuvky" | "Rámečky" | "Ostatní přístroje" | "Instalační krabice" | "Kabely";
+export const BOM_CATEGORIES: readonly BomCategory[] = ["Přístroje spínačů", "Kryty spínačů", "Sběrnicové prvky", "Chytré moduly", "Zásuvky", "Rámečky", "Ostatní přístroje", "Instalační krabice", "Kabely"];
 
 export interface WiringBomRow {
   category: BomCategory;
@@ -72,16 +72,6 @@ const ABB_MATRIX: Record<string, SeriesMatrix> = {
 
 const DIVIDED = new Set(["5", "6+6", "1/0+1/0", "1+1", "6+6/0"]);
 
-/** Řazení vypínače: pevné (S5, S6+6, tlačítka) nebo z párování se světlem (1 místo = 1, 2 = 6, další 7). */
-function switchNumberOf(draft: Pick<FloorplanDraft, "elements">, elementId: string, fixed: string | undefined): string {
-  if (fixed) return fixed;
-  const light = draft.elements.find((candidate) => draft.elements.some((element) => element.id === elementId && element.controls.includes(candidate.id)));
-  if (!light) return "1";
-  const controllers = draft.elements.filter((element) => element.controls.includes(light.id));
-  const index = controllers.findIndex((element) => element.id === elementId);
-  return controllers.length === 1 ? "1" : index < 2 ? "6" : "7";
-}
-
 /** Objednací číslo s kódem barvy; dvoubarevný kód („241/141“) nebo barva bez kódu → neověřeno / chybí. */
 function withColor(base: string | null, code: string | null | undefined, verified: boolean): { mpn: string | null; verified: boolean } {
   if (!base) return { mpn: null, verified: false };
@@ -125,6 +115,18 @@ export function compileFloorplanBom(draft: FloorplanDraft, options: BomOptions =
       add({ category: "Rámečky", ...frameMpn, name: `Rámeček ${units}násobný (${units}R)`, appearance, unit: "ks" }, 1);
     };
 
+    // Fáze 57: sběrnicové prvky (bez objednacích čísel – podle zvoleného systému KNX / Loxone / free@home)
+    if (item.bus) {
+      add({ category: "Sběrnicové prvky", mpn: null, verified: false, name: `${item.label} – dle zvoleného systému (KNX / Loxone Tree / ABB-free@home)`, appearance: item.bus.role === "presence" ? "–" : appearance, unit: "ks" }, units);
+      if (item.bus.role !== "presence") frame();
+      continue;
+    }
+    // Bezdrátové tlačítko / čidlo: na baterii, bez krabice a bez kabelu
+    if (item.wireless) {
+      boxes -= units;
+      add({ category: "Chytré moduly", mpn: null, verified: false, name: `${item.label.replace(/ \(.*\)$/, "")} (Zigbee / Matter, baterie)`, appearance, unit: "ks" }, units);
+      continue;
+    }
     if (item.kind === "switch") {
       if (item.wiringCategory && item.control !== "blind") {
         add({ category: "Ostatní přístroje", mpn: null, verified: false, name: item.label, appearance, unit: "ks" }, units);
@@ -132,7 +134,7 @@ export function compileFloorplanBom(draft: FloorplanDraft, options: BomOptions =
         continue;
       }
       const blind = item.control === "blind";
-      const switchNo = blind ? "blind" : switchNumberOf(draft, element.id, item.fixedSwitchNo);
+      const switchNo = blind ? "blind" : effectiveSwitchNo(draft, element).replace(/S+o?$/, "");
       const mechanism = isAbb && !item.led && !item.ip44 ? (ABB_MECHANISMS[switchNo] ?? null) : null;
       add({ category: "Přístroje spínačů", mpn: mechanism, verified: Boolean(mechanism), name: blind ? "Žaluziový spínač – přístroj" : `Spínač řazení ${switchNo} – přístroj pod omítku`, appearance: found ? found.brand.label : "–", unit: "ks" }, units);
       const kind: CoverKind = blind ? "blind" : DIVIDED.has(switchNo) ? "divided" : "single";
@@ -155,6 +157,23 @@ export function compileFloorplanBom(draft: FloorplanDraft, options: BomOptions =
       add({ category: "Ostatní přístroje", mpn: null, verified: false, name: "Datová zásuvka RJ45 (Cat6)", appearance, unit: "ks" }, units);
       frame();
     }
+  }
+  // Retrofit: modul pod vypínač na každou spínanou větev (světlo s kabelovým ovladačem) a žaluzii, spínací modul
+  // do krabice svítidla, které ovládá jen bezdrátové tlačítko
+  if (options.installation === "smart_retrofit") {
+    const wiredLights = new Set<string>();
+    const wirelessLights = new Set<string>();
+    let blindModules = 0;
+    for (const element of draft.elements) {
+      const item = paletteItem(element.item);
+      if (item?.control === "blind" && isWiredSwitch(item)) blindModules += Math.max(1, element.frameUnits);
+      const target = item && (item.control ?? "light") === "light" ? (isWiredSwitch(item) ? wiredLights : item.wireless ? wirelessLights : null) : null;
+      for (const lightId of element.controls) target?.add(lightId);
+    }
+    for (const id of wiredLights) wirelessLights.delete(id);
+    add({ category: "Chytré moduly", mpn: null, verified: false, name: "Chytrý modul pod vypínač (Zigbee / Matter, s nulovým vodičem N)", appearance: "–", unit: "ks" }, wiredLights.size);
+    add({ category: "Chytré moduly", mpn: null, verified: false, name: "Žaluziový modul pod vypínač (Zigbee / Matter)", appearance: "–", unit: "ks" }, blindModules);
+    add({ category: "Chytré moduly", mpn: null, verified: false, name: "Spínací modul do krabice svítidla (Zigbee / Matter) – pro bezdrátové tlačítko", appearance: "–", unit: "ks" }, wirelessLights.size);
   }
   const deep = options.installation === "bus_loxone" || options.installation === "smart_retrofit";
   add({ category: "Instalační krabice", mpn: deep ? "KPR 68" : "KU 68-1901", verified: true, name: deep ? "Přístrojová krabice hluboká KOPOS (chytrá / retrofit instalace)" : "Přístrojová krabice KOPOS pod omítku", appearance: "KOPOS", unit: "ks" }, boxes);

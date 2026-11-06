@@ -36,6 +36,8 @@ export const ENVIRONMENTS: readonly InstallEnvironment[] = [
 ];
 
 export const DEFAULT_ENVIRONMENT: EnvironmentId = "INDOOR_DRY";
+/** Fáze 57: překážka tisku / propuštění dokumentace bez výslovně zvoleného prostředí. */
+export const ENVIRONMENT_BLOCKER = "Zvolte a potvrďte prostředí instalace dle ČSN 33 2000-5-51 ed. 3 (protokol o určení vnějších vlivů).";
 export const environmentOf = (id: string | null | undefined): InstallEnvironment => ENVIRONMENTS.find((env) => env.id === id) ?? ENVIRONMENTS[0];
 export const isEnvironmentId = (value: unknown): value is EnvironmentId => ENVIRONMENTS.some((env) => env.id === value);
 

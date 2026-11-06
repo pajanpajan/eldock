@@ -56,6 +56,9 @@ test("📐 2D půdorys: osazení, párování, výkaz kabeláže Spodem / Vrchem
 
   // ⚡ Rozváděč z půdorysu → projekt s výkazem kabeláže v dokumentaci
   await page.getByLabel("Název rozváděče").fill("RD49 z půdorysu");
+  // Fáze 57: bez prostředí dle ČSN 33 2000-5-51 ed. 3 nelze generovat
+  await expect(page.getByTestId("generate-from-floorplan")).toBeDisabled();
+  await page.getByTestId("floorplan-environment").selectOption("INDOOR_DRY");
   await page.getByTestId("generate-from-floorplan").click();
   await expect(page).toHaveURL(/\/panel-builder\/[^/]+$/, { timeout: 60_000 });
   await expect(page.getByRole("heading", { level: 1 })).toContainText("RD49 z půdorysu");

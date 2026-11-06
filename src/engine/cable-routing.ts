@@ -154,6 +154,8 @@ export interface CableSummary {
   /** Rozpis k nákupu ve vybraném režimu: typ kabelu → metry. */
   byCable: { cable: string; meters: number }[];
   circuits: CircuitCabling[];
+  /** Fáze 57: trasa sběrnicové linky ve zvoleném režimu (pro vykreslení), jinak null. */
+  busLine: CircuitRoute | null;
   warnings: string[];
 }
 
@@ -171,6 +173,11 @@ export interface CablingInput {
   dataNodeIds?: readonly string[];
   /** Fáze 52: úroveň instalace – hvězda světel (sběrnice), CYKY-J ke každému vypínači (retrofit). */
   installation?: InstallMode;
+  /**
+   * Fáze 57: sběrnicové prvky (tlačítka, detektory, prostorové jednotky). Zadané = jedna sběrnicová linka z rozváděče
+   * přes všechny prvky (KNX linie / Loxone Tree) místo svodů ze svítidel; žaluzie pak napájí aktor v rozváděči.
+   */
+  busNodeIds?: readonly string[];
 }
 
 /** Hvězdicová topologie: každý prvek samostatným kabelem do rozváděče, trasy sečtené do jedné. */
@@ -230,7 +237,18 @@ export function summarizeCabling(input: CablingInput): CableSummary {
   // Svody k vypínačům: ze stropní krabice světla dolů k vypínači (stejné ve všech režimech);
   // sběrnice = jeden sběrnicový kabel na ovládací místo
   const busSwitches = new Set<string>();
-  for (const link of input.switchLinks ?? []) {
+  const busLine = input.installation === "bus_loxone" && input.busNodeIds !== undefined;
+  let busRoute: CircuitRoute | null = null;
+  if (busLine) {
+    const busNodes = (input.busNodeIds ?? []).map((id) => byId.get(id)).filter((node): node is RouteNode => Boolean(node));
+    if (busNodes.length) {
+      const routes = circuitRoutes(busNodes, input.panel, profile);
+      for (const mode of ["BOTTOM", "TOP", "OPTIMIZED"] as const) totals[mode] += routes[mode].totalMm;
+      busRoute = routes[input.selected];
+      add(BUS_LEG_CABLE, busRoute.totalMm);
+    }
+  }
+  for (const link of busLine ? [] : (input.switchLinks ?? [])) {
     const light = byId.get(link.lightId);
     const switchNode = byId.get(link.switchId);
     if (!light || !switchNode) continue;
@@ -247,7 +265,12 @@ export function summarizeCabling(input: CablingInput): CableSummary {
     const node = byId.get(run.id);
     if (!node) continue;
     const runs = { BOTTOM: 0, TOP: 0, OPTIMIZED: 0 } as Record<CableRoutingMode, number>;
-    if (run.kind === "blind") {
+    // Sběrnice: termostat je prostorová jednotka na lince (ventily spíná aktor), žaluzii napájí aktor z rozváděče
+    if (busLine && run.kind === "thermostat") continue;
+    if (busLine && run.kind === "blind") {
+      for (const mode of ["BOTTOM", "TOP"] as const) runs[mode] = Math.round((manhattan(input.panel, node) + panelVertical(Math.min(profile.ceilingHeightMm, node.heightMm + BLIND_MOTOR_RUN_MM), mode, profile)) * slack + profile.panelAllowanceMm + profile.boxAllowanceMm);
+      runs.OPTIMIZED = Math.min(runs.BOTTOM, runs.TOP);
+    } else if (run.kind === "blind") {
       const mm = Math.round((Math.max(0, profile.ceilingHeightMm - node.heightMm) + BLIND_MOTOR_RUN_MM) * slack + profile.boxAllowanceMm * 2);
       runs.BOTTOM = runs.TOP = runs.OPTIMIZED = mm;
     } else {
@@ -284,6 +307,7 @@ export function summarizeCabling(input: CablingInput): CableSummary {
     savingVsTopM: Math.max(0, Math.round((totalsM.TOP - totalsM.OPTIMIZED) * 10) / 10),
     byCable: [...byCable.entries()].map(([cable, mm]) => ({ cable, meters: Math.ceil(mm / 1000) })).sort((a, b) => b.meters - a.meters || a.cable.localeCompare(b.cable)),
     circuits,
+    busLine: busRoute,
     warnings,
   };
 }

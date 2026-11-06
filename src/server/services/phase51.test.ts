@@ -52,7 +52,7 @@ describe("📷 kombinovaná analýza: celková fotka + detaily lišt / snímky z
 });
 
 describe("⚡ rozváděč z půdorysu: řada, barva a nové ovladače", () => {
-  const el = (id: string, item: string, x: number, y: number, room: string, patch: Partial<EditorElement> = {}): EditorElement => ({ id, item, x, y, room, mountHeightMm: null, frameUnits: 1, series: null, color: null, controls: [], ...patch });
+  const el = (id: string, item: string, x: number, y: number, room: string, patch: Partial<EditorElement> = {}): EditorElement => ({ id, item, x, y, room, mountHeightMm: null, frameUnits: 1, series: null, color: null, rotation: 0, scale: null, controls: [], ...patch });
 
   it("černá ABB Levit: vypínač i čidlo v černé, výkaz s kabelem žaluzie a termostatu", async () => {
     await importWiringDevices(prisma, (readWiringSnapshot() ?? []).filter((row) => row.series === "Levit"));

@@ -5,6 +5,7 @@ import type { PrismaClient } from "@/generated/prisma/client";
 import { isHiddenManufacturer } from "@/lib/panel-builder/brands";
 import { enclosureProjectData } from "@/lib/panel-builder/enclosures";
 import { analyzeDraft, paletteItem, parseDraft, type CableReport, type EditorElement, type FloorplanDraft, type PlanBuild } from "@/lib/panel-builder/floorplan-editor";
+import { environmentOf } from "@/lib/panel-builder/environments";
 import { pickWiringDevice, type WiringNeed } from "@/lib/panel-builder/wiring-picker";
 import { DEFAULT_COLOR, dbSeriesFor, designColor } from "@/lib/panel-builder/wiring-designs";
 import { isSampleProject, projectUploads, refundsCredit } from "@/lib/panel-builder/project-admin";
@@ -126,7 +127,7 @@ async function createPlanProject(
   input: Omit<CreateProjectInput, "photoUrl" | "designMode" | "dims">,
   circuits: CircuitPlanResult,
   board: SwitchboardResult,
-  options: { data?: { floorplanJson?: string; cableReportJson?: string }; afterItems?: (items: { id: string; device: SwitchboardResult["devices"][number] }[]) => Promise<string[]> } = {},
+  options: { data?: { floorplanJson?: string; cableReportJson?: string; environment?: string; ambientTempC?: number; environmentConfirmedAt?: Date }; afterItems?: (items: { id: string; device: SwitchboardResult["devices"][number] }[]) => Promise<string[]> } = {},
 ) {
   const project = await createPanelProject(prisma, { ...input, photoUrl: null, designMode: "DESIGN" });
   try {
@@ -212,8 +213,14 @@ export async function createProjectFromFloorplan(prisma: PrismaClient, input: Fl
   const supply = supplyById(draft.supplySystem ?? input.supplySystem);
   const board = buildSwitchboardFromCircuits(circuits, { mode: draft.installation, enclosures, supplyPhases: supply.phases });
   const header = { name: input.name, customerName: input.customerName, installationSite: input.installationSite, companyId: input.companyId, manufacturerInfo: input.manufacturerInfo, createdById: input.createdById, supplySystem: supply.id };
+  // Fáze 57: prostředí dle ČSN 33 2000-5-51 ed. 3 zvolené v půdorysu = potvrzené prostředí dokumentace
+  const environment = draft.environment ? environmentOf(draft.environment) : null;
   return createPlanProject(prisma, header, circuits, board, {
-    data: { floorplanJson: JSON.stringify(draft), cableReportJson: JSON.stringify(cableReportOf(summary, draft.profile)) },
+    data: {
+      floorplanJson: JSON.stringify(draft),
+      cableReportJson: JSON.stringify(cableReportOf(summary, draft.profile)),
+      ...(environment ? { environment: environment.id, ambientTempC: environment.ambientTempC, environmentConfirmedAt: new Date() } : {}),
+    },
     afterItems: (items) => assignWiringDevices(prisma, items, circuits, build, draft),
   });
 }
@@ -263,6 +270,8 @@ async function assignWiringDevices(prisma: PrismaClient, items: { id: string; de
         controllers.forEach((controller, index) => {
           const palette = paletteItem(controller.item);
           if (!palette) return;
+          // Fáze 57: sběrnicová a bezdrátová tlačítka nejsou v katalogu domovních přístrojů (kusovník je vede bez MPN)
+          if (palette.bus || palette.wireless) return;
           if (palette.wiringCategory) return add(itemId, controller, { kind: "category", category: palette.wiringCategory }, 1, palette.label);
           const base = palette.fixedSwitchNo ?? (controllers.length === 1 ? "1" : index < 2 ? "6" : "7");
           const switchNo = palette.led && (base === "1" || base === "6" || base === "7") ? `${base}So` : base;

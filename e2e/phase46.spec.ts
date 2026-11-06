@@ -115,8 +115,10 @@ test("AI Panel Builder: norma strojního rozváděče a protokol o kusové zkou�
   await expect(page.getByTestId("doc-thermal-basis")).toContainText("ČSN EN 60204-1 ed. 3");
 
   const routine = page.getByTestId("routine-test");
-  await expect(page.getByTestId("routine-verdict")).toHaveText("NEÚPLNÝ");
-  for (const button of await routine.getByRole("button", { name: "✓ Vyhovuje" }).all()) await button.click();
+  // Od fáze 55 má vzorový PB-001 v seedu vyplněnou kusovou zkoušku (VYHOVUJE) – test ji přepíše vlastními hodnotami
+  await expect(page.getByTestId("routine-verdict")).toHaveText(/NEÚPLNÝ|VYHOVUJE/);
+  // Tlačítko se přepíná – klikne se jen na body, které ještě nejsou „Vyhovuje“
+  for (const button of await routine.getByRole("button", { name: "✓ Vyhovuje" }).all()) if ((await button.getAttribute("aria-pressed")) !== "true") await button.click();
   await routine.getByLabel("Izolační odpor R_iso", { exact: true }).fill("250");
   await routine.getByLabel("Zkoušku provedl").fill("Ing. Petra Nová");
   await expect(page.getByTestId("routine-verdict")).toHaveText("VYHOVUJE");

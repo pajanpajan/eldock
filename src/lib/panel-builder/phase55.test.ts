@@ -88,7 +88,7 @@ describe("řady ABB 2026 a barvy", () => {
 });
 
 describe("kusovník domovní instalace", () => {
-  const el = (id: string, item: string, extra: Partial<EditorElement> = {}): EditorElement => ({ id, item, x: 0, y: 0, room: "Obývák", mountHeightMm: null, frameUnits: 1, series: null, color: null, controls: [], ...extra });
+  const el = (id: string, item: string, extra: Partial<EditorElement> = {}): EditorElement => ({ id, item, x: 0, y: 0, room: "Obývák", mountHeightMm: null, frameUnits: 1, series: null, color: null, rotation: 0, scale: null, controls: [], ...extra });
 
   it("Zoni bílá 500: strojky, kryty, zásuvky, rámečky podle násobnosti, krabice a kabely", () => {
     const draft = {

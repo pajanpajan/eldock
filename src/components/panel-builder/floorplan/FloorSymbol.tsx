@@ -1,119 +1,258 @@
+import type { ReactNode } from "react";
+
+import type { InstallLevel } from "@/engine/floorplan-bridge";
 import type { PaletteItem } from "@/lib/panel-builder/floorplan-editor";
 
 /**
- * Fáze 55: elektrotechnické značky do půdorysu (dle ČSN EN 60617 / ČSN 01 3481) místo teček – zásuvky (půlkruh se svislou
- * čarou, 2Z dvojitá ryska, IP44 stříška, RJ45), vypínače (kruh s praporky podle řazení, tlačítko trojúhelník, žaluzie šipky),
- * svítidla (⊗ stropní, konzola nástěnné) a spotřebiče (čtverec s piktogramem). Barevný lem = barva domovních přístrojů.
- * Kreslí se v jednotkách plátna (mm); `size` = velikost značky, `stroke` = tloušťka čáry.
+ * Fáze 57: značky do půdorysu podle ČSN EN 60617-11 (instalační plány budov) místo vyplněných tvarů:
+ * – zásuvka 11-13-01: oblouk otevřený do místnosti s „nožičkou“ ke stěně, s ochranným kontaktem 11-13-04 vodorovná
+ *   čára přes vrchol oblouku, vícenásobná zásuvka = šikmá čárka s počtem, sdělovací zásuvka 11-13-09 (RJ45),
+ * – spínač 11-14: kroužek s šikmou čarou zakončenou praporkem – řazení 1 jedna čára, 5 dvě čáry do V, 6 čáry na obě
+ *   strany, 7 (a 6+6) čtyři čáry, se signální doutnavkou kroužek s křížkem, stmívač klínek, tlačítko soustředné kroužky,
+ * – svítidlo ⊗ (nástěnné s nožičkou ke stěně), spotřebiče jako vývod se zkratkou, rozváděč obdélník s polovinou vyplněnou.
+ * Sběrnicové prvky se kreslí v rámečku (prvek na sběrnici 24 V DC), bezdrátové s vlnkami, chytrý modul štítkem „M“.
+ * Počátek (0, 0) = bod u stěny (zásuvky, nástěnná svítidla) nebo střed přístroje; kreslí se v mm plánu, `size` je
+ * velikost značky. Popisek (řazení, IP44 …) se neotáčí se značkou.
  */
-export function FloorSymbol({ item, size, stroke, active, lem, switchNo }: { item: PaletteItem; size: number; stroke: number; active: boolean; lem?: string | null; switchNo?: string }) {
-  const r = size * 0.5;
-  const ink = "#09090b";
-  const line = { stroke: ink, strokeWidth: stroke * 2.2, fill: "none", strokeLinecap: "round" as const };
-  const ring = active ? "#facc15" : lem ?? "#e4e4e7";
-  // Neviditelná plocha pro snadné kliknutí
-  const hit = <circle r={size * 0.75} fill="transparent" />;
-  const label = (text: string) => (
-    <text x={r * 1.15} y={r * 1.35} fontSize={size * 0.34} fontWeight={800} fill="#e4e4e7" stroke="#09090b" strokeWidth={stroke * 0.8} paintOrder="stroke">
-      {text}
-    </text>
+export function FloorSymbol({
+  item,
+  size,
+  active,
+  onPaper,
+  rotation = 0,
+  switchNo,
+  level = "classic",
+  lem,
+}: {
+  item: PaletteItem;
+  size: number;
+  active: boolean;
+  /** Podklad (bílý výkres) → černá kresba; čistý rastr (tmavý) → světlá kresba. */
+  onPaper: boolean;
+  rotation?: number;
+  /** Skutečné řazení z párování (č. 1 / 6 / 7 …). */
+  switchNo?: string;
+  level?: InstallLevel;
+  /** Barva domovních přístrojů (fáze 51) – tečka u popisku. */
+  lem?: string | null;
+}) {
+  const ink = onPaper ? "#111827" : "#f4f4f5";
+  const halo = active ? "#facc15" : onPaper ? "rgba(255,255,255,0.9)" : "rgba(9,9,11,0.85)";
+  const w = size / 22;
+  const parts = symbolParts(item, size, { switchNo, level });
+  const draw = (stroke: string, width: number, key: string) => (
+    <g key={key} fill="none" stroke={stroke} strokeWidth={width} strokeLinecap="round" strokeLinejoin="round">
+      {parts.paths.map((d, index) => (
+        <path key={index} d={d} />
+      ))}
+      {parts.circles.map((circle, index) => (
+        <circle key={`c${index}`} cx={circle.cx} cy={circle.cy} r={circle.r} fill={circle.fill ? stroke : "none"} />
+      ))}
+    </g>
   );
-
-  if (item.kind === "single_socket" || item.kind === "double_socket" || item.kind === "data_socket") {
-    const double = item.kind === "double_socket";
-    return (
-      <g data-symbol="socket">
-        {hit}
-        <path d={`M${-r} 0 A${r} ${r} 0 0 1 ${r} 0 Z`} fill={item.kind === "data_socket" ? "#86efac" : "#f4f4f5"} stroke={ring} strokeWidth={stroke * (active ? 6 : 4)} />
-        <path d={`M${-r} 0 A${r} ${r} 0 0 1 ${r} 0 M${-r * 1.1} 0 H${r * 1.1} M0 0 V${r * 0.9}`} {...line} />
-        {double ? <path d={`M${-r * 0.35} ${-r * 0.2} V${-r * 0.75} M${r * 0.35} ${-r * 0.2} V${-r * 0.75}`} {...line} /> : null}
-        {item.variant === "ip44" ? <path d={`M${-r * 0.8} ${-r * 1.15} L0 ${-r * 1.55} L${r * 0.8} ${-r * 1.15}`} {...line} /> : null}
-        {label(item.kind === "data_socket" ? "RJ45" : item.variant === "worktop" ? "ZL" : double ? "2Z" : item.variant === "ip44" ? "IP44" : "Z")}
-      </g>
-    );
-  }
-
-  if (item.kind === "light") {
-    return (
-      <g data-symbol="light">
-        {hit}
-        {item.variant === "wall" ? (
-          <>
-            <path d={`M${-r} ${r * 0.4} A${r} ${r} 0 0 1 ${r} ${r * 0.4} Z`} fill="#fde68a" stroke={active ? "#facc15" : ink} strokeWidth={stroke * 2.2} />
-            <path d={`M${-r * 1.1} ${r * 0.4} H${r * 1.1}`} {...line} />
-          </>
-        ) : (
-          <>
-            <circle r={r} fill="#fde68a" stroke={active ? "#facc15" : ink} strokeWidth={stroke * (active ? 5 : 2.2)} />
-            <path d={`M${-r * 0.7} ${-r * 0.7} L${r * 0.7} ${r * 0.7} M${r * 0.7} ${-r * 0.7} L${-r * 0.7} ${r * 0.7}`} {...line} />
-          </>
-        )}
-      </g>
-    );
-  }
-
-  if (item.kind === "switch") {
-    const no = switchNo ?? item.fixedSwitchNo ?? item.switchNo ?? "1";
-    const flag = (angle: number, offset = 0) => {
-      const rad = (angle * Math.PI) / 180;
-      const x1 = Math.cos(rad) * r * 0.45;
-      const y1 = -Math.sin(rad) * r * 0.45;
-      const x2 = Math.cos(rad) * r * 1.5;
-      const y2 = -Math.sin(rad) * r * 1.5;
-      const tick = (offset ? 1 : 0) * r * 0.35;
-      return <path key={`${angle}-${offset}`} d={`M${x1} ${y1} L${x2} ${y2} M${x2} ${y2} l${-tick || -r * 0.3} ${r * 0.2}`} {...line} />;
-    };
-    let marks: React.ReactNode = flag(45);
-    if (item.control === "blind") marks = <path d={`M0 ${-r * 0.3} V${-r * 1.4} M${-r * 0.3} ${-r * 1.1} L0 ${-r * 1.4} L${r * 0.3} ${-r * 1.1} M0 ${r * 0.3} V${r * 1.4} M${-r * 0.3} ${r * 1.1} L0 ${r * 1.4} L${r * 0.3} ${r * 1.1}`} {...line} />;
-    else if (item.variant === "button") marks = <path d={`M${-r * 0.45} ${r * 0.3} L0 ${-r * 0.5} L${r * 0.45} ${r * 0.3} Z`} {...line} />;
-    else if (item.wiringCategory === "WD_DIMMER") marks = <path d={`M${-r * 1.2} ${r * 0.9} L${r * 1.2} ${-r * 0.9} M${r * 1.2} ${-r * 0.9} l${-r * 0.45} ${r * 0.05} M${r * 1.2} ${-r * 0.9} l${-r * 0.1} ${r * 0.45}`} {...line} />;
-    else if (no.startsWith("7")) marks = [flag(45), flag(135), flag(225), flag(315)];
-    else if (no.startsWith("6+6") || no.startsWith("6")) marks = no.startsWith("6+6") ? [flag(45), flag(225), flag(60, 1), flag(240, 1)] : [flag(45), flag(225)];
-    else if (no.startsWith("5") || no.startsWith("1+1") || no.startsWith("1/0+1/0")) marks = [flag(45), flag(65, 1)];
-    const special = item.wiringCategory === "WD_SENSOR" ? "PIR" : item.wiringCategory === "WD_THERMOSTAT" ? "t°" : null;
-    return (
-      <g data-symbol="switch">
-        {hit}
-        {marks}
-        <circle r={r * 0.45} fill="#93c5fd" stroke={ring} strokeWidth={stroke * (active ? 6 : 4)} />
-        {item.led ? <circle r={r * 0.15} fill="#f97316" /> : null}
-        {item.ip44 ? <path d={`M${-r * 0.6} ${r * 0.9} L0 ${r * 1.3} L${r * 0.6} ${r * 0.9}`} {...line} /> : null}
-        {special ? (
-          <text textAnchor="middle" dominantBaseline="central" fontSize={size * 0.3} fontWeight={800} fill={ink}>
-            {special}
-          </text>
-        ) : null}
-        {label(item.symbol)}
-      </g>
-    );
-  }
-
-  // Samostatné spotřebiče: čtvercový technologický symbol s piktogramem
-  const square = size * 0.6;
-  const pictogram = (() => {
-    switch (item.tag) {
-      case "cooktop_3p":
-        return [-0.25, 0.25].flatMap((dx) => [-0.25, 0.25].map((dy) => <circle key={`${dx}${dy}`} cx={dx * size} cy={dy * size} r={size * 0.12} fill="none" stroke={ink} strokeWidth={stroke * 1.6} />));
-      case "ev_charger":
-        return <path d={`M${-size * 0.15} ${-size * 0.3} L${size * 0.05} 0 H${-size * 0.08} L${size * 0.15} ${size * 0.3}`} {...line} />;
-      case "pv_inverter":
-        return <path d={`M${-square} ${square} L${square} ${-square} M${-square * 0.2} ${square} L${square} ${-square * 0.2}`} {...line} />;
-      case "heat_pump":
-        return <path d={`M${-size * 0.3} ${size * 0.15} q${size * 0.15} ${-size * 0.3} ${size * 0.3} 0 t${size * 0.3} 0`} {...line} />;
-      default:
-        return (
-          <text textAnchor="middle" dominantBaseline="central" fontSize={size * (item.symbol.length > 2 ? 0.34 : 0.46)} fontWeight={800} fill={ink}>
-            {item.symbol}
-          </text>
-        );
-    }
-  })();
+  const labelText = parts.label;
+  const font = size * 0.3;
   return (
-    <g data-symbol="appliance">
-      {hit}
-      <rect x={-square} y={-square} width={square * 2} height={square * 2} rx={size * 0.06} fill="#fca5a5" stroke={active ? "#facc15" : ink} strokeWidth={stroke * (active ? 6 : 2.4)} />
-      {pictogram}
-      {item.tag === "cooktop_3p" || item.tag === "ev_charger" || item.tag === "pv_inverter" || item.tag === "heat_pump" ? label(item.symbol) : null}
+    <g data-symbol={parts.kind}>
+      {/* Neviditelná plocha pro snadné kliknutí */}
+      <circle cx={0} cy={0} r={size * 0.75} fill="transparent" />
+      <g transform={rotation ? `rotate(${rotation})` : undefined}>
+        {draw(halo, w * (active ? 4.5 : 3.2), "halo")}
+        {parts.fills.map((fill, index) => (
+          <path key={`F${index}`} d={fill} fill={ink} stroke="none" />
+        ))}
+        {draw(ink, w, "ink")}
+        {parts.texts.map((text, index) => (
+          <text key={`t${index}`} x={text.x} y={text.y} fontSize={text.size} fontWeight={700} textAnchor="middle" dominantBaseline="central" fill={ink} stroke="none" transform={rotation ? `rotate(${-rotation} ${text.x} ${text.y})` : undefined}>
+            {text.value}
+          </text>
+        ))}
+      </g>
+      {labelText ? (
+        <g pointerEvents="none">
+          <text x={size * 0.62} y={-size * 0.5} fontSize={font} fontWeight={800} fill={ink} stroke={onPaper ? "#fff" : "#09090b"} strokeWidth={w * 1.4} paintOrder="stroke">
+            {labelText}
+          </text>
+          {lem ? <circle cx={size * 0.5} cy={-size * 0.6} r={size * 0.07} fill={lem} stroke={ink} strokeWidth={w * 0.5} /> : null}
+        </g>
+      ) : null}
+    </g>
+  );
+}
+
+interface Parts {
+  kind: string;
+  paths: string[];
+  circles: { cx: number; cy: number; r: number; fill?: boolean }[];
+  fills: string[];
+  texts: { x: number; y: number; size: number; value: string }[];
+  label: string | null;
+}
+
+const f = (value: number) => Math.round(value * 10) / 10;
+
+/** Čára spínače z kroužku pod úhlem `angle` (° od vodorovné, proti směru hodin) s praporkem ven. */
+function lever(radius: number, length: number, flag: number, angle: number, extra: (end: { x: number; y: number }, dir: { x: number; y: number }, out: { x: number; y: number }) => string = () => ""): string {
+  const rad = (angle * Math.PI) / 180;
+  const dir = { x: Math.cos(rad), y: -Math.sin(rad) };
+  const start = { x: dir.x * radius, y: dir.y * radius };
+  const end = { x: dir.x * (radius + length), y: dir.y * (radius + length) };
+  // Praporek: od konce čáry „ven“ a zpět k místnosti (≈ 110° od čáry), u levých čar zrcadlově
+  const side = dir.x >= 0 ? 1 : -1;
+  const vertical = dir.y <= 0 ? 1 : -1;
+  const out = { x: side * 0.64, y: vertical * 0.77 };
+  return `M${f(start.x)} ${f(start.y)} L${f(end.x)} ${f(end.y)} l${f(out.x * flag)} ${f(out.y * flag)}${extra(end, dir, out)}`;
+}
+
+export function symbolParts(item: PaletteItem, size: number, options: { switchNo?: string; level?: InstallLevel } = {}): Parts {
+  const parts: Parts = { kind: "appliance", paths: [], circles: [], fills: [], texts: [], label: null };
+  const R = size * 0.3;
+  const L = size * 0.28;
+
+  // --- Zásuvky (oblouk s nožičkou ke stěně v -y, ochranný kontakt) ---
+  if (item.kind === "single_socket" || item.kind === "double_socket") {
+    parts.kind = "socket";
+    // Nožička od stěny (0,0) k vrcholu oblouku, oblouk otevřený do místnosti
+    parts.paths.push(`M0 0 V${f(L)}`, `M${f(-R)} ${f(L + R)} A${f(R)} ${f(R)} 0 0 1 ${f(R)} ${f(L + R)}`);
+    // Ochranný kontakt (ČSN: zásuvky vždy s kolíkem PE)
+    parts.paths.push(`M${f(-R)} ${f(L)} H${f(R)}`);
+    if (item.kind === "double_socket") {
+      // Vícenásobná zásuvka: šikmá čárka s počtem vývodů
+      parts.paths.push(`M${f(R * 0.35)} ${f(L + R * 0.9)} L${f(R * 1.05)} ${f(L + R * 0.2)}`);
+      parts.texts.push({ x: R * 1.45, y: L + R * 0.2, size: size * 0.26, value: "2" });
+    }
+    parts.label = item.variant === "ip44" ? "IP44" : item.variant === "worktop" ? "+1150" : null;
+    return parts;
+  }
+  if (item.kind === "data_socket") {
+    parts.kind = "socket";
+    parts.paths.push(`M0 0 V${f(L)}`, `M${f(-R)} ${f(L + R * 0.8)} V${f(L)} H${f(R)} V${f(L + R * 0.8)}`);
+    parts.label = "RJ45";
+    return parts;
+  }
+
+  // --- Svítidla ---
+  if (item.kind === "light") {
+    parts.kind = "light";
+    const r = size * 0.26;
+    const cy = item.variant === "wall" ? L + r : 0;
+    if (item.variant === "wall") parts.paths.push(`M0 0 V${f(L)}`, `M${f(-r)} 0 H${f(r)}`);
+    parts.circles.push({ cx: 0, cy, r });
+    const d = r * 0.7071;
+    parts.paths.push(`M${f(-d)} ${f(cy - d)} L${f(d)} ${f(cy + d)} M${f(d)} ${f(cy - d)} L${f(-d)} ${f(cy + d)}`);
+    return parts;
+  }
+
+  // --- Ovládání ---
+  if (item.kind === "switch") {
+    parts.kind = "switch";
+    const c = size * 0.14;
+    const length = size * 0.42;
+    const flag = size * 0.16;
+    const cross = (radius: number) => {
+      const d = radius * 0.7071;
+      parts.paths.push(`M${f(-d)} ${f(-d)} L${f(d)} ${f(d)} M${f(d)} ${f(-d)} L${f(-d)} ${f(d)}`);
+    };
+    const radio = () => parts.paths.push(`M${f(c * 1.6)} ${f(-c * 1.6)} a${f(c * 1.2)} ${f(c * 1.2)} 0 0 1 ${f(c * 0.9)} ${f(c * 0.9)}`, `M${f(c * 1.9)} ${f(-c * 2.4)} a${f(c * 2)} ${f(c * 2)} 0 0 1 ${f(c * 1.6)} ${f(c * 1.6)}`);
+
+    if (item.bus) {
+      // Sběrnicový prvek: rámeček „sběrnice“ + vnitřní značka podle role
+      parts.kind = "bus";
+      const box = size * 0.3;
+      parts.paths.push(`M${f(-box)} ${f(-box)} H${f(box)} V${f(box)} H${f(-box)} Z`);
+      if (item.bus.role === "button" || item.bus.role === "blind") {
+        parts.circles.push({ cx: 0, cy: 0, r: c * 1.2 }, { cx: 0, cy: 0, r: c * 0.6 });
+        if (item.bus.role === "blind") parts.paths.push(`M${f(-c * 0.35)} ${f(-c * 1.6)} L0 ${f(-c * 2)} L${f(c * 0.35)} ${f(-c * 1.6)} M${f(-c * 0.35)} ${f(c * 1.6)} L0 ${f(c * 2)} L${f(c * 0.35)} ${f(c * 1.6)}`);
+        parts.label = item.bus.role === "blind" ? "BUS ↕" : `BUS ${item.bus.channels}×`;
+      } else if (item.bus.role === "presence") {
+        parts.paths.push(`M${f(-c * 1.3)} ${f(c * 0.6)} A${f(c * 1.3)} ${f(c * 1.3)} 0 0 1 ${f(c * 1.3)} ${f(c * 0.6)} Z`, `M${f(-c * 1.9)} ${f(-c * 0.6)} a${f(c * 2)} ${f(c * 2)} 0 0 1 ${f(c * 3.8)} 0`);
+        parts.label = "BUS DP";
+      } else {
+        parts.texts.push({ x: 0, y: 0, size: size * 0.2, value: item.bus.role === "room_unit" ? "t°" : item.bus.role === "sensor" ? "θ %" : "▭" });
+        parts.label = item.bus.role === "room_unit" ? "BUS PJ" : item.bus.role === "sensor" ? "BUS ČT" : "BUS DTP";
+      }
+      return parts;
+    }
+
+    if (item.wireless) {
+      parts.kind = "wireless";
+      if (item.variant === "button") parts.circles.push({ cx: 0, cy: 0, r: c }, { cx: 0, cy: 0, r: c * 0.5 });
+      else parts.paths.push(`M${f(-c * 1.2)} ${f(c * 0.5)} A${f(c * 1.2)} ${f(c * 1.2)} 0 0 1 ${f(c * 1.2)} ${f(c * 0.5)} Z`);
+      radio();
+      parts.label = item.id === "wireless-2" ? "2× bez kabelu" : "bez kabelu";
+      return parts;
+    }
+
+    const no = (options.switchNo ?? item.fixedSwitchNo ?? item.switchNo ?? "1").replace(/S+o?$/, "");
+    const led = Boolean(item.led);
+    if (item.control === "thermostat") {
+      parts.circles.push({ cx: 0, cy: 0, r: c * 1.3 });
+      parts.texts.push({ x: 0, y: 0, size: size * 0.2, value: "t°" });
+      parts.label = "TER";
+    } else if (item.wiringCategory === "WD_SENSOR") {
+      // Pohybové čidlo: kryt s detekčním polem
+      parts.paths.push(`M${f(-c * 1.3)} ${f(c * 0.6)} A${f(c * 1.3)} ${f(c * 1.3)} 0 0 1 ${f(c * 1.3)} ${f(c * 0.6)} Z`, `M${f(-c * 1.9)} ${f(-c * 0.6)} a${f(c * 2)} ${f(c * 2)} 0 0 1 ${f(c * 3.8)} 0`);
+      parts.label = "PIR";
+    } else if (item.control === "blind") {
+      parts.circles.push({ cx: 0, cy: 0, r: c });
+      parts.paths.push(lever(c, length, flag, 70), lever(c, length, flag, 250));
+      parts.paths.push(`M${f(-c * 0.4)} ${f(-c * 0.1)} L0 ${f(-c * 0.55)} L${f(c * 0.4)} ${f(-c * 0.1)} M${f(-c * 0.4)} ${f(c * 0.1)} L0 ${f(c * 0.55)} L${f(c * 0.4)} ${f(c * 0.1)}`);
+      parts.label = "ŽAL";
+    } else if (item.variant === "button") {
+      // Tlačítko: soustředné kroužky, se signální doutnavkou křížek
+      parts.circles.push({ cx: 0, cy: 0, r: c }, { cx: 0, cy: 0, r: c * 0.55 });
+      if (led) cross(c * 0.55);
+      parts.label = no === "1/0+1/0" ? "2× tlačítko" : "tlačítko";
+    } else if (item.wiringCategory === "WD_DIMMER") {
+      parts.circles.push({ cx: 0, cy: 0, r: c });
+      // Stmívač: čára spínače zakončená klínkem
+      const rad = (70 * Math.PI) / 180;
+      const end = { x: Math.cos(rad) * (c + length), y: -Math.sin(rad) * (c + length) };
+      parts.paths.push(`M${f(Math.cos(rad) * c)} ${f(-Math.sin(rad) * c)} L${f(end.x)} ${f(end.y)}`);
+      parts.fills.push(`M${f(end.x)} ${f(end.y)} L${f(end.x + flag * 0.9)} ${f(end.y + flag * 0.15)} L${f(end.x + flag * 0.25)} ${f(end.y + flag * 0.85)} Z`);
+      parts.label = "STM";
+    } else {
+      parts.circles.push({ cx: 0, cy: 0, r: c });
+      if (led) cross(c);
+      // Řazení dle ČSN: 1 = jedna čára, 5 / 1+1 = dvě čáry do V, 6 = na obě strany, 7 a 6+6 = čtyři čáry
+      const angles = no.startsWith("7") || no.startsWith("6+6") ? [70, 110, 250, 290] : no.startsWith("6") ? [70, 250] : no.startsWith("5") || no.startsWith("1+1") ? [70, 110] : [70];
+      for (const angle of angles) parts.paths.push(lever(c, length, flag, angle));
+      parts.label = `${options.switchNo ?? item.fixedSwitchNo ?? item.switchNo ?? "1"}${item.ip44 ? " IP44" : ""}`;
+    }
+    // Hybridní retrofit: modul pod vypínač (štítek M)
+    if (options.level === "smart_retrofit" && (item.control ?? "light") === "light") {
+      const m = c * 0.9;
+      parts.paths.push(`M${f(c * 0.9)} ${f(c * 0.9)} h${f(m)} v${f(m)} h${f(-m)} Z`);
+      parts.texts.push({ x: c * 0.9 + m / 2, y: c * 0.9 + m / 2, size: m * 0.85, value: "M" });
+    }
+    return parts;
+  }
+
+  // --- Spotřebiče: vývod se zkratkou, bojler = ohřívač vody (kruh se šrafou) ---
+  const box = size * 0.32;
+  if (item.tag === "boiler") {
+    parts.circles.push({ cx: 0, cy: 0, r: box });
+    for (const dx of [-0.5, 0, 0.5]) parts.paths.push(`M${f(dx * box)} ${f(-Math.sqrt(1 - dx * dx) * box)} V${f(Math.sqrt(1 - dx * dx) * box)}`);
+    parts.label = item.symbol;
+    return parts;
+  }
+  parts.paths.push(`M${f(-box)} ${f(-box)} H${f(box)} V${f(box)} H${f(-box)} Z`);
+  parts.texts.push({ x: 0, y: 0, size: size * (item.symbol.length > 2 ? 0.2 : 0.28), value: item.symbol });
+  return parts;
+}
+
+/** Rozváděč: obdélník s vyplněnou polovinou (úhlopříčka) a označením. */
+export function PanelSymbol({ size, active, onPaper, label }: { size: number; active: boolean; onPaper: boolean; label: string }): ReactNode {
+  const ink = onPaper ? "#111827" : "#f4f4f5";
+  const w = size * 0.6;
+  const h = size * 0.35;
+  return (
+    <g data-symbol="panel">
+      <rect x={-w} y={-h} width={w * 2} height={h * 2} fill={onPaper ? "#fff" : "#18181b"} stroke={active ? "#facc15" : ink} strokeWidth={size / (active ? 9 : 16)} />
+      <path d={`M${-w} ${h} L${w} ${-h} L${w} ${h} Z`} fill={ink} />
+      <text x={-w * 0.55} y={-h * 0.38} fontSize={size * 0.24} fontWeight={800} textAnchor="middle" dominantBaseline="central" fill={ink}>
+        {label}
+      </text>
     </g>
   );
 }

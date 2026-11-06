@@ -342,6 +342,8 @@ async function completeShowcase(prisma: PrismaClient, projectId: string) {
   const pristine = items.length > 0 && items.every((item) => !item.parentItemId && !item.fedFromIncomer);
   if (pristine) await applyProposedTree(prisma, projectId);
   await prisma.panelBoardProject.updateMany({ where: { id: projectId, routineTestJson: null }, data: { routineTestJson: SHOWCASE_ROUTINE_TEST } });
+  // Fáze 57: vzorový elaborát má prostředí potvrzené (Interiér – byt / technická místnost)
+  await prisma.panelBoardProject.updateMany({ where: { id: projectId, environmentConfirmedAt: null }, data: { environmentConfirmedAt: new Date() } });
   return pristine;
 }
 

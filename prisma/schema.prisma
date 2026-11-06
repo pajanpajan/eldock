@@ -931,6 +931,8 @@ model PanelBoardProject {
   enclosurePmaxW       Float?
   /** Prostředí instalace dle ČSN 33 2000-5-51 ed. 3 (fáze 45): INDOOR_DRY | GARAGE | OUTDOOR | TIMBER | HOT. */
   environment          String             @default("INDOOR_DRY")
+  /// Fáze 57: kdy uživatel výslovně zvolil / potvrdil prostředí (bez potvrzení nelze tisknout ani propustit dokumentaci).
+  environmentConfirmedAt DateTime?
   /// Edice normy rozváděče (fáze 46): CSN_61439_3_ED2 (DBO) | CSN_61439_2_ED3 (PSC) | CSN_60204_1_ED3 (stroje, EU 2023/1230).
   standardEdition      String             @default("CSN_61439_3_ED2")
   /// Protokol o kusové zkoušce dle čl. 11 ČSN EN IEC 61439-1 ed. 3 – JSON (8 bodů, R_iso, zkoušející, datum).

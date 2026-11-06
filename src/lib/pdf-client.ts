@@ -62,6 +62,34 @@ export function renderPdfPage(url: string, pageNumber: number, width = 1600): Pr
 }
 
 /**
+ * Fáze 57: stránka PDF ze souboru (podklad půdorysu) – pdf.js dostane přímo data souboru (bez blob URL a cache),
+ * vrací PNG a velikost stránky v pt pro ověření měřítka podle razítka výkresu.
+ */
+export async function renderPdfFile(file: Blob, pageNumber = 1, width = 3200): Promise<{ blob: Blob; width: number; height: number; pageCount: number; pagePt: { width: number; height: number } }> {
+  const pdf = await pdfjs();
+  const task = pdf.getDocument({ data: new Uint8Array(await file.arrayBuffer()), verbosity: 0 });
+  const doc = await task.promise;
+  try {
+    const page = await doc.getPage(Math.min(Math.max(1, pageNumber), doc.numPages));
+    const base = page.getViewport({ scale: 1 });
+    const viewport = page.getViewport({ scale: width / base.width });
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(viewport.width);
+    canvas.height = Math.round(viewport.height);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Plátno není k dispozici.");
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvas, canvasContext: ctx, viewport }).promise;
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.9));
+    if (!blob) throw new Error("Stránku PDF se nepodařilo vykreslit.");
+    return { blob, width: canvas.width, height: canvas.height, pageCount: doc.numPages, pagePt: { width: base.width, height: base.height } };
+  } finally {
+    void task.destroy();
+  }
+}
+
+/**
  * Text PDF po stránkách a řádcích (útržky se stejnou svislou polohou = jeden řádek) – podklad pro
  * atomizaci datasheetů a kusovníků. Nejvýše `maxPages` stran.
  */

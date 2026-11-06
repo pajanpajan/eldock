@@ -30,11 +30,14 @@ export function DocumentationActions({
   released,
   blockers,
   targets,
+  environmentConfirmed = true,
 }: {
   projectId: string;
   released: { equipmentId: string; tag: string; name: string } | null;
   blockers: string[];
   targets: ReleaseTarget[];
+  /** Fáze 57: prostředí dle ČSN 33 2000-5-51 ed. 3 potvrzeno – jinak nelze tisknout. */
+  environmentConfirmed?: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -60,7 +63,7 @@ export function DocumentationActions({
         <span>✅ Potvrzuji, že jsem veškeré rozpoznané přístroje, schéma zapojení i výpočet oteplení odborně zkontroloval(a) a přebírám za dokumentaci plnou odpovědnost výrobce rozváděče.</span>
       </label>
       <div className="flex flex-wrap items-center gap-2">
-        <Button className="touch-target gap-2" onClick={() => window.print()} disabled={!confirmed} title={confirmed ? undefined : "Nejdřív potvrďte odbornou kontrolu dokumentace"}>
+        <Button className="touch-target gap-2" onClick={() => window.print()} disabled={!confirmed || !environmentConfirmed} title={!environmentConfirmed ? "Nejdřív zvolte a potvrďte prostředí instalace" : confirmed ? undefined : "Nejdřív potvrďte odbornou kontrolu dokumentace"}>
           <Printer className="size-4" aria-hidden /> Vytisknout / Exportovat kompletní PDF elaborát
         </Button>
         {targets.length || released ? (
