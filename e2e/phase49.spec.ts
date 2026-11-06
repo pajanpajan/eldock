@@ -30,7 +30,7 @@ test("📐 2D půdorys: osazení, párování, výkaz kabeláže Spodem / Vrchem
 
   // Párování vypínače se světlem (čárkovaná ovládací vazba + řazení)
   await canvas.getByRole("button", { name: /^Vypínač č\. 1/ }).click();
-  await page.getByRole("button", { name: "🔗 Spárovat se světlem" }).click();
+  await page.getByRole("button", { name: "🔗 Přiřadit ke světlu" }).click();
   await canvas.getByRole("button", { name: /^Stropní svítidlo/ }).click();
   await expect(page.getByTestId("switch-link")).toHaveCount(1);
   await expect(page.getByTestId("switch-controls")).toContainText("řazení 1");

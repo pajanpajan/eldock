@@ -5,7 +5,8 @@
 // u řady, kde zadání uvádí jen jednoduchý kryt, dvoubarevný kód) má `verified: false`; bez podkladu je MPN null (doplnit).
 // Čisté funkce.
 
-import { effectiveSwitchNo, isWiredSwitch, paletteItem, type FloorplanDraft } from "./floorplan-editor";
+import { allElements, effectiveSwitchNo, floorsOf, isWiredSwitch, paletteItem, type EditorElement, type FloorplanDraft, type FrameGroup } from "./floorplan-editor";
+import { gangsOf } from "./floorplan-frames";
 import { appearanceLabel, designSeriesOf } from "./wiring-designs";
 
 export type BomCategory = "Přístroje spínačů" | "Kryty spínačů" | "Sběrnicové prvky" | "Chytré moduly" | "Zásuvky" | "Rámečky" | "Ostatní přístroje" | "Instalační krabice" | "Kabely";
@@ -98,19 +99,26 @@ export function compileFloorplanBom(draft: FloorplanDraft, options: BomOptions =
     else rows.set(key, { ...row, quantity });
   };
   let boxes = 0;
-  for (const element of draft.elements) {
-    const item = paletteItem(element.item);
-    if (!item || item.kind === "panel" || item.kind === "light" || item.kind === "appliance") continue;
+  // Fáze 59: víceramečky všech podlaží – člen rámečku nemá vlastní rámeček, za skupinu jeden rámeček NR
+  const frameOf = new Map<string, FrameGroup>();
+  for (const floor of floorsOf(draft)) for (const group of floor.frames) for (const id of group.members) frameOf.set(id, group);
+  const look = (element: Pick<EditorElement, "series" | "color">) => {
     const seriesKey = element.series ?? draft.series;
     const colorId = element.color ?? draft.color;
     const found = designSeriesOf(seriesKey);
     const isAbb = found?.brand.manufacturer === "ABB";
-    const matrix = isAbb ? ABB_MATRIX[found!.series.name] : undefined;
-    const code = found?.series.colors?.find((color) => color.id === colorId)?.code ?? null;
-    const appearance = appearanceLabel(seriesKey, colorId);
+    return { seriesKey, colorId, found, isAbb, matrix: isAbb ? ABB_MATRIX[found!.series.name] : undefined, code: found?.series.colors?.find((color) => color.id === colorId)?.code ?? null, appearance: appearanceLabel(seriesKey, colorId) };
+  };
+  const everything = allElements(draft);
+  for (const element of everything) {
+    const item = paletteItem(element.item);
+    if (!item || item.kind === "panel" || item.kind === "riser" || item.kind === "light" || item.kind === "appliance") continue;
+    const { found, isAbb, matrix, code, appearance } = look(element);
     const units = Math.max(1, element.frameUnits);
-    boxes += units;
+    const inFrame = frameOf.has(element.id);
+    boxes += inFrame ? gangsOf(element) : units;
     const frame = () => {
+      if (inFrame) return;
       const frameMpn = withColor(matrix?.frame(units) ?? null, code, true);
       add({ category: "Rámečky", ...frameMpn, name: `Rámeček ${units}násobný (${units}R)`, appearance, unit: "ks" }, 1);
     };
@@ -150,7 +158,9 @@ export function compileFloorplanBom(draft: FloorplanDraft, options: BomOptions =
       continue;
     }
     if (item.kind === "double_socket") {
-      add({ category: "Zásuvky", ...withColor(matrix?.socket2 ?? null, code, true), name: "Dvojzásuvka 2N – kompletní přístroj", appearance, unit: "ks" }, units);
+      // Ve víceramečku = 2 jednozásuvky s krytem vedle sebe (dvojzásuvka je jinak kompletní přístroj s rámečkem)
+      if (inFrame) add({ category: "Zásuvky", ...withColor(matrix?.socket1 ?? null, code, true), name: "Zásuvka 1N s krytem (přístroj + kryt) – ve víceramečku", appearance, unit: "ks" }, units * 2);
+      else add({ category: "Zásuvky", ...withColor(matrix?.socket2 ?? null, code, true), name: "Dvojzásuvka 2N – kompletní přístroj", appearance, unit: "ks" }, units);
       continue;
     }
     if (item.kind === "data_socket") {
@@ -158,13 +168,21 @@ export function compileFloorplanBom(draft: FloorplanDraft, options: BomOptions =
       frame();
     }
   }
+  // Víceramečky: jeden rámeček NR za skupinu v řadě a barvě kotvy (první přístroj rámečku)
+  for (const group of new Set(frameOf.values())) {
+    const members = group.members.map((id) => everything.find((element) => element.id === id)).filter((element): element is EditorElement => Boolean(element));
+    if (members.length < 2) continue;
+    const gangs = Math.min(5, members.reduce((sum, element) => sum + gangsOf(element), 0));
+    const { matrix, code, appearance } = look(members[0]);
+    add({ category: "Rámečky", ...withColor(matrix?.frame(gangs) ?? null, code, true), name: `Rámeček ${gangs}násobný (${gangs}R) – víceramček`, appearance, unit: "ks" }, 1);
+  }
   // Retrofit: modul pod vypínač na každou spínanou větev (světlo s kabelovým ovladačem) a žaluzii, spínací modul
   // do krabice svítidla, které ovládá jen bezdrátové tlačítko
   if (options.installation === "smart_retrofit") {
     const wiredLights = new Set<string>();
     const wirelessLights = new Set<string>();
     let blindModules = 0;
-    for (const element of draft.elements) {
+    for (const element of everything) {
       const item = paletteItem(element.item);
       if (item?.control === "blind" && isWiredSwitch(item)) blindModules += Math.max(1, element.frameUnits);
       const target = item && (item.control ?? "light") === "light" ? (isWiredSwitch(item) ? wiredLights : item.wireless ? wirelessLights : null) : null;

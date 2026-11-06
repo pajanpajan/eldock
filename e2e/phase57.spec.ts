@@ -184,7 +184,7 @@ test("značky dle ČSN EN 60617-11, přesun / otočení / mazání, úroveň ins
   await page.keyboard.press("Escape");
   for (const index of [0, 1]) {
     await canvas.locator('[data-element="switch-1"]').nth(index).click();
-    await page.getByRole("button", { name: "🔗 Spárovat se světlem" }).click();
+    await page.getByRole("button", { name: "🔗 Přiřadit ke světlu" }).click();
     await canvas.getByRole("button", { name: /^Stropní svítidlo/ }).click();
     await page.keyboard.press("Escape");
   }

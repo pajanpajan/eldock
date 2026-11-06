@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Camera, Loader2, Plus, RefreshCw } from "lucide-react";
+import { ArrowRight, Camera, Check, Loader2, Plus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -13,9 +13,9 @@ import { formatRailSummary, freeOnRail, railSummary } from "@/lib/panel-builder/
 import { deviceWithConfig, type VectorDevice } from "@/lib/panel-builder/vector-symbols";
 import { RECOGNITION } from "@/lib/panel-builder/project";
 import { cn } from "@/lib/utils";
-import { addModuleAction, addRailAction, analyzePanelProjectAction, configureItemAction, deleteRailAction, updateItemTextAction } from "@/server/actions/panel-builder";
+import { addRailAction, analyzePanelProjectAction, configureItemAction, deleteRailAction, updateItemTextAction } from "@/server/actions/panel-builder";
 import { PANEL_PHOTO_MAX_PX, PANEL_PHOTO_QUALITY, resizeImage, uploadFile } from "@/lib/upload-client";
-import { analyzeRailDetailAction, moveRailAction, placeComponentsAction, setEnvironmentAction, setRailCapacityAction } from "@/server/actions/panel-design";
+import { analyzeRailDetailAction, moveItemAction, moveRailAction, placeComponentsAction, setEnvironmentAction, setRailCapacityAction } from "@/server/actions/panel-design";
 import { nextChipLabel, presetConfig } from "@/lib/panel-builder/circuit-chips";
 import { ENVIRONMENTS, enclosureFitsEnvironment, environmentOf, ipLabel } from "@/lib/panel-builder/environments";
 import { validateSwitchboardState, type LintIssue } from "@/lib/panel-builder/linter";
@@ -126,6 +126,8 @@ export function RecognitionWorkspace({
     config: null,
   }));
   const [paletteLabel, setPaletteLabel] = useState("");
+  /** Fáze 59: kam paleta vloží další přístroj („vpravo od -F3“, „na konec lišty 2“); null = aktivní lišta, na konec. */
+  const [target, setTarget] = useState<{ rail: number; position: number | null; label: string } | null>(null);
   const [chips, saveChips] = useCircuitChips(chipsJson);
   const [fixing, startFixing] = useTransition();
   // Pravidlo F (fáze 47): detailní fotka jedné lišty / sekce velkého rozváděče
@@ -210,20 +212,55 @@ export function RecognitionWorkspace({
     });
   }
 
+  /**
+   * Fáze 59: po vložení nezůstane nic vybrané – další klik do kaskády tak nikdy nezmění právě vložený přístroj.
+   * Paleta si drží konfiguraci vloženého přístroje (další stejný kus jedním klikem), cíl vložení se zruší.
+   */
+  function afterInsert(config: ItemConfig) {
+    setSelectedId(null);
+    setTarget(null);
+    setPalette((current) => ({ manufacturer: config.manufacturer ?? current.manufacturer, chosen: true, config }));
+  }
+
   /** Žádná lišta nemá místo: přidat lištu a vložit na ni. */
   function addRailAndPlace(count: number) {
+    const config = cardConfig;
     startPlacing(async () => {
       const added = await addRailAction(projectId);
       if (!added.ok) return void toast.error(added.error);
       const rail = added.data.dinRailsCount;
-      if (!cardConfig) return;
-      const result = await placeComponentsAction({ projectId, config: cardConfig, rail, count, position: null, circuitLabel: paletteLabel });
+      if (!config) return;
+      const result = await placeComponentsAction({ projectId, config, rail, count, position: null, circuitLabel: paletteLabel });
       if (!result.ok) return void toast.error(result.error);
       setActiveRail(rail);
+      afterInsert(config);
       toast.success(`Přidána lišta ${rail} a vloženo ${result.data.placed}× ${result.data.typeCode}.`);
       router.refresh();
     });
   }
+
+  /** Fáze 59: přesun přístroje (◀ ▶, jiná lišta, přetažení na liště) – výběr, strom i konfigurace zůstávají. */
+  function move(itemId: string, rail: number, position: number) {
+    const item = items.find((candidate) => candidate.id === itemId);
+    startEditing(async () => {
+      const result = await moveItemAction(itemId, { rail, position });
+      if (!result.ok) return void toast.error(result.error);
+      setActiveRail(result.data.rail);
+      toast.success(`${item?.designation ?? "Přístroj"} přesunut na lištu ${result.data.rail}, pozice ${result.data.position}.`);
+      router.refresh();
+    });
+  }
+
+  // Esc = ukončit úpravu vybraného přístroje (zpět na vkládání nového)
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement) return;
+      setSelectedId(null);
+      setTarget(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   // Elektro-linter nad uloženým stavem (každá změna = nový výpočet)
   const issues = useMemo(
@@ -292,14 +329,18 @@ export function RecognitionWorkspace({
     });
   }
 
-  function place(count: number, rail = activeRail, position: number | null = null) {
-    if (!cardConfig) return void toast.error("Nejdřív vyberte výrobce, kategorii a parametry přístroje.");
+  /** Vložení z karty / přetažením: přetažení určí lištu a pozici samo, jinak cíl palety („vpravo od -F3“) nebo konec lišty. */
+  function place(count: number, rail = activeRail, position: number | null = null, dropped = false) {
+    const config = cardConfig;
+    if (!config) return void toast.error("Nejdřív vyberte výrobce, kategorii a parametry přístroje.");
+    const at = !dropped && target && target.rail === rail ? { rail, position: target.position } : { rail, position };
     startPlacing(async () => {
-      const result = await placeComponentsAction({ projectId, config: cardConfig, rail, count, position, circuitLabel: paletteLabel });
+      const result = await placeComponentsAction({ projectId, config, rail: at.rail, count, position: at.position, circuitLabel: paletteLabel });
       if (!result.ok) return void toast.error(result.error);
-      setActiveRail(rail);
-      toast.success(`Vloženo ${result.data.placed}× ${result.data.typeCode} na lištu ${rail}.`);
-      if (result.data.placed < result.data.requested) toast.warning(`Na lištu ${rail} se vešlo jen ${result.data.placed} z ${result.data.requested} kusů.`);
+      setActiveRail(at.rail);
+      afterInsert(config);
+      toast.success(`Vloženo ${result.data.placed}× ${result.data.typeCode} na lištu ${at.rail}${at.position ? `, pozice ${at.position}` : ""}.`);
+      if (result.data.placed < result.data.requested) toast.warning(`Na lištu ${at.rail} se vešlo jen ${result.data.placed} z ${result.data.requested} kusů.`);
       router.refresh();
     });
   }
@@ -321,7 +362,7 @@ export function RecognitionWorkspace({
       config={cardConfig}
       label={paletteLabel}
       onLabelChange={setPaletteLabel}
-      activeRail={activeRail}
+      activeRail={target?.rail ?? activeRail}
       rails={capacities.map((_, index) => ({ index: index + 1, free: freeOnRail(capacities, items, index + 1) }))}
       busy={placing}
       onInsert={(count, rail) => place(count, rail)}
@@ -518,7 +559,13 @@ export function RecognitionWorkspace({
             });
           }}
           busy={editing || placing}
-          onAddModule={design ? undefined : (rail) => railAction(() => addModuleAction(projectId, rail), `Modul přidán na lištu ${rail}.`, (data) => setSelectedId(data.id))}
+          onAddModule={(rail) => {
+            // Fáze 59: „+“ na liště = vložení z palety na konec lišty (nový přístroj se nevybírá)
+            setSelectedId(null);
+            setActiveRail(rail);
+            setTarget({ rail, position: null, label: `na konec lišty ${rail}` });
+            toast.info(`Vyberte přístroj v pravém menu – vloží se na konec lišty ${rail}.`);
+          }}
           onDeleteRail={(rail) => {
             if (!window.confirm(`Smazat celou lištu ${rail} se všemi jejími prvky? Lišty pod ní se posunou nahoru.`)) return;
             railAction(() => deleteRailAction(projectId, rail), `Lišta ${rail} smazána.`);
@@ -532,33 +579,63 @@ export function RecognitionWorkspace({
           onMoveRail={(rail, direction) => railAction(() => moveRailAction(projectId, rail, direction), null, (data) => setActiveRail(data.rail))}
           activeRail={activeRail}
           onActivateRail={setActiveRail}
-          onPlaceDrop={(rail, position) => place(1, rail, position)}
+          onPlaceDrop={(rail, position) => place(1, rail, position, true)}
+          onMoveDevice={move}
           onRailPhoto={design ? undefined : pickRailPhoto}
         />
         {selected ? (
           <p className="text-xs text-muted-foreground" data-testid="vector-selected">
-            Upravujete <b className="font-mono text-amber-300">{selected.designation}</b> · lišta {selected.dinRailIndex}, {String(selected.modulesWidth).replace(".", ",")}M
+            Upravujete <b className="font-mono text-amber-300">{selected.designation}</b> · lišta {selected.dinRailIndex}, {String(selected.modulesWidth).replace(".", ",")}M · Esc = konec úprav
           </p>
-        ) : null}
+        ) : (
+          <p className="text-xs text-muted-foreground">Přístroj na liště jde přetáhnout na jinou pozici nebo lištu; kliknutím ho upravíte.</p>
+        )}
       </section>
 
       <section
         aria-label="Konfigurátor prvku"
+        data-mode={selected ? "edit" : "insert"}
         className={cn(
-          "flex flex-col gap-3 rounded-xl border border-border bg-card p-4 sm:p-5 xl:self-start",
+          "flex flex-col gap-3 rounded-xl border bg-card p-4 sm:p-5 xl:self-start",
+          selected ? "border-amber-400/70 ring-1 ring-amber-400/30" : "border-border",
           design ? "xl:col-start-2 xl:row-start-1" : "xl:col-start-2 xl:row-span-2 xl:row-start-1 2xl:col-start-3 2xl:row-span-1",
         )}
       >
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className="font-semibold">{selected ? "Konfigurátor prvku" : "Vložit nový přístroj"}</h2>
+          <h2 className="font-semibold" data-testid="configurator-mode">
+            {selected ? (
+              <>
+                ✏️ Úprava přístroje <span className="font-mono text-amber-300">{selected.designation}</span>
+              </>
+            ) : (
+              "➕ Vložit nový přístroj"
+            )}
+          </h2>
           {selected ? (
-            <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => setSelectedId(null)}>
-              <Plus className="size-3.5" aria-hidden /> Nový přístroj
-            </Button>
+            <div className="flex flex-wrap gap-1.5">
+              <Button variant="outline" size="sm" className="gap-1.5 border-amber-400/60" onClick={() => setSelectedId(null)} data-testid="edit-done">
+                <Check className="size-3.5" aria-hidden /> Hotovo
+              </Button>
+              <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => setSelectedId(null)}>
+                <Plus className="size-3.5" aria-hidden /> Nový přístroj
+              </Button>
+            </div>
           ) : (
             <span className="text-xs text-muted-foreground">Výrobce → kategorie → parametry → přetáhnout na lištu</span>
           )}
         </div>
+        {selected ? (
+          <p className="rounded-md border border-amber-400/40 bg-amber-400/10 px-2.5 py-1.5 text-xs text-amber-100" data-testid="edit-banner">
+            Změny v kaskádě se ukládají rovnou do <b>{selected.designation}</b> (lišta {selected.dinRailIndex}, pozice {selected.positionOnRail}). Nový přístroj vložíte po kliknutí na „Hotovo“ nebo klávesou Esc.
+          </p>
+        ) : target ? (
+          <p className="flex flex-wrap items-center gap-2 rounded-md border border-sky-400/50 bg-sky-500/10 px-2.5 py-1.5 text-xs text-sky-100" data-testid="insert-target">
+            Vkládáte {target.label} – vyberte přístroj a vložte ho kartou nebo přetažením.
+            <button type="button" className="ml-auto rounded border border-sky-400/50 px-1.5 py-0.5 hover:bg-sky-500/20" onClick={() => setTarget(null)}>
+              Zrušit cíl
+            </button>
+          </p>
+        ) : null}
         {selected ? (
           <>
             {/* Klíč bez katalogového kusu: uložení konfigurace prvek znovu nepřipojí (žádná ztráta stavu ani probliknutí) */}
@@ -580,8 +657,19 @@ export function RecognitionWorkspace({
                 setSelectedId(null);
                 router.refresh();
               }}
+              railCount={capacities.length}
+              railItems={items.filter((item) => item.dinRailIndex === selected.dinRailIndex).length}
+              onMove={(rail, position) => move(selected.id, rail, position)}
+              onInsertRight={() => {
+                // Fáze 59: „Přidat vpravo“ = vložení z palety hned za vybraný přístroj (nic nezůstane vybrané)
+                setTarget({ rail: selected.dinRailIndex, position: selected.positionOnRail + 1, label: `vpravo od ${selected.designation} (lišta ${selected.dinRailIndex}, pozice ${selected.positionOnRail + 1})` });
+                setActiveRail(selected.dinRailIndex);
+                setSelectedId(null);
+              }}
               onInserted={(itemId) => {
-                setSelectedId(itemId);
+                // Duplikát se nevybírá – úpravu nabídne toast
+                setSelectedId(null);
+                toast.success(`${selected.designation} duplikován vpravo.`, { action: { label: "Upravit kopii", onClick: () => setSelectedId(itemId) } });
                 router.refresh();
               }}
             />

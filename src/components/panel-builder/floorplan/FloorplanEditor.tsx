@@ -1,20 +1,23 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition, type PointerEvent as ReactPointerEvent } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState, useTransition, type PointerEvent as ReactPointerEvent } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, FileUp, Grid3x3, Link2, Loader2, Maximize2, Minus, MousePointer2, Plus, RotateCw, Ruler, Square, Trash2, Zap } from "lucide-react";
+import { CheckCircle2, FileUp, Grid3x3, LayoutGrid, Link2, Loader2, Maximize2, Minus, MousePointer2, Plus, RotateCw, Ruler, Sparkles, Square, Trash2, Zap } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import type { RoutePoint } from "@/engine/cable-routing";
 import { INSTALL_LEVELS, INSTALL_METHODS, ROUTING_MODES, mountHeight, type CableRoutingMode, type ElevationProfile, type InstallLevel, type InstallMethod } from "@/engine/floorplan-bridge";
 import {
+  ANNOTATION_DEFAULTS,
   CONTROLS_LABEL,
   PALETTE_GROUPS,
   ROOM_NAME_CHIPS,
   SYMBOL_SCALE_MAX,
   SYMBOL_SCALE_MIN,
+  addFloor,
   analyzeDraft,
   applyAppearance,
   clampSymbolScale,
@@ -24,29 +27,63 @@ import {
   deleteRoom,
   effectiveSwitchNo,
   emptyDraft,
+  floorsOf,
   generationChecklist,
   isWallMounted,
   isWiredSwitch,
   levelConversionPreview,
+  levelLabel,
   moveRoom,
   paletteFor,
   paletteItem,
   parseDraft,
   recalibrate,
+  removeFloor,
   resizeRect,
   roomAt,
   roomDimensions,
   snapToWall,
+  switchFloor,
   switchingFor,
   symbolSizeOf,
+  updateFloor,
   updateRoom,
   wallRotation,
   wiringInventory,
+  type Annotation,
+  type AnnotationKind,
   type EditorElement,
   type EditorRoom,
   type FloorplanDraft,
   type RoomHandle,
 } from "@/lib/panel-builder/floorplan-editor";
+import {
+  ANNOTATION_LABEL,
+  annotationBounds,
+  autoPairLights,
+  createFrame,
+  dissolveFrame,
+  dragGroupOf,
+  frameGangs,
+  frameOf,
+  frameOutline,
+  gangsOf,
+  idleSwitches,
+  isFrameable,
+  layoutFrame,
+  moveAnnotation,
+  moveInFrame,
+  newAnnotation,
+  orthogonal,
+  removeAnnotation,
+  removeElements,
+  removeFromFrame,
+  rotateFrame,
+  toggleLink,
+  translateElements,
+  unpairedLights,
+  updateAnnotation,
+} from "@/lib/panel-builder/floorplan-frames";
 import {
   ZOOM_STEP,
   backgroundTransform,
@@ -72,16 +109,21 @@ import { cn } from "@/lib/utils";
 import { compileFloorplanBom } from "@/lib/panel-builder/wiring-bom";
 import { createFloorplanProjectAction } from "@/server/actions/panel-projects";
 
+import { AnnotationShape, HatchPatterns } from "./AnnotationLayer";
+import { AnnotationDetail, NoteStyleControls, type NoteStyle } from "./AnnotationPanel";
 import { CablePanel } from "./CablePanel";
 import { CalibrationDialog, type CalibrationResult } from "./CalibrationDialog";
 import { DeviceAppearance } from "./DeviceAppearance";
+import { FloorBar } from "./FloorBar";
 import { FloorSymbol, PanelSymbol } from "./FloorSymbol";
 import { PdfEditMenu, type PdfEditAction } from "./PdfEditMenu";
+import { PlanChecks, SelectionPanel, type PlanCheck } from "./PlanPanels";
 import { WiringBomDialog } from "./WiringBomDialog";
 
-// 2D editor půdorysu elektroinstalace (fáze 49, úprava PDF / značky / úroveň instalace fáze 57): podklad (obrázek / PDF /
-// rastr) s otočením, ořezem a zoomem, kalibrace s ověřením, značky dle ČSN EN 60617-11, párování vypínačů se světly,
-// trasy kabelů a výkaz kabeláže v reálném čase.
+// 2D editor půdorysu elektroinstalace (fáze 49, úprava PDF / značky / úroveň instalace fáze 57, fáze 59: natočení další
+// značky podle předchozí, vícenásobný výběr, víceramečky s přisazením, přiřazení vypínačů ke světlům, zakreslení změn
+// a podlaží domu): podklad (obrázek / PDF / rastr) s otočením, ořezem a zoomem, kalibrace s ověřením, značky dle
+// ČSN EN 60617-11, trasy kabelů a výkaz kabeláže v reálném čase.
 
 const STORAGE_KEY = "eldock.pb.floorplan";
 const SNAP_MM = 50;
@@ -89,7 +131,16 @@ const ROUTE_COLORS = ["#38bdf8", "#f472b6", "#a3e635", "#fb923c", "#c084fc", "#f
 /** Šířka podkladu po nahrání [px] – ostrý i při přiblížení (A3 ≈ 270 dpi). */
 const BACKGROUND_PX = 3200;
 
-type Tool = { kind: "select" } | { kind: "place"; item: string } | { kind: "room" } | { kind: "calibrate" } | { kind: "verify" } | { kind: "crop" } | { kind: "pair"; switchId: string };
+type Tool =
+  | { kind: "select" }
+  | { kind: "place"; item: string }
+  | { kind: "room" }
+  | { kind: "calibrate" }
+  | { kind: "verify" }
+  | { kind: "crop" }
+  | { kind: "pair"; switchId: string }
+  | { kind: "pair-light"; lightId: string }
+  | { kind: "annotate"; mode: AnnotationKind };
 
 const HEIGHTS: { key: keyof ElevationProfile; label: string }[] = [
   { key: "ceilingHeightMm", label: "Strop" },
@@ -110,6 +161,13 @@ const LEVEL_NOTES: Record<InstallLevel, string> = {
 
 const SCALE_OPTIONS = [0.5, 0.75, 1, 1.5, 2, 3];
 
+const DEFAULT_STYLES: Record<AnnotationKind, NoteStyle> = {
+  wall: { ...ANNOTATION_DEFAULTS.wall, fontMm: 250, bold: false, background: false },
+  demolish: { ...ANNOTATION_DEFAULTS.demolish, fontMm: 250, bold: false, background: false },
+  zone: { ...ANNOTATION_DEFAULTS.zone, fontMm: 250, bold: false, background: false },
+  text: { ...ANNOTATION_DEFAULTS.text, fontMm: 250, bold: false, background: true },
+};
+
 function loadDraft(): FloorplanDraft {
   try {
     const stored = window.localStorage.getItem(STORAGE_KEY);
@@ -122,6 +180,7 @@ function loadDraft(): FloorplanDraft {
 const snap = (value: number) => Math.round(value / SNAP_MM) * SNAP_MM;
 let sequence = 0;
 const newId = (prefix: string) => `${prefix}${Date.now().toString(36)}${(sequence++).toString(36)}`;
+const turn = (rotation: Rotation): Rotation => ((rotation + 90) % 360) as Rotation;
 
 export interface SeriesOption {
   count?: number;
@@ -137,25 +196,51 @@ interface ViewFraction {
 }
 const FIT: ViewFraction = { x: 0, y: 0, w: 1 };
 
+/** Lomená čára trasy rozdělená na úseky aktivního podlaží (přechod podlaží = stoupací vedení). */
+function floorRuns(points: readonly RoutePoint[], floorId: string): { x: number; y: number }[][] {
+  const runs: { x: number; y: number }[][] = [];
+  let current: { x: number; y: number }[] = [];
+  for (const point of points) {
+    if (point.floor === undefined || point.floor === floorId) current.push(point);
+    else if (current.length) {
+      runs.push(current);
+      current = [];
+    }
+  }
+  if (current.length) runs.push(current);
+  return runs.filter((run) => run.length >= 2);
+}
+
 export function FloorplanEditor({ series }: { series: SeriesOption[] }) {
   const router = useRouter();
   const svg = useRef<SVGSVGElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const [draft, setDraft] = useState<FloorplanDraft>(loadDraft);
   const [tool, setTool] = useState<Tool>({ kind: "select" });
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [drag, setDrag] = useState<{ id: string; dx: number; dy: number } | null>(null);
+  /** Fáze 59: vícenásobný výběr (Shift + klik, tažení obdélníku); jeden prvek = detail prvku. */
+  const [selection, setSelection] = useState<string[]>([]);
+  const selectedId = selection.length === 1 ? selection[0] : null;
+  const [drag, setDrag] = useState<{ ids: string[]; start: { x: number; y: number }; origin: Record<string, { x: number; y: number }> } | null>(null);
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   /** Tažení vybrané místnosti: přesun (celá místnost s prvky) nebo změna rozměru za stěnu / roh. */
   const [roomDrag, setRoomDrag] = useState<{ id: string; handle: RoomHandle | "move"; start: { x: number; y: number }; origin: Pick<EditorRoom, "x" | "y" | "w" | "h"> } | null>(null);
   /** Tažený obdélník – nová místnost nebo ořez podkladu. */
   const [roomDraft, setRoomDraft] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const [marquee, setMarquee] = useState<{ x: number; y: number; w: number; h: number; additive: boolean } | null>(null);
   const [calibration, setCalibration] = useState<{ x: number; y: number }[]>([]);
   const [calibrationDialog, setCalibrationDialog] = useState<{ mode: "calibrate" | "verify"; segmentMm: number } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [view, setView] = useState<ViewFraction>(FIT);
   const [pan, setPan] = useState<{ clientX: number; clientY: number; view: PlanView } | null>(null);
   const [levelPrompt, setLevelPrompt] = useState<({ level: InstallLevel } & ReturnType<typeof levelConversionPreview>) | null>(null);
+  /** Fáze 59: natočení další vkládané značky = natočení předchozí (R při vkládání otočí náhled). */
+  const [placeRotation, setPlaceRotation] = useState<Rotation>(0);
+  const [hover, setHover] = useState<{ x: number; y: number } | null>(null);
+  /** Fáze 59: zakreslení změn – vzhled nových poznámek, rozkreslená poznámka, výběr a tažení. */
+  const [noteStyles, setNoteStyles] = useState<Record<AnnotationKind, NoteStyle>>(DEFAULT_STYLES);
+  const [noteDraft, setNoteDraft] = useState<{ mode: AnnotationKind; from: { x: number; y: number }; to: { x: number; y: number } } | null>(null);
+  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
+  const [noteDrag, setNoteDrag] = useState<{ id: string; handle: "move" | "a" | "b"; start: { x: number; y: number }; origin: Annotation } | null>(null);
   const [pending, startTransition] = useTransition();
   const lastRoom = useRef("Místnost 1");
 
@@ -182,21 +267,27 @@ export function FloorplanEditor({ series }: { series: SeriesOption[] }) {
   const ui = Math.max(viewMm.w, viewHeight) / 55;
   const stroke = ui / 16;
 
+  // Výpočet tras a okruhů na odloženém nákresu – tažení značky zůstane plynulé i u velkého domu
+  const deferred = useDeferredValue(draft);
   const analysis = useMemo(() => {
     try {
-      return { ok: true as const, ...analyzeDraft(draft) };
+      return { ok: true as const, ...analyzeDraft(deferred) };
     } catch (error) {
       return { ok: false as const, error: error instanceof Error ? error.message : "Neplatný půdorys." };
     }
-  }, [draft]);
-  const bom = useMemo(() => compileFloorplanBom(draft, { installation: draft.installation, cables: analysis.ok ? analysis.summary.byCable : [] }), [draft, analysis]);
+  }, [deferred]);
+  const bom = useMemo(() => compileFloorplanBom(deferred, { installation: deferred.installation, cables: analysis.ok ? analysis.summary.byCable : [] }), [deferred, analysis]);
   const checklist = generationChecklist(draft);
 
+  const floors = floorsOf(draft);
+  const panelFloorId = floors.find((floor) => floor.elements.some((element) => element.item === "panel"))?.id ?? null;
   const selected = draft.elements.find((element) => element.id === selectedId) ?? null;
   const selectedRoom = draft.rooms.find((room) => room.id === selectedRoomId) ?? null;
+  const selectedNote = draft.annotations.find((note) => note.id === selectedNoteId) ?? null;
   const available = useMemo(() => new Map(series.map((option) => [option.key, option.count ?? 1])), [series]);
   const inventory = useMemo(() => wiringInventory(draft), [draft]);
   const palette = paletteFor(draft.installation);
+  const selectionFrame = selection.length >= 2 ? createFrame(draft, selection) : null;
 
   function toPlan(event: { clientX: number; clientY: number }) {
     const element = svg.current;
@@ -206,20 +297,47 @@ export function FloorplanEditor({ series }: { series: SeriesOption[] }) {
     return { x: point.x, y: point.y };
   }
 
-  function rotateSelected(id: string) {
-    update((current) => ({ ...current, elements: current.elements.map((element) => (element.id === id ? { ...element, rotation: (((element.rotation + 90) % 360) as Rotation) } : element)) }));
+  function clearSelection() {
+    setSelection([]);
+    setSelectedRoomId(null);
+    setSelectedNoteId(null);
   }
 
-  function removeSelected(id: string) {
-    update((current) => removeElement(current, id));
-    setSelectedId(null);
+  /** Otočení vybraných značek (rámeček jako celek); natočení se pamatuje pro další vkládanou značku. */
+  function rotateSelection(ids: readonly string[] = selection) {
+    if (!ids.length) return;
+    const first = draft.elements.find((element) => element.id === ids[0]);
+    if (first) setPlaceRotation(turn(first.rotation));
+    update((current) => {
+      const frames = new Set(ids.map((id) => frameOf(current, id)?.id).filter((id): id is string => Boolean(id)));
+      let next = current;
+      for (const frameId of frames) next = rotateFrame(next, frameId);
+      const loose = new Set(ids.filter((id) => !frameOf(current, id)));
+      return { ...next, elements: next.elements.map((element) => (loose.has(element.id) ? { ...element, rotation: turn(element.rotation) } : element)) };
+    });
+  }
+
+  function removeSelection(ids: readonly string[] = selection) {
+    update((current) => removeElements(current, ids));
+    setSelection([]);
   }
 
   function zoomBy(factor: number, focus?: { x: number; y: number }) {
     setViewMm(zoomView(viewMm, draft, factor, focus));
   }
 
-  // Esc = zpět na výběr, Delete = smazat, R = otočit značku, šipky = posun značky, + / − / 0 = zoom, [ ] = otočit podklad
+  /** Kam a jak se vloží značka v místě kurzoru: u stěny místnosti přicvaknutí a natočení ke stěně, jinak natočení předchozí. */
+  function placement(item: NonNullable<ReturnType<typeof paletteItem>>, point: { x: number; y: number }) {
+    const room = roomAt(draft.rooms, point.x, point.y);
+    const base = { x: snap(point.x), y: snap(point.y) };
+    if (isWallMounted(item) && room) {
+      const position = snapToWall(room, base.x, base.y);
+      if (position.x !== base.x || position.y !== base.y) return { position, rotation: wallRotation(room, point.x, point.y), room };
+    }
+    return { position: base, rotation: item.kind === "panel" ? (0 as Rotation) : placeRotation, room };
+  }
+
+  // Esc = zpět na výběr, Delete = smazat, R = otočit (i náhled vkládané značky), šipky = posun, + / − / 0 = zoom, [ ] = otočit podklad
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement || event.target instanceof HTMLTextAreaElement) return;
@@ -228,22 +346,28 @@ export function FloorplanEditor({ series }: { series: SeriesOption[] }) {
         setTool({ kind: "select" });
         setCalibration([]);
         setRoomDraft(null);
+        setNoteDraft(null);
+        setMarquee(null);
         return;
       }
-      if ((event.key === "Delete" || event.key === "Backspace") && selectedId) {
-        setDraft((current) => removeElement(current, selectedId));
-        setSelectedId(null);
+      if ((event.key === "Delete" || event.key === "Backspace") && selection.length) {
+        removeSelection();
+      } else if ((event.key === "Delete" || event.key === "Backspace") && selectedNoteId) {
+        update((current) => removeAnnotation(current, selectedNoteId));
+        setSelectedNoteId(null);
       } else if ((event.key === "Delete" || event.key === "Backspace") && selectedRoomId) {
-        setDraft((current) => ({ ...deleteRoom(current, selectedRoomId), updatedAt: Date.now() }));
+        update((current) => deleteRoom(current, selectedRoomId));
         setSelectedRoomId(null);
-      } else if ((event.key === "r" || event.key === "R") && selectedId) {
-        rotateSelected(selectedId);
-      } else if (event.key.startsWith("Arrow") && selectedId) {
+      } else if (event.key === "r" || event.key === "R") {
+        if (selection.length) rotateSelection();
+        else if (tool.kind === "place") setPlaceRotation((rotation) => turn(rotation));
+      } else if (event.key.startsWith("Arrow") && selection.length) {
         event.preventDefault();
         const step = event.shiftKey ? 10 : SNAP_MM;
         const dx = event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0;
         const dy = event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0;
-        setDraft((current) => ({ ...current, updatedAt: Date.now(), elements: current.elements.map((element) => (element.id === selectedId ? { ...element, x: element.x + dx, y: element.y + dy } : element)) }));
+        const ids = [...new Set(selection.flatMap((id) => dragGroupOf(draft, id)))];
+        update((current) => translateElements(current, ids, dx, dy));
       } else if (event.key === "+" || event.key === "=") zoomBy(ZOOM_STEP);
       else if (event.key === "-") zoomBy(1 / ZOOM_STEP);
       else if (event.key === "0") setView(FIT);
@@ -280,27 +404,47 @@ export function FloorplanEditor({ series }: { series: SeriesOption[] }) {
     if (tool.kind === "place") {
       const item = paletteItem(tool.item);
       if (!item) return;
-      const room = roomAt(draft.rooms, point.x, point.y);
-      // Fáze 57: zásuvka / nástěnné svítidlo se přicvakne ke stěně místnosti a natočí „nožičkou“ ke stěně
-      const wall = isWallMounted(item) && room;
-      const position = wall ? snapToWall(room, snap(point.x), snap(point.y)) : { x: snap(point.x), y: snap(point.y) };
+      const target = placement(item, point);
+      const single = item.kind === "panel" || item.kind === "riser";
       const element: EditorElement = {
-        id: newId(item.kind === "panel" ? "rh" : "e"),
+        id: newId(item.kind === "panel" ? "rh" : item.kind === "riser" ? "st" : "e"),
         item: item.id,
-        x: Math.round(position.x),
-        y: Math.round(position.y),
-        room: room?.name ?? lastRoom.current,
+        x: Math.round(target.position.x),
+        y: Math.round(target.position.y),
+        room: target.room?.name ?? lastRoom.current,
         mountHeightMm: null,
         frameUnits: 1,
-        series: item.kind === "panel" ? null : draft.series,
-        color: item.kind === "panel" ? null : draft.color,
+        series: single ? null : draft.series,
+        color: single ? null : draft.color,
         controls: [],
-        rotation: wall ? wallRotation(room, point.x, point.y) : 0,
+        rotation: target.rotation,
         scale: null,
       };
-      update((current) => ({ ...current, elements: [...(item.kind === "panel" ? current.elements.filter((other) => other.item !== "panel") : current.elements), element] }));
-      setSelectedId(element.id);
-      if (item.kind === "panel") setTool({ kind: "select" });
+      if (!single) setPlaceRotation(target.rotation);
+      update((current) => {
+        // Rozváděč je v domě jen jeden (i přes podlaží), stoupací vedení jedno na podlaží
+        if (item.kind === "panel") return { ...current, elements: [...current.elements.filter((other) => other.item !== "panel"), element], otherFloors: current.otherFloors.map((floor) => ({ ...floor, elements: floor.elements.filter((other) => other.item !== "panel") })) };
+        if (item.kind === "riser") return { ...current, elements: [...current.elements.filter((other) => other.item !== "riser"), element] };
+        return { ...current, elements: [...current.elements, element] };
+      });
+      setSelection([element.id]);
+      setSelectedNoteId(null);
+      if (single) setTool({ kind: "select" });
+      return;
+    }
+    if (tool.kind === "annotate") {
+      const at = { x: snap(point.x), y: snap(point.y) };
+      if (tool.mode === "text") {
+        // Text je ve výchozím stavu tmavý na bílém podkladu – čitelný nad výkresem i nad tmavým rastrem
+        const note = { ...newAnnotation("text", at), ...noteStyles.text };
+        update((current) => ({ ...current, annotations: [...current.annotations, note] }));
+        setSelection([]);
+        setSelectedNoteId(note.id);
+        setTool({ kind: "select" });
+        return;
+      }
+      capture(svg.current, event.pointerId);
+      setNoteDraft({ mode: tool.mode, from: at, to: at });
       return;
     }
     if (tool.kind === "room" || tool.kind === "crop") {
@@ -318,17 +462,24 @@ export function FloorplanEditor({ series }: { series: SeriesOption[] }) {
       setCalibrationDialog({ mode: tool.kind, segmentMm });
       return;
     }
-    setSelectedId(null);
-    setSelectedRoomId(null);
-    // Přiblížený výkres: tažení prázdným místem = posun pohledu
-    if (zoomed) startPan(event);
+    if (tool.kind === "pair" || tool.kind === "pair-light") return;
+    // Výběr: přiblížený výkres posouvá tažením (Shift = výběr obdélníkem), jinak výběr obdélníkem
+    if (zoomed && !event.shiftKey) {
+      clearSelection();
+      return startPan(event);
+    }
+    if (!event.shiftKey) clearSelection();
+    capture(svg.current, event.pointerId);
+    setMarquee({ x: point.x, y: point.y, w: 0, h: 0, additive: event.shiftKey });
   }
 
   /** Klik do místnosti v režimu Výběr = výběr místnosti a přesun tažením (prvky uvnitř jdou s ní). */
   function onRoomDown(event: ReactPointerEvent, room: EditorRoom, handle: RoomHandle | "move") {
     if (tool.kind !== "select" || event.button !== 0) return;
     event.stopPropagation();
-    setSelectedId(null);
+    if (event.shiftKey && handle === "move") return onCanvasDown(event as unknown as ReactPointerEvent<SVGSVGElement>);
+    setSelection([]);
+    setSelectedNoteId(null);
     setSelectedRoomId(room.id);
     capture(svg.current, event.pointerId);
     setRoomDrag({ id: room.id, handle, start: toPlan(event), origin: { x: room.x, y: room.y, w: room.w, h: room.h } });
@@ -338,23 +489,49 @@ export function FloorplanEditor({ series }: { series: SeriesOption[] }) {
     event.stopPropagation();
     if (event.button === 1) return startPan(event);
     if (event.button !== 0) return;
+    const item = paletteItem(element.item);
     if (tool.kind === "pair") {
-      if (paletteItem(element.item)?.kind !== "light") return void toast.error("Klikněte na svítidlo, které má vypínač ovládat.");
-      update((current) => ({
-        ...current,
-        elements: current.elements.map((candidate) =>
-          candidate.id === tool.switchId ? { ...candidate, controls: candidate.controls.includes(element.id) ? candidate.controls.filter((id) => id !== element.id) : [...candidate.controls, element.id] } : candidate,
-        ),
-      }));
+      if (item?.kind !== "light") return void toast.error("Klikněte na svítidlo, které má vypínač ovládat.");
+      update((current) => toggleLink(current, tool.switchId, element.id));
       return;
     }
-    if (tool.kind === "room" || tool.kind === "crop" || tool.kind === "calibrate" || tool.kind === "verify") return onCanvasDown(event as unknown as ReactPointerEvent<SVGSVGElement>);
-    // Fáze 57: i v režimu vkládání klik na osazenou značku ji vybere a dá se přesunout (nevloží se další přes ni)
-    setSelectedId(element.id);
+    if (tool.kind === "pair-light") {
+      if (!controlsLights(item)) return void toast.error("Klikněte na vypínač nebo tlačítko, které má světlo ovládat.");
+      update((current) => toggleLink(current, element.id, tool.lightId));
+      return;
+    }
+    if (tool.kind === "room" || tool.kind === "crop" || tool.kind === "calibrate" || tool.kind === "verify" || tool.kind === "annotate") return onCanvasDown(event as unknown as ReactPointerEvent<SVGSVGElement>);
+    // Shift + klik = přidat / odebrat z výběru
+    if (event.shiftKey) {
+      setSelectedRoomId(null);
+      setSelectedNoteId(null);
+      setSelection((current) => (current.includes(element.id) ? current.filter((id) => id !== element.id) : [...current, element.id]));
+      return;
+    }
+    // Fáze 57: i v režimu vkládání klik na osazenou značku ji vybere a dá se přesunout (nevloží se další přes ni);
+    // fáze 59: tažení přesune celý rámeček, případně celý vícenásobný výběr
+    const ids = selection.length > 1 && selection.includes(element.id) ? [...new Set(selection.flatMap((id) => dragGroupOf(draft, id)))] : dragGroupOf(draft, element.id);
+    if (!(selection.length > 1 && selection.includes(element.id))) setSelection([element.id]);
     setSelectedRoomId(null);
-    const point = toPlan(event);
+    setSelectedNoteId(null);
     capture(svg.current, event.pointerId);
-    setDrag({ id: element.id, dx: point.x - element.x, dy: point.y - element.y });
+    setDrag({ ids, start: toPlan(event), origin: Object.fromEntries(draft.elements.filter((candidate) => ids.includes(candidate.id)).map((candidate) => [candidate.id, { x: candidate.x, y: candidate.y }])) });
+  }
+
+  function onNoteDown(event: ReactPointerEvent, note: Annotation) {
+    if (tool.kind !== "select" || event.button !== 0) return;
+    event.stopPropagation();
+    setSelection([]);
+    setSelectedRoomId(null);
+    setSelectedNoteId(note.id);
+    capture(svg.current, event.pointerId);
+    setNoteDrag({ id: note.id, handle: "move", start: toPlan(event), origin: note });
+  }
+
+  function onNoteHandle(event: ReactPointerEvent, note: Annotation, handle: "a" | "b") {
+    event.stopPropagation();
+    capture(svg.current, event.pointerId);
+    setNoteDrag({ id: note.id, handle, start: toPlan(event), origin: note });
   }
 
   function onMove(event: ReactPointerEvent<SVGSVGElement>) {
@@ -364,8 +541,9 @@ export function FloorplanEditor({ series }: { series: SeriesOption[] }) {
       setViewMm({ ...pan.view, x: pan.view.x - (event.clientX - pan.clientX) * perPx, y: pan.view.y - (event.clientY - pan.clientY) * perPx });
       return;
     }
-    if (!drag && !roomDraft && !roomDrag) return;
     const point = toPlan(event);
+    if (tool.kind === "place") setHover(point);
+    if (!drag && !roomDraft && !roomDrag && !marquee && !noteDraft && !noteDrag) return;
     if (roomDrag) {
       const dx = snap(point.x - roomDrag.start.x);
       const dy = snap(point.y - roomDrag.start.y);
@@ -379,11 +557,30 @@ export function FloorplanEditor({ series }: { series: SeriesOption[] }) {
       return;
     }
     if (drag) {
-      setDraft((current) => ({ ...current, elements: current.elements.map((element) => (element.id === drag.id ? { ...element, x: snap(point.x - drag.dx), y: snap(point.y - drag.dy) } : element)) }));
+      const dx = snap(point.x - drag.start.x);
+      const dy = snap(point.y - drag.start.y);
+      setDraft((current) => ({ ...current, elements: current.elements.map((element) => (drag.origin[element.id] ? { ...element, x: drag.origin[element.id].x + dx, y: drag.origin[element.id].y + dy } : element)) }));
     }
     if (roomDraft) {
       const crop = tool.kind === "crop";
       setRoomDraft({ ...roomDraft, w: (crop ? point.x : snap(point.x)) - roomDraft.x, h: (crop ? point.y : snap(point.y)) - roomDraft.y });
+    }
+    if (marquee) setMarquee({ ...marquee, w: point.x - marquee.x, h: point.y - marquee.y });
+    if (noteDraft) {
+      const to = { x: snap(point.x), y: snap(point.y) };
+      setNoteDraft({ ...noteDraft, to: noteDraft.mode === "zone" || event.shiftKey ? to : orthogonal(noteDraft.from, to) });
+    }
+    if (noteDrag) {
+      const dx = snap(point.x - noteDrag.start.x);
+      const dy = snap(point.y - noteDrag.start.y);
+      const origin = noteDrag.origin;
+      setDraft((current) => {
+        if (noteDrag.handle === "move") return moveAnnotation({ ...current, annotations: current.annotations.map((note) => (note.id === origin.id ? origin : note)) }, origin.id, dx, dy);
+        const raw = noteDrag.handle === "a" ? { x: origin.x + dx, y: origin.y + dy } : { x: origin.x2 + dx, y: origin.y2 + dy };
+        const anchor = noteDrag.handle === "a" ? { x: origin.x2, y: origin.y2 } : { x: origin.x, y: origin.y };
+        const end = origin.kind === "zone" || event.shiftKey ? raw : orthogonal(anchor, raw);
+        return updateAnnotation(current, origin.id, noteDrag.handle === "a" ? { x: end.x, y: end.y } : { x2: end.x, y2: end.y });
+      });
     }
   }
 
@@ -400,21 +597,59 @@ export function FloorplanEditor({ series }: { series: SeriesOption[] }) {
       return;
     }
     if (drag) {
-      // Přetažením do jiné místnosti se změní i místnost prvku; zásuvka u stěny se k ní přicvakne a natočí
-      update((current) => ({
-        ...current,
-        elements: current.elements.map((element) => {
-          if (element.id !== drag.id) return element;
-          const room = roomAt(current.rooms, element.x, element.y);
-          if (!room) return element;
-          if (!isWallMounted(paletteItem(element.item))) return { ...element, room: room.name };
-          const position = snapToWall(room, element.x, element.y);
-          const atWall = position.x !== element.x || position.y !== element.y;
-          return { ...element, room: room.name, x: Math.round(position.x), y: Math.round(position.y), rotation: atWall ? wallRotation(room, element.x, element.y) : element.rotation };
-        }),
-      }));
+      const ids = drag.ids;
+      update((current) => {
+        const frame = frameOf(current, ids[0]);
+        // Celý rámeček: kotva se přicvakne ke stěně a natočí, ostatní přístroje se k ní znovu přisadí
+        if (frame && ids.length === frame.members.length && frame.members.every((id) => ids.includes(id))) {
+          const anchor = current.elements.find((element) => element.id === frame.members[0]);
+          const room = anchor ? roomAt(current.rooms, anchor.x, anchor.y) : null;
+          if (!anchor || !room) return current;
+          const position = snapToWall(room, anchor.x, anchor.y);
+          const atWall = position.x !== anchor.x || position.y !== anchor.y;
+          const rotation = atWall ? wallRotation(room, anchor.x, anchor.y) : anchor.rotation;
+          const moved = { ...current, elements: current.elements.map((element) => (frame.members.includes(element.id) ? { ...element, room: room.name, rotation, ...(element.id === anchor.id ? { x: Math.round(position.x), y: Math.round(position.y) } : {}) } : element)) };
+          return layoutFrame(moved, frame.id);
+        }
+        // Přetažením do jiné místnosti se změní i místnost prvku; samostatná zásuvka u stěny se k ní přicvakne a natočí
+        return {
+          ...current,
+          elements: current.elements.map((element) => {
+            if (!ids.includes(element.id)) return element;
+            const room = roomAt(current.rooms, element.x, element.y);
+            if (!room) return element;
+            if (ids.length > 1 || !isWallMounted(paletteItem(element.item))) return { ...element, room: room.name };
+            const position = snapToWall(room, element.x, element.y);
+            const atWall = position.x !== element.x || position.y !== element.y;
+            return { ...element, room: room.name, x: Math.round(position.x), y: Math.round(position.y), rotation: atWall ? wallRotation(room, element.x, element.y) : element.rotation };
+          }),
+        };
+      });
       setDrag(null);
     }
+    if (marquee) {
+      const rect = { x: Math.min(marquee.x, marquee.x + marquee.w), y: Math.min(marquee.y, marquee.y + marquee.h), w: Math.abs(marquee.w), h: Math.abs(marquee.h) };
+      setMarquee(null);
+      if (rect.w > ui * 0.4 || rect.h > ui * 0.4) {
+        const inside = draft.elements.filter((element) => element.x >= rect.x && element.x <= rect.x + rect.w && element.y >= rect.y && element.y <= rect.y + rect.h).map((element) => element.id);
+        setSelection((current) => (marquee.additive ? [...new Set([...current, ...inside])] : inside));
+        setSelectedRoomId(null);
+        setSelectedNoteId(null);
+      }
+    }
+    if (noteDraft) {
+      const from = noteDraft.from;
+      const to = noteDraft.to;
+      setNoteDraft(null);
+      const big = noteDraft.mode === "zone" ? Math.abs(to.x - from.x) >= 200 && Math.abs(to.y - from.y) >= 200 : Math.hypot(to.x - from.x, to.y - from.y) >= 200;
+      if (big) {
+        const note = { ...newAnnotation(noteDraft.mode, from, to), ...noteStyles[noteDraft.mode] };
+        update((current) => ({ ...current, annotations: [...current.annotations, note] }));
+        setSelectedNoteId(note.id);
+        setSelection([]);
+      }
+    }
+    if (noteDrag) setNoteDrag(null);
     if (roomDraft) {
       const rect = { x: Math.min(roomDraft.x, roomDraft.x + roomDraft.w), y: Math.min(roomDraft.y, roomDraft.y + roomDraft.h), w: Math.abs(roomDraft.w), h: Math.abs(roomDraft.h) };
       setRoomDraft(null);
@@ -425,7 +660,7 @@ export function FloorplanEditor({ series }: { series: SeriesOption[] }) {
       lastRoom.current = name;
       const id = newId("m");
       setSelectedRoomId(id);
-      setSelectedId(null);
+      setSelection([]);
       setTool({ kind: "select" });
       update((current) => ({
         ...current,
@@ -439,12 +674,11 @@ export function FloorplanEditor({ series }: { series: SeriesOption[] }) {
   function applyCrop(rect: { x: number; y: number; w: number; h: number }) {
     if (rect.w < 500 || rect.h < 500) return void toast.error("Ořez je příliš malý – táhněte obdélník přes část výkresu, kterou chcete zachovat.");
     const impact = cropImpact(draft, rect);
-    if ((impact.elements || impact.rooms) && !window.confirm(`Mimo ořez leží ${impact.elements} značek a ${impact.rooms} místností – budou odstraněny. Oříznout?`)) return;
+    if ((impact.elements || impact.rooms || impact.annotations) && !window.confirm(`Mimo ořez leží ${impact.elements} značek, ${impact.rooms} místností a ${impact.annotations} zakreslených změn – budou odstraněny. Oříznout?`)) return;
     update((current) => cropDraft(current, rect));
     setView(FIT);
     setTool({ kind: "select" });
-    setSelectedId(null);
-    setSelectedRoomId(null);
+    clearSelection();
     toast.success(`Podklad oříznut na ${roomDimensions(rect.w, rect.h).label}. Měřítko zůstává.`);
   }
 
@@ -452,14 +686,20 @@ export function FloorplanEditor({ series }: { series: SeriesOption[] }) {
     if (action === "zoom-in") return zoomBy(ZOOM_STEP);
     if (action === "zoom-out") return zoomBy(1 / ZOOM_STEP);
     if (action === "zoom-fit") return setView(FIT);
+    if (action.startsWith("draw-")) {
+      const mode = action.slice(5) as AnnotationKind;
+      clearSelection();
+      setTool({ kind: "annotate", mode });
+      return void toast.info(mode === "text" ? "Klikněte do půdorysu, kam se má vložit text." : `${ANNOTATION_LABEL[mode]}: táhněte myší (Shift = libovolný úhel). Barvu a šrafu zvolíte v liště nad výkresem.`);
+    }
     if (!draft.background) return;
     if (action === "rotate-cw" || action === "rotate-ccw") {
       update((current) => rotateDraft(current, action === "rotate-cw" ? 1 : -1));
       setView(FIT);
-      return void toast.success(`Podklad otočen o 90° ${action === "rotate-cw" ? "doprava" : "doleva"} i se značkami a místnostmi.`);
+      return void toast.success(`Podklad otočen o 90° ${action === "rotate-cw" ? "doprava" : "doleva"} i se značkami, místnostmi a zakreslenými změnami.`);
     }
     if (action === "crop") {
-      setSelectedId(null);
+      clearSelection();
       setTool({ kind: "crop" });
       return;
     }
@@ -527,7 +767,7 @@ export function FloorplanEditor({ series }: { series: SeriesOption[] }) {
       setView(FIT);
       setCalibration([]);
       setTool({ kind: "calibrate" });
-      toast.info(`${pages > 1 ? `PDF má ${pages} stran – použita 1. strana. ` : ""}Podklad nahrán. Teď klikněte na začátek a konec známé stěny nebo kóty (📏 kalibrace).`);
+      toast.info(`${pages > 1 ? `PDF má ${pages} stran – použita 1. strana. ` : ""}Podklad podlaží ${draft.floorName} nahrán. Teď klikněte na začátek a konec známé stěny nebo kóty (📏 kalibrace).`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Podklad se nepodařilo nahrát.");
     } finally {
@@ -557,6 +797,29 @@ export function FloorplanEditor({ series }: { series: SeriesOption[] }) {
     toast.success(`${label}${converted ? ` – převedeno ${converted} ovladačů` : ""}${result.removed ? `, odstraněno ${result.removed}` : ""}. Paleta ovládání se změnila.`);
   }
 
+  function selectFloor(id: string) {
+    update((current) => switchFloor(current, id));
+    clearSelection();
+    setView(FIT);
+    setCalibration([]);
+    if (tool.kind !== "pair" && tool.kind !== "pair-light") setTool({ kind: "select" });
+  }
+
+  function makeFrame() {
+    const result = createFrame(draft, selection);
+    if (!result.ok) return void toast.error(result.error);
+    update(() => result.draft);
+    setSelection([result.draft.frames.find((frame) => frame.id === result.frameId)!.members[0]]);
+    toast.success(`Víceramček ${result.gangs}R vytvořen – přístroje přisazeny vedle sebe.`);
+  }
+
+  function autoPair() {
+    const result = autoPairLights(draft);
+    if (!result.paired) return void toast.error(result.skipped.length ? `V místnostech ${result.skipped.join(", ")} není žádný vypínač – vložte ho a spárujte.` : "Všechna světla už mají ovládání.");
+    update(() => result.draft);
+    toast.success(`Přiřazeno ${result.paired} světel k nejbližšímu vypínači v místnosti.${result.skipped.length ? ` Bez vypínače: ${result.skipped.join(", ")}.` : ""}`);
+  }
+
   function generate(form: FormData) {
     if (!checklist.ready) return void toast.error(checklist.items.find((item) => !item.ok)?.label ?? "Doplňte kontrolní seznam.");
     startTransition(async () => {
@@ -573,25 +836,39 @@ export function FloorplanEditor({ series }: { series: SeriesOption[] }) {
     });
   }
 
+  // Kontrola půdorysu (fáze 59): ovládání světel a stoupací vedení
+  const lightsWithout = unpairedLights(draft);
+  const idle = idleSwitches(draft);
+  const checks: PlanCheck[] = [];
+  if (lightsWithout.length) {
+    const rooms = [...new Set(lightsWithout.map((light) => light.room))];
+    checks.push({ id: "lights-unpaired", level: "warning", text: `${lightsWithout.length}× svítidlo bez vypínače (${rooms.slice(0, 4).join(", ")}${rooms.length > 4 ? " …" : ""}).`, action: { label: "✨ Přiřadit automaticky", onClick: autoPair } });
+  }
+  if (idle.length) checks.push({ id: "switch-idle", level: "info", text: `${idle.length}× vypínač bez přiřazeného svítidla – vyberte ho a klikněte na 🔗.`, action: { label: "Zobrazit", onClick: () => (draft.elements.some((element) => element.id === idle[0].id) ? setSelection([idle[0].id]) : toast.info(`Vypínač je na jiném podlaží (${floors.find((floor) => floor.elements.some((element) => element.id === idle[0].id))?.name}).`)) } });
+  if (floors.length > 1) {
+    const missing = floors.filter((floor) => floor.elements.some((element) => element.item !== "riser") && !floor.elements.some((element) => element.item === "riser" || element.item === "panel"));
+    if (missing.length) checks.push({ id: "riser-missing", level: "info", text: `Podlaží ${missing.map((floor) => floor.name).join(", ")} nemá stoupací vedení ↕ – trasy vedou svisle nad / pod rozváděčem.` });
+  }
+
   const nodeById = analysis.ok ? new Map(analysis.build.routeNodes.map((node) => [node.id, node])) : new Map();
   const panelPoint = analysis.ok ? analysis.build.panel : null;
-  const routePath = (segments: readonly { from: string; to: string }[]) => {
-    if (!panelPoint) return "";
-    const path: string[] = [];
-    let last = { x: panelPoint.x, y: panelPoint.y };
-    for (const segment of segments) {
+  const routeRuns = (segments: readonly { from: string; to: string; points?: RoutePoint[] }[]) =>
+    segments.flatMap((segment) => {
+      if (segment.points) return floorRuns(segment.points, draft.floorId);
+      // Bez lomené čáry (starší výpočet): pravoúhle z předchozího prvku
       const to = nodeById.get(segment.to);
-      if (!to) continue;
-      // Hvězda (sběrnicová instalace) začíná každou větev znovu v rozváděči
-      const from = segment.from === "panel" ? panelPoint : (nodeById.get(segment.from) ?? last);
-      path.push(`M ${from.x} ${from.y} L ${to.x} ${from.y} L ${to.x} ${to.y}`);
-      last = to;
-    }
-    return path.join(" ");
-  };
+      const from = segment.from === "panel" ? panelPoint : nodeById.get(segment.from);
+      return to && from && (to.floor ?? draft.floorId) === draft.floorId ? [[from, { x: to.x, y: from.y }, to]] : [];
+    });
+  const pathOf = (runs: { x: number; y: number }[][]) => runs.map((run) => `M ${run.map((point) => `${Math.round(point.x)} ${Math.round(point.y)}`).join(" L ")}`).join(" ");
+  const riserHere = analysis.ok ? analysis.build.floors.find((floor) => floor.id === draft.floorId) : null;
+  const ghostItem = tool.kind === "place" ? paletteItem(tool.item) : null;
+  const ghost = ghostItem && hover ? placement(ghostItem, hover) : null;
+  const pairing = tool.kind === "pair" || tool.kind === "pair-light";
+
   const hint =
     tool.kind === "place"
-      ? `Klikněte do půdorysu – ${paletteItem(tool.item)?.label ?? ""}. Klik na osazenou značku ji vybere a přesune. Esc / pravé tlačítko = konec.`
+      ? `Klikněte do půdorysu – ${paletteItem(tool.item)?.label ?? ""} (natočení ${placeRotation}°, R = otočit). Klik na osazenou značku ji vybere a přesune. Esc / pravé tlačítko = konec.`
       : tool.kind === "room"
         ? "Tažením myší nakreslete obdélník místnosti – rozměry X × Y se zobrazují živě."
         : tool.kind === "crop"
@@ -605,12 +882,20 @@ export function FloorplanEditor({ series }: { series: SeriesOption[] }) {
                 ? "Klikněte na konec ověřovací kóty."
                 : "✅ Ověření: klikněte na začátek jiné známé kóty (ideálně kolmé na kalibrační)."
               : tool.kind === "pair"
-                ? "🔗 Klikněte na svítidla, která má vypínač ovládat (znovu = odpojit). Esc = hotovo."
-                : selectedRoom
-                  ? "Místnost: tažením za vnitřek přesun (i s prvky), za stěnu nebo žlutý roh změna rozměru, Delete = smazat."
-                  : selected
-                    ? "Značka: tažením přesun, R = otočit, šipky = posun po 5 cm, Delete = smazat."
-                    : `Výběr: klik = detail prvku / místnosti, tažení = přesun, Delete = smazat. Ctrl + kolečko = zoom${zoomed ? ", tažením prázdným místem posun" : ""}.`;
+                ? "🔗 Klikněte na svítidla, která má vypínač ovládat (znovu = odpojit; i na jiném podlaží). Esc = hotovo."
+                : tool.kind === "pair-light"
+                  ? "🔗 Klikněte na vypínače / tlačítka, která mají světlo ovládat (znovu = odpojit). Esc = hotovo."
+                  : tool.kind === "annotate"
+                    ? tool.mode === "text"
+                      ? "T Klikněte do půdorysu, kam se má vložit textové pole."
+                      : `✏️ ${ANNOTATION_LABEL[tool.mode]}: táhněte myší${tool.mode === "zone" ? " obdélník" : " (Shift = libovolný úhel)"}. Esc = konec kreslení.`
+                    : selectedRoom
+                      ? "Místnost: tažením za vnitřek přesun (i s prvky), za stěnu nebo žlutý roh změna rozměru, Delete = smazat."
+                      : selection.length > 1
+                        ? "Vybráno víc prvků: tažením přesun všech, R = otočit, Delete = smazat, vpravo „Vložit do víceramečku“."
+                        : selected
+                          ? "Značka: tažením přesun (rámeček celý), R = otočit (další vkládaná značka převezme natočení), šipky = posun po 5 cm, Shift + klik = přidat do výběru."
+                          : `Výběr: klik = detail, Shift + klik nebo tažení obdélníku = víc prvků, Delete = smazat. Ctrl + kolečko = zoom${zoomed ? ", tažením prázdným místem posun (Shift = výběr)" : ""}.`;
 
   return (
     <div className="flex flex-col gap-3" data-testid="floorplan-editor">
@@ -644,9 +929,9 @@ export function FloorplanEditor({ series }: { series: SeriesOption[] }) {
           size="sm"
           className="gap-1.5 text-muted-foreground"
           onClick={() => {
-            if (!window.confirm("Vymazat celý nákres (prvky, místnosti i podklad)?")) return;
+            if (!window.confirm("Vymazat celý nákres (všechna podlaží, prvky, místnosti i podklady)?")) return;
             setDraft({ ...emptyDraft(), updatedAt: Date.now() });
-            setSelectedId(null);
+            clearSelection();
             setView(FIT);
           }}
         >
@@ -796,18 +1081,38 @@ export function FloorplanEditor({ series }: { series: SeriesOption[] }) {
         onSupply={(supplySystem) => update((current) => ({ ...current, supplySystem }))}
         onChange={(patch) =>
           update((current) => {
-            const series = patch.series ?? current.series;
-            return { ...current, series, color: colorForSeries(series, patch.color ?? current.color) };
+            const nextSeries = patch.series ?? current.series;
+            return { ...current, series: nextSeries, color: colorForSeries(nextSeries, patch.color ?? current.color) };
           })
         }
         onApplyAll={() => {
           update((current) => applyAppearance(current));
-          toast.success(`Vzhled ${appearanceLabel(draft.series, draft.color)} použit na celý půdorys.`);
+          toast.success(`Vzhled ${appearanceLabel(draft.series, draft.color)} použit na celý dům.`);
         }}
         onApplyRoom={() => {
           if (!selectedRoom) return;
           update((current) => applyAppearance(current, { room: selectedRoom.name }));
           toast.success(`Vzhled použit v místnosti ${selectedRoom.name}.`);
+        }}
+      />
+
+      {/* Fáze 59: podlaží domu */}
+      <FloorBar
+        floors={floors}
+        activeId={draft.floorId}
+        panelFloorId={panelFloorId}
+        onSelect={selectFloor}
+        onAdd={(input) => {
+          update((current) => addFloor(current, input));
+          clearSelection();
+          setView(FIT);
+          toast.success(`Podlaží ${input.name} přidáno – nahrajte jeho podklad nebo kreslete do rastru. Stoupací vedení ↕ najdete v paletě Rozváděč.`);
+        }}
+        onUpdate={(id, patch) => update((current) => updateFloor(current, id, patch))}
+        onRemove={(id) => {
+          update((current) => removeFloor(current, id));
+          clearSelection();
+          setView(FIT);
         }}
       />
 
@@ -823,13 +1128,17 @@ export function FloorplanEditor({ series }: { series: SeriesOption[] }) {
                 <div className="flex flex-wrap gap-1">
                   {items.map((item) => {
                     const active = tool.kind === "place" && tool.item === item.id;
+                    const height = item.kind === "panel" || item.kind === "riser" ? draft.profile.switchboardHeightMm : (item.heightMm ?? mountHeight({ kind: item.kind, variant: item.variant, tag: item.tag }, draft.profile));
                     return (
                       <button
                         key={item.id}
                         type="button"
                         aria-pressed={active}
-                        onClick={() => setTool(active ? { kind: "select" } : { kind: "place", item: item.id })}
-                        title={`${item.label} (${item.heightMm ?? mountHeight({ kind: item.kind === "panel" ? "switch" : item.kind, variant: item.variant, tag: item.tag }, draft.profile)} mm)`}
+                        onClick={() => {
+                          setTool(active ? { kind: "select" } : { kind: "place", item: item.id });
+                          setHover(null);
+                        }}
+                        title={`${item.label} (${height} mm)`}
                         className={cn("flex items-center gap-1 rounded-md border px-1.5 py-1 text-xs", active ? "border-primary bg-primary/20 text-foreground" : "border-border text-muted-foreground hover:border-primary/60 hover:text-foreground")}
                       >
                         <span className="rounded bg-muted px-1 font-mono text-[10px] font-bold text-foreground">{item.symbol}</span>
@@ -848,6 +1157,15 @@ export function FloorplanEditor({ series }: { series: SeriesOption[] }) {
           <p className="text-xs text-muted-foreground" role="status">
             {hint}
           </p>
+          {tool.kind === "annotate" ? (
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-sky-500/40 bg-sky-500/5 px-2 py-1.5" data-testid="annotate-bar">
+              <span className="text-xs font-semibold text-sky-200">✏️ {ANNOTATION_LABEL[tool.mode]}</span>
+              <NoteStyleControls compact kind={tool.mode} style={noteStyles[tool.mode]} onChange={(patch) => setNoteStyles((current) => ({ ...current, [tool.mode]: { ...current[tool.mode], ...patch } }))} />
+              <Button type="button" size="sm" variant="ghost" className="ml-auto" onClick={() => setTool({ kind: "select" })}>
+                Hotovo
+              </Button>
+            </div>
+          ) : null}
           <div className="relative overflow-hidden rounded-xl border border-border bg-zinc-950">
             <svg
               ref={svg}
@@ -857,21 +1175,25 @@ export function FloorplanEditor({ series }: { series: SeriesOption[] }) {
               aria-label="Půdorys elektroinstalace"
               data-testid="floorplan-canvas"
               data-zoom={Math.round(zoom * 100)}
+              data-floor={draft.floorName}
               onPointerDown={onCanvasDown}
               onPointerMove={onMove}
               onPointerUp={onUp}
+              onPointerLeave={() => setHover(null)}
               onContextMenu={(event) => {
-                // Pravé tlačítko = konec vkládání / měření
+                // Pravé tlačítko = konec vkládání / měření / kreslení
                 event.preventDefault();
                 setTool({ kind: "select" });
                 setCalibration([]);
                 setRoomDraft(null);
+                setNoteDraft(null);
               }}
             >
               <defs>
                 <pattern id="fp-grid" width={1000} height={1000} patternUnits="userSpaceOnUse">
                   <path d="M 1000 0 L 0 0 0 1000" fill="none" stroke="#27272a" strokeWidth={Math.max(stroke, draft.widthMm / 2000)} />
                 </pattern>
+                <HatchPatterns notes={draft.annotations} extra={tool.kind === "annotate" ? [noteStyles[tool.mode]] : []} />
               </defs>
               <rect width={draft.widthMm} height={draft.heightMm} fill={draft.background ? "#fff" : "url(#fp-grid)"} />
               {draft.background ? (
@@ -949,6 +1271,15 @@ export function FloorplanEditor({ series }: { series: SeriesOption[] }) {
                   </g>
                 );
               })}
+
+              {/* Fáze 59: zakreslené změny (příčky, bourání, šrafy, texty) */}
+              <g data-testid="annotation-layer">
+                {draft.annotations.map((note) => (
+                  <AnnotationShape key={note.id} note={note} unit={ui} selected={note.id === selectedNoteId} interactive={tool.kind === "select"} onDown={onNoteDown} onHandle={onNoteHandle} />
+                ))}
+                {noteDraft ? <AnnotationShape note={{ ...newAnnotation(noteDraft.mode, noteDraft.from, noteDraft.to), ...noteStyles[noteDraft.mode], id: "draft" }} unit={ui} selected={false} interactive={false} /> : null}
+              </g>
+
               {roomDraft ? (
                 <g data-testid={tool.kind === "crop" ? "crop-draft" : "room-draft"}>
                   {tool.kind === "crop" ? (
@@ -965,14 +1296,17 @@ export function FloorplanEditor({ series }: { series: SeriesOption[] }) {
                 </g>
               ) : null}
 
-              {/* Trasy kabelů po okruzích (Manhattan) */}
+              {/* Trasy kabelů po okruzích (aktivní podlaží; souběžné okruhy mírně odsazené, ať se nepřekrývají) */}
               {analysis.ok && panelPoint
                 ? analysis.summary.circuits.map((circuit, index) => {
                     const color = ROUTE_COLORS[index % ROUTE_COLORS.length];
-                    const last = nodeById.get(circuit.route.segments.at(-1)?.to ?? "") ?? panelPoint;
+                    const runs = routeRuns(circuit.route.segments);
+                    if (!runs.length) return null;
+                    const offset = ((index % 7) - 3) * stroke * 2.4;
+                    const last = runs[runs.length - 1][runs[runs.length - 1].length - 1];
                     return (
-                      <g key={circuit.id} data-testid="cable-route" pointerEvents="none">
-                        <path d={routePath(circuit.route.segments)} fill="none" stroke={color} strokeWidth={stroke * 3.5} strokeDasharray={circuit.routing === "TOP" ? `${ui / 2} ${ui / 5}` : undefined} opacity={0.9} />
+                      <g key={circuit.id} data-testid="cable-route" pointerEvents="none" transform={`translate(${offset} ${offset})`}>
+                        <path d={pathOf(runs)} fill="none" stroke={color} strokeWidth={stroke * 3.5} strokeLinejoin="round" strokeDasharray={circuit.routing === "TOP" ? `${ui / 2} ${ui / 5}` : undefined} opacity={0.9} />
                         <text x={last.x + ui * 0.6} y={last.y - ui * 0.6} fontSize={ui * 0.62} fill={color} fontWeight={700}>
                           {circuit.lengthsM[draft.mode].toLocaleString("cs-CZ")} m
                         </text>
@@ -981,11 +1315,18 @@ export function FloorplanEditor({ series }: { series: SeriesOption[] }) {
                   })
                 : null}
               {/* Fáze 57: sběrnicová linka (KNX / Loxone Tree) */}
-              {analysis.ok && analysis.summary.busLine ? (
-                <path d={routePath(analysis.summary.busLine.segments)} fill="none" stroke="#22c55e" strokeWidth={stroke * 2.5} strokeDasharray={`${ui / 6} ${ui / 6}`} pointerEvents="none" data-testid="bus-line" />
+              {analysis.ok && analysis.summary.busLine ? <path d={pathOf(routeRuns(analysis.summary.busLine.segments))} fill="none" stroke="#22c55e" strokeWidth={stroke * 2.5} strokeDasharray={`${ui / 6} ${ui / 6}`} pointerEvents="none" data-testid="bus-line" /> : null}
+              {/* Fáze 59: průchod stoupacího vedení bez značky (výchozí nad / pod rozváděčem) */}
+              {floors.length > 1 && riserHere && !draft.elements.some((element) => element.item === "riser") ? (
+                <g transform={`translate(${riserHere.riser.x} ${riserHere.riser.y})`} pointerEvents="none" data-testid="riser-default">
+                  <circle r={ui * 0.45} fill="none" stroke="#a78bfa" strokeWidth={stroke * 2.5} strokeDasharray={`${ui / 6} ${ui / 8}`} />
+                  <text y={ui * 0.22} fontSize={ui * 0.6} textAnchor="middle" fill="#a78bfa" fontWeight={800}>
+                    ↕
+                  </text>
+                </g>
               ) : null}
 
-              {/* Ovládací vazby vypínač → světlo */}
+              {/* Ovládací vazby vypínač → světlo (aktivní podlaží) */}
               {draft.elements.flatMap((element) =>
                 element.controls.map((lightId) => {
                   const light = draft.elements.find((candidate) => candidate.id === lightId);
@@ -997,13 +1338,32 @@ export function FloorplanEditor({ series }: { series: SeriesOption[] }) {
                 <circle key={index} cx={point.x} cy={point.y} r={ui / 4} fill={tool.kind === "verify" ? "#22c55e" : "#facc15"} stroke="#09090b" strokeWidth={stroke} data-testid="calibration-point" />
               ))}
 
+              {/* Fáze 59: víceramečky – obrys kolem přisazených přístrojů */}
+              {draft.frames.map((frame) => {
+                const outline = frameOutline(draft, frame);
+                if (!outline) return null;
+                const active = frame.members.some((id) => selection.includes(id));
+                return (
+                  <g key={frame.id} pointerEvents="none" data-testid="frame-outline" data-gangs={frameGangs(draft, frame)}>
+                    <rect x={outline.x} y={outline.y} width={outline.w} height={outline.h} rx={ui * 0.2} fill="none" stroke={active ? "#facc15" : "#ca8a04"} strokeWidth={stroke * (active ? 3 : 2)} />
+                    <text x={outline.x + outline.w} y={outline.y - ui * 0.15} fontSize={ui * 0.5} textAnchor="end" fill="#ca8a04" fontWeight={800}>
+                      {frameGangs(draft, frame)}R
+                    </text>
+                  </g>
+                );
+              })}
+
               {draft.elements.map((element) => {
                 const item = paletteItem(element.item);
                 if (!item) return null;
                 const size = symbolSizeOf(draft, element);
-                const active = element.id === selectedId || (tool.kind === "pair" && tool.switchId === element.id);
+                const active = selection.includes(element.id) || (tool.kind === "pair" && tool.switchId === element.id) || (tool.kind === "pair-light" && tool.lightId === element.id);
+                // Při párování zvýraznit, na co jde kliknout
+                const candidate = (tool.kind === "pair" && item.kind === "light") || (tool.kind === "pair-light" && controlsLights(item));
+                const linked = tool.kind === "pair" ? draft.elements.find((other) => other.id === tool.switchId)?.controls.includes(element.id) : tool.kind === "pair-light" ? element.controls.includes(tool.lightId) : false;
                 return (
-                  <g key={element.id} transform={`translate(${element.x} ${element.y})`} onPointerDown={(event) => onElementDown(event, element)} className={tool.kind === "select" || tool.kind === "place" ? "cursor-move" : "cursor-pointer"} data-element={item.id} aria-label={`${item.label} – ${element.room}`} role="button">
+                  <g key={element.id} transform={`translate(${element.x} ${element.y})`} onPointerDown={(event) => onElementDown(event, element)} className={tool.kind === "select" || tool.kind === "place" ? "cursor-move" : "cursor-pointer"} data-element={item.id} data-selected={active ? "true" : undefined} aria-label={`${item.label} – ${element.room}`} role="button">
+                    {candidate ? <circle r={size * 0.62} fill={linked ? "rgba(34,197,94,0.18)" : "rgba(56,189,248,0.12)"} stroke={linked ? "#22c55e" : "#38bdf8"} strokeWidth={stroke * 2} strokeDasharray={linked ? undefined : `${ui / 5} ${ui / 7}`} data-testid="pair-candidate" /> : null}
                     {item.kind === "panel" ? (
                       <PanelSymbol size={size * 1.3} active={active} onPaper={Boolean(draft.background)} label={item.symbol} />
                     ) : (
@@ -1019,16 +1379,35 @@ export function FloorplanEditor({ series }: { series: SeriesOption[] }) {
                 );
               })}
 
-              {/* Fáze 57: plovoucí lišta vybrané značky – otočit, zmenšit / zvětšit, smazat */}
-              {selected && tool.kind !== "pair" ? (
+              {/* Fáze 59: náhled vkládané značky u kurzoru s natočením (R = otočit) */}
+              {ghostItem && ghost && ghostItem.kind !== "panel" ? (
+                <g transform={`translate(${ghost.position.x} ${ghost.position.y})`} opacity={0.55} pointerEvents="none" data-testid="place-ghost" data-rotation={ghost.rotation}>
+                  <FloorSymbol item={ghostItem} size={symbolSizeOf(draft, { scale: null })} active={false} onPaper={Boolean(draft.background)} rotation={ghost.rotation} level={draft.installation} />
+                </g>
+              ) : null}
+
+              {marquee ? <rect x={Math.min(marquee.x, marquee.x + marquee.w)} y={Math.min(marquee.y, marquee.y + marquee.h)} width={Math.abs(marquee.w)} height={Math.abs(marquee.h)} fill="rgba(56,189,248,0.08)" stroke="#38bdf8" strokeDasharray={`${ui / 4} ${ui / 6}`} strokeWidth={stroke * 2} pointerEvents="none" data-testid="marquee" /> : null}
+
+              {/* Fáze 57: plovoucí lišta vybrané značky – otočit, zmenšit / zvětšit, smazat; fáze 59: 🔗 přiřadit */}
+              {selected && !pairing ? (
                 <ElementToolbar
                   x={selected.x}
                   y={selected.y - symbolSizeOf(draft, selected) * 0.9}
                   unit={ui}
-                  onRotate={() => rotateSelected(selected.id)}
+                  onRotate={() => rotateSelection([selected.id])}
                   onScale={(factor) => update((current) => ({ ...current, elements: current.elements.map((element) => (element.id === selected.id ? { ...element, scale: clampSymbolScale((element.scale ?? 1) * factor) } : element)) }))}
-                  onDelete={() => removeSelected(selected.id)}
+                  onDelete={() => removeSelection([selected.id])}
+                  onPair={
+                    controlsLights(paletteItem(selected.item))
+                      ? () => setTool({ kind: "pair", switchId: selected.id })
+                      : paletteItem(selected.item)?.kind === "light"
+                        ? () => setTool({ kind: "pair-light", lightId: selected.id })
+                        : undefined
+                  }
                 />
+              ) : null}
+              {selectedNote && tool.kind === "select" ? (
+                <rect {...(() => { const box = annotationBounds(selectedNote); return { x: box.x - ui * 0.2, y: box.y - ui * 0.2, width: box.w + ui * 0.4, height: box.h + ui * 0.4 }; })()} fill="none" stroke="#38bdf8" strokeDasharray={`${ui / 4} ${ui / 6}`} strokeWidth={stroke * 1.5} pointerEvents="none" />
               ) : null}
             </svg>
             {/* Zoom */}
@@ -1046,6 +1425,9 @@ export function FloorplanEditor({ series }: { series: SeriesOption[] }) {
                 <Maximize2 className="size-3.5" aria-hidden />
               </button>
             </div>
+            <span className="pointer-events-none absolute top-2 left-2 rounded-md border border-border bg-card/90 px-2 py-0.5 text-xs font-semibold" data-testid="active-floor">
+              {draft.floorName} <span className="font-mono text-muted-foreground">{levelLabel(draft.floorLevelMm)}</span>
+            </span>
             {busy ? (
               <div className="absolute inset-0 flex items-center justify-center bg-zinc-950/70" role="status" data-testid="floorplan-busy">
                 <p className="flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2 text-sm">
@@ -1058,6 +1440,15 @@ export function FloorplanEditor({ series }: { series: SeriesOption[] }) {
 
         {/* Detail prvku + výkaz kabeláže */}
         <aside className="flex flex-col gap-3" aria-label="Detail a výkaz kabeláže">
+          {pairing ? (
+            <div className="flex items-center gap-2 rounded-xl border-2 border-emerald-500/60 bg-emerald-500/10 p-3 text-sm" data-testid="pairing-banner">
+              <Link2 className="size-4 text-emerald-300" aria-hidden />
+              <span className="flex-1">{tool.kind === "pair" ? "Klikejte na svítidla, která vypínač ovládá." : "Klikejte na vypínače, které světlo ovládají."}</span>
+              <Button type="button" size="sm" onClick={() => setTool({ kind: "select" })} data-testid="pairing-done">
+                Hotovo
+              </Button>
+            </div>
+          ) : null}
           {selectedRoom ? (
             <RoomDetail
               key={selectedRoom.id}
@@ -1066,18 +1457,59 @@ export function FloorplanEditor({ series }: { series: SeriesOption[] }) {
               onDelete={() => removeRoom(selectedRoom.id)}
             />
           ) : null}
+          {selectedNote ? (
+            <AnnotationDetail
+              key={selectedNote.id}
+              note={selectedNote}
+              onChange={(patch) => update((current) => updateAnnotation(current, selectedNote.id, patch))}
+              onDelete={() => {
+                update((current) => removeAnnotation(current, selectedNote.id));
+                setSelectedNoteId(null);
+              }}
+            />
+          ) : null}
+          {selection.length > 1 ? (
+            <SelectionPanel
+              count={selection.length}
+              gangs={draft.elements.filter((element) => selection.includes(element.id)).reduce((sum, element) => sum + gangsOf(element), 0)}
+              frameError={selectionFrame && !selectionFrame.ok ? selectionFrame.error : null}
+              onFrame={makeFrame}
+              onRotate={() => rotateSelection()}
+              onDelete={() => removeSelection()}
+              onClear={() => setSelection([])}
+            />
+          ) : null}
           {selected ? (
             <ElementDetail
               key={selected.id}
               draft={draft}
               element={selected}
-              pairing={tool.kind === "pair" && tool.switchId === selected.id}
-              onPair={() => setTool(tool.kind === "pair" ? { kind: "select" } : { kind: "pair", switchId: selected.id })}
+              pairing={(tool.kind === "pair" && tool.switchId === selected.id) || (tool.kind === "pair-light" && tool.lightId === selected.id)}
+              onPair={() => {
+                const item = paletteItem(selected.item);
+                if (pairing) return setTool({ kind: "select" });
+                setTool(item?.kind === "light" ? { kind: "pair-light", lightId: selected.id } : { kind: "pair", switchId: selected.id });
+              }}
               onChange={(patch) => update((current) => ({ ...current, elements: current.elements.map((element) => (element.id === selected.id ? { ...element, ...patch } : element)) }))}
-              onRotate={() => rotateSelected(selected.id)}
-              onDelete={() => removeSelected(selected.id)}
+              onRotate={() => rotateSelection([selected.id])}
+              onDelete={() => removeSelection([selected.id])}
+              onAutoPair={autoPair}
+              onFrame={{
+                moveLeft: () => update((current) => moveInFrame(current, selected.id, -1)),
+                moveRight: () => update((current) => moveInFrame(current, selected.id, 1)),
+                rotate: () => {
+                  const frame = frameOf(draft, selected.id);
+                  if (frame) update((current) => rotateFrame(current, frame.id));
+                },
+                leave: () => update((current) => removeFromFrame(current, selected.id)),
+                dissolve: () => {
+                  const frame = frameOf(draft, selected.id);
+                  if (frame) update((current) => dissolveFrame(current, frame.id));
+                },
+              }}
             />
           ) : null}
+          <PlanChecks checks={checks} />
           <CablePanel
             analysis={analysis}
             mode={draft.mode}
@@ -1092,7 +1524,7 @@ export function FloorplanEditor({ series }: { series: SeriesOption[] }) {
           <WiringBomDialog rows={bom} />
           {inventory.length ? (
             <section className="flex flex-col gap-1.5 rounded-xl border border-border bg-card p-3 text-sm" aria-label="Soupis domovní instalace" data-testid="wiring-inventory">
-              <h3 className="font-bold">Soupis domovní instalace</h3>
+              <h3 className="font-bold">Soupis domovní instalace{floors.length > 1 ? ` (${floors.length} podlaží)` : ""}</h3>
               <ul className="flex flex-col gap-0.5 text-xs">
                 {inventory.map((row) => (
                   <li key={`${row.label}|${row.appearance}`} className="flex justify-between gap-2">
@@ -1145,7 +1577,7 @@ export function FloorplanEditor({ series }: { series: SeriesOption[] }) {
               ))}
               {levelPrompt.removed ? <li className="text-amber-200">Bez obdoby v nové úrovni (odstraní se): {levelPrompt.removed}×</li> : null}
             </ul>
-            <p className="text-xs text-muted-foreground">Párování ovladačů se světly zůstane. Kabeláž, okruhy a kusovník se přepočítají podle nové úrovně.</p>
+            <p className="text-xs text-muted-foreground">Párování ovladačů se světly zůstane. Kabeláž, okruhy a kusovník se přepočítají podle nové úrovně (všechna podlaží).</p>
             <DialogFooter className="gap-2">
               <Button type="button" variant="ghost" onClick={() => setLevelPrompt(null)}>
                 Zrušit
@@ -1170,9 +1602,10 @@ function ToolButton({ active, onClick, icon, label }: { active: boolean; onClick
 }
 
 /** Plovoucí lišta nad vybranou značkou (velikost drží stejnou na obrazovce i při zoomu). */
-function ElementToolbar({ x, y, unit, onRotate, onScale, onDelete }: { x: number; y: number; unit: number; onRotate: () => void; onScale: (factor: number) => void; onDelete: () => void }) {
+function ElementToolbar({ x, y, unit, onRotate, onScale, onDelete, onPair }: { x: number; y: number; unit: number; onRotate: () => void; onScale: (factor: number) => void; onDelete: () => void; onPair?: () => void }) {
   const size = unit * 1.15;
   const buttons: { label: string; text: string; fill: string; onClick: () => void }[] = [
+    ...(onPair ? [{ label: "Přiřadit vypínač ke světlu", text: "🔗", fill: "#166534", onClick: onPair }] : []),
     { label: "Otočit značku o 90°", text: "⟳", fill: "#27272a", onClick: onRotate },
     { label: "Zmenšit značku", text: "−", fill: "#27272a", onClick: () => onScale(1 / 1.25) },
     { label: "Zvětšit značku", text: "+", fill: "#27272a", onClick: () => onScale(1.25) },
@@ -1202,10 +1635,6 @@ function ElementToolbar({ x, y, unit, onRotate, onScale, onDelete }: { x: number
       ))}
     </g>
   );
-}
-
-function removeElement(draft: FloorplanDraft, id: string): FloorplanDraft {
-  return { ...draft, updatedAt: Date.now(), elements: draft.elements.filter((element) => element.id !== id).map((element) => ({ ...element, controls: element.controls.filter((lightId) => lightId !== id) })) };
 }
 
 /** Předběžné načtení nahraného podkladu (dekódování) – při chybě ještě 2 pokusy. */
@@ -1255,6 +1684,8 @@ function ElementDetail({
   onChange,
   onRotate,
   onDelete,
+  onAutoPair,
+  onFrame,
 }: {
   draft: FloorplanDraft;
   element: EditorElement;
@@ -1263,13 +1694,19 @@ function ElementDetail({
   onChange: (patch: Partial<EditorElement>) => void;
   onRotate: () => void;
   onDelete: () => void;
+  onAutoPair: () => void;
+  onFrame: { moveLeft: () => void; moveRight: () => void; rotate: () => void; leave: () => void; dissolve: () => void };
 }) {
   const item = paletteItem(element.item)!;
-  const isPanel = item.kind === "panel";
-  const defaultHeight = isPanel ? draft.profile.switchboardHeightMm : item.heightMm ?? mountHeight({ kind: item.kind as Exclude<typeof item.kind, "panel">, variant: item.variant, tag: item.tag }, draft.profile);
-  const frameable = !item.wireless && (item.kind === "single_socket" || item.kind === "double_socket" || item.kind === "data_socket" || item.kind === "switch");
+  const isPanel = item.kind === "panel" || item.kind === "riser";
+  const defaultHeight = isPanel ? draft.profile.switchboardHeightMm : (item.heightMm ?? mountHeight({ kind: item.kind as Exclude<typeof item.kind, "panel" | "riser">, variant: item.variant, tag: item.tag }, draft.profile));
+  const frame = frameOf(draft, element.id);
+  const legacyFrameable = !frame && !item.wireless && (item.kind === "single_socket" || item.kind === "double_socket" || item.kind === "data_socket" || item.kind === "switch");
   const rooms = [...new Set([...draft.rooms.map((room) => room.name), ...draft.elements.map((other) => other.room)])];
-  const lights = draft.elements.filter((other) => element.controls.includes(other.id));
+  const everything = [...draft.elements, ...draft.otherFloors.flatMap((floor) => floor.elements)];
+  const lights = everything.filter((other) => element.controls.includes(other.id));
+  const controllers = everything.filter((other) => other.controls.includes(element.id));
+  const floorName = (id: string) => (draft.elements.some((other) => other.id === id) ? null : (draft.otherFloors.find((floor) => floor.elements.some((other) => other.id === id))?.name ?? null));
   return (
     <section className="flex flex-col gap-2 rounded-xl border-2 border-sky-500/50 bg-card p-3 text-sm" aria-label="Detail vybraného prvku" data-testid="element-detail">
       <div className="flex items-center justify-between gap-2">
@@ -1296,7 +1733,11 @@ function ElementDetail({
         ))}
       </div>
       {isPanel ? (
-        <p className="text-xs text-muted-foreground">Výchozí bod všech tras. Výška rozváděče se nastavuje v horní liště ({draft.profile.switchboardHeightMm} mm).</p>
+        <p className="text-xs text-muted-foreground">
+          {item.kind === "riser"
+            ? "Průchod kabelů do jiného podlaží – trasy z tohoto podlaží vedou k rozváděči přes toto místo (svislá délka = rozdíl výšek podlaží)."
+            : `Výchozí bod všech tras. Výška rozváděče se nastavuje v horní liště (${draft.profile.switchboardHeightMm} mm).`}
+        </p>
       ) : (
         <>
           <div className="grid grid-cols-2 gap-2">
@@ -1314,14 +1755,42 @@ function ElementDetail({
               </datalist>
             </label>
           </div>
-          {frameable ? (
-            <div className="flex items-center gap-1 text-xs text-muted-foreground" role="radiogroup" aria-label="Počet kusů v rámečku">
-              Rámeček:
-              {[1, 2, 3, 4, 5].map((units) => (
-                <button key={units} type="button" role="radio" aria-checked={element.frameUnits === units} onClick={() => onChange({ frameUnits: units })} className={cn("rounded border px-2 py-0.5", element.frameUnits === units ? "border-primary bg-primary/20 text-foreground" : "border-border")}>
-                  {units}R
-                </button>
-              ))}
+          {/* Fáze 59: víceramček – pořadí, otočení, vyjmutí a rozdělení */}
+          {frame ? (
+            <div className="flex flex-col gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/5 p-2 text-xs" data-testid="frame-detail">
+              <p className="font-semibold text-amber-200">
+                <LayoutGrid className="mr-1 inline size-3.5" aria-hidden />
+                Víceramček {frameGangs(draft, frame)}R · pozice {frame.members.indexOf(element.id) + 1} z {frame.members.length}
+              </p>
+              <div className="flex flex-wrap gap-1">
+                <Button type="button" size="sm" variant="outline" className="h-7 px-2" onClick={onFrame.moveLeft} disabled={frame.members.indexOf(element.id) === 0}>
+                  ◀ Posunout
+                </Button>
+                <Button type="button" size="sm" variant="outline" className="h-7 px-2" onClick={onFrame.moveRight} disabled={frame.members.indexOf(element.id) === frame.members.length - 1}>
+                  Posunout ▶
+                </Button>
+                <Button type="button" size="sm" variant="outline" className="h-7 px-2" onClick={onFrame.rotate}>
+                  ⟳ Otočit rámeček
+                </Button>
+                <Button type="button" size="sm" variant="outline" className="h-7 px-2" onClick={onFrame.leave}>
+                  Vyjmout z rámečku
+                </Button>
+                <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-red-300" onClick={onFrame.dissolve} data-testid="frame-dissolve">
+                  Rozdělit rámeček
+                </Button>
+              </div>
+            </div>
+          ) : legacyFrameable ? (
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-1 text-xs text-muted-foreground" role="radiogroup" aria-label="Počet kusů v rámečku">
+                Stejné kusy v rámečku:
+                {[1, 2, 3, 4, 5].map((units) => (
+                  <button key={units} type="button" role="radio" aria-checked={element.frameUnits === units} onClick={() => onChange({ frameUnits: units })} className={cn("rounded border px-2 py-0.5", element.frameUnits === units ? "border-primary bg-primary/20 text-foreground" : "border-border")}>
+                    {units}R
+                  </button>
+                ))}
+              </div>
+              {isFrameable(element) ? <p className="text-[11px] text-muted-foreground">Různé přístroje (např. 2 zásuvky + vypínač) do jednoho rámečku: vyberte je Shift + klikem a zvolte „Vložit do víceramečku“.</p> : null}
             </div>
           ) : null}
           {item.kind !== "appliance" && item.kind !== "light" ? (
@@ -1360,12 +1829,12 @@ function ElementDetail({
           ) : null}
           {controlsLights(item) ? (
             <div className="flex flex-col gap-1.5">
-              <Button type="button" size="sm" variant={pairing ? "default" : "outline"} className="gap-1.5" onClick={onPair}>
-                <Link2 className="size-4" aria-hidden /> {pairing ? "Hotovo – ukončit párování" : "🔗 Spárovat se světlem"}
+              <Button type="button" size="sm" variant={pairing ? "default" : "outline"} className="gap-1.5" onClick={onPair} data-testid="pair-switch">
+                <Link2 className="size-4" aria-hidden /> {pairing ? "Hotovo – ukončit párování" : "🔗 Přiřadit ke světlu"}
               </Button>
               <p className="text-xs text-muted-foreground" data-testid="switch-controls">
                 {lights.length
-                  ? `Ovládá: ${lights.map((light) => `${paletteItem(light.item)?.label} (${light.room})${isWiredSwitch(item) ? ` – řazení ${switchingFor(controllersOf(draft, light.id))}` : ""}`).join(", ")}`
+                  ? `Ovládá: ${lights.map((light) => `${paletteItem(light.item)?.label} (${light.room}${floorName(light.id) ? `, ${floorName(light.id)}` : ""})${isWiredSwitch(item) ? ` – řazení ${switchingFor(controllersOf(draft, light.id))}` : ""}`).join(", ")}`
                   : "Zatím neovládá žádné svítidlo."}
               </p>
               {isWiredSwitch(item) && lights.length ? (
@@ -1376,9 +1845,22 @@ function ElementDetail({
             </div>
           ) : null}
           {item.kind === "light" ? (
-            <p className="text-xs text-muted-foreground" data-testid="light-switching">
-              Ovládací místa: {controllersOf(draft, element.id)} · řazení {switchingFor(controllersOf(draft, element.id))}
-            </p>
+            <div className="flex flex-col gap-1.5">
+              <p className="text-xs text-muted-foreground" data-testid="light-switching">
+                Ovládací místa: {controllersOf(draft, element.id)} · řazení {switchingFor(controllersOf(draft, element.id))}
+                {controllers.length ? ` · ${controllers.map((controller) => `${paletteItem(controller.item)?.symbol} (${controller.room}${floorName(controller.id) ? `, ${floorName(controller.id)}` : ""})`).join(", ")}` : ""}
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                <Button type="button" size="sm" variant={pairing ? "default" : "outline"} className="gap-1.5" onClick={onPair} data-testid="pair-light">
+                  <Link2 className="size-4" aria-hidden /> {pairing ? "Hotovo" : "🔗 Přiřadit vypínač"}
+                </Button>
+                {!controllers.length ? (
+                  <Button type="button" size="sm" variant="ghost" className="gap-1.5" onClick={onAutoPair}>
+                    <Sparkles className="size-4" aria-hidden /> Nejbližší vypínač v místnosti
+                  </Button>
+                ) : null}
+              </div>
+            </div>
           ) : null}
         </>
       )}

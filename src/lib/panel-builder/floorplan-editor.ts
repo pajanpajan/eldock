@@ -2,12 +2,13 @@
 // na vstup mostu „půdorys → rozváděč“ (`src/engine/floorplan-bridge.ts`) a 3D výpočtu kabeláže.
 // Čisté funkce – bezpečné pro klient i server.
 
-import { DOUBLE_TWO_WAY_CABLE, summarizeCabling, type RouteNode } from "@/engine/cable-routing";
+import { DOUBLE_TWO_WAY_CABLE, floorMetric, summarizeCabling, type FloorLink, type RouteMetric, type RouteNode, type RoutePoint } from "@/engine/cable-routing";
 import {
   DEFAULT_ELEVATION,
   calibrateFloorplanScale,
   elevationProfile,
   generateCircuitsFromFloorplan,
+  homeRunLength,
   isInstallLevel,
   isInstallMethod,
   mountHeight,
@@ -40,7 +41,8 @@ export interface PaletteItem {
   label: string;
   /** Krátká značka v půdorysu. */
   symbol: string;
-  kind: NodeKind | "panel";
+  /** "riser" = stoupací vedení mezi podlažími (fáze 59) – není elektrický vývod. */
+  kind: NodeKind | "panel" | "riser";
   variant?: NodeVariant;
   tag?: ApplianceTag;
   /** Číslo řazení vypínače (1 / 5 / 6 / 7) – jen informativně, skutečné řazení určí párování. */
@@ -86,6 +88,8 @@ const RETROFIT: readonly InstallLevel[] = ["smart_retrofit"];
 
 export const PALETTE: PaletteItem[] = [
   { id: "panel", group: "panel", label: "Hlavní domovní / bytový rozváděč", symbol: "RH", kind: "panel" },
+  // Fáze 59: průchod kabelů mezi podlažími (jedno na podlaží) – bez něj vede trasa svisle nad / pod rozváděčem
+  { id: "riser", group: "panel", label: "Stoupací vedení (průchod do jiného podlaží)", symbol: "↕", kind: "riser" },
   { id: "socket", group: "sockets", label: "Jednozásuvka", symbol: "Z", kind: "single_socket" },
   { id: "double-socket", group: "sockets", label: "Dvojzásuvka", symbol: "2Z", kind: "double_socket" },
   { id: "worktop-socket", group: "sockets", label: "Zásuvka nad linkou", symbol: "ZL", kind: "double_socket", variant: "worktop" },
@@ -169,6 +173,30 @@ export interface EditorElement {
   /** Fáze 57: otočení značky (zásuvka „nožičkou“ ke stěně) a vlastní měřítko značky (null = měřítko nákresu). */
   rotation: Rotation;
   scale: number | null;
+  /** Fáze 61: svítidlo – stmívání, příkon a druh zátěže (výběr spínacího / stmívacího akčního členu). */
+  light?: LightSpec;
+}
+
+/** Fáze 61: zátěž svítidla pro chytrou domácnost. */
+export type LightLoad = "led" | "led_driver" | "halogen" | "dali";
+export interface LightSpec {
+  dimmable: boolean;
+  /** Příkon svítidla [W]. */
+  powerW: number;
+  load: LightLoad;
+}
+export const DEFAULT_LIGHT: LightSpec = { dimmable: false, powerW: 20, load: "led" };
+export const LIGHT_LOADS: readonly { id: LightLoad; label: string }[] = [
+  { id: "led", label: "LED (retrofit / stmívatelné LED)" },
+  { id: "led_driver", label: "LED zdroj s předřadníkem (kapacitní zátěž)" },
+  { id: "halogen", label: "Žárovka / halogen 230 V" },
+  { id: "dali", label: "DALI předřadník (digitální stmívání)" },
+];
+export const lightSpecOf = (element: Pick<EditorElement, "light">): LightSpec => element.light ?? DEFAULT_LIGHT;
+
+function parseLightSpec(value: unknown, num: (input: unknown, fallback: number, min: number, max: number) => number): LightSpec {
+  const raw = (value && typeof value === "object" ? value : {}) as Partial<LightSpec>;
+  return { dimmable: raw.dimmable === true, powerW: Math.round(num(raw.powerW, DEFAULT_LIGHT.powerW, 1, 3000)), load: LIGHT_LOADS.some((load) => load.id === raw.load) ? raw.load! : DEFAULT_LIGHT.load };
 }
 
 /** Základní velikost značky v půdorysu [mm] (≈ 6 mm na výkresu 1 : 50); násobí ji měřítko značek. */
@@ -188,6 +216,71 @@ export interface EditorRoom {
   h: number;
 }
 
+/**
+ * Fáze 59: vícenásobný rámeček (víceramček 2R–5R) z různých přístrojů – např. 2 zásuvky + vypínač. Pořadí `members`
+ * = pořadí v rámečku; první přístroj je kotva (poloha, natočení, výška, řada a barva rámečku).
+ */
+export interface FrameGroup {
+  id: string;
+  members: string[];
+}
+
+/** Fáze 59: zakreslení změny do podkladu – nová příčka, bouraná konstrukce, šrafovaná oblast, textové pole. */
+export type AnnotationKind = "wall" | "demolish" | "zone" | "text";
+export type HatchId = "none" | "diagonal" | "cross" | "horizontal" | "dots" | "solid";
+export const HATCHES: readonly { id: HatchId; label: string }[] = [
+  { id: "diagonal", label: "Šikmá šrafa" },
+  { id: "cross", label: "Křížová šrafa" },
+  { id: "horizontal", label: "Vodorovná šrafa" },
+  { id: "dots", label: "Tečky" },
+  { id: "solid", label: "Plná výplň" },
+  { id: "none", label: "Bez výplně" },
+];
+export const isHatch = (value: unknown): value is HatchId => HATCHES.some((hatch) => hatch.id === value);
+
+export interface Annotation {
+  id: string;
+  kind: AnnotationKind;
+  /** Příčka / bouraná konstrukce: osa úsečky (x, y) → (x2, y2); oblast: protilehlé rohy; text: kotva vlevo nahoře (x, y). */
+  x: number;
+  y: number;
+  x2: number;
+  y2: number;
+  /** Barva čáry, šrafy a textu (#rrggbb). */
+  color: string;
+  hatch: HatchId;
+  /** Tloušťka příčky / bourané konstrukce [mm] (u textu a oblasti se nepoužije). */
+  thicknessMm: number;
+  text: string;
+  /** Výška písma [mm v půdorysu] – na výkresu 1 : 50 odpovídá 250 mm písmu 5 mm. */
+  fontMm: number;
+  bold: boolean;
+  /** Text na bílém podkladu (čitelnost nad výkresem). */
+  background: boolean;
+}
+
+/** Fáze 59: podlaží domu – vlastní podklad, kalibrace, místnosti, prvky, rámečky a zakreslené změny. */
+export interface FloorSheet {
+  id: string;
+  /** „1. NP“, „2. NP“, „1. PP“, „Podkroví“ … */
+  name: string;
+  /** Výška čisté podlahy podlaží nad podlažím rozváděče ±0 [mm] (2. NP při konstrukční výšce 3 m = 3000). */
+  levelMm: number;
+  background: FloorplanBackground | null;
+  calibration: CalibrationRecord;
+  mmPerPx: number;
+  widthMm: number;
+  heightMm: number;
+  rooms: EditorRoom[];
+  elements: EditorElement[];
+  frames: FrameGroup[];
+  annotations: Annotation[];
+}
+
+/** Výchozí konstrukční výška podlaží (podlaha → podlaha) [mm]. */
+export const DEFAULT_STOREY_MM = 3000;
+export const FLOOR_NAME_CHIPS = ["1. PP", "1. NP", "2. NP", "3. NP", "Podkroví"];
+
 export interface FloorplanDraft {
   version: 1;
   /** Podklad: nahraný obrázek / PDF převedený na obrázek (otočení a ořez fáze 57); null = čistý rastr. */
@@ -205,6 +298,17 @@ export interface FloorplanDraft {
   heightMm: number;
   rooms: EditorRoom[];
   elements: EditorElement[];
+  /** Fáze 59: víceramečky a zakreslené změny aktivního podlaží. */
+  frames: FrameGroup[];
+  annotations: Annotation[];
+  /**
+   * Fáze 59: vícepodlažní dům. Kořen nákresu = aktivní podlaží (podklad, kalibrace, místnosti, prvky …), ostatní podlaží
+   * leží v `otherFloors`; přepnutí = `switchFloor`. Výpočty pro celý dům vždy přes `floorsOf` / `allElements`.
+   */
+  floorId: string;
+  floorName: string;
+  floorLevelMm: number;
+  otherFloors: FloorSheet[];
   profile: ElevationProfile;
   mode: CableRoutingMode;
   /** Výchozí designová řada („ABB|Levit“) – platí pro nově vkládané prvky. */
@@ -232,6 +336,12 @@ export const emptyDraft = (): FloorplanDraft => ({
   heightMm: 10_000,
   rooms: [],
   elements: [],
+  frames: [],
+  annotations: [],
+  floorId: "f1",
+  floorName: "1. NP",
+  floorLevelMm: 0,
+  otherFloors: [],
   profile: { ...DEFAULT_ELEVATION },
   mode: "OPTIMIZED",
   series: "ABB|Levit",
@@ -250,41 +360,32 @@ export function parseDraft(value: unknown): FloorplanDraft | null {
   const draft = value as Partial<FloorplanDraft>;
   if (draft.version !== 1 || !Array.isArray(draft.elements) || !Array.isArray(draft.rooms)) return null;
   const base = emptyDraft();
-  const num = (input: unknown, fallback: number, min: number, max: number) => (typeof input === "number" && Number.isFinite(input) ? Math.min(max, Math.max(min, input)) : fallback);
-  const background = parseBackground(draft.background, num);
-  const mmPerPx = num(draft.mmPerPx, base.mmPerPx, 0.01, 1000);
-  // S podkladem plyne plocha výkresu z ořezu a měřítka (fáze 57), jinak z uloženého rastru
-  const extent = background ? planExtent(background, mmPerPx) : null;
+  const num: Num = (input, fallback, min, max) => (typeof input === "number" && Number.isFinite(input) ? Math.min(max, Math.max(min, input)) : fallback);
+  const sheet = parseSheet(draft, num, { id: base.floorId, name: base.floorName, levelMm: 0 });
+  // Fáze 59: ostatní podlaží (starší nákresy = jedno podlaží 1. NP)
+  const seen = new Set([sheet.id]);
+  const otherFloors = (Array.isArray(draft.otherFloors) ? draft.otherFloors : [])
+    .filter((floor): floor is FloorSheet => Boolean(floor) && typeof floor === "object" && Array.isArray(floor.elements) && Array.isArray(floor.rooms))
+    .slice(0, MAX_FLOORS - 1)
+    .map((floor, index) => parseSheet(floor, num, { id: `f${index + 2}`, name: `${index + 2}. NP`, levelMm: (index + 1) * DEFAULT_STOREY_MM }))
+    .filter((floor) => !seen.has(floor.id) && seen.add(floor.id));
   return {
     ...base,
-    background,
-    calibration: parseCalibration(draft.calibration, num),
+    background: sheet.background,
+    calibration: sheet.calibration,
     symbolScale: clampSymbolScale(num(draft.symbolScale, 1, SYMBOL_SCALE_MIN, SYMBOL_SCALE_MAX)),
     environment: isEnvironmentId(draft.environment) ? draft.environment : null,
-    mmPerPx,
-    widthMm: extent ? Math.max(100, extent.widthMm) : num(draft.widthMm, base.widthMm, 1000, 200_000),
-    heightMm: extent ? Math.max(100, extent.heightMm) : num(draft.heightMm, base.heightMm, 1000, 200_000),
-    rooms: draft.rooms
-      .filter((room) => room && typeof room.id === "string" && typeof room.name === "string")
-      .slice(0, 60)
-      .map((room) => ({ id: room.id.slice(0, 40), name: room.name.slice(0, 40), x: num(room.x, 0, -1e6, 1e6), y: num(room.y, 0, -1e6, 1e6), w: num(room.w, 1000, 100, 1e6), h: num(room.h, 1000, 100, 1e6) })),
-    elements: draft.elements
-      .filter((element) => element && typeof element.id === "string" && paletteItem(element.item))
-      .slice(0, 400)
-      .map((element) => ({
-        id: element.id.slice(0, 40),
-        item: element.item,
-        x: num(element.x, 0, -1e6, 1e6),
-        y: num(element.y, 0, -1e6, 1e6),
-        room: typeof element.room === "string" && element.room.trim() ? element.room.trim().slice(0, 40) : "Místnost",
-        mountHeightMm: typeof element.mountHeightMm === "number" && Number.isFinite(element.mountHeightMm) ? Math.min(6000, Math.max(0, element.mountHeightMm)) : null,
-        frameUnits: Math.round(num(element.frameUnits, 1, 1, 5)),
-        series: typeof element.series === "string" ? element.series.slice(0, 80) : null,
-        color: typeof element.color === "string" && designColor(element.color) ? element.color : null,
-        controls: Array.isArray(element.controls) ? element.controls.filter((id): id is string => typeof id === "string").slice(0, 20) : [],
-        rotation: isRotation(element.rotation) ? element.rotation : 0,
-        scale: typeof element.scale === "number" && Number.isFinite(element.scale) ? clampSymbolScale(element.scale) : null,
-      })),
+    mmPerPx: sheet.mmPerPx,
+    widthMm: sheet.widthMm,
+    heightMm: sheet.heightMm,
+    rooms: sheet.rooms,
+    elements: sheet.elements,
+    frames: sheet.frames,
+    annotations: sheet.annotations,
+    floorId: sheet.id,
+    floorName: sheet.name,
+    floorLevelMm: sheet.levelMm,
+    otherFloors,
     profile: elevationProfile(draft.profile ?? {}),
     mode: draft.mode === "BOTTOM" || draft.mode === "TOP" || draft.mode === "OPTIMIZED" ? draft.mode : "OPTIMIZED",
     series: typeof draft.series === "string" ? draft.series.slice(0, 80) : null,
@@ -299,6 +400,89 @@ export function parseDraft(value: unknown): FloorplanDraft | null {
 }
 
 type Num = (input: unknown, fallback: number, min: number, max: number) => number;
+
+/** Nejvýš podlaží v jednom nákresu (suterén + 3 NP + podkroví …). */
+export const MAX_FLOORS = 6;
+const COLOR_RE = /^#[0-9a-f]{6}$/i;
+
+/** Jedno podlaží z uložených dat (kořen staršího nákresu nebo položka `otherFloors`). */
+function parseSheet(raw: Partial<FloorSheet> & Partial<Pick<FloorplanDraft, "floorId" | "floorName" | "floorLevelMm">>, num: Num, fallback: { id: string; name: string; levelMm: number }): FloorSheet {
+  const background = parseBackground(raw.background, num);
+  const mmPerPx = num(raw.mmPerPx, 10, 0.01, 1000);
+  // S podkladem plyne plocha výkresu z ořezu a měřítka (fáze 57), jinak z uloženého rastru
+  const extent = background ? planExtent(background, mmPerPx) : null;
+  const elements = (raw.elements ?? [])
+    .filter((element) => element && typeof element.id === "string" && paletteItem(element.item))
+    .slice(0, 400)
+    .map((element): EditorElement => ({
+      id: element.id.slice(0, 40),
+      item: element.item,
+      x: num(element.x, 0, -1e6, 1e6),
+      y: num(element.y, 0, -1e6, 1e6),
+      room: typeof element.room === "string" && element.room.trim() ? element.room.trim().slice(0, 40) : "Místnost",
+      mountHeightMm: typeof element.mountHeightMm === "number" && Number.isFinite(element.mountHeightMm) ? Math.min(6000, Math.max(0, element.mountHeightMm)) : null,
+      frameUnits: Math.round(num(element.frameUnits, 1, 1, 5)),
+      series: typeof element.series === "string" ? element.series.slice(0, 80) : null,
+      color: typeof element.color === "string" && designColor(element.color) ? element.color : null,
+      controls: Array.isArray(element.controls) ? element.controls.filter((id): id is string => typeof id === "string").slice(0, 20) : [],
+      rotation: isRotation(element.rotation) ? element.rotation : 0,
+      scale: typeof element.scale === "number" && Number.isFinite(element.scale) ? clampSymbolScale(element.scale) : null,
+      ...(element.light ? { light: parseLightSpec(element.light, num) } : {}),
+    }));
+  const ids = new Set(elements.map((element) => element.id));
+  const framed = new Set<string>();
+  const frames = (Array.isArray(raw.frames) ? raw.frames : [])
+    .filter((frame) => frame && typeof frame.id === "string" && Array.isArray(frame.members))
+    .slice(0, 100)
+    .map((frame) => ({ id: frame.id.slice(0, 40), members: frame.members.filter((id): id is string => typeof id === "string" && ids.has(id) && !framed.has(id) && Boolean(framed.add(id))).slice(0, 5) }))
+    .filter((frame) => frame.members.length >= 2);
+  const annotations = (Array.isArray(raw.annotations) ? raw.annotations : [])
+    .filter((note) => note && typeof note.id === "string" && (note.kind === "wall" || note.kind === "demolish" || note.kind === "zone" || note.kind === "text"))
+    .slice(0, 200)
+    .map((note): Annotation => ({
+      id: note.id.slice(0, 40),
+      kind: note.kind,
+      x: num(note.x, 0, -1e6, 1e6),
+      y: num(note.y, 0, -1e6, 1e6),
+      x2: num(note.x2, num(note.x, 0, -1e6, 1e6), -1e6, 1e6),
+      y2: num(note.y2, num(note.y, 0, -1e6, 1e6), -1e6, 1e6),
+      color: typeof note.color === "string" && COLOR_RE.test(note.color) ? note.color : ANNOTATION_DEFAULTS[note.kind].color,
+      hatch: isHatch(note.hatch) ? note.hatch : ANNOTATION_DEFAULTS[note.kind].hatch,
+      thicknessMm: Math.round(num(note.thicknessMm, ANNOTATION_DEFAULTS[note.kind].thicknessMm, 20, 1000)),
+      text: typeof note.text === "string" ? note.text.slice(0, 500) : "",
+      fontMm: Math.round(num(note.fontMm, 250, 40, 3000)),
+      bold: note.bold === true,
+      background: note.background !== false,
+    }));
+  const id = typeof raw.floorId === "string" ? raw.floorId : typeof raw.id === "string" ? raw.id : fallback.id;
+  const name = typeof raw.floorName === "string" ? raw.floorName : typeof raw.name === "string" ? raw.name : fallback.name;
+  const level = raw.floorLevelMm ?? raw.levelMm;
+  return {
+    id: id.slice(0, 20) || fallback.id,
+    name: name.trim().slice(0, 30) || fallback.name,
+    levelMm: Math.round(num(level, fallback.levelMm, -20_000, 60_000)),
+    background,
+    calibration: parseCalibration(raw.calibration, num),
+    mmPerPx,
+    widthMm: extent ? Math.max(100, extent.widthMm) : num(raw.widthMm, 14_000, 1000, 200_000),
+    heightMm: extent ? Math.max(100, extent.heightMm) : num(raw.heightMm, 10_000, 1000, 200_000),
+    rooms: (raw.rooms ?? [])
+      .filter((room) => room && typeof room.id === "string" && typeof room.name === "string")
+      .slice(0, 60)
+      .map((room) => ({ id: room.id.slice(0, 40), name: room.name.slice(0, 40), x: num(room.x, 0, -1e6, 1e6), y: num(room.y, 0, -1e6, 1e6), w: num(room.w, 1000, 100, 1e6), h: num(room.h, 1000, 100, 1e6) })),
+    elements,
+    frames,
+    annotations,
+  };
+}
+
+/** Výchozí vzhled zakreslených změn (nová příčka červeně šrafovaná, bouraná konstrukce žlutě křížem). */
+export const ANNOTATION_DEFAULTS: Record<AnnotationKind, Pick<Annotation, "color" | "hatch" | "thicknessMm">> = {
+  wall: { color: "#dc2626", hatch: "diagonal", thicknessMm: 100 },
+  demolish: { color: "#d97706", hatch: "cross", thicknessMm: 150 },
+  zone: { color: "#2563eb", hatch: "diagonal", thicknessMm: 50 },
+  text: { color: "#111827", hatch: "none", thicknessMm: 50 },
+};
 
 function parseBackground(value: unknown, num: Num): FloorplanBackground | null {
   if (!value || typeof value !== "object") return null;
@@ -339,22 +523,134 @@ function parseCalibration(value: unknown, num: Num): CalibrationRecord {
   };
 }
 
+// ---------------------------------------------------------------------------
+//  Fáze 59: podlaží domu
+// ---------------------------------------------------------------------------
+
+type FloorsLike = Pick<FloorplanDraft, "elements"> & Partial<Pick<FloorplanDraft, "otherFloors">>;
+
+/** Aktivní podlaží jako samostatný list. */
+export function activeSheet(draft: FloorplanDraft): FloorSheet {
+  return {
+    id: draft.floorId,
+    name: draft.floorName,
+    levelMm: draft.floorLevelMm,
+    background: draft.background,
+    calibration: draft.calibration,
+    mmPerPx: draft.mmPerPx,
+    widthMm: draft.widthMm,
+    heightMm: draft.heightMm,
+    rooms: draft.rooms,
+    elements: draft.elements,
+    frames: draft.frames,
+    annotations: draft.annotations,
+  };
+}
+
+/** Všechna podlaží domu seřazená odspodu (aktivní podlaží z kořene nákresu). */
+export const floorsOf = (draft: FloorplanDraft): FloorSheet[] => [activeSheet(draft), ...draft.otherFloors].sort((a, b) => a.levelMm - b.levelMm || a.name.localeCompare(b.name, "cs"));
+
+/** Prvky všech podlaží (párování vypínač → světlo může vést i mezi podlažími – schodiště). */
+export const allElements = (draft: FloorsLike): EditorElement[] => [...draft.elements, ...(draft.otherFloors ?? []).flatMap((floor) => floor.elements)];
+
+/** Úprava prvků na všech podlažích (např. odpojení smazaného světla z párování). */
+export function mapAllElements(draft: FloorplanDraft, map: (element: EditorElement) => EditorElement): FloorplanDraft {
+  return { ...draft, elements: draft.elements.map(map), otherFloors: draft.otherFloors.map((floor) => ({ ...floor, elements: floor.elements.map(map) })) };
+}
+
+function loadSheet(draft: FloorplanDraft, sheet: FloorSheet): FloorplanDraft {
+  return {
+    ...draft,
+    floorId: sheet.id,
+    floorName: sheet.name,
+    floorLevelMm: sheet.levelMm,
+    background: sheet.background,
+    calibration: sheet.calibration,
+    mmPerPx: sheet.mmPerPx,
+    widthMm: sheet.widthMm,
+    heightMm: sheet.heightMm,
+    rooms: sheet.rooms,
+    elements: sheet.elements,
+    frames: sheet.frames,
+    annotations: sheet.annotations,
+  };
+}
+
+/** Přepnutí na jiné podlaží: aktivní list se odloží do `otherFloors`, cílový se načte do kořene. */
+export function switchFloor(draft: FloorplanDraft, floorId: string): FloorplanDraft {
+  if (floorId === draft.floorId) return draft;
+  const target = draft.otherFloors.find((floor) => floor.id === floorId);
+  if (!target) return draft;
+  return { ...loadSheet(draft, target), otherFloors: [...draft.otherFloors.filter((floor) => floor.id !== floorId), activeSheet(draft)] };
+}
+
+/**
+ * Nové podlaží (prázdný rastr se stejnou plochou a měřítkem jako aktivní) – rovnou se na něj přepne. Výchozí výška =
+ * o jednu konstrukční výšku nad nejvyšším podlažím; název „N. NP“.
+ */
+export function addFloor(draft: FloorplanDraft, input: { name?: string; levelMm?: number } = {}): FloorplanDraft {
+  const floors = floorsOf(draft);
+  if (floors.length >= MAX_FLOORS) return draft;
+  const top = floors[floors.length - 1];
+  const used = new Set(floors.map((floor) => floor.id));
+  let index = floors.length + 1;
+  while (used.has(`f${index}`)) index++;
+  const levelMm = input.levelMm ?? top.levelMm + DEFAULT_STOREY_MM;
+  const names = new Set(floors.map((floor) => floor.name));
+  let name = input.name?.trim().slice(0, 30) || `${Math.round(levelMm / DEFAULT_STOREY_MM) + 1}. NP`;
+  for (let n = 2; names.has(name); n++) name = `${input.name?.trim() || "Podlaží"} ${n}`;
+  const sheet: FloorSheet = { id: `f${index}`, name, levelMm, background: null, calibration: emptyCalibration(), mmPerPx: draft.mmPerPx, widthMm: draft.widthMm, heightMm: draft.heightMm, rooms: [], elements: [], frames: [], annotations: [] };
+  return switchFloor({ ...draft, otherFloors: [...draft.otherFloors, sheet] }, sheet.id);
+}
+
+/** Smazání podlaží i s prvky (poslední podlaží zůstane); vypínače jinde se od smazaných světel odpojí. */
+export function removeFloor(draft: FloorplanDraft, floorId: string): FloorplanDraft {
+  const floors = floorsOf(draft);
+  if (floors.length <= 1) return draft;
+  const removed = floors.find((floor) => floor.id === floorId);
+  if (!removed) return draft;
+  const gone = new Set(removed.elements.map((element) => element.id));
+  const base = floorId === draft.floorId ? switchFloor(draft, floors.find((floor) => floor.id !== floorId)!.id) : draft;
+  return mapAllElements({ ...base, otherFloors: base.otherFloors.filter((floor) => floor.id !== floorId) }, (element) => (element.controls.some((id) => gone.has(id)) ? { ...element, controls: element.controls.filter((id) => !gone.has(id)) } : element));
+}
+
+/** Název a výška podlaží. */
+export function updateFloor(draft: FloorplanDraft, floorId: string, patch: { name?: string; levelMm?: number }): FloorplanDraft {
+  const name = (value: string) => value.trim().slice(0, 30);
+  const level = (value: number) => Math.round(Math.min(60_000, Math.max(-20_000, value)));
+  if (floorId === draft.floorId) return { ...draft, ...(patch.name !== undefined && name(patch.name) ? { floorName: name(patch.name) } : {}), ...(patch.levelMm !== undefined && Number.isFinite(patch.levelMm) ? { floorLevelMm: level(patch.levelMm) } : {}) };
+  return {
+    ...draft,
+    otherFloors: draft.otherFloors.map((floor) => (floor.id === floorId ? { ...floor, ...(patch.name !== undefined && name(patch.name) ? { name: name(patch.name) } : {}), ...(patch.levelMm !== undefined && Number.isFinite(patch.levelMm) ? { levelMm: level(patch.levelMm) } : {}) } : floor)),
+  };
+}
+
+/** „±0,000“ / „+3,000“ / „−2,800“ – výškový údaj podlaží v metrech jako ve stavebních výkresech. */
+export const levelLabel = (levelMm: number) => `${levelMm > 0 ? "+" : levelMm < 0 ? "−" : "±"}${(Math.abs(levelMm) / 1000).toLocaleString("cs-CZ", { minimumFractionDigits: 3, maximumFractionDigits: 3 })}`;
+
 /** Kalibrace ověřená (druhá kóta v toleranci) nebo podklad bez měřítka (čistý rastr) – podmínka generování. */
 export const calibrationConfirmed = (draft: Pick<FloorplanDraft, "background" | "calibration">) => !draft.background || draft.calibration.state === "verified";
 
-/** Kontrolní seznam před generováním rozváděče a dokumentace (fáze 57). */
-export function generationChecklist(draft: Pick<FloorplanDraft, "background" | "calibration" | "environment">) {
+/** Kontrolní seznam před generováním rozváděče a dokumentace (fáze 57, fáze 59: měřítko na každém podlaží). */
+export function generationChecklist(draft: Pick<FloorplanDraft, "background" | "calibration" | "environment"> & Partial<FloorplanDraft>) {
+  const sheets = draft.otherFloors?.length ? floorsOf(draft as FloorplanDraft) : [{ name: draft.floorName ?? "", background: draft.background, calibration: draft.calibration }];
+  const pending = sheets.filter((sheet) => !calibrationConfirmed(sheet));
+  const multi = sheets.length > 1;
   const items = [
     {
       id: "calibration",
-      ok: calibrationConfirmed(draft),
-      label: !draft.background
-        ? "Měřítko: čistý rastr 1 dílek = 1 m"
-        : draft.calibration.state === "verified"
-          ? `Měřítko ověřeno${draft.calibration.check ? ` (odchylka ${Math.abs(draft.calibration.check.deviationPct).toLocaleString("cs-CZ")} % ≤ ${CALIBRATION_TOLERANCE_PCT} %)` : ""}`
-          : draft.calibration.state === "set"
-            ? "Měřítko nastaveno – ověřte ho druhou známou kótou (Úprava PDF → Ověřit měřítko)"
-            : "Zkalibrujte měřítko podkladu (Úprava PDF → Kalibrovat měřítko)",
+      ok: pending.length === 0,
+      label: multi
+        ? pending.length
+          ? `Ověřte měřítko podkladu podlaží ${pending.map((sheet) => sheet.name).join(", ")} (Úprava PDF → Kalibrovat / Ověřit měřítko)`
+          : `Měřítko ověřeno na všech podlažích (${sheets.length})`
+        : !draft.background
+          ? "Měřítko: čistý rastr 1 dílek = 1 m"
+          : draft.calibration.state === "verified"
+            ? `Měřítko ověřeno${draft.calibration.check ? ` (odchylka ${Math.abs(draft.calibration.check.deviationPct).toLocaleString("cs-CZ")} % ≤ ${CALIBRATION_TOLERANCE_PCT} %)` : ""}`
+            : draft.calibration.state === "set"
+              ? "Měřítko nastaveno – ověřte ho druhou známou kótou (Úprava PDF → Ověřit měřítko)"
+              : "Zkalibrujte měřítko podkladu (Úprava PDF → Kalibrovat měřítko)",
     },
     { id: "environment", ok: draft.environment !== null, label: draft.environment ? "Prostředí dle ČSN 33 2000-5-51 ed. 3 zvoleno" : "Zvolte prostředí instalace dle ČSN 33 2000-5-51 ed. 3" },
   ];
@@ -369,19 +665,21 @@ export function switchingFor(count: number): string {
   return `6 + 6 + ${count - 2}× 7`;
 }
 
-/** Počet vypínačů ovládajících dané světlo. */
-export const controllersOf = (draft: Pick<FloorplanDraft, "elements">, lightId: string) => draft.elements.filter((element) => element.controls.includes(lightId)).length;
+/** Počet vypínačů ovládajících dané světlo (na všech podlažích). */
+export const controllersOf = (draft: FloorsLike, lightId: string) => allElements(draft).filter((element) => element.controls.includes(lightId)).length;
 
 /**
  * Skutečné řazení klasického vypínače v nákresu (fáze 57 – podle něj se kreslí značka): pevné řazení palety
  * (S5, S6+6, tlačítka), jinak z párování – jediné ovládací místo světla = č. 1, dvě = č. 6, třetí a další = č. 7.
  */
-export function effectiveSwitchNo(draft: Pick<FloorplanDraft, "elements">, element: Pick<EditorElement, "id" | "item">): string {
+export function effectiveSwitchNo(draft: FloorsLike, element: Pick<EditorElement, "id" | "item">): string {
   const item = paletteItem(element.item);
   if (item?.fixedSwitchNo) return item.fixedSwitchNo;
-  const light = draft.elements.find((candidate) => draft.elements.some((other) => other.id === element.id && other.controls.includes(candidate.id)));
+  const everything = allElements(draft);
+  const self = everything.find((other) => other.id === element.id);
+  const light = self ? everything.find((candidate) => self.controls.includes(candidate.id)) : undefined;
   if (!light) return item?.switchNo ?? "1";
-  const controllers = draft.elements.filter((other) => other.controls.includes(light.id) && !paletteItem(other.item)?.wireless && !paletteItem(other.item)?.bus);
+  const controllers = everything.filter((other) => other.controls.includes(light.id) && !paletteItem(other.item)?.wireless && !paletteItem(other.item)?.bus);
   const index = controllers.findIndex((other) => other.id === element.id);
   const base = controllers.length <= 1 ? "1" : index < 2 ? "6" : "7";
   return item?.led && base !== "1" ? `${base}So` : item?.led ? (item.switchNo ?? "1So") : base;
@@ -471,7 +769,8 @@ export interface LevelConversion {
 export function convertForLevel(draft: FloorplanDraft, level: InstallLevel): LevelConversion {
   const changes = new Map<string, { from: string; to: string; count: number }>();
   const removedIds = new Set<string>();
-  const elements = draft.elements.flatMap((element): EditorElement[] => {
+  // Fáze 59: převod na všech podlažích
+  const convert = (element: EditorElement): EditorElement[] => {
     const item = paletteItem(element.item);
     if (!item || availableIn(item, level)) return [element];
     const target = level === "bus_loxone" ? TO_BUS[item.id] : TO_WIRED[item.id];
@@ -485,9 +784,13 @@ export function convertForLevel(draft: FloorplanDraft, level: InstallLevel): Lev
     row.count += 1;
     changes.set(key, row);
     return [{ ...element, item: next.id, controls: controlsLights(next) ? element.controls : [] }];
-  });
+  };
+  const clean = (elements: EditorElement[]) => elements.map((element) => ({ ...element, controls: element.controls.filter((id) => !removedIds.has(id)) }));
+  const active = draft.elements.flatMap(convert);
+  const others = draft.otherFloors.map((floor) => ({ ...floor, elements: floor.elements.flatMap(convert) }));
+  const frames = (list: FrameGroup[]) => list.map((frame) => ({ ...frame, members: frame.members.filter((id) => !removedIds.has(id)) })).filter((frame) => frame.members.length >= 2);
   return {
-    draft: { ...draft, installation: level, elements: elements.map((element) => ({ ...element, controls: element.controls.filter((id) => !removedIds.has(id)) })) },
+    draft: { ...draft, installation: level, elements: clean(active), frames: frames(draft.frames), otherFloors: others.map((floor) => ({ ...floor, elements: clean(floor.elements), frames: frames(floor.frames) })) },
     changes: [...changes.values()],
     removed: removedIds.size,
   };
@@ -510,7 +813,8 @@ export const FRAME_PITCH_MM = 71;
 export interface PlanBuild {
   plan: Floorplan;
   calibration: Calibration;
-  panel: { x: number; y: number };
+  /** Rozváděč – výchozí bod všech tras (s podlažím, fáze 59). */
+  panel: RoutePoint;
   routeNodes: RouteNode[];
   switchLinks: { switchId: string; lightId: string; cable?: string }[];
   /** Žaluziové ovladače a termostaty (fáze 51). */
@@ -520,75 +824,122 @@ export interface PlanBuild {
   busNodeIds: string[];
   /** Uzel výpočtu → prvek nákresu (vícenásobný rámeček = víc uzlů). */
   elementOf: Map<string, EditorElement>;
+  /** Fáze 59: podlaží se stoupacím vedením a měřidlo tras (vodorovně na podlaží, svisle mezi podlažími). */
+  floors: FloorLink[];
+  metric: RouteMetric;
 }
 
-/** Nákres → vstup mostu půdorys → rozváděč (1 px = 1 mm) a 3D kabeláže; bez rozváděče → chyba. */
+/** Fáze 59: osa víceramečku podle natočení kotvy (stěna nahoře / dole = vodorovně, vlevo / vpravo = svisle). */
+export const frameAxis = (rotation: Rotation) => (rotation === 90 || rotation === 270 ? { x: 0, y: 1 } : { x: 1, y: 0 });
+
+/** Nákres → vstup mostu půdorys → rozváděč (1 px = 1 mm) a 3D kabeláže přes všechna podlaží; bez rozváděče → chyba. */
 export function buildPlan(draft: FloorplanDraft): PlanBuild {
-  const panelElement = draft.elements.find((element) => element.item === "panel");
-  if (!panelElement) throw new Error("Umístěte do půdorysu rozváděč (⚡ Rozváděč) – z něj vedou všechny trasy.");
+  const floors = floorsOf(draft);
+  const panelFloor = floors.find((floor) => floor.elements.some((element) => element.item === "panel"));
+  const panelElement = panelFloor?.elements.find((element) => element.item === "panel");
+  if (!panelFloor || !panelElement) throw new Error("Umístěte do půdorysu rozváděč (⚡ Rozváděč) – z něj vedou všechny trasy.");
   const profile = draft.profile;
-  const roomIds = new Map<string, string>();
-  const roomId = (name: string) => {
-    if (!roomIds.has(name)) roomIds.set(name, `m${roomIds.size + 1}`);
-    return roomIds.get(name)!;
+  const multi = floors.length > 1;
+  const everything = floors.flatMap((floor) => floor.elements);
+  const roomIds = new Map<string, { id: string; name: string; floor: string; source: string }>();
+  const roomId = (floor: FloorSheet, name: string) => {
+    const key = `${floor.id}|${name}`;
+    if (!roomIds.has(key)) roomIds.set(key, { id: `m${roomIds.size + 1}`, name: multi ? `${name} (${floor.name})` : name, floor: floor.id, source: name });
+    return roomIds.get(key)!.id;
   };
+  // Stoupací vedení: značka „↕“ na podlaží, jinak stejné místo jako na jiném podlaží (svislá šachta – podlaží v jedné
+  // poloze výkresu), jinak svisle nad / pod rozváděčem
+  const riserOf = (floor: FloorSheet) => floor.elements.find((element) => element.item === "riser");
+  const fallbackRiser = riserOf(panelFloor) ?? floors.map(riserOf).find((riser) => riser !== undefined) ?? panelElement;
+  const links: FloorLink[] = floors.map((floor) => {
+    const riser = riserOf(floor) ?? fallbackRiser;
+    return { id: floor.id, levelMm: floor.levelMm, riser: { x: riser.x, y: riser.y } };
+  });
+  const metric = floorMetric(links);
+  const panel: RoutePoint = { x: panelElement.x, y: panelElement.y, floor: panelFloor.id };
   const nodes: FloorNode[] = [];
   const routeNodes: RouteNode[] = [];
   const elementOf = new Map<string, EditorElement>();
   const dataNodeIds: string[] = [];
   const busNodeIds: string[] = [];
-  for (const element of draft.elements) {
-    const item = paletteItem(element.item);
-    if (!item || item.kind === "panel") continue;
-    const units = item.kind === "single_socket" || item.kind === "double_socket" || item.kind === "data_socket" || item.kind === "switch" ? element.frameUnits : 1;
-    for (let unit = 0; unit < units; unit++) {
-      const id = units > 1 ? `${element.id}#${unit + 1}` : element.id;
-      const node: FloorNode = {
-        id,
-        room: roomId(element.room),
-        kind: item.kind,
-        px: [element.x + unit * FRAME_PITCH_MM, element.y],
-        ...(item.tag ? { tag: item.tag } : {}),
-        ...(item.variant ? { variant: item.variant } : {}),
-        ...(element.mountHeightMm !== null ? { mountHeightMm: element.mountHeightMm } : item.heightMm ? { mountHeightMm: item.heightMm } : {}),
-        ...(units > 1 ? { frame: element.id } : {}),
-      };
-      nodes.push(node);
-      elementOf.set(id, element);
-      routeNodes.push({ id, x: node.px[0], y: node.px[1], heightMm: mountHeight(node, profile), room: node.room, ...(units > 1 ? { frame: element.id } : {}) });
-      if (item.kind === "data_socket") dataNodeIds.push(id);
-      if (item.bus && draft.installation === "bus_loxone") busNodeIds.push(id);
+  /** Výška krabice pro výpočet (vlastní, z palety, jinak podle druhu). */
+  const heightOf = (element: EditorElement, item: PaletteItem) => (element.mountHeightMm !== null ? element.mountHeightMm : (item.heightMm ?? null));
+  const homeRun = (point: RoutePoint, heightMm: number) => homeRunLength({ x: 0, y: 0 }, { x: metric.distance(panel, point), y: 0 }, heightMm, draft.mode, profile);
+  for (const floor of floors) {
+    // Fáze 59: víceramček = krabice vedle sebe v rozteči 71 mm od kotvy (propojení přímo v krabici)
+    const frameSlot = new Map<string, { frame: string; origin: { x: number; y: number }; axis: { x: number; y: number }; start: number }>();
+    for (const frame of floor.frames) {
+      const anchor = floor.elements.find((element) => element.id === frame.members[0]);
+      if (!anchor) continue;
+      const axis = frameAxis(anchor.rotation);
+      let start = 0;
+      for (const memberId of frame.members) {
+        const member = floor.elements.find((element) => element.id === memberId);
+        if (!member) continue;
+        frameSlot.set(memberId, { frame: frame.id, origin: { x: anchor.x, y: anchor.y }, axis, start });
+        start += Math.max(1, member.frameUnits);
+      }
+    }
+    for (const element of floor.elements) {
+      const item = paletteItem(element.item);
+      if (!item || item.kind === "panel" || item.kind === "riser") continue;
+      const units = item.kind === "single_socket" || item.kind === "double_socket" || item.kind === "data_socket" || item.kind === "switch" ? element.frameUnits : 1;
+      const slot = frameSlot.get(element.id);
+      const frame = slot?.frame ?? (units > 1 ? element.id : null);
+      for (let unit = 0; unit < units; unit++) {
+        const id = units > 1 ? `${element.id}#${unit + 1}` : element.id;
+        const offset = ((slot?.start ?? 0) + unit) * FRAME_PITCH_MM;
+        const px: [number, number] = slot ? [slot.origin.x + slot.axis.x * offset, slot.origin.y + slot.axis.y * offset] : [element.x + unit * FRAME_PITCH_MM, element.y];
+        const height = heightOf(element, item);
+        const node: FloorNode = {
+          id,
+          room: roomId(floor, element.room),
+          kind: item.kind,
+          px,
+          ...(item.tag ? { tag: item.tag } : {}),
+          ...(item.variant ? { variant: item.variant } : {}),
+          ...(height !== null ? { mountHeightMm: height } : {}),
+          ...(frame ? { frame } : {}),
+          ...(multi ? { floor: floor.id } : {}),
+        };
+        const heightMm = mountHeight(node, profile);
+        node.lengthMm = homeRun({ x: px[0], y: px[1], floor: floor.id }, heightMm);
+        nodes.push(node);
+        elementOf.set(id, element);
+        routeNodes.push({ id, x: px[0], y: px[1], heightMm, room: node.room, floor: floor.id, ...(frame ? { frame } : {}) });
+        if (item.kind === "data_socket") dataNodeIds.push(id);
+        if (item.bus && draft.installation === "bus_loxone") busNodeIds.push(id);
+      }
     }
   }
-  // Ovládání světel po místnostech: počet ovládacích míst = vypínače spárované se světly místnosti
-  const switchLinks = draft.elements.flatMap((element) => {
+  // Ovládání světel po místnostech: počet ovládacích míst = vypínače spárované se světly místnosti (i mezi podlažími)
+  const switchLinks = everything.flatMap((element) => {
     const item = paletteItem(element.item);
     // Bezdrátové tlačítko nemá kabel ani ovládací místo v zapojení (spíná modul u svítidla)
     if (!controlsLights(item) || item?.wireless) return [];
     // Dvojitý střídavý č. 6+6: korespondenční pár pro obě větve (L + 2 × 2 žíly)
     const cable = item?.fixedSwitchNo === "6+6" ? { cable: DOUBLE_TWO_WAY_CABLE } : {};
-    return element.controls.filter((lightId) => draft.elements.some((light) => light.id === lightId)).map((lightId) => ({ switchId: element.id, lightId, ...cable }));
+    return element.controls.filter((lightId) => everything.some((light) => light.id === lightId)).map((lightId) => ({ switchId: element.id, lightId, ...cable }));
   });
   // Termostat → nejbližší zdroj tepla (tepelné čerpadlo / bojler), jinak topný okruh v rozváděči
   const heating = routeNodes.filter((node) => {
     const tag = paletteItem(elementOf.get(node.id)?.item ?? "")?.tag;
     return tag === "heat_pump" || tag === "boiler";
   });
-  const distance = (a: RouteNode, b: RouteNode) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
   const controlRuns = routeNodes.flatMap((node) => {
     const control = paletteItem(elementOf.get(node.id)?.item ?? "")?.control;
     if (control !== "blind" && control !== "thermostat") return [];
-    const target = control === "thermostat" ? ([...heating].sort((a, b) => distance(a, node) - distance(b, node))[0] ?? null) : null;
+    const target = control === "thermostat" ? ([...heating].sort((a, b) => metric.distance(a, node) - metric.distance(b, node))[0] ?? null) : null;
     return [{ id: node.id, kind: control, targetId: target?.id ?? null }];
   });
-  const rooms = [...roomIds.entries()].map(([name, id]) => {
-    const lights = draft.elements.filter((element) => element.room === name && paletteItem(element.item)?.kind === "light");
+  const rooms = [...roomIds.values()].map((room) => {
+    const floor = floors.find((candidate) => candidate.id === room.floor)!;
+    const lights = floor.elements.filter((element) => element.room === room.source && paletteItem(element.item)?.kind === "light");
     const switches = new Set(switchLinks.filter((link) => lights.some((light) => light.id === link.lightId)).map((link) => link.switchId));
-    return { id, name, ...(lights.length && switches.size ? { lighting: { groups: 1 as const, switchCount: Math.min(6, switches.size) } } : {}) };
+    return { id: room.id, name: room.name, ...(multi ? { floor: floor.id } : {}), ...(lights.length && switches.size ? { lighting: { groups: 1 as const, switchCount: Math.min(6, switches.size) } } : {}) };
   });
-  const panel = { x: panelElement.x, y: panelElement.y };
   const calibration = calibrateFloorplanScale({ walls: [{ px: [0, 0, 1000, 0], lengthMm: 1000 }], panelPx: [panel.x, panel.y], elevation: profile, routing: draft.mode });
-  return { plan: { rooms, nodes, mode: draft.installation }, calibration, panel, routeNodes, switchLinks, controlRuns, dataNodeIds, busNodeIds, elementOf };
+  return { plan: { rooms, nodes, mode: draft.installation }, calibration, panel, routeNodes, switchLinks, controlRuns, dataNodeIds, busNodeIds, elementOf, floors: links, metric };
 }
 
 /** Kalibrace na 2 kliky: úsečka v mm současného měřítka a skutečná délka → nové měřítko a přepočet prvků. */
@@ -603,6 +954,8 @@ export function recalibrate(draft: FloorplanDraft, segmentMm: number, realMm: nu
     heightMm: scale(draft.heightMm),
     rooms: draft.rooms.map((room) => ({ ...room, x: scale(room.x), y: scale(room.y), w: scale(room.w), h: scale(room.h) })),
     elements: draft.elements.map((element) => ({ ...element, x: scale(element.x), y: scale(element.y) })),
+    // Fáze 59: zakreslené změny drží polohu na podkladu (tloušťka a písmo zůstávají ve skutečných mm)
+    annotations: draft.annotations.map((note) => ({ ...note, x: scale(note.x), y: scale(note.y), x2: scale(note.x2), y2: scale(note.y2) })),
   };
 }
 
@@ -649,7 +1002,7 @@ export const designOptionsOf = (draft: Pick<FloorplanDraft, "installMethod" | "g
 export function analyzeDraft(draft: FloorplanDraft) {
   const build = buildPlan(draft);
   const circuits = generateCircuitsFromFloorplan(build.plan, build.calibration, designOptionsOf(draft));
-  const summary = summarizeCabling({ circuits: circuits.circuits, nodes: build.routeNodes, panel: build.panel, profile: draft.profile, selected: draft.mode, switchLinks: build.switchLinks, controlRuns: build.controlRuns, dataNodeIds: build.dataNodeIds, busNodeIds: build.busNodeIds, installation: draft.installation });
+  const summary = summarizeCabling({ circuits: circuits.circuits, nodes: build.routeNodes, panel: build.panel, profile: draft.profile, selected: draft.mode, switchLinks: build.switchLinks, controlRuns: build.controlRuns, dataNodeIds: build.dataNodeIds, busNodeIds: build.busNodeIds, installation: draft.installation, metric: build.metric });
   return { build, circuits, summary };
 }
 
@@ -734,18 +1087,17 @@ export const hasWiringDevice = (element: EditorElement) => {
   return kind === "single_socket" || kind === "double_socket" || kind === "switch" || kind === "data_socket";
 };
 
-/** „🔄 Použít na celý půdorys“ / „Použít na vybranou místnost“: řada a barva výchozího nastavení. */
+/** „🔄 Použít na celý půdorys“ (všechna podlaží) / „Použít na vybranou místnost“ (aktivní podlaží): řada a barva. */
 export function applyAppearance(draft: FloorplanDraft, scope: { room?: string } = {}): FloorplanDraft {
-  return {
-    ...draft,
-    elements: draft.elements.map((element) => (hasWiringDevice(element) && (scope.room === undefined || element.room === scope.room) ? { ...element, series: draft.series, color: draft.color } : element)),
-  };
+  const apply = (element: EditorElement) => (hasWiringDevice(element) ? { ...element, series: draft.series, color: draft.color } : element);
+  if (scope.room !== undefined) return { ...draft, elements: draft.elements.map((element) => (element.room === scope.room ? apply(element) : element)) };
+  return mapAllElements(draft, apply);
 }
 
 /** Soupis domovní instalace: druh prvku × vzhled (výrobce, řada, barva) → počet kusů. */
 export function wiringInventory(draft: FloorplanDraft): { label: string; appearance: string; seriesKey: string | null; color: string; count: number }[] {
   const rows = new Map<string, { label: string; appearance: string; seriesKey: string | null; color: string; count: number }>();
-  for (const element of draft.elements) {
+  for (const element of allElements(draft)) {
     if (!hasWiringDevice(element)) continue;
     const item = paletteItem(element.item)!;
     const seriesKey = element.series ?? draft.series;

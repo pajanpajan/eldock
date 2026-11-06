@@ -55,6 +55,10 @@ export interface FloorNode {
   variant?: NodeVariant;
   /** Společný vícenásobný rámeček (1R–5R): prvky se stejným `frame` se propojují přímo v krabici. */
   frame?: string;
+  /** Fáze 59: podlaží (vícepodlažní dům) – okruhy zásuvek a světel se nemíchají mezi podlažími. */
+  floor?: string;
+  /** Fáze 59: délka trasy z rozváděče předpočítaná měřidlem tras (stoupací vedení, fáze 60 podél stěn) [mm]. */
+  lengthMm?: number;
 }
 
 export interface Calibration {
@@ -504,6 +508,8 @@ export interface BomItem {
 export interface Room {
   id: string;
   name: string;
+  /** Fáze 59: podlaží místnosti (vícepodlažní dům). */
+  floor?: string;
   /** Ovládání světel v místnosti (větve, ovládací místa, žaluzie). */
   lighting?: { groups: 1 | 2; switchCount: number; blinds?: number };
 }
@@ -552,7 +558,7 @@ export function generateCircuitsFromFloorplan(plan: Floorplan, calibration: Cali
   const circuits: Circuit[] = [];
   const roomName = new Map(plan.rooms.map((room) => [room.id, room.name]));
   const roomOrder = new Map(plan.rooms.map((room, index) => [room.id, index]));
-  const length = (node: FloorNode) => calibration.calculateCableLength(node);
+  const length = (node: FloorNode) => node.lengthMm ?? calibration.calculateCableLength(node);
   const counters = new Map<CircuitKind, number>();
   const nextId = (kind: CircuitKind) => {
     const value = (counters.get(kind) ?? 0) + 1;
@@ -693,9 +699,11 @@ export function generateCircuitsFromFloorplan(plan: Floorplan, calibration: Cali
   const outletsOf = (node: FloorNode) => (node.kind === "double_socket" && countDoubleAsTwo ? 2 : 1);
   const weight = (nodes: readonly FloorNode[]) => nodes.reduce((sum, node) => sum + outletsOf(node), 0);
   const socketGroups: FloorNode[][] = [];
+  // Fáze 59: zásuvkový okruh nikdy nespojuje dvě podlaží
+  const floorOf = (nodes: readonly FloorNode[]) => nodes[0]?.floor ?? "";
   for (const [, nodes] of byRoom(sockets)) {
     let current = socketGroups[socketGroups.length - 1];
-    if (!current || weight(current) + weight(nodes) > MAX_OUTLETS_PER_CIRCUIT) {
+    if (!current || weight(current) + weight(nodes) > MAX_OUTLETS_PER_CIRCUIT || floorOf(current) !== floorOf(nodes)) {
       current = [];
       socketGroups.push(current);
     }
@@ -728,16 +736,23 @@ export function generateCircuitsFromFloorplan(plan: Floorplan, calibration: Cali
     );
   }
 
-  // Světla: místnosti střídavě do min. 2 nezávislých okruhů, max. 10 bodů na okruh
-  const lightRooms = byRoom(lights);
-  const lightCount = Math.max(2, Math.ceil(lights.length / MAX_LIGHTS_PER_CIRCUIT));
-  const lightGroups: FloorNode[][] = Array.from({ length: lightCount }, () => []);
-  if (lightRooms.length === 1) lights.forEach((node, index) => lightGroups[index % lightCount].push(node));
-  else
-    for (const [, nodes] of lightRooms) {
-      const target = lightGroups.reduce((best, group) => (group.length < best.length ? group : best), lightGroups[0]);
-      target.push(...nodes);
-    }
+  // Světla: místnosti střídavě do min. 2 nezávislých okruhů, max. 10 bodů na okruh; fáze 59 – po podlažích
+  // (každé podlaží s vlastními světelnými okruhy, jediné podlaží se světly = min. 2 okruhy)
+  const lightFloors = [...new Set(lights.map((node) => node.floor ?? ""))];
+  const lightGroups: FloorNode[][] = [];
+  for (const floor of lightFloors) {
+    const floorLights = lights.filter((node) => (node.floor ?? "") === floor);
+    const lightRooms = byRoom(floorLights);
+    const lightCount = Math.min(Math.max(floorLights.length, 1), Math.max(lightFloors.length === 1 ? 2 : 1, Math.ceil(floorLights.length / MAX_LIGHTS_PER_CIRCUIT)));
+    const groups: FloorNode[][] = Array.from({ length: Math.max(1, lightCount) }, () => []);
+    if (lightRooms.length === 1) floorLights.forEach((node, index) => groups[index % groups.length].push(node));
+    else
+      for (const [, nodes] of lightRooms) {
+        const target = groups.reduce((best, group) => (group.length < best.length ? group : best), groups[0]);
+        target.push(...nodes);
+      }
+    lightGroups.push(...groups);
+  }
   for (const group of lightGroups.filter((nodes) => nodes.length)) {
     const rooms = [...new Set(group.map((node) => node.room))];
     const installedW = group.reduce((sum, node) => sum + (node.powerW ?? LIGHT_POWER_W), 0);

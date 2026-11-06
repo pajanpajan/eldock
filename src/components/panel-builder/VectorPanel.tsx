@@ -56,6 +56,7 @@ export function VectorPanel({
   activeRail,
   onActivateRail,
   onPlaceDrop,
+  onMoveDevice,
   onRailPhoto,
   busbars,
 }: {
@@ -93,6 +94,8 @@ export function VectorPanel({
   onActivateRail?: (rail: number) => void;
   /** Upuštění karty z pravého menu na lištu (pozice = pořadí zleva, kam se přístroj vloží). */
   onPlaceDrop?: (rail: number, position: number) => void;
+  /** Fáze 59: přesun osazeného přístroje tažením na jinou pozici / lištu (pozice = pořadí bez přesouvaného přístroje). */
+  onMoveDevice?: (deviceId: string, rail: number, position: number) => void;
   /** Fáze 47 – detailní fotka jedné lišty / sekce (velké rozváděče). */
   onRailPhoto?: (rail: number) => void;
   /** Fáze 55 – svorkovnice PE / N0 / N-FIx (nahoře nebo dole podle přívodu). */
@@ -115,7 +118,7 @@ export function VectorPanel({
     const rect = layout.rects.get(device.id);
     return rect && point.x >= rect.x && point.x <= rect.x + rect.w && point.y >= rect.y - 4 && point.y <= rect.y + rect.h + 4;
   }) ?? null;
-  const target = drag?.active ? hit(drag) : null;
+  const target = drag?.active && onDrop ? hit(drag) : null;
   const validTarget = target && !drag?.ids.includes(target.id) ? target : null;
 
   function pointerDown(event: ReactPointerEvent, device: VectorDevice) {
@@ -124,21 +127,39 @@ export function VectorPanel({
     const point = toSvg(event);
     const additive = event.ctrlKey || event.metaKey || event.shiftKey;
     const ids = selectedIds?.has(device.id) && selectedIds.size > 1 ? [...selectedIds] : [device.id];
+    // Strom (krok 2) zachytí ukazatel hned; přesun v kroku 1 až po rozjetí tažení – dvojklik na štítek tak dál funguje
     if (onDrop) svg.current?.setPointerCapture(event.pointerId);
     setDrag({ ids, startX: point.x, startY: point.y, x: point.x, y: point.y, active: false, pointerId: event.pointerId, origin: device, additive });
   }
   function pointerMove(event: ReactPointerEvent) {
-    if (!drag || !onDrop) return;
+    if (!drag || (!onDrop && !onMoveDevice)) return;
     const point = toSvg(event);
     const active = drag.active || Math.hypot(point.x - drag.startX, point.y - drag.startY) > DRAG_THRESHOLD;
+    if (active && !drag.active && !onDrop) {
+      try {
+        svg.current?.setPointerCapture(drag.pointerId);
+      } catch {
+        // ukazatel už není aktivní
+      }
+    }
     setDrag({ ...drag, ...point, active });
+    if (active && onMoveDevice && !onDrop) {
+      const hint = dropTarget(event, drag.origin.id);
+      if (hint && (hint.rail !== moveHint?.rail || hint.position !== moveHint.position)) setMoveHint(hint);
+    }
   }
   function pointerUp() {
     if (!drag) return;
     const current = drag;
+    const hint = moveHint;
     setDrag(null);
+    setMoveHint(null);
     if (!current.active) return onSelect?.(current.origin, { additive: current.additive });
-    if (validTarget) onDrop?.(current.ids, validTarget.id);
+    if (validTarget) return onDrop?.(current.ids, validTarget.id);
+    if (onMoveDevice && hint) {
+      const unchanged = hint.rail === current.origin.dinRailIndex && hint.position === devices.filter((device) => device.dinRailIndex === hint.rail && device.positionOnRail < current.origin.positionOnRail).length + 1;
+      if (!unchanged) onMoveDevice(current.origin.id, hint.rail, hint.position);
+    }
   }
   function keyDown(event: ReactKeyboardEvent, device: VectorDevice) {
     if (event.key === "Enter" || event.key === " ") {
@@ -159,14 +180,17 @@ export function VectorPanel({
 
   // Drag & drop karty z pravého menu: nejbližší lišta a pořadí podle středů přístrojů vlevo od kurzoru
   const [dropHint, setDropHint] = useState<{ rail: number; position: number; x: number } | null>(null);
-  function dropTarget(event: ReactDragEvent) {
+  const [moveHint, setMoveHint] = useState<{ rail: number; position: number; x: number } | null>(null);
+  const indicator = dropHint ?? moveHint;
+  /** Místo vložení podle kurzoru: nejbližší lišta, pořadí podle středů přístrojů vlevo (bez přesouvaného přístroje). */
+  function dropTarget(event: { clientX: number; clientY: number }, exclude?: string) {
     const box = svg.current?.getBoundingClientRect();
     if (!box) return null;
     const x = ((event.clientX - box.left) / box.width) * layout.width;
     const y = ((event.clientY - box.top) / box.height) * layout.height;
     const rail = [...layout.rails].sort((a, b) => Math.abs(a.y - y) - Math.abs(b.y - y))[0];
     if (!rail) return null;
-    const onRail = devices.filter((device) => device.dinRailIndex === rail.index).sort((a, b) => a.positionOnRail - b.positionOnRail);
+    const onRail = devices.filter((device) => device.dinRailIndex === rail.index && device.id !== exclude).sort((a, b) => a.positionOnRail - b.positionOnRail);
     const before = onRail.filter((device) => {
       const rect = layout.rects.get(device.id);
       return rect ? rect.x + rect.w / 2 < x : false;
@@ -239,7 +263,10 @@ export function VectorPanel({
             aria-label="2D vektorový rozváděč"
             onPointerMove={pointerMove}
             onPointerUp={pointerUp}
-            onPointerCancel={() => setDrag(null)}
+            onPointerCancel={() => {
+              setDrag(null);
+              setMoveHint(null);
+            }}
             onPointerDown={() => onBackground?.()}
           >
             <defs>
@@ -319,7 +346,7 @@ export function VectorPanel({
                   tabIndex={0}
                   aria-pressed={selected}
                   aria-label={`${device.designation} ${[texts.manufacturer, texts.value, texts.detail].filter(Boolean).join(" ")}${device.label ? ` · ${device.label}` : ""}`}
-                  className={cn("outline-none", onDrop ? "cursor-grab" : "cursor-pointer")}
+                  className={cn("outline-none", onDrop || onMoveDevice ? "cursor-grab" : "cursor-pointer")}
                   onPointerDown={(event) => pointerDown(event, device)}
                   onKeyDown={(event) => keyDown(event, device)}
                   onDoubleClick={() => onLabelEdit && setEditing({ id: device.id, value: device.label })}
@@ -339,10 +366,10 @@ export function VectorPanel({
             })}
 
             {/* Místo vložení karty z pravého menu */}
-            {dropHint ? (
+            {indicator ? (
               <g pointerEvents="none" data-testid="drop-indicator">
-                <line x1={dropHint.x} x2={dropHint.x} y1={(layout.rails[dropHint.rail - 1]?.top ?? 0) - 10} y2={(layout.rails[dropHint.rail - 1]?.top ?? 0) + VECTOR.deviceH + 10} stroke="#22d3ee" strokeWidth={4} strokeLinecap="round" />
-                <circle cx={dropHint.x} cy={(layout.rails[dropHint.rail - 1]?.top ?? 0) - 10} r={6} fill="#22d3ee" />
+                <line x1={indicator.x} x2={indicator.x} y1={(layout.rails[indicator.rail - 1]?.top ?? 0) - 10} y2={(layout.rails[indicator.rail - 1]?.top ?? 0) + VECTOR.deviceH + 10} stroke="#22d3ee" strokeWidth={4} strokeLinecap="round" />
+                <circle cx={indicator.x} cy={(layout.rails[indicator.rail - 1]?.top ?? 0) - 10} r={6} fill="#22d3ee" />
               </g>
             ) : null}
 
@@ -351,7 +378,7 @@ export function VectorPanel({
               <g pointerEvents="none" data-testid="drag-ghost">
                 <rect x={drag.x + 10} y={drag.y - 26} width={Math.max(90, (validTarget && dragHint ? dragHint(drag.ids, validTarget).length : 14) * 6.4 + 16)} height={22} rx={4} fill="#0f172a" stroke={validTarget ? "#22d3ee" : "#64748b"} />
                 <text x={drag.x + 18} y={drag.y - 11} fontSize={11} fontWeight={700} fill="#e2e8f0" fontFamily="ui-sans-serif, system-ui, sans-serif">
-                  {validTarget && dragHint ? dragHint(drag.ids, validTarget) : `${drag.ids.length > 1 ? `${drag.ids.length} prvky` : drag.origin.designation} → …`}
+                  {validTarget && dragHint ? dragHint(drag.ids, validTarget) : moveHint ? `${drag.origin.designation} → lišta ${moveHint.rail}, pozice ${moveHint.position}` : `${drag.ids.length > 1 ? `${drag.ids.length} prvky` : drag.origin.designation} → …`}
                 </text>
               </g>
             ) : null}

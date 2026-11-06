@@ -1,15 +1,15 @@
 "use client";
 
-import { CheckCircle2, ChevronDown, Crop, FileCog, Maximize2, Ruler, RotateCcw, RotateCw, Undo2, ZoomIn, ZoomOut } from "lucide-react";
+import { BrickWall, CheckCircle2, ChevronDown, Crop, FileCog, Hammer, Maximize2, Ruler, RotateCcw, RotateCw, SquareDashed, Type, Undo2, ZoomIn, ZoomOut } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuShortcut, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
-export type PdfEditAction = "rotate-cw" | "rotate-ccw" | "zoom-in" | "zoom-out" | "zoom-fit" | "crop" | "crop-reset" | "calibrate" | "verify";
+export type PdfEditAction = "rotate-cw" | "rotate-ccw" | "zoom-in" | "zoom-out" | "zoom-fit" | "crop" | "crop-reset" | "calibrate" | "verify" | "draw-wall" | "draw-demolish" | "draw-zone" | "draw-text";
 
 /**
  * Fáze 57: menu „Úprava PDF“ nad půdorysem – otočení podkladu o 90°, zoom, ořez a kalibrace měřítka s ověřením.
- * Bez podkladu (čistý rastr) zůstává jen zoom.
+ * Bez podkladu (čistý rastr) zůstává jen zoom. Fáze 59: zakreslení změn (příčka, bourání, šrafa, text) i nad rastrem.
  */
 export function PdfEditMenu({ hasBackground, cropped, zoomPercent, calibration, onAction }: { hasBackground: boolean; cropped: boolean; zoomPercent: number; calibration: "none" | "set" | "verified"; onAction: (action: PdfEditAction) => void }) {
   return (
@@ -60,6 +60,20 @@ export function PdfEditMenu({ hasBackground, cropped, zoomPercent, calibration, 
         </DropdownMenuItem>
         <DropdownMenuItem disabled={!hasBackground || calibration === "none"} onSelect={() => onAction("verify")}>
           <CheckCircle2 className="size-4" aria-hidden /> Ověřit měřítko druhou kótou
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel>Zakreslení změn</DropdownMenuLabel>
+        <DropdownMenuItem onSelect={() => onAction("draw-wall")}>
+          <BrickWall className="size-4 text-red-400" aria-hidden /> Nová příčka (barva, šrafa, tloušťka)
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => onAction("draw-demolish")}>
+          <Hammer className="size-4 text-amber-400" aria-hidden /> Bouraná konstrukce
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => onAction("draw-zone")}>
+          <SquareDashed className="size-4 text-sky-400" aria-hidden /> Šrafovaná oblast / označení
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => onAction("draw-text")}>
+          <Type className="size-4" aria-hidden /> Textové pole
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

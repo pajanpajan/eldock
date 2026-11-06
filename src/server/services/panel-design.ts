@@ -330,6 +330,33 @@ export async function analyzeRailDetails(
 }
 
 /**
+ * Fáze 59: přesun osazeného přístroje na jinou pozici téže lišty nebo na jinou lištu (◀ ▶, výběr lišty, přetažení).
+ * Na cílové liště musí být místo; obě lišty se přečíslují, IEC značení se přepočítá, strom zapojení (rodič / potomci)
+ * i konfigurace přístroje zůstávají.
+ */
+export async function moveItem(prisma: PrismaClient, itemId: string, rail: number, position: number) {
+  const item = await prisma.panelBoardItem.findUnique({ where: { id: itemId }, select: { id: true, projectId: true, dinRailIndex: true, positionOnRail: true, modulesWidth: true, designation: true } });
+  if (!item) throw new WorkflowError("NOT_FOUND", "Prvek rozváděče neexistuje.");
+  const project = await railProject(prisma, item.projectId);
+  if (rail < 1 || rail > project.capacities.length) throw new WorkflowError("VALIDATION", "Neplatná DIN lišta.");
+  if (rail !== item.dinRailIndex && freeOnRail(project.capacities, project.items, rail) + 1e-9 < item.modulesWidth) {
+    throw new WorkflowError("VALIDATION", `Na lištu ${rail} se ${item.designation} (${decimal(item.modulesWidth)}M) nevejde – rozšiřte lištu nebo uvolněte místo.`);
+  }
+  const byPosition = (a: { positionOnRail: number }, b: { positionOnRail: number }) => a.positionOnRail - b.positionOnRail;
+  const target = project.items.filter((entry) => entry.dinRailIndex === rail && entry.id !== item.id).sort(byPosition);
+  const at = Math.min(Math.max(1, Math.round(position)), target.length + 1);
+  target.splice(at - 1, 0, { ...item, dinRailIndex: rail });
+  const source = rail !== item.dinRailIndex ? project.items.filter((entry) => entry.dinRailIndex === item.dinRailIndex && entry.id !== item.id).sort(byPosition) : [];
+  const updates = [
+    ...target.map((entry, index) => ({ id: entry.id, rail, position: index + 1 })),
+    ...source.map((entry, index) => ({ id: entry.id, rail: item.dinRailIndex, position: index + 1 })),
+  ];
+  await prisma.$transaction(updates.map((entry) => prisma.panelBoardItem.update({ where: { id: entry.id }, data: { dinRailIndex: entry.rail, positionOnRail: entry.position, sortOrder: entry.rail * 100 + entry.position } })));
+  await renumberProject(prisma, item.projectId);
+  return { projectId: item.projectId, rail, position: at };
+}
+
+/**
  * „➕ Přidat prvek vpravo“ (prázdný nerozpoznaný 1M modul) a „📑 Duplikovat prvek“ (přesná kopie
  * se stejným katalogovým kusem a konfigurací) hned napravo od vybraného přístroje; přístroje vpravo se posunou.
  */

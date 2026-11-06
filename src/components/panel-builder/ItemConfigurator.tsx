@@ -43,6 +43,10 @@ export function ItemConfigurator({
   existingLabels,
   placement,
   absorbNeighbors = true,
+  railCount = 1,
+  railItems = 1,
+  onMove,
+  onInsertRight,
 }: {
   item: WorkspaceItem;
   dominant: string;
@@ -64,6 +68,12 @@ export function ItemConfigurator({
   /** Sticky karta přiřazeného přístroje (hned pod funkcí obvodu). */
   placement?: ReactNode;
   absorbNeighbors?: boolean;
+  /** Fáze 59: počet lišt a přístrojů na liště vybraného prvku (přesun ◀ ▶ / na jinou lištu). */
+  railCount?: number;
+  railItems?: number;
+  onMove?: (rail: number, position: number) => void;
+  /** Fáze 59: „Přidat prvek vpravo“ = paleta s cílem hned za tímto přístrojem (bez prázdného modulu). */
+  onInsertRight?: () => void;
 }) {
   const initialManufacturer = item.config?.manufacturer ?? item.component?.manufacturer ?? item.detected?.manufacturer ?? (isMix(dominant) ? null : dominant);
   const [config, setConfig] = useState<ItemConfig | null>(item.config);
@@ -206,13 +216,18 @@ export function ItemConfigurator({
     });
   }
 
-  /** „➕ Přidat prvek vpravo“ / „📑 Duplikovat prvek“ – nový prvek hned napravo a rovnou vybraný. */
+  /**
+   * „➕ Přidat prvek vpravo“ (fáze 59: paleta s cílem za tímto přístrojem) / „📑 Duplikovat prvek“ – kopie hned napravo,
+   * která se nevybere (úpravu nabídne toast).
+   */
   function insertNext(mode: "blank" | "duplicate") {
+    flush();
+    if (mode === "blank" && onInsertRight) return onInsertRight();
     startTransition(async () => {
       const result = await insertNextToAction(item.id, mode);
       if (!result.ok) return void toast.error(result.error);
-      toast.success(mode === "duplicate" ? `${item.designation} duplikován vpravo.` : "Nový prvek přidán vpravo.");
-      onInserted?.(result.data.id);
+      if (onInserted) onInserted(result.data.id);
+      else toast.success(mode === "duplicate" ? `${item.designation} duplikován vpravo.` : "Nový prvek přidán vpravo.");
     });
   }
 
@@ -352,6 +367,36 @@ export function ItemConfigurator({
             </Button>
           ) : null}
         </div>
+        {/* Fáze 59: přesun přístroje po liště a na jinou lištu (strom zapojení i konfigurace zůstávají) */}
+        {onMove ? (
+          <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Přesun přístroje" data-testid="item-move">
+            <Button size="sm" variant="outline" className="touch-target gap-1" disabled={pending || item.positionOnRail <= 1} onClick={() => onMove(item.dinRailIndex, item.positionOnRail - 1)} aria-label="Posunout přístroj vlevo">
+              ◀ Vlevo
+            </Button>
+            <Button size="sm" variant="outline" className="touch-target gap-1" disabled={pending || item.positionOnRail >= railItems} onClick={() => onMove(item.dinRailIndex, item.positionOnRail + 1)} aria-label="Posunout přístroj vpravo">
+              Vpravo ▶
+            </Button>
+            {railCount > 1 ? (
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                Přesunout na lištu
+                <select
+                  className="h-8 rounded-md border border-input bg-transparent px-1.5 text-foreground dark:bg-input/30"
+                  value={item.dinRailIndex}
+                  disabled={pending}
+                  onChange={(event) => onMove(Number(event.target.value), 999)}
+                  aria-label="Přesunout přístroj na lištu"
+                >
+                  {Array.from({ length: railCount }, (_, index) => (
+                    <option key={index} value={index + 1}>
+                      {index + 1}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            <span className="text-[11px] text-muted-foreground">nebo přístroj na liště přetáhněte myší</span>
+          </div>
+        ) : null}
       </section>
 
       {suggested ? (

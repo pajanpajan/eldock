@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma";
 import type { ItemConfig } from "@/lib/panel-builder/configurator";
 import { MAX_RAIL_MODULES, MAX_RAILS, MIN_RAIL_MODULES } from "@/lib/panel-builder/rails";
 import { actionFailure, guardCompany, guardItem, guardProject } from "@/server/panel-guards";
-import { analyzeRailDetail, insertNextTo } from "@/server/services/panel-design";
+import { analyzeRailDetail, insertNextTo, moveItem } from "@/server/services/panel-design";
 import { analyzeRailPhoto } from "@/server/services/geminiPanelService";
 import { addItemWiring, searchWiringDevices, setItemWiringQuantity, setProjectFan, type WiringHit } from "@/server/services/panel-wiring";
 import { readStoredFile } from "@/server/storage";
@@ -245,6 +245,20 @@ export async function insertNextToAction(itemId: string, mode: "blank" | "duplic
     return { ok: true, data: { id: result.id } };
   } catch (error) {
     return actionFailure(error, mode === "duplicate" ? "Prvek se nepodařilo duplikovat." : "Prvek se nepodařilo přidat.");
+  }
+}
+
+/** Fáze 59: přesun přístroje na pozici / jinou lištu (strom a konfigurace zůstávají). */
+export async function moveItemAction(itemId: string, target: { rail: number; position: number }): Promise<ActionResult<{ rail: number; position: number }>> {
+  const parsed = z.object({ rail, position: z.number().int().min(1).max(200) }).safeParse(target);
+  if (!id.safeParse(itemId).success || !parsed.success) return { ok: false, error: "Neplatný přesun přístroje." };
+  try {
+    await guardItem(itemId);
+    const result = await moveItem(prisma, itemId, parsed.data.rail, parsed.data.position);
+    revalidatePath(`/panel-builder/${result.projectId}`, "layout");
+    return { ok: true, data: { rail: result.rail, position: result.position } };
+  } catch (error) {
+    return actionFailure(error, "Přístroj se nepodařilo přesunout.");
   }
 }
 

@@ -228,6 +228,16 @@ export function symbolParts(item: PaletteItem, size: number, options: { switchNo
     return parts;
   }
 
+  // --- Fáze 59: stoupací vedení (průchod kabelů mezi podlažími) – kroužek se šipkami nahoru / dolů ---
+  if (item.kind === "riser") {
+    parts.kind = "riser";
+    const r = size * 0.32;
+    parts.circles.push({ cx: 0, cy: 0, r });
+    parts.paths.push(`M0 ${f(r * 0.7)} V${f(-r * 0.7)}`, `M${f(-r * 0.35)} ${f(-r * 0.35)} L0 ${f(-r * 0.7)} L${f(r * 0.35)} ${f(-r * 0.35)}`, `M${f(-r * 0.35)} ${f(r * 0.35)} L0 ${f(r * 0.7)} L${f(r * 0.35)} ${f(r * 0.35)}`);
+    parts.label = "stoupačka";
+    return parts;
+  }
+
   // --- Spotřebiče: vývod se zkratkou, bojler = ohřívač vody (kruh se šrafou) ---
   const box = size * 0.32;
   if (item.tag === "boiler") {

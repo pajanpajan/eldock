@@ -4,7 +4,8 @@ import { floorplanFromSchedule, sanitizeSchedule, type ScheduleRoom } from "@/en
 import type { PrismaClient } from "@/generated/prisma/client";
 import { isHiddenManufacturer } from "@/lib/panel-builder/brands";
 import { enclosureProjectData } from "@/lib/panel-builder/enclosures";
-import { analyzeDraft, paletteItem, parseDraft, type CableReport, type EditorElement, type FloorplanDraft, type PlanBuild } from "@/lib/panel-builder/floorplan-editor";
+import { allElements, analyzeDraft, floorsOf, paletteItem, parseDraft, type CableReport, type EditorElement, type FloorplanDraft, type FrameGroup, type PlanBuild } from "@/lib/panel-builder/floorplan-editor";
+import { gangsOf } from "@/lib/panel-builder/floorplan-frames";
 import { environmentOf } from "@/lib/panel-builder/environments";
 import { pickWiringDevice, type WiringNeed } from "@/lib/panel-builder/wiring-picker";
 import { DEFAULT_COLOR, dbSeriesFor, designColor } from "@/lib/panel-builder/wiring-designs";
@@ -231,7 +232,12 @@ export async function createProjectFromFloorplan(prisma: PrismaClient, input: Fl
  * a termostaty (k okruhu světel své místnosti).
  */
 async function assignWiringDevices(prisma: PrismaClient, items: { id: string; device: SwitchboardResult["devices"][number] }[], circuits: CircuitPlanResult, build: PlanBuild, draft: FloorplanDraft): Promise<string[]> {
-  const keys = [...new Set([draft.series, ...draft.elements.map((element) => element.series)])].map((key) => dbSeriesFor(key)).filter((key): key is NonNullable<typeof key> => key !== null);
+  const everything = allElements(draft);
+  const keys = [...new Set([draft.series, ...everything.map((element) => element.series)])].map((key) => dbSeriesFor(key)).filter((key): key is NonNullable<typeof key> => key !== null);
+  // Fáze 59: víceramečky (všechna podlaží) – jeden rámeček NR za skupinu k jističi kotvy
+  const groupOf = new Map<string, FrameGroup>();
+  for (const floor of floorsOf(draft)) for (const group of floor.frames) for (const id of group.members) groupOf.set(id, group);
+  const frameItem = new Map<string, string>();
   const devices = keys.length
     ? await prisma.wiringDevice.findMany({ where: { OR: keys.map((key) => ({ manufacturer: key.manufacturer, series: { in: key.series } })) }, select: { id: true, manufacturer: true, series: true, category: true, title: true, frameUnits: true, ipRating: true, featuresJson: true } })
     : [];
@@ -260,13 +266,17 @@ async function assignWiringDevices(prisma: PrismaClient, items: { id: string; de
     for (const element of elements) {
       const item = paletteItem(element.item);
       if (item?.kind === "light" && !roomItem.has(element.room)) roomItem.set(element.room, itemId);
+      const group = groupOf.get(element.id);
+      if (group && !frameItem.has(group.id)) frameItem.set(group.id, itemId);
       if (item?.kind === "single_socket" || item?.kind === "double_socket") {
-        add(itemId, element, { kind: "socket", double: item.kind === "double_socket", ip44: item.variant === "ip44" }, element.frameUnits, item.label);
-        if (element.frameUnits > 1) add(itemId, element, { kind: "frame", units: element.frameUnits }, 1, `rámeček ${element.frameUnits}R`);
+        // Dvojzásuvka ve víceramečku = 2 jednozásuvky
+        if (group && item.kind === "double_socket") add(itemId, element, { kind: "socket", double: false, ip44: item.variant === "ip44" }, element.frameUnits * 2, "zásuvka 1N");
+        else add(itemId, element, { kind: "socket", double: item.kind === "double_socket", ip44: item.variant === "ip44" }, element.frameUnits, item.label);
+        if (!group && element.frameUnits > 1) add(itemId, element, { kind: "frame", units: element.frameUnits }, 1, `rámeček ${element.frameUnits}R`);
       }
       if (item?.kind === "light") {
         // Ovladače světla: 1 místo = č. 1, 2 místa = č. 6, další = č. 7; pevné typy (S5, S6+6, tlačítka, stmívač, PIR) zůstanou
-        const controllers = draft.elements.filter((candidate) => candidate.controls.includes(element.id));
+        const controllers = everything.filter((candidate) => candidate.controls.includes(element.id));
         controllers.forEach((controller, index) => {
           const palette = paletteItem(controller.item);
           if (!palette) return;
@@ -282,7 +292,14 @@ async function assignWiringDevices(prisma: PrismaClient, items: { id: string; de
   }
   // Žaluziové ovladače a termostaty (nejsou na silovém okruhu) → jistič světel své místnosti
   const fallbackItem = items[0]?.id;
-  for (const element of draft.elements) {
+  for (const group of new Set(groupOf.values())) {
+    const anchor = everything.find((element) => element.id === group.members[0]);
+    const itemId = frameItem.get(group.id) ?? fallbackItem;
+    if (!anchor || !itemId) continue;
+    const gangs = Math.min(5, group.members.reduce((sum, id) => sum + gangsOf(everything.find((element) => element.id === id) ?? { item: "socket", frameUnits: 1 }), 0));
+    add(itemId, anchor, { kind: "frame", units: gangs }, 1, `víceramček ${gangs}R`);
+  }
+  for (const element of everything) {
     const palette = paletteItem(element.item);
     if (!palette?.wiringCategory || (palette.control !== "blind" && palette.control !== "thermostat")) continue;
     const itemId = roomItem.get(element.room) ?? fallbackItem;

@@ -2,7 +2,7 @@
 // s ověřením. Podklad zůstává jeden nahraný obrázek; otočení a ořez se ukládají jako transformace, takže se
 // nic znovu nenahrává, kvalita neklesá a měřítko (mm / px) zůstává platné. Čisté funkce.
 
-import type { EditorElement, EditorRoom, FloorplanDraft } from "./floorplan-editor";
+import type { Annotation, EditorElement, EditorRoom, FloorplanDraft } from "./floorplan-editor";
 
 export type Rotation = 0 | 90 | 180 | 270;
 export const isRotation = (value: unknown): value is Rotation => value === 0 || value === 90 || value === 180 || value === 270;
@@ -85,17 +85,27 @@ function rotateClockwise(draft: FloorplanDraft): FloorplanDraft {
     heightMm: draft.widthMm,
     rooms: draft.rooms.map((room) => ({ ...room, ...rotateRect(room, heightMm) })),
     elements: draft.elements.map((element) => ({ ...element, ...rotatePoint(element.x, element.y, heightMm), rotation: (((element.rotation + 90) % 360) as Rotation) })),
+    // Fáze 59: zakreslené změny se otáčejí s podkladem (text zůstává vodorovně čitelný)
+    annotations: (draft.annotations ?? []).map((note): Annotation => {
+      const a = rotatePoint(note.x, note.y, heightMm);
+      const b = rotatePoint(note.x2, note.y2, heightMm);
+      return { ...note, x: a.x, y: a.y, x2: b.x, y2: b.y };
+    }),
   };
 }
 
 const inside = (rect: { x: number; y: number; w: number; h: number }, x: number, y: number) => x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h;
 
 /** Kolik prvků a místností ořez vyřadí (pro potvrzení před oříznutím). */
-export function cropImpact(draft: Pick<FloorplanDraft, "elements" | "rooms">, rectMm: { x: number; y: number; w: number; h: number }) {
+export function cropImpact(draft: Pick<FloorplanDraft, "elements" | "rooms"> & Partial<Pick<FloorplanDraft, "annotations">>, rectMm: { x: number; y: number; w: number; h: number }) {
   const elements = draft.elements.filter((element) => !inside(rectMm, element.x, element.y)).length;
   const rooms = draft.rooms.filter((room) => clipRoom(room, rectMm) === null).length;
-  return { elements, rooms };
+  const annotations = (draft.annotations ?? []).filter((note) => !keepsNote(note, rectMm)).length;
+  return { elements, rooms, annotations };
 }
+
+/** Zakreslená změna zůstane po ořezu, pokud do výřezu zasahuje aspoň jedním bodem. */
+const keepsNote = (note: Annotation, rect: { x: number; y: number; w: number; h: number }) => inside(rect, note.x, note.y) || inside(rect, note.x2, note.y2);
 
 function clipRoom(room: EditorRoom, rect: { x: number; y: number; w: number; h: number }): EditorRoom | null {
   const x = Math.max(room.x, rect.x);
@@ -123,13 +133,17 @@ export function cropDraft(draft: FloorplanDraft, rectMm: { x: number; y: number;
   const clip = { x, y, w, h };
   const kept = draft.elements.filter((element) => inside(clip, element.x, element.y));
   const keptIds = new Set(kept.map((element) => element.id));
+  // Párování na jiná podlaží zůstává (prvky jiných podlaží ořez nemění)
+  const elsewhere = new Set((draft.otherFloors ?? []).flatMap((floor) => floor.elements.map((element) => element.id)));
   return {
     ...draft,
     background: { ...background, crop },
     widthMm: Math.round(w),
     heightMm: Math.round(h),
     rooms: draft.rooms.map((room) => clipRoom(room, clip)).filter((room): room is EditorRoom => room !== null).map((room) => ({ ...room, x: room.x - x, y: room.y - y })),
-    elements: kept.map((element): EditorElement => ({ ...element, x: element.x - x, y: element.y - y, controls: element.controls.filter((id) => keptIds.has(id)) })),
+    elements: kept.map((element): EditorElement => ({ ...element, x: element.x - x, y: element.y - y, controls: element.controls.filter((id) => keptIds.has(id) || elsewhere.has(id)) })),
+    frames: (draft.frames ?? []).map((frame) => ({ ...frame, members: frame.members.filter((id) => keptIds.has(id)) })).filter((frame) => frame.members.length >= 2),
+    annotations: (draft.annotations ?? []).filter((note) => keepsNote(note, clip)).map((note) => ({ ...note, x: note.x - x, y: note.y - y, x2: note.x2 - x, y2: note.y2 - y })),
   };
 }
 
@@ -146,6 +160,7 @@ export function resetCrop(draft: FloorplanDraft): FloorplanDraft {
     ...planExtent(next, draft.mmPerPx),
     rooms: draft.rooms.map((room) => ({ ...room, x: Math.round(room.x + dx), y: Math.round(room.y + dy) })),
     elements: draft.elements.map((element) => ({ ...element, x: Math.round(element.x + dx), y: Math.round(element.y + dy) })),
+    annotations: (draft.annotations ?? []).map((note) => ({ ...note, x: Math.round(note.x + dx), y: Math.round(note.y + dy), x2: Math.round(note.x2 + dx), y2: Math.round(note.y2 + dy) })),
   };
 }
 

@@ -212,18 +212,19 @@ test("Vision Analyzer 2.0: režim analýzy, přidání a smazání modulu i liš
   await expect(page.getByRole("button", { name: "🛡️ Zakrytovaný", pressed: true })).toBeVisible();
   await expect(page.getByTestId("symbol--FI1").locator("[data-screw]")).toHaveCount(8);
 
-  // + Přidat modul na lištu 3 → nový nerozpoznaný -F11
+  // + na liště 3 → fáze 59: vložení z palety na konec lišty (nový přístroj se nevybírá)
   await page.getByRole("button", { name: "Přidat modul na lištu 3" }).click();
-  await expect(symbols).toHaveCount(14);
-  await expect(page.getByTestId("vector-selected")).toContainText("-F11");
-
+  await expect(page.getByTestId("insert-target")).toContainText("na konec lišty 3");
+  const menu = page.getByRole("region", { name: "Konfigurátor prvku" });
   // Kompaktní dvojitý jistič 2×1P v 1M a rozdělení na 2 obvodové větve
+  await menu.getByRole("button", { name: "⚡ Obecný přístroj (bez výrobce)" }).click();
+  await menu.getByRole("button", { name: "Jistič", exact: true }).click();
+  await menu.getByRole("button", { name: "⚡ 2×1P Duální (1M)" }).click();
+  await page.getByTestId("placement-card").getByTestId("insert-1").click();
+  await expect(symbols).toHaveCount(14);
+  await expect(page.getByTestId("vector-selected")).toHaveCount(0);
+  await panel.getByRole("button", { name: /^-F11 / }).click();
   const configurator = page.getByTestId("item-configurator");
-  // Nový modul bez výrobce: kaskáda začíná kartami výrobců (kategorie až po výběru)
-  await expect(configurator.getByRole("button", { name: "Jistič", exact: true })).toHaveCount(0);
-  await configurator.getByRole("button", { name: "⚡ Obecný přístroj (bez výrobce)" }).click();
-  await configurator.getByRole("button", { name: "Jistič", exact: true }).click();
-  await configurator.getByRole("button", { name: "⚡ 2×1P Duální (1M)" }).click();
   await expect(page.getByTestId("assigned-device")).toContainText("2x1P B16 kompakt");
   await configurator.getByRole("button", { name: /Rozdělit na 2 obvodové větve/ }).click();
   await expect(symbols).toHaveCount(15);

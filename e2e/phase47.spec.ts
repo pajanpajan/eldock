@@ -41,16 +41,20 @@ test("➕ přidat vpravo a 📑 duplikovat prvek, linter jako odznak, ventiláto
   await page.keyboard.press("Escape");
   await expect(page.locator('[data-rule="rcd-missing"]')).toHaveCount(0);
 
-  // Duplikovat → -F2 se stejným kusem; přidat vpravo → nerozpoznaný -X modul
+  // Duplikovat → -F2 se stejným kusem (fáze 59: kopie se nevybere); přidat vpravo → vložení z palety za vybraný přístroj
   await page.getByTestId("vector-panel").getByRole("button", { name: /^-F1 / }).click();
   const configurator = page.getByTestId("item-configurator");
   await configurator.getByRole("button", { name: "📑 Duplikovat prvek" }).click();
   await expect(page.getByTestId("symbol--F2")).toBeVisible();
-  await expect(configurator.getByTestId("assigned-device")).toContainText("S201-B16");
-  await expect(page.getByTestId("vector-selected")).toContainText("-F2");
-  await configurator.getByRole("button", { name: "➕ Přidat prvek vpravo" }).click();
+  await expect(page.getByTestId("vector-selected")).toHaveCount(0);
+  await expect(page.getByTestId("configurator-mode")).toHaveText("➕ Vložit nový přístroj");
+  await page.getByTestId("vector-panel").getByRole("button", { name: /^-F1 / }).click();
+  await page.getByTestId("item-configurator").getByRole("button", { name: "➕ Přidat prvek vpravo" }).click();
+  await expect(page.getByTestId("insert-target")).toContainText("vpravo od -F1");
+  await page.getByTestId("placement-card").getByTestId("insert-1").click();
   await expect(page.getByTestId("vector-panel").locator("[data-symbol]")).toHaveCount(3);
-  await expect(page.getByTestId("vector-selected")).not.toContainText("-F2");
+  await expect(page.getByTestId("vector-selected")).toHaveCount(0);
+  await expect(page.getByTestId("insert-target")).toHaveCount(0);
 
   // Krok oteplení: ventilátor skříně s potřebným průtokem a výběrem z katalogu
   await page.goto(page.url() + "/thermal");

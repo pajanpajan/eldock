@@ -34,7 +34,7 @@ test("📐 2D půdorys: retrofit = CYKY-J k vypínači, světla na RCBO typ A, I
   await place("Stropní svítidlo", [300, 260]);
   await place("Vypínač č. 1", [160, 220]);
   await canvas.getByRole("button", { name: /^Vypínač č\. 1/ }).click();
-  await page.getByRole("button", { name: "🔗 Spárovat se světlem" }).click();
+  await page.getByRole("button", { name: "🔗 Přiřadit ke světlu" }).click();
   await canvas.getByRole("button", { name: /^Stropní svítidlo/ }).click();
   await page.keyboard.press("Escape");
 
