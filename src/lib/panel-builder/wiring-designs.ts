@@ -2,7 +2,7 @@
 // Řady jsou pojmenované podle katalogů výrobců; `dbSeries` = názvy řad v databázi `WiringDevice`
 // (externí katalog), barvy = skupiny `wd_color_family`. Čisté funkce.
 
-import { ABB_SERIES_2026, type SeriesColor, type SeriesShape } from "./abb-catalog-2026";
+import { ABB_SERIES_2026, SERIES_ALIASES, type SeriesColor, type SeriesShape } from "./abb-catalog-2026";
 
 export interface DesignSeries {
   /** Název v kaskádě (a v klíči „výrobce|řada“). */
@@ -19,6 +19,9 @@ export interface DesignSeries {
   letter?: string | null;
   /** Starší názvy řady (klíče uložených nákresů). */
   aliases?: string[];
+  /** Fáze 61: podtitul řady a strana v katalogu výrobce (ABB 2026). */
+  tagline?: string;
+  page?: number;
 }
 
 export interface DesignBrand {
@@ -32,7 +35,7 @@ export const DESIGN_BRANDS: DesignBrand[] = [
   {
     manufacturer: "ABB",
     label: "ABB",
-    // Fáze 55: 14 řad pro zapuštěnou montáž + 3 nástěnné IP44 / IP54 se skutečnými barvami (Katalog ABB 2026)
+    // Fáze 55 / 61: 14 řad pro zapuštěnou montáž + 3 nástěnné IP44 / IP54 se skutečnými barvami (Katalog ABB 2026)
     series: ABB_SERIES_2026.map((series) => ({
       name: series.name,
       dbSeries: series.dbSeries,
@@ -40,7 +43,9 @@ export const DESIGN_BRANDS: DesignBrand[] = [
       colors: series.colors,
       shape: series.shape,
       letter: series.letter,
-      aliases: series.name === "Swing" ? ["Swing / Swing L"] : series.name === "future linear" ? ["Future Linear"] : series.name === "solo / solo carat" ? ["Solo"] : undefined,
+      tagline: series.tagline,
+      page: series.page,
+      aliases: SERIES_ALIASES[series.name],
     })),
   },
   {

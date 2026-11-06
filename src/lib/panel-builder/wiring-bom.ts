@@ -67,8 +67,25 @@ const ABB_MATRIX: Record<string, SeriesMatrix> = {
     cover: (kind) => (kind === "single" ? { base: "3558E-A00651", verified: true } : { base: kind === "divided" ? "3558E-A00652" : "3558E-A00662", verified: false }),
     socket1: null,
     socket2: null,
-    frame: () => null,
+    // Fáze 61: rámečky Time podle katalogu 2026 (3901F-A00110 … A00150 + kód barvy)
+    frame: (units) => `3901F-A001${units}0`,
   },
+  // Fáze 61: rámečky Swing / Swing L (3901G / 3901J-A000.0 + kód barvy, katalog 2026), kryty a zásuvky doplnit
+  Swing: { cover: () => null, socket1: null, socket2: null, frame: (units) => `3901G-A000${units}0` },
+  "Swing L": { cover: () => null, socket1: null, socket2: null, frame: (units) => `3901J-A000${units}0` },
+};
+// Levit M sdílí přístroje i rámečky s řadou Levit (kódy barev 63 / 68 / 69 / 70)
+ABB_MATRIX["Levit M"] = ABB_MATRIX.Levit;
+
+/**
+ * Fáze 61: sběrnicové prvky ABB-free@home podle katalogu 2026 (str. 252): tlačítková rozhraní pod designový kryt
+ * a prostorový termostat; ostatní systémy / prvky bez objednacího čísla (dle zvoleného výrobce).
+ */
+const FREEATHOME_BUS: Record<string, { mpn: string; name: string }> = {
+  "bus-1": { mpn: "2CKA006220A0117", name: "Rozhraní tlačítkové 1násobné ABB-free@home (SU-F-1.0.1) – pod designový kryt" },
+  "bus-2": { mpn: "2CKA006220A0118", name: "Rozhraní tlačítkové 2násobné ABB-free@home (SU-F-2.0.1) – pod designový kryt" },
+  "bus-blind": { mpn: "2CKA006220A0118", name: "Rozhraní tlačítkové 2násobné ABB-free@home (SU-F-2.0.1) – kryt se symbolem žaluzie" },
+  "bus-room": { mpn: "2CKA006220A0122", name: "Termostat prostorový sběrnicový ABB-free@home – pod designový kryt" },
 };
 
 const DIVIDED = new Set(["5", "6+6", "1/0+1/0", "1+1", "6+6/0"]);
@@ -86,6 +103,13 @@ export interface BomOptions {
   installation?: string;
   /** Rozpis kabelů z výkazu kabeláže (typ → metry). */
   cables?: readonly { cable: string; meters: number }[];
+}
+
+/** Objednací číslo rámečku NR: řady Busch-Jaeger mají číslo pro každou barvu (`frameMpn`), ostatní matice + kód barvy. */
+function frameNumber(style: { matrix?: SeriesMatrix; code: string | null; frameMpn?: (string | null)[] }, units: number): { mpn: string | null; verified: boolean } {
+  const own = style.frameMpn?.[units - 1];
+  if (own) return { mpn: own, verified: true };
+  return withColor(style.matrix?.frame(units) ?? null, style.code, true);
 }
 
 /** Kompletní kusovník domovní instalace (součty kusů podle objednacího čísla a popisu). */
@@ -107,25 +131,27 @@ export function compileFloorplanBom(draft: FloorplanDraft, options: BomOptions =
     const colorId = element.color ?? draft.color;
     const found = designSeriesOf(seriesKey);
     const isAbb = found?.brand.manufacturer === "ABB";
-    return { seriesKey, colorId, found, isAbb, matrix: isAbb ? ABB_MATRIX[found!.series.name] : undefined, code: found?.series.colors?.find((color) => color.id === colorId)?.code ?? null, appearance: appearanceLabel(seriesKey, colorId) };
+    const seriesColor = found?.series.colors?.find((color) => color.id === colorId);
+    return { seriesKey, colorId, found, isAbb, matrix: isAbb ? ABB_MATRIX[found!.series.name] : undefined, code: seriesColor?.code ?? null, frameMpn: seriesColor?.frameMpn, appearance: appearanceLabel(seriesKey, colorId) };
   };
   const everything = allElements(draft);
   for (const element of everything) {
     const item = paletteItem(element.item);
-    if (!item || item.kind === "panel" || item.kind === "riser" || item.kind === "light" || item.kind === "appliance") continue;
+    if (!item || item.kind === "panel" || item.kind === "riser" || item.kind === "fixture" || item.kind === "light" || item.kind === "appliance") continue;
     const { found, isAbb, matrix, code, appearance } = look(element);
     const units = Math.max(1, element.frameUnits);
     const inFrame = frameOf.has(element.id);
     boxes += inFrame ? gangsOf(element) : units;
     const frame = () => {
       if (inFrame) return;
-      const frameMpn = withColor(matrix?.frame(units) ?? null, code, true);
-      add({ category: "Rámečky", ...frameMpn, name: `Rámeček ${units}násobný (${units}R)`, appearance, unit: "ks" }, 1);
+      add({ category: "Rámečky", ...frameNumber(look(element), units), name: `Rámeček ${units}násobný (${units}R)`, appearance, unit: "ks" }, 1);
     };
 
-    // Fáze 57: sběrnicové prvky (bez objednacích čísel – podle zvoleného systému KNX / Loxone / free@home)
+    // Fáze 57: sběrnicové prvky; fáze 61 – u ABB-free@home objednací čísla tlačítkových rozhraní z katalogu 2026
     if (item.bus) {
-      add({ category: "Sběrnicové prvky", mpn: null, verified: false, name: `${item.label} – dle zvoleného systému (KNX / Loxone Tree / ABB-free@home)`, appearance: item.bus.role === "presence" ? "–" : appearance, unit: "ks" }, units);
+      const known = draft.smartSystem === "abb_freeathome" ? FREEATHOME_BUS[item.id] : undefined;
+      if (known) add({ category: "Sběrnicové prvky", mpn: known.mpn, verified: true, name: known.name, appearance, unit: "ks" }, units);
+      else add({ category: "Sběrnicové prvky", mpn: null, verified: false, name: `${item.label} – dle zvoleného systému (${draft.smartSystem === "abb_knx" ? "ABB i-bus KNX" : draft.smartSystem === "loxone" ? "Loxone Tree" : "ABB-free@home"})`, appearance: item.bus.role === "presence" ? "–" : appearance, unit: "ks" }, units);
       if (item.bus.role !== "presence") frame();
       continue;
     }
@@ -173,8 +199,8 @@ export function compileFloorplanBom(draft: FloorplanDraft, options: BomOptions =
     const members = group.members.map((id) => everything.find((element) => element.id === id)).filter((element): element is EditorElement => Boolean(element));
     if (members.length < 2) continue;
     const gangs = Math.min(5, members.reduce((sum, element) => sum + gangsOf(element), 0));
-    const { matrix, code, appearance } = look(members[0]);
-    add({ category: "Rámečky", ...withColor(matrix?.frame(gangs) ?? null, code, true), name: `Rámeček ${gangs}násobný (${gangs}R) – víceramček`, appearance, unit: "ks" }, 1);
+    const style = look(members[0]);
+    add({ category: "Rámečky", ...frameNumber(style, gangs), name: `Rámeček ${gangs}násobný (${gangs}R) – víceramček`, appearance: style.appearance, unit: "ks" }, 1);
   }
   // Retrofit: modul pod vypínač na každou spínanou větev (světlo s kabelovým ovladačem) a žaluzii, spínací modul
   // do krabice svítidla, které ovládá jen bezdrátové tlačítko

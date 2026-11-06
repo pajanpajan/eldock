@@ -18,6 +18,8 @@ import { describeConfig } from "@/lib/panel-builder/configurator";
 import { isSystemDevice } from "@/lib/panel-builder/manufacturer-transfer";
 import { sameManufacturer } from "@/lib/panel-builder/matching";
 import { isPhaseAssignment, type PhaseAssignment } from "@/lib/panel-builder/tree";
+import { buildSearchText } from "@/lib/panel-builder/catalog";
+import { smartPlanOf } from "@/lib/panel-builder/smart-home-plan";
 import { supplyById, supplyColumns } from "@/lib/panel-builder/supply";
 
 // Správa projektů AI Panel Builderu (fáze 48): smazání (jednotlivě i hromadně) s vrácením kreditu
@@ -154,9 +156,10 @@ async function createPlanProject(
     const estimated = new Set<string>();
     for (const { rail, position, device } of devices) {
       // Fáze 60: celý rozváděč od jednoho výrobce; systémové prvky chytré instalace zůstávají u svého systému
-      const config = options.manufacturer && !isSystemDevice(device.config) ? { ...device.config, manufacturer: options.manufacturer } : device.config;
-      const component = await componentForConfig(prisma, config);
-      if (options.manufacturer && config.manufacturer === options.manufacturer && (component.dataSource === "IEC_ESTIMATE" || component.articleNumber.startsWith("CFG-"))) estimated.add(describeConfig(config));
+      const config = options.manufacturer && !isSystemDevice(device.config) && !device.article ? { ...device.config, manufacturer: options.manufacturer } : device.config;
+      // Fáze 61: akční členy chytré domácnosti = přesný kus podle objednacího čísla (chybí-li v databázi, založí se)
+      const component = device.article ? await componentForArticle(prisma, device.article, config) : await componentForConfig(prisma, config);
+      if (options.manufacturer && !device.article && config.manufacturer === options.manufacturer && (component.dataSource === "IEC_ESTIMATE" || component.articleNumber.startsWith("CFG-"))) estimated.add(describeConfig(config));
       device.config = config;
       rows.push({
         projectId: project.id,
@@ -206,6 +209,28 @@ export interface FloorplanProjectInput extends Omit<CreateProjectInput, "photoUr
   manufacturer?: string | null;
 }
 
+/** Fáze 61: katalogový kus podle objednacího čísla (akční člen chytré domácnosti); bez čísla odhad podle konfigurace. */
+async function componentForArticle(prisma: PrismaClient, article: NonNullable<SwitchboardResult["devices"][number]["article"]>, config: Parameters<typeof componentForConfig>[1]) {
+  if (!article.articleNumber) return componentForConfig(prisma, { ...config, manufacturer: article.manufacturer });
+  const existing = await prisma.catalogComponent.findUnique({ where: { articleNumber: article.articleNumber } });
+  if (existing) return existing;
+  const fields = {
+    manufacturer: article.manufacturer,
+    series: article.series ?? article.manufacturer,
+    typeCode: article.typeCode,
+    articleNumber: article.articleNumber,
+    category: config.moduleSubtype === "PSU_DC" ? ("PSU" as const) : ("PLC" as const),
+    poles: "1P",
+    ratedCurrentA: 0,
+    moduleSubtype: config.moduleSubtype ?? "PLC",
+    modulesCount: config.modules,
+    widthMm: config.modules * 17.5,
+    powerLossWatts: Math.max(1, config.modules * 0.5),
+    description: article.description,
+  };
+  return prisma.catalogComponent.create({ data: { ...fields, dataSource: "IEC_ESTIMATE", searchText: buildSearchText(fields) } });
+}
+
 /** Fáze přístroje ve stromu (1P+N / 2P → „L1,N“, 4P / 3P+N → „L1,L2,L3,N“). */
 function phaseAssignmentOf(device: Pick<SwitchboardResult["devices"][number], "phase" | "poles">): PhaseAssignment | null {
   const phase = device.phase;
@@ -251,8 +276,11 @@ export async function createProjectFromFloorplan(prisma: PrismaClient, input: Fl
   // Fáze 60: skříň přednostně od výrobce přístrojů, jinak nejmenší vyhovující z databáze
   const manufacturer = input.manufacturer?.trim() || "ABB";
   const own = enclosures.filter((row) => sameManufacturer(row.manufacturer, manufacturer));
-  const preferred = own.length ? buildSwitchboardFromCircuits(circuits, { mode: draft.installation, enclosures: own, supplyPhases: supply.phases }) : null;
-  const board = preferred?.enclosure ? preferred : buildSwitchboardFromCircuits(circuits, { mode: draft.installation, enclosures, supplyPhases: supply.phases });
+  // Fáze 61: chytrá domácnost – akční členy, zdroj a rozhraní zvoleného systému do rozváděče
+  const smartPlan = smartPlanOf(draft);
+  const smart = smartPlan?.modules.map((unit) => ({ role: unit.role, label: unit.label, manufacturer: smartPlan.system.manufacturer, series: smartPlan.system.label.replace(/\s*\(.*\)$/, ""), typeCode: unit.typeCode, articleNumber: unit.articleNumber, modules: unit.modules }));
+  const preferred = own.length ? buildSwitchboardFromCircuits(circuits, { mode: draft.installation, enclosures: own, supplyPhases: supply.phases, smart }) : null;
+  const board = preferred?.enclosure ? preferred : buildSwitchboardFromCircuits(circuits, { mode: draft.installation, enclosures, supplyPhases: supply.phases, smart });
   const header = { name: input.name, customerName: input.customerName, installationSite: input.installationSite, companyId: input.companyId, manufacturerInfo: input.manufacturerInfo, createdById: input.createdById, supplySystem: supply.id };
   // Fáze 57: prostředí dle ČSN 33 2000-5-51 ed. 3 zvolené v půdorysu = potvrzené prostředí dokumentace
   const environment = draft.environment ? environmentOf(draft.environment) : null;
@@ -264,7 +292,7 @@ export async function createProjectFromFloorplan(prisma: PrismaClient, input: Fl
       dominantManufacturer: manufacturer,
     },
     manufacturer,
-    afterItems: (items) => assignWiringDevices(prisma, items, circuits, build, draft),
+    afterItems: async (items) => [...(smartPlan?.warnings ?? []).map((warning) => `Chytrá domácnost (${smartPlan!.system.label}): ${warning}`), ...(await assignWiringDevices(prisma, items, circuits, build, draft))],
   });
 }
 

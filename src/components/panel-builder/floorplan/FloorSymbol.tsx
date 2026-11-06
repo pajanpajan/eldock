@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import type { InstallLevel } from "@/engine/floorplan-bridge";
 import type { PaletteItem } from "@/lib/panel-builder/floorplan-editor";
+import { FIXTURE_SIZE, ZONE2_MM } from "@/lib/panel-builder/floorplan-norms";
 
 /**
  * Fáze 57: značky do půdorysu podle ČSN EN 60617-11 (instalační plány budov) místo vyplněných tvarů:
@@ -52,10 +53,18 @@ export function FloorSymbol({
   );
   const labelText = parts.label;
   const font = size * 0.3;
+  const fixture = item.kind === "fixture" ? (FIXTURE_SIZE[item.id] ?? null) : null;
   return (
     <g data-symbol={parts.kind}>
-      {/* Neviditelná plocha pro snadné kliknutí */}
-      <circle cx={0} cy={0} r={size * 0.75} fill="transparent" />
+      {/* Neviditelná plocha pro snadné kliknutí; u vany / sprchy celý obdélník a zóna 2 (0,6 m) čárkovaně */}
+      {fixture ? (
+        <g transform={rotation ? `rotate(${rotation})` : undefined}>
+          <rect x={-fixture.w / 2 - ZONE2_MM} y={-fixture.h / 2 - ZONE2_MM} width={fixture.w + ZONE2_MM * 2} height={fixture.h + ZONE2_MM * 2} rx={ZONE2_MM} fill="rgba(56,189,248,0.06)" stroke="#38bdf8" strokeOpacity={0.6} strokeWidth={w * 0.8} strokeDasharray={`${w * 4} ${w * 3}`} pointerEvents="none" />
+          <rect x={-fixture.w / 2} y={-fixture.h / 2} width={fixture.w} height={fixture.h} fill="rgba(56,189,248,0.12)" />
+        </g>
+      ) : (
+        <circle cx={0} cy={0} r={size * 0.75} fill="transparent" />
+      )}
       <g transform={rotation ? `rotate(${rotation})` : undefined}>
         {draw(halo, w * (active ? 4.5 : 3.2), "halo")}
         {parts.fills.map((fill, index) => (
@@ -225,6 +234,21 @@ export function symbolParts(item: PaletteItem, size: number, options: { switchNo
       parts.paths.push(`M${f(c * 0.9)} ${f(c * 0.9)} h${f(m)} v${f(m)} h${f(-m)} Z`);
       parts.texts.push({ x: c * 0.9 + m / 2, y: c * 0.9 + m / 2, size: m * 0.85, value: "M" });
     }
+    return parts;
+  }
+
+  // --- Fáze 61: zařizovací předměty – vana / sprchový kout ve skutečné velikosti (zóny 0–2 koupelny) ---
+  if (item.kind === "fixture") {
+    parts.kind = "fixture";
+    const size = FIXTURE_SIZE[item.id] ?? { w: 900, h: 900 };
+    const w = size.w / 2;
+    const h = size.h / 2;
+    parts.paths.push(`M${f(-w)} ${f(-h)} H${f(w)} V${f(h)} H${f(-w)} Z`);
+    const r = h - 80;
+    if (item.id === "bath") parts.paths.push(`M${f(-w + 80)} ${f(-r)} H${f(w - 80 - r)} A${f(r)} ${f(r)} 0 0 1 ${f(w - 80 - r)} ${f(r)} H${f(-w + 80)} Z`);
+    else parts.paths.push(`M${f(-w)} ${f(-h)} L${f(w)} ${f(h)} M${f(w)} ${f(-h)} L${f(-w)} ${f(h)}`);
+    parts.circles.push({ cx: item.id === "bath" ? -w + 220 : 0, cy: 0, r: 45 });
+    parts.label = item.id === "bath" ? "vana · zóna 2 = +0,6 m" : "sprcha · zóna 2 = +0,6 m";
     return parts;
   }
 

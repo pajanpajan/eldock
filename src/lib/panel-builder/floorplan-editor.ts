@@ -31,7 +31,7 @@ import { DEFAULT_SUPPLY, supplyById, type SupplySystem } from "./supply";
 import { isEnvironmentId, type EnvironmentId } from "./environments";
 import { CALIBRATION_TOLERANCE_PCT, emptyCalibration, isRotation, planExtent, rotatedSize, type CalibrationRecord, type FloorplanBackground, type Rotation } from "./floorplan-pdf";
 
-export type PaletteGroup = "panel" | "sockets" | "lights" | "controls" | "appliances";
+export type PaletteGroup = "panel" | "sockets" | "lights" | "controls" | "appliances" | "fixtures";
 
 /** Fáze 57: role sběrnicového prvku (KNX / Loxone Tree / free@home) – kreslí se v rámečku „sběrnice“. */
 export type BusRole = "button" | "presence" | "room_unit" | "sensor" | "display" | "blind";
@@ -42,8 +42,8 @@ export interface PaletteItem {
   label: string;
   /** Krátká značka v půdorysu. */
   symbol: string;
-  /** "riser" = stoupací vedení mezi podlažími (fáze 59) – není elektrický vývod. */
-  kind: NodeKind | "panel" | "riser";
+  /** "riser" = stoupací vedení mezi podlažími (fáze 59), "fixture" = zařizovací předmět pro koupelnové zóny (fáze 61) – nejsou elektrické vývody. */
+  kind: NodeKind | "panel" | "riser" | "fixture";
   variant?: NodeVariant;
   tag?: ApplianceTag;
   /** Číslo řazení vypínače (1 / 5 / 6 / 7) – jen informativně, skutečné řazení určí párování. */
@@ -74,6 +74,7 @@ export const PALETTE_GROUPS: { id: PaletteGroup; label: string }[] = [
   { id: "lights", label: "💡 Světla" },
   { id: "controls", label: "🎛️ Ovládání" },
   { id: "appliances", label: "🔥 Samostatné spotřebiče (vlastní jisticí okruh)" },
+  { id: "fixtures", label: "🛁 Zařizovací předměty (koupelnové zóny ČSN 33 2000-7-701)" },
 ];
 
 /** Nadpis skupiny ovládání podle úrovně instalace (fáze 57). */
@@ -143,6 +144,9 @@ export const PALETTE: PaletteItem[] = [
   { id: "heat-pump", group: "appliances", label: "Tepelné čerpadlo", symbol: "TČ", kind: "appliance", tag: "heat_pump" },
   { id: "wallbox", group: "appliances", label: "Wallbox EV", symbol: "EV", kind: "appliance", tag: "ev_charger" },
   { id: "pv-inverter", group: "appliances", label: "Střídač FVE (chránič typ B)", symbol: "FVE", kind: "appliance", tag: "pv_inverter" },
+  // Fáze 61: vana a sprchový kout – normový hlídač ověří zóny 0–2 (zásuvky a spínače dál než 0,6 m)
+  { id: "bath", group: "fixtures", label: "Vana (1700 × 750 mm)", symbol: "VANA", kind: "fixture" },
+  { id: "shower", group: "fixtures", label: "Sprchový kout (900 × 900 mm)", symbol: "SPR", kind: "fixture" },
 ];
 
 export const paletteItem = (id: string) => PALETTE.find((item) => item.id === id) ?? null;
@@ -323,6 +327,8 @@ export interface FloorplanDraft {
   countDoubleAsTwo: boolean;
   /** Fáze 55: soustava přívodu rozváděče (1f / 3f, TN-C-S / TN-S / TT). */
   supplySystem: SupplySystem["id"];
+  /** Fáze 61: systém chytré domácnosti na sběrnicové úrovni (abb_freeathome / abb_knx / loxone). */
+  smartSystem: string;
   updatedAt: number;
 }
 
@@ -352,6 +358,7 @@ export const emptyDraft = (): FloorplanDraft => ({
   groupedCables: 1,
   countDoubleAsTwo: true,
   supplySystem: DEFAULT_SUPPLY.id,
+  smartSystem: "abb_freeathome",
   updatedAt: 0,
 });
 
@@ -396,11 +403,15 @@ export function parseDraft(value: unknown): FloorplanDraft | null {
     groupedCables: Math.round(num(draft.groupedCables, 1, 1, 20)),
     countDoubleAsTwo: typeof draft.countDoubleAsTwo === "boolean" ? draft.countDoubleAsTwo : true,
     supplySystem: supplyById(draft.supplySystem).id,
+    smartSystem: SMART_SYSTEM_IDS.includes(draft.smartSystem as string) ? (draft.smartSystem as string) : base.smartSystem,
     updatedAt: num(draft.updatedAt, 0, 0, 1e15),
   };
 }
 
 type Num = (input: unknown, fallback: number, min: number, max: number) => number;
+
+/** Fáze 61: systémy chytré domácnosti (`lib/panel-builder/smart-home.ts`) – kopie id bez importu (bez cyklu modulů). */
+const SMART_SYSTEM_IDS = ["abb_freeathome", "abb_knx", "loxone"];
 
 /** Nejvýš podlaží v jednom nákresu (suterén + 3 NP + podkroví …). */
 export const MAX_FLOORS = 6;
@@ -892,7 +903,7 @@ export function buildPlan(draft: FloorplanDraft): PlanBuild {
     }
     for (const element of floor.elements) {
       const item = paletteItem(element.item);
-      if (!item || item.kind === "panel" || item.kind === "riser") continue;
+      if (!item || item.kind === "panel" || item.kind === "riser" || item.kind === "fixture") continue;
       const units = item.kind === "single_socket" || item.kind === "double_socket" || item.kind === "data_socket" || item.kind === "switch" ? element.frameUnits : 1;
       const slot = frameSlot.get(element.id);
       const frame = slot?.frame ?? (units > 1 ? element.id : null);

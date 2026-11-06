@@ -56,7 +56,7 @@ export function frameGangs(draft: Pick<FloorplanDraft, "elements">, frame: Frame
 /** Výška osy krabice prvku [mm] (vlastní, z palety, jinak podle druhu a výškového profilu). */
 export function effectiveHeight(draft: Pick<FloorplanDraft, "profile">, element: EditorElement): number {
   const item = paletteItem(element.item);
-  if (!item || item.kind === "panel" || item.kind === "riser") return draft.profile?.switchboardHeightMm ?? DEFAULT_ELEVATION.switchboardHeightMm;
+  if (!item || item.kind === "panel" || item.kind === "riser" || item.kind === "fixture") return draft.profile?.switchboardHeightMm ?? DEFAULT_ELEVATION.switchboardHeightMm;
   return mountHeight({ kind: item.kind, variant: item.variant, tag: item.tag, ...(element.mountHeightMm !== null ? { mountHeightMm: element.mountHeightMm } : item.heightMm ? { mountHeightMm: item.heightMm } : {}) }, draft.profile ?? DEFAULT_ELEVATION);
 }
 

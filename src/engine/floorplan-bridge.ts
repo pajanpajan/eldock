@@ -827,6 +827,20 @@ export interface PanelDevice {
   /** Fáze 60: stabilní klíč přístroje a klíč nadřazeného přístroje ve stromu zapojení (null = hlavní vstupní prvek). */
   key: string;
   parentKey: string | null;
+  /** Fáze 61: přesný katalogový kus (akční členy chytré domácnosti) – přednost před výběrem podle konfigurace. */
+  article?: { manufacturer: string; series?: string; typeCode: string; articleNumber: string | null; description: string };
+}
+
+/** Fáze 61: modul chytré domácnosti pro generátor rozváděče (z `planSmartHome`). */
+export interface SmartBoardModule {
+  role: string;
+  label: string;
+  manufacturer: string;
+  /** Systém jako řada katalogu („ABB-free@home“, „ABB i-bus KNX“, „Loxone“). */
+  series?: string;
+  typeCode: string;
+  articleNumber: string | null;
+  modules: number;
 }
 
 export interface RcdGroup {
@@ -925,7 +939,19 @@ const config = (partial: Partial<ItemConfig> & Pick<ItemConfig, "category" | "po
 /** Přístroje rozváděče, rozložení na lišty (skupina chrániče se nedělí), 25% rezerva a výběr skříně. */
 export function buildSwitchboardFromCircuits(
   plan: Pick<CircuitPlan, "circuits" | "io" | "bom">,
-  options: { mode: InstallMode; enclosures: readonly EnclosureLike[]; mainSwitchA?: number; railModules?: number; centralStop?: boolean; supplyPhases?: 1 | 3 },
+  options: {
+    mode: InstallMode;
+    enclosures: readonly EnclosureLike[];
+    mainSwitchA?: number;
+    railModules?: number;
+    centralStop?: boolean;
+    supplyPhases?: 1 | 3;
+    /**
+     * Fáze 61: akční členy, zdroj a rozhraní chytré domácnosti z výpočtu `planSmartHome` (zvolený systém a výrobce);
+     * bez nich výchozí sestava Loxone podle počtu výstupů.
+     */
+    smart?: readonly SmartBoardModule[];
+  },
 ): Switchboard {
   const warnings: string[] = [];
   const bom = new Map(plan.bom.map((entry) => [entry.item, entry.count]));
@@ -1008,7 +1034,18 @@ export function buildSwitchboardFromCircuits(
   // Ovládání světel: impulzní relé a chytrá instalace
   const relays = plan.io.impulseRelays;
   const control: PanelDevice[] = Array.from({ length: relays }, () => device("KA", "Impulzní paměťové relé (např. ELKO MR-41)", "RELAY", "1P", 1, 16, config({ category: "RELAY", poles: "1P", modules: 1, ratedCurrentA: 16, relaySubtype: "IMPULSE" })));
-  if (options.mode === "bus_loxone" && (plan.io.do > 0 || plan.io.treeDevices > 0)) {
+  if (options.mode === "bus_loxone" && options.smart?.length) {
+    for (const unit of options.smart) {
+      // Systémový modul bez šířky (nástěnný SysAP) jde do kusovníku, ne na lištu
+      if (unit.modules <= 0) {
+        addBom(bom, `${unit.label} – ${unit.manufacturer} ${unit.typeCode}${unit.articleNumber ? ` (${unit.articleNumber})` : ""}`);
+        continue;
+      }
+      const psu = unit.role === "psu";
+      const item = device(psu ? "T" : "A", unit.label, psu ? "PSU" : "PLC", "1P", unit.modules, null, config({ category: "OTHER", poles: "1P", modules: unit.modules, moduleSubtype: psu ? "PSU_DC" : "PLC", manufacturer: unit.manufacturer }));
+      control.push({ ...item, article: { manufacturer: unit.manufacturer, series: unit.series, typeCode: unit.typeCode, articleNumber: unit.articleNumber, description: unit.label } });
+    }
+  } else if (options.mode === "bus_loxone" && (plan.io.do > 0 || plan.io.treeDevices > 0)) {
     const mini = SMART_MODULES.loxoneMiniserver;
     control.push(device("A", mini.label, "PLC", "1P", mini.modules, null, config({ category: "OTHER", poles: "1P", modules: mini.modules, moduleSubtype: "PLC" })));
     for (let i = 0; i < Math.ceil(Math.max(0, plan.io.do - mini.outputs) / SMART_MODULES.loxoneRelayExtension.outputs); i++) {

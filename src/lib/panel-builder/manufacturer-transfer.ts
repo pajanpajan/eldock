@@ -4,6 +4,7 @@
 
 import { catalogCategory, describeConfig, matchConfig, type CatalogLike, type ItemConfig } from "./configurator";
 import { sameManufacturer } from "./matching";
+import { SMART_SYSTEMS } from "./smart-home";
 
 /** exact = stejný přístroj výrobce i šířka, width = jiná šířka, estimate = výrobce kus nemá (parametry zůstanou, Pv odhad), keep = systémový prvek / bez konfigurace. */
 export type TransferStatus = "exact" | "width" | "estimate" | "keep";
@@ -21,7 +22,7 @@ export interface TransferItem {
   circuitLabel: string;
   modulesWidth: number;
   config: ItemConfig | null;
-  component: Pick<CatalogLike, "manufacturer" | "typeCode"> | null;
+  component: (Pick<CatalogLike, "manufacturer" | "typeCode"> & { articleNumber?: string | null }) | null;
 }
 
 export interface TransferRow {
@@ -46,12 +47,16 @@ export interface TransferRow {
 const SYSTEM_SUBTYPES = new Set(["PLC", "SMART_ACTUATOR", "BUS_PSU", "SYSTEM_MODULE"]);
 export const isSystemDevice = (config: ItemConfig | null) => Boolean(config && (config.category === "OTHER" || config.category === "ACCESSORY") && config.moduleSubtype && SYSTEM_SUBTYPES.has(config.moduleSubtype));
 
+/** Fáze 61: objednací čísla přístrojů systémů chytré domácnosti (i sběrnicové zdroje free@home / KNX s podtypem „zdroj DC“). */
+const SMART_ARTICLES = new Set(SMART_SYSTEMS.flatMap((system) => system.modules.map((unit) => unit.articleNumber).filter((number): number is string => Boolean(number))));
+export const isSmartArticle = (articleNumber: string | null | undefined) => Boolean(articleNumber && SMART_ARTICLES.has(articleNumber));
+
 /** Převodní tabulka: pro každý prvek nejbližší kus cílového výrobce se stejnými určujícími parametry. */
 export function planTransfer(items: readonly TransferItem[], catalog: readonly CatalogLike[], manufacturer: string): TransferRow[] {
   return items.map((item): TransferRow => {
     const from = item.component ? `${item.component.manufacturer} ${item.component.typeCode}` : item.config ? describeConfig(item.config) : "neurčený modul";
     const keep = (): TransferRow => ({ itemId: item.id, designation: item.designation, label: item.circuitLabel, from, to: from, status: "keep", modulesFrom: item.modulesWidth, modulesTo: item.modulesWidth, componentId: null, config: null });
-    if (!item.config || isSystemDevice(item.config)) return keep();
+    if (!item.config || isSystemDevice(item.config) || isSmartArticle(item.component?.articleNumber)) return keep();
     if (item.component && sameManufacturer(item.component.manufacturer, manufacturer)) return keep();
     const target: ItemConfig = { ...item.config, manufacturer };
     const candidates = catalog.filter((component) => component.category === catalogCategory(target) && sameManufacturer(component.manufacturer, manufacturer));

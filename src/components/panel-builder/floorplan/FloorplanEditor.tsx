@@ -50,6 +50,9 @@ import {
   updateRoom,
   wallRotation,
   wiringInventory,
+  DEFAULT_LIGHT,
+  LIGHT_LOADS,
+  lightSpecOf,
   type Annotation,
   type AnnotationKind,
   type EditorElement,
@@ -118,6 +121,10 @@ import { FloorBar } from "./FloorBar";
 import { FloorSymbol, PanelSymbol } from "./FloorSymbol";
 import { PdfEditMenu, type PdfEditAction } from "./PdfEditMenu";
 import { PlanChecks, SelectionPanel, type PlanCheck } from "./PlanPanels";
+import { SmartHomePanel } from "./SmartHomePanel";
+import { applyNormFix, floorplanNorms } from "@/lib/panel-builder/floorplan-norms";
+import { smartPlanOf } from "@/lib/panel-builder/smart-home-plan";
+import { isSmartSystem } from "@/lib/panel-builder/smart-home";
 import { WiringBomDialog } from "./WiringBomDialog";
 
 // 2D editor půdorysu elektroinstalace (fáze 49, úprava PDF / značky / úroveň instalace fáze 57, fáze 59: natočení další
@@ -277,6 +284,9 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
     }
   }, [deferred]);
   const bom = useMemo(() => compileFloorplanBom(deferred, { installation: deferred.installation, cables: analysis.ok ? analysis.summary.byCable : [] }), [deferred, analysis]);
+  // Fáze 61: chytrá domácnost (sběrnicová úroveň) a normový hlídač
+  const smartPlan = useMemo(() => smartPlanOf(deferred), [deferred]);
+  const norms = useMemo(() => floorplanNorms(deferred), [deferred]);
   const checklist = generationChecklist(draft);
 
   const floors = floorsOf(draft);
@@ -330,6 +340,7 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
   function placement(item: NonNullable<ReturnType<typeof paletteItem>>, point: { x: number; y: number }) {
     const room = roomAt(draft.rooms, point.x, point.y);
     const base = { x: snap(point.x), y: snap(point.y) };
+    if (item.kind === "fixture") return { position: base, rotation: placeRotation, room };
     if (isWallMounted(item) && room) {
       const position = snapToWall(room, base.x, base.y);
       if (position.x !== base.x || position.y !== base.y) return { position, rotation: wallRotation(room, point.x, point.y), room };
@@ -850,6 +861,21 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
     const missing = floors.filter((floor) => floor.elements.some((element) => element.item !== "riser") && !floor.elements.some((element) => element.item === "riser" || element.item === "panel"));
     if (missing.length) checks.push({ id: "riser-missing", level: "info", text: `Podlaží ${missing.map((floor) => floor.name).join(", ")} nemá stoupací vedení ↕ – trasy vedou svisle nad / pod rozváděčem.` });
   }
+  // Fáze 61: normový hlídač (koupelnové zóny, krytí, AFDD) s opravou jedním klikem
+  for (const issue of norms) {
+    const here = issue.elementIds.find((id) => draft.elements.some((element) => element.id === id));
+    checks.push({
+      id: issue.id,
+      level: issue.level,
+      text: issue.text,
+      source: issue.source,
+      action: issue.fix
+        ? { label: issue.fix.label, onClick: () => (update((current) => applyNormFix(current, issue)), toast.success(`Opraveno: ${issue.fix!.label}.`)) }
+        : here
+          ? { label: "Zobrazit", onClick: () => setSelection(issue.elementIds.filter((id) => draft.elements.some((element) => element.id === id))) }
+          : undefined,
+    });
+  }
 
   const nodeById = analysis.ok ? new Map(analysis.build.routeNodes.map((node) => [node.id, node])) : new Map();
   const panelPoint = analysis.ok ? analysis.build.panel : null;
@@ -1129,7 +1155,8 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
                 <div className="flex flex-wrap gap-1">
                   {items.map((item) => {
                     const active = tool.kind === "place" && tool.item === item.id;
-                    const height = item.kind === "panel" || item.kind === "riser" ? draft.profile.switchboardHeightMm : (item.heightMm ?? mountHeight({ kind: item.kind, variant: item.variant, tag: item.tag }, draft.profile));
+                    // Fáze 61: zařizovací předmět (vana / sprcha) nemá výšku montáže – v titulku jen rozměr
+                    const height = item.kind === "fixture" ? null : item.kind === "panel" || item.kind === "riser" ? draft.profile.switchboardHeightMm : (item.heightMm ?? mountHeight({ kind: item.kind, variant: item.variant, tag: item.tag }, draft.profile));
                     return (
                       <button
                         key={item.id}
@@ -1139,7 +1166,7 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
                           setTool(active ? { kind: "select" } : { kind: "place", item: item.id });
                           setHover(null);
                         }}
-                        title={`${item.label} (${height} mm)`}
+                        title={height === null ? item.label : `${item.label} (${height} mm)`}
                         className={cn("flex items-center gap-1 rounded-md border px-1.5 py-1 text-xs", active ? "border-primary bg-primary/20 text-foreground" : "border-border text-muted-foreground hover:border-primary/60 hover:text-foreground")}
                       >
                         <span className="rounded bg-muted px-1 font-mono text-[10px] font-bold text-foreground">{item.symbol}</span>
@@ -1510,7 +1537,8 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
               }}
             />
           ) : null}
-          <PlanChecks checks={checks} />
+          {smartPlan ? <SmartHomePanel plan={smartPlan} onSystem={(smartSystem) => isSmartSystem(smartSystem) && update((current) => ({ ...current, smartSystem }))} /> : null}
+          <PlanChecks checks={checks} title="Kontrola půdorysu a norem" />
           <CablePanel
             analysis={analysis}
             mode={draft.mode}
@@ -1702,8 +1730,9 @@ function ElementDetail({
   onFrame: { moveLeft: () => void; moveRight: () => void; rotate: () => void; leave: () => void; dissolve: () => void };
 }) {
   const item = paletteItem(element.item)!;
-  const isPanel = item.kind === "panel" || item.kind === "riser";
-  const defaultHeight = isPanel ? draft.profile.switchboardHeightMm : (item.heightMm ?? mountHeight({ kind: item.kind as Exclude<typeof item.kind, "panel" | "riser">, variant: item.variant, tag: item.tag }, draft.profile));
+  const isPanel = item.kind === "panel" || item.kind === "riser" || item.kind === "fixture";
+  const defaultHeight = isPanel ? draft.profile.switchboardHeightMm : (item.heightMm ?? mountHeight({ kind: item.kind as Exclude<typeof item.kind, "panel" | "riser" | "fixture">, variant: item.variant, tag: item.tag }, draft.profile));
+  const light = item.kind === "light" ? lightSpecOf(element) : null;
   const frame = frameOf(draft, element.id);
   const legacyFrameable = !frame && !item.wireless && (item.kind === "single_socket" || item.kind === "double_socket" || item.kind === "data_socket" || item.kind === "switch");
   const rooms = [...new Set([...draft.rooms.map((room) => room.name), ...draft.elements.map((other) => other.room)])];
@@ -1740,7 +1769,9 @@ function ElementDetail({
         <p className="text-xs text-muted-foreground">
           {item.kind === "riser"
             ? "Průchod kabelů do jiného podlaží – trasy z tohoto podlaží vedou k rozváděči přes toto místo (svislá délka = rozdíl výšek podlaží)."
-            : `Výchozí bod všech tras. Výška rozváděče se nastavuje v horní liště (${draft.profile.switchboardHeightMm} mm).`}
+            : item.kind === "fixture"
+              ? "Zařizovací předmět pro koupelnové zóny: zásuvky a spínače musí být dál než 0,6 m od jeho hrany (zóny 0–2, ČSN 33 2000-7-701 ed. 2). R = otočit."
+              : `Výchozí bod všech tras. Výška rozváděče se nastavuje v horní liště (${draft.profile.switchboardHeightMm} mm).`}
         </p>
       ) : (
         <>
@@ -1846,6 +1877,30 @@ function ElementDetail({
                   <CheckCircle2 className="size-3" aria-hidden /> Značka kreslena jako řazení č. {effectiveSwitchNo(draft, element)}
                 </p>
               ) : null}
+            </div>
+          ) : null}
+          {/* Fáze 61: svítidlo pro chytrou domácnost – stmívání, příkon a druh zátěže (výběr akčního členu) */}
+          {light && draft.installation === "bus_loxone" ? (
+            <div className="flex flex-col gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/5 p-2 text-xs" data-testid="light-spec">
+              <label className="flex items-center gap-1.5">
+                <input type="checkbox" checked={light.dimmable} onChange={(event) => onChange({ light: { ...light, dimmable: event.target.checked } })} aria-label="Stmívané svítidlo" /> Stmívané (stmívací kanál)
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="flex flex-col gap-1 text-muted-foreground">
+                  Příkon [W]
+                  <Input type="number" min={1} max={3000} value={light.powerW} onChange={(event) => onChange({ light: { ...light, powerW: Math.min(3000, Math.max(1, Math.round(Number(event.target.value) || DEFAULT_LIGHT.powerW))) } })} aria-label="Příkon svítidla [W]" className="h-8" />
+                </label>
+                <label className="flex flex-col gap-1 text-muted-foreground">
+                  Zátěž
+                  <select value={light.load} onChange={(event) => onChange({ light: { ...light, load: event.target.value as typeof light.load, ...(event.target.value === "dali" ? { dimmable: true } : {}) } })} className="h-8 rounded-md border border-input bg-transparent px-1.5 text-foreground dark:bg-input/30" aria-label="Druh zátěže svítidla">
+                    {LIGHT_LOADS.map((load) => (
+                      <option key={load.id} value={load.id}>
+                        {load.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
             </div>
           ) : null}
           {item.kind === "light" ? (

@@ -34,7 +34,7 @@ export async function transferManufacturer(prisma: PrismaClient, projectId: stri
     circuitLabel: item.circuitLabel,
     modulesWidth: item.modulesWidth,
     config: parseConfig(item.configJson) ?? (item.catalogComponent ? configFromComponent(item.catalogComponent) : null),
-    component: item.catalogComponent ? { manufacturer: item.catalogComponent.manufacturer, typeCode: item.catalogComponent.typeCode } : null,
+    component: item.catalogComponent ? { manufacturer: item.catalogComponent.manufacturer, typeCode: item.catalogComponent.typeCode, articleNumber: item.catalogComponent.articleNumber } : null,
   }));
   const categories = [...new Set(items.map((item) => (item.config ? catalogCategory(item.config) : null)).filter((category): category is NonNullable<typeof category> => category !== null))];
   const catalog = categories.length ? await prisma.catalogComponent.findMany({ where: { category: { in: categories }, manufacturer: { notIn: HIDDEN_MANUFACTURER_NAMES } } }) : [];

@@ -15,6 +15,7 @@ import { renderPanelPhotoSvg } from "../src/lib/mock-graphics/panel-photo";
 import { GENERATED_CATALOG, type SeedComponent } from "./seed-catalog-generated";
 import { buildSearchText, estimatePowerLoss, iecSymbolFor } from "../src/lib/panel-builder/catalog";
 import { ABB_CA35R, ENCLOSURE_FANS, RESEARCH_COMPONENTS } from "./seed-catalog-research";
+import { ABB_2026_COMPONENTS } from "./seed-abb-2026";
 import { isHiddenManufacturer } from "../src/lib/panel-builder/brands";
 import { demoDetections } from "../src/lib/panel-builder/matching";
 import { REFERENCE_DEVICES, REFERENCE_DIMS, withPositions } from "../src/lib/panel-builder/reference";
@@ -227,7 +228,8 @@ export const CATALOG: SeedComponent[] = (() => {
   const seen = new Set<string>();
   const key = (component: SeedComponent) => `${component.manufacturer.toLowerCase()}|${component.typeCode.toLowerCase().replace(/\s+/g, "")}`;
   // Rešerše výrobců (fáze 47): Siemens SENTRON a ABB z reálného 144M rozváděče; chybějící Pv = odhad IEC
-  const research: SeedComponent[] = RESEARCH_COMPONENTS.map((entry) => {
+  // Fáze 61: chytrá domácnost z Katalogu ABB 2026 (free@home), KNX stmívač / DALI / IP rozhraní, Loxone Dimmer Extension
+  const research: SeedComponent[] = [...ABB_2026_COMPONENTS, ...RESEARCH_COMPONENTS].map((entry) => {
     const { powerLossWatts, source, ...component } = entry;
     void source; // zdroj rešerše zůstává jen v souboru s daty
     return {
