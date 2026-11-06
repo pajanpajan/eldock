@@ -116,6 +116,28 @@ export const getBrandCounts = cache(async (): Promise<Record<string, number>> =>
   return Object.fromEntries(rows.map((row) => [row.manufacturer, row._count._all]));
 });
 
+const visibleBoardParts = { manufacturer: { notIn: HIDDEN_MANUFACTURER_NAMES }, NOT: { articleNumber: { startsWith: "CFG-" } } };
+
+/**
+ * Fáze 60: výrobci, ze kterých jde postavit celý domovní rozváděč (jističe i chrániče v databázi) – volba výrobce
+ * při generování z půdorysu a převod rozváděče. Počet = jističe + chrániče + jističochrániče.
+ */
+export const getBoardManufacturers = cache(async (): Promise<{ name: string; count: number }[]> => {
+  const rows = await prisma.catalogComponent.groupBy({ by: ["manufacturer", "category"], where: { category: { in: ["MCB", "RCD", "RCBO"] }, ...visibleBoardParts }, _count: { _all: true } });
+  const brands = new Map<string, { mcb: number; rcd: number }>();
+  for (const row of rows) {
+    const name = brandOf(row.manufacturer)?.value ?? row.manufacturer;
+    const current = brands.get(name) ?? { mcb: 0, rcd: 0 };
+    if (row.category === "MCB") current.mcb += row._count._all;
+    else current.rcd += row._count._all;
+    brands.set(name, current);
+  }
+  return [...brands.entries()]
+    .filter(([name, counts]) => counts.mcb >= 5 && counts.rcd >= 1 && !isHiddenManufacturer(name))
+    .map(([name, counts]) => ({ name, count: counts.mcb + counts.rcd }))
+    .sort((a, b) => (a.name === "ABB" ? -1 : b.name === "ABB" ? 1 : b.count - a.count));
+});
+
 /** Vybraná skříň z katalogu rozvodnic (kusovník, P_max). */
 export const getProjectEnclosure = cache((enclosureId: string | null) => (enclosureId ? prisma.panelEnclosure.findUnique({ where: { id: enclosureId } }) : null));
 

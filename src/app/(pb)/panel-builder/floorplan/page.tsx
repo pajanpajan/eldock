@@ -6,7 +6,7 @@ import { PageHeader } from "@/components/common/PageHeader";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { panelBuilderGuard } from "@/components/panel-builder/access";
 import { FloorplanEditorLoader } from "@/components/panel-builder/floorplan/FloorplanEditorLoader";
-import { getWiringSeries } from "@/server/queries/panel-builder";
+import { getBoardManufacturers, getWiringSeries } from "@/server/queries/panel-builder";
 
 export const metadata: Metadata = { title: "2D půdorys a kabeláž" };
 
@@ -14,7 +14,7 @@ export const metadata: Metadata = { title: "2D půdorys a kabeláž" };
 export default async function FloorplanPage() {
   const guard = await panelBuilderGuard();
   if (guard) return guard;
-  const series = await getWiringSeries();
+  const [series, manufacturers] = await Promise.all([getWiringSeries(), getBoardManufacturers()]);
   return (
     <PageTransition>
       <PageHeader
@@ -26,7 +26,7 @@ export default async function FloorplanPage() {
         title="📐 2D půdorys & kabeláž"
         description="Nahrajte půdorys (obrázek / PDF) nebo nakreslete místnosti, zkalibrujte měřítko, osaďte zásuvky, světla, vypínače a spotřebiče. Výkaz kabeláže porovná vedení spodem, vrchem a optimalizovaně; rozváděč vygenerujete jedním klikem."
       />
-      <FloorplanEditorLoader series={series.map(({ key, label, count }) => ({ key, label, count }))} />
+      <FloorplanEditorLoader series={series.map(({ key, label, count }) => ({ key, label, count }))} manufacturers={manufacturers} />
     </PageTransition>
   );
 }

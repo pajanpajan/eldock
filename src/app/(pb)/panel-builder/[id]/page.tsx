@@ -12,7 +12,7 @@ import { railCapacities, railPhotoList } from "@/lib/panel-builder/rails";
 import { vectorDeviceFrom } from "@/lib/panel-builder/vector-symbols";
 import { WIRING_CATEGORIES } from "@/lib/panel-builder/wiring-devices";
 import { ENCLOSURE_TYPES } from "@/lib/panel-builder/project";
-import { getBrandCounts, getPanelProject, getProjectEnclosure } from "@/server/queries/panel-builder";
+import { getBoardManufacturers, getBrandCounts, getPanelProject, getProjectEnclosure } from "@/server/queries/panel-builder";
 
 export async function generateMetadata({ params }: PageProps<"/panel-builder/[id]">): Promise<Metadata> {
   const project = await getPanelProject((await params).id);
@@ -32,7 +32,7 @@ export default async function PanelProjectPage({ params }: PageProps<"/panel-bui
   const guard = await panelBuilderGuard();
   if (guard) return guard;
   const { id } = await params;
-  const [project, counts] = await Promise.all([getPanelProject(id), getBrandCounts()]);
+  const [project, counts, boardManufacturers] = await Promise.all([getPanelProject(id), getBrandCounts(), getBoardManufacturers()]);
   if (!project) notFound();
   const pickedEnclosure = await getProjectEnclosure(project.enclosureId);
   // Počty podle karet výrobců (sloučí zápisy „EATON“ / „Eaton“)
@@ -103,6 +103,7 @@ export default async function PanelProjectPage({ params }: PageProps<"/panel-bui
         standardEdition={project.standardEdition}
         railPhotos={railPhotoList(project.railPhotosJson)}
         chipsJson={project.company?.circuitChipsJson ?? null}
+        boardManufacturers={boardManufacturers}
       />
     </PageTransition>
   );

@@ -211,7 +211,7 @@ function floorRuns(points: readonly RoutePoint[], floorId: string): { x: number;
   return runs.filter((run) => run.length >= 2);
 }
 
-export function FloorplanEditor({ series }: { series: SeriesOption[] }) {
+export function FloorplanEditor({ series, manufacturers = [] }: { series: SeriesOption[]; manufacturers?: { name: string; count: number }[] }) {
   const router = useRouter();
   const svg = useRef<SVGSVGElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -828,9 +828,10 @@ export function FloorplanEditor({ series }: { series: SeriesOption[] }) {
         customerName: String(form.get("customer") ?? "") || null,
         installationSite: String(form.get("site") ?? "") || null,
         draft,
+        manufacturer: String(form.get("manufacturer") ?? "") || null,
       });
       if (!result.ok) return void toast.error(result.error);
-      toast.success(`Rozváděč vygenerován: ${result.data.circuits} okruhů, ${result.data.devices} přístrojů${result.data.enclosure ? `, skříň ${result.data.enclosure}` : ""}.`);
+      toast.success(`Rozváděč vygenerován: ${result.data.circuits} okruhů, ${result.data.devices} přístrojů${result.data.manufacturer ? ` ${result.data.manufacturer}` : ""}${result.data.enclosure ? `, skříň ${result.data.enclosure}` : ""}. Strom zapojení je sestavený podle hierarchie.`);
       for (const warning of result.data.warnings.slice(0, 3)) toast.warning(warning);
       router.push(`/panel-builder/${result.data.id}`);
     });
@@ -1519,6 +1520,9 @@ export function FloorplanEditor({ series }: { series: SeriesOption[] }) {
             environment={draft.environment}
             onEnvironment={(environment) => update((current) => ({ ...current, environment }))}
             checklist={checklist}
+            manufacturers={manufacturers}
+            wallFloors={analysis.ok ? analysis.build.wallFloors.length : 0}
+            floorCount={floors.length}
           />
           {/* Fáze 55: kusovník domovní instalace s objednacími čísly */}
           <WiringBomDialog rows={bom} />

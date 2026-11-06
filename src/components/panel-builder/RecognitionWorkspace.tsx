@@ -28,6 +28,7 @@ import { StandardEditionSelect } from "./documentation/RoutineTestPanel";
 import { standardEditionOf } from "@/lib/legislation-2027";
 import { EnclosurePicker } from "./EnclosurePicker";
 import { ItemConfigurator } from "./ItemConfigurator";
+import { ManufacturerTransfer } from "./ManufacturerTransfer";
 import { PhotoViewer } from "./PhotoViewer";
 import { PlacementCard } from "./PlacementCard";
 import { VectorPanel } from "./VectorPanel";
@@ -89,6 +90,7 @@ export function RecognitionWorkspace({
   chipsJson = null,
   standardEdition = "CSN_61439_3_ED2",
   railPhotos = [],
+  boardManufacturers = [],
 }: {
   projectId: string;
   designMode: "PHOTO" | "DESIGN";
@@ -108,6 +110,8 @@ export function RecognitionWorkspace({
   standardEdition?: string;
   /** Detailní fotky lišt / sekcí (fáze 47). */
   railPhotos?: { rail: number; url: string }[];
+  /** Fáze 60: výrobci, na které jde rozváděč převést (jističe i chrániče v databázi). */
+  boardManufacturers?: { name: string; count: number }[];
 }) {
   const router = useRouter();
   const design = designMode === "DESIGN";
@@ -501,6 +505,7 @@ export function RecognitionWorkspace({
           </label>
           <StandardEditionSelect projectId={projectId} value={standardEditionOf(standardEdition).id} compact />
           <div className="ml-auto flex flex-wrap items-center gap-2">
+            {items.length ? <ManufacturerTransfer projectId={projectId} current={dominant} manufacturers={boardManufacturers} /> : null}
             {enclosureFitsEnvironment(enclosure.ipRating, env) ? (
               <EnclosurePicker projectId={projectId} need={enclosureNeed(capacities, items)} current={enclosure} minIp={env.minIp} />
             ) : (

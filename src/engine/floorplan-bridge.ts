@@ -824,6 +824,9 @@ export interface PanelDevice {
   phase: Phase | "L1,L2,L3" | "L1,N" | null;
   /** Okruh, který přístroj jistí (null = hlavní vypínač, SPD, chránič, svorkovnice, chytré moduly). */
   circuitId: string | null;
+  /** Fáze 60: stabilní klíč přístroje a klíč nadřazeného přístroje ve stromu zapojení (null = hlavní vstupní prvek). */
+  key: string;
+  parentKey: string | null;
 }
 
 export interface RcdGroup {
@@ -942,35 +945,42 @@ export function buildSwitchboardFromCircuits(
     counters.set(prefix, value);
     return `-${prefix}${value}`;
   };
-  const device = (prefix: string, label: string, category: ComponentCategory, poles: string, modules: number, ratedA: number | null, cfg: ItemConfig, circuitId: string | null = null, phase: PanelDevice["phase"] = null): PanelDevice => ({
-    designation: designation(prefix),
-    label,
-    category,
-    poles,
-    modules,
-    ratedA,
-    config: cfg,
-    powerLossW: estimatePowerLoss(category, poles, ratedA ?? 0),
-    phase,
-    circuitId,
-  });
+  const device = (prefix: string, label: string, category: ComponentCategory, poles: string, modules: number, ratedA: number | null, cfg: ItemConfig, circuitId: string | null = null, phase: PanelDevice["phase"] = null): PanelDevice => {
+    const designated = designation(prefix);
+    return {
+      designation: designated,
+      label,
+      category,
+      poles,
+      modules,
+      ratedA,
+      config: cfg,
+      powerLossW: estimatePowerLoss(category, poles, ratedA ?? 0),
+      phase,
+      circuitId,
+      // Fáze 60: strom podle hierarchie – výchozí rodič je hlavní vypínač (upřesní se níže)
+      key: circuitId ? `circuit:${circuitId}` : designated,
+      parentKey: "main",
+    };
+  };
+  const tree = (item: PanelDevice, key: string, parentKey: string | null): PanelDevice => ({ ...item, key, parentKey });
 
   /** Skupiny přístrojů (na liště se nedělí). */
   const groups: PanelDevice[][] = [];
   const mainA = options.mainSwitchA ?? 40;
-  groups.push(
-    single
-      ? [
-          device("Q", "Hlavní vypínač 2P (1× 230 V)", "MAIN_SWITCH", "2P", 2, mainA, config({ category: "MAIN_SWITCH", poles: "2P", modules: 2, ratedCurrentA: mainA }), null, "L1,N"),
-          device("FV", "Svodič přepětí T1+T2 1f bez předjištění", "SPD", "1P+N", 2, null, config({ category: "SPD", poles: "1P+N", modules: 2, spdType: "T1+T2", surgeCurrentKa: 25 }), null, "L1,N"),
-          device("X", "Rozbočovací svorkovnice (HLAK)", "TERMINAL", "2P", 2, null, config({ category: "ACCESSORY", poles: "2P", modules: 2, moduleSubtype: "TERMINAL_BLOCK" })),
-        ]
-      : [
-          device("Q", "Hlavní vypínač", "MAIN_SWITCH", "3P", 3, mainA, config({ category: "MAIN_SWITCH", poles: "3P", modules: 3, ratedCurrentA: mainA }), null, "L1,L2,L3"),
-          device("FV", "Svodič přepětí T1+T2 bez předjištění", "SPD", "3P+N", 4, null, config({ category: "SPD", poles: "3P+N", modules: 4, spdType: "T1+T2", surgeCurrentKa: 25 }), null, "L1,L2,L3"),
-          device("X", "Rozbočovací svorkovnice (HLAK)", "TERMINAL", "4P", 4, null, config({ category: "ACCESSORY", poles: "4P", modules: 4, moduleSubtype: "TERMINAL_BLOCK" })),
-        ],
-  );
+  // Hierarchie (fáze 60): hlavní vypínač = kořen stromu, SPD a svorkovnice za ním
+  const head = single
+    ? [
+        device("Q", "Hlavní vypínač 2P (1× 230 V)", "MAIN_SWITCH", "2P", 2, mainA, config({ category: "MAIN_SWITCH", poles: "2P", modules: 2, ratedCurrentA: mainA }), null, "L1,N"),
+        device("FV", "Svodič přepětí T1+T2 1f bez předjištění", "SPD", "1P+N", 2, null, config({ category: "SPD", poles: "1P+N", modules: 2, spdType: "T1+T2", surgeCurrentKa: 25 }), null, "L1,N"),
+        device("X", "Rozbočovací svorkovnice (HLAK)", "TERMINAL", "2P", 2, null, config({ category: "ACCESSORY", poles: "2P", modules: 2, moduleSubtype: "TERMINAL_BLOCK" })),
+      ]
+    : [
+        device("Q", "Hlavní vypínač", "MAIN_SWITCH", "3P", 3, mainA, config({ category: "MAIN_SWITCH", poles: "3P", modules: 3, ratedCurrentA: mainA }), null, "L1,L2,L3"),
+        device("FV", "Svodič přepětí T1+T2 bez předjištění", "SPD", "3P+N", 4, null, config({ category: "SPD", poles: "3P+N", modules: 4, spdType: "T1+T2", surgeCurrentKa: 25 }), null, "L1,L2,L3"),
+        device("X", "Rozbočovací svorkovnice (HLAK)", "TERMINAL", "4P", 4, null, config({ category: "ACCESSORY", poles: "4P", modules: 4, moduleSubtype: "TERMINAL_BLOCK" })),
+      ];
+  groups.push([tree(head[0], "main", null), tree(head[1], "spd", "main"), tree(head[2], "terminal", "main")]);
 
   const mcb = (circuit: Circuit) => {
     const { protection } = circuit;
@@ -985,9 +995,10 @@ export function buildSwitchboardFromCircuits(
     const circuits = group.circuitIds.map((id) => byId.get(id)!);
     const ratedA = 40;
     const rcdPoles = single ? "2P" : "4P";
-    const rcd: PanelDevice = { ...device("FI", `Proudový chránič 30 mA typ ${group.type}${group.lightingOnly ? " – jen světla" : ""}`, "RCD", rcdPoles, single ? 2 : 4, ratedA, config({ category: "RCD", poles: rcdPoles, modules: single ? 2 : 4, ratedCurrentA: ratedA, rcdType: group.type, rcdSensitivityMa: 30 }), null, single ? "L1,N" : "L1,L2,L3") };
+    const rcd: PanelDevice = { ...device("FI", `Proudový chránič 30 mA typ ${group.type}${group.lightingOnly ? " – jen světla" : ""}`, "RCD", rcdPoles, single ? 2 : 4, ratedA, config({ category: "RCD", poles: rcdPoles, modules: single ? 2 : 4, ratedCurrentA: ratedA, rcdType: group.type, rcdSensitivityMa: 30 }), null, single ? "L1,N" : "L1,L2,L3"), key: `rcd:${group.designation}`, parentKey: "main" };
     rcd.designation = group.designation;
-    groups.push([rcd, ...circuits.map(mcb)]);
+    // Jističe skupiny pod svým chráničem (strom podle hierarchie, i když se skupina rozdělí na dvě lišty)
+    groups.push([rcd, ...circuits.map((circuit) => ({ ...mcb(circuit), parentKey: rcd.key }))]);
     addBom(bom, "Izolovaný N-můstek (pod chránič)");
     addBom(bom, single ? "Hřebenová propojovací lišta 1P+N (pod chránič)" : "Hřebenová propojovací lišta 3P (pod chránič)");
   }
@@ -1026,7 +1037,17 @@ export function buildSwitchboardFromCircuits(
     control.push(device("S", "Tlačítko TOTAL STOP / CENTRAL STOP", "OTHER", "1P", 1, null, config({ category: "OTHER", poles: "1P", modules: 1 })));
     addBom(bom, "Vypínací spoušť hlavního vypínače (pro TOTAL STOP)");
   }
-  if (control.length) groups.push(control);
+  if (control.length) {
+    // Fáze 60: řídicí obvody (zdroj sběrnice, moduly, relé SG Ready, TOTAL STOP) z vlastního jističe; impulzní relé
+    // spíná světelný okruh, elektroměr DLM je za hlavním vypínačem
+    const lighting = plan.circuits.find((circuit) => circuit.kind === "lighting");
+    const needsSupply = control.some((item) => !(item.category === "RELAY" && item.config.relaySubtype === "IMPULSE") && item.config.moduleSubtype !== "METER");
+    const supply = needsSupply ? tree(device("F", "Ovládání a řídicí obvody", "MCB", "1P", 1, 6, config({ category: "MCB", poles: "1P", modules: 1, ratedCurrentA: 6, curve: "B", breakingCapacityKa: 6 }), null, "L1"), "control", "main") : null;
+    const parented = control.map((item) =>
+      item.category === "RELAY" && item.config.relaySubtype === "IMPULSE" ? { ...item, parentKey: lighting ? `circuit:${lighting.id}` : supply ? "control" : "main" } : item.config.moduleSubtype === "METER" ? { ...item, parentKey: "main" } : { ...item, parentKey: supply ? "control" : "main" },
+    );
+    groups.push(supply ? [supply, ...parented] : parented);
+  }
 
   const devices = groups.flat();
   const totalModules = devices.reduce((sum, item) => sum + item.modules, 0);

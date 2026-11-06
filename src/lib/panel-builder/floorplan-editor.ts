@@ -2,7 +2,8 @@
 // na vstup mostu „půdorys → rozváděč“ (`src/engine/floorplan-bridge.ts`) a 3D výpočtu kabeláže.
 // Čisté funkce – bezpečné pro klient i server.
 
-import { DOUBLE_TWO_WAY_CABLE, floorMetric, summarizeCabling, type FloorLink, type RouteMetric, type RouteNode, type RoutePoint } from "@/engine/cable-routing";
+import { DOUBLE_TWO_WAY_CABLE, MANHATTAN, floorMetric, summarizeCabling, type FloorLink, type RouteMetric, type RouteNode, type RoutePoint } from "@/engine/cable-routing";
+import { buildWallGraph, wallMetric, wallSegments } from "@/engine/wall-routing";
 import {
   DEFAULT_ELEVATION,
   calibrateFloorplanScale,
@@ -827,6 +828,8 @@ export interface PlanBuild {
   /** Fáze 59: podlaží se stoupacím vedením a měřidlo tras (vodorovně na podlaží, svisle mezi podlažími). */
   floors: FloorLink[];
   metric: RouteMetric;
+  /** Fáze 60: podlaží s trasami podél stěn (místnosti / nové příčky); ostatní pravoúhle. */
+  wallFloors: string[];
 }
 
 /** Fáze 59: osa víceramečku podle natočení kotvy (stěna nahoře / dole = vodorovně, vlevo / vpravo = svisle). */
@@ -855,7 +858,14 @@ export function buildPlan(draft: FloorplanDraft): PlanBuild {
     const riser = riserOf(floor) ?? fallbackRiser;
     return { id: floor.id, levelMm: floor.levelMm, riser: { x: riser.x, y: riser.y } };
   });
-  const metric = floorMetric(links);
+  // Fáze 60: trasy podél stěn – graf ze stěn místností a nově zakreslených příček každého podlaží
+  const bases = new Map<string, RouteMetric>();
+  for (const floor of floors) {
+    const partitions = floor.annotations.filter((note) => note.kind === "wall").map((note) => ({ x1: note.x, y1: note.y, x2: note.x2, y2: note.y2 }));
+    const graph = buildWallGraph(wallSegments(floor.rooms, partitions));
+    if (graph.edges.length) bases.set(floor.id, wallMetric(graph, MANHATTAN));
+  }
+  const metric = floorMetric(links, bases);
   const panel: RoutePoint = { x: panelElement.x, y: panelElement.y, floor: panelFloor.id };
   const nodes: FloorNode[] = [];
   const routeNodes: RouteNode[] = [];
@@ -939,7 +949,7 @@ export function buildPlan(draft: FloorplanDraft): PlanBuild {
     return { id: room.id, name: room.name, ...(multi ? { floor: floor.id } : {}), ...(lights.length && switches.size ? { lighting: { groups: 1 as const, switchCount: Math.min(6, switches.size) } } : {}) };
   });
   const calibration = calibrateFloorplanScale({ walls: [{ px: [0, 0, 1000, 0], lengthMm: 1000 }], panelPx: [panel.x, panel.y], elevation: profile, routing: draft.mode });
-  return { plan: { rooms, nodes, mode: draft.installation }, calibration, panel, routeNodes, switchLinks, controlRuns, dataNodeIds, busNodeIds, elementOf, floors: links, metric };
+  return { plan: { rooms, nodes, mode: draft.installation }, calibration, panel, routeNodes, switchLinks, controlRuns, dataNodeIds, busNodeIds, elementOf, floors: links, metric, wallFloors: [...bases.keys()] };
 }
 
 /** Kalibrace na 2 kliky: úsečka v mm současného měřítka a skutečná délka → nové měřítko a přepočet prvků. */

@@ -13,7 +13,11 @@ import { isSampleProject, projectUploads, refundsCredit } from "@/lib/panel-buil
 import { railColumns } from "@/lib/panel-builder/rails";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 
-import { componentForConfig, createPanelProject, renumberProject, type CreateProjectInput } from "./panel-builder";
+import { componentForConfig, createPanelProject, renumberProject, saveTree, type CreateProjectInput } from "./panel-builder";
+import { describeConfig } from "@/lib/panel-builder/configurator";
+import { isSystemDevice } from "@/lib/panel-builder/manufacturer-transfer";
+import { sameManufacturer } from "@/lib/panel-builder/matching";
+import { isPhaseAssignment, type PhaseAssignment } from "@/lib/panel-builder/tree";
 import { supplyById, supplyColumns } from "@/lib/panel-builder/supply";
 
 // Správa projektů AI Panel Builderu (fáze 48): smazání (jednotlivě i hromadně) s vrácením kreditu
@@ -128,7 +132,12 @@ async function createPlanProject(
   input: Omit<CreateProjectInput, "photoUrl" | "designMode" | "dims">,
   circuits: CircuitPlanResult,
   board: SwitchboardResult,
-  options: { data?: { floorplanJson?: string; cableReportJson?: string; environment?: string; ambientTempC?: number; environmentConfirmedAt?: Date }; afterItems?: (items: { id: string; device: SwitchboardResult["devices"][number] }[]) => Promise<string[]> } = {},
+  options: {
+    data?: { floorplanJson?: string; cableReportJson?: string; environment?: string; ambientTempC?: number; environmentConfirmedAt?: Date; dominantManufacturer?: string };
+    afterItems?: (items: { id: string; device: SwitchboardResult["devices"][number] }[]) => Promise<string[]>;
+    /** Fáze 60: jeden výrobce celého rozváděče (chybějící kus = odhad stejného výrobce, nikdy jiný výrobce). */
+    manufacturer?: string | null;
+  } = {},
 ) {
   const project = await createPanelProject(prisma, { ...input, photoUrl: null, designMode: "DESIGN" });
   try {
@@ -142,8 +151,13 @@ async function createPlanProject(
     });
     const devices = board.rails.flatMap((rail) => rail.devices.map((device, index) => ({ rail: rail.index, position: index + 1, device })));
     const rows = [];
+    const estimated = new Set<string>();
     for (const { rail, position, device } of devices) {
-      const component = await componentForConfig(prisma, device.config);
+      // Fáze 60: celý rozváděč od jednoho výrobce; systémové prvky chytré instalace zůstávají u svého systému
+      const config = options.manufacturer && !isSystemDevice(device.config) ? { ...device.config, manufacturer: options.manufacturer } : device.config;
+      const component = await componentForConfig(prisma, config);
+      if (options.manufacturer && config.manufacturer === options.manufacturer && (component.dataSource === "IEC_ESTIMATE" || component.articleNumber.startsWith("CFG-"))) estimated.add(describeConfig(config));
+      device.config = config;
       rows.push({
         projectId: project.id,
         catalogComponentId: component.id,
@@ -161,9 +175,20 @@ async function createPlanProject(
     }
     await prisma.panelBoardItem.createMany({ data: rows });
     await renumberProject(prisma, project.id);
-    const created = await prisma.panelBoardItem.findMany({ where: { projectId: project.id }, orderBy: [{ dinRailIndex: "asc" }, { positionOnRail: "asc" }], select: { id: true } });
+    const created = await prisma.panelBoardItem.findMany({ where: { projectId: project.id }, orderBy: [{ dinRailIndex: "asc" }, { positionOnRail: "asc" }], select: { id: true, designation: true, circuitLabel: true } });
+    // Fáze 60: strom zapojení podle hierarchie generátoru (hlavní vypínač → SPD / chrániče → jejich jističe, řídicí obvody)
+    const itemOfKey = new Map(created.map((item, index) => [devices[index].device.key, item.id]));
+    await saveTree(
+      prisma,
+      project.id,
+      created.map((item, index) => {
+        const device = devices[index].device;
+        return { id: item.id, designation: item.designation, circuitLabel: item.circuitLabel, parentItemId: device.parentKey ? (itemOfKey.get(device.parentKey) ?? null) : null, fedFromIncomer: device.parentKey === null, phaseAssignment: phaseAssignmentOf(device) };
+      }),
+    );
     const extraWarnings = options.afterItems ? await options.afterItems(created.map((item, index) => ({ id: item.id, device: devices[index].device }))) : [];
-    return { id: project.id, devices: rows.length, circuits: circuits.circuits.length, enclosure: board.enclosure?.model ?? null, warnings: [...circuits.warnings, ...board.warnings, ...extraWarnings] };
+    const manufacturerWarnings = estimated.size ? [`${options.manufacturer} v databázi prvků nemá: ${[...estimated].join(", ")} – přístroje mají parametry návrhu a odhad ztrát dle IEC (ověřte, případně vyberte typ v konfigurátoru).`] : [];
+    return { id: project.id, devices: rows.length, circuits: circuits.circuits.length, enclosure: board.enclosure?.model ?? null, manufacturer: options.manufacturer ?? null, warnings: [...manufacturerWarnings, ...circuits.warnings, ...board.warnings, ...extraWarnings] };
   } catch (error) {
     // Nedokončený návrh nenechávat v přehledu
     await prisma.panelBoardProject.delete({ where: { id: project.id } });
@@ -177,6 +202,17 @@ async function createPlanProject(
 
 export interface FloorplanProjectInput extends Omit<CreateProjectInput, "photoUrl" | "designMode" | "dims"> {
   draft: unknown;
+  /** Fáze 60: výrobce přístrojů celého rozváděče (výchozí ABB). */
+  manufacturer?: string | null;
+}
+
+/** Fáze přístroje ve stromu (1P+N / 2P → „L1,N“, 4P / 3P+N → „L1,L2,L3,N“). */
+function phaseAssignmentOf(device: Pick<SwitchboardResult["devices"][number], "phase" | "poles">): PhaseAssignment | null {
+  const phase = device.phase;
+  if (!phase) return null;
+  const neutral = /\+N|^2P$|^4P$/.test(device.poles);
+  const value = phase === "L1,L2,L3" ? (neutral ? "L1,L2,L3,N" : "L1,L2,L3") : phase.includes(",") ? phase : neutral ? `${phase},N` : phase;
+  return isPhaseAssignment(value) ? value : null;
 }
 
 /** Výpočet nad nákresem: okruhy a výkaz kabeláže (bez zápisu do DB). */
@@ -212,7 +248,11 @@ export async function createProjectFromFloorplan(prisma: PrismaClient, input: Fl
   const enclosures = (await prisma.panelEnclosure.findMany({ orderBy: { totalModules: "asc" } })).filter((row) => !isHiddenManufacturer(row.manufacturer));
   // Fáze 55: soustava z nákresu půdorysu (přepínač v editoru), jinak z dialogu
   const supply = supplyById(draft.supplySystem ?? input.supplySystem);
-  const board = buildSwitchboardFromCircuits(circuits, { mode: draft.installation, enclosures, supplyPhases: supply.phases });
+  // Fáze 60: skříň přednostně od výrobce přístrojů, jinak nejmenší vyhovující z databáze
+  const manufacturer = input.manufacturer?.trim() || "ABB";
+  const own = enclosures.filter((row) => sameManufacturer(row.manufacturer, manufacturer));
+  const preferred = own.length ? buildSwitchboardFromCircuits(circuits, { mode: draft.installation, enclosures: own, supplyPhases: supply.phases }) : null;
+  const board = preferred?.enclosure ? preferred : buildSwitchboardFromCircuits(circuits, { mode: draft.installation, enclosures, supplyPhases: supply.phases });
   const header = { name: input.name, customerName: input.customerName, installationSite: input.installationSite, companyId: input.companyId, manufacturerInfo: input.manufacturerInfo, createdById: input.createdById, supplySystem: supply.id };
   // Fáze 57: prostředí dle ČSN 33 2000-5-51 ed. 3 zvolené v půdorysu = potvrzené prostředí dokumentace
   const environment = draft.environment ? environmentOf(draft.environment) : null;
@@ -221,7 +261,9 @@ export async function createProjectFromFloorplan(prisma: PrismaClient, input: Fl
       floorplanJson: JSON.stringify(draft),
       cableReportJson: JSON.stringify(cableReportOf(summary, draft.profile)),
       ...(environment ? { environment: environment.id, ambientTempC: environment.ambientTempC, environmentConfirmedAt: new Date() } : {}),
+      dominantManufacturer: manufacturer,
     },
+    manufacturer,
     afterItems: (items) => assignWiringDevices(prisma, items, circuits, build, draft),
   });
 }

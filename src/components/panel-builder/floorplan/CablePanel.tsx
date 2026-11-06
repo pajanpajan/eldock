@@ -32,6 +32,9 @@ export function CablePanel({
   environment,
   onEnvironment,
   checklist,
+  manufacturers = [],
+  wallFloors = 0,
+  floorCount = 1,
 }: {
   analysis: Analysis;
   mode: CableRoutingMode;
@@ -41,6 +44,11 @@ export function CablePanel({
   environment: EnvironmentId | null;
   onEnvironment: (environment: EnvironmentId | null) => void;
   checklist: ReturnType<typeof generationChecklist>;
+  /** Fáze 60: výrobci celého rozváděče (jističe + chrániče v databázi). */
+  manufacturers?: readonly { name: string; count: number }[];
+  /** Fáze 60: počet podlaží s trasami podél stěn (místnosti / příčky) z celkového počtu podlaží. */
+  wallFloors?: number;
+  floorCount?: number;
 }) {
   const circuitById = new Map(analysis.ok ? analysis.circuits.circuits.map((circuit) => [circuit.id, circuit]) : []);
   return (
@@ -62,6 +70,14 @@ export function CablePanel({
           </div>
           <p className="text-xs text-emerald-300" data-testid="cable-saving">
             Optimalizovaně: {m(analysis.summary.totals.OPTIMIZED)} – ušetřeno {m(analysis.summary.savingVsBottomM)} oproti vedení spodem a {m(analysis.summary.savingVsTopM)} oproti vedení vrchem.
+          </p>
+          {/* Fáze 60: trasy podél stěn a pořadí prvků nezávislé na pořadí kreslení */}
+          <p className={cn("text-xs", wallFloors ? "text-sky-200" : "text-amber-200")} data-testid="cable-walls">
+            {wallFloors
+              ? `Trasy vedou podél stěn v instalačních zónách (${wallFloors === floorCount ? "všechna podlaží" : `${wallFloors} z ${floorCount} podlaží`}).`
+              : "Trasy zatím pravoúhle – zakreslete místnosti nebo nové příčky (Úprava PDF), pak povedou podél stěn."}{" "}
+            Pořadí prvků v okruzích se vždy přepočítá na nejkratší
+            {analysis.summary.orderSavingM > 0 ? ` – o ${m(analysis.summary.orderSavingM)} kratší než v pořadí kreslení.` : "."}
           </p>
           <div>
             <p className="mb-1 text-xs font-semibold text-muted-foreground">Kabely k nákupu – {ROUTING_LABEL[mode]} (vč. rezervy {slackPercent} % a přídavků na zapojení)</p>
@@ -131,6 +147,19 @@ export function CablePanel({
             <Label htmlFor="fp-site">Místo instalace</Label>
             <Input id="fp-site" name="site" maxLength={120} placeholder="nepovinné" />
           </div>
+        </div>
+        {/* Fáze 60: celý rozváděč od jednoho výrobce */}
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="fp-manufacturer">Výrobce přístrojů rozváděče</Label>
+          <select id="fp-manufacturer" name="manufacturer" defaultValue={manufacturers[0]?.name ?? "ABB"} className="h-9 rounded-md border border-input bg-transparent px-2 text-sm dark:bg-input/30" data-testid="floorplan-manufacturer">
+            {(manufacturers.length ? manufacturers : [{ name: "ABB", count: 0 }]).map((option) => (
+              <option key={option.name} value={option.name}>
+                {option.name}
+                {option.count ? ` (${option.count} jističů a chráničů)` : ""}
+              </option>
+            ))}
+          </select>
+          <p className="text-[11px] text-muted-foreground">Všechny přístroje od jednoho výrobce – co výrobce v databázi nemá, dostane parametry návrhu s odhadem (nikdy jiný výrobce). Převést na jiného výrobce jde i později v kroku 1.</p>
         </div>
         {/* Fáze 57: prostředí dle ČSN 33 2000-5-51 ed. 3 – povinně před generováním rozváděče a dokumentace */}
         <div className="flex flex-col gap-1">

@@ -70,7 +70,8 @@ describe("🏠 rozváděč ze soupisu místností (floorplan-bridge)", () => {
     const result = await createProjectFromSchedule(prisma, { name: "RD ze soupisu", customerName: null, installationSite: "Jablonec", companyId, rooms: SAMPLE_SCHEDULE, mode: "classic" });
     expect(result.devices).toBeGreaterThan(10);
     const created = await prisma.panelBoardProject.findUniqueOrThrow({ where: { id: result.id }, include: { items: { orderBy: [{ dinRailIndex: "asc" }, { positionOnRail: "asc" }] } } });
-    expect(created).toMatchObject({ designMode: "DESIGN", status: "RECOGNIZED", installationSite: "Jablonec", companyId });
+    // Fáze 60: generátor rovnou sestaví strom zapojení podle hierarchie → TREE_BUILT
+    expect(created).toMatchObject({ designMode: "DESIGN", status: "TREE_BUILT", installationSite: "Jablonec", companyId });
     expect(created.items[0].designation).toBe("-Q1");
     expect(created.items.every((item) => item.catalogComponentId && item.recognitionStatus === "VERIFIED")).toBe(true);
     expect(created.items.some((item) => item.designation.startsWith("-FI"))).toBe(true);

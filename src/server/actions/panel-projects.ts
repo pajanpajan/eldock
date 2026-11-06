@@ -101,12 +101,13 @@ export async function createScheduleProjectAction(input: z.input<typeof schedule
   }
 }
 
-const floorplanSchema = z.object({ name: text.min(1), customerName: text.nullable(), installationSite: text.nullable(), draft: z.unknown() });
+const floorplanSchema = z.object({ name: text.min(1), customerName: text.nullable(), installationSite: text.nullable(), draft: z.unknown(), manufacturer: z.string().trim().max(60).nullable().optional() });
 
 /** ⚡ Vygenerovat rozváděč z 2D půdorysu (fáze 49) – 1 kredit; nepovedený návrh kredit vrátí. */
-export async function createFloorplanProjectAction(input: z.input<typeof floorplanSchema>): Promise<ActionResult<{ id: string; devices: number; circuits: number; enclosure: string | null; warnings: string[] }>> {
+export async function createFloorplanProjectAction(input: z.input<typeof floorplanSchema>): Promise<ActionResult<{ id: string; devices: number; circuits: number; enclosure: string | null; manufacturer: string | null; warnings: string[] }>> {
   const parsed = floorplanSchema.safeParse(input);
-  if (!parsed.success || JSON.stringify(parsed.data.draft ?? null).length > 400_000) return { ok: false, error: "Zadejte název rozváděče; půdorys je příliš velký nebo neplatný." };
+  // Fáze 59: vícepodlažní nákres s poznámkami je větší – limit 900 kB (Server Action do 1 MB)
+  if (!parsed.success || JSON.stringify(parsed.data.draft ?? null).length > 900_000) return { ok: false, error: "Zadejte název rozváděče; půdorys je příliš velký nebo neplatný." };
   try {
     const company = await guardCompany();
     await consumeCredit(prisma, company.id);
