@@ -6,11 +6,9 @@ import { SiteFooter } from "@/components/landing/SiteChrome";
 import { Logo } from "@/components/layout/Logo";
 import { Button } from "@/components/ui/button";
 import type { LegalSection } from "@/lib/legal";
-import { hasShowcaseProject } from "@/server/queries/panel-builder";
 
 /** Fáze 54: společný vzhled veřejných právních stránek (zásady zpracování osobních údajů, obchodní podmínky). */
-export async function LegalPage({ title, version, intro, sections }: { title: string; version: string; intro?: string; sections: LegalSection[] }) {
-  const showcase = await hasShowcaseProject();
+export function LegalPage({ title, version, intro, sections }: { title: string; version: string; intro?: string; sections: LegalSection[] }) {
   return (
     <div className="landing bg-blueprint flex flex-1 flex-col">
       <header className="sticky top-0 z-30 border-b border-border bg-background/90 backdrop-blur">
@@ -52,8 +50,9 @@ export async function LegalPage({ title, version, intro, sections }: { title: st
           <ConsentSettingsLink className="text-primary underline-offset-2 hover:underline" />
         </p>
       </main>
-      {/* Fáze 58: mapa webu i na právních stránkách */}
-      <SiteFooter clientZone={{ href: "/login", label: "Klientská zóna / Přihlášení" }} showcase={showcase} />
+      {/* Fáze 58: mapa webu i na právních stránkách. Stránka je statická (předrenderuje se při buildu bez databáze),
+          proto bez dotazu na vzorový elaborát – odkaz na ukázku je v hlavní navigaci ostatních stránek. */}
+      <SiteFooter clientZone={{ href: "/login", label: "Klientská zóna / Přihlášení" }} showcase={false} />
     </div>
   );
 }
