@@ -15,6 +15,7 @@ import { CATALOG_GROUPS, GROUP_FILTERS, catalogGroupOf, isCatalogGroup, type Cat
 import { CATEGORY_LABELS, formatWatts } from "@/lib/panel-builder/catalog";
 import { WIRING_CATEGORIES, frameLabel } from "@/lib/panel-builder/wiring-devices";
 import { cn } from "@/lib/utils";
+import { DatasheetDialog } from "@/components/panel-builder/DatasheetDialog";
 import { getBrandGroups, getCatalogBrands, getGroupItems, searchWholeCatalog, type CatalogItemFilter } from "@/server/queries/panel-builder";
 
 export const metadata: Metadata = { title: "Katalog prvků – AI Panel Builder" };
@@ -65,7 +66,15 @@ export default async function CatalogPage({ searchParams }: PageProps<"/panel-bu
           <ArrowLeft className="size-4" aria-hidden /> AI Panel Builder
         </Link>
       }
-      actions={<DatasheetImport />}
+      actions={
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Fáze 58: knihovna značek ČSN EN 60617 (schéma i půdorys) */}
+          <Link href="/panel-builder/catalog/znacky" className="rounded-md border border-border px-3 py-2 text-sm hover:bg-muted" data-testid="symbol-library-link">
+            Knihovna značek
+          </Link>
+          <DatasheetImport />
+        </div>
+      }
     />
   );
 
@@ -148,7 +157,7 @@ export default async function CatalogPage({ searchParams }: PageProps<"/panel-bu
                         ) : null}
                       </TableCell>
                       <TableCell className="text-xs">
-                        <Datasheet url={row.datasheetUrl} />
+                        <DatasheetDialog componentId={row.id} size="xs" label={row.datasheetUrl ? "Datasheet" : "Náhled"} />
                       </TableCell>
                     </TableRow>
                   ))}
@@ -345,7 +354,7 @@ export default async function CatalogPage({ searchParams }: PageProps<"/panel-bu
                       <TableCell className="text-xs">{CATEGORY_LABELS[row.category]}</TableCell>
                       <TableCell className="text-right font-mono">{formatWatts(row.powerLossWatts)}</TableCell>
                       <TableCell className="text-xs">
-                        <Datasheet url={row.datasheetUrl} />
+                        <DatasheetDialog componentId={row.id} size="xs" label={row.datasheetUrl ? "Datasheet" : "Náhled"} />
                       </TableCell>
                     </TableRow>
                   ))}

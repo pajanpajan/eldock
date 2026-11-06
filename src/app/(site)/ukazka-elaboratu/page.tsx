@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { Rocket } from "lucide-react";
 
 import { Logo } from "@/components/layout/Logo";
+import { SiteFooter } from "@/components/landing/SiteChrome";
 import { DocumentationSheets } from "@/components/panel-builder/documentation/DocumentationSheets";
 import { PrintButton } from "@/components/landing/PrintButton";
 import { Button } from "@/components/ui/button";
@@ -80,6 +81,8 @@ export default async function SampleElaboratePage({ searchParams }: PageProps<"/
         </div>
         <DocumentationSheets data={data} />
       </main>
+      {/* Fáze 58: mapa webu */}
+      {embed ? null : <SiteFooter clientZone={{ href: "/login", label: "Klientská zóna / Přihlášení" }} showcase />}
     </div>
   );
 }

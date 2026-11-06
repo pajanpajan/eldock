@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { COMPONENT_CATEGORIES } from "@/lib/panel-builder/catalog";
+import { CATEGORY_LABELS, COMPONENT_CATEGORIES } from "@/lib/panel-builder/catalog";
 import { prisma } from "@/lib/prisma";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 import { analyzePanelPhoto, analyzeRailPhoto, extractDatasheetComponents, lookupComponent, type AiMode, type AnalysisMode } from "@/server/services/geminiPanelService";
@@ -14,6 +14,9 @@ import { consumeCredit } from "@/server/services/companies";
 import { companyManufacturer } from "@/lib/registered-company";
 import { readStoredFile } from "@/server/storage";
 import { analyzeRailDetails } from "@/server/services/panel-design";
+
+import { cleanArticle, datasheetLinks, type DatasheetLink } from "@/lib/panel-builder/datasheets";
+import { symbolKindOf, type SymbolKind } from "@/lib/panel-builder/iec-symbols";
 
 import type { ActionResult } from "./workflow";
 
@@ -384,5 +387,69 @@ export async function addRailAction(projectId: string): Promise<ActionResult<{ d
     return { ok: true, data: result };
   } catch (error) {
     return failure(error, "Lištu se nepodařilo přidat.");
+  }
+}
+
+export interface ComponentDatasheet {
+  id: string;
+  manufacturer: string;
+  series: string;
+  typeCode: string;
+  articleNumber: string;
+  description: string;
+  symbol: SymbolKind;
+  /** Hlavní parametry z katalogu (štítek → hodnota). */
+  params: [string, string][];
+  links: DatasheetLink[];
+  /** Původ dat: výchozí katalog / datasheet PDF / AI / odhad IEC (+ zdrojový soubor a strana). */
+  source: string;
+}
+
+const DATA_SOURCE_LABEL: Record<string, string> = { SEED_CATALOG: "výchozí katalog Eldocku", PDF_DATASHEET: "vytěženo z PDF datasheetu", GEMINI_AI: "dohledáno AI – ověřte", IEC_ESTIMATE: "ztrátový výkon odhadnut podle IEC" };
+
+/** Fáze 58: náhled datasheetu přístroje – parametry z katalogu, značka dle ČSN EN 60617 a odkazy na podklady výrobce. */
+export async function componentDatasheetAction(componentId: string): Promise<ActionResult<ComponentDatasheet>> {
+  if (!id.safeParse(componentId).success) return { ok: false, error: "Neplatný prvek katalogu." };
+  try {
+    await guard();
+    const row = await prisma.catalogComponent.findUnique({ where: { id: componentId } });
+    if (!row) return { ok: false, error: "Prvek v katalogu neexistuje." };
+    const num = (value: number | null, unit: string) => (value === null ? null : `${String(value).replace(".", ",")} ${unit}`);
+    const params = (
+      [
+        ["Kategorie", CATEGORY_LABELS[row.category]],
+        ["Póly", row.poles],
+        ["Jmenovitý proud In", row.ratedCurrentA ? num(row.ratedCurrentA, "A") : null],
+        ["Vypínací charakteristika", row.trippingCurve],
+        ["Vypínací schopnost Icn", num(row.breakingCapacityKa, "kA")],
+        ["Citlivost IΔn", num(row.rcdSensitivityMa, "mA")],
+        ["Typ chrániče", row.rcdType],
+        ["Typ SPD", row.spdType],
+        ["Svodový proud", num(row.surgeCurrentKa, "kA")],
+        ["Kontakty", row.contactConfig],
+        ["Napětí cívky", row.coilVoltage],
+        ["Šířka", num(row.modulesCount, "M")],
+        ["Ztrátový výkon Pn", num(row.powerLossWatts, "W")],
+        ["Rozměry", row.widthMm && row.heightMm ? `${row.widthMm} × ${row.heightMm}${row.depthMm ? ` × ${row.depthMm}` : ""} mm` : null],
+        ["EAN", row.ean],
+      ] as [string, string | null][]
+    ).filter((entry): entry is [string, string] => Boolean(entry[1]));
+    return {
+      ok: true,
+      data: {
+        id: row.id,
+        manufacturer: row.manufacturer,
+        series: row.series,
+        typeCode: row.typeCode,
+        articleNumber: cleanArticle(row.articleNumber),
+        description: row.description,
+        symbol: symbolKindOf(row),
+        params,
+        links: datasheetLinks(row),
+        source: [DATA_SOURCE_LABEL[row.dataSource] ?? row.dataSource, row.sourcePdfName ? `${row.sourcePdfName}${row.sourcePage ? `, str. ${row.sourcePage}` : ""}` : null].filter(Boolean).join(" · "),
+      },
+    };
+  } catch (error) {
+    return failure(error, "Datasheet se nepodařilo načíst.");
   }
 }

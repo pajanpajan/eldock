@@ -4,6 +4,7 @@
 import type { ComponentCategory } from "@/generated/prisma/enums";
 import { esc } from "@/lib/mock-graphics/svg";
 
+import { drawSymbol, symbolKindOf, type SymbolKind } from "./iec-symbols";
 import { DEVICE_HEIGHT_MM, MODULE_MM, railFraction, slotOffsets, type EnclosureDims } from "./layout";
 import type { BusbarPlan } from "./pe-n-busbars";
 import { phasesOf, readingOrder } from "./tree";
@@ -23,6 +24,8 @@ export interface DrawingItem {
   fedFromIncomer: boolean;
   phaseAssignment: string | null;
   circuitLabel: string;
+  /** Fáze 58: značka dle ČSN EN 60617 (z kategorie a podtypu katalogového prvku). */
+  symbol?: SymbolKind;
 }
 
 const INK = "#111";
@@ -137,32 +140,11 @@ ${enclosureLabel ? `<text x="${margin}" y="${margin - 8}" font-size="6" font-wei
 // ---------------------------------------------------------------------------
 
 const SLOT = 74;
+const WIDE_SYMBOLS = new Set<SymbolKind>(["RCD", "RCBO", "CONTACTOR", "RELAY", "RELAY_IMPULSE", "RELAY_TIMER", "RELAY_STAIRCASE", "RELAY_MONITORING", "RELAY_LEVEL", "RELAY_THERMOSTAT"]);
 const LEVEL = 116;
 
-function symbol(category: ComponentCategory | null, cx: number, top: number): string {
-  const bottom = top + 44;
-  const line = (y1: number, y2: number) => `<line x1="${cx}" y1="${y1}" x2="${cx}" y2="${y2}" stroke="${INK}" stroke-width="1.4"/>`;
-  const blade = `<line x1="${cx}" y1="${top + 30}" x2="${cx - 10}" y2="${top + 13}" stroke="${INK}" stroke-width="1.4"/>`;
-  const cross = `<path d="M${cx - 4} ${top + 8}L${cx + 4} ${top + 16}M${cx + 4} ${top + 8}L${cx - 4} ${top + 16}" stroke="${INK}" stroke-width="1.2"/>`;
-  const toroid = `<ellipse cx="${cx}" cy="${top + 37}" rx="7" ry="3" fill="none" stroke="${INK}" stroke-width="1"/><text x="${cx + 9}" y="${top + 40}" font-size="7">IΔ</text>`;
-  switch (category) {
-    case "MAIN_SWITCH":
-      return `${line(top, top + 12)}<line x1="${cx - 5}" y1="${top + 12}" x2="${cx + 5}" y2="${top + 12}" stroke="${INK}" stroke-width="1.4"/>${blade}${line(top + 30, bottom)}`;
-    case "SPD":
-      return `${line(top, top + 8)}<rect x="${cx - 6}" y="${top + 8}" width="12" height="22" fill="#fff" stroke="${INK}" stroke-width="1.2"/><path d="M${cx - 4} ${top + 26}L${cx + 4} ${top + 12}M${cx + 4} ${top + 12}l-3 1M${cx + 4} ${top + 12}l0 3" stroke="${INK}" stroke-width="1"/>${line(top + 30, top + 38)}<path d="M${cx - 8} ${top + 38}H${cx + 8}M${cx - 5} ${top + 41}H${cx + 5}M${cx - 2} ${top + 44}H${cx + 2}" stroke="${INK}" stroke-width="1.2"/>`;
-    case "RCD":
-      return `${line(top, top + 12)}<circle cx="${cx}" cy="${top + 12}" r="1.6" fill="${INK}"/>${blade}${line(top + 30, bottom)}${toroid}<line x1="${cx - 5}" y1="${top + 21}" x2="${cx - 14}" y2="${top + 35}" stroke="${INK}" stroke-width="0.7" stroke-dasharray="2 2"/>`;
-    case "RCBO":
-      return `${line(top, top + 12)}${cross}${blade}${line(top + 30, bottom)}${toroid}`;
-    case "CONTACTOR":
-      return `${line(top, top + 12)}<path d="M${cx - 5} ${top + 12}a5 5 0 0 1 10 0" fill="none" stroke="${INK}" stroke-width="1.2"/>${blade}${line(top + 30, bottom)}`;
-    case "MCB":
-    case null:
-      return `${line(top, top + 12)}${cross}${blade}${line(top + 30, bottom)}<rect x="${cx - 9}" y="${top + 19}" width="5" height="5" fill="none" stroke="${INK}" stroke-width="0.8"/>`;
-    default:
-      return `${line(top, top + 8)}<rect x="${cx - 8}" y="${top + 8}" width="16" height="26" fill="#fff" stroke="${INK}" stroke-width="1.2"/>${line(top + 34, bottom)}`;
-  }
-}
+/** Fáze 58: druh značky prvku (z katalogu), jinak podle kategorie; neznámý prvek = obecná značka. */
+export const drawingSymbolOf = (item: Pick<DrawingItem, "category" | "symbol">): SymbolKind => item.symbol ?? symbolKindOf({ category: item.category });
 
 /** Popis vodiče: fáze a počet pólů (čárka s číslem) u vícefázového vedení. */
 function conductorLabel(item: DrawingItem, cx: number, y: number): string {
@@ -173,6 +155,8 @@ function conductorLabel(item: DrawingItem, cx: number, y: number): string {
 }
 
 export function renderSingleLineDiagramSvg(items: readonly DrawingItem[], options: { incomer: string; network: string }): string {
+  // Fáze 58: cívky a spouště leží vlevo od osy – s nimi širší rozteč, aby nezasahovaly do popisu souseda
+  const slot = items.some((item) => WIDE_SYMBOLS.has(drawingSymbolOf(item))) ? 92 : SLOT;
   const byParent = new Map<string | null, DrawingItem[]>();
   const ids = new Set(items.map((item) => item.id));
   for (const item of readingOrder(items)) {
@@ -200,19 +184,19 @@ export function renderSingleLineDiagramSvg(items: readonly DrawingItem[], option
   const left = 40;
   const top = 62;
   const bottomY = top + maxDepth * LEVEL + 10;
-  const width = left * 2 + totalLeaves * SLOT;
+  const width = left * 2 + totalLeaves * slot;
   const height = bottomY + 150;
   const out: string[] = [];
 
   const draw = (item: DrawingItem, x0: number, y: number, seen: Set<string>) => {
     if (seen.has(item.id)) return;
     seen.add(item.id);
-    const span = (leaves.get(item.id) ?? 1) * SLOT;
+    const span = (leaves.get(item.id) ?? 1) * slot;
     const kids = byParent.get(item.id) ?? [];
-    const cx = kids.length ? x0 + span / 2 : x0 + SLOT / 2;
+    const cx = kids.length ? x0 + span / 2 : x0 + slot / 2;
     out.push(conductorLabel(item, cx, y));
     out.push(`<line x1="${cx}" y1="${y}" x2="${cx}" y2="${y + 14}" stroke="${INK}" stroke-width="1.4"/>`);
-    out.push(symbol(item.category, cx, y + 14));
+    out.push(drawSymbol(drawingSymbolOf(item), cx, y + 14));
     out.push(`<text x="${cx + 9}" y="${y + 34}" font-size="9" font-weight="700">${esc(item.designation)}</text>`);
     out.push(`<text x="${cx + 9}" y="${y + 44}" font-size="6.5" fill="#374151">${esc(item.typeCode.length > 16 ? `${item.typeCode.slice(0, 15)}…` : item.typeCode)}</text>`);
     if (item.manufacturer) out.push(`<text x="${cx + 9}" y="${y + 52}" font-size="6" fill="#6b7280">${esc(item.manufacturer)}</text>`);
@@ -222,8 +206,8 @@ export function renderSingleLineDiagramSvg(items: readonly DrawingItem[], option
       let cursor = x0;
       const centers: number[] = [];
       for (const kid of kids) {
-        const kidSpan = (leaves.get(kid.id) ?? 1) * SLOT;
-        centers.push((byParent.get(kid.id) ?? []).length ? cursor + kidSpan / 2 : cursor + SLOT / 2);
+        const kidSpan = (leaves.get(kid.id) ?? 1) * slot;
+        centers.push((byParent.get(kid.id) ?? []).length ? cursor + kidSpan / 2 : cursor + slot / 2);
         cursor += kidSpan;
       }
       out.push(`<line x1="${cx}" y1="${outY}" x2="${cx}" y2="${busY}" stroke="${INK}" stroke-width="1.4"/>`);
@@ -232,7 +216,7 @@ export function renderSingleLineDiagramSvg(items: readonly DrawingItem[], option
       kids.forEach((kid, index) => {
         out.push(`<line x1="${centers[index]}" y1="${busY}" x2="${centers[index]}" y2="${busY + 8}" stroke="${INK}" stroke-width="1.4"/>`);
         draw(kid, cursor, busY + 8, seen);
-        cursor += (leaves.get(kid.id) ?? 1) * SLOT;
+        cursor += (leaves.get(kid.id) ?? 1) * slot;
       });
     } else if (item.category !== "SPD") {
       // Koncový vývod: kabel k bodu odběru a svislý popis obvodu
@@ -246,8 +230,8 @@ export function renderSingleLineDiagramSvg(items: readonly DrawingItem[], option
   const rootCenters: number[] = [];
   let cursor = left;
   for (const root of roots) {
-    const span = (leaves.get(root.id) ?? 1) * SLOT;
-    rootCenters.push((byParent.get(root.id) ?? []).length ? cursor + span / 2 : cursor + SLOT / 2);
+    const span = (leaves.get(root.id) ?? 1) * slot;
+    rootCenters.push((byParent.get(root.id) ?? []).length ? cursor + span / 2 : cursor + slot / 2);
     cursor += span;
   }
   const feedX = rootCenters.length ? (Math.min(...rootCenters) + Math.max(...rootCenters)) / 2 : width / 2;
@@ -261,7 +245,7 @@ export function renderSingleLineDiagramSvg(items: readonly DrawingItem[], option
   roots.forEach((root, index) => {
     out.push(`<line x1="${rootCenters[index]}" y1="${top - 10}" x2="${rootCenters[index]}" y2="${top}" stroke="${INK}" stroke-width="1.4"/>`);
     draw(root, cursor, top, seen);
-    cursor += (leaves.get(root.id) ?? 1) * SLOT;
+    cursor += (leaves.get(root.id) ?? 1) * slot;
   });
   if (loose.length) out.push(`<text x="${left}" y="${height - 8}" font-size="8" fill="#b91c1c">Nezapojeno ve stromu: ${esc(loose.map((item) => item.designation).join(", "))}</text>`);
 

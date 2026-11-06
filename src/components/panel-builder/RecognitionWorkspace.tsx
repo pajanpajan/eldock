@@ -329,6 +329,7 @@ export function RecognitionWorkspace({
       assigned={
         selected?.component
           ? {
+              componentId: selected.component.id,
               manufacturer: selected.component.manufacturer,
               typeCode: selected.customTypeCode || selected.component.typeCode,
               articleNumber: selected.component.articleNumber,

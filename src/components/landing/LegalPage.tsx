@@ -2,12 +2,15 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
 import { ConsentSettingsLink } from "@/components/consent/ConsentManager";
+import { SiteFooter } from "@/components/landing/SiteChrome";
 import { Logo } from "@/components/layout/Logo";
 import { Button } from "@/components/ui/button";
 import type { LegalSection } from "@/lib/legal";
+import { hasShowcaseProject } from "@/server/queries/panel-builder";
 
 /** Fáze 54: společný vzhled veřejných právních stránek (zásady zpracování osobních údajů, obchodní podmínky). */
-export function LegalPage({ title, version, intro, sections }: { title: string; version: string; intro?: string; sections: LegalSection[] }) {
+export async function LegalPage({ title, version, intro, sections }: { title: string; version: string; intro?: string; sections: LegalSection[] }) {
+  const showcase = await hasShowcaseProject();
   return (
     <div className="landing bg-blueprint flex flex-1 flex-col">
       <header className="sticky top-0 z-30 border-b border-border bg-background/90 backdrop-blur">
@@ -49,6 +52,8 @@ export function LegalPage({ title, version, intro, sections }: { title: string; 
           <ConsentSettingsLink className="text-primary underline-offset-2 hover:underline" />
         </p>
       </main>
+      {/* Fáze 58: mapa webu i na právních stránkách */}
+      <SiteFooter clientZone={{ href: "/login", label: "Klientská zóna / Přihlášení" }} showcase={showcase} />
     </div>
   );
 }

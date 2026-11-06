@@ -1,4 +1,5 @@
 // Fáze 56: úvodní stránka pro čtyři cílové skupiny – elektrikář, revizní technik, technický ředitel, údržbář.
+// Fáze 58: elektrikář patří do části Domovní elektroinstalace, ostatní do části Průmysl.
 // Obsah jen z toho, co platforma skutečně umí (Panel Builder, půdorys, revize, lhůtník, červenky, hlídač životnosti).
 
 export type AudienceId = "elektrikar" | "revizni-technik" | "technicky-reditel" | "udrzba";
@@ -11,6 +12,8 @@ export interface AudienceCta {
 
 export interface Audience {
   id: AudienceId;
+  /** Fáze 58: část webu – domovní elektroinstalace, nebo průmysl. */
+  segment: "domov" | "prumysl";
   /** Kotva sekce na úvodní stránce. */
   anchor: string;
   role: string;
@@ -28,6 +31,7 @@ export interface Audience {
 export const AUDIENCES: Audience[] = [
   {
     id: "elektrikar",
+    segment: "domov",
     anchor: "elektrikar",
     role: "Elektrikář",
     eyebrow: "Pro elektrikáře",
@@ -48,6 +52,7 @@ export const AUDIENCES: Audience[] = [
   },
   {
     id: "revizni-technik",
+    segment: "prumysl",
     anchor: "revizni-technik",
     role: "Revizní technik",
     eyebrow: "Pro revizní techniky",
@@ -68,7 +73,8 @@ export const AUDIENCES: Audience[] = [
   },
   {
     id: "technicky-reditel",
-    anchor: "prumysl",
+    segment: "prumysl",
+    anchor: "technicky-reditel",
     role: "Technický ředitel",
     eyebrow: "Pro technické ředitele",
     promise: "Platná dokumentace a auditní stopa napříč závody.",
@@ -88,6 +94,7 @@ export const AUDIENCES: Audience[] = [
   },
   {
     id: "udrzba",
+    segment: "prumysl",
     anchor: "udrzba",
     role: "Údržbář",
     eyebrow: "Pro údržbu",

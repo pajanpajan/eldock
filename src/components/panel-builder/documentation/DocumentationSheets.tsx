@@ -28,6 +28,8 @@ export interface DocumentationData {
   year: string;
   panelDrawingSvg: string;
   singleLineSvg: string;
+  /** Fáze 58: legenda značek jednopólového schématu (ČSN EN 60617). */
+  symbolLegend?: { label: string; norm: string; svg: string }[];
   functions: { designation: string; label: string }[];
   parts: PartsRow[];
   components: ComponentRow[];
@@ -308,6 +310,23 @@ export function DocumentationSheets({ data }: { data: DocumentationData }) {
       <Sheet data={data} number={3}>
         {/* eslint-disable-next-line @next/next/no-img-element -- vektorové schéma ze stromu zapojení */}
         <img src={svgUri(data.singleLineSvg)} alt="Jednopólové schéma rozváděče" className="h-auto w-full" data-testid="doc-sld" />
+        {data.symbolLegend?.length ? (
+          <div className="mt-3 border-t border-zinc-300 pt-2" data-testid="doc-symbol-legend">
+            <p className="mb-1 text-[10px] font-bold">Legenda značek (ČSN EN 60617)</p>
+            <ul className="grid grid-cols-3 gap-x-3 gap-y-1 text-[9px] leading-tight">
+              {data.symbolLegend.map((row) => (
+                <li key={row.label} className="flex items-center gap-1.5">
+                  {/* eslint-disable-next-line @next/next/no-img-element -- vlastní vektorová značka */}
+                  <img src={svgUri(row.svg)} alt="" className="h-8 w-9 shrink-0" />
+                  <span>
+                    <b>{row.label}</b>
+                    <span className="block text-zinc-500">{row.norm}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
       </Sheet>
 
       {/* List 4 – kusovník a seznam komponent */}

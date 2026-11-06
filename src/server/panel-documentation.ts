@@ -4,7 +4,8 @@ import type { DocumentationData } from "@/components/panel-builder/documentation
 import { formatDate } from "@/lib/format";
 import { isMix } from "@/lib/panel-builder/catalog";
 import { componentsList, partsList, technicalData } from "@/lib/panel-builder/documentation";
-import { renderPanelDrawingSvg, renderSingleLineDiagramSvg, type DrawingItem } from "@/lib/panel-builder/drawings";
+import { drawingSymbolOf, renderPanelDrawingSvg, renderSingleLineDiagramSvg, type DrawingItem } from "@/lib/panel-builder/drawings";
+import { symbolKindOf, symbolLegend } from "@/lib/panel-builder/iec-symbols";
 import { LEGAL_FRAMEWORK, externalInfluencesProtocol, isFlushEnclosure } from "@/lib/panel-builder/external-influences";
 import { parseCableReport, parseDraft } from "@/lib/panel-builder/floorplan-editor";
 import { compileFloorplanBom } from "@/lib/panel-builder/wiring-bom";
@@ -54,6 +55,8 @@ export async function buildDocumentationData(project: PanelProjectDetail, origin
     fedFromIncomer: item.fedFromIncomer,
     phaseAssignment: item.phaseAssignment,
     circuitLabel: item.circuitLabel,
+    // Fáze 58: značka dle ČSN EN 60617 podle kategorie a podtypu katalogového prvku
+    symbol: symbolKindOf(item.catalogComponent ?? { category: null }),
   }));
   // Fáze 55: veřejná ukázka má vždy úplný strom – nezapojené prvky dostanou navržené zapojení jen pro vykreslení
   // (List 2 spojnice, List 3 jednopólové schéma bez „Nezapojeno ve stromu“); databáze se nemění.
@@ -99,6 +102,7 @@ export async function buildDocumentationData(project: PanelProjectDetail, origin
     year: String(date.getFullYear()),
     panelDrawingSvg: renderPanelDrawingSvg(project, drawingItems, project.enclosureModel, { plan: busbars, position: project.incomerFrom === "BOTTOM" ? "BOTTOM" : "TOP" }),
     singleLineSvg: renderSingleLineDiagramSvg(drawingItems, { incomer, network: project.networkSystem }),
+    symbolLegend: symbolLegend(drawingItems.map(drawingSymbolOf)).map(({ info, svg }) => ({ label: info.label, norm: info.norm, svg })),
     functions: readingOrder(project.items).map((item) => ({ designation: item.designation, label: item.circuitLabel })),
     // Fáze 55: sběrnice PE / N0 / N-FIx a propojka PEN v kusovníku (List 4)
     parts: [...partsList(docItems, enclosure), ...busbarPartsRows(busbars)],

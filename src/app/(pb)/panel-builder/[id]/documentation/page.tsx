@@ -13,6 +13,9 @@ import type { StandardEditionId } from "@/lib/legislation-2027";
 import { RoutineTestPanel, StandardEditionSelect } from "@/components/panel-builder/documentation/RoutineTestPanel";
 import { buildDocumentationData } from "@/server/panel-documentation";
 import { EnvironmentConfirm } from "@/components/panel-builder/documentation/EnvironmentConfirm";
+import { SymbolDatasheetList } from "@/components/panel-builder/documentation/SymbolDatasheetList";
+import { symbolKindOf } from "@/lib/panel-builder/iec-symbols";
+import { readingOrder } from "@/lib/panel-builder/tree";
 import { ENVIRONMENT_BLOCKER } from "@/lib/panel-builder/environments";
 
 export async function generateMetadata({ params }: PageProps<"/panel-builder/[id]/documentation">): Promise<Metadata> {
@@ -68,6 +71,17 @@ export default async function PanelDocumentationPage({ params }: PageProps<"/pan
           </div>
           <RoutineTestPanel projectId={project.id} initial={routineTest} />
         </div>
+        {/* Fáze 58: značka každého přístroje dle ČSN EN 60617 a náhled datasheetu */}
+        <SymbolDatasheetList
+          rows={readingOrder(project.items).map((item) => ({
+            id: item.id,
+            designation: item.designation,
+            typeCode: item.customTypeCode ?? item.catalogComponent?.typeCode ?? "?",
+            manufacturer: item.catalogComponent?.manufacturer ?? null,
+            componentId: item.catalogComponent?.id ?? null,
+            symbol: symbolKindOf(item.catalogComponent ?? { category: null }),
+          }))}
+        />
         <DocumentationSheets data={data} />
       </div>
     </PageTransition>

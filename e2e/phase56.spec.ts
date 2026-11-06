@@ -5,15 +5,17 @@ import { expect, test } from "@playwright/test";
 test.describe("fáze 56 – veřejný web", () => {
   test.use({ storageState: { cookies: [], origins: [] } });
 
-  test("rozcestník „Jsem…“ vede na sekce elektrikáře, revizního technika, průmyslu a údržby", async ({ page }) => {
-    await page.goto("/");
-    const chooser = page.getByTestId("audience-chooser");
-    await expect(chooser.getByRole("link")).toHaveCount(4);
-    for (const [role, anchor] of [["Elektrikář", "elektrikar"], ["Revizní technik", "revizni-technik"], ["Technický ředitel", "prumysl"], ["Údržbář", "udrzba"]] as const) {
-      await expect(chooser.getByRole("link", { name: new RegExp(role) })).toHaveAttribute("href", `#${anchor}`);
+  test("cílové skupiny: elektrikář v části Domovní elektroinstalace, ředitel, údržba a revizní technik v části Průmysl", async ({ page }) => {
+    // Fáze 58: rozcestník „Jsem…“ nahradily dvě části webu
+    await page.goto("/domovni-elektroinstalace");
+    await expect(page.locator("section#elektrikar")).toBeAttached();
+    await page.goto("/prumysl");
+    const roles = page.getByTestId("industry-roles");
+    for (const [role, anchor] of [["Technický ředitel", "technicky-reditel"], ["Údržbář", "udrzba"], ["Revizní technik", "revizni-technik"]] as const) {
+      await expect(roles.getByRole("link", { name: role })).toHaveAttribute("href", `#${anchor}`);
       await expect(page.locator(`section#${anchor}`)).toBeAttached();
     }
-    await chooser.getByRole("link", { name: /Revizní technik/ }).click();
+    await roles.getByRole("link", { name: "Revizní technik" }).click();
     await expect(page).toHaveURL(/#revizni-technik$/);
     await expect(page.getByRole("heading", { name: /Revize bez přepisování/ })).toBeInViewport();
     await expect(page.getByTestId("trust-points")).toContainText("ČSN EN IEC 61439");

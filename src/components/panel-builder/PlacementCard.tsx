@@ -13,6 +13,7 @@ import { deviceWithConfig, type VectorDevice } from "@/lib/panel-builder/vector-
 import { previewConfigAction } from "@/server/actions/panel-design";
 import type { ConfigPreview } from "@/server/services/panel-design";
 
+import { DatasheetDialog } from "./DatasheetDialog";
 import { VectorModuleSymbol } from "./VectorModuleSymbol";
 import { PLACE_MIME } from "./VectorPanel";
 
@@ -75,7 +76,7 @@ export function PlacementCard({
   /** Žádná lišta nemá místo: přidat novou lištu a vložit na ni. */
   onAddRailInsert: (count: number) => void;
   /** Vybraný přístroj na liště: uložený katalogový kus (sloučená karta „Přiřazený přístroj“). */
-  assigned?: { manufacturer: string; typeCode: string; articleNumber: string; modules: number; powerLossWatts: number; estimated: boolean } | null;
+  assigned?: { componentId?: string; manufacturer: string; typeCode: string; articleNumber: string; modules: number; powerLossWatts: number; estimated: boolean } | null;
 }) {
   const key = config ? JSON.stringify(config) : "";
   const [preview, setPreview] = useState<{ key: string; data: ConfigPreview } | null>(null);
@@ -135,6 +136,8 @@ export function PlacementCard({
             · Šířka: {assigned.modules}M · Ztrátový výkon: {formatWatts(assigned.powerLossWatts)}
           </span>
           {assigned.estimated ? <Badge variant="outline">odhad IEC</Badge> : null}
+          {/* Fáze 58: náhled datasheetu a značky přiřazeného přístroje */}
+          {assigned.componentId ? <DatasheetDialog componentId={assigned.componentId} size="xs" className="ml-auto" /> : null}
         </p>
       ) : null}
       <div className="flex gap-3">

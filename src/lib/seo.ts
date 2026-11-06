@@ -30,6 +30,9 @@ export const SEO_KEYWORDS = [
 /** Veřejné vstupní stránky do sitemap.xml (cesta, priorita, četnost změn). */
 export const PUBLIC_PAGES = [
   { path: "/", priority: 1, changeFrequency: "weekly" },
+  // Fáze 58: dvě části webu – domovní elektroinstalace a průmysl
+  { path: "/domovni-elektroinstalace", priority: 0.9, changeFrequency: "monthly" },
+  { path: "/prumysl", priority: 0.9, changeFrequency: "monthly" },
   { path: "/ukazka-elaboratu", priority: 0.8, changeFrequency: "monthly" },
   { path: "/panel-builder/auth", priority: 0.8, changeFrequency: "monthly" },
   { path: "/register-plant", priority: 0.6, changeFrequency: "monthly" },

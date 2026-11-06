@@ -7,7 +7,8 @@ test.describe("nepřihlášený návštěvník", () => {
     await page.goto("/");
     await expect(page).toHaveURL(/\/$/);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Eldock – elektrodokumentace od rodinného domu po výrobní závod");
-    for (const name of ["Čtyři pilíře systému", "Jeden systém pro celý závod", "Ukážeme vám Eldock přímo ve vašem závodě"]) {
+    // Fáze 58: úvod = proč Eldock vznikl + rozcestník; pilíře a role závodu jsou na /prumysl (e2e/phase58.spec.ts)
+    for (const name of ["Kde Eldock použijete?", "Ukážeme vám Eldock na vaší zakázce nebo ve vašem závodě"]) {
       await expect(page.getByRole("heading", { name })).toBeVisible();
     }
     await expect(page.getByText("Eldock s.r.o. (v založení)").first()).toBeVisible();

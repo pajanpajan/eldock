@@ -31,6 +31,8 @@ test.describe("fáze 54 – veřejný web", () => {
     await expect(menu).toBeHidden();
     await expect(page).toHaveURL(/#kontakt$/);
 
+    // Fáze 58: produktová karta Panel Builderu je v části Domovní elektroinstalace
+    await page.goto("/domovni-elektroinstalace");
     const card = page.getByTestId("product-panel-builder");
     const cardBox = (await card.boundingBox())!;
     for (const button of [card.getByRole("link", { name: /Spustit AI Panel Builder/ }), card.getByTestId("sample-elaborate")]) {
