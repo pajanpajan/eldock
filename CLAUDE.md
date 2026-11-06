@@ -92,7 +92,7 @@ Server je hlídá přes `assertFeature`, správa je na `/admin/modules`.
 - **Stav (ověřeno 2026-11-01):** klíč je nastavený lokálně v `.env` i na produkci (kontejner `eldock-app`), takže **AI běží naostro přes Gemini**.
 - Demo režim (deterministická analýza a Smart Fallback Picker) je jen záložní: zapne se bez klíče, u SVG ukázek nebo při chybě volání (klíč, kvóta, výpadek); UI pak ukáže štítek „Demo AI režim“. E2E testy běží záměrně s prázdným klíčem.
 - Klíč nikdy nevypisuj do výstupu a nedávej ho do Gitu.
-- Fáze 56: produkční `.env` může mít `GEMINI_VISION_MODEL` nastavený napevno – výchozí hodnotu z `docker-compose.yml` pak přebije; změnu modelu na serveru dělá uživatel (soubor `.env` nečteme ani nepřepisujeme).
+- Fáze 56: produkční `.env` má `GEMINI_VISION_MODEL` nastavený napevno (od 2026-11-06 `gemini-3.1-pro-preview`) – výchozí hodnotu z `docker-compose.yml` přebije. Soubor `.env` nečteme; jednotlivý řádek měníme jen po výslovném souhlasu uživatele (`sed` na `^GEMINI_VISION_MODEL=`, pak `docker-compose up -d`).
 
 ## 5a. Souhlas s cookies a newsletter (fáze 56)
 
