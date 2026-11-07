@@ -5,7 +5,7 @@ revize VTZ, změny skutečného provedení mezi údržbou v hale a externími CA
 rozváděčů. Pracovní název byl Digitry, od fáze 20 je to **ELDOCK**. Produkce běží na https://eldock.cz.
 Původní zadání MVP je v `docs/archiv/SPECIFIKACE-MVP.md`, celá historie fází 0–35 v `docs/archiv/PLAN-faze-00-35.md`, celý archiv v jednom souboru `docs/archiv/ARCHIV-KOMPLET.md`.
 
-## 1. Milníky (fáze 0–58 nasazené, 59–61 k nasazení)
+## 1. Milníky (fáze 0–61 nasazené)
 
 | Fáze | Milník |
 |---|---|
@@ -125,7 +125,7 @@ Když uživatel řekne **„nasaď to na produkci“** nebo **„deploy“**:
 1. Ověř změny (`npm run verify`) a commitni je (`git add -A`, commit s výstižnou zprávou).
 2. `git push` na GitHub (`origin main`).
 3. `ssh root@91.99.148.62 "cd /root/eldock && git pull && docker-compose up -d --build"`. Build na serveru s 2 GB RAM trvá přes 10 minut, proto ho pouštěj na pozadí. Docker build vynechává kontrolu typů (`ELDOCK_SKIP_BUILD_TYPECHECK=1`), typy hlídá `verify`.
-   Fáze 58: SSH spojení může během dlouhého buildu spadnout (connection reset) a build tím skončí – spolehlivější je spustit stejný příkaz odpojeně: `ssh root@91.99.148.62 "cd /root/eldock && git pull && nohup sh -c 'docker-compose up -d --build; echo BUILD_EXIT=\$?' > /tmp/eldock-build.log 2>&1 < /dev/null &"` a výsledek číst z `/tmp/eldock-build.log`. Statické stránky se předrenderují při buildu bez databáze (`DATABASE_URL=file:/tmp/build.db`) – nesmí se ptát Prismy; lokálně ověříš `DATABASE_URL="file:./build-empty.db" npm run build`.
+   Fáze 58: SSH spojení může během dlouhého buildu spadnout (connection reset) a build tím skončí – spolehlivější je spustit stejný příkaz odpojeně: `ssh root@91.99.148.62 "cd /root/eldock && git pull && { nohup sh -c 'docker-compose up -d --build; echo BUILD_EXIT=\$?' > /tmp/eldock-build.log 2>&1 < /dev/null & }"` a výsledek číst z `/tmp/eldock-build.log`. Složené závorky jsou nutné (fáze 61): bez nich se `&` vztahuje na celý řetězec `cd && git pull && nohup …`, ten běží v subshellu s výstupem do SSH a spojení zůstane otevřené až do konce buildu. Statické stránky se předrenderují při buildu bez databáze (`DATABASE_URL=file:/tmp/build.db`) – nesmí se ptát Prismy; lokálně ověříš `DATABASE_URL="file:./build-empty.db" npm run build`.
 4. Pokaždé po nasazení ukliď mezivrstvy: `ssh root@91.99.148.62 "docker image prune -f && df -h /"`. Maže jen obrazy bez tagu, kontejnery, data ani `.env` neovlivní.
 5. Ověř výsledek: výstup buildu, `docker-compose ps` (`healthy`), odpověď https://eldock.cz (hned po startu chvíli vrací 503) a volné místo na disku. Pak ho shrň.
 
