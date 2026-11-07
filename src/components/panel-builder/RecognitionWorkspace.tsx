@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Camera, Check, Loader2, Plus, RefreshCw } from "lucide-react";
+import { ArrowRight, Camera, Loader2, Plus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,7 @@ import { standardEditionOf } from "@/lib/legislation-2027";
 import { EnclosurePicker } from "./EnclosurePicker";
 import { ItemConfigurator } from "./ItemConfigurator";
 import { ManufacturerTransfer } from "./ManufacturerTransfer";
+import { ModeBar } from "./ModeBar";
 import { PhotoViewer } from "./PhotoViewer";
 import { PlacementCard } from "./PlacementCard";
 import { VectorPanel } from "./VectorPanel";
@@ -540,6 +541,32 @@ export function RecognitionWorkspace({
           }}
         />
         </div>
+        {/* Fáze 62: lišta kroku nad rozváděčem (lepkavá) – úprava přístroje se ukončuje „Hotovo“ tady, ne v bočním
+            panelu; vykreslená vždy, ať se rozváděč po kliknutí na přístroj neposune */}
+        <ModeBar
+          tone={selected ? "edit" : "idle"}
+          title={
+            selected ? (
+              <>
+                ✏️ Úprava přístroje <span className="font-mono text-amber-300">{selected.designation}</span>
+              </>
+            ) : (
+              "Výběr přístroje"
+            )
+          }
+          hint={
+            selected ? (
+              <span data-testid="vector-selected">
+                Upravujete <b className="font-mono text-amber-300">{selected.designation}</b> · lišta {selected.dinRailIndex}, {String(selected.modulesWidth).replace(".", ",")}M · změny v pravém panelu se ukládají hned · Esc = konec úprav
+              </span>
+            ) : (
+              "Kliknutím přístroj upravíte, přetažením ho přesunete na jinou pozici nebo lištu."
+            )
+          }
+          onDone={selected ? () => setSelectedId(null) : undefined}
+          testId="edit-bar"
+          doneTestId="edit-done"
+        />
         <VectorPanel
           devices={devices}
           rails={capacities.length}
@@ -588,13 +615,6 @@ export function RecognitionWorkspace({
           onMoveDevice={move}
           onRailPhoto={design ? undefined : pickRailPhoto}
         />
-        {selected ? (
-          <p className="text-xs text-muted-foreground" data-testid="vector-selected">
-            Upravujete <b className="font-mono text-amber-300">{selected.designation}</b> · lišta {selected.dinRailIndex}, {String(selected.modulesWidth).replace(".", ",")}M · Esc = konec úprav
-          </p>
-        ) : (
-          <p className="text-xs text-muted-foreground">Přístroj na liště jde přetáhnout na jinou pozici nebo lištu; kliknutím ho upravíte.</p>
-        )}
       </section>
 
       <section
@@ -617,21 +637,16 @@ export function RecognitionWorkspace({
             )}
           </h2>
           {selected ? (
-            <div className="flex flex-wrap gap-1.5">
-              <Button variant="outline" size="sm" className="gap-1.5 border-amber-400/60" onClick={() => setSelectedId(null)} data-testid="edit-done">
-                <Check className="size-3.5" aria-hidden /> Hotovo
-              </Button>
-              <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => setSelectedId(null)}>
-                <Plus className="size-3.5" aria-hidden /> Nový přístroj
-              </Button>
-            </div>
+            <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => setSelectedId(null)}>
+              <Plus className="size-3.5" aria-hidden /> Nový přístroj
+            </Button>
           ) : (
             <span className="text-xs text-muted-foreground">Výrobce → kategorie → parametry → přetáhnout na lištu</span>
           )}
         </div>
         {selected ? (
           <p className="rounded-md border border-amber-400/40 bg-amber-400/10 px-2.5 py-1.5 text-xs text-amber-100" data-testid="edit-banner">
-            Změny v kaskádě se ukládají rovnou do <b>{selected.designation}</b> (lišta {selected.dinRailIndex}, pozice {selected.positionOnRail}). Nový přístroj vložíte po kliknutí na „Hotovo“ nebo klávesou Esc.
+            Změny v kaskádě se ukládají rovnou do <b>{selected.designation}</b> (lišta {selected.dinRailIndex}, pozice {selected.positionOnRail}). Úpravu ukončíte tlačítkem „Hotovo“ nad rozváděčem nebo klávesou Esc.
           </p>
         ) : target ? (
           <p className="flex flex-wrap items-center gap-2 rounded-md border border-sky-400/50 bg-sky-500/10 px-2.5 py-1.5 text-xs text-sky-100" data-testid="insert-target">

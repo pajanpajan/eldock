@@ -24,10 +24,16 @@ export function FloorSymbol({
   switchNo,
   level = "classic",
   lem,
+  hitSlot = null,
 }: {
   item: PaletteItem;
   size: number;
   active: boolean;
+  /**
+   * Fáze 62: přístroj ve víceramečku – klikací plocha jen na jeho pozici v rámečku (délka v ose rámečku), aby se
+   * přisazení sousedé nepřekrývali; kresba značky pak kliky nezachytává.
+   */
+  hitSlot?: { length: number; horizontal: boolean } | null;
   /** Podklad (bílý výkres) → černá kresba; čistý rastr (tmavý) → světlá kresba. */
   onPaper: boolean;
   rotation?: number;
@@ -62,10 +68,19 @@ export function FloorSymbol({
           <rect x={-fixture.w / 2 - ZONE2_MM} y={-fixture.h / 2 - ZONE2_MM} width={fixture.w + ZONE2_MM * 2} height={fixture.h + ZONE2_MM * 2} rx={ZONE2_MM} fill="rgba(56,189,248,0.06)" stroke="#38bdf8" strokeOpacity={0.6} strokeWidth={w * 0.8} strokeDasharray={`${w * 4} ${w * 3}`} pointerEvents="none" />
           <rect x={-fixture.w / 2} y={-fixture.h / 2} width={fixture.w} height={fixture.h} fill="rgba(56,189,248,0.12)" />
         </g>
+      ) : hitSlot ? (
+        <rect
+          x={hitSlot.horizontal ? -hitSlot.length / 2 : -size * 0.75}
+          y={hitSlot.horizontal ? -size * 0.75 : -hitSlot.length / 2}
+          width={hitSlot.horizontal ? hitSlot.length : size * 1.5}
+          height={hitSlot.horizontal ? size * 1.5 : hitSlot.length}
+          fill="transparent"
+          data-testid="frame-slot"
+        />
       ) : (
         <circle cx={0} cy={0} r={size * 0.75} fill="transparent" />
       )}
-      <g transform={rotation ? `rotate(${rotation})` : undefined}>
+      <g transform={rotation ? `rotate(${rotation})` : undefined} pointerEvents={hitSlot ? "none" : undefined}>
         {draw(halo, w * (active ? 4.5 : 3.2), "halo")}
         {parts.fills.map((fill, index) => (
           <path key={`F${index}`} d={fill} fill={ink} stroke="none" />

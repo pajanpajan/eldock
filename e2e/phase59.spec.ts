@@ -120,10 +120,11 @@ test("2D půdorys: natočení podle předchozí značky, víceramček, vypínač
   await expect(page.getByTestId("plan-checks")).toContainText("svítidlo bez vypínače");
   await canvas.locator('[data-element="switch-1"]').first().click();
   await canvas.getByTestId("element-toolbar").getByRole("button", { name: "Přiřadit vypínač ke světlu" }).click();
-  await expect(page.getByTestId("pairing-banner")).toBeVisible();
+  // Fáze 62: krok párování a jeho „Hotovo“ jsou v liště nad půdorysem, ne v bočním panelu
+  await expect(page.getByTestId("mode-bar")).toHaveAttribute("data-tone", "pair");
   await expect(canvas.getByTestId("pair-candidate")).toHaveCount(1);
   await canvas.getByRole("button", { name: /^Stropní svítidlo/ }).click();
-  await page.getByTestId("pairing-done").click();
+  await page.getByTestId("mode-done").click();
   await expect(detail.getByTestId("switch-controls")).toContainText("Stropní svítidlo");
   await expect(page.getByTestId("plan-checks")).toHaveCount(0);
   // Druhé světlo bez vypínače → automatické přiřazení k nejbližšímu vypínači v místnosti

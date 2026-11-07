@@ -2,7 +2,7 @@
 // příčka, bouraná konstrukce, šrafovaná oblast, textové pole) a přiřazení vypínačů ke světlům. Čisté funkce nad
 // nákresem (aktivní podlaží), bezpečné pro klient i server.
 
-import { DEFAULT_ELEVATION, mountHeight } from "@/engine/floorplan-bridge";
+import { DEFAULT_ELEVATION, mountHeight, type InstallLevel } from "@/engine/floorplan-bridge";
 
 import {
   ANNOTATION_DEFAULTS,
@@ -10,8 +10,10 @@ import {
   controlsLights,
   frameAxis,
   mapAllElements,
+  paletteFor,
   paletteItem,
   symbolSizeOf,
+  type PaletteItem,
   type Annotation,
   type AnnotationKind,
   type EditorElement,
@@ -74,12 +76,15 @@ export function layoutFrame(draft: FloorplanDraft, frameId: string): FloorplanDr
   const axis = frameAxis(anchor.rotation);
   const pitch = framePitch(draft, anchor);
   const placed = new Map<string, { x: number; y: number }>();
+  // Fáze 62: kotva drží svůj střed i jako dvojzásuvka (2 pozice) – dřív se rámeček při každém přepočtu
+  // (otočení, posun v rámečku) posunul o půl pozice
+  const base = ((gangsOf(anchor) - 1) / 2) * pitch;
   let start = 0;
   for (const id of frame.members) {
     const member = draft.elements.find((element) => element.id === id);
     if (!member) continue;
     const gangs = gangsOf(member);
-    const offset = (start + (gangs - 1) / 2) * pitch;
+    const offset = (start + (gangs - 1) / 2) * pitch - base;
     placed.set(id, { x: Math.round(anchor.x + axis.x * offset), y: Math.round(anchor.y + axis.y * offset) });
     start += gangs;
   }
@@ -138,9 +143,12 @@ export function moveInFrame(draft: FloorplanDraft, elementId: string, direction:
   if (target < 0 || target >= frame.members.length) return draft;
   const members = [...frame.members];
   [members[index], members[target]] = [members[target], members[index]];
-  // Nová kotva drží polohu staré kotvy (rámeček se neposouvá)
+  // Nová kotva drží začátek rámečku staré kotvy (rámeček se neposouvá ani při výměně jednozásuvky za dvojzásuvku)
   const oldAnchor = draft.elements.find((element) => element.id === frame.members[0])!;
-  const elements = draft.elements.map((element) => (element.id === members[0] ? { ...element, x: oldAnchor.x, y: oldAnchor.y } : element));
+  const newAnchor = draft.elements.find((element) => element.id === members[0])!;
+  const axis = frameAxis(oldAnchor.rotation);
+  const shift = ((gangsOf(newAnchor) - gangsOf(oldAnchor)) / 2) * framePitch(draft, oldAnchor);
+  const elements = draft.elements.map((element) => (element.id === members[0] ? { ...element, x: Math.round(oldAnchor.x + axis.x * shift), y: Math.round(oldAnchor.y + axis.y * shift) } : element));
   return layoutFrame({ ...draft, elements, frames: draft.frames.map((candidate) => (candidate.id === frame.id ? { ...candidate, members } : candidate)) }, frame.id);
 }
 
@@ -197,6 +205,115 @@ export function frameOutline(draft: FloorplanDraft, frame: FrameGroup): { x: num
   const a0 = Math.min(across - size * 0.15 * inward, across + depth * inward);
   const a1 = Math.max(across - size * 0.15 * inward, across + depth * inward);
   return axis.x ? { x: lo, y: a0, w: hi - lo, h: a1 - a0 } : { x: a0, y: lo, w: a1 - a0, h: hi - lo };
+}
+
+// ---------------------------------------------------------------------------
+//  Fáze 62: sestavy ve víceramečku přímo z palety, přidání přístroje do rámečku
+// ---------------------------------------------------------------------------
+
+/** Hotová sestava do víceramečku – pořadí členů = pořadí v rámečku (zleva doprava, shora dolů). */
+export interface FrameAssembly {
+  id: string;
+  label: string;
+  members: readonly string[];
+}
+
+export const FRAME_ASSEMBLIES: readonly FrameAssembly[] = [
+  { id: "set-2z", label: "2× jednozásuvka", members: ["socket", "socket"] },
+  { id: "set-3z", label: "3× jednozásuvka", members: ["socket", "socket", "socket"] },
+  { id: "set-4z", label: "4× jednozásuvka", members: ["socket", "socket", "socket", "socket"] },
+  { id: "set-2s1", label: "2× vypínač č. 1", members: ["switch-1", "switch-1"] },
+  { id: "set-3s1", label: "3× vypínač č. 1", members: ["switch-1", "switch-1", "switch-1"] },
+  { id: "set-s1-s6", label: "Vypínač č. 1 + přepínač č. 6", members: ["switch-1", "switch-6"] },
+  { id: "set-s1-z", label: "Vypínač č. 1 + jednozásuvka", members: ["switch-1", "socket"] },
+  { id: "set-s1-2z", label: "Vypínač č. 1 + 2× jednozásuvka", members: ["switch-1", "socket", "socket"] },
+  { id: "set-z-rj", label: "Jednozásuvka + datová RJ45", members: ["socket", "data-socket"] },
+  { id: "set-b2-z", label: "Sběrnicové tlačítko 2násobné + jednozásuvka", members: ["bus-2", "socket"] },
+  { id: "set-b1-2z", label: "Sběrnicové tlačítko 1násobné + 2× jednozásuvka", members: ["bus-1", "socket", "socket"] },
+];
+
+/** Přístroje, které jdou na dané úrovni instalace do víceramečku (výběr pro vlastní sestavu). */
+export const frameableItems = (level: InstallLevel): PaletteItem[] => paletteFor(level).filter((item) => isFrameable({ item: item.id }));
+
+/** Hotové sestavy dostupné na úrovni instalace (všechny členy jsou v paletě úrovně). */
+export function assembliesFor(level: InstallLevel): FrameAssembly[] {
+  const available = new Set(frameableItems(level).map((item) => item.id));
+  return FRAME_ASSEMBLIES.filter((assembly) => assembly.members.every((id) => available.has(id)));
+}
+
+/** Počet pozic sestavy (dvojzásuvka = 2). */
+export const assemblyGangs = (members: readonly string[]) => members.reduce((sum, item) => sum + gangsOf({ item, frameUnits: 1 }), 0);
+
+/** Popis vlastní sestavy: „Vypínač č. 1 + 2× Jednozásuvka“ (bez upřesnění v závorce, pořadí prvního výskytu). */
+export function assemblyLabel(members: readonly string[]): string {
+  const counts = new Map<string, number>();
+  for (const id of members) counts.set(id, (counts.get(id) ?? 0) + 1);
+  return [...counts.entries()].map(([id, count]) => `${count > 1 ? `${count}× ` : ""}${(paletteItem(id)?.label ?? id).replace(/\s*\(.*\)$/, "")}`).join(" + ");
+}
+
+/** Chyba sestavy (méně než 2 přístroje, nevhodný přístroj, víc než 5 pozic), jinak null. */
+export function assemblyError(members: readonly string[]): string | null {
+  if (members.length < 2) return "Sestava potřebuje alespoň 2 přístroje.";
+  const rejected = members.filter((id) => !isFrameable({ item: id }));
+  if (rejected.length) return `Do rámečku nejdou: ${[...new Set(rejected.map((id) => paletteItem(id)?.label ?? id))].join(", ")}.`;
+  const gangs = assemblyGangs(members);
+  return gangs > MAX_FRAME_GANGS ? `Víceramček pojme nejvýš ${MAX_FRAME_GANGS} pozic – sestava má ${gangs} (dvojzásuvka = 2 pozice).` : null;
+}
+
+/** Polohy členů sestavy podél osy rámečku se středem sestavy v bodě vložení (rozteč jako přisazení). */
+export function assemblyLayout(draft: Pick<FloorplanDraft, "symbolScale">, members: readonly string[], at: { x: number; y: number; rotation: Rotation; scale?: number | null }): { item: string; x: number; y: number }[] {
+  const axis = frameAxis(at.rotation);
+  const pitch = framePitch(draft, { scale: at.scale ?? null });
+  const gangs = members.map((item) => gangsOf({ item, frameUnits: 1 }));
+  const total = gangs.reduce((sum, value) => sum + value, 0);
+  let start = 0;
+  return members.map((item, index) => {
+    const offset = (start + (gangs[index] - 1) / 2 - (total - 1) / 2) * pitch;
+    start += gangs[index];
+    return { item, x: Math.round(at.x + axis.x * offset), y: Math.round(at.y + axis.y * offset) };
+  });
+}
+
+export type AssemblyResult = { ok: true; draft: FloorplanDraft; frameId: string; gangs: number; ids: string[] } | { ok: false; error: string };
+
+export interface AssemblyAnchor {
+  x: number;
+  y: number;
+  rotation: Rotation;
+  room: string;
+  series: string | null;
+  color: string | null;
+}
+
+/**
+ * Vložení celé sestavy jedním klikem: přístroje se vytvoří v pořadí sestavy, vyrovnají a přisadí do jednoho rámečku
+ * (společná výška, řada, barva a místnost – stejná pravidla jako „Vložit do víceramečku“). `ids` = předem
+ * přidělená id členů (stejný výsledek i při opakovaném volání).
+ */
+export function placeAssembly(draft: FloorplanDraft, members: readonly string[], at: AssemblyAnchor, ids: readonly string[] = members.map(() => uid("e"))): AssemblyResult {
+  const error = assemblyError(members);
+  if (error) return { ok: false, error };
+  const elements: EditorElement[] = assemblyLayout(draft, members, at).map((slot, index) => ({ id: ids[index], item: slot.item, x: slot.x, y: slot.y, room: at.room, mountHeightMm: null, frameUnits: 1, series: at.series, color: at.color, controls: [], rotation: at.rotation, scale: null }));
+  const result = createFrame({ ...draft, elements: [...draft.elements, ...elements] }, elements.map((element) => element.id));
+  return result.ok ? { ...result, ids: elements.map((element) => element.id) } : result;
+}
+
+/**
+ * „▦+“: přidá přístroj na konec rámečku vybraného přístroje (bez rámečku vznikne nový víceramček z obou). Nový
+ * přístroj převezme natočení, místnost, řadu, barvu a měřítko; rámeček zůstane na místě a prodlouží se.
+ */
+export function addToFrame(draft: FloorplanDraft, elementId: string, itemId: string, id: string = uid("e")): AssemblyResult {
+  const element = draft.elements.find((candidate) => candidate.id === elementId);
+  if (!element) return { ok: false, error: "Přístroj v nákresu nenalezen." };
+  if (!paletteItem(itemId)) return { ok: false, error: `Neznámý přístroj ${itemId}.` };
+  const members = frameOf(draft, elementId)?.members ?? [elementId];
+  const last = draft.elements.find((candidate) => candidate.id === members[members.length - 1]) ?? element;
+  const axis = frameAxis(element.rotation);
+  // Za poslední člen – pořadí v rámečku se bere podle polohy v ose
+  const reach = (gangsOf(last) + 1) * framePitch(draft, element);
+  const added: EditorElement = { id, item: itemId, x: Math.round(last.x + axis.x * reach), y: Math.round(last.y + axis.y * reach), room: element.room, mountHeightMm: null, frameUnits: 1, series: element.series, color: element.color, controls: [], rotation: element.rotation, scale: element.scale };
+  const result = createFrame({ ...draft, elements: [...draft.elements, added] }, [...members, added.id]);
+  return result.ok ? { ...result, ids: [added.id] } : result;
 }
 
 // ---------------------------------------------------------------------------

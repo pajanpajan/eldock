@@ -1,8 +1,8 @@
 "use client";
 
-import { useDeferredValue, useEffect, useMemo, useRef, useState, useTransition, type PointerEvent as ReactPointerEvent } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState, useTransition, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, FileUp, Grid3x3, LayoutGrid, Link2, Loader2, Maximize2, Minus, MousePointer2, Plus, RotateCw, Ruler, Sparkles, Square, Trash2, Zap } from "lucide-react";
+import { CheckCircle2, Eye, EyeOff, FileUp, Grid3x3, LayoutGrid, Link2, Loader2, Maximize2, Minus, MousePointer2, Plus, RotateCw, Ruler, Sparkles, Square, Trash2, Zap } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,7 @@ import {
   effectiveSwitchNo,
   emptyDraft,
   floorsOf,
+  frameAxis,
   generationChecklist,
   isWallMounted,
   isWiredSwitch,
@@ -62,14 +63,20 @@ import {
 } from "@/lib/panel-builder/floorplan-editor";
 import {
   ANNOTATION_LABEL,
+  MAX_FRAME_GANGS,
+  addToFrame,
   annotationBounds,
+  assemblyGangs,
+  assemblyLayout,
   autoPairLights,
   createFrame,
+  placeAssembly,
   dissolveFrame,
   dragGroupOf,
   frameGangs,
   frameOf,
   frameOutline,
+  framePitch,
   gangsOf,
   idleSwitches,
   isFrameable,
@@ -119,6 +126,8 @@ import { CalibrationDialog, type CalibrationResult } from "./CalibrationDialog";
 import { DeviceAppearance } from "./DeviceAppearance";
 import { FloorBar } from "./FloorBar";
 import { FloorSymbol, PanelSymbol } from "./FloorSymbol";
+import { AddToFrameControl, FrameAssemblyPalette } from "./FrameAssemblyPalette";
+import { ModeBar, type ModeTone } from "../ModeBar";
 import { PdfEditMenu, type PdfEditAction } from "./PdfEditMenu";
 import { PlanChecks, SelectionPanel, type PlanCheck } from "./PlanPanels";
 import { SmartHomePanel } from "./SmartHomePanel";
@@ -141,6 +150,8 @@ const BACKGROUND_PX = 3200;
 type Tool =
   | { kind: "select" }
   | { kind: "place"; item: string }
+  /** Fáze 62: sestava ve víceramečku z palety – vloží se celá jedním klikem. */
+  | { kind: "place-set"; key: string; members: string[]; label: string }
   | { kind: "room" }
   | { kind: "calibrate" }
   | { kind: "verify" }
@@ -188,6 +199,8 @@ const snap = (value: number) => Math.round(value / SNAP_MM) * SNAP_MM;
 let sequence = 0;
 const newId = (prefix: string) => `${prefix}${Date.now().toString(36)}${(sequence++).toString(36)}`;
 const turn = (rotation: Rotation): Rotation => ((rotation + 90) % 360) as Rotation;
+/** Český tvar podle počtu: 1 svítidlo, 2–4 svítidla, 5 a víc svítidel. */
+const plural = (count: number, one: string, few: string, many: string) => (count === 1 ? one : count >= 2 && count <= 4 ? few : many);
 
 export interface SeriesOption {
   count?: number;
@@ -243,6 +256,9 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
   /** Fáze 59: natočení další vkládané značky = natočení předchozí (R při vkládání otočí náhled). */
   const [placeRotation, setPlaceRotation] = useState<Rotation>(0);
   const [hover, setHover] = useState<{ x: number; y: number } | null>(null);
+  /** Fáze 62: kabeláž v půdorysu – zobrazená / skrytá; při párování vypínačů se světly ve výchozím stavu skrytá. */
+  const [showCables, setShowCables] = useState(true);
+  const [pairCables, setPairCables] = useState(false);
   /** Fáze 59: zakreslení změn – vzhled nových poznámek, rozkreslená poznámka, výběr a tažení. */
   const [noteStyles, setNoteStyles] = useState<Record<AnnotationKind, NoteStyle>>(DEFAULT_STYLES);
   const [noteDraft, setNoteDraft] = useState<{ mode: AnnotationKind; from: { x: number; y: number }; to: { x: number; y: number } } | null>(null);
@@ -298,6 +314,9 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
   const inventory = useMemo(() => wiringInventory(draft), [draft]);
   const palette = paletteFor(draft.installation);
   const selectionFrame = selection.length >= 2 ? createFrame(draft, selection) : null;
+  const pairing = tool.kind === "pair" || tool.kind === "pair-light";
+  const cablesShown = pairing ? pairCables : showCables;
+  const toggleCables = () => (pairing ? setPairCables((value) => !value) : setShowCables((value) => !value));
 
   function toPlan(event: { clientX: number; clientY: number }) {
     const element = svg.current;
@@ -332,6 +351,23 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
     setSelection([]);
   }
 
+  /** Fáze 62: přístroj vedle vybraného do společného víceramečku (▦+ v liště značky, „Přidat do rámečku“ v detailu). */
+  function addIntoFrame(elementId: string, itemId: string) {
+    const id = newId("e");
+    const result = addToFrame(draft, elementId, itemId, id);
+    if (!result.ok) return void toast.error(result.error);
+    update((current) => {
+      const next = addToFrame(current, elementId, itemId, id);
+      return next.ok ? next.draft : current;
+    });
+  }
+
+  /** Obsazené pozice rámečku prvku (bez rámečku pozice prvku samotného). */
+  const usedGangs = (element: EditorElement) => {
+    const frame = frameOf(draft, element.id);
+    return frame ? frameGangs(draft, frame) : gangsOf(element);
+  };
+
   function zoomBy(factor: number, focus?: { x: number; y: number }) {
     setViewMm(zoomView(viewMm, draft, factor, focus));
   }
@@ -354,6 +390,8 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement || event.target instanceof HTMLTextAreaElement) return;
       if (calibrationDialog || levelPrompt) return;
       if (event.key === "Escape") {
+        // Fáze 62: Esc ukončí probíhající krok, ve výběru ukončí úpravu (zruší výběr) – jako „Hotovo“ nad půdorysem
+        if (tool.kind === "select") clearSelection();
         setTool({ kind: "select" });
         setCalibration([]);
         setRoomDraft(null);
@@ -361,6 +399,7 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
         setMarquee(null);
         return;
       }
+      if (event.key === "k" || event.key === "K") return toggleCables();
       if ((event.key === "Delete" || event.key === "Backspace") && selection.length) {
         removeSelection();
       } else if ((event.key === "Delete" || event.key === "Backspace") && selectedNoteId) {
@@ -371,7 +410,7 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
         setSelectedRoomId(null);
       } else if (event.key === "r" || event.key === "R") {
         if (selection.length) rotateSelection();
-        else if (tool.kind === "place") setPlaceRotation((rotation) => turn(rotation));
+        else if (tool.kind === "place" || tool.kind === "place-set") setPlaceRotation((rotation) => turn(rotation));
       } else if (event.key.startsWith("Arrow") && selection.length) {
         event.preventDefault();
         const step = event.shiftKey ? 10 : SNAP_MM;
@@ -441,6 +480,25 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
       setSelection([element.id]);
       setSelectedNoteId(null);
       if (single) setTool({ kind: "select" });
+      return;
+    }
+    if (tool.kind === "place-set") {
+      // Fáze 62: celá sestava jedním klikem – u stěny přicvaknutá a natočená ke stěně, střed sestavy v místě kliknutí
+      const first = paletteItem(tool.members[0]);
+      if (!first) return;
+      const target = placement(first, point);
+      const at = { x: Math.round(target.position.x), y: Math.round(target.position.y), rotation: target.rotation, room: target.room?.name ?? lastRoom.current, series: draft.series, color: draft.color };
+      const ids = tool.members.map(() => newId("e"));
+      const result = placeAssembly(draft, tool.members, at, ids);
+      if (!result.ok) return void toast.error(result.error);
+      setPlaceRotation(target.rotation);
+      update((current) => {
+        const next = placeAssembly(current, tool.members, at, ids);
+        return next.ok ? next.draft : current;
+      });
+      setSelection([ids[0]]);
+      setSelectedRoomId(null);
+      setSelectedNoteId(null);
       return;
     }
     if (tool.kind === "annotate") {
@@ -553,7 +611,7 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
       return;
     }
     const point = toPlan(event);
-    if (tool.kind === "place") setHover(point);
+    if (tool.kind === "place" || tool.kind === "place-set") setHover(point);
     if (!drag && !roomDraft && !roomDrag && !marquee && !noteDraft && !noteDrag) return;
     if (roomDrag) {
       const dx = snap(point.x - roomDrag.start.x);
@@ -803,6 +861,7 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
     update(() => result.draft);
     setLevelPrompt(null);
     if (tool.kind === "place" && !paletteFor(level).some((item) => item.id === tool.item)) setTool({ kind: "select" });
+    if (tool.kind === "place-set" && !tool.members.every((id) => paletteFor(level).some((item) => item.id === id))) setTool({ kind: "select" });
     const label = INSTALL_LEVELS.find((option) => option.id === level)?.label ?? level;
     const converted = result.changes.reduce((sum, row) => sum + row.count, 0);
     toast.success(`${label}${converted ? ` – převedeno ${converted} ovladačů` : ""}${result.removed ? `, odstraněno ${result.removed}` : ""}. Paleta ovládání se změnila.`);
@@ -891,11 +950,25 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
   const riserHere = analysis.ok ? analysis.build.floors.find((floor) => floor.id === draft.floorId) : null;
   const ghostItem = tool.kind === "place" ? paletteItem(tool.item) : null;
   const ghost = ghostItem && hover ? placement(ghostItem, hover) : null;
-  const pairing = tool.kind === "pair" || tool.kind === "pair-light";
+  // Fáze 62: náhled celé sestavy u kurzoru (přístroje i obrys rámečku)
+  const setGhost = (() => {
+    if (tool.kind !== "place-set" || !hover) return null;
+    const first = paletteItem(tool.members[0]);
+    if (!first) return null;
+    const target = placement(first, hover);
+    const members = assemblyLayout(draft, tool.members, { x: target.position.x, y: target.position.y, rotation: target.rotation }).map(
+      (slot, index): EditorElement => ({ id: `ghost-${index}`, item: slot.item, x: slot.x, y: slot.y, room: "", mountHeightMm: null, frameUnits: 1, series: null, color: null, controls: [], rotation: target.rotation, scale: null }),
+    );
+    return { rotation: target.rotation, members, outline: frameOutline({ ...draft, elements: members }, { id: "ghost", members: members.map((member) => member.id) }) };
+  })();
+  const setGangs = tool.kind === "place-set" ? assemblyGangs(tool.members) : 0;
+  const pairCablesHint = cablesShown ? " Kabeláž skryjete klávesou K." : " Kabeláž je při párování skrytá (K = zobrazit).";
 
   const hint =
     tool.kind === "place"
       ? `Klikněte do půdorysu – ${paletteItem(tool.item)?.label ?? ""} (natočení ${placeRotation}°, R = otočit). Klik na osazenou značku ji vybere a přesune. Esc / pravé tlačítko = konec.`
+      : tool.kind === "place-set"
+        ? `Klikněte do půdorysu – celá sestava se vloží přisazená v jednom rámečku ${setGangs}R; u stěny se přicvakne a natočí ke stěně (jinak natočení ${placeRotation}°, R = otočit). Esc / pravé tlačítko = konec.`
       : tool.kind === "room"
         ? "Tažením myší nakreslete obdélník místnosti – rozměry X × Y se zobrazují živě."
         : tool.kind === "crop"
@@ -909,9 +982,9 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
                 ? "Klikněte na konec ověřovací kóty."
                 : "✅ Ověření: klikněte na začátek jiné známé kóty (ideálně kolmé na kalibrační)."
               : tool.kind === "pair"
-                ? "🔗 Klikněte na svítidla, která má vypínač ovládat (znovu = odpojit; i na jiném podlaží). Esc = hotovo."
+                ? `Klikněte na svítidla, která má vypínač ovládat (znovu = odpojit; i na jiném podlaží). Esc = hotovo.${pairCablesHint}`
                 : tool.kind === "pair-light"
-                  ? "🔗 Klikněte na vypínače / tlačítka, která mají světlo ovládat (znovu = odpojit). Esc = hotovo."
+                  ? `Klikněte na vypínače / tlačítka, která mají světlo ovládat (znovu = odpojit). Esc = hotovo.${pairCablesHint}`
                   : tool.kind === "annotate"
                     ? tool.mode === "text"
                       ? "T Klikněte do půdorysu, kam se má vložit textové pole."
@@ -923,6 +996,71 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
                         : selected
                           ? "Značka: tažením přesun (rámeček celý), R = otočit (další vkládaná značka převezme natočení), šipky = posun po 5 cm, Shift + klik = přidat do výběru."
                           : `Výběr: klik = detail, Shift + klik nebo tažení obdélníku = víc prvků, Delete = smazat. Ctrl + kolečko = zoom${zoomed ? ", tažením prázdným místem posun (Shift = výběr)" : ""}.`;
+
+  // Fáze 62: lišta probíhajícího kroku nad půdorysem – co právě dělám, ovládání kroku a „Hotovo“ vždy na stejném místě
+  const pairWith = tool.kind === "pair" ? draft.elements.find((element) => element.id === tool.switchId) : tool.kind === "pair-light" ? draft.elements.find((element) => element.id === tool.lightId) : null;
+  const elementName = (element: EditorElement | null | undefined) => (element ? `${paletteItem(element.item)?.label ?? element.item} – ${element.room}` : "");
+  const endStep = () => {
+    // Konec vkládání = konec i úprav naposledy vloženého prvku (jinak by zůstal vybraný)
+    if (tool.kind === "place" || tool.kind === "place-set") clearSelection();
+    setTool({ kind: "select" });
+    setCalibration([]);
+    setRoomDraft(null);
+    setNoteDraft(null);
+  };
+  const rotateNext = (
+    <Button type="button" size="sm" variant="outline" className="h-7 gap-1 px-2 text-xs" onClick={() => setPlaceRotation((rotation) => turn(rotation))} title="Natočení další vkládané značky (R)" data-testid="mode-rotate">
+      <RotateCw className="size-3.5" aria-hidden /> {placeRotation}°
+    </Button>
+  );
+  const pairCount = tool.kind === "pair" ? (pairWith?.controls.length ?? 0) : tool.kind === "pair-light" ? controllersOf(draft, tool.lightId) : 0;
+  const step: { tone: ModeTone; title: string; onDone?: () => void; doneLabel?: string; extra?: ReactNode } = pairing
+    ? {
+        tone: "pair",
+        title: `🔗 Párování: ${elementName(pairWith)}`,
+        onDone: endStep,
+        extra: (
+          <>
+            <span className="rounded-full border border-emerald-500/50 px-2 py-0.5 text-xs text-emerald-200" data-testid="pair-count">
+              {tool.kind === "pair" ? `ovládá ${pairCount} ${plural(pairCount, "svítidlo", "svítidla", "svítidel")}` : `${pairCount} ${plural(pairCount, "ovládací místo", "ovládací místa", "ovládacích míst")}`}
+            </span>
+            {/* Přepínač kabeláže i v lepkavé liště – přepínač v rohu plátna po posunu stránky není vidět */}
+            <Button type="button" size="sm" variant="outline" className="h-7 gap-1 px-2 text-xs" onClick={toggleCables} title="Kabeláž v půdorysu (K)" data-testid="mode-toggle-cables">
+              {cablesShown ? <EyeOff className="size-3.5" aria-hidden /> : <Eye className="size-3.5" aria-hidden />} {cablesShown ? "Skrýt kabeláž" : "Zobrazit kabeláž"}
+            </Button>
+          </>
+        ),
+      }
+    : tool.kind === "annotate"
+      ? {
+          tone: "annotate",
+          title: `✏️ Zakreslení změny: ${ANNOTATION_LABEL[tool.mode]}`,
+          onDone: endStep,
+          extra: (
+            <div className="flex flex-wrap items-center gap-2" data-testid="annotate-bar">
+              <NoteStyleControls compact kind={tool.mode} style={noteStyles[tool.mode]} onChange={(patch) => setNoteStyles((current) => ({ ...current, [tool.mode]: { ...current[tool.mode], ...patch } }))} />
+            </div>
+          ),
+        }
+      : tool.kind === "place"
+        ? { tone: "place", title: `➕ Vkládání: ${paletteItem(tool.item)?.label ?? ""}`, onDone: endStep, extra: rotateNext }
+        : tool.kind === "place-set"
+          ? { tone: "place", title: `▦ Vkládání sestavy: ${tool.label} (${setGangs}R)`, onDone: endStep, extra: rotateNext }
+          : tool.kind === "room"
+            ? { tone: "draw", title: "▭ Kreslení místností", onDone: endStep }
+            : tool.kind === "crop"
+              ? { tone: "measure", title: "✂ Ořez podkladu", onDone: endStep, doneLabel: "Zrušit" }
+              : tool.kind === "calibrate" || tool.kind === "verify"
+                ? { tone: "measure", title: tool.kind === "calibrate" ? "📏 Kalibrace měřítka" : "✅ Ověření měřítka", onDone: endStep, doneLabel: "Zrušit" }
+                : selectedRoom
+                  ? { tone: "edit", title: `✏️ Úprava místnosti ${selectedRoom.name}`, onDone: clearSelection }
+                  : selectedNote
+                    ? { tone: "edit", title: `✏️ Úprava: ${ANNOTATION_LABEL[selectedNote.kind]}`, onDone: clearSelection }
+                    : selection.length > 1
+                      ? { tone: "edit", title: `✏️ Vybráno ${selection.length} ${plural(selection.length, "prvek", "prvky", "prvků")}`, onDone: clearSelection }
+                      : selected
+                        ? { tone: "edit", title: `✏️ Úprava: ${elementName(selected)}`, onDone: clearSelection }
+                        : { tone: "idle", title: "Výběr a úpravy" };
 
   return (
     <div className="flex flex-col gap-3" data-testid="floorplan-editor">
@@ -1144,56 +1282,59 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
       />
 
       <div className="grid gap-3 xl:grid-cols-[15rem_minmax(0,1fr)_24rem]">
-        {/* Paleta značek podle úrovně instalace */}
-        <aside className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3" aria-label="Paleta elektroinstalačních značek">
-          {PALETTE_GROUPS.map((group) => {
-            const items = palette.filter((item) => item.group === group.id);
-            if (!items.length) return null;
-            return (
-              <div key={group.id} className="flex flex-col gap-1" data-group={group.id}>
-                <h3 className="text-xs font-bold text-muted-foreground">{group.id === "controls" ? CONTROLS_LABEL[draft.installation] : group.label}</h3>
-                <div className="flex flex-wrap gap-1">
-                  {items.map((item) => {
-                    const active = tool.kind === "place" && tool.item === item.id;
-                    // Fáze 61: zařizovací předmět (vana / sprcha) nemá výšku montáže – v titulku jen rozměr
-                    const height = item.kind === "fixture" ? null : item.kind === "panel" || item.kind === "riser" ? draft.profile.switchboardHeightMm : (item.heightMm ?? mountHeight({ kind: item.kind, variant: item.variant, tag: item.tag }, draft.profile));
-                    return (
-                      <button
-                        key={item.id}
-                        type="button"
-                        aria-pressed={active}
-                        onClick={() => {
-                          setTool(active ? { kind: "select" } : { kind: "place", item: item.id });
-                          setHover(null);
-                        }}
-                        title={height === null ? item.label : `${item.label} (${height} mm)`}
-                        className={cn("flex items-center gap-1 rounded-md border px-1.5 py-1 text-xs", active ? "border-primary bg-primary/20 text-foreground" : "border-border text-muted-foreground hover:border-primary/60 hover:text-foreground")}
-                      >
-                        <span className="rounded bg-muted px-1 font-mono text-[10px] font-bold text-foreground">{item.symbol}</span>
-                        {item.label}
-                      </button>
-                    );
-                  })}
+        <div className="flex flex-col gap-3">
+          {/* Fáze 62: sestavy zásuvek a vypínačů ve víceramečku – samostatný panel nad paletou, vloží se celé jedním klikem */}
+          <FrameAssemblyPalette
+            level={draft.installation}
+            active={tool.kind === "place-set" ? tool.key : null}
+            onPick={(pick) => {
+              setTool(tool.kind === "place-set" && tool.key === pick.key && pick.key !== "custom" ? { kind: "select" } : { kind: "place-set", ...pick });
+              setHover(null);
+            }}
+          />
+          {/* Paleta značek podle úrovně instalace */}
+          <aside className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3" aria-label="Paleta elektroinstalačních značek">
+            {PALETTE_GROUPS.map((group) => {
+              const items = palette.filter((item) => item.group === group.id);
+              if (!items.length) return null;
+              return (
+                <div key={group.id} className="flex flex-col gap-1" data-group={group.id}>
+                  <h3 className="text-xs font-bold text-muted-foreground">{group.id === "controls" ? CONTROLS_LABEL[draft.installation] : group.label}</h3>
+                  <div className="flex flex-wrap gap-1">
+                    {items.map((item) => {
+                      const active = tool.kind === "place" && tool.item === item.id;
+                      // Fáze 61: zařizovací předmět (vana / sprcha) nemá výšku montáže – v titulku jen rozměr
+                      const height = item.kind === "fixture" ? null : item.kind === "panel" || item.kind === "riser" ? draft.profile.switchboardHeightMm : (item.heightMm ?? mountHeight({ kind: item.kind, variant: item.variant, tag: item.tag }, draft.profile));
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          aria-pressed={active}
+                          onClick={() => {
+                            setTool(active ? { kind: "select" } : { kind: "place", item: item.id });
+                            setHover(null);
+                          }}
+                          title={height === null ? item.label : `${item.label} (${height} mm)`}
+                          className={cn("flex items-center gap-1 rounded-md border px-1.5 py-1 text-xs", active ? "border-primary bg-primary/20 text-foreground" : "border-border text-muted-foreground hover:border-primary/60 hover:text-foreground")}
+                        >
+                          <span className="rounded bg-muted px-1 font-mono text-[10px] font-bold text-foreground">{item.symbol}</span>
+                          {item.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </aside>
+              );
+            })}
+          </aside>
+        </div>
 
         {/* Plátno půdorysu */}
         <div className="flex min-w-0 flex-col gap-1.5">
-          <p className="text-xs text-muted-foreground" role="status">
-            {hint}
-          </p>
-          {tool.kind === "annotate" ? (
-            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-sky-500/40 bg-sky-500/5 px-2 py-1.5" data-testid="annotate-bar">
-              <span className="text-xs font-semibold text-sky-200">✏️ {ANNOTATION_LABEL[tool.mode]}</span>
-              <NoteStyleControls compact kind={tool.mode} style={noteStyles[tool.mode]} onChange={(patch) => setNoteStyles((current) => ({ ...current, [tool.mode]: { ...current[tool.mode], ...patch } }))} />
-              <Button type="button" size="sm" variant="ghost" className="ml-auto" onClick={() => setTool({ kind: "select" })}>
-                Hotovo
-              </Button>
-            </div>
-          ) : null}
+          {/* Fáze 62: probíhající krok (párování, vkládání, kreslení, úprava) a „Hotovo“ vždy nad půdorysem */}
+          <ModeBar tone={step.tone} title={step.title} hint={hint} onDone={step.onDone} doneLabel={step.doneLabel}>
+            {step.extra}
+          </ModeBar>
           <div className="relative overflow-hidden rounded-xl border border-border bg-zinc-950">
             <svg
               ref={svg}
@@ -1324,8 +1465,9 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
                 </g>
               ) : null}
 
-              {/* Trasy kabelů po okruzích (aktivní podlaží; souběžné okruhy mírně odsazené, ať se nepřekrývají) */}
-              {analysis.ok && panelPoint
+              {/* Trasy kabelů po okruzích (aktivní podlaží; souběžné okruhy mírně odsazené, ať se nepřekrývají);
+                  fáze 62: vrstvu jde skrýt (K), při párování vypínačů se světly je ve výchozím stavu skrytá */}
+              {cablesShown && analysis.ok && panelPoint
                 ? analysis.summary.circuits.map((circuit, index) => {
                     const color = ROUTE_COLORS[index % ROUTE_COLORS.length];
                     const runs = routeRuns(circuit.route.segments);
@@ -1343,7 +1485,7 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
                   })
                 : null}
               {/* Fáze 57: sběrnicová linka (KNX / Loxone Tree) */}
-              {analysis.ok && analysis.summary.busLine ? <path d={pathOf(routeRuns(analysis.summary.busLine.segments))} fill="none" stroke="#22c55e" strokeWidth={stroke * 2.5} strokeDasharray={`${ui / 6} ${ui / 6}`} pointerEvents="none" data-testid="bus-line" /> : null}
+              {cablesShown && analysis.ok && analysis.summary.busLine ? <path d={pathOf(routeRuns(analysis.summary.busLine.segments))} fill="none" stroke="#22c55e" strokeWidth={stroke * 2.5} strokeDasharray={`${ui / 6} ${ui / 6}`} pointerEvents="none" data-testid="bus-line" /> : null}
               {/* Fáze 59: průchod stoupacího vedení bez značky (výchozí nad / pod rozváděčem) */}
               {floors.length > 1 && riserHere && !draft.elements.some((element) => element.item === "riser") ? (
                 <g transform={`translate(${riserHere.riser.x} ${riserHere.riser.y})`} pointerEvents="none" data-testid="riser-default">
@@ -1389,14 +1531,16 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
                 // Při párování zvýraznit, na co jde kliknout
                 const candidate = (tool.kind === "pair" && item.kind === "light") || (tool.kind === "pair-light" && controlsLights(item));
                 const linked = tool.kind === "pair" ? draft.elements.find((other) => other.id === tool.switchId)?.controls.includes(element.id) : tool.kind === "pair-light" ? element.controls.includes(tool.lightId) : false;
+                // Fáze 62: ve víceramečku klikací plocha jen na pozici přístroje (sousedé v rozteči 0,78 značky se jinak překrývají)
+                const hitSlot = frameOf(draft, element.id) ? { length: gangsOf(element) * framePitch(draft, element), horizontal: frameAxis(element.rotation).x === 1 } : null;
                 return (
                   <g key={element.id} transform={`translate(${element.x} ${element.y})`} onPointerDown={(event) => onElementDown(event, element)} className={tool.kind === "select" || tool.kind === "place" ? "cursor-move" : "cursor-pointer"} data-element={item.id} data-selected={active ? "true" : undefined} aria-label={`${item.label} – ${element.room}`} role="button">
-                    {candidate ? <circle r={size * 0.62} fill={linked ? "rgba(34,197,94,0.18)" : "rgba(56,189,248,0.12)"} stroke={linked ? "#22c55e" : "#38bdf8"} strokeWidth={stroke * 2} strokeDasharray={linked ? undefined : `${ui / 5} ${ui / 7}`} data-testid="pair-candidate" /> : null}
+                    {candidate ? <circle r={size * 0.62} fill={linked ? "rgba(34,197,94,0.18)" : "rgba(56,189,248,0.12)"} stroke={linked ? "#22c55e" : "#38bdf8"} strokeWidth={stroke * 2} strokeDasharray={linked ? undefined : `${ui / 5} ${ui / 7}`} pointerEvents="none" data-testid="pair-candidate" /> : null}
                     {item.kind === "panel" ? (
                       <PanelSymbol size={size * 1.3} active={active} onPaper={Boolean(draft.background)} label={item.symbol} />
                     ) : (
                       // Fáze 57: značka dle ČSN EN 60617-11, řazení vypínače z párování, natočení ke stěně
-                      <FloorSymbol item={item} size={size} active={active} onPaper={Boolean(draft.background)} rotation={element.rotation} switchNo={isWiredSwitch(item) && (item.control ?? "light") === "light" ? effectiveSwitchNo(draft, element) : undefined} level={draft.installation} lem={designColor(element.color ?? draft.color)?.swatch ?? null} />
+                      <FloorSymbol item={item} size={size} active={active} onPaper={Boolean(draft.background)} rotation={element.rotation} switchNo={isWiredSwitch(item) && (item.control ?? "light") === "light" ? effectiveSwitchNo(draft, element) : undefined} level={draft.installation} lem={designColor(element.color ?? draft.color)?.swatch ?? null} hitSlot={hitSlot} />
                     )}
                     {element.frameUnits > 1 ? (
                       <text x={size * 0.6} y={size * 0.75} fontSize={size * 0.3} fill="#ca8a04" fontWeight={700}>
@@ -1411,6 +1555,20 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
               {ghostItem && ghost && ghostItem.kind !== "panel" ? (
                 <g transform={`translate(${ghost.position.x} ${ghost.position.y})`} opacity={0.55} pointerEvents="none" data-testid="place-ghost" data-rotation={ghost.rotation}>
                   <FloorSymbol item={ghostItem} size={symbolSizeOf(draft, { scale: null })} active={false} onPaper={Boolean(draft.background)} rotation={ghost.rotation} level={draft.installation} />
+                </g>
+              ) : null}
+              {/* Fáze 62: náhled celé sestavy ve víceramečku */}
+              {setGhost ? (
+                <g opacity={0.6} pointerEvents="none" data-testid="place-set-ghost" data-rotation={setGhost.rotation} data-members={setGhost.members.length}>
+                  {setGhost.outline ? <rect x={setGhost.outline.x} y={setGhost.outline.y} width={setGhost.outline.w} height={setGhost.outline.h} rx={ui * 0.2} fill="none" stroke="#ca8a04" strokeWidth={stroke * 2} strokeDasharray={`${ui / 4} ${ui / 6}`} /> : null}
+                  {setGhost.members.map((member) => {
+                    const item = paletteItem(member.item);
+                    return item ? (
+                      <g key={member.id} transform={`translate(${member.x} ${member.y})`}>
+                        <FloorSymbol item={item} size={symbolSizeOf(draft, { scale: null })} active={false} onPaper={Boolean(draft.background)} rotation={setGhost.rotation} level={draft.installation} />
+                      </g>
+                    ) : null;
+                  })}
                 </g>
               ) : null}
 
@@ -1432,6 +1590,7 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
                         ? () => setTool({ kind: "pair-light", lightId: selected.id })
                         : undefined
                   }
+                  onAddToFrame={isFrameable(selected) && usedGangs(selected) + gangsOf({ item: selected.item, frameUnits: 1 }) <= MAX_FRAME_GANGS ? () => addIntoFrame(selected.id, selected.item) : undefined}
                 />
               ) : null}
               {selectedNote && tool.kind === "select" ? (
@@ -1453,6 +1612,19 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
                 <Maximize2 className="size-3.5" aria-hidden />
               </button>
             </div>
+            {/* Fáze 62: vrstva kabeláže – zobrazit / skrýt (K); při párování vypínačů se světly je ve výchozím stavu skrytá */}
+            <button
+              type="button"
+              aria-label="Zobrazit kabeláž v půdorysu"
+              aria-pressed={cablesShown}
+              onClick={toggleCables}
+              title={cablesShown ? "Skrýt trasy kabelů v půdorysu (K)" : "Zobrazit trasy kabelů v půdorysu (K)"}
+              className={cn("absolute top-2 right-2 flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs font-semibold shadow", cablesShown ? "border-border bg-card/90 text-foreground hover:bg-muted" : "border-amber-400/70 bg-amber-950/90 text-amber-100 hover:bg-amber-900")}
+              data-testid="toggle-cables"
+            >
+              {cablesShown ? <Eye className="size-3.5" aria-hidden /> : <EyeOff className="size-3.5" aria-hidden />}
+              {cablesShown ? "Kabeláž" : "Kabeláž skrytá"}
+            </button>
             <span className="pointer-events-none absolute top-2 left-2 rounded-md border border-border bg-card/90 px-2 py-0.5 text-xs font-semibold" data-testid="active-floor">
               {draft.floorName} <span className="font-mono text-muted-foreground">{levelLabel(draft.floorLevelMm)}</span>
             </span>
@@ -1468,15 +1640,6 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
 
         {/* Detail prvku + výkaz kabeláže */}
         <aside className="flex flex-col gap-3" aria-label="Detail a výkaz kabeláže">
-          {pairing ? (
-            <div className="flex items-center gap-2 rounded-xl border-2 border-emerald-500/60 bg-emerald-500/10 p-3 text-sm" data-testid="pairing-banner">
-              <Link2 className="size-4 text-emerald-300" aria-hidden />
-              <span className="flex-1">{tool.kind === "pair" ? "Klikejte na svítidla, která vypínač ovládá." : "Klikejte na vypínače, které světlo ovládají."}</span>
-              <Button type="button" size="sm" onClick={() => setTool({ kind: "select" })} data-testid="pairing-done">
-                Hotovo
-              </Button>
-            </div>
-          ) : null}
           {selectedRoom ? (
             <RoomDetail
               key={selectedRoom.id}
@@ -1522,6 +1685,8 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
               onRotate={() => rotateSelection([selected.id])}
               onDelete={() => removeSelection([selected.id])}
               onAutoPair={autoPair}
+              usedGangs={usedGangs(selected)}
+              onAddToFrame={(item) => addIntoFrame(selected.id, item)}
               onFrame={{
                 moveLeft: () => update((current) => moveInFrame(current, selected.id, -1)),
                 moveRight: () => update((current) => moveInFrame(current, selected.id, 1)),
@@ -1634,10 +1799,12 @@ function ToolButton({ active, onClick, icon, label }: { active: boolean; onClick
 }
 
 /** Plovoucí lišta nad vybranou značkou (velikost drží stejnou na obrazovce i při zoomu). */
-function ElementToolbar({ x, y, unit, onRotate, onScale, onDelete, onPair }: { x: number; y: number; unit: number; onRotate: () => void; onScale: (factor: number) => void; onDelete: () => void; onPair?: () => void }) {
+function ElementToolbar({ x, y, unit, onRotate, onScale, onDelete, onPair, onAddToFrame }: { x: number; y: number; unit: number; onRotate: () => void; onScale: (factor: number) => void; onDelete: () => void; onPair?: () => void; onAddToFrame?: () => void }) {
   const size = unit * 1.15;
-  const buttons: { label: string; text: string; fill: string; onClick: () => void }[] = [
+  const buttons: { label: string; text: string; fill: string; onClick: () => void; font?: number }[] = [
     ...(onPair ? [{ label: "Přiřadit vypínač ke světlu", text: "🔗", fill: "#166534", onClick: onPair }] : []),
+    // Fáze 62: stejný přístroj vedle do víceramečku (zásuvka → 2R → 3R …)
+    ...(onAddToFrame ? [{ label: "Přidat stejný přístroj vedle do rámečku", text: "▦+", fill: "#a16207", onClick: onAddToFrame, font: 0.5 }] : []),
     { label: "Otočit značku o 90°", text: "⟳", fill: "#27272a", onClick: onRotate },
     { label: "Zmenšit značku", text: "−", fill: "#27272a", onClick: () => onScale(1 / 1.25) },
     { label: "Zvětšit značku", text: "+", fill: "#27272a", onClick: () => onScale(1.25) },
@@ -1660,7 +1827,7 @@ function ElementToolbar({ x, y, unit, onRotate, onScale, onDelete, onPair }: { x
           }}
         >
           <rect width={size} height={size} rx={unit * 0.2} fill={button.fill} />
-          <text x={size / 2} y={size / 2} fontSize={unit * 0.7} textAnchor="middle" dominantBaseline="central" fill="#fafafa" pointerEvents="none">
+          <text x={size / 2} y={size / 2} fontSize={unit * (button.font ?? 0.7)} textAnchor="middle" dominantBaseline="central" fill="#fafafa" pointerEvents="none">
             {button.text}
           </text>
         </g>
@@ -1717,6 +1884,8 @@ function ElementDetail({
   onRotate,
   onDelete,
   onAutoPair,
+  usedGangs,
+  onAddToFrame,
   onFrame,
 }: {
   draft: FloorplanDraft;
@@ -1727,6 +1896,9 @@ function ElementDetail({
   onRotate: () => void;
   onDelete: () => void;
   onAutoPair: () => void;
+  /** Fáze 62: obsazené pozice rámečku prvku a přidání dalšího přístroje do rámečku. */
+  usedGangs: number;
+  onAddToFrame: (item: string) => void;
   onFrame: { moveLeft: () => void; moveRight: () => void; rotate: () => void; leave: () => void; dissolve: () => void };
 }) {
   const item = paletteItem(element.item)!;
@@ -1814,6 +1986,7 @@ function ElementDetail({
                   Rozdělit rámeček
                 </Button>
               </div>
+              <AddToFrameControl level={draft.installation} defaultItem={element.item} gangs={usedGangs} onAdd={onAddToFrame} />
             </div>
           ) : legacyFrameable ? (
             <div className="flex flex-col gap-1">
@@ -1825,7 +1998,12 @@ function ElementDetail({
                   </button>
                 ))}
               </div>
-              {isFrameable(element) ? <p className="text-[11px] text-muted-foreground">Různé přístroje (např. 2 zásuvky + vypínač) do jednoho rámečku: vyberte je Shift + klikem a zvolte „Vložit do víceramečku“.</p> : null}
+              {isFrameable(element) ? (
+                <>
+                  <AddToFrameControl level={draft.installation} defaultItem={element.item} gangs={usedGangs} onAdd={onAddToFrame} />
+                  <p className="text-[11px] text-muted-foreground">Celou sestavu vložíte i z palety (▦ Sestavy ve víceramečku), již osazené přístroje spojíte Shift + klikem a „Vložit do víceramečku“.</p>
+                </>
+              ) : null}
             </div>
           ) : null}
           {item.kind !== "appliance" && item.kind !== "light" ? (
@@ -1864,9 +2042,16 @@ function ElementDetail({
           ) : null}
           {controlsLights(item) ? (
             <div className="flex flex-col gap-1.5">
-              <Button type="button" size="sm" variant={pairing ? "default" : "outline"} className="gap-1.5" onClick={onPair} data-testid="pair-switch">
-                <Link2 className="size-4" aria-hidden /> {pairing ? "Hotovo – ukončit párování" : "🔗 Přiřadit ke světlu"}
-              </Button>
+              {/* Fáze 62: párování se ukončuje tlačítkem „Hotovo“ nad půdorysem, ne v bočním panelu */}
+              {pairing ? (
+                <p className="rounded-md border border-emerald-500/50 bg-emerald-500/10 px-2 py-1 text-xs text-emerald-200" data-testid="pairing-note">
+                  🔗 Párování běží – klikejte na svítidla v půdorysu, ukončíte ho tlačítkem Hotovo nad půdorysem (Esc).
+                </p>
+              ) : (
+                <Button type="button" size="sm" variant="outline" className="gap-1.5" onClick={onPair} data-testid="pair-switch">
+                  <Link2 className="size-4" aria-hidden /> 🔗 Přiřadit ke světlu
+                </Button>
+              )}
               <p className="text-xs text-muted-foreground" data-testid="switch-controls">
                 {lights.length
                   ? `Ovládá: ${lights.map((light) => `${paletteItem(light.item)?.label} (${light.room}${floorName(light.id) ? `, ${floorName(light.id)}` : ""})${isWiredSwitch(item) ? ` – řazení ${switchingFor(controllersOf(draft, light.id))}` : ""}`).join(", ")}`
@@ -1910,9 +2095,15 @@ function ElementDetail({
                 {controllers.length ? ` · ${controllers.map((controller) => `${paletteItem(controller.item)?.symbol} (${controller.room}${floorName(controller.id) ? `, ${floorName(controller.id)}` : ""})`).join(", ")}` : ""}
               </p>
               <div className="flex flex-wrap gap-1.5">
-                <Button type="button" size="sm" variant={pairing ? "default" : "outline"} className="gap-1.5" onClick={onPair} data-testid="pair-light">
-                  <Link2 className="size-4" aria-hidden /> {pairing ? "Hotovo" : "🔗 Přiřadit vypínač"}
-                </Button>
+                {pairing ? (
+                  <p className="rounded-md border border-emerald-500/50 bg-emerald-500/10 px-2 py-1 text-xs text-emerald-200" data-testid="pairing-note">
+                    🔗 Párování běží – klikejte na vypínače v půdorysu, ukončíte ho tlačítkem Hotovo nad půdorysem (Esc).
+                  </p>
+                ) : (
+                  <Button type="button" size="sm" variant="outline" className="gap-1.5" onClick={onPair} data-testid="pair-light">
+                    <Link2 className="size-4" aria-hidden /> 🔗 Přiřadit vypínač
+                  </Button>
+                )}
                 {!controllers.length ? (
                   <Button type="button" size="sm" variant="ghost" className="gap-1.5" onClick={onAutoPair}>
                     <Sparkles className="size-4" aria-hidden /> Nejbližší vypínač v místnosti
