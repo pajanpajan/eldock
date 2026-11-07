@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Cpu } from "lucide-react";
+import { AlertTriangle, Cpu, FileText } from "lucide-react";
 
 import { ROLE_LABEL, SMART_SYSTEMS, type SmartPlan, type SmartSystemId } from "@/lib/panel-builder/smart-home";
 import { cn } from "@/lib/utils";
@@ -17,7 +17,7 @@ const channelWord = (count: number) => (count === 1 ? "kanál" : count >= 2 && c
  * v půdorysu (spínání, stmívání, DALI, žaluzie, topení), vybrané akční členy s objednacími čísly a šířkou na DIN
  * liště, kontrola sběrnice a přiřazení kanálů. Moduly se při generování vloží do rozváděče.
  */
-export function SmartHomePanel({ plan, onSystem }: { plan: SmartPlan; onSystem: (system: SmartSystemId) => void }) {
+export function SmartHomePanel({ plan, onSystem, onDatasheet }: { plan: SmartPlan; onSystem: (system: SmartSystemId) => void; /** Fáze 65: technický list modulu. */ onDatasheet?: (moduleId: string) => void }) {
   const roles = (["switch", "dim", "dali", "blind", "heating"] as const).filter((role) => plan.channels[role].needed > 0);
   const actuators = plan.modules.filter((module) => module.modules > 0);
   const offRail = plan.modules.filter((module) => module.modules === 0);
@@ -73,7 +73,13 @@ export function SmartHomePanel({ plan, onSystem }: { plan: SmartPlan; onSystem: 
             {actuators.map((module) => (
               <tr key={`${module.id}-${module.index}`} className="border-t border-border" data-module={module.typeCode}>
                 <td className="py-0.5 pr-1">
+                  {onDatasheet ? (
+                    <button type="button" onClick={() => onDatasheet(module.id)} className="mr-1 inline-flex align-middle text-muted-foreground hover:text-foreground" aria-label={`Datasheet: ${module.typeCode}`} title="Technický list" data-testid="module-datasheet">
+                      <FileText className="size-3.5" aria-hidden />
+                    </button>
+                  ) : null}
                   {module.typeCode}
+                  {module.manual ? <span className="ml-1 rounded border border-sky-400/60 px-1 text-[10px] text-sky-200">ručně</span> : null}
                   <span className="block text-[10px] text-muted-foreground">
                     {module.label}
                     {module.channels && module.role !== "psu" && module.role !== "interface" ? ` · obsazeno ${module.assigned.length}/${module.channels}` : ""}

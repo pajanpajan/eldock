@@ -22,6 +22,7 @@
     "db:demo-legislation": "tsx prisma/demo-legislation.ts",
     "db:demo-lifespan": "tsx prisma/demo-lifespan.ts",
     "catalog:sync": "tsx scripts/sync-external-catalog.ts",
+    "catalog:smart-specs": "tsx scripts/smart-device-specs.ts",
     "brands:fetch": "tsx scripts/fetch-brand-logos.ts",
     "docs:bundle": "tsx scripts/archive-bundle.ts",
     "storage:cleanup": "tsx scripts/cleanup-storage.ts",

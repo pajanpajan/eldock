@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { CheckCircle2, LayoutGrid, Link2, RotateCw, Sparkles, Trash2, Zap } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -98,6 +99,7 @@ export function ElementDetail({
   appliance,
   onRotateStep,
   onEditAppliances,
+  socketCircuit,
 }: {
   draft: FloorplanDraft;
   element: EditorElement;
@@ -116,6 +118,8 @@ export function ElementDetail({
   appliance: ApplianceSpec | null;
   onRotateStep: (step: number) => void;
   onEditAppliances: () => void;
+  /** Fáze 65: okruh zásuvky (jen jedno- / dvojzásuvky). */
+  socketCircuit?: ReactNode;
 }) {
   const item = paletteItem(element.item)!;
   const isPanel = item.kind === "panel" || item.kind === "riser" || item.kind === "fixture";
@@ -144,6 +148,7 @@ export function ElementDetail({
           </button>
         </div>
       </div>
+      {socketCircuit}
       {/* Fáze 57: měřítko značky (násobek velikosti značek nákresu) */}
       <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground" role="radiogroup" aria-label="Měřítko značky">
         Měřítko značky:

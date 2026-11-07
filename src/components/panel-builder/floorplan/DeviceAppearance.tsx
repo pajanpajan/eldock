@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { ExternalLink, RefreshCw } from "lucide-react";
+import { Building2, ExternalLink, House, RefreshCw, ToggleRight, type LucideIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import type { InstallLevel } from "@/engine/floorplan-bridge";
 import { seriesLink } from "@/lib/panel-builder/series-links";
+import { deviceToneOf } from "@/lib/panel-builder/smart-datasheet";
 import { PRODUCT_FAMILIES, SMART_MANUFACTURERS, familiesOf, type CatalogProduct } from "@/lib/panel-builder/smart-catalog";
 import { SUPPLY_SYSTEMS, type SupplySystem } from "@/lib/panel-builder/supply";
 import { DESIGN_BRANDS, designBrand, designSeriesOf, seriesColors } from "@/lib/panel-builder/wiring-designs";
@@ -13,7 +14,7 @@ import { cn } from "@/lib/utils";
 
 import { ManufacturerLogo } from "../ManufacturerLogo";
 import { DeviceMockup, SeriesGallery } from "./SeriesGallery";
-import { SmartCatalog } from "./SmartCatalog";
+import { SmartHomeDeviceCatalog, type SmartCatalogProps } from "../SmartHomeDeviceCatalog";
 
 /**
  * Fáze 55: horní lišta 2D půdorysu nad rastrem – 1. výrobce s logem → 2. designová řada s náhledem tvaru → 3. barvy dané řady
@@ -24,6 +25,9 @@ import { SmartCatalog } from "./SmartCatalog";
  * Fáze 63: u ABB přepínač produktových rodin (domovní spínače a zásuvky / ABB-free@home / ABB i-bus KNX
  * & ABB-flexTronics), výrobci chytré automatizace Loxone a TapHome a odkaz „🌐 Prohlédnout řadu na webu výrobce ↗“.
  */
+/** Ikony segmentového přepínače rodin ABB (fáze 65). */
+const FAMILY_ICON: Record<string, LucideIcon> = { "abb-design": ToggleRight, "abb-fah": House, "abb-knx": Building2 };
+
 export function DeviceAppearance({
   seriesKey,
   color,
@@ -40,6 +44,11 @@ export function DeviceAppearance({
   onSmartSystem,
   onBusLevel,
   onPlaceProduct,
+  placed = () => 0,
+  planned = () => 0,
+  extras = {},
+  onExtra,
+  onDatasheet,
 }: {
   seriesKey: string | null;
   color: string;
@@ -57,6 +66,12 @@ export function DeviceAppearance({
   onSmartSystem?: (system: string) => void;
   onBusLevel?: () => void;
   onPlaceProduct?: (product: CatalogProduct) => void;
+  /** Fáze 65: osazené kusy výrobku, kusy modulu podle výpočtu, ručně přidané moduly, technický list. */
+  placed?: SmartCatalogProps["placed"];
+  planned?: SmartCatalogProps["planned"];
+  extras?: SmartCatalogProps["extras"];
+  onExtra?: SmartCatalogProps["onExtra"];
+  onDatasheet?: SmartCatalogProps["onDatasheet"];
 }) {
   const current = designSeriesOf(seriesKey);
   const brand = current?.brand ?? designBrand(seriesKey?.split("|")[0]) ?? DESIGN_BRANDS[0];
@@ -67,6 +82,8 @@ export function DeviceAppearance({
   const [abbFamily, setAbbFamily] = useState("abb-design");
   const family = smartBrand ? familiesOf(smartBrand)[0] : brand.manufacturer === "ABB" && abbFamily !== "abb-design" ? PRODUCT_FAMILIES.find((option) => option.id === abbFamily) : null;
   const link = seriesLink(seriesKey);
+  // Fáze 65: barva náhledů přístrojů – dvoubarevná řada (rámeček / klapka), u Loxone bílá / antracit
+  const tone = deviceToneOf(seriesKey, color, family?.colors);
   return (
     <section className="flex flex-col gap-2 rounded-xl border border-primary/40 bg-primary/5 p-2" aria-label="Domovní přístroje – výrobce, řada a barva" data-testid="device-appearance">
       <div className="flex flex-wrap items-center gap-2">
@@ -114,26 +131,41 @@ export function DeviceAppearance({
           </select>
         </label>
       </div>
+      {/* Fáze 65: segmentový přepínač rodin ABB s ikonami a podtitulky */}
       {!smartBrand && brand.manufacturer === "ABB" ? (
-        <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="Produktová rodina ABB" data-testid="abb-families">
-          {familiesOf("ABB").map((option) => (
-            <button key={option.id} type="button" role="radio" aria-checked={abbFamily === option.id} onClick={() => setAbbFamily(option.id)} className={cn("rounded-md border px-2 py-1 text-xs font-semibold", abbFamily === option.id ? "border-primary bg-primary/20 text-foreground" : "border-border text-muted-foreground hover:text-foreground")} data-family={option.id}>
-              {option.id === "abb-design" ? `${option.label} (${brand.series.length} řad)` : option.label}
-            </button>
-          ))}
+        <div className="grid gap-1 rounded-xl border border-border bg-background/60 p-1 sm:grid-cols-3" role="radiogroup" aria-label="Produktová rodina ABB" data-testid="abb-families">
+          {familiesOf("ABB").map((option) => {
+            const Icon: LucideIcon = FAMILY_ICON[option.id] ?? ToggleRight;
+            const active = abbFamily === option.id;
+            return (
+              <button key={option.id} type="button" role="radio" aria-checked={active} onClick={() => setAbbFamily(option.id)} className={cn("flex items-center gap-2.5 rounded-lg px-3 py-2 text-left transition-colors", active ? "bg-primary text-primary-foreground shadow-sm" : "text-foreground hover:bg-muted")} data-family={option.id}>
+                <Icon className="size-5 shrink-0" strokeWidth={1.6} aria-hidden />
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold leading-tight">{option.label}</span>
+                  <span className={cn("block text-[11px] leading-tight", active ? "text-primary-foreground/80" : "text-muted-foreground")}>{option.id === "abb-design" ? `${brand.series.length} ${option.subtitle}` : option.subtitle}</span>
+                </span>
+              </button>
+            );
+          })}
         </div>
       ) : null}
       {family ? (
-        <SmartCatalog
+        <SmartHomeDeviceCatalog
           family={family}
           installation={installation}
           smartSystem={smartSystem}
           activeProduct={activeProduct}
           color={color}
+          tone={tone}
+          placed={placed}
+          planned={planned}
+          extras={extras}
           onSystem={(system) => onSmartSystem?.(system)}
           onBusLevel={() => onBusLevel?.()}
           onPlace={(product) => onPlaceProduct?.(product)}
           onColor={(next) => onChange({ color: next })}
+          onExtra={(moduleId, delta) => onExtra?.(moduleId, delta)}
+          onDatasheet={(product) => onDatasheet?.(product)}
         />
       ) : (
         <>

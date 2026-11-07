@@ -9,6 +9,8 @@ import type { ItemConfig } from "@/lib/panel-builder/configurator";
 import type { EnclosureLike } from "@/lib/panel-builder/enclosures";
 import { constructionDetails } from "@/lib/panel-builder/environments";
 
+import { planSocketGroups, type SocketGrouping } from "./socket-zones";
+
 // ===========================================================================
 //  1. Kalibrace měřítka půdorysu a délky kabelů
 // ===========================================================================
@@ -61,6 +63,8 @@ export interface FloorNode {
   lengthMm?: number;
   /** Fáze 63: upravený / vlastní samostatný spotřebič – vlastní okruh přesně podle zadání (jistič, chránič, kabel). */
   appliance?: ApplianceOverride;
+  /** Fáze 65: ruční zásuvkový okruh („Z1“, „Z2“ …) – zásuvky se stejným klíčem tvoří jeden okruh; bez = automaticky. */
+  socketCircuit?: string | null;
 }
 
 /** Fáze 63: zadání samostatného spotřebiče z knihovny spotřebičů (`lib/panel-builder/appliances.ts`). */
@@ -514,6 +518,8 @@ export interface DesignOptions {
   supplyLoopOhm?: number;
   /** Prostředí instalace (`environments.ts`) – stavební detaily do kusovníku. */
   environment?: string | null;
+  /** Fáze 65: rozdělení běžných zásuvek do okruhů (`socket-zones.ts`); výchozí dosavadní „distance“, půdorys posílá svou volbu. */
+  socketGrouping?: SocketGrouping;
 }
 
 export interface BomItem {
@@ -730,7 +736,7 @@ export function generateCircuitsFromFloorplan(plan: Floorplan, calibration: Cali
     if (node.kind === "single_socket" || node.kind === "double_socket" || node.kind === "appliance") sockets.push(node);
   }
 
-  // Běžné zásuvky: místnosti od rozváděče nejbližší, uvnitř místnosti podle vzdálenosti; místnost se nedělí, pokud se vejde
+  // Místnosti od rozváděče nejbližší, uvnitř místnosti podle vzdálenosti (světla)
   const byRoom = (nodes: readonly FloorNode[]) => {
     const groups = new Map<string, FloorNode[]>();
     for (const node of [...nodes].sort((a, b) => length(a) - length(b))) groups.set(node.room, [...(groups.get(node.room) ?? []), node]);
@@ -739,29 +745,32 @@ export function generateCircuitsFromFloorplan(plan: Floorplan, calibration: Cali
   // ČSN 33 2130 ed. 4: limit 10 platí pro skutečné zásuvky – dvojzásuvka = 2 (přepínač `countDoubleAsTwo`)
   const outletsOf = (node: FloorNode) => (node.kind === "double_socket" && countDoubleAsTwo ? 2 : 1);
   const weight = (nodes: readonly FloorNode[]) => nodes.reduce((sum, node) => sum + outletsOf(node), 0);
-  const socketGroups: FloorNode[][] = [];
-  // Fáze 59: zásuvkový okruh nikdy nespojuje dvě podlaží
-  const floorOf = (nodes: readonly FloorNode[]) => nodes[0]?.floor ?? "";
-  for (const [, nodes] of byRoom(sockets)) {
-    let current = socketGroups[socketGroups.length - 1];
-    if (!current || weight(current) + weight(nodes) > MAX_OUTLETS_PER_CIRCUIT || floorOf(current) !== floorOf(nodes)) {
-      current = [];
-      socketGroups.push(current);
-    }
-    for (const node of nodes) {
-      if (current.length && weight(current) + outletsOf(node) > MAX_OUTLETS_PER_CIRCUIT) {
-        current = [];
-        socketGroups.push(current);
-      }
-      current.push(node);
-    }
-  }
-  for (const group of socketGroups) {
+  // Fáze 65: běžné zásuvky – ruční okruhy, pak kompaktní zóny / po místnostech / podle vzdálenosti (`socket-zones.ts`);
+  // fáze 59: zásuvkový okruh nikdy nespojuje dvě podlaží
+  const socketById = new Map(sockets.map((node) => [node.id, node]));
+  const zones = planSocketGroups(
+    sockets.map((node) => ({
+      id: node.id,
+      room: node.room,
+      floor: node.floor ?? "",
+      x: node.px[0] * calibration.pxToMm.x,
+      y: node.px[1] * calibration.pxToMm.y,
+      home: length(node),
+      weight: outletsOf(node),
+      manual: node.socketCircuit ?? null,
+      roomOrder: roomOrder.get(node.room) ?? 0,
+      frame: node.frame ?? null,
+    })),
+    { grouping: options.socketGrouping ?? "distance", maxOutlets: MAX_OUTLETS_PER_CIRCUIT },
+  );
+  warnings.push(...zones.warnings);
+  for (const zone of zones.groups) {
+    const group = zone.ids.map((id) => socketById.get(id)!);
     const rooms = [...new Set(group.map((node) => node.room))];
     const installedW = group.reduce((sum, node) => sum + (node.powerW ?? OUTLET_POWER_W), 0);
     push(
       {
-        label: `Zásuvky – ${rooms.map((room) => roomName.get(room) ?? room).join(", ")}`,
+        label: `Zásuvky – ${rooms.map((room) => roomName.get(room) ?? room).join(", ")}${zone.manual ? ` (ruční okruh ${zone.manual})` : ""}`,
         kind: "sockets",
         phases: 1,
         protection: { device: "MCB", poles: "1P", curve: "B", ratedA: 16 },

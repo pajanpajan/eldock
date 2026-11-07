@@ -197,3 +197,18 @@ Výsledek vzorového domu z testu (klasická instalace):
 - **Rozváděč** – „⚡ Vygenerovat rozváděč“ nejdřív uloží půdorys a nový projekt (1 kredit) se k němu naváže;
   „📐 Upravit půdorys“ u projektu otevře navázaný půdorys, u projektů z fází 49–63 ho založí z kopie nákresu
   uložené v projektu (`PanelBoardProject.floorplanJson`).
+
+## Zásuvkové okruhy v kompaktních zónách (fáze 65)
+
+- **Proč** – dosavadní rozdělení řadilo zásuvky velké místnosti (i půdorysu bez zakreslených místností) podle délky
+  přívodu z rozváděče a dělilo po 10 zásuvkách: okruh pak sbíral zásuvky stejně daleko od rozváděče na protilehlých
+  koncích bytu („prstence“ přes celý byt, okruhy přes 50 m).
+- **Kompaktní zóny** (`compact`, výchozí u nového nákresu) – zásuvky místnosti v pořadí nejkratšího průchodu od
+  zásuvky nejblíž rozváděči, místnosti v pořadí sousedství (nejkratší průchod místnostmi). Okruh = souvislý úsek:
+  místnost se nedělí, pokud se vejde; sousední malé místnosti se spojí, je-li mezera do 8 m; velká místnost se
+  rozdělí na vyvážené souvislé úseky (23 zásuvek = 8 + 7 + 8). Zásuvky víceramečku zůstanou v jednom okruhu.
+- **Po místnostech** (`rooms`) – každá místnost vlastní okruh(y); **podle vzdálenosti** (`distance`) – dosavadní
+  rozdělení, které si ponechá nákres uložený před fází 65 (stejné okruhy jako jeho vygenerovaný rozváděč).
+- **Ruční okruh** – zásuvky se stejným klíčem Z1–Z99 tvoří jeden okruh v každém režimu (po podlažích, nad 10
+  zásuvek jen s varováním). Přesun do automatického okruhu ho zafixuje jako ruční i s jeho zásuvkami.
+  „Optimalizovat zásuvkové okruhy“ = kompaktní zóny bez ručních okruhů a bez ručně upravených tras zásuvek.

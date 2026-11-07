@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import { FileText } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -17,6 +18,8 @@ export interface PaletteEntry {
   title?: string;
   active: boolean;
   onPick: () => void;
+  /** Fáze 65: technický list (sběrnicové prvky chytré domácnosti). */
+  onInfo?: () => void;
 }
 
 export interface PaletteSection {
@@ -125,8 +128,8 @@ export function PaletteAccordion({ sections }: { sections: PaletteSection[] }) {
             {expanded ? (
               <div id={`palette-${section.id}`} className="flex flex-wrap gap-1">
                 {section.entries.map((entry) => (
+                  <span key={entry.id} className="inline-flex items-stretch gap-0.5">
                   <button
-                    key={entry.id}
                     type="button"
                     aria-pressed={entry.active}
                     onClick={entry.onPick}
@@ -136,6 +139,12 @@ export function PaletteAccordion({ sections }: { sections: PaletteSection[] }) {
                     <span className="rounded bg-muted px-1 font-mono text-[10px] font-bold text-foreground">{entry.symbol}</span>
                     {entry.label}
                   </button>
+                  {entry.onInfo ? (
+                    <button type="button" onClick={entry.onInfo} className="rounded-md border border-border px-1 text-muted-foreground hover:border-primary/60 hover:text-foreground" aria-label={`Technický list ${entry.symbol}`} title={`Technický list: ${entry.label}`} data-testid="palette-datasheet">
+                      <FileText className="size-3.5" aria-hidden />
+                    </button>
+                  ) : null}
+                  </span>
                 ))}
               </div>
             ) : null}

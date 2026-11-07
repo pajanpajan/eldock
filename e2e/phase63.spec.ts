@@ -216,7 +216,10 @@ test("2D půdorys: akordeon palety, předměty X × Y, spotřebiče, úprava tra
   await catalog.getByTestId("smart-catalog-level").getByRole("button", { name: "Přepnout na sběrnicovou instalaci" }).click();
   if (await page.getByTestId("level-conversion").isVisible()) await page.getByTestId("level-convert").click();
   await expect(catalog.getByTestId("smart-catalog-level")).toHaveCount(0);
+  // Fáze 65: obrázkový katalog po záložkách – DIN lišta zvlášť, výrobky k osazení v záložce ovladačů
+  await catalog.getByTestId("smart-tab-din").click();
   await expect(catalog.getByTestId("smart-catalog-din")).toContainText("SA-M-4.16.2.2");
+  await catalog.getByTestId("smart-tab-controls").click();
   await catalog.locator('[data-product="fah-sensor-2"]').click();
   await expect(title).toContainText("Senzor / tlačítko 2násobné free@home");
   await clickAt(5000, 5000);

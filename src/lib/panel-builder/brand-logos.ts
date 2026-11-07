@@ -52,7 +52,7 @@ export const LOGO_SOURCES: Record<string, string[]> = {
   wago: ["Logo_WAGO_2020.svg", "WAGO_Logo.svg"],
   schrack: ["Schrack_Technik_logo.svg"],
   rittal: ["Rittal-Logo_2010.svg"],
-  loxone: ["Loxone.svg"],
+  // Fáze 65: Loxone bez staženého loga (obkreslený obrázek s černým podkladem) – čistý zelený wordmark public/brands/loxone.svg
   hensel: ["Hensel.svg"],
 };
 
@@ -104,6 +104,9 @@ export const WORDMARKS: Record<string, WordmarkStyle> = {
   stego: { text: "STEGO", color: "#004a8f", weight: 900, spacing: 2.5 },
   // Fáze 55: modrý wordmark „hager“ (#005CA9) místo šedého korporátního loga Hager Group
   hager: { text: "hager", color: "#005CA9", weight: 800, spacing: -0.5 },
+  // Fáze 65: čisté wordmarky chytré automatizace (soubory v public/brands mají přednost)
+  loxone: { text: "LOXONE", color: "#69C350", weight: 800, spacing: 1.5 },
+  taphome: { text: "TapHome", color: "#1f2937", weight: 800, spacing: -0.5 },
 };
 
 const escapeXml = (value: string) => value.replace(/[<>&"']/g, (char) => `&#${char.charCodeAt(0)};`);

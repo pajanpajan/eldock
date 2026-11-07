@@ -128,7 +128,7 @@ import { PlanChecks, SelectionPanel, type PlanCheck } from "./PlanPanels";
 import { SmartHomePanel } from "./SmartHomePanel";
 import { applyNormFix, floorplanNorms } from "@/lib/panel-builder/floorplan-norms";
 import { smartPlanOf } from "@/lib/panel-builder/smart-home-plan";
-import { isSmartSystem } from "@/lib/panel-builder/smart-home";
+import { isSmartSystem, type SmartSystemId } from "@/lib/panel-builder/smart-home";
 import { WiringBomDialog } from "./WiringBomDialog";
 import { ApplianceEditor, useApplianceLibrary } from "./ApplianceEditor";
 import { FixtureShape } from "./FixtureShape";
@@ -140,11 +140,15 @@ import { resizeFixture, turnBy, type FixtureHandle } from "@/lib/panel-builder/f
 import { isPolygonRoom, polygonArea, polygonBounds, pointInRoom, roomPolygon, snapAngle, validPolygon, wallLabel } from "@/lib/panel-builder/room-geometry";
 import { displayRoutes, editedKeysOf, type DisplayCircuit, type DisplayLeg } from "@/lib/panel-builder/route-display";
 import { cleanPolyline, dragSegment, insertJog, segmentShift } from "@/lib/panel-builder/route-edit";
-import { PRODUCT_FAMILIES, productById, type CatalogProduct } from "@/lib/panel-builder/smart-catalog";
+import { PRODUCT_FAMILIES, productById, productForItem, productOfModule, type CatalogProduct } from "@/lib/panel-builder/smart-catalog";
+import { deviceToneOf } from "@/lib/panel-builder/smart-datasheet";
+import { SmartHomeDatasheetModal } from "../SmartHomeDatasheetModal";
 import { FloorplanDocumentBar } from "./FloorplanDocumentBar";
 import { useDraftHistory } from "./useDraftHistory";
 import { useFloorplanSync, type FloorplanMetaState } from "./useFloorplanSync";
 import { Dimensions, ElementDetail, ElementToolbar, RoomDetail, ToolButton } from "./ElementPanels";
+import { SocketCircuitPicker, SocketCircuitsPanel, type SocketMoveTarget } from "./SocketCircuitsPanel";
+import { assignSocketCircuit, isSocketElement, moveSocketsToCircuit, nextSocketCircuit, optimizeSocketCircuits, socketCircuitRows, type SocketCircuitRow } from "@/lib/panel-builder/socket-circuits";
 import { BACKGROUND_PX, preloadImage, rasterizeSvg } from "@/lib/panel-builder/background-image";
 
 // 2D editor půdorysu elektroinstalace (fáze 49, úprava PDF / značky / úroveň instalace fáze 57, fáze 59: natočení další
@@ -284,6 +288,8 @@ export function FloorplanEditor({
   const [routeDrag, setRouteDrag] = useState<{ key: string; index: number; base: { x: number; y: number }[]; start: { x: number; y: number }; points: { x: number; y: number }[]; moved: boolean } | null>(null);
   const [vertexDrag, setVertexDrag] = useState<{ roomId: string; index: number } | null>(null);
   const [applianceOpen, setApplianceOpen] = useState(false);
+  /** Fáze 65: otevřený technický list přístroje chytré domácnosti. */
+  const [datasheet, setDatasheet] = useState<(CatalogProduct & { family: string }) | null>(null);
   /** Fáze 63: dvojklik na úsek trasy = dva stisky na stejném úseku do 400 ms (plátno při stisku přebírá ukazatel). */
   const lastRouteTap = useRef<{ key: string; index: number; at: number } | null>(null);
   const [pending, startTransition] = useTransition();
@@ -320,6 +326,51 @@ export function FloorplanEditor({
     setSelection([]);
     setSelectedRoomId(null);
     setSelectedNoteId(null);
+  }
+
+  /** Fáze 65: přesun zásuvek do okruhu – automaticky, do existujícího okruhu (automatický se zafixuje jako ruční), nový ruční. */
+  function moveSockets(ids: readonly string[], target: SocketMoveTarget) {
+    if (!ids.length) return;
+    if (target.kind === "auto") {
+      update((current) => assignSocketCircuit(current, ids, null));
+      return void toast.success(ids.length > 1 ? "Vybrané zásuvky jsou zpět v automatickém rozdělení." : "Zásuvka je zpět v automatickém rozdělení.");
+    }
+    if (target.kind === "new") {
+      const key = nextSocketCircuit(draft);
+      if (!key) return void toast.error("Všech 99 ručních okruhů je obsazeno.");
+      update((current) => assignSocketCircuit(current, ids, key));
+      return void toast.success(`${ids.length > 1 ? `${ids.length} zásuvek` : "Zásuvka"} v novém ručním okruhu ${key}.`);
+    }
+    update((current) => moveSocketsToCircuit(current, ids, { nodeIds: target.row.elementIds }));
+    toast.success(`Přesunuto do okruhu ${target.row.designation} – okruh je teď ruční (Ctrl+Z vrátí).`);
+  }
+
+  /** Fáze 65: ručně přidané moduly chytré domácnosti na DIN lištu (nad výpočet). */
+  function changeSmartExtra(moduleId: string, delta: 1 | -1) {
+    update((current) => {
+      const next = Math.max(0, Math.min(20, (current.smartExtras[moduleId] ?? 0) + delta));
+      const smartExtras = { ...current.smartExtras };
+      if (next) smartExtras[moduleId] = next;
+      else delete smartExtras[moduleId];
+      return next === (current.smartExtras[moduleId] ?? 0) ? current : { ...current, smartExtras };
+    });
+  }
+
+  /** Fáze 65: „✨ Optimalizovat zásuvkové okruhy“ – kompaktní zóny bez ručních okruhů a bez ručních tras zásuvek. */
+  function optimizeSockets() {
+    const result = optimizeSocketCircuits(draft);
+    update(() => result.draft);
+    const extra = [result.manual ? `zrušeno ${result.manual} ručních přiřazení` : null, result.routes ? `${result.routes} ručně upravených tras zásuvek na automat` : null].filter(Boolean).join(", ");
+    toast.success(`Zásuvkové okruhy přepočítány na optimalizované zóny${extra ? ` (${extra})` : ""}. Ctrl+Z vrátí.`);
+  }
+
+  /** Fáze 65: klik na okruh v panelu vybere jeho zásuvky na aktivním podlaží. */
+  function selectSocketCircuit(row: SocketCircuitRow) {
+    const here = row.elementIds.filter((id) => draft.elements.some((element) => element.id === id));
+    setSelectedRoomId(null);
+    setSelectedNoteId(null);
+    setSelection(here);
+    if (here.length < row.elementIds.length) toast.info(`Část zásuvek okruhu ${row.designation} je na jiném podlaží.`);
   }
 
   /** Fáze 64: název, zákazník a místo stavby – u uloženého půdorysu na server, u nového se použijí při prvním uložení. */
@@ -361,6 +412,19 @@ export function FloorplanEditor({
   const norms = useMemo(() => floorplanNorms(deferred), [deferred]);
   // Fáze 63: trasy k vykreslení (odsazení podél stěn, ruční úpravy, štítky okruhů) a knihovna spotřebičů palety
   const routes = useMemo(() => (analysis.ok ? displayRoutes(deferred, analysis) : null), [analysis, deferred]);
+  // Fáze 65: zásuvkové okruhy (označení jističů, délky z tras, ruční okruhy) pro panel, detail zásuvky a výběr
+  const socketRows = useMemo(() => (analysis.ok ? socketCircuitRows(analysis.circuits.circuits, (id) => routes?.circuits.find((circuit) => circuit.id === id)?.lengthM) : []), [analysis, routes]);
+  const socketRowOf = (elementId: string) => socketRows.find((row) => row.elementIds.includes(elementId)) ?? null;
+  const selectedSockets = draft.elements.filter((element) => selection.includes(element.id) && isSocketElement(element)).map((element) => element.id);
+  // Fáze 65: osazené výrobky chytré domácnosti, výrobek sběrnicové položky palety a systém otevřeného technického listu
+  const placedProducts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const element of allElements(draft)) if (element.product) counts.set(element.product, (counts.get(element.product) ?? 0) + 1);
+    return counts;
+  }, [draft]);
+  const busProduct = (itemId: string) => (isSmartSystem(draft.smartSystem) ? productForItem(draft.smartSystem, itemId) : null);
+  const datasheetFamily = datasheet ? (PRODUCT_FAMILIES.find((family) => family.id === datasheet.family) ?? null) : null;
+  const datasheetSystem = (datasheetFamily?.system ?? "abb_freeathome") as SmartSystemId;
   const catalog = useMemo(() => applianceCatalog(draft.appliances), [draft.appliances]);
   const checklist = generationChecklist(draft);
 
@@ -1351,6 +1415,8 @@ export function FloorplanEditor({
               setTool(active ? { kind: "select" } : { kind: "place", item: item.id });
               setHover(null);
             },
+            // Fáze 65: technický list sběrnicového prvku zvoleného systému chytré domácnosti
+            ...(item.bus && busProduct(item.id) ? { onInfo: () => setDatasheet(busProduct(item.id)) } : {}),
           };
         }),
     };
@@ -1613,6 +1679,11 @@ export function FloorplanEditor({
         }}
         onBusLevel={() => changeLevel("bus_loxone")}
         onPlaceProduct={placeProduct}
+        placed={(id) => placedProducts.get(id) ?? 0}
+        planned={(moduleId) => smartPlan?.modules.filter((unit) => unit.id === moduleId && !unit.manual).length ?? 0}
+        extras={draft.smartExtras}
+        onExtra={changeSmartExtra}
+        onDatasheet={(product) => setDatasheet(productById(product.id))}
       />
 
       {/* Fáze 59: podlaží domu */}
@@ -2036,6 +2107,9 @@ export function FloorplanEditor({
               onRotate={() => rotateSelection()}
               onDelete={() => removeSelection()}
               onClear={() => setSelection([])}
+              sockets={selectedSockets.length}
+              onJoinSockets={() => moveSockets(selectedSockets, { kind: "new" })}
+              onAutoSockets={() => moveSockets(selectedSockets, { kind: "auto" })}
             />
           ) : null}
           {selected ? (
@@ -2059,6 +2133,7 @@ export function FloorplanEditor({
               appliance={paletteItem(selected.item)?.kind === "appliance" ? applianceSpecFor(draft.appliances, selected) : null}
               onRotateStep={(step) => rotateSelection([selected.id], step)}
               onEditAppliances={() => setApplianceOpen(true)}
+              socketCircuit={isSocketElement(selected) ? <SocketCircuitPicker manual={selected.socketCircuit ?? null} current={socketRowOf(selected.id)} rows={socketRows} onMove={(target) => moveSockets([selected.id], target)} /> : undefined}
               onFrame={{
                 moveLeft: () => update((current) => moveInFrame(current, selected.id, -1)),
                 moveRight: () => update((current) => moveInFrame(current, selected.id, 1)),
@@ -2074,8 +2149,19 @@ export function FloorplanEditor({
               }}
             />
           ) : null}
-          {smartPlan ? <SmartHomePanel plan={smartPlan} onSystem={(smartSystem) => isSmartSystem(smartSystem) && update((current) => ({ ...current, smartSystem }))} /> : null}
+          {smartPlan ? <SmartHomePanel plan={smartPlan} onDatasheet={(moduleId) => setDatasheet(productOfModule(smartPlan.system.id, moduleId))} onSystem={(smartSystem) => isSmartSystem(smartSystem) && update((current) => ({ ...current, smartSystem }))} /> : null}
           <PlanChecks checks={checks} title="Kontrola půdorysu a norem" />
+          {/* Fáze 65: zásuvkové okruhy – rozdělení, optimalizace a ruční změna */}
+          {socketRows.length || draft.elements.some(isSocketElement) ? (
+            <SocketCircuitsPanel
+              grouping={draft.socketGrouping}
+              rows={socketRows}
+              activeIds={selection}
+              onGrouping={(socketGrouping) => update((current) => (current.socketGrouping === socketGrouping ? current : { ...current, socketGrouping }))}
+              onOptimize={optimizeSockets}
+              onSelect={selectSocketCircuit}
+            />
+          ) : null}
           {/* Fáze 63: ručně upravené trasy – návrat na automat */}
           {routes && routes.circuits.some((circuit) => circuit.edited) ? (
             <section className="flex flex-col gap-1.5 rounded-xl border border-amber-500/40 bg-card p-3 text-xs" aria-label="Ručně upravené trasy" data-testid="edited-routes">
@@ -2134,6 +2220,8 @@ export function FloorplanEditor({
 
       {/* Fáze 63: knihovna samostatných spotřebičů (✎ Upravit / + Přidat v paletě) */}
       <ApplianceEditor open={applianceOpen} onOpenChange={setApplianceOpen} specs={catalog} onSave={saveAppliances} />
+      {/* Fáze 65: technický list přístroje chytré domácnosti (katalog, paleta, přehled akčních členů) */}
+      <SmartHomeDatasheetModal product={datasheet} system={datasheetSystem} tone={deviceToneOf(draft.series, draft.color, datasheetFamily?.colors)} onClose={() => setDatasheet(null)} />
 
       {calibrationDialog ? (
         <CalibrationDialog

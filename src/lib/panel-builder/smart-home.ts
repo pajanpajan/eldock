@@ -157,6 +157,8 @@ export interface PlannedModule extends SmartModule {
   index: number;
   /** Obsazené kanály: číslo kanálu → zátěž. */
   assigned: { channel: number; load: SmartLoad }[];
+  /** Fáze 65: ručně přidaný kus nad výpočet (rezerva, rozšíření). */
+  manual?: boolean;
 }
 
 export interface SmartPlan {
@@ -203,15 +205,26 @@ export function chooseModules(options: readonly SmartModule[], needed: number): 
  * Výpočet chytré domácnosti: kanály podle zátěží (+ rezerva systému, min. 1 volný kanál od každého druhu), výběr
  * akčních členů, rozdělení zátěží na kanály (po místnostech), zdroj a systémový modul, kontrola sběrnice a stmívačů.
  */
-export function planSmartHome(input: { system: SmartSystemId; loads: readonly SmartLoad[]; busDevices: number }): SmartPlan {
+export function planSmartHome(input: { system: SmartSystemId; loads: readonly SmartLoad[]; busDevices: number; extras?: Readonly<Record<string, number>> }): SmartPlan {
   const system = smartSystemOf(input.system);
   const warnings: string[] = [];
   const modules: PlannedModule[] = [];
   const counts = new Map<string, number>();
-  const add = (unit: SmartModule, assigned: PlannedModule["assigned"] = []) => {
+  const add = (unit: SmartModule, assigned: PlannedModule["assigned"] = [], manual = false) => {
     const index = (counts.get(unit.id) ?? 0) + 1;
     counts.set(unit.id, index);
-    modules.push({ ...unit, index, assigned });
+    modules.push({ ...unit, index, assigned, ...(manual ? { manual: true } : {}) });
+  };
+  /** Fáze 65: ručně přidané kusy modulů (nejvýš 20 od typu); akční členy zatíží sběrnici, zdroje a rozhraní ne. */
+  const central = (unit: SmartModule) => unit.role === "psu" || unit.role === "interface" || unit.role === "system";
+  const addExtras = (pick: (unit: SmartModule) => boolean) => {
+    let added = 0;
+    for (const unit of system.modules.filter(pick)) {
+      const extra = Math.max(0, Math.min(20, Math.floor(input.extras?.[unit.id] ?? 0)));
+      for (let index = 0; index < extra; index++) add(unit, [], true);
+      added += extra;
+    }
+    return added;
   };
   const byRole = (role: SmartRole) => system.modules.filter((unit) => unit.role === role);
   const channels = { switch: { needed: 0, available: 0 }, dim: { needed: 0, available: 0 }, dali: { needed: 0, available: 0 }, blind: { needed: 0, available: 0 }, heating: { needed: 0, available: 0 } };
@@ -263,6 +276,7 @@ export function planSmartHome(input: { system: SmartSystemId; loads: readonly Sm
     if (queue.length) warnings.push(`Nepřiřazeno ${queue.length} zátěží (${ROLE_LABEL[role]}).`);
   }
 
+  addExtras((unit) => !central(unit));
   // Zdroj sběrnice a rozhraní
   const actuators = modules.filter((unit) => unit.role !== "system").length;
   const busDevices = input.busDevices + actuators + (system.id === "loxone" ? 0 : 1);
@@ -271,6 +285,8 @@ export function planSmartHome(input: { system: SmartSystemId; loads: readonly Sm
   const lines = system.id === "loxone" ? 1 : Math.max(1, Math.ceil(busDevices / system.devicesPerLine), psu?.busMa && system.deviceMa ? Math.ceil(busMa / (psu.busMa * 0.8)) : 1);
   if (psu) for (let line = 0; line < lines; line++) add(psu);
   for (const unit of byRole("interface")) if (system.id !== "loxone" || input.busDevices > 50) add(unit);
+  addExtras(central);
+  const manualPsu = modules.filter((unit) => unit.manual && unit.role === "psu").length;
   if (busDevices > system.maxDevices) warnings.push(`${busDevices} prvků překračuje limit systému ${system.maxDevices} – rozdělte instalaci nebo zvolte větší systém.`);
   if (lines > 1) warnings.push(`${busDevices} sběrnicových prvků → ${lines} linie (zdroje); nejvýš ${system.devicesPerLine} prvků na linii a délka kabelu linie do ${system.maxLineM} m.`);
   if (system.id === "loxone" && input.busDevices > 50) warnings.push("Více než 50 prvků Tree – druhá větev Tree Extension (každá větev max. 50 prvků).");
@@ -280,7 +296,7 @@ export function planSmartHome(input: { system: SmartSystemId; loads: readonly Sm
     channels,
     busDevices,
     busMa,
-    psuMa: (psu?.busMa ?? 0) * lines,
+    psuMa: (psu?.busMa ?? 0) * (psu ? lines + manualPsu : 0),
     widthModules: modules.reduce((sum, unit) => sum + unit.modules, 0),
     warnings,
   };

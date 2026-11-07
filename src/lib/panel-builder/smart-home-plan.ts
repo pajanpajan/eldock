@@ -35,5 +35,6 @@ export function smartLoadsOf(draft: FloorplanDraft): { loads: SmartLoad[]; busDe
 export function smartPlanOf(draft: FloorplanDraft): SmartPlan | null {
   if (draft.installation !== "bus_loxone") return null;
   const { loads, busDevices } = smartLoadsOf(draft);
-  return planSmartHome({ system: smartSystemOf(draft.smartSystem as SmartSystemId).id, loads, busDevices });
+  // Fáze 65: ručně přidané moduly na DIN lištu nad výpočet
+  return planSmartHome({ system: smartSystemOf(draft.smartSystem as SmartSystemId).id, loads, busDevices, extras: draft.smartExtras });
 }

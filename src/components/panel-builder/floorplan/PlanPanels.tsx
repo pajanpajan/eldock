@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, CheckCircle2, Info, LayoutGrid, RotateCw, Trash2, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Info, LayoutGrid, Plug, RotateCw, Trash2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -60,6 +60,9 @@ export function SelectionPanel({
   onRotate,
   onDelete,
   onClear,
+  sockets = 0,
+  onJoinSockets,
+  onAutoSockets,
 }: {
   count: number;
   gangs: number;
@@ -69,6 +72,10 @@ export function SelectionPanel({
   onRotate: () => void;
   onDelete: () => void;
   onClear: () => void;
+  /** Fáze 65: zásuvky ve výběru – spojení do ručního okruhu / automatické rozdělení. */
+  sockets?: number;
+  onJoinSockets?: () => void;
+  onAutoSockets?: () => void;
 }) {
   return (
     <section className="flex flex-col gap-2 rounded-xl border-2 border-sky-500/50 bg-card p-3 text-sm" aria-label="Vybrané prvky" data-testid="selection-panel">
@@ -90,6 +97,22 @@ export function SelectionPanel({
           <Trash2 className="size-4" aria-hidden /> Smazat vybrané
         </Button>
       </div>
+      {/* Fáze 65: vybrané zásuvky do jednoho ručního okruhu / zpět na automatické rozdělení */}
+      {sockets ? (
+        <div className="flex flex-col gap-1 border-t border-border pt-2" data-testid="selection-sockets">
+          <p className="text-xs text-muted-foreground">
+            Zásuvek ve výběru: <b className="text-foreground">{sockets}</b>
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            <Button type="button" size="sm" variant="outline" className="gap-1.5" onClick={onJoinSockets} data-testid="join-sockets">
+              <Plug className="size-4" aria-hidden /> Spojit do jednoho okruhu
+            </Button>
+            <Button type="button" size="sm" variant="ghost" className="gap-1.5" onClick={onAutoSockets} data-testid="auto-sockets">
+              Automatické rozdělení
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

@@ -4,6 +4,7 @@
 
 import { DOUBLE_TWO_WAY_CABLE, MANHATTAN, floorMetric, summarizeCabling, type FloorLink, type RouteMetric, type RouteNode, type RoutePoint } from "@/engine/cable-routing";
 import { buildWallGraph, wallMetric, wallSegments } from "@/engine/wall-routing";
+import { isSocketGrouping, type SocketGrouping } from "@/engine/socket-zones";
 import {
   DEFAULT_ELEVATION,
   calibrateFloorplanScale,
@@ -200,6 +201,8 @@ export interface EditorElement {
   appliance?: string;
   /** Fáze 63: konkrétní výrobek z lišty výrobců (ABB-free@home, ABB i-bus KNX, Loxone, TapHome) – popis a sběrnice. */
   product?: string;
+  /** Fáze 65: ruční zásuvkový okruh („Z1“ … „Z99“) – zásuvky se stejným okruhem jdou na jeden jistič; bez = automaticky. */
+  socketCircuit?: string;
 }
 
 /** Fáze 61: zátěž svítidla pro chytrou domácnost. */
@@ -358,6 +361,10 @@ export interface FloorplanDraft {
   routeEdits: Record<string, { x: number; y: number }[]>;
   /** Fáze 63: zobrazení kabelů – barevně podle okruhů, nebo normové CAD značení (rysky žil, štítky okruhů). */
   cableView: "color" | "cad";
+  /** Fáze 65: rozdělení běžných zásuvek do okruhů – kompaktní zóny (nový nákres), po místnostech, podle vzdálenosti (nákres do fáze 64). */
+  socketGrouping: SocketGrouping;
+  /** Fáze 65: ručně přidané moduly chytré domácnosti na DIN lištu nad výpočet (id modulu → kusy). */
+  smartExtras: Record<string, number>;
   updatedAt: number;
 }
 
@@ -391,6 +398,8 @@ export const emptyDraft = (): FloorplanDraft => ({
   appliances: [],
   routeEdits: {},
   cableView: "color",
+  socketGrouping: "compact",
+  smartExtras: {},
   updatedAt: 0,
 });
 
@@ -439,6 +448,9 @@ export function parseDraft(value: unknown): FloorplanDraft | null {
     appliances: parseApplianceList(draft.appliances),
     routeEdits: parseRouteEdits(draft.routeEdits, num),
     cableView: draft.cableView === "cad" ? "cad" : "color",
+    // Fáze 65: nákres z doby před volbou rozdělení zůstane u dosavadního rozdělení (stejné okruhy jako vygenerovaný rozváděč)
+    socketGrouping: isSocketGrouping(draft.socketGrouping) ? draft.socketGrouping : "distance",
+    smartExtras: parseSmartExtras(draft.smartExtras),
     updatedAt: num(draft.updatedAt, 0, 0, 1e15),
   };
 }
@@ -554,14 +566,29 @@ function parseSheet(raw: Partial<FloorSheet> & Partial<Pick<FloorplanDraft, "flo
   };
 }
 
-/** Fáze 63: rozměr předmětu, vlastní spotřebič a výrobek prvku z uložených dat. */
-function parseExtras(element: Partial<EditorElement> & { item: string }, num: Num): Pick<EditorElement, "sizeMm" | "appliance" | "product"> {
+/** Fáze 65: ruční zásuvkový okruh „Z1“ … „Z99“. */
+export const SOCKET_CIRCUIT = /^Z[1-9]\d?$/;
+
+/** Fáze 65: ručně přidané moduly chytré domácnosti (id modulu → 1 … 20 kusů). */
+function parseSmartExtras(value: unknown): Record<string, number> {
+  if (!value || typeof value !== "object") return {};
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([key, count]) => /^[\w-]{1,40}$/.test(key) && typeof count === "number" && Number.isInteger(count) && count > 0)
+      .slice(0, 40)
+      .map(([key, count]) => [key, Math.min(20, count as number)]),
+  );
+}
+
+/** Fáze 63: rozměr předmětu, vlastní spotřebič a výrobek prvku z uložených dat; fáze 65 ruční zásuvkový okruh. */
+function parseExtras(element: Partial<EditorElement> & { item: string }, num: Num): Pick<EditorElement, "sizeMm" | "appliance" | "product" | "socketCircuit"> {
   const fixture = fixtureSpecOf(element.item);
   const size = element.sizeMm && typeof element.sizeMm === "object" ? element.sizeMm : null;
   return {
     ...(fixture && size ? { sizeMm: { w: clampFixture(num(size.w, fixture.w, 1, 1e5)), d: clampFixture(num(size.d, fixture.d, 1, 1e5)) } } : {}),
     ...(element.item === CUSTOM_APPLIANCE_ITEM && typeof element.appliance === "string" && /^[\w-]{1,40}$/.test(element.appliance) ? { appliance: element.appliance } : {}),
     ...(typeof element.product === "string" && productById(element.product) ? { product: element.product } : {}),
+    ...(typeof element.socketCircuit === "string" && SOCKET_CIRCUIT.test(element.socketCircuit) ? { socketCircuit: element.socketCircuit } : {}),
   };
 }
 
@@ -1018,6 +1045,8 @@ export function buildPlan(draft: FloorplanDraft): PlanBuild {
           ...(frame ? { frame } : {}),
           ...(multi ? { floor: floor.id } : {}),
           ...(override ? { appliance: override } : {}),
+          // Fáze 65: ruční zásuvkový okruh (jen zásuvky)
+          ...(element.socketCircuit && (item.kind === "single_socket" || item.kind === "double_socket") ? { socketCircuit: element.socketCircuit } : {}),
         };
         const heightMm = mountHeight(node, profile);
         node.lengthMm = homeRun({ x: px[0], y: px[1], floor: floor.id }, heightMm);
@@ -1115,8 +1144,14 @@ export function parseCableReport(json: string | null | undefined): CableReport |
   }
 }
 
-/** Volby návrhu dle ČSN 33 2130 ed. 4 z nákresu (fáze 52). */
-export const designOptionsOf = (draft: Pick<FloorplanDraft, "installMethod" | "groupedCables" | "countDoubleAsTwo"> & Partial<Pick<FloorplanDraft, "environment">>): DesignOptions => ({ installMethod: draft.installMethod, groupedCables: draft.groupedCables, countDoubleAsTwo: draft.countDoubleAsTwo, environment: draft.environment ?? null });
+/** Volby návrhu dle ČSN 33 2130 ed. 4 z nákresu (fáze 52; fáze 65 rozdělení zásuvek). */
+export const designOptionsOf = (draft: Pick<FloorplanDraft, "installMethod" | "groupedCables" | "countDoubleAsTwo"> & Partial<Pick<FloorplanDraft, "environment" | "socketGrouping">>): DesignOptions => ({
+  installMethod: draft.installMethod,
+  groupedCables: draft.groupedCables,
+  countDoubleAsTwo: draft.countDoubleAsTwo,
+  environment: draft.environment ?? null,
+  ...(draft.socketGrouping ? { socketGrouping: draft.socketGrouping } : {}),
+});
 
 /** Živý výpočet nad nákresem (klient i server): okruhy dle ČSN 33 2130 ed. 4 a výkaz kabeláže ve 3 režimech. */
 export function analyzeDraft(draft: FloorplanDraft) {
