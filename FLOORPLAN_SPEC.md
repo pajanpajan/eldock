@@ -180,3 +180,20 @@ Výsledek vzorového domu z testu (klasická instalace):
 - **Šikmé stěny** – `wallSegments` bere u místnosti s `points` hrany mnohoúhelníku; graf stěn (`buildWallGraph`)
   obecné úsečky dělí v průsečících a T-spojích stejně jako vodorovné / svislé, kolmice k prvku je kolmý průmět na
   šikmou stěnu. Ve volném prostoru zůstává pravoúhlé měřidlo `MANHATTAN`.
+
+## Uložené půdorysy, verze a Zpět / Znovu (fáze 64)
+
+- **Úložiště** – nákres (`FloorplanDraft`) patří firmě a je na serveru v `Floorplan.draftJson`; prohlížeč drží jen
+  zálohu neuložených změn (`eldock.pb.floorplan:<id>`, nový půdorys `…:novy`). Nový půdorys vznikne při první změně.
+- **Ukládání** – 1,2 s po poslední úpravě, při nepřetržité práci nejpozději po 10 s; zápis jen nad verzí, ze které
+  editor vychází (`Floorplan.version`). Jiná verze = souběh dvou oken: odmítnutý nákres jde do historie (CONFLICT)
+  a uživatel zvolí „Načíst aktuální verzi“, nebo „Ponechat mou verzi“ (stav serveru jde do historie jako OVERWRITE).
+- **Historie verzí** – automatický snímek nejvýš jednou za 10 minut, ručně pojmenovaná verze, stav, ze kterého byl
+  vygenerován rozváděč (GENERATE), stav před obnovením (RESTORE) a převzetí (IMPORT); drží se 30 snímků.
+  Obnovení starší verze jde vrátit – současný stav se před ním uloží do historie.
+- **Zpět / Znovu** – Ctrl+Z, Ctrl+Shift+Z / Ctrl+Y a tlačítka v liště půdorysu; jedno tažení nebo jeden klik =
+  jeden krok, rychlá série úprav z klávesnice a formulářů (mezery do 700 ms) se slučuje; 100 kroků. V textovém
+  poli platí Zpět prohlížeče.
+- **Rozváděč** – „⚡ Vygenerovat rozváděč“ nejdřív uloží půdorys a nový projekt (1 kredit) se k němu naváže;
+  „📐 Upravit půdorys“ u projektu otevře navázaný půdorys, u projektů z fází 49–63 ho založí z kopie nákresu
+  uložené v projektu (`PanelBoardProject.floorplanJson`).

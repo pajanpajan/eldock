@@ -48,8 +48,10 @@ const WARM_ROUTES = [
   "/inspections/planner",
   "/studio",
   "/panel-builder",
-  // Fáze 57: editor půdorysu (pdf.js, velký klientský chunk) se na studeném serveru kompiluje i několik minut
+  // Fáze 57: editor půdorysu (pdf.js, velký klientský chunk) se na studeném serveru kompiluje i několik minut;
+  // fáze 64: seznam půdorysů a nový půdorys (editor) jsou samostatné stránky
   "/panel-builder/floorplan",
+  "/panel-builder/floorplan/novy",
   "/cae",
 ];
 

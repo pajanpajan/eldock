@@ -9,7 +9,7 @@ test("půdorys → trasy podél stěn a optimální pořadí → rozváděč Eat
   page.on("dialog", (dialog) => void dialog.accept());
   await page.setViewportSize({ width: 1600, height: 1100 });
   await expect(async () => {
-    await page.goto("/panel-builder/floorplan");
+    await page.goto("/panel-builder/floorplan/novy");
     await expect(page.getByTestId("floorplan-canvas")).toBeVisible({ timeout: 30_000 });
   }).toPass({ timeout: 240_000 });
   await page.waitForLoadState("networkidle");

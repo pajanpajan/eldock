@@ -776,6 +776,7 @@ model RegisteredCompany {
   users         User[]
   creditOrders  CreditOrder[]
   aiFeedback    AiFeedbackReport[]
+  floorplans    Floorplan[]
 
   @@index([productScope])
   @@index([ico])
@@ -962,10 +963,70 @@ model PanelBoardProject {
   fan       EnclosureFan?      @relation(fields: [fanId], references: [id], onDelete: SetNull)
   items     PanelBoardItem[]
   feedback  AiFeedbackReport[]
+  /// Fáze 64: půdorysy, ze kterých byl rozváděč naposledy vygenerován.
+  floorplans Floorplan[]
 
   @@index([equipmentId])
   @@index([companyId, updatedAt])
   @@index([enclosureId])
+}
+
+/// Důvod snímku v historii verzí půdorysu (fáze 64).
+enum FloorplanVersionReason {
+  AUTO // průběžné ukládání – nejvýš jeden snímek za 10 minut
+  MANUAL // „Uložit verzi“ s vlastním popisem
+  GENERATE // stav, ze kterého byl vygenerován rozváděč
+  RESTORE // stav před obnovením starší verze
+  CONFLICT // změny z jiného okna odmítnuté kvůli souběhu
+  OVERWRITE // verze přepsaná volbou „Ponechat mou verzi“
+  IMPORT // převzato z prohlížeče nebo z hotového projektu
+}
+
+/// 2D půdorys elektroinstalace uložený na serveru (fáze 64) – rozpracovaný nákres editoru patřící firmě.
+model Floorplan {
+  id               String    @id @default(cuid())
+  companyId        String
+  name             String
+  customerName     String?
+  installationSite String?
+  /// Nákres editoru (JSON `FloorplanDraft`).
+  draftJson        String
+  /// Číslo uložené verze – ochrana proti přepsání z jiného okna (optimistické zamykání).
+  version          Int       @default(1)
+  /// Souhrn pro seznam půdorysů.
+  elementCount     Int       @default(0)
+  roomCount        Int       @default(0)
+  floorCount       Int       @default(1)
+  /// Poslední rozváděč vygenerovaný z půdorysu.
+  projectId        String?
+  /// Smazaný půdorys (koš) – jde obnovit.
+  deletedAt        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  company  RegisteredCompany  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  project  PanelBoardProject? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  versions FloorplanVersion[]
+
+  @@index([companyId, deletedAt, updatedAt])
+  @@index([projectId])
+}
+
+/// Snímek nákresu v historii verzí půdorysu (fáze 64).
+model FloorplanVersion {
+  id           String                 @id @default(cuid())
+  floorplanId  String
+  /// Číslo verze půdorysu, ke které snímek patří.
+  version      Int
+  reason       FloorplanVersionReason
+  label        String?
+  draftJson    String
+  elementCount Int                    @default(0)
+  createdAt    DateTime               @default(now())
+
+  floorplan Floorplan @relation(fields: [floorplanId], references: [id], onDelete: Cascade)
+
+  @@index([floorplanId, createdAt])
 }
 
 /// Skříň rozváděče / rozvodnice z katalogu (fáze 43) – filtruje se podle počtu řad a modulů návrhu.

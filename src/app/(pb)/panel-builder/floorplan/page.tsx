@@ -5,17 +5,16 @@ import { ArrowLeft } from "lucide-react";
 import { PageHeader } from "@/components/common/PageHeader";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { panelBuilderGuard } from "@/components/panel-builder/access";
-import { FloorplanEditorLoader } from "@/components/panel-builder/floorplan/FloorplanEditorLoader";
-import { getApplianceLibraryJson, getBoardManufacturers, getWiringSeries } from "@/server/queries/panel-builder";
-import { getPanelCompany } from "@/server/panel-session";
+import { FloorplanList } from "@/components/panel-builder/floorplan/FloorplanList";
+import { getFloorplanList } from "@/server/queries/floorplans";
 
-export const metadata: Metadata = { title: "2D půdorys a kabeláž" };
+export const metadata: Metadata = { title: "2D půdorysy a kabeláž" };
 
-// Fáze 49: vizuální 2D editor půdorysu elektroinstalace, 3D výpočet kabeláže a rozváděč z půdorysu na 1 klik.
-export default async function FloorplanPage() {
+// Fáze 64: seznam 2D půdorysů firmy uložených na serveru (editor: /panel-builder/floorplan/novy a /panel-builder/floorplan/[id]).
+export default async function FloorplansPage() {
   const guard = await panelBuilderGuard();
   if (guard) return guard;
-  const [series, manufacturers, applianceJson, company] = await Promise.all([getWiringSeries(), getBoardManufacturers(), getApplianceLibraryJson(), getPanelCompany()]);
+  const { active, deleted } = await getFloorplanList();
   return (
     <PageTransition>
       <PageHeader
@@ -25,9 +24,9 @@ export default async function FloorplanPage() {
           </Link>
         }
         title="📐 2D půdorys & kabeláž"
-        description="Nahrajte půdorys (obrázek / PDF) nebo nakreslete místnosti, zkalibrujte měřítko, osaďte zásuvky, světla, vypínače a spotřebiče. Výkaz kabeláže porovná vedení spodem, vrchem a optimalizovaně; rozváděč vygenerujete jedním klikem."
+        description="Půdorysy elektroinstalace vaší firmy: nahrajte výkres (obrázek / PDF) nebo nakreslete místnosti, osaďte zásuvky, světla, vypínače a spotřebiče, spočítejte kabeláž a jedním klikem vygenerujte rozváděč. Vše se průběžně ukládá na server včetně historie verzí."
       />
-      <FloorplanEditorLoader series={series.map(({ key, label, count }) => ({ key, label, count }))} manufacturers={manufacturers} applianceJson={applianceJson} company={company?.companyName ?? null} />
+      <FloorplanList active={active} deleted={deleted} />
     </PageTransition>
   );
 }

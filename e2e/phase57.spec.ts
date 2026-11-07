@@ -30,7 +30,7 @@ test("PDF podklad se zobrazí hned po nahrání (bez obnovení stránky)", async
   test.setTimeout(360_000);
   await page.setViewportSize({ width: 1600, height: 1100 });
   await expect(async () => {
-    await page.goto("/panel-builder/floorplan");
+    await page.goto("/panel-builder/floorplan/novy");
     await expect(page.getByTestId("floorplan-canvas")).toBeVisible({ timeout: 30_000 });
   }).toPass({ timeout: 240_000 });
   // Čerstvý kontext testu nemá v localStorage žádný nákres; počkáme, až se studený dev server přestane přenačítat
@@ -118,7 +118,7 @@ test("značky dle ČSN EN 60617-11, přesun / otočení / mazání, úroveň ins
   page.on("dialog", (dialog) => void dialog.accept());
   await page.setViewportSize({ width: 1600, height: 1100 });
   await expect(async () => {
-    await page.goto("/panel-builder/floorplan");
+    await page.goto("/panel-builder/floorplan/novy");
     await expect(page.getByTestId("floorplan-canvas")).toBeVisible({ timeout: 30_000 });
   }).toPass({ timeout: 240_000 });
   await page.waitForLoadState("networkidle");

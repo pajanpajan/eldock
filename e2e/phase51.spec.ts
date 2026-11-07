@@ -54,7 +54,7 @@ test("📷 nový projekt: dlaždice 2×2, více fotek (celková + detail lišty)
 test("🎨 2D půdorys: kaskáda výrobce → řada → barva, živé kóty a úpravy místnosti", async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 1100 });
   await expect(async () => {
-    await page.goto("/panel-builder/floorplan");
+    await page.goto("/panel-builder/floorplan/novy");
     await expect(page.getByTestId("floorplan-canvas")).toBeVisible({ timeout: 5_000 });
   }).toPass({ timeout: 90_000 });
   const palette = page.getByRole("complementary", { name: "Paleta elektroinstalačních značek" });

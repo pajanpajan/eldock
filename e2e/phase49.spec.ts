@@ -8,7 +8,7 @@ test("📐 2D půdorys: osazení, párování, výkaz kabeláže Spodem / Vrchem
   page.on("dialog", (dialog) => void dialog.accept());
   await page.setViewportSize({ width: 1600, height: 1100 });
   await expect(async () => {
-    await page.goto("/panel-builder/floorplan");
+    await page.goto("/panel-builder/floorplan/novy");
     await expect(page.getByTestId("floorplan-canvas")).toBeVisible({ timeout: 5_000 });
   }).toPass({ timeout: 90_000 });
   // Odkaz z horní lišty Panel Builderu
@@ -63,7 +63,13 @@ test("📐 2D půdorys: osazení, párování, výkaz kabeláže Spodem / Vrchem
   await expect(page).toHaveURL(/\/panel-builder\/[^/]+$/, { timeout: 60_000 });
   await expect(page.getByRole("heading", { level: 1 })).toContainText("RD49 z půdorysu");
   await expect(page.getByTestId("symbol--Q1")).toBeVisible();
-  await page.goto(page.url() + "/documentation");
+  // Fáze 64: „📐 Upravit půdorys“ otevře tentýž uložený půdorys s odkazem na vygenerovaný rozváděč
+  const projectUrl = page.url();
+  await page.getByTestId("open-floorplan").click();
+  await expect(page).toHaveURL(/\/panel-builder\/floorplan\/(?!novy)[\w-]+$/, { timeout: 60_000 });
+  await expect(page.getByTestId("floorplan-project-link")).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByTestId("floorplan-canvas")).toBeVisible();
+  await page.goto(projectUrl + "/documentation");
   await expect(page.getByTestId("doc-cables")).toContainText("Výkaz kabeláže", { timeout: 30_000 });
   await expect(page.getByTestId("doc-cables")).toContainText("CYKY-J 3×2,5");
 

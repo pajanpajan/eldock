@@ -35,6 +35,7 @@ export function CablePanel({
   manufacturers = [],
   wallFloors = 0,
   floorCount = 1,
+  defaults,
 }: {
   analysis: Analysis;
   mode: CableRoutingMode;
@@ -49,6 +50,8 @@ export function CablePanel({
   /** Fáze 60: počet podlaží s trasami podél stěn (místnosti / příčky) z celkového počtu podlaží. */
   wallFloors?: number;
   floorCount?: number;
+  /** Fáze 64: zákazník a místo stavby z údajů uloženého půdorysu (předvyplnění formuláře). */
+  defaults?: { customer: string | null; site: string | null };
 }) {
   const circuitById = new Map(analysis.ok ? analysis.circuits.circuits.map((circuit) => [circuit.id, circuit]) : []);
   return (
@@ -133,7 +136,7 @@ export function CablePanel({
           ))}
         </>
       )}
-      <form action={onGenerate} className="flex flex-col gap-2 border-t border-border pt-3">
+      <form action={onGenerate} className="flex flex-col gap-2 border-t border-border pt-3" key={`${defaults?.customer ?? ""}|${defaults?.site ?? ""}`}>
         <div className="flex flex-col gap-1">
           <Label htmlFor="fp-name">Název rozváděče</Label>
           <Input id="fp-name" name="name" required maxLength={120} defaultValue="Rozvodnice RD – z půdorysu" />
@@ -141,11 +144,11 @@ export function CablePanel({
         <div className="grid grid-cols-2 gap-2">
           <div className="flex flex-col gap-1">
             <Label htmlFor="fp-customer">Zákazník</Label>
-            <Input id="fp-customer" name="customer" maxLength={120} placeholder="nepovinné" />
+            <Input id="fp-customer" name="customer" maxLength={120} placeholder="nepovinné" defaultValue={defaults?.customer ?? ""} />
           </div>
           <div className="flex flex-col gap-1">
             <Label htmlFor="fp-site">Místo instalace</Label>
-            <Input id="fp-site" name="site" maxLength={120} placeholder="nepovinné" />
+            <Input id="fp-site" name="site" maxLength={120} placeholder="nepovinné" defaultValue={defaults?.site ?? ""} />
           </div>
         </div>
         {/* Fáze 60: celý rozváděč od jednoho výrobce */}

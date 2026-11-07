@@ -10,7 +10,7 @@ test("📐 2D půdorys: retrofit = CYKY-J k vypínači, světla na RCBO typ A, I
 }) => {
   await page.setViewportSize({ width: 1600, height: 1100 });
   await expect(async () => {
-    await page.goto("/panel-builder/floorplan");
+    await page.goto("/panel-builder/floorplan/novy");
     await expect(page.getByTestId("floorplan-canvas")).toBeVisible({
       timeout: 5_000,
     });

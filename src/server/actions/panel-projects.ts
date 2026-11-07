@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { companyManufacturer } from "@/lib/registered-company";
 import { actionFailure, guardCompany, guardProject } from "@/server/panel-guards";
 import { consumeCredit } from "@/server/services/companies";
+import { linkGeneratedProject } from "@/server/services/floorplans";
 import { createProjectFromFloorplan, createProjectFromSchedule, deletePanelProjects, updateProjectHeader, type DeleteResult } from "@/server/services/panel-projects";
 import { removeStoredFile } from "@/server/storage";
 
@@ -101,18 +102,21 @@ export async function createScheduleProjectAction(input: z.input<typeof schedule
   }
 }
 
-const floorplanSchema = z.object({ name: text.min(1), customerName: text.nullable(), installationSite: text.nullable(), draft: z.unknown(), manufacturer: z.string().trim().max(60).nullable().optional() });
+const floorplanSchema = z.object({ name: text.min(1), customerName: text.nullable(), installationSite: text.nullable(), draft: z.unknown(), manufacturer: z.string().trim().max(60).nullable().optional(), floorplanId: id.optional() });
 
-/** ⚡ Vygenerovat rozváděč z 2D půdorysu (fáze 49) – 1 kredit; nepovedený návrh kredit vrátí. */
+/** ⚡ Vygenerovat rozváděč z 2D půdorysu (fáze 49) – 1 kredit; nepovedený návrh kredit vrátí. Fáze 64: vazba na uložený půdorys. */
 export async function createFloorplanProjectAction(input: z.input<typeof floorplanSchema>): Promise<ActionResult<{ id: string; devices: number; circuits: number; enclosure: string | null; manufacturer: string | null; warnings: string[] }>> {
   const parsed = floorplanSchema.safeParse(input);
   // Fáze 59: vícepodlažní nákres s poznámkami je větší – limit 900 kB (Server Action do 1 MB)
   if (!parsed.success || JSON.stringify(parsed.data.draft ?? null).length > 900_000) return { ok: false, error: "Zadejte název rozváděče; půdorys je příliš velký nebo neplatný." };
+  const { floorplanId, ...project } = parsed.data;
   try {
     const company = await guardCompany();
     await consumeCredit(prisma, company.id);
     try {
-      const result = await createProjectFromFloorplan(prisma, { ...parsed.data, companyId: company.id, manufacturerInfo: companyManufacturer(company) });
+      const result = await createProjectFromFloorplan(prisma, { ...project, companyId: company.id, manufacturerInfo: companyManufacturer(company) });
+      // Fáze 64: uložený půdorys ukazuje na poslední vygenerovaný rozváděč; nákres jde do historie verzí (chyba vazby generování nezruší)
+      if (floorplanId) await linkGeneratedProject(prisma, company.id, floorplanId, result.id, project.draft).catch((error: unknown) => console.error("Vazba půdorysu na rozváděč selhala", error));
       revalidatePath("/panel-builder", "layout");
       return { ok: true, data: result };
     } catch (error) {

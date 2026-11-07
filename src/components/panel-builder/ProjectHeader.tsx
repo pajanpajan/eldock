@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import type { PanelProjectDetail } from "@/server/queries/panel-builder";
 import { isGeminiConfigured } from "@/server/services/geminiPanelService";
 
+import { OpenFloorplanButton } from "./floorplan/OpenFloorplanButton";
 import { DeleteProjectButton, EditProjectButton } from "./ProjectAdmin";
 import { ReportAiErrorButton } from "./ReportAiErrorButton";
 import { supplyOf } from "@/lib/panel-builder/supply";
@@ -55,6 +56,8 @@ export function ProjectHeader({ project }: { project: PanelProjectDetail }) {
         .join(" · ")}
       actions={
         <>
+          {/* Fáze 64: rozváděč z 2D půdorysu → zpět do editoru půdorysu (uložený půdorys, případně založený z kopie v projektu) */}
+          {project.floorplanJson ? <OpenFloorplanButton projectId={project.id} /> : null}
           <Link
             href={`/panel-builder/${project.id}/labels`}
             className="touch-target flex items-center gap-1.5 rounded-md border border-border px-3 text-sm font-medium hover:border-primary"

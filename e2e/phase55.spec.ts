@@ -17,7 +17,7 @@ test.describe("fáze 55 – veřejná ukázka", () => {
 test("🎨 2D půdorys: horní lišta s řadami ABB 2026, barvy podle řady, soustava, značky a kusovník s objednacími čísly", async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 1100 });
   await expect(async () => {
-    await page.goto("/panel-builder/floorplan");
+    await page.goto("/panel-builder/floorplan/novy");
     await expect(page.getByTestId("floorplan-canvas")).toBeVisible({ timeout: 5_000 });
   }).toPass({ timeout: 90_000 });
 
