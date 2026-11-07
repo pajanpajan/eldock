@@ -20,7 +20,6 @@ import {
   type FloorplanDraft,
   type FrameGroup,
 } from "./floorplan-editor";
-import type { Rotation } from "./floorplan-pdf";
 
 let sequence = 0;
 const uid = (prefix: string) => `${prefix}${Date.now().toString(36)}${(sequence++).toString(36)}`;
@@ -105,7 +104,7 @@ export function createFrame(draft: FloorplanDraft, ids: readonly string[]): Fram
   if (picked.length < 2) return { ok: false, error: "Vyberte alespoň 2 přístroje (Shift + klik nebo tažením obdélníku přes prázdné místo)." };
   const gangs = picked.reduce((sum, element) => sum + gangsOf(element), 0);
   if (gangs > MAX_FRAME_GANGS) return { ok: false, error: `Víceramček pojme nejvýš ${MAX_FRAME_GANGS} pozic – vybráno ${gangs} (dvojzásuvka = 2 pozice).` };
-  const counts = new Map<Rotation, number>();
+  const counts = new Map<number, number>();
   for (const element of picked) counts.set(element.rotation, (counts.get(element.rotation) ?? 0) + 1);
   const rotation = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0][0];
   const axis = frameAxis(rotation);
@@ -165,7 +164,7 @@ export function rotateFrame(draft: FloorplanDraft, frameId: string): FloorplanDr
   if (!frame) return draft;
   const anchor = draft.elements.find((element) => element.id === frame.members[0]);
   if (!anchor) return draft;
-  const rotation = ((anchor.rotation + 90) % 360) as Rotation;
+  const rotation = (anchor.rotation + 90) % 360;
   return layoutFrame({ ...draft, elements: draft.elements.map((element) => (frame.members.includes(element.id) ? { ...element, rotation } : element)) }, frameId);
 }
 
@@ -261,7 +260,7 @@ export function assemblyError(members: readonly string[]): string | null {
 }
 
 /** Polohy členů sestavy podél osy rámečku se středem sestavy v bodě vložení (rozteč jako přisazení). */
-export function assemblyLayout(draft: Pick<FloorplanDraft, "symbolScale">, members: readonly string[], at: { x: number; y: number; rotation: Rotation; scale?: number | null }): { item: string; x: number; y: number }[] {
+export function assemblyLayout(draft: Pick<FloorplanDraft, "symbolScale">, members: readonly string[], at: { x: number; y: number; rotation: number; scale?: number | null }): { item: string; x: number; y: number }[] {
   const axis = frameAxis(at.rotation);
   const pitch = framePitch(draft, { scale: at.scale ?? null });
   const gangs = members.map((item) => gangsOf({ item, frameUnits: 1 }));
@@ -279,7 +278,7 @@ export type AssemblyResult = { ok: true; draft: FloorplanDraft; frameId: string;
 export interface AssemblyAnchor {
   x: number;
   y: number;
-  rotation: Rotation;
+  rotation: number;
   room: string;
   series: string | null;
   color: string | null;

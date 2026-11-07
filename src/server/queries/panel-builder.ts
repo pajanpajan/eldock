@@ -283,6 +283,13 @@ export const getEnclosureFans = cache(async () =>
 );
 
 /** Designové řady domovních přístrojů s vypínači nebo zásuvkami (2D půdorys, fáze 49): „výrobce|řada“ + počet kusů. */
+/** Fáze 63: knihovna samostatných spotřebičů přihlášené firmy (JSON) pro 2D půdorys. */
+export const getApplianceLibraryJson = cache(async (): Promise<string | null> => {
+  const company = await getPanelCompany();
+  if (!company) return null;
+  return (await prisma.registeredCompany.findUnique({ where: { id: company.id }, select: { applianceLibraryJson: true } }))?.applianceLibraryJson ?? null;
+});
+
 export const getWiringSeries = cache(async () => {
   const rows = await prisma.wiringDevice.groupBy({ by: ["manufacturer", "series"], where: { category: { in: ["WD_SOCKET", "WD_SWITCH"] } }, _count: { _all: true }, orderBy: [{ manufacturer: "asc" }, { series: "asc" }] });
   return rows.filter((row) => row._count._all >= 5).map((row) => ({ key: `${row.manufacturer}|${row.series}`, label: `${row.manufacturer} ${row.series}`, count: row._count._all }));

@@ -32,7 +32,8 @@ describe("fáze 61 – chytrá domácnost: akční členy podle zátěží", () 
     const lox = planSmartHome({ system: "loxone", loads: loads("switch", 6), busDevices: 10 });
     expect(lox.modules.map((module) => module.typeCode)).toEqual(["Miniserver", "24 V DC / 2,5 A"]);
     expect(lox.modules[0].assigned).toHaveLength(6);
-    expect(SMART_SYSTEMS.map((system) => system.id)).toEqual(["abb_freeathome", "abb_knx", "loxone"]);
+    // Fáze 63: TapHome (Core) jako čtvrtý systém lišty výrobců
+    expect(SMART_SYSTEMS.map((system) => system.id)).toEqual(["abb_freeathome", "abb_knx", "loxone", "taphome"]);
   });
 
   it("kontrola sběrnice: víc prvků než unese linie → další zdroj a varování", () => {

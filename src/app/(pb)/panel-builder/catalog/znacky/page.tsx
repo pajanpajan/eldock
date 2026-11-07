@@ -42,7 +42,8 @@ const SOURCE: Record<SymbolKind, string> = {
 export default async function SymbolLibraryPage() {
   const guard = await panelBuilderGuard();
   if (guard) return guard;
-  const floorItems = PALETTE.filter((item) => item.kind !== "panel");
+  // Fáze 63: bez skryté položky vlastního spotřebiče (v paletě jen jako spotřebiče knihovny)
+  const floorItems = PALETTE.filter((item) => item.kind !== "panel" && !item.hidden);
   return (
     <PageTransition>
       <PageHeader

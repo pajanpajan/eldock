@@ -8,7 +8,6 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import type { RoutePoint } from "@/engine/cable-routing";
 import { INSTALL_LEVELS, INSTALL_METHODS, ROUTING_MODES, mountHeight, type CableRoutingMode, type ElevationProfile, type InstallLevel, type InstallMethod } from "@/engine/floorplan-bridge";
 import {
   ANNOTATION_DEFAULTS,
@@ -18,6 +17,7 @@ import {
   SYMBOL_SCALE_MAX,
   SYMBOL_SCALE_MIN,
   addFloor,
+  allElements,
   analyzeDraft,
   applyAppearance,
   clampSymbolScale,
@@ -59,6 +59,7 @@ import {
   type EditorElement,
   type EditorRoom,
   type FloorplanDraft,
+  type PaletteItem,
   type RoomHandle,
 } from "@/lib/panel-builder/floorplan-editor";
 import {
@@ -135,6 +136,17 @@ import { applyNormFix, floorplanNorms } from "@/lib/panel-builder/floorplan-norm
 import { smartPlanOf } from "@/lib/panel-builder/smart-home-plan";
 import { isSmartSystem } from "@/lib/panel-builder/smart-home";
 import { WiringBomDialog } from "./WiringBomDialog";
+import { ApplianceEditor, useApplianceLibrary } from "./ApplianceEditor";
+import { FixtureControls, FixtureShape } from "./FixtureShape";
+import { FloorplanExport } from "./FloorplanExport";
+import { PaletteAccordion, type PaletteSection } from "./PaletteAccordion";
+import { RouteLayer } from "./RouteLayer";
+import { CUSTOM_APPLIANCE_ITEM, applianceCatalog, applianceSpecFor, protectionLabel, storedSpecs, type ApplianceSpec } from "@/lib/panel-builder/appliances";
+import { resizeFixture, turnBy, type FixtureHandle } from "@/lib/panel-builder/fixtures";
+import { isPolygonRoom, polygonArea, polygonBounds, pointInRoom, roomPolygon, snapAngle, validPolygon, wallLabel } from "@/lib/panel-builder/room-geometry";
+import { displayRoutes, editedKeysOf, type DisplayCircuit, type DisplayLeg } from "@/lib/panel-builder/route-display";
+import { cleanPolyline, dragSegment, insertJog, segmentShift } from "@/lib/panel-builder/route-edit";
+import { PRODUCT_FAMILIES, productById, type CatalogProduct } from "@/lib/panel-builder/smart-catalog";
 
 // 2D editor půdorysu elektroinstalace (fáze 49, úprava PDF / značky / úroveň instalace fáze 57, fáze 59: natočení další
 // značky podle předchozí, vícenásobný výběr, víceramečky s přisazením, přiřazení vypínačů ke světlům, zakreslení změn
@@ -143,16 +155,17 @@ import { WiringBomDialog } from "./WiringBomDialog";
 
 const STORAGE_KEY = "eldock.pb.floorplan";
 const SNAP_MM = 50;
-const ROUTE_COLORS = ["#38bdf8", "#f472b6", "#a3e635", "#fb923c", "#c084fc", "#facc15", "#2dd4bf", "#f87171", "#818cf8", "#4ade80"];
 /** Šířka podkladu po nahrání [px] – ostrý i při přiblížení (A3 ≈ 270 dpi). */
 const BACKGROUND_PX = 3200;
 
 type Tool =
   | { kind: "select" }
-  | { kind: "place"; item: string }
+  | { kind: "place"; item: string; appliance?: string; product?: string }
   /** Fáze 62: sestava ve víceramečku z palety – vloží se celá jedním klikem. */
   | { kind: "place-set"; key: string; members: string[]; label: string }
   | { kind: "room" }
+  /** Fáze 63: polygonální místnost se šikmými stěnami – rohy po obvodu. */
+  | { kind: "polygon" }
   | { kind: "calibrate" }
   | { kind: "verify" }
   | { kind: "crop" }
@@ -198,7 +211,7 @@ function loadDraft(): FloorplanDraft {
 const snap = (value: number) => Math.round(value / SNAP_MM) * SNAP_MM;
 let sequence = 0;
 const newId = (prefix: string) => `${prefix}${Date.now().toString(36)}${(sequence++).toString(36)}`;
-const turn = (rotation: Rotation): Rotation => ((rotation + 90) % 360) as Rotation;
+const turn = (rotation: number) => turnBy(rotation, 90);
 /** Český tvar podle počtu: 1 svítidlo, 2–4 svítidla, 5 a víc svítidel. */
 const plural = (count: number, one: string, few: string, many: string) => (count === 1 ? one : count >= 2 && count <= 4 ? few : many);
 
@@ -216,26 +229,16 @@ interface ViewFraction {
 }
 const FIT: ViewFraction = { x: 0, y: 0, w: 1 };
 
-/** Lomená čára trasy rozdělená na úseky aktivního podlaží (přechod podlaží = stoupací vedení). */
-function floorRuns(points: readonly RoutePoint[], floorId: string): { x: number; y: number }[][] {
-  const runs: { x: number; y: number }[][] = [];
-  let current: { x: number; y: number }[] = [];
-  for (const point of points) {
-    if (point.floor === undefined || point.floor === floorId) current.push(point);
-    else if (current.length) {
-      runs.push(current);
-      current = [];
-    }
-  }
-  if (current.length) runs.push(current);
-  return runs.filter((run) => run.length >= 2);
-}
-
-export function FloorplanEditor({ series, manufacturers = [] }: { series: SeriesOption[]; manufacturers?: { name: string; count: number }[] }) {
+export function FloorplanEditor({ series, manufacturers = [], applianceJson = null, company = null }: { series: SeriesOption[]; manufacturers?: { name: string; count: number }[]; applianceJson?: string | null; company?: string | null }) {
   const router = useRouter();
   const svg = useRef<SVGSVGElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
-  const [draft, setDraft] = useState<FloorplanDraft>(loadDraft);
+  // Fáze 63: knihovna spotřebičů firmy (prohlížeč / profil firmy) – nákres ji převezme při načtení a při každém uložení
+  const [library, saveLibrary] = useApplianceLibrary(applianceJson);
+  const [draft, setDraft] = useState<FloorplanDraft>(() => {
+    const loaded = loadDraft();
+    return library ? { ...loaded, appliances: library.specs } : loaded;
+  });
   const [tool, setTool] = useState<Tool>({ kind: "select" });
   /** Fáze 59: vícenásobný výběr (Shift + klik, tažení obdélníku); jeden prvek = detail prvku. */
   const [selection, setSelection] = useState<string[]>([]);
@@ -254,8 +257,8 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
   const [pan, setPan] = useState<{ clientX: number; clientY: number; view: PlanView } | null>(null);
   const [levelPrompt, setLevelPrompt] = useState<({ level: InstallLevel } & ReturnType<typeof levelConversionPreview>) | null>(null);
   /** Fáze 59: natočení další vkládané značky = natočení předchozí (R při vkládání otočí náhled). */
-  const [placeRotation, setPlaceRotation] = useState<Rotation>(0);
-  const [hover, setHover] = useState<{ x: number; y: number } | null>(null);
+  const [placeRotation, setPlaceRotation] = useState<number>(0);
+  const [hover, setHover] = useState<{ x: number; y: number; shift?: boolean } | null>(null);
   /** Fáze 62: kabeláž v půdorysu – zobrazená / skrytá; při párování vypínačů se světly ve výchozím stavu skrytá. */
   const [showCables, setShowCables] = useState(true);
   const [pairCables, setPairCables] = useState(false);
@@ -264,6 +267,14 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
   const [noteDraft, setNoteDraft] = useState<{ mode: AnnotationKind; from: { x: number; y: number }; to: { x: number; y: number } } | null>(null);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [noteDrag, setNoteDrag] = useState<{ id: string; handle: "move" | "a" | "b"; start: { x: number; y: number }; origin: Annotation } | null>(null);
+  /** Fáze 63: rozkreslená polygonální místnost, změna rozměru předmětu, ruční úprava trasy a posun rohu místnosti. */
+  const [polyDraft, setPolyDraft] = useState<{ x: number; y: number }[]>([]);
+  const [fixtureDrag, setFixtureDrag] = useState<{ id: string; handle: FixtureHandle } | null>(null);
+  const [routeDrag, setRouteDrag] = useState<{ key: string; index: number; base: { x: number; y: number }[]; start: { x: number; y: number }; points: { x: number; y: number }[]; moved: boolean } | null>(null);
+  const [vertexDrag, setVertexDrag] = useState<{ roomId: string; index: number } | null>(null);
+  const [applianceOpen, setApplianceOpen] = useState(false);
+  /** Fáze 63: dvojklik na úsek trasy = dva stisky na stejném úseku do 400 ms (plátno při stisku přebírá ukazatel). */
+  const lastRouteTap = useRef<{ key: string; index: number; at: number } | null>(null);
   const [pending, startTransition] = useTransition();
   const lastRoom = useRef("Místnost 1");
 
@@ -303,6 +314,9 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
   // Fáze 61: chytrá domácnost (sběrnicová úroveň) a normový hlídač
   const smartPlan = useMemo(() => smartPlanOf(deferred), [deferred]);
   const norms = useMemo(() => floorplanNorms(deferred), [deferred]);
+  // Fáze 63: trasy k vykreslení (odsazení podél stěn, ruční úpravy, štítky okruhů) a knihovna spotřebičů palety
+  const routes = useMemo(() => (analysis.ok ? displayRoutes(deferred, analysis) : null), [analysis, deferred]);
+  const catalog = useMemo(() => applianceCatalog(draft.appliances), [draft.appliances]);
   const checklist = generationChecklist(draft);
 
   const floors = floorsOf(draft);
@@ -317,6 +331,19 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
   const pairing = tool.kind === "pair" || tool.kind === "pair-light";
   const cablesShown = pairing ? pairCables : showCables;
   const toggleCables = () => (pairing ? setPairCables((value) => !value) : setShowCables((value) => !value));
+  /** Fáze 63: zobrazovaná položka – spotřebič z knihovny (název, zkratka), výrobek z lišty výrobců (popis, bezdrátově). */
+  const displayItem = (element: Pick<EditorElement, "item" | "appliance" | "product">) => {
+    const item = paletteItem(element.item);
+    if (!item) return null;
+    if (item.kind === "appliance") {
+      const spec = applianceSpecFor(draft.appliances, element);
+      return spec ? { ...item, label: spec.label, symbol: spec.symbol } : item;
+    }
+    const product = productById(element.product);
+    return product ? { ...item, label: product.label, ...(product.noBus ? { wireless: true } : {}) } : item;
+  };
+  /** Úseky tras jdou táhnout ve výběru (vybraná místnost / poznámka má přednost – úchyty stěn). */
+  const routesEditable = tool.kind === "select" && !selectedRoomId && !selectedNoteId;
 
   function toPlan(event: { clientX: number; clientY: number }) {
     const element = svg.current;
@@ -333,16 +360,17 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
   }
 
   /** Otočení vybraných značek (rámeček jako celek); natočení se pamatuje pro další vkládanou značku. */
-  function rotateSelection(ids: readonly string[] = selection) {
+  function rotateSelection(ids: readonly string[] = selection, step = 90) {
     if (!ids.length) return;
     const first = draft.elements.find((element) => element.id === ids[0]);
-    if (first) setPlaceRotation(turn(first.rotation));
+    if (first) setPlaceRotation(turnBy(first.rotation, step));
     update((current) => {
+      // Rámeček se otáčí po 90°, samostatné prvky (předměty po 45°) o zvolený krok
       const frames = new Set(ids.map((id) => frameOf(current, id)?.id).filter((id): id is string => Boolean(id)));
       let next = current;
       for (const frameId of frames) next = rotateFrame(next, frameId);
       const loose = new Set(ids.filter((id) => !frameOf(current, id)));
-      return { ...next, elements: next.elements.map((element) => (loose.has(element.id) ? { ...element, rotation: turn(element.rotation) } : element)) };
+      return { ...next, elements: next.elements.map((element) => (loose.has(element.id) ? { ...element, rotation: turnBy(element.rotation, step) } : element)) };
     });
   }
 
@@ -397,9 +425,16 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
         setRoomDraft(null);
         setNoteDraft(null);
         setMarquee(null);
+        setPolyDraft([]);
         return;
       }
       if (event.key === "k" || event.key === "K") return toggleCables();
+      // Fáze 63: polygonální místnost – Enter uzavře obrys, Backspace vrátí poslední roh
+      if (tool.kind === "polygon" && event.key === "Enter") return finishPolygon();
+      if (tool.kind === "polygon" && event.key === "Backspace" && polyDraft.length) {
+        event.preventDefault();
+        return setPolyDraft((points) => points.slice(0, -1));
+      }
       if ((event.key === "Delete" || event.key === "Backspace") && selection.length) {
         removeSelection();
       } else if ((event.key === "Delete" || event.key === "Backspace") && selectedNoteId) {
@@ -409,8 +444,10 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
         update((current) => deleteRoom(current, selectedRoomId));
         setSelectedRoomId(null);
       } else if (event.key === "r" || event.key === "R") {
-        if (selection.length) rotateSelection();
-        else if (tool.kind === "place" || tool.kind === "place-set") setPlaceRotation((rotation) => turn(rotation));
+        // Fáze 63: Shift + R = otočení o 45° (zařizovací předměty, šikmé stěny)
+        const step = event.shiftKey ? 45 : 90;
+        if (selection.length) rotateSelection(selection, step);
+        else if (tool.kind === "place" || tool.kind === "place-set") setPlaceRotation((rotation) => turnBy(rotation, step));
       } else if (event.key.startsWith("Arrow") && selection.length) {
         event.preventDefault();
         const step = event.shiftKey ? 10 : SNAP_MM;
@@ -469,6 +506,9 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
         controls: [],
         rotation: target.rotation,
         scale: null,
+        // Fáze 63: vlastní spotřebič z knihovny a výrobek z lišty výrobců
+        ...(tool.appliance ? { appliance: tool.appliance } : {}),
+        ...(tool.product ? { product: tool.product } : {}),
       };
       if (!single) setPlaceRotation(target.rotation);
       update((current) => {
@@ -514,6 +554,17 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
       }
       capture(svg.current, event.pointerId);
       setNoteDraft({ mode: tool.mode, from: at, to: at });
+      return;
+    }
+    if (tool.kind === "polygon") {
+      // Fáze 63: roh polygonální místnosti – první na rastr 5 cm, další s přichycením úhlu 0° / 45° / 90° (Shift = volně)
+      const first = polyDraft[0];
+      if (first && polyDraft.length >= 3 && Math.hypot(point.x - first.x, point.y - first.y) <= ui * 0.8) return finishPolygon();
+      const last = polyDraft[polyDraft.length - 1];
+      const corner = !last ? { x: snap(point.x), y: snap(point.y) } : event.shiftKey ? { x: Math.round(point.x), y: Math.round(point.y) } : snapAngle(last, point, 45);
+      if (last && Math.hypot(corner.x - last.x, corner.y - last.y) < 100) return;
+      setPolyDraft([...polyDraft, corner]);
+      setSelectedRoomId(null);
       return;
     }
     if (tool.kind === "room" || tool.kind === "crop") {
@@ -569,7 +620,7 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
       update((current) => toggleLink(current, element.id, tool.lightId));
       return;
     }
-    if (tool.kind === "room" || tool.kind === "crop" || tool.kind === "calibrate" || tool.kind === "verify" || tool.kind === "annotate") return onCanvasDown(event as unknown as ReactPointerEvent<SVGSVGElement>);
+    if (tool.kind === "room" || tool.kind === "polygon" || tool.kind === "crop" || tool.kind === "calibrate" || tool.kind === "verify" || tool.kind === "annotate") return onCanvasDown(event as unknown as ReactPointerEvent<SVGSVGElement>);
     // Shift + klik = přidat / odebrat z výběru
     if (event.shiftKey) {
       setSelectedRoomId(null);
@@ -603,6 +654,89 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
     setNoteDrag({ id: note.id, handle, start: toPlan(event), origin: note });
   }
 
+  /** Fáze 63: uzavření polygonální místnosti (aspoň 3 rohy, plocha ≥ 0,25 m²). */
+  function finishPolygon(points = polyDraft) {
+    if (!validPolygon(points)) return void toast.error("Místnost potřebuje aspoň 3 rohy a plochu 0,25 m² – klikejte rohy po obvodu, uzavřete klikem na první roh nebo Enter.");
+    const name = uniqueRoomName(draft.rooms, `Místnost ${draft.rooms.length + 1}`);
+    lastRoom.current = name;
+    const room: EditorRoom = { id: newId("m"), name, ...polygonBounds(points), points };
+    setPolyDraft([]);
+    setSelectedRoomId(room.id);
+    setSelection([]);
+    setTool({ kind: "select" });
+    update((current) => ({ ...current, rooms: [...current.rooms, room], elements: current.elements.map((element) => (pointInRoom(room, element.x, element.y) ? { ...element, room: name } : element)) }));
+    toast.success(`Polygonální místnost ${name} (${points.length} rohů) – kabely vedou podél šikmých stěn v jejich ose.`);
+  }
+
+  /** Fáze 63: posun rohu polygonální místnosti. */
+  function onVertexDown(event: ReactPointerEvent, room: EditorRoom, index: number) {
+    if (event.button !== 0) return;
+    event.stopPropagation();
+    capture(svg.current, event.pointerId);
+    setVertexDrag({ roomId: room.id, index });
+  }
+
+  /** Fáze 63: změna rozměru zařizovacího předmětu za stranu / žlutý roh. */
+  function onFixtureHandle(event: ReactPointerEvent, element: EditorElement, handle: FixtureHandle) {
+    if (event.button !== 0) return;
+    event.stopPropagation();
+    capture(svg.current, event.pointerId);
+    setFixtureDrag({ id: element.id, handle });
+  }
+
+  /** Fáze 63: tažení úseku trasy – vodorovný jen v ose Y, svislý jen v ose X, šikmý kolmo ke stěně; dvojklik = odskok. */
+  function onRouteDown(event: ReactPointerEvent, _circuit: DisplayCircuit, leg: DisplayLeg, index: number) {
+    if (tool.kind !== "select" || event.button !== 0) return;
+    event.stopPropagation();
+    const now = Date.now();
+    const last = lastRouteTap.current;
+    if (last && last.key === leg.key && last.index === index && now - last.at < 400) {
+      lastRouteTap.current = null;
+      return insertRouteJog(leg, index, toPlan(event));
+    }
+    lastRouteTap.current = { key: leg.key, index, at: now };
+    capture(svg.current, event.pointerId);
+    setSelection([]);
+    setRouteDrag({ key: leg.key, index, base: leg.points, start: toPlan(event), points: leg.points, moved: false });
+  }
+
+  /** Fáze 63: ortogonální odskok kolem překážky v místě dvojkliku. */
+  function insertRouteJog(leg: DisplayLeg, index: number, at: { x: number; y: number }) {
+    update((current) => ({ ...current, routeEdits: { ...current.routeEdits, [leg.key]: insertJog(leg.points, index, at) } }));
+    toast.info("Odskok vložen – táhněte prostřední úsek kolem překážky. Pravé tlačítko na trase ji vrátí na automat.");
+  }
+
+  /** Fáze 63: „🔄 Resetovat trasu na automat“ – zruší ruční úpravy všech úseků okruhu. */
+  function resetRoute(circuit: Pick<DisplayCircuit, "legs" | "label">) {
+    const keys = editedKeysOf(circuit);
+    if (!keys.length) return void toast.info("Trasa okruhu je automatická – není co vracet.");
+    update((current) => ({ ...current, routeEdits: Object.fromEntries(Object.entries(current.routeEdits).filter(([key]) => !keys.includes(key))) }));
+    toast.success(`🔄 Trasa ${circuit.label} vrácena na automat.`);
+  }
+
+  /** Fáze 63: výrobek z lišty výrobců do půdorysu (systém chytré domácnosti se nastaví podle rodiny výrobku). */
+  function placeProduct(product: CatalogProduct) {
+    if (!product.item) return;
+    const family = PRODUCT_FAMILIES.find((option) => option.id === productById(product.id)?.family);
+    if (family?.system && draft.smartSystem !== family.system) {
+      const system = family.system;
+      update((current) => ({ ...current, smartSystem: system }));
+      toast.info(`Systém chytré domácnosti: ${family.label} – akční členy se přepočítají.`);
+    }
+    setTool({ kind: "place", item: product.item, product: product.id });
+    setHover(null);
+  }
+
+  /** Fáze 63: uložení knihovny spotřebičů – nákres, prohlížeč i profil firmy; osazený vlastní spotřebič se nesmaže. */
+  function saveAppliances(specs: ApplianceSpec[]) {
+    const used = new Set(allElements(draft).flatMap((element) => (element.item === CUSTOM_APPLIANCE_ITEM && element.appliance ? [element.appliance] : [])));
+    const kept = [...specs, ...draft.appliances.filter((spec) => spec.custom && used.has(spec.id) && !specs.some((other) => other.id === spec.id))];
+    const restored = kept.length - specs.length;
+    saveLibrary(kept);
+    update((current) => ({ ...current, appliances: storedSpecs(kept) }));
+    toast.success(`Spotřebiče uloženy v nákresu, v prohlížeči i v profilu firmy.${restored ? ` ${restored}× vlastní spotřebič zůstal, protože je osazený v půdorysu.` : ""}`);
+  }
+
   function onMove(event: ReactPointerEvent<SVGSVGElement>) {
     if (pan) {
       const element = svg.current;
@@ -611,7 +745,36 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
       return;
     }
     const point = toPlan(event);
-    if (tool.kind === "place" || tool.kind === "place-set") setHover(point);
+    if (tool.kind === "place" || tool.kind === "place-set" || tool.kind === "polygon") setHover({ ...point, shift: event.shiftKey });
+    // Fáze 63: změna rozměru předmětu, posun úseku trasy, posun rohu polygonální místnosti
+    if (fixtureDrag) {
+      setDraft((current) => ({
+        ...current,
+        elements: current.elements.map((element) => {
+          if (element.id !== fixtureDrag.id) return element;
+          const next = resizeFixture(element, fixtureDrag.handle, point);
+          return next ? { ...element, ...next } : element;
+        }),
+      }));
+      return;
+    }
+    if (routeDrag) {
+      const delta = { x: point.x - routeDrag.start.x, y: point.y - routeDrag.start.y };
+      setRouteDrag({ ...routeDrag, points: dragSegment(routeDrag.base, routeDrag.index, delta, { snap: SNAP_MM }), moved: segmentShift(routeDrag.base, routeDrag.index, delta, SNAP_MM) !== null });
+      return;
+    }
+    if (vertexDrag) {
+      const at = { x: snap(point.x), y: snap(point.y) };
+      setDraft((current) => ({
+        ...current,
+        rooms: current.rooms.map((room) => {
+          if (room.id !== vertexDrag.roomId || !room.points) return room;
+          const points = room.points.map((corner, index) => (index === vertexDrag.index ? at : corner));
+          return { ...room, points, ...polygonBounds(points) };
+        }),
+      }));
+      return;
+    }
     if (!drag && !roomDraft && !roomDrag && !marquee && !noteDraft && !noteDrag) return;
     if (roomDrag) {
       const dx = snap(point.x - roomDrag.start.x);
@@ -655,12 +818,32 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
 
   function onUp() {
     if (pan) return void setPan(null);
+    if (fixtureDrag) {
+      update((current) => current);
+      setFixtureDrag(null);
+      return;
+    }
+    if (routeDrag) {
+      const { key, points, moved } = routeDrag;
+      setRouteDrag(null);
+      if (moved) update((current) => ({ ...current, routeEdits: { ...current.routeEdits, [key]: cleanPolyline(points) } }));
+      return;
+    }
+    if (vertexDrag) {
+      const { roomId } = vertexDrag;
+      setVertexDrag(null);
+      update((current) => {
+        const room = current.rooms.find((candidate) => candidate.id === roomId);
+        return room ? { ...current, elements: current.elements.map((element) => (pointInRoom(room, element.x, element.y) ? { ...element, room: room.name } : element)) } : current;
+      });
+      return;
+    }
     if (roomDrag) {
       // Po změně rozměru patří do místnosti prvky, které v ní nově leží
       update((current) => {
         const room = current.rooms.find((candidate) => candidate.id === roomDrag.id);
         if (!room || roomDrag.handle === "move") return current;
-        return { ...current, elements: current.elements.map((element) => (element.x >= room.x && element.x <= room.x + room.w && element.y >= room.y && element.y <= room.y + room.h ? { ...element, room: room.name } : element)) };
+        return { ...current, elements: current.elements.map((element) => (pointInRoom(room, element.x, element.y) ? { ...element, room: room.name } : element)) };
       });
       setRoomDrag(null);
       return;
@@ -936,17 +1119,6 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
     });
   }
 
-  const nodeById = analysis.ok ? new Map(analysis.build.routeNodes.map((node) => [node.id, node])) : new Map();
-  const panelPoint = analysis.ok ? analysis.build.panel : null;
-  const routeRuns = (segments: readonly { from: string; to: string; points?: RoutePoint[] }[]) =>
-    segments.flatMap((segment) => {
-      if (segment.points) return floorRuns(segment.points, draft.floorId);
-      // Bez lomené čáry (starší výpočet): pravoúhle z předchozího prvku
-      const to = nodeById.get(segment.to);
-      const from = segment.from === "panel" ? panelPoint : nodeById.get(segment.from);
-      return to && from && (to.floor ?? draft.floorId) === draft.floorId ? [[from, { x: to.x, y: from.y }, to]] : [];
-    });
-  const pathOf = (runs: { x: number; y: number }[][]) => runs.map((run) => `M ${run.map((point) => `${Math.round(point.x)} ${Math.round(point.y)}`).join(" L ")}`).join(" ");
   const riserHere = analysis.ok ? analysis.build.floors.find((floor) => floor.id === draft.floorId) : null;
   const ghostItem = tool.kind === "place" ? paletteItem(tool.item) : null;
   const ghost = ghostItem && hover ? placement(ghostItem, hover) : null;
@@ -963,14 +1135,17 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
   })();
   const setGangs = tool.kind === "place-set" ? assemblyGangs(tool.members) : 0;
   const pairCablesHint = cablesShown ? " Kabeláž skryjete klávesou K." : " Kabeláž je při párování skrytá (K = zobrazit).";
+  const toolLabel = tool.kind === "place" ? (displayItem({ item: tool.item, appliance: tool.appliance, product: tool.product })?.label ?? "") : "";
 
   const hint =
     tool.kind === "place"
-      ? `Klikněte do půdorysu – ${paletteItem(tool.item)?.label ?? ""} (natočení ${placeRotation}°, R = otočit). Klik na osazenou značku ji vybere a přesune. Esc / pravé tlačítko = konec.`
+      ? `Klikněte do půdorysu – ${toolLabel} (natočení ${placeRotation}°, R = otočit, Shift + R = 45°). Klik na osazenou značku ji vybere a přesune. Esc / pravé tlačítko = konec.`
       : tool.kind === "place-set"
         ? `Klikněte do půdorysu – celá sestava se vloží přisazená v jednom rámečku ${setGangs}R; u stěny se přicvakne a natočí ke stěně (jinak natočení ${placeRotation}°, R = otočit). Esc / pravé tlačítko = konec.`
       : tool.kind === "room"
         ? "Tažením myší nakreslete obdélník místnosti – rozměry X × Y se zobrazují živě."
+        : tool.kind === "polygon"
+          ? `📐 Klikejte rohy místnosti po obvodu (${polyDraft.length} ${plural(polyDraft.length, "roh", "rohy", "rohů")}) – úhel se přichytává na 0° / 45° / 90°, Shift = volný úhel podle podkladu. Uzavřete klikem na první roh nebo Enter, Backspace = zpět.`
         : tool.kind === "crop"
           ? "✂ Tažením vyberte část podkladu, která zůstane (Esc = zrušit)."
           : tool.kind === "calibrate"
@@ -994,12 +1169,14 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
                       : selection.length > 1
                         ? "Vybráno víc prvků: tažením přesun všech, R = otočit, Delete = smazat, vpravo „Vložit do víceramečku“."
                         : selected
-                          ? "Značka: tažením přesun (rámeček celý), R = otočit (další vkládaná značka převezme natočení), šipky = posun po 5 cm, Shift + klik = přidat do výběru."
-                          : `Výběr: klik = detail, Shift + klik nebo tažení obdélníku = víc prvků, Delete = smazat. Ctrl + kolečko = zoom${zoomed ? ", tažením prázdným místem posun (Shift = výběr)" : ""}.`;
+                          ? paletteItem(selected.item)?.kind === "fixture"
+                            ? "Předmět: tažením přesun, za strany nebo žlutý roh změna rozměru X × Y (zóny se přepočítají), R = 90°, Shift + R = 45°, přesný rozměr v detailu vpravo."
+                            : "Značka: tažením přesun (rámeček celý), R = otočit (další vkládaná značka převezme natočení), šipky = posun po 5 cm, Shift + klik = přidat do výběru."
+                          : `Výběr: klik = detail, Shift + klik nebo tažení obdélníku = víc prvků, Delete = smazat. Trasy: táhněte úsek (↕ jen v ose Y, ↔ jen v ose X), dvojklik = odskok, pravé tlačítko = zpět na automat. Ctrl + kolečko = zoom${zoomed ? ", tažením prázdným místem posun (Shift = výběr)" : ""}.`;
 
   // Fáze 62: lišta probíhajícího kroku nad půdorysem – co právě dělám, ovládání kroku a „Hotovo“ vždy na stejném místě
   const pairWith = tool.kind === "pair" ? draft.elements.find((element) => element.id === tool.switchId) : tool.kind === "pair-light" ? draft.elements.find((element) => element.id === tool.lightId) : null;
-  const elementName = (element: EditorElement | null | undefined) => (element ? `${paletteItem(element.item)?.label ?? element.item} – ${element.room}` : "");
+  const elementName = (element: EditorElement | null | undefined) => (element ? `${displayItem(element)?.label ?? element.item} – ${element.room}` : "");
   const endStep = () => {
     // Konec vkládání = konec i úprav naposledy vloženého prvku (jinak by zůstal vybraný)
     if (tool.kind === "place" || tool.kind === "place-set") clearSelection();
@@ -1007,6 +1184,7 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
     setCalibration([]);
     setRoomDraft(null);
     setNoteDraft(null);
+    setPolyDraft([]);
   };
   const rotateNext = (
     <Button type="button" size="sm" variant="outline" className="h-7 gap-1 px-2 text-xs" onClick={() => setPlaceRotation((rotation) => turn(rotation))} title="Natočení další vkládané značky (R)" data-testid="mode-rotate">
@@ -1043,11 +1221,13 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
           ),
         }
       : tool.kind === "place"
-        ? { tone: "place", title: `➕ Vkládání: ${paletteItem(tool.item)?.label ?? ""}`, onDone: endStep, extra: rotateNext }
+        ? { tone: "place", title: `➕ Vkládání: ${toolLabel}`, onDone: endStep, extra: rotateNext }
         : tool.kind === "place-set"
           ? { tone: "place", title: `▦ Vkládání sestavy: ${tool.label} (${setGangs}R)`, onDone: endStep, extra: rotateNext }
           : tool.kind === "room"
             ? { tone: "draw", title: "▭ Kreslení místností", onDone: endStep }
+            : tool.kind === "polygon"
+              ? { tone: "draw", title: "📐 Polygonální místnost / šikmé stěny", onDone: () => (polyDraft.length >= 3 ? finishPolygon() : endStep()), doneLabel: polyDraft.length >= 3 ? "Uzavřít místnost" : "Hotovo" }
             : tool.kind === "crop"
               ? { tone: "measure", title: "✂ Ořez podkladu", onDone: endStep, doneLabel: "Zrušit" }
               : tool.kind === "calibrate" || tool.kind === "verify"
@@ -1061,6 +1241,65 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
                       : selected
                         ? { tone: "edit", title: `✏️ Úprava: ${elementName(selected)}`, onDone: clearSelection }
                         : { tone: "idle", title: "Výběr a úpravy" };
+
+  // Fáze 63: paleta jako akordeon – počty osazených prvků kategorie na aktivním podlaží, spotřebiče z knihovny
+  const groupCounts = new Map<string, number>();
+  for (const element of draft.elements) {
+    const group = paletteItem(element.item)?.group;
+    if (group) groupCounts.set(group, (groupCounts.get(group) ?? 0) + 1);
+  }
+  const paletteSections: PaletteSection[] = PALETTE_GROUPS.map((group): PaletteSection => {
+    if (group.id === "appliances") {
+      return {
+        id: group.id,
+        label: group.label,
+        count: groupCounts.get(group.id) ?? 0,
+        action: (
+          <button type="button" onClick={() => setApplianceOpen(true)} className="shrink-0 rounded-md border border-orange-500/50 px-1.5 py-0.5 text-[10px] font-semibold text-orange-200 hover:bg-orange-500/10" data-testid="appliance-edit">
+            ✎ Upravit / + Přidat
+          </button>
+        ),
+        entries: catalog.map((spec) => {
+          const itemId = spec.custom ? CUSTOM_APPLIANCE_ITEM : spec.id;
+          const active = tool.kind === "place" && tool.item === itemId && (tool.appliance ?? null) === (spec.custom ? spec.id : null);
+          return {
+            id: spec.id,
+            label: spec.label,
+            symbol: spec.symbol,
+            title: `${spec.label} – ${spec.powerW.toLocaleString("cs-CZ")} W · ${protectionLabel(spec)}`,
+            active,
+            onPick: () => {
+              setTool(active ? { kind: "select" } : { kind: "place", item: itemId, ...(spec.custom ? { appliance: spec.id } : {}) });
+              setHover(null);
+            },
+          };
+        }),
+      };
+    }
+    return {
+      id: group.id,
+      label: group.id === "controls" ? CONTROLS_LABEL[draft.installation] : group.label,
+      count: groupCounts.get(group.id) ?? 0,
+      entries: palette
+        .filter((item) => item.group === group.id)
+        .map((item) => {
+          const active = tool.kind === "place" && tool.item === item.id && !tool.product;
+          // Fáze 61: zařizovací předmět nemá výšku montáže – v titulku jen rozměr
+          const height = item.kind === "fixture" ? null : item.kind === "panel" || item.kind === "riser" ? draft.profile.switchboardHeightMm : (item.heightMm ?? mountHeight({ kind: item.kind, variant: item.variant, tag: item.tag }, draft.profile));
+          return {
+            id: item.id,
+            label: item.label,
+            symbol: item.symbol,
+            title: height === null ? item.label : `${item.label} (${height} mm)`,
+            active,
+            onPick: () => {
+              setTool(active ? { kind: "select" } : { kind: "place", item: item.id });
+              setHover(null);
+            },
+          };
+        }),
+    };
+  }).filter((section) => section.entries.length);
 
   return (
     <div className="flex flex-col gap-3" data-testid="floorplan-editor">
@@ -1086,7 +1325,8 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
           <Grid3x3 className="size-4" aria-hidden /> Čistý rastr
         </Button>
         <ToolButton active={tool.kind === "select"} onClick={() => setTool({ kind: "select" })} icon={<MousePointer2 className="size-4" aria-hidden />} label="Výběr" />
-        <ToolButton active={tool.kind === "room"} onClick={() => setTool({ kind: "room" })} icon={<Square className="size-4" aria-hidden />} label="Kreslit místnost" />
+        <ToolButton active={tool.kind === "room"} onClick={() => setTool({ kind: "room" })} icon={<Square className="size-4" aria-hidden />} label="Kreslit místnost (obdélník)" />
+        <ToolButton active={tool.kind === "polygon"} onClick={() => (setPolyDraft([]), setTool({ kind: "polygon" }))} icon={<span aria-hidden>📐</span>} label="Kreslit šikmou stěnu / polygonální místnost" />
         <ToolButton active={tool.kind === "calibrate"} onClick={() => (setCalibration([]), setTool({ kind: "calibrate" }))} icon={<Ruler className="size-4" aria-hidden />} label="📏 Kalibrovat měřítko" />
         <Button
           type="button"
@@ -1102,6 +1342,8 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
         >
           <Trash2 className="size-4" aria-hidden /> Vymazat nákres
         </Button>
+        {/* Fáze 63: export výkresu do PDF (tiskový list A3 / A4) a do CAD (DXF) */}
+        <FloorplanExport draft={deferred} analysis={analysis.ok ? analysis : null} company={company} />
         <span className="ml-auto flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           {draft.background ? (
             <span className={cn("rounded-full border px-2 py-0.5", draft.calibration.state === "verified" ? "border-emerald-500/50 text-emerald-300" : "border-amber-400/60 text-amber-200")} data-testid="calibration-state">
@@ -1114,6 +1356,27 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
         </span>
       </div>
       <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-2">
+        {/* Fáze 63: zobrazení kabelů – barevně podle okruhů / normové CAD značení */}
+        <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="Zobrazení kabelů">
+          {(
+            [
+              ["color", "🎨 Barevně podle okruhů"],
+              ["cad", "📐 Normové CAD značení (ČSN)"],
+            ] as const
+          ).map(([view, label]) => (
+            <button
+              key={view}
+              type="button"
+              role="radio"
+              aria-checked={draft.cableView === view}
+              onClick={() => update((current) => ({ ...current, cableView: view }))}
+              className={cn("rounded-md border px-2.5 py-1.5 text-sm font-semibold", draft.cableView === view ? "border-emerald-500 bg-emerald-500/20 text-foreground" : "border-border text-muted-foreground hover:text-foreground")}
+              data-testid={`cable-view-${view}`}
+            >
+              [ {label} ]
+            </button>
+          ))}
+        </div>
         <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="Způsob vedení kabelů">
           {ROUTING_MODES.map((mode) => (
             <button
@@ -1259,6 +1522,16 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
           update((current) => applyAppearance(current, { room: selectedRoom.name }));
           toast.success(`Vzhled použit v místnosti ${selectedRoom.name}.`);
         }}
+        installation={draft.installation}
+        smartSystem={draft.smartSystem}
+        activeProduct={tool.kind === "place" ? (tool.product ?? null) : null}
+        onSmartSystem={(smartSystem) => {
+          if (!isSmartSystem(smartSystem)) return;
+          update((current) => ({ ...current, smartSystem }));
+          toast.success("Systém chytré domácnosti změněn – akční členy se přepočítaly.");
+        }}
+        onBusLevel={() => changeLevel("bus_loxone")}
+        onPlaceProduct={placeProduct}
       />
 
       {/* Fáze 59: podlaží domu */}
@@ -1292,41 +1565,8 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
               setHover(null);
             }}
           />
-          {/* Paleta značek podle úrovně instalace */}
-          <aside className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3" aria-label="Paleta elektroinstalačních značek">
-            {PALETTE_GROUPS.map((group) => {
-              const items = palette.filter((item) => item.group === group.id);
-              if (!items.length) return null;
-              return (
-                <div key={group.id} className="flex flex-col gap-1" data-group={group.id}>
-                  <h3 className="text-xs font-bold text-muted-foreground">{group.id === "controls" ? CONTROLS_LABEL[draft.installation] : group.label}</h3>
-                  <div className="flex flex-wrap gap-1">
-                    {items.map((item) => {
-                      const active = tool.kind === "place" && tool.item === item.id;
-                      // Fáze 61: zařizovací předmět (vana / sprcha) nemá výšku montáže – v titulku jen rozměr
-                      const height = item.kind === "fixture" ? null : item.kind === "panel" || item.kind === "riser" ? draft.profile.switchboardHeightMm : (item.heightMm ?? mountHeight({ kind: item.kind, variant: item.variant, tag: item.tag }, draft.profile));
-                      return (
-                        <button
-                          key={item.id}
-                          type="button"
-                          aria-pressed={active}
-                          onClick={() => {
-                            setTool(active ? { kind: "select" } : { kind: "place", item: item.id });
-                            setHover(null);
-                          }}
-                          title={height === null ? item.label : `${item.label} (${height} mm)`}
-                          className={cn("flex items-center gap-1 rounded-md border px-1.5 py-1 text-xs", active ? "border-primary bg-primary/20 text-foreground" : "border-border text-muted-foreground hover:border-primary/60 hover:text-foreground")}
-                        >
-                          <span className="rounded bg-muted px-1 font-mono text-[10px] font-bold text-foreground">{item.symbol}</span>
-                          {item.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-          </aside>
+          {/* Fáze 63: paleta značek jako akordeon (počty osazených prvků, sbalit / rozbalit vše, jedna kategorie) */}
+          <PaletteAccordion sections={paletteSections} />
         </div>
 
         {/* Plátno půdorysu */}
@@ -1374,24 +1614,39 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
                 const active = room.id === selectedRoomId;
                 const handle = ui * 0.45;
                 const edge = ui * 0.35;
+                // Fáze 63: polygonální místnost se šikmými stěnami
+                const polygon = isPolygonRoom(room);
+                const corners = roomPolygon(room);
+                const shape = {
+                  fill: active ? "rgba(250,204,21,0.10)" : "rgba(250,204,21,0.04)",
+                  stroke: active ? "#facc15" : "#a1a1aa",
+                  strokeWidth: stroke * (active ? 4 : 2.5),
+                  className: tool.kind === "select" ? (active ? "cursor-move" : "cursor-pointer") : undefined,
+                  onPointerDown: (event: ReactPointerEvent) => onRoomDown(event, room, "move"),
+                  "data-testid": `room-${room.name}`,
+                };
                 return (
                   <g key={room.id} data-room={room.name} aria-label={`Místnost ${room.name}`}>
-                    <rect
-                      x={room.x}
-                      y={room.y}
-                      width={room.w}
-                      height={room.h}
-                      fill={active ? "rgba(250,204,21,0.10)" : "rgba(250,204,21,0.04)"}
-                      stroke={active ? "#facc15" : "#a1a1aa"}
-                      strokeWidth={stroke * (active ? 4 : 2.5)}
-                      className={tool.kind === "select" ? (active ? "cursor-move" : "cursor-pointer") : undefined}
-                      onPointerDown={(event) => onRoomDown(event, room, "move")}
-                      data-testid={`room-${room.name}`}
-                    />
+                    {polygon ? <polygon points={corners.map((corner) => `${corner.x},${corner.y}`).join(" ")} strokeLinejoin="round" data-polygon="true" {...shape} /> : <rect x={room.x} y={room.y} width={room.w} height={room.h} {...shape} />}
                     <text x={room.x + ui * 0.4} y={room.y + ui * 1.1} fontSize={ui * 0.8} fill={draft.background ? "#52525b" : "#d4d4d8"} pointerEvents="none">
-                      {room.name} · {roomDimensions(room.w, room.h).label}
+                      {room.name} · {polygon ? `${(polygonArea(corners) / 1e6).toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} m² (${corners.length} rohů)` : roomDimensions(room.w, room.h).label}
                     </text>
-                    {active ? (
+                    {active && polygon ? (
+                      <g data-testid="polygon-handles">
+                        {corners.map((corner, index) => {
+                          const next = corners[(index + 1) % corners.length];
+                          return (
+                            <g key={index}>
+                              <text x={(corner.x + next.x) / 2} y={(corner.y + next.y) / 2 - ui * 0.3} fontSize={ui * 0.5} fontWeight={700} textAnchor="middle" fill="#facc15" stroke="#09090b" strokeWidth={ui * 0.05} paintOrder="stroke" pointerEvents="none">
+                                {wallLabel(corner, next)}
+                              </text>
+                              <rect x={corner.x - ui * 0.3} y={corner.y - ui * 0.3} width={ui * 0.6} height={ui * 0.6} rx={ui * 0.1} fill="#facc15" stroke="#09090b" strokeWidth={stroke * 2} className="cursor-move" onPointerDown={(event) => onVertexDown(event, room, index)} data-testid="polygon-vertex" />
+                            </g>
+                          );
+                        })}
+                      </g>
+                    ) : null}
+                    {active && !polygon ? (
                       <>
                         {/* Stěny: tažením změna rozměru */}
                         <rect x={room.x} y={room.y - edge / 2} width={room.w} height={edge} fill="transparent" className="cursor-ns-resize" onPointerDown={(event) => onRoomDown(event, room, "n")} data-handle="n" />
@@ -1464,28 +1719,48 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
                   <Dimensions x={Math.min(roomDraft.x, roomDraft.x + roomDraft.w)} y={Math.min(roomDraft.y, roomDraft.y + roomDraft.h)} w={Math.abs(roomDraft.w)} h={Math.abs(roomDraft.h)} symbol={ui} />
                 </g>
               ) : null}
-
-              {/* Trasy kabelů po okruzích (aktivní podlaží; souběžné okruhy mírně odsazené, ať se nepřekrývají);
-                  fáze 62: vrstvu jde skrýt (K), při párování vypínačů se světly je ve výchozím stavu skrytá */}
-              {cablesShown && analysis.ok && panelPoint
-                ? analysis.summary.circuits.map((circuit, index) => {
-                    const color = ROUTE_COLORS[index % ROUTE_COLORS.length];
-                    const runs = routeRuns(circuit.route.segments);
-                    if (!runs.length) return null;
-                    const offset = ((index % 7) - 3) * stroke * 2.4;
-                    const last = runs[runs.length - 1][runs[runs.length - 1].length - 1];
+              {/* Fáze 63: rozkreslená polygonální místnost – rohy a gumová čára ke kurzoru s délkou a úhlem */}
+              {tool.kind === "polygon" && polyDraft.length
+                ? (() => {
+                    const last = polyDraft[polyDraft.length - 1];
+                    const first = polyDraft[0];
+                    const cursor = hover ? (hover.shift ? { x: Math.round(hover.x), y: Math.round(hover.y) } : snapAngle(last, hover, 45)) : null;
+                    const closing = Boolean(hover && polyDraft.length >= 3 && Math.hypot(hover.x - first.x, hover.y - first.y) <= ui * 0.8);
+                    const angle = cursor ? Math.round(((Math.atan2(cursor.y - last.y, cursor.x - last.x) * 180) / Math.PI + 360) % 360) : 0;
                     return (
-                      <g key={circuit.id} data-testid="cable-route" pointerEvents="none" transform={`translate(${offset} ${offset})`}>
-                        <path d={pathOf(runs)} fill="none" stroke={color} strokeWidth={stroke * 3.5} strokeLinejoin="round" strokeDasharray={circuit.routing === "TOP" ? `${ui / 2} ${ui / 5}` : undefined} opacity={0.9} />
-                        <text x={last.x + ui * 0.6} y={last.y - ui * 0.6} fontSize={ui * 0.62} fill={color} fontWeight={700}>
-                          {circuit.lengthsM[draft.mode].toLocaleString("cs-CZ")} m
-                        </text>
+                      <g pointerEvents="none" data-testid="polygon-draft" data-points={polyDraft.length}>
+                        <polyline points={polyDraft.map((corner) => `${corner.x},${corner.y}`).join(" ")} fill="rgba(250,204,21,0.06)" stroke="#facc15" strokeWidth={stroke * 3} />
+                        {cursor ? <line x1={last.x} y1={last.y} x2={closing ? first.x : cursor.x} y2={closing ? first.y : cursor.y} stroke="#facc15" strokeWidth={stroke * 2} strokeDasharray={`${ui / 3} ${ui / 4}`} /> : null}
+                        {cursor && !closing ? (
+                          <text x={(last.x + cursor.x) / 2} y={(last.y + cursor.y) / 2 - ui * 0.4} fontSize={ui * 0.6} fontWeight={700} textAnchor="middle" fill="#facc15" stroke="#09090b" strokeWidth={ui * 0.05} paintOrder="stroke">
+                            {wallLabel(last, cursor)} · {angle}°
+                          </text>
+                        ) : null}
+                        {polyDraft.map((corner, index) => (
+                          <circle key={index} cx={corner.x} cy={corner.y} r={ui * (index === 0 ? 0.35 : 0.22)} fill={index === 0 && closing ? "#22c55e" : "#facc15"} stroke="#09090b" strokeWidth={stroke} />
+                        ))}
                       </g>
                     );
-                  })
+                  })()
                 : null}
-              {/* Fáze 57: sběrnicová linka (KNX / Loxone Tree) */}
-              {cablesShown && analysis.ok && analysis.summary.busLine ? <path d={pathOf(routeRuns(analysis.summary.busLine.segments))} fill="none" stroke="#22c55e" strokeWidth={stroke * 2.5} strokeDasharray={`${ui / 6} ${ui / 6}`} pointerEvents="none" data-testid="bus-line" /> : null}
+
+              {/* Trasy kabelů po okruzích a sběrnicová linka (aktivní podlaží); fáze 62: vrstvu jde skrýt (K), při párování
+                  vypínačů se světly je ve výchozím stavu skrytá; fáze 63: barevně / normové CAD značení, odsazení 200 mm podél
+                  stěn (u šikmé stěny v její ose), ruční posun úseků (↕ v ose Y, ↔ v ose X), odskok dvojklikem, reset pravým tlačítkem */}
+              {cablesShown && routes ? (
+                <RouteLayer
+                  circuits={routes.circuits}
+                  bus={routes.bus}
+                  view={draft.cableView}
+                  onPaper={Boolean(draft.background)}
+                  unit={ui}
+                  stroke={stroke}
+                  editable={routesEditable}
+                  drag={routeDrag ? { key: routeDrag.key, points: routeDrag.points } : null}
+                  onSegmentDown={onRouteDown}
+                  onReset={resetRoute}
+                />
+              ) : null}
               {/* Fáze 59: průchod stoupacího vedení bez značky (výchozí nad / pod rozváděčem) */}
               {floors.length > 1 && riserHere && !draft.elements.some((element) => element.item === "riser") ? (
                 <g transform={`translate(${riserHere.riser.x} ${riserHere.riser.y})`} pointerEvents="none" data-testid="riser-default">
@@ -1524,10 +1799,18 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
               })}
 
               {draft.elements.map((element) => {
-                const item = paletteItem(element.item);
+                const item = displayItem(element);
                 if (!item) return null;
                 const size = symbolSizeOf(draft, element);
                 const active = selection.includes(element.id) || (tool.kind === "pair" && tool.switchId === element.id) || (tool.kind === "pair-light" && tool.lightId === element.id);
+                // Fáze 63: zařizovací předmět ve skutečném rozměru se zónami, posuvnými stranami a žlutým rohem
+                if (item.kind === "fixture") {
+                  return (
+                    <g key={element.id} data-element={item.id} data-selected={active ? "true" : undefined} aria-label={`${item.label} – ${element.room}`} role="button">
+                      <FixtureShape element={element} active={active} onPaper={Boolean(draft.background)} unit={ui} interactive={tool.kind === "select" || tool.kind === "place"} onBodyDown={(event) => onElementDown(event, element)} onHandleDown={(event, handle) => onFixtureHandle(event, element, handle)} />
+                    </g>
+                  );
+                }
                 // Při párování zvýraznit, na co jde kliknout
                 const candidate = (tool.kind === "pair" && item.kind === "light") || (tool.kind === "pair-light" && controlsLights(item));
                 const linked = tool.kind === "pair" ? draft.elements.find((other) => other.id === tool.switchId)?.controls.includes(element.id) : tool.kind === "pair-light" ? element.controls.includes(tool.lightId) : false;
@@ -1552,7 +1835,11 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
               })}
 
               {/* Fáze 59: náhled vkládané značky u kurzoru s natočením (R = otočit) */}
-              {ghostItem && ghost && ghostItem.kind !== "panel" ? (
+              {ghostItem && ghost && ghostItem.kind === "fixture" ? (
+                <g opacity={0.55} pointerEvents="none" data-testid="place-ghost" data-rotation={ghost.rotation}>
+                  <FixtureShape element={{ id: "ghost", item: ghostItem.id, x: ghost.position.x, y: ghost.position.y, room: "", mountHeightMm: null, frameUnits: 1, series: null, color: null, controls: [], rotation: ghost.rotation, scale: null }} active={false} onPaper={Boolean(draft.background)} unit={ui} interactive={false} />
+                </g>
+              ) : ghostItem && ghost && ghostItem.kind !== "panel" ? (
                 <g transform={`translate(${ghost.position.x} ${ghost.position.y})`} opacity={0.55} pointerEvents="none" data-testid="place-ghost" data-rotation={ghost.rotation}>
                   <FloorSymbol item={ghostItem} size={symbolSizeOf(draft, { scale: null })} active={false} onPaper={Boolean(draft.background)} rotation={ghost.rotation} level={draft.installation} />
                 </g>
@@ -1687,6 +1974,10 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
               onAutoPair={autoPair}
               usedGangs={usedGangs(selected)}
               onAddToFrame={(item) => addIntoFrame(selected.id, item)}
+              display={displayItem(selected) ?? paletteItem(selected.item)!}
+              appliance={paletteItem(selected.item)?.kind === "appliance" ? applianceSpecFor(draft.appliances, selected) : null}
+              onRotateStep={(step) => rotateSelection([selected.id], step)}
+              onEditAppliances={() => setApplianceOpen(true)}
               onFrame={{
                 moveLeft: () => update((current) => moveInFrame(current, selected.id, -1)),
                 moveRight: () => update((current) => moveInFrame(current, selected.id, 1)),
@@ -1704,6 +1995,28 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
           ) : null}
           {smartPlan ? <SmartHomePanel plan={smartPlan} onSystem={(smartSystem) => isSmartSystem(smartSystem) && update((current) => ({ ...current, smartSystem }))} /> : null}
           <PlanChecks checks={checks} title="Kontrola půdorysu a norem" />
+          {/* Fáze 63: ručně upravené trasy – návrat na automat */}
+          {routes && routes.circuits.some((circuit) => circuit.edited) ? (
+            <section className="flex flex-col gap-1.5 rounded-xl border border-amber-500/40 bg-card p-3 text-xs" aria-label="Ručně upravené trasy" data-testid="edited-routes">
+              <h3 className="text-sm font-bold">✎ Ručně upravené trasy</h3>
+              <ul className="flex flex-col gap-1">
+                {routes.circuits
+                  .filter((circuit) => circuit.edited)
+                  .map((circuit) => (
+                    <li key={circuit.id} className="flex items-center justify-between gap-2">
+                      <span className="min-w-0">
+                        {circuit.designation ? `${circuit.designation} ` : ""}
+                        {circuit.label} · {circuit.lengthM.toLocaleString("cs-CZ")} m
+                      </span>
+                      <Button type="button" size="sm" variant="outline" className="h-7 shrink-0 px-2 text-xs" onClick={() => resetRoute(circuit)} data-testid="route-reset">
+                        🔄 Resetovat trasu na automat
+                      </Button>
+                    </li>
+                  ))}
+              </ul>
+              <p className="text-muted-foreground">Délka kabelu se počítá z upravené trasy. Pravé tlačítko na trase vrátí okruh na automat.</p>
+            </section>
+          ) : null}
           <CablePanel
             analysis={analysis}
             mode={draft.mode}
@@ -1736,6 +2049,9 @@ export function FloorplanEditor({ series, manufacturers = [] }: { series: Series
           ) : null}
         </aside>
       </div>
+
+      {/* Fáze 63: knihovna samostatných spotřebičů (✎ Upravit / + Přidat v paletě) */}
+      <ApplianceEditor open={applianceOpen} onOpenChange={setApplianceOpen} specs={catalog} onSave={saveAppliances} />
 
       {calibrationDialog ? (
         <CalibrationDialog
@@ -1887,6 +2203,10 @@ function ElementDetail({
   usedGangs,
   onAddToFrame,
   onFrame,
+  display,
+  appliance,
+  onRotateStep,
+  onEditAppliances,
 }: {
   draft: FloorplanDraft;
   element: EditorElement;
@@ -1900,10 +2220,15 @@ function ElementDetail({
   usedGangs: number;
   onAddToFrame: (item: string) => void;
   onFrame: { moveLeft: () => void; moveRight: () => void; rotate: () => void; leave: () => void; dissolve: () => void };
+  /** Fáze 63: zobrazovaná položka (spotřebič z knihovny, výrobek), zadání spotřebiče, otočení po 45° a úprava spotřebičů. */
+  display: PaletteItem;
+  appliance: ApplianceSpec | null;
+  onRotateStep: (step: number) => void;
+  onEditAppliances: () => void;
 }) {
   const item = paletteItem(element.item)!;
   const isPanel = item.kind === "panel" || item.kind === "riser" || item.kind === "fixture";
-  const defaultHeight = isPanel ? draft.profile.switchboardHeightMm : (item.heightMm ?? mountHeight({ kind: item.kind as Exclude<typeof item.kind, "panel" | "riser" | "fixture">, variant: item.variant, tag: item.tag }, draft.profile));
+  const defaultHeight = isPanel ? draft.profile.switchboardHeightMm : (appliance?.heightMm ?? item.heightMm ?? mountHeight({ kind: item.kind as Exclude<typeof item.kind, "panel" | "riser" | "fixture">, variant: item.variant, tag: item.tag }, draft.profile));
   const light = item.kind === "light" ? lightSpecOf(element) : null;
   const frame = frameOf(draft, element.id);
   const legacyFrameable = !frame && !item.wireless && (item.kind === "single_socket" || item.kind === "double_socket" || item.kind === "data_socket" || item.kind === "switch");
@@ -1916,8 +2241,8 @@ function ElementDetail({
     <section className="flex flex-col gap-2 rounded-xl border-2 border-sky-500/50 bg-card p-3 text-sm" aria-label="Detail vybraného prvku" data-testid="element-detail">
       <div className="flex items-center justify-between gap-2">
         <h3 className="font-semibold">
-          <span className="mr-1.5 rounded bg-muted px-1 font-mono text-xs">{item.symbol}</span>
-          {item.label}
+          <span className="mr-1.5 rounded bg-muted px-1 font-mono text-xs">{display.symbol}</span>
+          {display.label}
         </h3>
         <div className="flex items-center gap-0.5">
           <button type="button" onClick={onRotate} className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Otočit prvek o 90°" title="Otočit o 90° (R)">
@@ -1937,13 +2262,14 @@ function ElementDetail({
           </button>
         ))}
       </div>
-      {isPanel ? (
+      {item.kind === "fixture" ? (
+        // Fáze 63: přesný rozměr X × Y a natočení po 90° / 45°
+        <FixtureControls element={element} onChange={onChange} onRotate={onRotateStep} />
+      ) : isPanel ? (
         <p className="text-xs text-muted-foreground">
           {item.kind === "riser"
             ? "Průchod kabelů do jiného podlaží – trasy z tohoto podlaží vedou k rozváděči přes toto místo (svislá délka = rozdíl výšek podlaží)."
-            : item.kind === "fixture"
-              ? "Zařizovací předmět pro koupelnové zóny: zásuvky a spínače musí být dál než 0,6 m od jeho hrany (zóny 0–2, ČSN 33 2000-7-701 ed. 2). R = otočit."
-              : `Výchozí bod všech tras. Výška rozváděče se nastavuje v horní liště (${draft.profile.switchboardHeightMm} mm).`}
+            : `Výchozí bod všech tras. Výška rozváděče se nastavuje v horní liště (${draft.profile.switchboardHeightMm} mm).`}
         </p>
       ) : (
         <>
@@ -1962,6 +2288,18 @@ function ElementDetail({
               </datalist>
             </label>
           </div>
+          {/* Fáze 63: samostatný spotřebič – jištění, chránič a kabel z knihovny spotřebičů */}
+          {appliance ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-orange-500/40 bg-orange-500/5 p-2 text-xs" data-testid="appliance-detail">
+              <span>
+                {appliance.powerW.toLocaleString("cs-CZ")} W · {protectionLabel(appliance)}
+                {appliance.custom ? " · vlastní spotřebič" : ""}
+              </span>
+              <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={onEditAppliances}>
+                ✎ Upravit spotřebiče
+              </Button>
+            </div>
+          ) : null}
           {/* Fáze 59: víceramček – pořadí, otočení, vyjmutí a rozdělení */}
           {frame ? (
             <div className="flex flex-col gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/5 p-2 text-xs" data-testid="frame-detail">

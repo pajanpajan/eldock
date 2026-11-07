@@ -59,6 +59,22 @@ export interface FloorNode {
   floor?: string;
   /** Fáze 59: délka trasy z rozváděče předpočítaná měřidlem tras (stoupací vedení, fáze 60 podél stěn) [mm]. */
   lengthMm?: number;
+  /** Fáze 63: upravený / vlastní samostatný spotřebič – vlastní okruh přesně podle zadání (jistič, chránič, kabel). */
+  appliance?: ApplianceOverride;
+}
+
+/** Fáze 63: zadání samostatného spotřebiče z knihovny spotřebičů (`lib/panel-builder/appliances.ts`). */
+export interface ApplianceOverride {
+  label: string;
+  powerW: number;
+  poles: 1 | 3;
+  ratedA: number;
+  curve: "B" | "C";
+  /** A = pod společný chránič typ A, F / B = vlastní chránič daného typu, RCBO = jistič s chráničem (1f). */
+  rcd: "A" | "F" | "B" | "RCBO";
+  /** Výchozí průřez kabelu [mm²] – výpočet ho zvětší při úbytku napětí nebo nesplněné koordinaci. */
+  mm2: number;
+  simultaneity: number;
 }
 
 export interface Calibration {
@@ -476,7 +492,7 @@ export interface Circuit {
    * Pod jakou proudovou ochranu okruh patří: společný chránič 30 mA typ A (zásuvky, spotřebiče),
    * chránič typ A vyhrazený jen pro světla (`A30L`), vlastní typ B (EV / TČ / FVE), nebo vlastní RCBO.
    */
-  rcd: "A30" | "A30L" | "B30" | "own";
+  rcd: "A30" | "A30L" | "B30" | "F30" | "own";
   /** Spotřebič vyhrazeného okruhu (fáze 52 – synergický energetický management). */
   tag?: ApplianceTag;
   /** Fáze 52: zatížitelnost Iz [A] v zadaném uložení a impedance smyčky. */
@@ -629,6 +645,31 @@ export function generateCircuitsFromFloorplan(plan: Floorplan, calibration: Cali
       continue;
     }
 
+    // Fáze 63: upravený nebo vlastní spotřebič – vlastní okruh přesně podle zadání v knihovně spotřebičů
+    if (node.appliance) {
+      const spec = node.appliance;
+      const phases = spec.poles;
+      const rcbo = spec.rcd === "RCBO" && phases === 1;
+      const kind: CircuitKind = phases === 3 ? (spec.rcd === "B" ? "three_phase_rcd_b" : "cooktop") : "dedicated";
+      push(
+        {
+          label: `${spec.label} – ${room}`,
+          kind,
+          phases,
+          protection: rcbo ? { device: "RCBO", poles: "1P+N", curve: spec.curve, ratedA: spec.ratedA, rcd: { type: "A", sensitivityMa: 30 } } : { device: "MCB", poles: phases === 3 ? "3P" : "1P", curve: spec.curve, ratedA: spec.ratedA },
+          rooms: [node.room],
+          nodeIds: [node.id],
+          outlets: 1,
+          installedW: spec.powerW,
+          designW: spec.powerW * spec.simultaneity,
+          rcd: rcbo ? "own" : spec.rcd === "B" ? "B30" : spec.rcd === "F" ? "F30" : "A30",
+          ...(tag ? { tag } : {}),
+        },
+        [node],
+        spec.mm2,
+      );
+      continue;
+    }
     if (tag && DEDICATED_1P.has(tag) && powerW >= DEDICATED_MIN_W) {
       push(
         { label: `${appliance!.label} – ${room}`, kind: "dedicated", phases: 1, protection: { device: "MCB", poles: "1P", curve: "B", ratedA: 16 }, rooms: [node.room], nodeIds: [node.id], outlets: 1, installedW: powerW, designW: powerW * appliance!.simultaneity, rcd: "A30", tag },
@@ -910,6 +951,26 @@ export function groupUnderRcds(circuits: readonly Circuit[]): RcdGroup[] {
   for (const group of pool("A30")) result.push({ designation: `-FI${result.length + 1}`, type: "A", circuitIds: group.map((c) => c.id) });
   for (const group of pool("A30L")) result.push({ designation: `-FI${result.length + 1}`, type: "A", circuitIds: group.map((c) => c.id), lightingOnly: true });
   for (const circuit of circuits.filter((c) => c.rcd === "B30")) result.push({ designation: `-FI${result.length + 1}`, type: "B", circuitIds: [circuit.id] });
+  // Fáze 63: spotřebič s vlastním chráničem typ F (měniče frekvence, pračky, tepelná čerpadla)
+  for (const circuit of circuits.filter((c) => c.rcd === "F30")) result.push({ designation: `-FI${result.length + 1}`, type: "F", circuitIds: [circuit.id] });
+  return result;
+}
+
+/**
+ * Fáze 63: označení jističů okruhů tak, jak je očísluje rozváděč z půdorysu (`buildSwitchboardFromCircuits`): jističe
+ * pod chrániči v pořadí skupin, pak okruhy s vlastní ochranou; jistič s chráničem (RCBO) má řadu -FA. Pro štítky tras.
+ */
+export function circuitDesignations(circuits: readonly Circuit[]): Record<string, string> {
+  const counters = { F: 0, FA: 0 };
+  const result: Record<string, string> = {};
+  const assign = (circuit: Circuit) => {
+    const prefix = circuit.protection.device === "RCBO" ? "FA" : "F";
+    counters[prefix] += 1;
+    result[circuit.id] = `-${prefix}${counters[prefix]}`;
+  };
+  const byId = new Map(circuits.map((circuit) => [circuit.id, circuit]));
+  for (const group of groupUnderRcds(circuits)) for (const id of group.circuitIds) assign(byId.get(id)!);
+  for (const circuit of circuits.filter((c) => c.rcd === "own")) assign(circuit);
   return result;
 }
 

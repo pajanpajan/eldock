@@ -29,8 +29,9 @@
 23. ZADANI-faze-58.md
 24. ZADANI-faze-59.md
 25. ZADANI-faze-62.md
-26. DENIK-faze-49-54.md
-27. docs/PLAN.md (aktuální plán a deník posledních fází)
+26. ZADANI-faze-63.md
+27. DENIK-faze-49-54.md
+28. docs/PLAN.md (aktuální plán a deník posledních fází)
 
 ---
 
@@ -2282,6 +2283,168 @@ Zadání uživatele (doslovně):
 
 ---
 
+# 📄 ZADANI-faze-63.md
+
+# Zadání fáze 63 (2026-11-07, z chatu)
+
+V zadání je etapa označená jako „Fáze 55“. Číslo 55 je obsazené (nasazená fáze 2026-11-05), proto se zadání
+zapisuje a realizuje jako **fáze 63**.
+
+Zadání uživatele (doslovně):
+
+> Na základě testování 2D půdorysu (`/panel-builder/floorplan`) provedeme 7 klíčových vylepšení (Fáze 55): sbalovací
+> levé menu, umyvadlo a aktivní změna rozměrů X×Y u zařizovacích předmětů, editovatelné samostatné spotřebiče,
+> rozšíření chytré domácnosti (ABB-free@home, KNX, Loxone, TapHome) v horní liště, realistické katalogové vizualizace
+> řad s přímým odkazem na web výrobce, interaktivní posouvání kabelových tras v osách X/Y + podpora šikmých stěn
+> (45° / polygon) a export výkresu s normovým značením kabelů do PDF a DXF/DWG.
+>
+> Zapiš tuto etapu do docs/PLAN.md jako novou fázi a kompletně ji naimplementuj:
+>
+> 1. SBALOVACÍ KATEGORIE V LEVÉM MENU PŮDORYSU (ACCORDION):
+> - V levém panelu `/panel-builder/floorplan` zabal každou kategorii (`⚡ Rozváděč`, `🔌 Zásuvky`, `💡 Světla a vypínače`,
+>   `🎛️ Sběrnicové ovládání 24 V DC / Smart Home`, `🔥 Samostatné spotřebiče`, `🛁 Zařizovací předměty`) do
+>   rozbalovacího akordeonu:
+>   * Kliknutím na záhlaví kategorie se sekce sbalí nebo rozbalí (zobrazuj u ní šipku `▾ / ▸` a počet osazených prvků
+>     této kategorie v půdorysu).
+>   * Přidej úplně nahoru do levého panelu rychlý přepínač `[ Sbalit vše ]` / `[ Rozbalit vše ]` a režim *"Rozbalit vždy
+>     jen jednu kategorii"*, aby menu zůstalo maximálně přehledné.
+>
+> 2. UMYVADLO, DVOJUMYVADLO A AKTIVNÍ ÚPRAVA ROZMĚRŮ X × Y U ZAŘIZOVACÍCH PŘEDMĚTŮ (ČSN 33 2000-7-701 a ČSN 33 2130 ed. 4):
+> - Do kategorie `🛁 Zařizovací předměty` přidej:
+>   * **`UMY` Umyvadlo (`600 × 450 mm`)** a **`DUM` Dvojumyvadlo (`1200 × 450 mm`)** – kolem umyvadla vykresluj v půdorysu
+>     ochranný umyvadlový prostor (svislý pás nad a pod umyvadlem dle ČSN 33 2130 ed. 4) a kontroluj v linteru dodržení
+>     vzdálenosti zásuvek a spínačů od hrany umyvadla / vany / sprchy!
+> - **Aktivní roh a živé rozměry X × Y pro Vanu, Sprchový kout i Umyvadlo:**
+>   * Každý zařizovací předmět (`Vana`, `Sprchový kout`, `Umyvadlo`, `Dvojumyvadlo`) vykresli na půdorysu jako
+>     architektonický 2D symbol v reálných rozměrech `widthM × depthM`.
+>   * Po kliknutí na zařizovací předmět zobraz **aktivní žlutý roh (handle)** a posuvné stěny, kterými může uživatel myší
+>     plynule měnit jeho šířku X a hloubku Y (se živými kótami přímo u předmětu: `X: 1,70 m × Y: 0,75 m`), předmět otáčet
+>     o 90°/45° nebo zadat přesný rozměr v mm v bočním panelu. Ochranné zóny 0, 1, 2 (60 cm) a umyvadlový prostor se
+>     okamžitě přepočítají podle nového rozměru!
+>
+> 3. EDITOVATELNÉ SAMOSTATNÉ SPOTŘEBIČE (`🔥 Samostatné spotřebiče`):
+> - V sekci `🔥 Samostatné spotřebiče (vlastní jisticí okruh)` přidej do záhlaví tlačítko `[ ✎ Upravit / + Přidat ]`.
+> - Umožni uživateli:
+>   * Přejmenovat kterýkoliv stávající spotřebič (např. změnit `"Trouba"` na `"Pečicí a parní trouba"`, `"Tepelné
+>     čerpadlo"` na `"Venkovní jednotka TČ"`), změnit jeho 2–3písmennou zkratku na značce, výchozí příkon [W], jistič
+>     (`1P/3P`, `B10/B16/B20/B25`), typ chrániče (`A / F / B / RCBO`), kabel (`3×2,5` / `5×2,5` / `5×4`) a výchozí
+>     montážní výšku [mm].
+>   * Přidat vlastní spotřebič tlačítkem `[ + Přidat vlastní spotřebič ]` (s rychlými šablonami: `Klimatizace`,
+>     `Rekuperace VZT`, `Saunová kamna 3f`, `Bazénová technologie`, `Čerpadlo studny / ČOV`, `Brána / Garážová vrata`)
+>     a uložit úpravy do `localStorage` + profilu firmy `RegisteredCompany`.
+>
+> 4. CHYTRÁ DOMÁCNOST V HORNÍ LIŠTĚ VÝROBCŮ (ABB-free@home®, KNX, Loxone, TapHome) A KOMPLETNÍ PRVKY:
+> - Rozšiř horní lištu výběru výrobců a systémů nad půdorysem:
+>   * U výrobce **ABB** přidej přepínač produktových rodin:
+>     1) **`🎨 Domovní spínače a zásuvky (15 řad)`**
+>     2) **`🏠 ABB-free@home® (Sběrnice 24 V DC & Wireless)`** – po kliknutí zobraz podkategorie:
+>        - *Senzory a tlačítka v designu řad (Zoni, Tango, Levit, Time, future linear)*: 1násobné, 2násobné, 4násobné
+>          tlačítko, žaluziový senzor, prostorový termostat s displejem.
+>        - *Bezdrátové prvky free@home® WL & Smart Switch*: Akční člen do krabičky (1kanál, 2kanál, žaluziový, stmívací),
+>          bezbateriový Smart Switch.
+>        - *Centrální panely a komunikace*: Dotykový panel **ABB OneTouch 7"**, System Access Point SysAP 2.0, videotelefon
+>          ABB-Welcome Midi.
+>        - *Akční členy na DIN lištu*: Spínací aktory 4/8/12kanálové (`SA-M`), žaluziové aktory (`JA-M`), stmívací aktory,
+>          topné aktory (`HA-M`), zdroj sběrnice `PS-M-64.1.1`.
+>     3) **`🏢 ABB i-bus® KNX & ABB-flexTronics®`** – KNX tlačítkové snímače, detektory přítomnosti Busch-Watchdog 180
+>        Basic/Multi/Sky/Corridor, DALI regulátory.
+>   * Do horní lišty výrobců přidej vedle `ABB`, `Schneider Electric`, `Legrand` a `Hager` také výrobce chytré automatizace
+>     s jejich logy:
+>     - **`Loxone`** (řady: *Touch Pure*, *Touch Pure Flex*, *Touch классик*, *Touch Nightlight*, *Stropní senzor
+>       přítomnosti*, *Miniserver / Tree / Air*) – ve barvách *Bílá* a *Antracit*.
+>     - **`TapHome`** (řady: *TapHome 2T / 4T / 6T tlačítka*, *UI Termostat*, *Core jednotka*).
+>
+> 5. VĚRNÉ VIZUALIZACE DESIGNOVÝCH ŘAD A PŘÍMÝ PROKLIK NA WEB VÝROBCE (`nizke-napeti.cz.abb.com`):
+> - Přepracuj vykreslování náhledů v modalu `Designové řady a barvy` (a v horní liště), aby 2D SVG rendery Spínače 1R,
+>   Zásuvky 1R a Vícerámečku 3R věrně odpovídaly skutečnému tvaru, proporcím a materiálům jednotlivých řad:
+>   * **ABB Levit / Levit M:** Ostrý čtvercový rámeček s charakteristickou barevnou spodní základnou prosvítající v horní
+>     a spodní spáře (dvoubarevný vrstvený efekt `Onyx / kouřová černá`, `Žlutá / kouřová černá` atd.) a vodorovným
+>     proužkem indikace.
+>   * **ABB Zoni:** Moderní matný plochý rámeček s tenkým okrajem (16 mm profil), u dvoubarevných variant (`pudrová /
+>     bílá`, `olivová / bílá`, `greige / bílá`, `matná černá / bílá`) barevný rámeček a čistě bílá středová
+>     klapka/zásuvka!
+>   * **ABB Tango:** Typický zaoblený (vypouklý) rámeček a zaoblená kolébka s vodorovným modrým/oranžovým průzorem
+>     doutnavky.
+>   * **ABB Time / Time Arbo:** Rovný rámeček s charakteristickou tenkou kovovou linkou kolem klapky; u *Time Arbo*
+>     realistická kresba dřeva (javor, olše, třešeň, mahagon, wenge) na rámečku a metalická klapka (starostříbrná /
+>     titanová / antracitová).
+>   * **ABB Decento:** Kulatý retro porcelánový rámeček s otočnou nebo úzkou páčkou a kulatou zásuvkou.
+>   * **Legrand Céliane:** Obdélníkový rámeček s typickým **kruhovým výřezem a kruhovou klapkou** uvnitř (nikoliv obyčejný
+>     čtverec!).
+>   * **Schneider Nová Unica / Sedna / Asfora:** Odpovídající tvar rámečku a kolébky v reálných odstínech.
+> - **Tlačítko pro přechod na web výrobce:**
+>   * Přímo do modalu `Designové řady a barvy` (vedle tlačítka *Použít*) i do horní lišty přidej tlačítko **`[ 🌐
+>     Prohlédnout řadu na webu výrobce ↗ ]`**, které otevře v novém okně oficiální stránku právě vybrané řady a výrobce:
+>     - Pro ABB: konkrétní URL na `https://nizke-napeti.cz.abb.com/` (např. stránku designových řad Zoni, Tango, Levit,
+>       Time, Decento, Swing, Classic, ABB-free@home).
+>     - Pro Schneider Electric, Legrand, Hager, Loxone a TapHome: jejich oficiální české katalogové stránky dané řady.
+>
+> 6. INTERAKTIVNÍ ÚPRAVA TRAS KABELŮ V OSÁCH X / Y + ŘEŠENÍ PRO ŠIKMÉ STĚNY (45° A OBECNÉ ÚHLY):
+> Uprav směrování a editaci kabelových tras na plátně 2D půdorysu:
+> a) **Interaktivní posouvání úseků kabelů myší striktně v ose X nebo Y:**
+>    - Každá vykreslená trasa kabelu se skládá z rovných úseků mezi lomovými body (`waypoints`).
+>    - Když uživatel najede myší na **vodorovný úsek kabelu**, zobraz zvýrazněný úchyt s kurzorem `ns-resize (↕)`.
+>      Tažením myší se tento vodorovný úsek posouvá **výhradně nahoru a dolů v ose Y** (sousední svislé úseky se
+>      automaticky natáhnou/zkrátí, úhel zůstává vždy 90°!).
+>    - Když uživatel najede na **svislý úsek kabelu**, zobraz kurzor `ew-resize (↔)` a tažením ho posouvej **výhradně
+>      doleva a doprava v ose X**.
+>    - **Dvojklik na úsek kabelu** vloží do trasy nový ortogonální odskok (dvojici 90° lomových bodů), takže lze trasu
+>      snadno vést kolem překážky. Kliknutím pravým tlačítkem (nebo tlačítkem v panelu) lze ručně posunutou trasu okruhu
+>      vrátit na `"🔄 Resetovat trasu na automat"`.
+> b) **Kreslení šikmých stěn / polygonálních místností a Lokální osa šikmé stěny (45° a obecné úhly):**
+>    - Vedle nástroje `Kreslit místnost (Obdélník)` přidej nástroj **`📐 Kreslit šikmou stěnu / Polygonální místnost`**:
+>      uživatel kliká jednotlivé rohy místnosti po obvodu podkladu PDF (s přichytáváním na **0°, 45°, 90°** nebo volný
+>      úhel podle podkladu při podržení `Shift`).
+>    - **Pravidlo kabelů u šikmých stěn:**
+>      * Ve volném prostoru půdorysu vedou kabely VŽDY striktně v osách X a Y (0° / 90°).
+>      * Pokud však prvek leží u šikmé stěny (pod úhlem $\alpha$, např. 45° nebo 15° podle stěny v PDF), úsek kabelu
+>        přiléhající k této šikmé stěně se automaticky přichytí do **lokální osy této stěny** (vede **rovnoběžně se šikmou
+>        stěnou** v odsazení např. 200 mm a do zásuvky/vypínače odbočuje **kolmo (90°) na šikmou stěnu**!).
+>      * Při tažení takového úseku myší se úsek posouvá kolmo ke své šikmé stěně (zůstává s ní vždy rovnoběžný).
+>
+> 7. KLASICKÉ NORMOVÉ ZNAČENÍ KABELŮ A CAD EXPORT DO PDF A DWG/DXF:
+> - Přidej nad půdorys přepínač zobrazení kabelů: `[ 🎨 Barevně podle okruhů ]` vs. **`[ 📐 Normové CAD značení (ČSN) ]`**:
+>   * V normovém CAD režimu vykresluj kabely klasickou inženýrskou grafikou (plná čára se šikmými ryskami počtu žil
+>     `/// 3` nebo `///// 5`, čárkovaná čára pro ovládací/sběrnicové kabely `24 V DC`) a přímo podél každé větve
+>     vypisuj čitelný štítek: **`Okr. -F4 · CYKY-J 3×2,5 · 14,2 m`**.
+> - Přidej do horní lišty půdorysu tlačítka pro export výkresu:
+>   1) **`[ 📄 Exportovat výkres elektroinstalace do PDF (A3/A4) ]`** – vygeneruje čistý vektorový výkres půdorysu
+>      s rohový razítkem projektu, legendou značek dle ČSN, okótovanými trasami kabelů s normovým popisem a souhrnnou
+>      tabulkou okruhů a metráže.
+>   2) **`[ 📐 Exportovat do CAD (DXF / DWG kompatibilní) ]`** (`src/lib/panel-builder/dxf-export.ts`) – vygeneruje
+>      standardní soubor `.dxf` (otevřitelný v AutoCADu, BricsCADu, GstarCADu i ProgeCADu) rozdělený do přehledných
+>      hladin (`STAVBA_MISTNOSTI`, `ZARIZOVACI_PREDMETY`, `ZASUVKY_230V_400V`, `SVETLA_VYPINACE`, `SBERNICE_SMART_HOME`,
+>      `KABELY_SILOVE`, `KABELY_SLABOPROUD`, `POPISY_A_KOTY`) v reálných milimetrech 1:1!
+>
+> Po implementaci spusť `npm run verify`, přidej unit testy pro posouvání ortogonálních a šikmých úseků kabelů a DXF
+> generátor, uprav E2E testy, udělej commit a vypiš příkazy pro push a deploy na server.
+
+## Rozpad fáze 63
+
+1. Paleta půdorysu jako akordeon: záhlaví kategorie se šipkou ▾ / ▸ a počtem osazených prvků na aktivním podlaží,
+   „Sbalit vše“ / „Rozbalit vše“, režim „Rozbalit vždy jen jednu kategorii“, stav uložený v prohlížeči.
+2. Zařizovací předměty ve skutečných rozměrech (vana, sprchový kout, umyvadlo UMY 600 × 450, dvojumyvadlo DUM
+   1200 × 450): architektonická značka, žlutý roh a posuvné strany se živými kótami, otočení o 90° / 45°, přesné
+   rozměry v detailu, zóny 0–2 (0,6 m) a pás nad / pod umyvadlem se přepočítají; hlídač vzdáleností zásuvek
+   a spínačů od vany, sprchy a umyvadla.
+3. Knihovna samostatných spotřebičů: úprava vestavěných (název, zkratka, příkon, jistič, chránič, kabel, montážní
+   výška), vlastní spotřebiče se šablonami, uložení v prohlížeči i ve firmě (`RegisteredCompany.applianceLibraryJson`)
+   a kopie v nákresu; okruhy rozváděče podle zadání spotřebiče (chránič typ F jako samostatná skupina).
+4. Lišta výrobců: ABB s přepínačem rodin (domovní spínače a zásuvky / ABB-free@home / ABB i-bus KNX
+   & ABB-flexTronics), výrobci Loxone a TapHome s řadami a barvami, vložení prvků do půdorysu (sběrnicová úroveň),
+   akční členy na DIN lištu jako informace o výpočtu rozváděče, TapHome jako systém chytré domácnosti.
+5. Věrné náhledy řad v galerii i v liště (Levit, Zoni, Tango, Time, Time Arbo, Decento, Céliane, Nová Unica, Sedna,
+   Asfora …) a tlačítko „🌐 Prohlédnout řadu na webu výrobce ↗“.
+6. Ruční úprava tras: posun úseku kolmo k jeho směru (vodorovný v Y, svislý v X, šikmý kolmo ke stěně), sousední
+   úseky se natáhnou, dvojklik = odskok, pravé tlačítko / panel = reset na automat; délky kabelů z upravené trasy.
+   Polygonální místnosti se šikmými stěnami (přichytávání 0° / 45° / 90°, Shift = volný úhel), trasy podél stěn
+   v odsazení 200 mm s kolmou odbočkou k prvku, prvek u šikmé stěny natočený ke stěně.
+7. Zobrazení kabelů barevně / normové CAD značení (rysky počtu žil, čárkovaně ovládací a sběrnicové kabely, štítek
+   okruhu), export výkresu do PDF přes tiskový náhled (A3 / A4, razítko, legenda, tabulka okruhů) a do DXF
+   (`dxf-export.ts`, 8 hladin, mm 1 : 1; DWG uloží CAD program z DXF).
+
+---
+
 # 📄 DENIK-faze-49-54.md
 
 # Deník fází 49–54 (přesunuto z docs/PLAN.md 2026-11-06)
@@ -2378,29 +2541,31 @@ a postup nasazení jsou v `CLAUDE.md`. Soubor drž pod 150 řádky.
 | 60 | Kabeláž 2D půdorysu podél stěn: graf stěn z místností a nových příček (`src/engine/wall-routing.ts` – sloučení společných stěn sousedních místností, T-spoje, přemostění dveří a mezer do 0,7 m, kolmice od prvku ke stěně), trasy i délky okruhů po stěnách na každém podlaží (bez stěn pravoúhle); pořadí prvků okruhu je vždy optimální bez ohledu na pořadí kreslení (`src/engine/route-order.ts`: přesně do 11 prvků, jinak nejbližší soused + 2-opt, úspora proti pořadí kreslení ve výkazu); rozváděč z půdorysu podle hierarchie (hlavní vypínač → SPD / svorkovnice / chrániče → jejich jističe, řídicí obvody z vlastního jističe B6, strom zapojení uložen hned při generování), celý rozváděč od jednoho zvoleného výrobce (chybějící kus = odhad stejného výrobce s varováním, skříň téhož výrobce) a převod hotového rozváděče na jiného výrobce se zachováním hodnot, pozic, popisů a stromu (`transferManufacturer`, náhled změn s přesnými kusy / jinou šířkou / odhady) | ✅ |
 | 61 | Chytrá domácnost v 2D půdorysu: na sběrnicové úrovni volba systému a výrobce (ABB-free@home, ABB i-bus KNX, Loxone), svítidla spínaná / stmívaná / DALI s příkonem a druhem zátěže, výpočet spínacích, stmívacích, DALI, žaluziových a topných akčních členů s rezervou 20 % a nejmenší šířkou na liště (stmívané svítidlo nad výkon kanálu = paralelní kanály), napájecí zdroj, systémový modul, kontrola odběru sběrnice a přiřazení kanálů, moduly s objednacími čísly do generovaného rozváděče a tlačítková rozhraní free@home do kusovníku; designové řady podle Katalogu ABB 2026 (bez řady Element – staré nákresy přejdou na Time, solo a solo carat zvlášť, materiály, dvoubarevná provedení rámeček / kryt, objednací čísla rámečků Time / Swing / Swing L / Levit M a řad Busch-Jaeger), galerie řad a barev s náhledem spínače, zásuvky a víceramečku 3R; databáze prvků + 20 přístrojů ABB-free@home / ABB i-bus KNX / Loxone; normový hlídač půdorysu (vana a sprchový kout v paletě, zóny 0–2 koupelny, IP44 v koupelně a venku s opravou jedním klikem, AFDD v ložnicích) | ✅ |
 | 62 | 2D půdorys: kabeláž jde skrýt (přepínač „Kabeláž“ u plátna i v liště kroku, klávesa K), při párování vypínačů se světly je ve výchozím stavu skrytá; lišta probíhajícího kroku nad projektem (`ModeBar`, lepkavá pod hlavičkou) s názvem kroku, nápovědou a „Hotovo“ pro párování, vkládání, kreslení, zakreslení změn, ořez / kalibraci („Zrušit“) i úpravu vybraného prvku – v bočním panelu „Hotovo“ není, v kroku 1 Panel Builderu ukončuje úpravu přístroje lišta nad rozváděčem; sestavy ve víceramečku v panelu nad paletou (hotové: 2–4× jednozásuvka, 2–3× vypínač č. 1, vypínač + přepínač, vypínač + zásuvky, zásuvka + RJ45, sběrnicové tlačítko + zásuvky; vlastní sestava po pozicích do 5R) s náhledem u kurzoru a vložením jedním klikem přisazeným ke stěně, ▦+ a „Přidat do rámečku“ u vybraného přístroje; rámeček s dvojzásuvkou na začátku se při otáčení a posunu v rámečku už neposouvá, přístroj v rámečku jde přesně vybrat (klikací plocha jen na jeho pozici) | ✅ |
+| 63 | 2D půdorys: paleta jako akordeon (počty osazených prvků, sbalit / rozbalit vše, režim jedné kategorie); zařizovací předměty ve skutečném rozměru – vana, sprchový kout, umyvadlo UMY 600 × 450 a dvojumyvadlo DUM 1200 × 450 s architektonickou značkou, žlutým rohem a posuvnými stranami (živé kóty X × Y), otočením 90° / 45° a přesným rozměrem v detailu, zóny 0–2 a pás nad a pod umyvadlem se přepočítají, hlídač vzdálenosti zásuvek a spínačů od vany, sprchy a umyvadla; knihovna samostatných spotřebičů (název, zkratka, příkon, jistič 1P / 3P B / C, chránič A / F / B / RCBO, kabel, výška, vlastní spotřebiče ze šablon, prohlížeč + profil firmy, okruhy podle zadání); lišta výrobců s rodinami ABB (domovní přístroje / ABB-free@home / ABB i-bus KNX & ABB-flexTronics), Loxone a TapHome s výrobky k vložení a akčními členy na DIN lištu jako informací; věrné náhledy řad (Levit, Zoni, Tango, Time, Time Arbo, Decento, Céliane, Nová Unica, Sedna, Asfora …) a „🌐 Prohlédnout řadu na webu výrobce ↗“; ruční posun úseků tras (vodorovný jen v ose Y, svislý jen v ose X, šikmý kolmo ke stěně), odskok dvojklikem, reset pravým tlačítkem / v panelu, délky kabelů z upravené trasy; polygonální místnosti se šikmými stěnami (přichytávání 0° / 45° / 90°, Shift = volný úhel), trasy podél stěn v odsazení 200 mm s kolmou odbočkou; normové CAD značení kabelů (rysky žil, čárkovaně ovládání a sběrnice, štítek okruhu) a export výkresu do PDF (A3 / A4, razítko, legenda, tabulka okruhů) a DXF (8 hladin, mm 1 : 1) | 🟦 |
 
 Fáze 36–38 jsou nasazené 2026-11-02 (commit `e9bfd76`), oprava kmitání plátna „Celé“ (`bd37aeb`) také; fáze 39 nasazena 2026-11-02 (commit `3c99981`). Fáze 40 a 41 nasazeny 2026-11-03 (commit `2ad82e4`), fáze 42 nasazena 2026-11-03 (commit `41e823d`), fáze 43 nasazena 2026-11-03 (commit `cd0910a`), fáze 44 a 45 nasazeny 2026-11-04 (commit `6e697a3`). Fáze 46 a 47 nasazeny 2026-11-04 (commit `7568296`). Fáze 48 a 49 nasazeny 2026-11-05 (commit `f118289`). Fáze 62 nasazena 2026-11-07 (commit `34ce053`; bez migrací, build napoprvé bez chyb za 7 minut, odpojený příkaz se složenými závorkami vrátil SSH hned, úklid mezivrstev uvolnil 1,2 GB). Fáze 59–61 nasazeny 2026-11-07 (commit `b3be053`; bez migrací, build napoprvé bez chyb, 20 přístrojů chytré domácnosti z katalogu ABB 2026 doplnil při startu `db:panel-builder` – ověřeno čtecím dotazem, katalog má 2720 komponent; odpojený příkaz s `nohup` držel SSH spojení až do konce buildu → oprava složenými závorkami v CLAUDE.md, sekce 7). Fáze 58 nasazena 2026-11-06 (commit `ff85d1d`; první build na serveru spadl – statické právní stránky se při buildu ptaly databáze, v Dockeru prázdné → oprava `ff85d1d`; SSH spojení během buildu spadlo, build proto běží přes `nohup` s logem `/tmp/eldock-build.log`). Fáze 57 nasazena 2026-11-06 (commit `6853165`, migrace `environment_confirmed` – propuštěné projekty potvrzené z `releasedAt`, ostatní se potvrzují jedním klikem na stránce dokumentace). Fáze 56 nasazena 2026-11-06 (commit `debb728`, migrace `consent_newsletter`; v produkčním `.env` přepnut se souhlasem uživatele 2026-11-06 řádek `GEMINI_VISION_MODEL` na `gemini-3.1-pro-preview` (kontejner znovu vytvořen, `healthy`), `ELDOCK_SMTP_URL` chybí → potvrzení newsletteru jen v logu, `ELDOCK_GA4_ID` nenastaveno → bez lišty cookies). Fáze 50–55 nasazeny 2026-11-05 (commit `576a7a1`, migrace `supply_phases`; přesměrování `www` → 301 načteno do Caddy bez restartu přes `caddy reload` z kopie Caddyfile – viz CLAUDE.md, sekce 7).
 
 ## B. Otevřená fáze
 
-**Fáze 63 – zatím nezadaná** ⬜
+**Fáze 64 – zatím nezadaná** ⬜
 
-Zadání z chatu 2026-11-07 (`docs/archiv/ZADANI-faze-62.md`) je hotové ve fázi 62, předchozí (`docs/archiv/ZADANI-faze-59.md`) ve fázích 59–61. Další plánované fáze z analýzy webu (`docs/archiv/ZADANI-faze-54.md`): normový registr v Eldocku, Projekt elektroinstalace jako produkt. Katalog výrobců pokračuje v repozitáři `ai-panel-builder` (FAZE.md, fáze 41b).
+Zadání z chatu 2026-11-07 (`docs/archiv/ZADANI-faze-63.md`, v zadání označené jako „Fáze 55“) je hotové ve fázi 63, předchozí (`docs/archiv/ZADANI-faze-62.md`) ve fázi 62 a (`docs/archiv/ZADANI-faze-59.md`) ve fázích 59–61. Další plánované fáze z analýzy webu (`docs/archiv/ZADANI-faze-54.md`): normový registr v Eldocku, Projekt elektroinstalace jako produkt. Katalog výrobců pokračuje v repozitáři `ai-panel-builder` (FAZE.md, fáze 41b).
 
 Šablona pro nové zadání (vložte sem, nepřepisujte celý soubor):
 
 ```
-### Fáze 63 – <název>
+### Fáze 64 – <název>
 **Cíl:** <jedna věta>
 - [ ] <úkol>
 **Hotovo když:** <ověřitelná kritéria> · `npm run verify` OK
-**Commit:** `feat(faze63): <popis>`
+**Commit:** `feat(faze64): <popis>`
 ```
 
 ## C. Deník (jen poslední záznamy, starší jsou v archivu)
 
 | Fáze | Datum | Poznámky |
 |---|---|---|
+| 63 | 2026-11-07 | Zadání z chatu → `docs/archiv/ZADANI-faze-63.md` (v zadání „Fáze 55“ – číslo obsazené). **Model nákresu:** `EditorElement.rotation` libovolný úhel (předměty po 45°, prvek u šikmé stěny; `Rotation` zůstává jen u podkladu, `frameAxis` v ose stěny), `sizeMm` předmětu, `appliance` (vlastní spotřebič, skrytá položka palety `appliance`), `product` (výrobek z lišty výrobců), `EditorRoom.points` (mnohoúhelník, obálka dopočítaná), `FloorplanDraft.appliances` / `routeEdits` / `cableView`; otočení / ořez / kalibrace přenáší rohy i ruční trasy. **Paleta:** `PaletteAccordion` (stav v localStorage `eldock-floorplan-palette`, výchozí vše rozbalené – testy palety se nemění). **Předměty:** `fixtures.ts` (rozměr, natočení, místní souřadnice, `resizeFixture` drží protilehlou stranu), `FixtureShape` + `FixtureControls`; hlídač `basin-band` – odstup 0,2 m od hrany umyvadla je projekční zásada Eldocku (text normy ČSN 33 2130 ed. 4 neověřen – ve zdroji zjištění uvedeno „ověřte v projektu“). **Spotřebiče:** `appliances.ts` (vestavěné s jištěním jako výpočet bez úprav, upravené a vlastní → `FloorNode.appliance` – vlastní okruh, chránič F = nová skupina `F30` / `RcdGroup` typ F, RCBO jen 1f), knihovna v prohlížeči + `RegisteredCompany.applianceLibraryJson` (migrace `20261107150000_appliance_library`, akce `saveApplianceLibraryAction`, novější vyhrává), nákres knihovnu převezme při načtení a uložení. **Lišta výrobců:** `smart-catalog.ts` (rodiny ABB-free@home / KNX & flexTronics / Loxone / TapHome, výrobky = sběrnicové položky palety, bezdrátové a videotelefon `noBus`, DIN = ověřené moduly ze `smart-home.ts`), TapHome jako systém (zatím jen Core bez čísla – akční členy hlásí „doplňte ručně“). **Náhledy řad:** `mockStyle` v `SeriesGallery` (podložka Levit, plochý Zoni, vypouklé Tango s průzorem, kovová linka Time, kulaté Decento s páčkou, kruhový výřez Céliane …), odkazy `series-links.ts` ověřené vyhledáním – ABB nemá stránky jednotlivých řad, odkaz otevře Katalog ABB 2026 na straně řady (Zoni prospekt, free@home stránka systému, Legrand jen úvod legrand.cz). **Trasy:** `route-geometry.ts` (engine: čištění, `reanchor`), `route-edit.ts` (`dragSegment`, `insertJog`, `insetWallRoute`), `summarizeCabling({ routeEdits })` – délka z upravené čáry, pořadí z automatických tras; `route-display.ts` = společná geometrie plátna, tisku i DXF; `RouteLayer` (úchyty jen ve výběru bez vybrané místnosti – úchyty stěn mají přednost). **Šikmé stěny:** `room-geometry.ts`, nástroj „📐 Kreslit šikmou stěnu / polygonální místnost“ (Enter / klik na první roh, Backspace), posun rohů. **Export:** `cad-notation.ts`, `dxf-export.ts` (R12 AC1009, `\U+XXXX`, značky z `symbol-parts.ts` – přesunuto z `FloorSymbol.tsx`), PDF = tiskový list `FloorplanExport` přes portál a `window.print` (měřítko 1 : 20 … 1 : 500 podle velikosti). Testy: `phase63.test.ts` (21), E2E `phase63.spec.ts`; `smart-home.test.ts` počítá se 4 systémy. |
 | 62 | 2026-11-07 | Zadání z chatu → `docs/archiv/ZADANI-faze-62.md`. **Kabeláž:** stav vrstvy je v editoru, ne v nákresu (`showCables`, při párování vlastní `pairCables` – výchozí skrytá), trasy okruhů i sběrnicová linka se kreslí jen při zobrazené vrstvě, přepínač `toggle-cables` vpravo nahoře na plátně, při párování i `mode-toggle-cables` v lepkavé liště kroku (přepínač v rohu plátna po posunu stránky není vidět), klávesa K. **„Hotovo“ nad projektem:** `components/panel-builder/ModeBar.tsx` – lepkavá lišta pod hlavičkou Panel Builderu (výška hlavičky z `ResizeObserver`), tón kroku, název, nápověda (`role=status`), ovládání a „Hotovo“ (`mode-done`); v půdorysu jeden popis kroku `step` (párování s počtem ovládaných svítidel, zakreslení změn se stylem čáry, vkládání s natočením další značky, sestava, místnosti, ořez / kalibrace = „Zrušit“, úprava prvku / místnosti / poznámky / výběru), „Hotovo“ po vkládání zruší i výběr posledního vloženého prvku, Esc ve výběru zruší výběr; boční panel při párování jen poznámka `pairing-note` (banner s „Hotovo“ zrušen); krok 1 Panel Builderu: lišta `edit-bar` nad rozváděčem vykreslená vždy (bez výběru jen nápověda, při úpravě „Hotovo“ `edit-done`), ať se rozváděč po kliknutí na přístroj neposune; v konfigurátoru zůstal „Nový přístroj“. **Sestavy:** `floorplan-frames.ts` – `FRAME_ASSEMBLIES`, `assembliesFor(level)` (všichni členové v paletě úrovně), `frameableItems`, `assemblyError` / `assemblyLabel`, `assemblyLayout` (střed sestavy v místě kliknutí), `placeAssembly` (předem přidělená id – stejný výsledek i při dvojím volání updateru, pravidla `createFrame`), `addToFrame` (nový člen za poslední pozici, rámeček zůstane na místě); samostatný panel `FrameAssemblyPalette` nad paletou značek (ne v ní – „2× vypínač č. 1“ by se pletl s jednotlivou značkou, to odhalily E2E fází 49–59; hotové + vlastní po pozicích, změna vlastní sestavy během vkládání se hned projeví, rozbalení panelu si pamatuje prohlížeč), nástroj `place-set` s náhledem `place-set-ghost`, `AddToFrameControl` v detailu přístroje, ▦+ v liště značky. Opravy: `layoutFrame` drží střed kotvy (dvojzásuvka na začátku rámečku se při každém přepočtu posunula o půl pozice), `moveInFrame` drží začátek rámečku; přístroj ve víceramečku má klikací plochu jen na své pozici (`FloorSymbol` `hitSlot` – obdélník v rozteči rámečku, kresba a zvýraznění kandidátů párování kliky nezachytávají) – dřív kruh 0,75 značky překrýval souseda v rozteči 0,78 značky a klik kousek vpravo od středu vybral sousední přístroj. E2E infrastruktura: smyčku obnovování dev serveru (fáze 60–62) způsoboval vestavěný MCP server Next.js (log prohlížeče v `.next-e2e/dev/logs`) – pro E2E vypnutý v `next.config.ts`. Testy: `phase62.test.ts` (6), E2E `phase62.spec.ts`, `phase59.spec.ts` upraven na lištu kroku. |
 | 61 | 2026-11-06 | **Chytrá domácnost:** `lib/panel-builder/smart-home.ts` – `SMART_SYSTEMS` (ABB-free@home podle Katalogu ABB 2026 str. 271–277: SysAP 3.0, zdroj PS-M-64.1.1, spínací SA-M-4/8/12.16.2.2, stmívací DA/M.4/6.210.2.1, DALI DG-M-1.16.1, žaluziové BA-M-4/8.230.1.1, topení HA-M-0.6/0.12.1; ABB i-bus KNX: zdroj SV/S 30.640.5.1, IP rozhraní IPS/S 3.5.1 (objednací číslo ověřit), SA/S, stmívač UD/S 4.210.2.1, DALI brána DG/S 1.64.1.1, JRA/S, ES/S; Loxone: Miniserver, Relay / Dimmer / Tree Extension, zdroj 24 V DC), `chooseModules` (dynamické programování – nejmenší šířka na liště, při shodě nejméně kusů), `planSmartHome` (rezerva 20 %, aspoň 1 volný kanál od druhu, stmívané svítidlo nad výkon kanálu = paralelní kanály s varováním, účastníci DALI na brány, Loxone nejdřív výstupy Miniserveru, zdroje podle linií a odběru, limit systému, přiřazení kanálů po místnostech). Zátěže z nákresu `smartLoadsOf` (`smart-home-plan.ts`, všechna podlaží: světlo → spínání / stmívání / DALI podle `EditorElement.light`, žaluziové tlačítko → žaluziový kanál, prostorová jednotka → topná zóna místnosti), systém v nákresu `FloorplanDraft.smartSystem` (výchozí ABB-free@home). Panel `SmartHomePanel` (systém s logem, potřebné / dostupné kanály, akční členy s objednacím číslem a šířkou, sběrnice, varování, přiřazení kanálů) a detail svítidla `light-spec` (stmívané, příkon, druh zátěže) na sběrnicové úrovni. Generátor: `buildSwitchboardFromCircuits({ smart })` vloží akční členy a zdroj na lištu (nástěnný SysAP jen do kusovníku), `PanelDevice.article` → `componentForArticle` (přesný kus podle objednacího čísla, i pod jiným zápisem typu v databázi; chybí-li, založí se s odhadem dle IEC), varování výpočtu do výsledku generování, systémové prvky zůstanou u svého výrobce i v rozváděči jiného výrobce a převod rozváděče (`transferManufacturer`) je nechá beze změny – i sběrnicové zdroje free@home / KNX s podtypem „zdroj DC“ (`isSmartArticle` podle objednacích čísel `SMART_SYSTEMS`). Kusovník: tlačítková rozhraní free@home (2CKA006220A0117 / A0118, termostat A0122). **Katalog ABB 2026:** „Katalog: Domovní elektroinstalační materiál 2026“ (únor 2026, 680 stran; dokument 20641 na webu ABB dřív obsahoval vydání 2024) – ověřeny řady a kódy barev; řada Element ve vydání 2026 není (staré nákresy → Time přes `SERIES_ALIASES`), solo a solo carat zvlášť, Swing L dvoubarevné, Decento 4 provedení, future linear / solo / solo carat / Busch-axcent s objednacími čísly rámečků 1R–5R pro každou barvu (`frameMpn`), `frame` / `insert` / `material` pro náhled, `tagline` a strana katalogu; rámečky Time (3901F), Swing (3901G), Swing L (3901J) a Levit M (= Levit) v kusovníku. **Galerie:** `SeriesGallery` (dialog z horní lišty: výrobce → řada s náhledem → velký náhled spínače, zásuvky a víceramečku 3R v barvě řady, povrch lesk / kov / dřevo / sklo / kámen / papír / porcelán / softtouch, dvoubarevné provedení, kód barvy a čísla rámečků), `DeviceMockup` i v horní liště místo starého náhledu, dvoubarevné vzorky barev. **Databáze prvků:** `prisma/seed-abb-2026.ts` – 20 přístrojů (16 ABB-free@home, 3 ABB i-bus KNX, Loxone Dimmer Extension) přírůstkově přes `db:panel-builder`. **Normový hlídač:** `floorplan-norms.ts` – paleta Zařizovací předměty (vana 1700 × 750 mm, sprchový kout 900 × 900 mm ve skutečné velikosti, otáčení), zásuvka nebo spínač blíž než 0,6 m od vany / sprchy = chyba zóny 0–2 (ČSN 33 2000-7-701 ed. 2), koupelna bez zařizovacího předmětu = výzva, zásuvky v koupelně a venku bez IP44 s opravou jedním klikem (`applyNormFix`; dvojzásuvku IP44 paleta nemá), AFDD v ložnicích (ČSN 33 2000-4-42, doporučení); vše v „Kontrola půdorysu a norem“ se zdrojem normy. Ověřeno: `phase61.test.ts` (6), `smart-home.test.ts` (4), server `phase61.test.ts` (2: KNX v rozváděči Eaton, free@home s převodem na Eaton), E2E `phase61.spec.ts` (snímky `test-results/phase61-*.png`) + regrese 51 / 55 / 59. |
 | 60 | 2026-11-06 | **Trasy podél stěn:** `wallSegments(rooms, partitions)` (hrany místností + nové příčky z úpravy PDF), `buildWallGraph` (sloučení kolineárních úseků – společná stěna dvou místností je jedna hrana, dělení v průsečících a T-spojích, přemostění oddělených částí do 0,7 m = dveře), `wallMetric` (prvek se připojí kolmicí na nejbližší stěnu, dál Dijkstra po grafu, mezivýsledky v cache); `floorMetric` dostává pro každé podlaží vlastní metriku stěn, bez místností zůstává `MANHATTAN`. Výkaz ukazuje „Trasy vedou podél stěn …“ / „Trasy zatím pravoúhle …“ (`cable-walls`). **Pořadí okruhu:** `optimalOrder` (Held–Karp přesně do 11 prvků, jinak nejbližší soused + 2-opt + přesuny) nad sdílenou maticí vzdáleností `distanceMatrix`; souhrn řadí prvky okruhu podle pořadí kreslení jen kvůli výpočtu úspory `orderSavingMm` / `orderSavingM` – výsledná trasa na pořadí kreslení nezávisí (test: 2 pořadí kreslení = stejná délka). **Hierarchie:** `PanelDevice.key` / `parentKey` – hlavní vypínač (kořen) → SPD, svorkovnice, chrániče (`rcd:<označení>`) → jejich jističe; řídicí obvody (impulzní relé, zdroj, Loxone) z vlastního jističe „Ovládání a řídicí obvody“ B6, elektroměr pod hlavním vypínačem; `createPlanProject` uloží strom přes `saveTree` (stav TREE_BUILT) a fáze přístrojů z `phaseAssignmentOf`. **Jeden výrobce:** výběr výrobce u generování (`floorplan-manufacturer`, `getBoardManufacturers` – výrobci s jističi i chrániči v databázi, ABB první), konfigurace všech přístrojů kromě systémových (`isSystemDevice`: PLC, akční členy, zdroj sběrnice) dostane zvoleného výrobce, chybějící kus = odhad téhož výrobce a varování „… v databázi prvků nemá“, skříň přednostně od téhož výrobce, `dominantManufacturer`. **Převod:** `planTransfer` (přesný kus / jiná šířka / odhad / beze změny), `reflowRails` (lišty se přeskládají, když se změní šířky), `transferManufacturer(projectId, výrobce, { apply })` – náhled a provedení v jedné transakci, zachová označení, popisy, fáze a strom; dialog `ManufacturerTransfer` v liště prostředí kroku 1. Ověřeno: `wall-routing.test.ts` (3), `route-order.test.ts` (2), `manufacturer-transfer.test.ts` (2), `phase60.test.ts` (3), server `phase60.test.ts` (3: strom ABB, jen Eaton, převod), E2E `phase60.spec.ts` + regrese 49 / 59; `phase48.test.ts` čeká stav TREE_BUILT. |

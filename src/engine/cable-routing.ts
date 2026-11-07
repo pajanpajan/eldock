@@ -3,6 +3,7 @@
 // rozpis metráže podle typu kabelu a úbytek napětí na nejdelší větvi. Čisté funkce bez UI.
 
 import { optimalOrder, pathCost } from "./route-order";
+import { polylineLength, reanchor } from "./route-geometry";
 import {
   DEFAULT_ELEVATION,
   VOLTAGE_DROP_LIMIT,
@@ -40,6 +41,8 @@ export interface RouteSegment {
   wall: boolean;
   /** Fáze 59: lomená čára trasy pro výkres (body s podlažím) – doplní `summarizeCabling` pro zvolený režim. */
   points?: RoutePoint[];
+  /** Fáze 63: úsek s ručně upravenou trasou (délka z upravené lomené čáry). */
+  edited?: boolean;
 }
 
 /**
@@ -262,6 +265,11 @@ export interface CablingInput {
    * přes všechny prvky (KNX linie / Loxone Tree) místo svodů ze svítidel; žaluzie pak napájí aktor v rozváděči.
    */
   busNodeIds?: readonly string[];
+  /**
+   * Fáze 63: ručně upravené trasy úseků – klíč „od>do“ (rozváděč = `panel`), lomená čára v mm půdorysu. Pořadí prvků
+   * se počítá z automatických tras (ruční úprava ho nepřehází), délka úseku se vezme z upravené čáry.
+   */
+  routeEdits?: Readonly<Record<string, readonly { x: number; y: number }[]>>;
 }
 
 /** Hvězdicová topologie: každý prvek samostatným kabelem do rozváděče, trasy sečtené do jedné. */
@@ -288,7 +296,8 @@ function withPaths(route: CircuitRoute, byId: ReadonlyMap<string, RouteNode>, pa
     if (!to) return segment;
     const from = segment.from === "panel" ? panel : (byId.get(segment.from) ?? last);
     last = to;
-    return { ...segment, points: metric.path(from, to) };
+    // Fáze 63: ručně upravený úsek už lomenou čáru má
+    return segment.points ? segment : { ...segment, points: metric.path(from, to) };
   });
   return { ...route, segments };
 }
@@ -305,6 +314,34 @@ export function summarizeCabling(input: CablingInput): CableSummary {
   const add = (cable: string, mm: number) => byCable.set(cable, (byCable.get(cable) ?? 0) + mm);
   const warnings: string[] = [];
   const slack = 1 + profile.slackPercent / 100;
+  // Fáze 63: ruční úpravy tras – přichycené k aktuální poloze prvků, jen v rámci jednoho podlaží
+  const edits = input.routeEdits ?? {};
+  const editedPath = (segment: RouteSegment): RoutePoint[] | null => {
+    const stored = edits[`${segment.from}>${segment.to}`];
+    if (!stored || stored.length < 2) return null;
+    const to = byId.get(segment.to);
+    const from = segment.from === "panel" ? input.panel : byId.get(segment.from);
+    if (!to || !from || (from.floor ?? "") !== (to.floor ?? "")) return null;
+    return reanchor(stored, from, to).map((point) => ({ x: point.x, y: point.y, floor: from.floor }));
+  };
+  const applyEdits = (route: CircuitRoute): CircuitRoute => {
+    let delta = 0;
+    let changed = false;
+    const segments = route.segments.map((segment) => {
+      const path = editedPath(segment);
+      if (!path) return segment;
+      changed = true;
+      const horizontalMm = Math.round(polylineLength(path));
+      delta += horizontalMm - segment.horizontalMm;
+      return { ...segment, horizontalMm, points: path, edited: true };
+    });
+    if (!changed) return route;
+    return { ...route, segments, rawMm: route.rawMm + delta, totalMm: Math.round(route.totalMm + delta * slack), longestMm: Math.round(route.longestMm + delta * slack) };
+  };
+  const withEdits = (routes: Record<CableRoutingMode, CircuitRoute>) => {
+    for (const mode of ["BOTTOM", "TOP", "OPTIMIZED"] as const) routes[mode] = applyEdits(routes[mode]);
+    return routes;
+  };
 
   const circuits: CircuitCabling[] = input.circuits
     .map((circuit): CircuitCabling | null => {
@@ -314,7 +351,7 @@ export function summarizeCabling(input: CablingInput): CableSummary {
         .sort((a, b) => (drawn.get(a.id) ?? 0) - (drawn.get(b.id) ?? 0));
       if (!nodes.length) return null;
       const star = input.installation === "bus_loxone" && circuit.kind === "lighting";
-      const routes = star ? starRoutes(nodes, input.panel, profile, metric) : circuitRoutes(nodes, input.panel, profile, metric);
+      const routes = withEdits(star ? starRoutes(nodes, input.panel, profile, metric) : circuitRoutes(nodes, input.panel, profile, metric));
       for (const mode of ["BOTTOM", "TOP", "OPTIMIZED"] as const) totals[mode] += routes[mode].totalMm;
       const route = withPaths(routes[input.selected], byId, input.panel, metric);
       const cable = star ? STAR_LIGHT_CABLE : cableLabel(circuit.cable);
@@ -345,7 +382,7 @@ export function summarizeCabling(input: CablingInput): CableSummary {
   if (busLine) {
     const busNodes = (input.busNodeIds ?? []).map((id) => byId.get(id)).filter((node): node is RouteNode => Boolean(node));
     if (busNodes.length) {
-      const routes = circuitRoutes(busNodes, input.panel, profile, metric);
+      const routes = withEdits(circuitRoutes(busNodes, input.panel, profile, metric));
       for (const mode of ["BOTTOM", "TOP", "OPTIMIZED"] as const) totals[mode] += routes[mode].totalMm;
       busRoute = withPaths(routes[input.selected], byId, input.panel, metric);
       add(BUS_LEG_CABLE, busRoute.totalMm);

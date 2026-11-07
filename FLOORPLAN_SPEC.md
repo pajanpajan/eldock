@@ -163,3 +163,20 @@ Výsledek vzorového domu z testu (klasická instalace):
 - **Synergie:** FVE + TČ → SG Ready relé; EV + (FVE nebo TČ) → elektroměr pro DLM; `centralStop` → tlačítko TOTAL STOP.
 - **Stavební detaily** (`constructionDetails` v `environments.ts`): dřevostavba / venkovní prostupy → membránové krabice,
   ROFLEX, Kopos KEZ_KB a zemnič V4A do kusovníku.
+
+## Spotřebiče, ruční trasy a šikmé stěny (fáze 63)
+
+- **Samostatný spotřebič podle zadání** – `FloorNode.appliance` (`ApplianceOverride`: název, příkon, póly 1 / 3, jistič
+  B / C 6–32 A, chránič A / F / B / RCBO, výchozí průřez, soudobost) má přednost před štítkem `tag`: vlastní okruh
+  `dedicated` (1f) / `cooktop` (3f) / `three_phase_rcd_b` (3f + typ B), chránič A = společná skupina `A30`, F = vlastní
+  skupina `F30` (`RcdGroup` typ F), B = `B30`, RCBO jen 1f (`own`). Průřez dál hlídá `sized` (úbytek, koordinace,
+  smyčka). Vestavěný spotřebič bez úprav počítá engine jako dřív (práh 2 000 W, lednice RCBO, EV / TČ / FVE typ B).
+- **Označení jističů** – `circuitDesignations(circuits)` čísluje jističe stejně jako `buildSwitchboardFromCircuits`
+  (pod chrániči v pořadí skupin, pak vlastní ochrana; RCBO řada -FA) – štítky tras „Okr. -F4 · CYKY-J 3×2,5 · 14,2 m“.
+- **Ruční úprava trasy** – `summarizeCabling({ routeEdits })`: klíč úseku „od>do“ (rozváděč = `panel`), lomená čára
+  se přichytí k aktuálním koncovým bodům (`reanchor`, `src/engine/route-geometry.ts`), vodorovná délka úseku = délka
+  upravené čáry ve všech třech režimech (rozdíl × rezerva do `totalMm` / `longestMm`). Pořadí prvků okruhu se počítá
+  z automatických tras – ruční objížďka ho nepřehází. Úsek přes stoupací vedení (dvě podlaží) ruční úpravu nemá.
+- **Šikmé stěny** – `wallSegments` bere u místnosti s `points` hrany mnohoúhelníku; graf stěn (`buildWallGraph`)
+  obecné úsečky dělí v průsečících a T-spojích stejně jako vodorovné / svislé, kolmice k prvku je kolmý průmět na
+  šikmou stěnu. Ve volném prostoru zůstává pravoúhlé měřidlo `MANHATTAN`.

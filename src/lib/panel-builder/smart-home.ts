@@ -9,7 +9,7 @@
 
 import type { LightLoad, LightSpec } from "./floorplan-editor";
 
-export type SmartSystemId = "abb_freeathome" | "abb_knx" | "loxone";
+export type SmartSystemId = "abb_freeathome" | "abb_knx" | "loxone" | "taphome";
 export type SmartRole = "switch" | "dim" | "dali" | "blind" | "heating" | "psu" | "interface" | "system";
 
 export interface SmartModule {
@@ -120,6 +120,19 @@ export const SMART_SYSTEMS: SmartSystem[] = [
       { id: "lox-tree", role: "interface", label: "Tree Extension (2 větve Tree, 50 prvků na větev)", typeCode: "Tree Extension", articleNumber: "100218", verified: true, channels: 100, modules: 2, source: "databáze prvků Eldocku (Loxone)" },
       { id: "lox-psu", role: "psu", label: "Napájecí zdroj 24 V DC pro Miniserver a Tree", typeCode: "24 V DC / 2,5 A", articleNumber: null, verified: false, channels: 0, modules: 3, busMa: 2500, source: "obecný zdroj 24 V DC" },
     ],
+  },
+  {
+    // Fáze 63: TapHome – v databázi zatím jen řídicí jednotka Core (akční členy doplní projektant podle nabídky TapHome)
+    id: "taphome",
+    label: "TapHome (Core + sběrnice)",
+    manufacturer: "TapHome",
+    description: "Řídicí jednotka Core, tlačítka 2T / 4T / 6T a UI termostat na sběrnici; akční členy zatím nejsou v databázi prvků – doplňte je podle nabídky TapHome.",
+    maxDevices: 999,
+    deviceMa: 0,
+    devicesPerLine: 999,
+    maxLineM: 500,
+    reserve: 0.2,
+    modules: [{ id: "tap-core", role: "system", label: "Řídicí jednotka TapHome Core", typeCode: "Core", articleNumber: null, verified: false, channels: 0, modules: 0, source: "TapHome (objednací číslo ověřte u výrobce)" }],
   },
 ];
 

@@ -61,6 +61,16 @@ export function backgroundTransform(background: FloorplanBackground, mmPerPx: nu
 
 const rotatePoint = (x: number, y: number, heightMm: number) => ({ x: heightMm - y, y: x });
 const rotateRect = (rect: { x: number; y: number; w: number; h: number }, heightMm: number) => ({ x: heightMm - (rect.y + rect.h), y: rect.x, w: rect.h, h: rect.w });
+/** Fáze 63: místnost (i mnohoúhelník) a ruční trasy se otáčejí / posouvají s podkladem. */
+const mapRoom = (room: EditorRoom, map: (x: number, y: number) => { x: number; y: number }, rect: (room: EditorRoom) => { x: number; y: number; w: number; h: number }): EditorRoom => {
+  if (!room.points?.length) return { ...room, ...rect(room) };
+  const points = room.points.map((point) => map(point.x, point.y));
+  const xs = points.map((point) => point.x);
+  const ys = points.map((point) => point.y);
+  return { ...room, points, x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
+};
+const mapEdits = (edits: FloorplanDraft["routeEdits"] | undefined, map: (x: number, y: number) => { x: number; y: number }) =>
+  Object.fromEntries(Object.entries(edits ?? {}).map(([key, points]) => [key, points.map((point) => map(point.x, point.y))]));
 
 /** Otočení celého nákresu o 90° po směru (podklad, ořez, místnosti i značky); proti směru = 3× po směru. */
 export function rotateDraft(draft: FloorplanDraft, direction: 1 | -1 = 1): FloorplanDraft {
@@ -83,8 +93,9 @@ function rotateClockwise(draft: FloorplanDraft): FloorplanDraft {
     background: rotated,
     widthMm: draft.heightMm,
     heightMm: draft.widthMm,
-    rooms: draft.rooms.map((room) => ({ ...room, ...rotateRect(room, heightMm) })),
-    elements: draft.elements.map((element) => ({ ...element, ...rotatePoint(element.x, element.y, heightMm), rotation: (((element.rotation + 90) % 360) as Rotation) })),
+    rooms: draft.rooms.map((room) => mapRoom(room, (x, y) => rotatePoint(x, y, heightMm), (rect) => rotateRect(rect, heightMm))),
+    elements: draft.elements.map((element) => ({ ...element, ...rotatePoint(element.x, element.y, heightMm), rotation: (element.rotation + 90) % 360 })),
+    routeEdits: mapEdits(draft.routeEdits, (x, y) => rotatePoint(x, y, heightMm)),
     // Fáze 59: zakreslené změny se otáčejí s podkladem (text zůstává vodorovně čitelný)
     annotations: (draft.annotations ?? []).map((note): Annotation => {
       const a = rotatePoint(note.x, note.y, heightMm);
@@ -108,6 +119,12 @@ export function cropImpact(draft: Pick<FloorplanDraft, "elements" | "rooms"> & P
 const keepsNote = (note: Annotation, rect: { x: number; y: number; w: number; h: number }) => inside(rect, note.x, note.y) || inside(rect, note.x2, note.y2);
 
 function clipRoom(room: EditorRoom, rect: { x: number; y: number; w: number; h: number }): EditorRoom | null {
+  // Fáze 63: mnohoúhelník se neořezává – zůstane celý, pokud jeho obálka do výřezu zasahuje aspoň 0,5 × 0,5 m
+  if (room.points?.length) {
+    const w = Math.min(room.x + room.w, rect.x + rect.w) - Math.max(room.x, rect.x);
+    const h = Math.min(room.y + room.h, rect.y + rect.h) - Math.max(room.y, rect.y);
+    return w >= 500 && h >= 500 ? room : null;
+  }
   const x = Math.max(room.x, rect.x);
   const y = Math.max(room.y, rect.y);
   const w = Math.min(room.x + room.w, rect.x + rect.w) - x;
@@ -140,7 +157,11 @@ export function cropDraft(draft: FloorplanDraft, rectMm: { x: number; y: number;
     background: { ...background, crop },
     widthMm: Math.round(w),
     heightMm: Math.round(h),
-    rooms: draft.rooms.map((room) => clipRoom(room, clip)).filter((room): room is EditorRoom => room !== null).map((room) => ({ ...room, x: room.x - x, y: room.y - y })),
+    rooms: draft.rooms
+      .map((room) => clipRoom(room, clip))
+      .filter((room): room is EditorRoom => room !== null)
+      .map((room) => mapRoom(room, (px, py) => ({ x: px - x, y: py - y }), (rect) => ({ x: rect.x - x, y: rect.y - y, w: rect.w, h: rect.h }))),
+    routeEdits: mapEdits(draft.routeEdits, (px, py) => ({ x: px - x, y: py - y })),
     elements: kept.map((element): EditorElement => ({ ...element, x: element.x - x, y: element.y - y, controls: element.controls.filter((id) => keptIds.has(id) || elsewhere.has(id)) })),
     frames: (draft.frames ?? []).map((frame) => ({ ...frame, members: frame.members.filter((id) => keptIds.has(id)) })).filter((frame) => frame.members.length >= 2),
     annotations: (draft.annotations ?? []).filter((note) => keepsNote(note, clip)).map((note) => ({ ...note, x: note.x - x, y: note.y - y, x2: note.x2 - x, y2: note.y2 - y })),
@@ -158,9 +179,10 @@ export function resetCrop(draft: FloorplanDraft): FloorplanDraft {
     ...draft,
     background: next,
     ...planExtent(next, draft.mmPerPx),
-    rooms: draft.rooms.map((room) => ({ ...room, x: Math.round(room.x + dx), y: Math.round(room.y + dy) })),
+    rooms: draft.rooms.map((room) => mapRoom(room, (x, y) => ({ x: Math.round(x + dx), y: Math.round(y + dy) }), (rect) => ({ x: Math.round(rect.x + dx), y: Math.round(rect.y + dy), w: rect.w, h: rect.h }))),
     elements: draft.elements.map((element) => ({ ...element, x: Math.round(element.x + dx), y: Math.round(element.y + dy) })),
     annotations: (draft.annotations ?? []).map((note) => ({ ...note, x: Math.round(note.x + dx), y: Math.round(note.y + dy), x2: Math.round(note.x2 + dx), y2: Math.round(note.y2 + dy) })),
+    routeEdits: mapEdits(draft.routeEdits, (x, y) => ({ x: Math.round(x + dx), y: Math.round(y + dy) })),
   };
 }
 

@@ -766,6 +766,8 @@ model RegisteredCompany {
   stampUrl            String?
   /** Rychlé štítky funkce obvodu se Smart Presety (fáze 45), JSON { chips, updatedAt }. */
   circuitChipsJson    String?
+  /// Knihovna samostatných spotřebičů 2D půdorysu (fáze 63), JSON { specs, updatedAt } – vyhrává novější.
+  applianceLibraryJson String?
   createdAt           DateTime     @default(now())
   updatedAt           DateTime     @updatedAt
 

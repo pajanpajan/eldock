@@ -32,14 +32,21 @@ export const BRIDGE_MM = 700;
 
 const dist = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
 
-/** Stěny místností (4 hrany obdélníku) a nové příčky jako úsečky. */
-export function wallSegments(rooms: readonly { x: number; y: number; w: number; h: number }[], partitions: readonly WallSegment[] = []): WallSegment[] {
-  const edges = rooms.flatMap((room) => [
-    { x1: room.x, y1: room.y, x2: room.x + room.w, y2: room.y },
-    { x1: room.x + room.w, y1: room.y, x2: room.x + room.w, y2: room.y + room.h },
-    { x1: room.x, y1: room.y + room.h, x2: room.x + room.w, y2: room.y + room.h },
-    { x1: room.x, y1: room.y, x2: room.x, y2: room.y + room.h },
-  ]);
+/** Stěny místností (4 hrany obdélníku, fáze 63: hrany mnohoúhelníku se šikmými stěnami) a nové příčky jako úsečky. */
+export function wallSegments(rooms: readonly { x: number; y: number; w: number; h: number; points?: readonly Point[] | null }[], partitions: readonly WallSegment[] = []): WallSegment[] {
+  const edges = rooms.flatMap((room) =>
+    room.points && room.points.length >= 3
+      ? room.points.map((point, index) => {
+          const next = room.points![(index + 1) % room.points!.length];
+          return { x1: point.x, y1: point.y, x2: next.x, y2: next.y };
+        })
+      : [
+          { x1: room.x, y1: room.y, x2: room.x + room.w, y2: room.y },
+          { x1: room.x + room.w, y1: room.y, x2: room.x + room.w, y2: room.y + room.h },
+          { x1: room.x, y1: room.y + room.h, x2: room.x + room.w, y2: room.y + room.h },
+          { x1: room.x, y1: room.y, x2: room.x, y2: room.y + room.h },
+        ],
+  );
   return [...edges, ...partitions].filter((segment) => Math.hypot(segment.x2 - segment.x1, segment.y2 - segment.y1) > EPS);
 }
 

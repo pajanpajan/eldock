@@ -13,8 +13,9 @@ import { addItemWiring, searchWiringDevices, setItemWiringQuantity, setProjectFa
 import { readStoredFile } from "@/server/storage";
 import { saveRoutineTest, setStandardEdition } from "@/server/services/panel-design";
 import { ROUTINE_TEST_POINTS } from "@/lib/legislation-2027";
-import { listEnclosures, moveRail, placeComponents, previewConfig, saveCircuitChips, selectEnclosure, setCompanyBranding, setEnvironment, setRailCapacity, type ConfigPreview } from "@/server/services/panel-design";
+import { listEnclosures, moveRail, placeComponents, previewConfig, saveApplianceLibrary, saveCircuitChips, selectEnclosure, setCompanyBranding, setEnvironment, setRailCapacity, type ConfigPreview } from "@/server/services/panel-design";
 import { MAX_CHIPS, type ChipSet } from "@/lib/panel-builder/circuit-chips";
+import { MAX_APPLIANCES, parseApplianceList } from "@/lib/panel-builder/appliances";
 
 import type { ActionResult } from "./workflow";
 
@@ -186,6 +187,21 @@ const chipSchema = z.object({
     )
     .max(MAX_CHIPS),
 });
+
+const applianceSchema = z.object({ specs: z.array(z.unknown()).max(MAX_APPLIANCES), updatedAt: z.number().int().nonnegative() });
+
+/** Fáze 63: knihovna samostatných spotřebičů 2D půdorysu – synchronizace z prohlížeče do firmy (novější vyhrává). */
+export async function saveApplianceLibraryAction(input: z.input<typeof applianceSchema>): Promise<ActionResult<{ saved: boolean }>> {
+  const parsed = applianceSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Neplatná knihovna spotřebičů." };
+  try {
+    const company = await guardCompany();
+    const result = await saveApplianceLibrary(prisma, company.id, { specs: parseApplianceList(parsed.data.specs), updatedAt: parsed.data.updatedAt });
+    return { ok: true, data: { saved: result.saved } };
+  } catch (error) {
+    return actionFailure(error, "Knihovnu spotřebičů se nepodařilo uložit.");
+  }
+}
 
 /** Štítky funkce obvodu – synchronizace z prohlížeče do firmy (novější vyhrává). */
 export async function saveCircuitChipsAction(input: z.input<typeof chipSchema>): Promise<ActionResult<{ saved: boolean; set: ChipSet }>> {

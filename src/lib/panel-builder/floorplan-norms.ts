@@ -2,14 +2,19 @@
 // jedním klikem, kde to jde. Koupelnové zóny dle ČSN 33 2000-7-701 ed. 2 (zásuvky a spínače mimo zóny 0–2, tj. dál
 // než 0,6 m od vany / sprchy), krytí IP44 v koupelně a venku, doporučení ochrany před obloukovou poruchou (AFDD)
 // v ložnicích a dětských pokojích dle ČSN 33 2000-4-42 (čl. 421.7). Čisté funkce.
+// Fáze 63: zóny podle skutečného rozměru a natočení předmětu (`fixtures.ts`), umyvadla – zásuvky a spínače mimo svislý
+// pás nad a pod umyvadlem (ČSN 33 2130 ed. 4), vzdálenost od hrany vany / sprchy / umyvadla v textu zjištění.
 
+import { BASIN_MARGIN_MM, ZONE2_MM, distanceToFixture, fixtureGeometry, inBasinBand, type FixtureGeometry } from "./fixtures";
 import { floorsOf, paletteItem, type EditorElement, type FloorplanDraft } from "./floorplan-editor";
+
+export { ZONE2_MM };
 
 export type NormLevel = "error" | "warning" | "info";
 
 export interface NormIssue {
   id: string;
-  rule: "bath-zone" | "wet-room-ip" | "outdoor-ip" | "afdd" | "fixture-missing";
+  rule: "bath-zone" | "basin-band" | "wet-room-ip" | "outdoor-ip" | "afdd" | "fixture-missing";
   level: NormLevel;
   text: string;
   source: string;
@@ -19,27 +24,7 @@ export interface NormIssue {
   fix?: { label: string; replace: { from: string; to: string }[] };
 }
 
-/** Zařizovací předměty pro koupelnové zóny (vana, sprchový kout) – obdélník ve skutečných mm. */
-export const FIXTURE_SIZE: Record<string, { w: number; h: number; label: string }> = {
-  bath: { w: 1700, h: 750, label: "Vana" },
-  shower: { w: 900, h: 900, label: "Sprchový kout" },
-};
-
-/** Zóna 2 koupelny sahá 0,6 m od hrany vany / sprchového koutu (ČSN 33 2000-7-701 ed. 2). */
-export const ZONE2_MM = 600;
-
-/** Obdélník zařizovacího předmětu (natočení 90° / 270° prohodí šířku a hloubku). */
-export function fixtureRect(element: Pick<EditorElement, "item" | "x" | "y" | "rotation">) {
-  const size = FIXTURE_SIZE[element.item];
-  if (!size) return null;
-  const turned = element.rotation === 90 || element.rotation === 270;
-  const w = turned ? size.h : size.w;
-  const h = turned ? size.w : size.h;
-  return { x: element.x - w / 2, y: element.y - h / 2, w, h };
-}
-
-/** Vodorovná vzdálenost bodu od obdélníku (0 = uvnitř). */
-const distanceToRect = (rect: { x: number; y: number; w: number; h: number }, x: number, y: number) => Math.hypot(Math.max(rect.x - x, 0, x - (rect.x + rect.w)), Math.max(rect.y - y, 0, y - (rect.y + rect.h)));
+const cm = (mm: number) => `${Math.round(mm / 10)} cm`;
 
 const WET = /koupel|sprch|wellness|sauna/i;
 const OUTDOOR = /terasa|venk|zahrad|balkon|lodžie|lodzie|garáž venku|dvůr/i;
@@ -61,23 +46,41 @@ const ipFix = (elements: EditorElement[]): Pick<NormIssue, "fix"> => {
 export function floorplanNorms(draft: FloorplanDraft): NormIssue[] {
   const issues: NormIssue[] = [];
   for (const floor of floorsOf(draft)) {
-    const fixtures = floor.elements.map((element) => ({ element, rect: fixtureRect(element) })).filter((entry): entry is { element: EditorElement; rect: NonNullable<ReturnType<typeof fixtureRect>> } => entry.rect !== null);
-    // Zóny 0–2: zásuvka ani spínač blíž než 0,6 m od vany / sprchy (ve stejné místnosti)
-    const inZone = floor.elements.filter((element) => (isSocket(element) || isSwitch(element)) && fixtures.some((fixture) => fixture.element.room === element.room && distanceToRect(fixture.rect, element.x, element.y) < ZONE2_MM));
+    const fixtures = floor.elements
+      .map((element) => ({ element, geometry: fixtureGeometry(element) }))
+      .filter((entry): entry is { element: EditorElement; geometry: FixtureGeometry } => entry.geometry !== null);
+    const devices = floor.elements.filter((element) => isSocket(element) || isSwitch(element));
+    // Zóny 0–2: zásuvka ani spínač blíž než 0,6 m od hrany vany / sprchy (ve stejné místnosti)
+    const nearest = (element: EditorElement, zone: "bath" | "basin") =>
+      Math.min(...fixtures.filter((fixture) => fixture.geometry.zone === zone && fixture.element.room === element.room).map((fixture) => distanceToFixture(fixture.geometry, element.x, element.y)));
+    const inZone = devices.filter((element) => nearest(element, "bath") < ZONE2_MM);
     if (inZone.length) {
+      const closest = Math.min(...inZone.map((element) => nearest(element, "bath")));
       issues.push({
         id: `bath-zone:${floor.id}`,
         rule: "bath-zone",
         level: "error",
-        text: `${floor.name}: ${inZone.length}× zásuvka / spínač v zóně 0–2 koupelny (blíž než 0,6 m od vany nebo sprchy) – přesuňte je dál.`,
+        text: `${floor.name}: ${inZone.length}× zásuvka / spínač v zóně 0–2 koupelny (nejblíž ${cm(closest)} od hrany vany / sprchy, potřeba aspoň 60 cm) – přesuňte je dál.`,
         source: "ČSN 33 2000-7-701 ed. 2 – zásuvky a spínače jen mimo zóny 0, 1 a 2",
         elementIds: inZone.map((element) => element.id),
+      });
+    }
+    // Fáze 63: umyvadlo – zásuvky a spínače ne ve svislém pásu nad a pod umyvadlem (šíře umyvadla + 0,2 m na každou stranu)
+    const inBand = devices.filter((element) => fixtures.some((fixture) => fixture.geometry.zone === "basin" && fixture.element.room === element.room && inBasinBand(fixture.geometry, element.x, element.y)));
+    if (inBand.length) {
+      issues.push({
+        id: `basin-band:${floor.id}`,
+        rule: "basin-band",
+        level: "error",
+        text: `${floor.name}: ${inBand.length}× zásuvka / spínač nad nebo pod umyvadlem (pás v šíři umyvadla + ${cm(BASIN_MARGIN_MM)} na každou stranu) – posuňte je stranou od hrany umyvadla.`,
+        source: "ČSN 33 2130 ed. 4 – zásuvky a spínače mimo prostor nad a pod umyvadlem; odstup 20 cm od hrany je projekční zásada Eldocku (ověřte v projektu)",
+        elementIds: inBand.map((element) => element.id),
       });
     }
     // Koupelna bez vany / sprchy v nákresu: zóny nejdou ověřit
     const wetRooms = [...new Set(floor.elements.filter((element) => WET.test(element.room) && (isSocket(element) || isSwitch(element))).map((element) => element.room))];
     for (const room of wetRooms.filter((name) => !fixtures.some((fixture) => fixture.element.room === name))) {
-      issues.push({ id: `fixture-missing:${floor.id}:${room}`, rule: "fixture-missing", level: "info", text: `${room}: vložte vanu nebo sprchový kout (paleta Zařizovací předměty) – pak se ověří zóny 0–2.`, source: "ČSN 33 2000-7-701 ed. 2", elementIds: [] });
+      issues.push({ id: `fixture-missing:${floor.id}:${room}`, rule: "fixture-missing", level: "info", text: `${room}: vložte vanu, sprchový kout nebo umyvadlo (paleta Zařizovací předměty) – pak se ověří zóny 0–2 a pás u umyvadla.`, source: "ČSN 33 2000-7-701 ed. 2", elementIds: [] });
     }
     // Krytí: zásuvky v koupelně a venku IP44
     const wetSockets = floor.elements.filter((element) => isSocket(element) && WET.test(element.room) && paletteItem(element.item)?.variant !== "ip44");

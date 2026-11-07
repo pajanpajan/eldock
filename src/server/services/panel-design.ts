@@ -2,6 +2,7 @@ import type { PrismaClient } from "@/generated/prisma/client";
 import { HIDDEN_MANUFACTURER_NAMES } from "@/lib/panel-builder/brands";
 import { catalogCategory, matchConfig, synthesizeComponent, type ItemConfig } from "@/lib/panel-builder/configurator";
 import { parseChipSet, type ChipSet } from "@/lib/panel-builder/circuit-chips";
+import { parseApplianceLibrary, parseApplianceList, type ApplianceLibrary } from "@/lib/panel-builder/appliances";
 import { enclosureProjectData } from "@/lib/panel-builder/enclosures";
 import { environmentOf, isEnvironmentId } from "@/lib/panel-builder/environments";
 import { isStandardEdition, parseRoutineTest, routineTestVerdict, standardEditionOf, type RoutineTest } from "@/lib/legislation-2027";
@@ -188,6 +189,17 @@ export async function saveCircuitChips(prisma: PrismaClient, companyId: string, 
   if (!clean) throw new WorkflowError("VALIDATION", "Neplatné štítky.");
   await prisma.registeredCompany.update({ where: { id: companyId }, data: { circuitChipsJson: JSON.stringify(clean) } });
   return { saved: true, set: clean };
+}
+
+/** Fáze 63: knihovna samostatných spotřebičů firmy (2D půdorys) – uloží se jen novější knihovna (vyhrává `updatedAt`). */
+export async function saveApplianceLibrary(prisma: PrismaClient, companyId: string, library: ApplianceLibrary) {
+  const company = await prisma.registeredCompany.findUnique({ where: { id: companyId }, select: { applianceLibraryJson: true } });
+  if (!company) throw new WorkflowError("NOT_FOUND", "Firma neexistuje.");
+  const stored = parseApplianceLibrary(company.applianceLibraryJson);
+  if (stored && stored.updatedAt >= library.updatedAt) return { saved: false, library: stored };
+  const clean: ApplianceLibrary = { specs: parseApplianceList(library.specs), updatedAt: library.updatedAt };
+  await prisma.registeredCompany.update({ where: { id: companyId }, data: { applianceLibraryJson: JSON.stringify(clean) } });
+  return { saved: true, library: clean };
 }
 
 /** Edice normy rozváděče (fáze 46): DBO 61439-3 ed. 2, PSC 61439-2 ed. 3, strojní 60204-1 ed. 3. */

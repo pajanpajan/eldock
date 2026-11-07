@@ -10,6 +10,6 @@ const FloorplanEditor = dynamic(() => import("./FloorplanEditor").then((mod) => 
   loading: () => <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">Načítám editor půdorysu…</p>,
 });
 
-export function FloorplanEditorLoader({ series, manufacturers = [] }: { series: SeriesOption[]; manufacturers?: { name: string; count: number }[] }) {
-  return <FloorplanEditor series={series} manufacturers={manufacturers} />;
+export function FloorplanEditorLoader({ series, manufacturers = [], applianceJson = null, company = null }: { series: SeriesOption[]; manufacturers?: { name: string; count: number }[]; applianceJson?: string | null; company?: string | null }) {
+  return <FloorplanEditor series={series} manufacturers={manufacturers} applianceJson={applianceJson} company={company} />;
 }

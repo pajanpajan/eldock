@@ -1,11 +1,12 @@
 "use client";
 
 import { useId, useState } from "react";
-import { Palette } from "lucide-react";
+import { ExternalLink, Palette } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import type { SeriesColor, SeriesMaterial, SeriesShape } from "@/lib/panel-builder/abb-catalog-2026";
+import { seriesLink } from "@/lib/panel-builder/series-links";
 import { DESIGN_BRANDS, designSeriesOf, seriesColors, type DesignSeries } from "@/lib/panel-builder/wiring-designs";
 import { cn } from "@/lib/utils";
 
@@ -103,64 +104,185 @@ function Surface({ id, material, ...shape }: { id: string; material: SeriesMater
   );
 }
 
-/** Jeden přístroj v rámečku (100 × 100 jednotek na pozici). */
-function Gang({ id, kind, x, look, shape }: { id: string; kind: MockupItem; x: number; look: Look; shape: SeriesShape }) {
+/**
+ * Fáze 63: věrný tvar řady pro náhled – zaoblení a šířka rámečku, tvar kolébky a typické prvky řady: Levit (ostrý
+ * čtverec na barevné podložce viditelné v horní a spodní spáře, vodorovný proužek indikace), Zoni (plochý matný rámeček
+ * s tenkým okrajem, dvoubarevně barevný rámeček a bílá klapka), Tango (vypouklý zaoblený rámeček a kolébka s vodorovným
+ * průzorem doutnavky), Time / Time Arbo (rovný rámeček s tenkou kovovou linkou kolem klapky, dřevo a kovová klapka),
+ * Decento (kulatý porcelánový rámeček s páčkou a kulatou zásuvkou), Céliane (obdélník s kruhovým výřezem a kruhovou
+ * klapkou), Schneider Nová Unica / Sedna / Asfora a další řady podle tvaru.
+ */
+export interface MockStyle {
+  radius: number;
+  border: number;
+  insetRadius: number;
+  rocker: "flat" | "rounded" | "lever" | "circle";
+  /** Levit: barevná podložka v horní a spodní spáře + proužek indikace. */
+  base?: boolean;
+  /** Tango: vypouklý rámeček a průzor doutnavky. */
+  convex?: boolean;
+  lamp?: boolean;
+  /** Time: tenká kovová linka kolem klapky. */
+  metalLine?: boolean;
+  /** Decento: kulatý rámeček (1R kruh, víceramček ovál). */
+  round?: boolean;
+  /** Céliane: kruhový výřez s kruhovou klapkou. */
+  circle?: boolean;
+}
+
+const SERIES_STYLE: Record<string, MockStyle> = {
+  "ABB|Levit": { radius: 3, border: 14, insetRadius: 2, rocker: "flat", base: true },
+  "ABB|Levit M": { radius: 3, border: 15, insetRadius: 2, rocker: "flat", base: true },
+  "ABB|Zoni": { radius: 9, border: 9, insetRadius: 6, rocker: "flat" },
+  "ABB|Tango": { radius: 28, border: 13, insetRadius: 18, rocker: "rounded", convex: true, lamp: true },
+  "ABB|Time": { radius: 6, border: 15, insetRadius: 3, rocker: "flat", metalLine: true },
+  "ABB|Time Arbo": { radius: 6, border: 17, insetRadius: 3, rocker: "flat", metalLine: true },
+  "ABB|Decento": { radius: 46, border: 15, insetRadius: 30, rocker: "lever", round: true },
+  "ABB|Swing": { radius: 18, border: 13, insetRadius: 10, rocker: "rounded" },
+  "ABB|Swing L": { radius: 18, border: 13, insetRadius: 10, rocker: "rounded" },
+  "ABB|Classic": { radius: 4, border: 16, insetRadius: 3, rocker: "flat" },
+  "ABB|future linear": { radius: 3, border: 8, insetRadius: 2, rocker: "flat" },
+  "ABB|solo": { radius: 30, border: 11, insetRadius: 20, rocker: "rounded" },
+  "ABB|solo carat": { radius: 30, border: 12, insetRadius: 20, rocker: "rounded" },
+  "ABB|Busch-axcent": { radius: 7, border: 19, insetRadius: 4, rocker: "flat" },
+  "Legrand|Céliane": { radius: 10, border: 11, insetRadius: 8, rocker: "circle", circle: true },
+  "Legrand|Valena Life": { radius: 16, border: 12, insetRadius: 10, rocker: "rounded" },
+  "Legrand|Valena Allure": { radius: 7, border: 13, insetRadius: 5, rocker: "flat" },
+  "Legrand|Niloé": { radius: 20, border: 12, insetRadius: 12, rocker: "rounded" },
+  "Legrand|Mosaic": { radius: 3, border: 10, insetRadius: 2, rocker: "flat" },
+  "Schneider|Nová Unica": { radius: 11, border: 13, insetRadius: 7, rocker: "flat" },
+  "Schneider|Sedna Design & Elements": { radius: 15, border: 9, insetRadius: 10, rocker: "rounded" },
+  "Schneider|Asfora": { radius: 6, border: 11, insetRadius: 5, rocker: "flat" },
+  "Hager|lumina": { radius: 12, border: 12, insetRadius: 8, rocker: "flat" },
+  "Hager|berker S.1 / B.3 / Q.1 / Q.3": { radius: 5, border: 13, insetRadius: 4, rocker: "flat" },
+};
+
+/** Styl náhledu řady (podle klíče řady, jinak podle tvaru). */
+export function mockStyle(seriesKey: string | null | undefined, shape: SeriesShape): MockStyle {
+  const found = seriesKey ? designSeriesOf(seriesKey) : null;
+  const key = found ? `${found.brand.manufacturer}|${found.series.name}` : "";
+  if (SERIES_STYLE[key]) return SERIES_STYLE[key];
   const geometry = SHAPE[shape];
+  return { radius: geometry.radius, border: geometry.border, insetRadius: geometry.insetRadius, rocker: shape === "rounded" || shape === "soft" || shape === "solo" ? "rounded" : "flat", round: shape === "porcelain" };
+}
+
+/** Jeden přístroj v rámečku (100 × 100 jednotek na pozici). */
+function Gang({ id, kind, x, look, style }: { id: string; kind: MockupItem; x: number; look: Look; style: MockStyle }) {
+  if (kind === "blank") return null;
   const inset = 22;
   const dark = lightness(look.insert) < 0.45;
   const ink = dark ? "#d4d4d8" : "#52525b";
   const hole = dark ? "#0a0a0a" : "#3f3f46";
-  const cover = { x: x + inset, y: inset, width: 100 - inset * 2, height: 100 - inset * 2, rx: geometry.insetRadius };
-  if (kind === "blank") return null;
+  const cover = { x: x + inset, y: inset, width: 100 - inset * 2, height: 100 - inset * 2, rx: style.rocker === "rounded" ? 14 : style.insetRadius };
+  const cx = x + 50;
+  const socket = (dy: number, r: number) => (
+    <g key={dy} transform={`translate(${cx} ${50 + dy})`}>
+      <circle r={r} fill="none" stroke={ink} strokeOpacity={0.45} strokeWidth={1.2} />
+      <circle cx={-r * 0.39} cy={0} r={r * 0.13} fill={hole} />
+      <circle cx={r * 0.39} cy={0} r={r * 0.13} fill={hole} />
+      <rect x={-1.4} y={-r} width={2.8} height={r * 0.33} rx={1} fill={ink} opacity={0.7} />
+    </g>
+  );
+  const sockets = kind === "double" ? [socket(-14, 12), socket(14, 12)] : [socket(0, 18)];
+  // Céliane: kruhový výřez v rámečku, uvnitř kruhová klapka / zásuvka
+  if (style.circle) {
+    return (
+      <g data-gang="circle">
+        <circle cx={cx} cy={50} r={29} fill="#000" opacity={0.18} />
+        <circle cx={cx} cy={50} r={27} fill={look.insert} stroke="#000" strokeOpacity={0.15} strokeWidth={0.8} />
+        {kind === "switch" ? (
+          <>
+            <circle cx={cx} cy={50} r={22} fill="none" stroke={ink} strokeOpacity={0.3} strokeWidth={0.8} />
+            <rect x={cx - 5} y={31} width={10} height={2.2} rx={1.1} fill="#f59e0b" opacity={0.85} />
+          </>
+        ) : (
+          sockets
+        )}
+      </g>
+    );
+  }
+  // Decento: kulatý porcelánový rámeček, úzká páčka a kulatá zásuvka
+  if (style.round) {
+    return (
+      <g data-gang="round">
+        <circle cx={cx} cy={50} r={30} fill={look.insert} stroke="#000" strokeOpacity={0.15} strokeWidth={0.8} />
+        <Surface id={id} material="porcelain" x={cx - 30} y={20} width={60} height={60} rx={30} />
+        {kind === "switch" ? (
+          <>
+            <circle cx={cx} cy={50} r={9} fill={look.insert} stroke={ink} strokeOpacity={0.4} strokeWidth={1} />
+            <rect x={cx - 3} y={28} width={6} height={24} rx={3} fill={ink} opacity={0.75} data-testid="mockup-lever" />
+          </>
+        ) : (
+          sockets
+        )}
+      </g>
+    );
+  }
   return (
-    <g>
+    <g data-gang={style.rocker}>
+      {style.metalLine ? <rect x={cover.x - 3} y={cover.y - 3} width={cover.width + 6} height={cover.height + 6} rx={cover.rx + 1} fill="none" stroke={`url(#${id}-metal)`} strokeWidth={2.6} data-testid="mockup-metal-line" /> : null}
+      {style.metalLine ? <rect x={cover.x - 3} y={cover.y - 3} width={cover.width + 6} height={cover.height + 6} rx={cover.rx + 1} fill="none" stroke="#a1a1aa" strokeOpacity={0.8} strokeWidth={1} /> : null}
       <rect {...cover} fill={look.insert} stroke="#000" strokeOpacity={0.12} strokeWidth={0.8} />
       <Surface id={id} material={look.material === "wood" || look.material === "stone" || look.material === "paper" ? "gloss" : look.material} {...cover} />
       {kind === "switch" ? (
         <>
-          {/* Klapka: dělicí linka a orientační doutnavka */}
-          <line x1={x + 50} y1={inset + 10} x2={x + 50} y2={100 - inset - 10} stroke={ink} strokeOpacity={0.25} strokeWidth={0.8} />
-          <rect x={x + 46} y={inset + 8} width={8} height={2.4} rx={1.2} fill="#f59e0b" opacity={0.85} />
+          {style.rocker === "rounded" ? <rect x={cover.x + 4} y={cover.y + 4} width={cover.width - 8} height={cover.height - 8} rx={cover.rx - 2} fill="#fff" opacity={0.12} /> : null}
+          {style.lamp ? (
+            // Tango: vodorovný průzor doutnavky (modrý / oranžový)
+            <rect x={cx - 9} y={cover.y + 8} width={18} height={3.2} rx={1.6} fill={dark ? "#f59e0b" : "#3b82f6"} opacity={0.9} data-testid="mockup-lamp" />
+          ) : style.base ? (
+            // Levit: vodorovný proužek indikace
+            <rect x={cover.x + 10} y={cover.y + cover.height - 9} width={cover.width - 20} height={2} rx={1} fill={ink} opacity={0.55} data-testid="mockup-strip" />
+          ) : (
+            <>
+              <line x1={cx} y1={inset + 10} x2={cx} y2={100 - inset - 10} stroke={ink} strokeOpacity={0.25} strokeWidth={0.8} />
+              <rect x={cx - 4} y={inset + 8} width={8} height={2.4} rx={1.2} fill="#f59e0b" opacity={0.85} />
+            </>
+          )}
         </>
       ) : (
-        // Zásuvka 230 V / 16 A s ochranným kolíkem (ČSN): kruhové lůžko, 2 otvory, kolík
-        [kind === "double" ? -14 : 0, kind === "double" ? 14 : null].filter((dy): dy is number => dy !== null).map((dy) => (
-          <g key={dy} transform={`translate(${x + 50} ${50 + dy * (kind === "double" ? 1 : 0)})`}>
-            <circle r={kind === "double" ? 12 : 18} fill="none" stroke={ink} strokeOpacity={0.45} strokeWidth={1.2} />
-            <circle cx={kind === "double" ? -5 : -7} cy={0} r={kind === "double" ? 1.8 : 2.4} fill={hole} />
-            <circle cx={kind === "double" ? 5 : 7} cy={0} r={kind === "double" ? 1.8 : 2.4} fill={hole} />
-            <rect x={-1.4} y={kind === "double" ? -12 : -18} width={2.8} height={kind === "double" ? 4 : 6} rx={1} fill={ink} opacity={0.7} />
-          </g>
-        ))
+        sockets
       )}
     </g>
   );
 }
 
-/** Rámeček s přístroji (víceramček vodorovně) na světlé stěně. */
-export function DeviceMockup({ shape, color, items, className, label }: { shape: SeriesShape; color: Pick<SeriesColor, "swatch" | "frame" | "insert" | "material"> | null; items: readonly MockupItem[]; className?: string; label?: string }) {
+/** Rámeček s přístroji (víceramček vodorovně) na světlé stěně ve tvaru řady. */
+export function DeviceMockup({ shape, color, items, className, label, seriesKey }: { shape: SeriesShape; color: Pick<SeriesColor, "swatch" | "frame" | "insert" | "material"> | null; items: readonly MockupItem[]; className?: string; label?: string; seriesKey?: string | null }) {
   const id = `m${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
   const look = lookOf(color, shape);
-  const geometry = SHAPE[shape];
+  const style = mockStyle(seriesKey, shape);
   const width = items.length * 100;
-  const frame = { x: 6, y: 6, width: width - 12, height: 88, rx: shape === "porcelain" && items.length === 1 ? 44 : geometry.radius };
+  const single = items.length === 1;
+  const frame = { x: 6, y: 6, width: width - 12, height: 88, rx: style.round ? 44 : style.radius };
+  // Levit: podložka v druhé barvě vyčnívá v horní a spodní spáře
+  const base = style.base ? { x: frame.x + 3, y: frame.y - 3.5, width: frame.width - 6, height: frame.height + 7, rx: 2 } : null;
   return (
-    <svg viewBox={`-10 -10 ${width + 20} 120`} className={className} role="img" aria-label={label ?? "Náhled designové řady"} data-shape={shape} data-material={look.material}>
+    <svg viewBox={`-10 -10 ${width + 20} 120`} className={className} role="img" aria-label={label ?? "Náhled designové řady"} data-shape={shape} data-material={look.material} data-series={seriesKey ?? undefined}>
       <MaterialDefs id={id} look={look} />
+      <defs>
+        <radialGradient id={`${id}-convex`} cx="0.5" cy="0.35" r="0.75">
+          <stop offset="0" stopColor="#fff" stopOpacity="0.45" />
+          <stop offset="0.7" stopColor="#fff" stopOpacity="0" />
+          <stop offset="1" stopColor="#000" stopOpacity="0.22" />
+        </radialGradient>
+      </defs>
       <rect x={-10} y={-10} width={width + 20} height={120} fill="#e7e5e4" />
       <g filter={`url(#${id}-shadow)`}>
         {shape === "surface" ? <rect x={frame.x - 2} y={frame.y + 6} width={frame.width + 4} height={frame.height} rx={frame.rx} fill="#000" opacity={0.08} /> : null}
-        <rect {...frame} fill={look.frame} stroke="#000" strokeOpacity={0.18} strokeWidth={1} />
+        {base ? <rect {...base} fill={look.insert} data-testid="mockup-base" /> : null}
+        {style.round && single ? <circle cx={50} cy={50} r={44} fill={look.frame} stroke="#000" strokeOpacity={0.18} strokeWidth={1} /> : <rect {...frame} fill={look.frame} stroke="#000" strokeOpacity={0.18} strokeWidth={1} />}
         <Surface id={id} material={look.material} {...frame} />
-        {shape === "layered" || shape === "thick" ? <rect x={frame.x + geometry.border * 0.45} y={frame.y + geometry.border * 0.45} width={frame.width - geometry.border * 0.9} height={frame.height - geometry.border * 0.9} rx={Math.max(2, frame.rx - 3)} fill="none" stroke={look.insert} strokeOpacity={0.6} strokeWidth={2} /> : null}
-        {shape === "metal" ? <rect x={frame.x} y={47} width={frame.width} height={6} fill="#000" opacity={0.08} /> : null}
+        {style.convex ? <rect {...frame} fill={`url(#${id}-convex)`} pointerEvents="none" /> : null}
+        {style.circle ? null : !style.base && (shape === "layered" || shape === "thick") ? <rect x={frame.x + style.border * 0.45} y={frame.y + style.border * 0.45} width={frame.width - style.border * 0.9} height={frame.height - style.border * 0.9} rx={Math.max(2, frame.rx - 3)} fill="none" stroke={look.insert} strokeOpacity={0.6} strokeWidth={2} /> : null}
       </g>
       {items.map((kind, index) => (
-        <Gang key={index} id={id} kind={kind} x={index * 100} look={look} shape={shape} />
+        <Gang key={index} id={id} kind={kind} x={index * 100} look={style.base ? { ...look, insert: look.insert === look.frame ? look.frame : look.insert } : look} style={style} />
       ))}
     </svg>
   );
 }
+
 
 /** Galerie designových řad: výrobce → řada (velký náhled, víceramček, materiál) → barvy s kódy a čísly rámečků. */
 export function SeriesGallery({ seriesKey, color, available, onChoose }: { seriesKey: string | null; color: string; available: Map<string, number>; onChoose: (patch: { series: string; color: string }) => void }) {
@@ -176,6 +298,8 @@ export function SeriesGallery({ seriesKey, color, available, onChoose }: { serie
   const shape = series.shape ?? "square";
   const count = series.dbSeries.reduce((sum, name) => sum + (available.get(`${brand.manufacturer}|${name}`) ?? 0), 0);
   const details = chosen;
+  const seriesKeyOf = `${brand.manufacturer}|${series.name}`;
+  const link = seriesLink(seriesKeyOf);
   return (
     <Dialog
       open={open}
@@ -209,7 +333,7 @@ export function SeriesGallery({ seriesKey, color, available, onChoose }: { serie
               return (
                 <li key={option.name}>
                   <button type="button" role="radio" aria-checked={series.name === option.name} onClick={() => setPick({ series: key, color: seriesColors(key)[0].id })} className={cn("flex w-full items-center gap-2 rounded-lg border p-1.5 text-left text-xs", series.name === option.name ? "border-primary bg-primary/15" : "border-border hover:border-primary/60")} data-testid={`gallery-series-${option.name}`}>
-                    <DeviceMockup shape={option.shape ?? "square"} color={first ?? { swatch: "#f8fafc" }} items={["switch"]} className="h-10 w-10 shrink-0 rounded" />
+                    <DeviceMockup seriesKey={key} shape={option.shape ?? "square"} color={first ?? { swatch: "#f8fafc" }} items={["switch"]} className="h-10 w-10 shrink-0 rounded" />
                     <span className="min-w-0">
                       <b className="block">{option.name}</b>
                       <span className="text-muted-foreground">{colorCount(option.colors?.length || seriesColors(key).length)}{option.ip ? ` · ${option.ip}` : ""}</span>
@@ -232,15 +356,15 @@ export function SeriesGallery({ seriesKey, color, available, onChoose }: { serie
             </div>
             <div className="grid gap-3 sm:grid-cols-[1fr_1fr_2fr]" data-testid="gallery-preview">
               <figure className="flex flex-col items-center gap-1 text-[11px] text-muted-foreground">
-                <DeviceMockup shape={shape} color={look} items={["switch"]} className="h-28 w-28 rounded-lg" label={`Spínač ${series.name}`} />
+                <DeviceMockup seriesKey={seriesKeyOf} shape={shape} color={look} items={["switch"]} className="h-28 w-28 rounded-lg" label={`Spínač ${series.name}`} />
                 Spínač 1R
               </figure>
               <figure className="flex flex-col items-center gap-1 text-[11px] text-muted-foreground">
-                <DeviceMockup shape={shape} color={look} items={["socket"]} className="h-28 w-28 rounded-lg" label={`Zásuvka ${series.name}`} />
+                <DeviceMockup seriesKey={seriesKeyOf} shape={shape} color={look} items={["socket"]} className="h-28 w-28 rounded-lg" label={`Zásuvka ${series.name}`} />
                 Zásuvka 1R
               </figure>
               <figure className="flex flex-col items-center gap-1 text-[11px] text-muted-foreground">
-                <DeviceMockup shape={shape} color={look} items={["switch", "socket", "socket"]} className="h-28 w-full max-w-80 rounded-lg" label={`Víceramček 3R ${series.name}`} />
+                <DeviceMockup seriesKey={seriesKeyOf} shape={shape} color={look} items={["switch", "socket", "socket"]} className="h-28 w-full max-w-80 rounded-lg" label={`Víceramček 3R ${series.name}`} />
                 Víceramček 3R – vypínač + 2 zásuvky
               </figure>
             </div>
@@ -249,7 +373,7 @@ export function SeriesGallery({ seriesKey, color, available, onChoose }: { serie
                 const seriesColor = (series.colors ?? []).find((candidate) => candidate.id === option.id) ?? null;
                 return (
                   <button key={option.id} type="button" role="radio" aria-checked={pick.color === option.id} onClick={() => setPick((value) => ({ ...value, color: option.id }))} className={cn("flex w-28 flex-col items-center gap-1 rounded-lg border p-1.5 text-center text-[11px] leading-tight", pick.color === option.id ? "border-primary bg-primary/15" : "border-border hover:border-primary/60")} data-testid="gallery-color">
-                    <DeviceMockup shape={shape} color={seriesColor ?? { swatch: option.swatch }} items={["switch"]} className="h-12 w-12 rounded" />
+                    <DeviceMockup seriesKey={seriesKeyOf} shape={shape} color={seriesColor ?? { swatch: option.swatch }} items={["switch"]} className="h-12 w-12 rounded" />
                     {option.label}
                   </button>
                 );
@@ -278,7 +402,13 @@ export function SeriesGallery({ seriesKey, color, available, onChoose }: { serie
                 ) : null}
               </dl>
             ) : null}
-            <div className="flex justify-end gap-2">
+            <div className="flex flex-wrap justify-end gap-2">
+              {/* Fáze 63: oficiální stránka / katalog řady u výrobce v novém okně */}
+              {link ? (
+                <a href={link.url} target="_blank" rel="noopener noreferrer" title={link.label} className="mr-auto inline-flex h-9 items-center gap-1.5 rounded-md border border-border px-3 text-sm font-medium hover:border-primary/60" data-testid="gallery-web">
+                  🌐 Prohlédnout řadu na webu výrobce <ExternalLink className="size-3.5" aria-hidden />
+                </a>
+              ) : null}
               <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
                 Zavřít
               </Button>
