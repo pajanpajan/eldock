@@ -81,6 +81,13 @@ enum BuildingType {
   OTHER
 }
 
+/// Provedení VTZ pro nejdelší lhůty revizí (NV 190/2022 Sb., příloha č. 4) – fáze 66.
+enum InstallationKind {
+  STANDARD // pevná instalace – lhůta podle účelu objektu a prostoru
+  CONSTRUCTION_SITE // prozatímní zařízení staveniště – 0,5 roku
+  MOBILE // pojízdné a převozné prostředky – 1 rok
+}
+
 /// Životní cyklus revize dokumentace.
 enum RevisionStatus {
   PENDING_APPROVAL // nahraná CAE, čeká na potvrzení údržbou
@@ -144,6 +151,7 @@ enum InspectionType {
   PERIODIC // Pravidelná revize
   EXTRAORDINARY // Mimořádná revize
   THERMOVISION // Termovizní měření (doplňkové, nepočítá se do lhůty)
+  VISUAL_CHECK // Vizuální kontrola LPS 1× ročně (NV 190/2022 Sb., příl. 4) – neposouvá lhůtu revize (fáze 66)
 }
 
 /// Celkový posudek revizní zprávy.
@@ -252,6 +260,8 @@ model Building {
   shortName   String? // "Lisovna"
   type        BuildingType @default(PRODUCTION)
   description String?
+  /// Objekt podle požárně bezpečnostního řešení umožňuje přítomnost více než 200 osob – VTZ I. třídy, revize 2 roky (fáze 66).
+  crowdOver200 Boolean @default(false)
 
   // Geometrie v Campus View (procenta vůči viewBoxu areálu)
   mapPolygon String // SVG points "x1,y1 x2,y2 ..." – obrys budovy
@@ -329,12 +339,18 @@ model Equipment {
   fedFromCircuit     String? // "Pole 3 / Jistič QF4"
 
   // Pasport a lhůtník revizí
-  inspectionIntervalMonths Int     @default(36) // lhůta pravidelné revize dle ČSN 33 1500
+  inspectionIntervalMonths Int     @default(36) // lhůta pravidelné revize – nejvýš podle lib/inspection-rules.ts (NV 190/2022 Sb., příl. 4)
   externalInfluences       String? // "AA5, AB4, BA4 – normální průmyslové"
+  /// Fáze 66: provedení (staveniště 0,5 roku, pojízdné 1 rok), LPS chránící kritické systémy (2 roky)
+  /// a lhůta stanovená řádem preventivní údržby (až dvojnásobná) – NV 190/2022 Sb., příloha č. 4.
+  installationKind      InstallationKind @default(STANDARD)
+  lpsCritical           Boolean          @default(false)
+  preventiveMaintenance Boolean          @default(false)
 
   // Spotřebiče a nářadí (ČSN 33 1600 ed. 2)
   usageGroup      String? // skupina A–E (C = průmysl, E = administrativa)
   protectionClass String? // třída ochrany "I" / "II" / "III"
+  handHeld        Boolean @default(false) // spotřebič držený v ruce (sloupec tab. 1 ČSN 33 1600 ed. 2; nářadí a přívody vždy)
   inventoryNumber String?
   assignedZone    String? // "Kuchyňka – Energetika 1. NP", "Dílna údržby"
 
@@ -412,10 +428,24 @@ model InspectionRecord {
   validUntil       DateTime
   reportNumber     String
   inspectorName    String
-  inspectorLicense String // ev. č. osvědčení TIČR dle NV 190/2022 Sb.
+  inspectorLicense String // ev. č. osvědčení revizního technika (zákon 250/2021 Sb., § 11; NV 190/2022 Sb., příloha č. 5)
   result           InspectionResult
   defectsSummary   String?
   reportUrl        String
+
+  // Fáze 66: náležitosti zprávy o revizi VTZ (NV 190/2022 Sb., § 10 odst. 1) a osvědčení RT (§ 17 zákona 250/2021 Sb.)
+  inspectorScope      String? // rozsah osvědčení "E1A" … "E3B" (příloha č. 5: E1 / E2 / E3, A bez a B s nebezpečím výbuchu)
+  inspectorValidUntil DateTime? // platnost osvědčení
+  scopeNote           String? // c) vymezení rozsahu revize
+  extraordinaryReason String? // e) důvod mimořádné revize
+  startedAt           DateTime? // f) zahájení revize (ukončení = inspectionDate)
+  reportedAt          DateTime? // f) vypracování zprávy
+  handedOverAt        DateTime? // f) předání zprávy
+  documentsUsed       String? // h) podklady a jejich vyhodnocení
+  actsPerformed       String? // i) soupis provedených úkonů
+  previousEvaluation  String? // m) vyhodnocení záznamů z předchozí revize, provozu a údržby
+  /// Původní platnost ze zprávy, pokud ji Eldock zkrátil na nejdelší zákonnou lhůtu (jednorázová oprava fáze 66).
+  validUntilOriginal  DateTime?
 
   // Měření (revize spotřebičů a nářadí)
   measuringInstrument           String? // "Metrel MI 3309 BT"
@@ -619,6 +649,8 @@ model InspectionDefect {
   inspectionId       String
   equipmentId        String
   description        String
+  /// Porušené ustanovení předpisu nebo normy (NV 190/2022 Sb., § 10 odst. 1 písm. k) – fáze 66.
+  provision          String?
   severity           DefectSeverity @default(MAJOR)
   deadline           DateTime
   status             DefectStatus   @default(OPEN)
@@ -755,7 +787,7 @@ model RegisteredCompany {
   email               String       @unique // přihlašovací e-mail
   phone               String
   passwordHash        String // scrypt (node:crypto), viz src/server/password.ts
-  authorizationNumber String? // ev. č. oprávnění / osvědčení TIČR (NV 190/2022 Sb.)
+  authorizationNumber String? // ev. č. oprávnění firmy (zákon 250/2021 Sb., § 8) nebo osvědčení revizního technika (§ 11)
   termsAcceptedAt     DateTime
   termsVersion        String       @default("1.0-2026-11")
   creditsRemaining    Int          @default(5)

@@ -4,9 +4,10 @@ import { notFound } from "next/navigation";
 import { PrintToolbar } from "@/components/common/PrintToolbar";
 import { LogoMark } from "@/components/layout/Logo";
 import { BRAND } from "@/lib/brand";
-import { EQUIPMENT_TYPE_LABELS, INSPECTION_TYPE_LABELS, formatDate } from "@/lib/format";
-import { PROTOCOL_TITLES, VERDICTS, protocolBatteryPassport, protocolMeasurements, protocolScope, protocolVariant } from "@/lib/inspection-protocol";
-import { USAGE_GROUP_LABELS, type UsageGroup } from "@/lib/inspection-rules";
+import { BUILDING_TYPE_LABELS, EQUIPMENT_TYPE_LABELS, INSPECTION_TYPE_LABELS, formatDate } from "@/lib/format";
+import { PROTOCOL_TITLES, VERDICTS, monthsBetween, protocolBatteryPassport, protocolMeasurements, protocolScope, protocolVariant } from "@/lib/inspection-protocol";
+import { defaultActs, defaultScopeNote, isReportType } from "@/lib/inspection-report";
+import { INSTALLATION_KIND_LABELS, USAGE_GROUP_LABELS, legalDeadline, ruleInputFrom, type UsageGroup } from "@/lib/inspection-rules";
 import { getFeatures } from "@/server/modules";
 import { getInspectionProtocol } from "@/server/queries/inspections";
 import { getCurrentAccount } from "@/server/session";
@@ -20,8 +21,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 const SEVERITY: Record<string, string> = { CRITICAL: "kritická", MAJOR: "závažná", MINOR: "drobná" };
+const NOT_RECORDED = "Neuvedeno v záznamu (zapsáno před fází 66).";
 
-// Revizní protokol A4 k tisku / uložení do PDF – varianta VTZ nebo spotřebiče podle typu zařízení.
+// Revizní protokol A4 k tisku / uložení do PDF – varianta VTZ nebo spotřebiče podle typu zařízení. U zprávy o revizi
+// VTZ obsahuje náležitosti podle NV 190/2022 Sb., § 10 odst. 1 písm. a–o (fáze 66).
 export default async function InspectionReportPage({ params }: Props) {
   const { id } = await params;
   const [record, account, modules] = await Promise.all([getInspectionProtocol(id), getCurrentAccount(), getFeatures()]);
@@ -32,9 +35,28 @@ export default async function InspectionReportPage({ params }: Props) {
   const { plant } = building;
   const variant = protocolVariant(equipment.type);
   const heading = PROTOCOL_TITLES[variant];
-  const scope = protocolScope(equipment);
+  const scope = protocolScope(ruleInputFrom(equipment, building));
   const measurements = protocolMeasurements({ record, equipment });
   const appliance = variant === "APPLIANCE";
+  const report = isReportType(record.type);
+  const location = `${building.name} › ${equipment.floor.name}`;
+  // a) provozovatel – název a sídlo (registrovaná firma závodu, jinak údaje závodu)
+  const company = plant.registeredCompanies[0] ?? null;
+  const operatorName = company?.companyName ?? plant.customerName;
+  const operatorSeat = company ? `${company.street}, ${company.zip} ${company.city}` : [plant.address, plant.city].filter(Boolean).join(", ") || "–";
+  const deadline = record.result === "INCAPABLE" ? null : legalDeadline(record.inspectionDate, record.validUntil, scope);
+  const legal = deadline && deadline.getTime() !== record.validUntil.getTime() ? { date: deadline, shorter: deadline.getTime() < record.validUntil.getTime() } : null;
+  const recommended = monthsBetween(record.inspectionDate, record.validUntil);
+  const certificate = [
+    record.inspectorLicense,
+    record.inspectorScope && !record.inspectorLicense.includes(record.inspectorScope) ? `rozsah ${record.inspectorScope}` : null,
+    record.inspectorValidUntil ? `platné do ${formatDate(record.inspectorValidUntil)}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const scopeNote = record.scopeNote ?? (report ? defaultScopeNote({ equipment, location, kind: scope.kind }) : null);
+  const acts = record.actsPerformed ?? (report ? defaultActs(scope.kind) : null);
+  const vtz = scope.kind === "VTZ" || scope.kind === "LPS";
 
   const facts: [string, React.ReactNode][] = [
     ["Zařízení", equipment.name],
@@ -42,20 +64,30 @@ export default async function InspectionReportPage({ params }: Props) {
     ["Druh zařízení", EQUIPMENT_TYPE_LABELS[equipment.type]],
     ["Výrobce / typ", [equipment.manufacturer, equipment.model].filter(Boolean).join(" ") || "–"],
     ["Výrobní číslo", equipment.serialNumber ?? "–"],
-    ["Umístění", [`${building.name} › ${equipment.floor.name}`, equipment.assignedZone].filter(Boolean).join(" · ")],
+    ["Umístění", [location, equipment.assignedZone].filter(Boolean).join(" · ")],
     ["Jmenovité hodnoty", [equipment.ratedVoltage, equipment.ratedCurrent, equipment.ipRating].filter(Boolean).join(" · ") || "–"],
     appliance
       ? ["Třída ochrany / skupina", `${equipment.protectionClass ?? "I"} · ${equipment.usageGroup ? (USAGE_GROUP_LABELS[equipment.usageGroup as UsageGroup] ?? equipment.usageGroup) : "–"}`]
-      : ["Vnější vlivy", equipment.externalInfluences ?? "normální prostory (ČSN 33 2000-5-51)"],
+      : ["Vnější vlivy", equipment.externalInfluences ?? "neurčeny"],
+    ...(vtz
+      ? ([
+          ["Účel objektu", `${BUILDING_TYPE_LABELS[building.type]}${building.crowdOver200 ? " · více než 200 osob (PBŘ)" : ""}`],
+          ...(equipment.installationKind !== "STANDARD" ? [["Provedení", INSTALLATION_KIND_LABELS[equipment.installationKind]]] : []),
+        ] as [string, React.ReactNode][])
+      : []),
   ];
   const inspection: [string, React.ReactNode][] = [
-    ["Druh revize", INSPECTION_TYPE_LABELS[record.type]],
-    ["Datum provedení", formatDate(record.inspectionDate)],
-    ["Příští pravidelná revize", formatDate(record.validUntil)],
-    ["Norma / lhůta", `${scope.standard} · ${scope.months} měsíců`],
-    ["Revizní technik", record.inspectorName],
-    [appliance ? "Osvědčení / oprávnění" : "Ev. č. osvědčení TIČR", record.inspectorLicense],
-    ["Měřicí přístroj", record.measuringInstrument ?? "–"],
+    ["Druh revize", record.type === "EXTRAORDINARY" && record.extraordinaryReason ? `${INSPECTION_TYPE_LABELS[record.type]} – ${record.extraordinaryReason}` : INSPECTION_TYPE_LABELS[record.type]],
+    ...(report
+      ? ([
+          ["Zahájení / ukončení", `${record.startedAt ? formatDate(record.startedAt) : "–"} / ${formatDate(record.inspectionDate)}`],
+          ["Vypracování / předání", `${record.reportedAt ? formatDate(record.reportedAt) : "–"} / ${record.handedOverAt ? formatDate(record.handedOverAt) : "při převzetí (podpis)"}`],
+        ] as [string, React.ReactNode][])
+      : ([["Datum provedení", formatDate(record.inspectionDate)]] as [string, React.ReactNode][])),
+    ["Předpis / nejdelší lhůta", `${scope.standard} · ${scope.maxMonths} měsíců`],
+    [record.type === "THERMOVISION" ? "Termodiagnostik" : "Revizní technik", record.inspectorName],
+    [appliance ? "Osvědčení / oprávnění" : "Ev. č. osvědčení", certificate],
+    ["Měřicí přístroje", record.measuringInstrument ?? "–"],
   ];
 
   return (
@@ -75,7 +107,7 @@ export default async function InspectionReportPage({ params }: Props) {
       <article className="sheet flex w-full max-w-[210mm] flex-col gap-4 bg-white p-[12mm] text-[10pt] leading-snug text-black shadow-2xl shadow-black/50 sm:min-h-[297mm]" data-testid="inspection-protocol" data-variant={variant}>
         <header className="flex items-start justify-between gap-6 border-b-2 border-black pb-3">
           <div className="space-y-1">
-            <p className="text-[8pt] font-semibold tracking-[0.12em] text-zinc-600 uppercase">{heading.basis}</p>
+            <p className="text-[8pt] font-semibold tracking-[0.12em] text-zinc-600 uppercase">{scope.kind === "LPS" ? `${heading.basis.replace(" · ČSN 33 2000-6 ed. 2", "")} · ČSN EN 62305-3` : heading.basis}</p>
             <h1 className="text-[17pt] leading-tight font-bold">{heading.title}</h1>
           </div>
           <div className="shrink-0 text-right">
@@ -87,19 +119,24 @@ export default async function InspectionReportPage({ params }: Props) {
           </div>
         </header>
 
-        <section className="grid grid-cols-2 gap-x-6 gap-y-1 rounded border border-zinc-400 p-3">
+        <section className="grid grid-cols-2 gap-x-6 gap-y-1 rounded border border-zinc-400 p-3" data-testid="protocol-operator">
           <p className="col-span-2 text-[8pt] font-semibold tracking-wide text-zinc-600 uppercase">Provozovatel</p>
-          <p className="font-semibold">{plant.customerName}</p>
-          <p>
-            {plant.name} ({plant.code})
+          <p className="font-semibold">{operatorName}</p>
+          <p>{company ? `IČO ${company.ico}` : ""}</p>
+          <p className="text-zinc-700">Sídlo: {operatorSeat}</p>
+          <p className="text-zinc-700">
+            Provozovna: {plant.name} ({plant.code}){company ? "" : ` · ${[plant.address, plant.city].filter(Boolean).join(", ") || "–"}`}
           </p>
-          <p className="col-span-2 text-zinc-700">{[plant.address, plant.city].filter(Boolean).join(", ") || "–"}</p>
         </section>
 
         <div className="grid gap-4 sm:grid-cols-2 print:grid-cols-2">
           <FactTable title="Revidované zařízení" rows={facts} />
           <FactTable title="Revize" rows={inspection} />
         </div>
+
+        {scopeNote ? <TextSection title="Rozsah revize" text={scopeNote} testId="protocol-scope" /> : null}
+        {report ? <TextSection title="Podklady a jejich vyhodnocení" text={record.documentsUsed ?? NOT_RECORDED} testId="protocol-documents" /> : null}
+        {acts ? <TextSection title="Provedené úkony" text={acts} testId="protocol-acts" /> : null}
 
         <section>
           <h2 className="mb-1.5 text-[8pt] font-semibold tracking-wide text-zinc-600 uppercase">Naměřené hodnoty a zkoušky</h2>
@@ -125,7 +162,6 @@ export default async function InspectionReportPage({ params }: Props) {
               ))}
             </tbody>
           </table>
-          {!appliance ? <p className="mt-1 text-[8pt] text-zinc-600">Prohlídka, zkoušení a měření dle ČSN 33 2000-6 ed. 2; spojitost ochranných a pospojovacích vodičů, izolační odpor zkušebním napětím 500 V DC; proudové chrániče dle ČSN EN 61557-6 ed. 2 (0,5 · IΔn, tΔ při 1 · IΔn, IΔ) a impedance smyčky Zsm ≤ ⅔ · Zs,max.</p> : null}
         </section>
 
         {protocolBatteryPassport(equipment) ? (
@@ -144,13 +180,15 @@ export default async function InspectionReportPage({ params }: Props) {
           </section>
         ) : null}
 
-        <section>
-          <h2 className="mb-1.5 text-[8pt] font-semibold tracking-wide text-zinc-600 uppercase">Zjištěné závady</h2>
+        <section data-testid="protocol-defects">
+          <h2 className="mb-1.5 text-[8pt] font-semibold tracking-wide text-zinc-600 uppercase">{vtz ? "Zjištěné závady a porušená ustanovení" : "Zjištěné závady"}</h2>
           {record.defects.length ? (
             <ol className="list-decimal space-y-0.5 pl-5">
               {record.defects.map((defect) => (
                 <li key={defect.id}>
-                  {defect.description} <span className="text-zinc-600">({SEVERITY[defect.severity] ?? defect.severity}, odstranit do {formatDate(defect.deadline)})</span>
+                  {defect.description}
+                  {defect.provision ? <span className="font-semibold"> – porušeno: {defect.provision}</span> : null}{" "}
+                  <span className="text-zinc-600">({SEVERITY[defect.severity] ?? defect.severity}, odstranit do {formatDate(defect.deadline)})</span>
                 </li>
               ))}
             </ol>
@@ -159,18 +197,40 @@ export default async function InspectionReportPage({ params }: Props) {
           )}
         </section>
 
+        {report ? <TextSection title="Vyhodnocení předchozí revize, provozu a údržby" text={record.previousEvaluation ?? NOT_RECORDED} testId="protocol-previous" /> : null}
+
         <section className="break-inside-avoid rounded border-2 border-black p-3" data-testid="protocol-verdict">
           <p className="text-[8pt] font-semibold tracking-wide text-zinc-600 uppercase">Celkový posudek</p>
           <p className="text-[13pt] font-bold">{VERDICTS[record.result]}</p>
         </section>
 
+        <section className="break-inside-avoid" data-testid="protocol-next">
+          <h2 className="mb-1 text-[8pt] font-semibold tracking-wide text-zinc-600 uppercase">Doporučená lhůta příští revize</h2>
+          {record.result === "INCAPABLE" ? (
+            <p>Po odstranění závad – před uvedením do provozu provést mimořádnou revizi.</p>
+          ) : (
+            <p>
+              <span className="font-semibold">
+                {recommended} měsíců – nejpozději do {formatDate(record.validUntil)}
+              </span>
+              {legal && !legal.shorter ? ` (zákonná lhůta umožňuje provést revizi do ${formatDate(legal.date)}, NV 190/2022 Sb., příloha č. 4, pozn. b)` : ""}.
+              {legal?.shorter ? ` Nejzazší termín podle NV 190/2022 Sb., příloha č. 4: ${formatDate(legal.date)}.` : ""}
+              {record.validUntilOriginal ? ` Platnost zkrácena na nejdelší zákonnou lhůtu, ve zprávě bylo uvedeno ${formatDate(record.validUntilOriginal)}.` : ""}
+            </p>
+          )}
+        </section>
+
         <section className="mt-auto grid break-inside-avoid grid-cols-2 gap-6 pt-2">
-          <SignatureBox title="Revizní technik" lines={[record.inspectorName, record.inspectorLicense, `Datum: ${formatDate(record.inspectionDate)}`]} stamp />
-          <SignatureBox title="Převzal za provozovatele" lines={["Jméno:", "Funkce:", "Datum:"]} />
+          <SignatureBox
+            title="Revizní technik"
+            lines={[record.inspectorName, `Osvědčení ${certificate}`, `Zprávu vypracoval dne: ${formatDate(record.reportedAt ?? record.inspectionDate)}`]}
+            stamp
+          />
+          <SignatureBox title="Převzal za provozovatele" lines={["Jméno:", "Funkce:", `Datum převzetí: ${record.handedOverAt ? formatDate(record.handedOverAt) : ""}`]} />
         </section>
 
         <footer className="border-t border-zinc-400 pt-1.5 text-[7.5pt] text-zinc-600">
-          Vystaveno v systému {BRAND.name} ({BRAND.domain}) · zařízení {equipment.tag} · zpráva {record.reportNumber}. Originál revizní zprávy uchovává provozovatel po dobu životnosti zařízení.
+          Vystaveno v systému {BRAND.name} ({BRAND.domain}) · zařízení {equipment.tag} · zpráva {record.reportNumber}. Originál revizní zprávy uchovává provozovatel po dobu životnosti zařízení. Elektronicky předaná zpráva musí být podepsána uznávaným elektronickým podpisem (NV 190/2022 Sb., § 10 odst. 1 písm. d).
         </footer>
       </article>
     </div>
@@ -189,6 +249,15 @@ function FactTable({ title, rows }: { title: string; rows: [string, React.ReactN
           </div>
         ))}
       </dl>
+    </section>
+  );
+}
+
+function TextSection({ title, text, testId }: { title: string; text: string; testId: string }) {
+  return (
+    <section className="break-inside-avoid" data-testid={testId}>
+      <h2 className="mb-1 text-[8pt] font-semibold tracking-wide text-zinc-600 uppercase">{title}</h2>
+      <p className="whitespace-pre-line">{text}</p>
     </section>
   );
 }

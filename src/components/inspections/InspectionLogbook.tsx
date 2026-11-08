@@ -1,10 +1,12 @@
 import { CalendarClock, ClipboardList, FileDown, Gauge, Thermometer, TriangleAlert, UserRound } from "lucide-react";
 
-import type { EquipmentType } from "@/generated/prisma/enums";
+import type { BuildingType, EquipmentType } from "@/generated/prisma/enums";
 
 import { formatCount, formatDateShort, INSPECTION_TYPE_LABELS, plural } from "@/lib/format";
-import { isLightCard, isPortable, type InspectionRule } from "@/lib/inspection-rules";
-import { governingInspection, inspectionStateFor, latestOfType, type InspectionState, type InspectionSummary } from "@/lib/inspection";
+import { effectiveIntervalMonths, intervalIssue, isLightCard, isPortable, legalDeadline, type InspectionRule } from "@/lib/inspection-rules";
+import type { ReportDefaults } from "@/lib/inspection-report";
+import { scopeFromLicense } from "@/lib/inspector-certificate";
+import { VISUAL_CHECK_INTERVAL_MONTHS, computeValidUntil, governingInspection, inspectionStateFor, latestOfType, type InspectionState, type InspectionSummary } from "@/lib/inspection";
 import { defectState, thermalLevel } from "@/lib/defects";
 import { DEFECT_STATE, INSPECTION_RESULT, INSPECTION_STATE, THERMAL_LEVEL } from "@/lib/status";
 import { inspectionReportHref } from "@/lib/routes";
@@ -14,6 +16,7 @@ import type { EquipmentInspection } from "@/server/queries/equipment";
 
 import { DefectList } from "./DefectList";
 import { DocumentPreviewButton } from "./DocumentPreviewButton";
+import { InspectionSettingsDialog, type InspectionSettings } from "./InspectionSettingsDialog";
 import { InspectionStatusBadge } from "./InspectionStatusBadge";
 import { RecordInspectionDialog, type KnownInspector } from "./RecordInspectionDialog";
 
@@ -43,21 +46,48 @@ interface Props {
   tag: string;
   type: EquipmentType;
   protectionClass: string | null;
+  /** Uložená lhůta zařízení (u VTZ se nové revize zapíší nejvýš se zákonnou). */
   intervalMonths: number;
   rule: InspectionRule;
   inspections: EquipmentInspection[];
   summary: InspectionSummary;
   today: string;
   now: Date;
-  /** Zápis nové revize (revizní technik, vedení údržby). */
+  /** Fáze 66: podklady lhůty (dialog „Upravit lhůtu“) a kontrola osvědčení při zápisu. */
+  building: { name: string; type: BuildingType; crowdOver200: boolean };
+  settings: InspectionSettings;
+  ratedVoltage: string | null;
+  /** Předvyplněné náležitosti zprávy (NV 190/2022 Sb., § 10 odst. 1). */
+  reportDefaults: ReportDefaults;
+  /** Zápis nové revize a úprava lhůty (revizní technik, vedení údržby). */
   canRecord?: boolean;
   canResolveDefects?: boolean;
   /** Generování PDF revizních zpráv (modul Revize & Legislativa). */
   showReports?: boolean;
 }
 
-/** Záložka „Revize & Lhůtník“: semafor, odpočet, historie revizních zpráv a termovizí, zápis nové revize. */
-export function InspectionLogbook({ equipmentId, tag, type, protectionClass, intervalMonths, rule, inspections, summary, today, now, canRecord = true, canResolveDefects = true, showReports = true }: Props) {
+const isoDay = (date: Date) => date.toISOString().slice(0, 10);
+
+/** Záložka „Revize & Lhůtník“: semafor, odpočet, zákonná lhůta, historie revizních zpráv a termovizí, zápis nové revize. */
+export function InspectionLogbook({
+  equipmentId,
+  tag,
+  type,
+  protectionClass,
+  intervalMonths,
+  rule,
+  inspections,
+  summary,
+  today,
+  now,
+  building,
+  settings,
+  ratedVoltage,
+  reportDefaults,
+  canRecord = true,
+  canResolveDefects = true,
+  showReports = true,
+}: Props) {
   const measurable = isPortable(type);
   const openDefects = inspections.flatMap((record) => record.defects).filter((defect) => defect.status === "OPEN");
   const overdueDefects = openDefects.filter((defect) => defectState(defect, now).state === "OVERDUE").length;
@@ -67,13 +97,32 @@ export function InspectionLogbook({ equipmentId, tag, type, protectionClass, int
   const thermoState = thermo ? inspectionStateFor(thermo.validUntil, now) : null;
   const inspectors: KnownInspector[] = [];
   for (const record of inspections) {
-    if (!inspectors.some((known) => known.name === record.inspectorName && known.license === record.inspectorLicense)) {
-      inspectors.push({ name: record.inspectorName, license: record.inspectorLicense });
-    }
+    const known = inspectors.find((item) => item.name === record.inspectorName && item.license === record.inspectorLicense);
+    if (!known) {
+      inspectors.push({
+        name: record.inspectorName,
+        license: record.inspectorLicense,
+        scope: record.inspectorScope ?? scopeFromLicense(record.inspectorLicense),
+        validUntil: record.inspectorValidUntil ? isoDay(record.inspectorValidUntil) : null,
+      });
+    } else if (!known.validUntil && record.inspectorValidUntil) known.validUntil = isoDay(record.inspectorValidUntil);
   }
+  // Předvyplní se revizní technik s osvědčením (ne termodiagnostik z poslední termovize); jinak podle data
+  inspectors.sort((a, b) => Number(!!b.scope) - Number(!!a.scope));
   const year = today.slice(0, 4);
   const suggestedReportNumber = `RZ-${year}-${String(inspections.length + 1).padStart(3, "0")}/${tag}`;
   const days = summary.daysLeft;
+  // Fáze 66: zákonná lhůta (NV 190/2022 Sb., příloha č. 4) – delší uložená lhůta se ořízne, nejzazší termín do konce roku
+  const effective = effectiveIntervalMonths(intervalMonths, rule);
+  const issue = intervalIssue(intervalMonths, rule);
+  const deadline = governing && governing.result !== "INCAPABLE" ? legalDeadline(governing.inspectionDate, governing.validUntil, rule) : null;
+  // Zobrazí se, když se liší od platnosti: dřív (delší starší lhůta) nebo později (konec kalendářního roku)
+  const legal = deadline && governing && deadline.getTime() !== governing.validUntil.getTime() ? { date: deadline, shorter: deadline.getTime() < governing.validUntil.getTime(), past: inspectionStateFor(deadline, now) === "EXPIRED" } : null;
+  // Vizuální kontrola LPS 1× ročně: poslední kontrola nebo revize (revize kontrolu zahrnuje)
+  const visual = latestOfType(inspections, "VISUAL_CHECK");
+  const lastVisual = [visual?.inspectionDate, governing?.inspectionDate].filter((date): date is Date => !!date).sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
+  const visualDue = lastVisual ? computeValidUntil(lastVisual, VISUAL_CHECK_INTERVAL_MONTHS) : null;
+  const visualState = visualDue ? inspectionStateFor(visualDue, now) : "MISSING";
 
   return (
     <div className="space-y-6">
@@ -107,8 +156,10 @@ export function InspectionLogbook({ equipmentId, tag, type, protectionClass, int
           </div>
           <div>
             <dt className="text-muted-foreground">Lhůta dle {rule.standard}</dt>
-            <dd className="font-medium" title={rule.basis}>
-              {formatCount(intervalMonths, ["měsíc", "měsíce", "měsíců"])}
+            <dd className="font-medium" title={rule.basis} data-testid="inspection-interval">
+              {formatCount(effective, ["měsíc", "měsíce", "měsíců"])}
+              {effective < rule.months ? <span className="block text-xs font-normal text-muted-foreground">vlastní kratší (předpis {rule.months} m)</span> : null}
+              {effective > rule.months ? <span className="block text-xs font-normal text-muted-foreground">řád preventivní údržby</span> : null}
             </dd>
           </div>
           <div>
@@ -117,7 +168,14 @@ export function InspectionLogbook({ equipmentId, tag, type, protectionClass, int
               {governing ? `${formatDateShort(governing.inspectionDate)} · ${governing.reportNumber}` : "–"}
             </dd>
           </div>
-          {isLightCard(type) ? (
+          {type === "LIGHTNING_ROD" ? (
+            <div>
+              <dt className="text-muted-foreground">Vizuální kontrola (1× ročně)</dt>
+              <dd className={cn("font-medium", INSPECTION_STATE[visualState].text)} data-testid="lps-visual-check">
+                {visualDue ? `${visualState === "EXPIRED" ? "propadlá" : "do"} ${formatDateShort(visualDue)}` : "chybí"}
+              </dd>
+            </div>
+          ) : isLightCard(type) ? (
             <div>
               <dt className="text-muted-foreground">Pravidlo</dt>
               <dd className="text-xs text-muted-foreground">{rule.basis}</dd>
@@ -130,23 +188,62 @@ export function InspectionLogbook({ equipmentId, tag, type, protectionClass, int
             </dd>
           </div>
           )}
+          {legal ? (
+            <div className="col-span-2">
+              <dt className="text-muted-foreground">
+                Nejzazší termín podle NV 190/2022 Sb. {legal.shorter ? "(zákonná lhůta od poslední revize)" : "(příloha č. 4, pozn. b – do konce roku)"}
+              </dt>
+              <dd className={cn("font-mono font-medium", legal.past ? INSPECTION_STATE.EXPIRED.text : legal.shorter ? INSPECTION_STATE.EXPIRING.text : "")} data-testid="inspection-legal-deadline">
+                do {formatDateShort(legal.date)}
+                {legal.past ? " – po zákonném termínu" : ""}
+              </dd>
+            </div>
+          ) : null}
         </dl>
 
-        <div className="sm:self-start">
+        <div className="flex flex-col gap-2 sm:self-start">
           {canRecord ? (
-            <RecordInspectionDialog
-              equipmentId={equipmentId}
-              tag={tag}
-              intervalMonths={intervalMonths}
-              today={today}
-              suggestedReportNumber={suggestedReportNumber}
-              inspectors={inspectors}
-              measurable={measurable}
-              protectionClass={protectionClass}
-            />
+            <>
+              <RecordInspectionDialog
+                equipmentId={equipmentId}
+                tag={tag}
+                type={type}
+                intervalMonths={effective}
+                rule={rule}
+                ratedVoltage={ratedVoltage}
+                externalInfluences={settings.externalInfluences}
+                today={today}
+                suggestedReportNumber={suggestedReportNumber}
+                inspectors={inspectors}
+                reportDefaults={reportDefaults}
+                lastInstrument={inspections.find((record) => record.measuringInstrument)?.measuringInstrument ?? null}
+                measurable={measurable}
+                protectionClass={protectionClass}
+              />
+              <InspectionSettingsDialog
+                equipmentId={equipmentId}
+                tag={tag}
+                type={type}
+                building={building}
+                settings={settings}
+                governing={governing ? { inspectionDate: isoDay(governing.inspectionDate), validUntil: isoDay(governing.validUntil) } : null}
+              />
+            </>
           ) : null}
         </div>
       </section>
+
+      {issue ? (
+        <p className={cn("flex items-start gap-2 rounded-xl border p-4 text-sm", issue.level === "error" ? DEFECT_STATE.OVERDUE.soft : DEFECT_STATE.OPEN.soft)} data-testid="inspection-interval-issue">
+          <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <span>{issue.message}</span>
+        </p>
+      ) : null}
+      {governing?.validUntilOriginal ? (
+        <p className="rounded-xl border border-border bg-muted/30 p-3 text-sm text-muted-foreground" data-testid="inspection-capped">
+          Platnost revize {governing.reportNumber} je zkrácená na nejdelší zákonnou lhůtu (NV 190/2022 Sb., příloha č. 4) – ve zprávě bylo uvedeno {formatDateShort(governing.validUntilOriginal)}.
+        </p>
+      ) : null}
 
       {openDefects.length ? (
         <p className={cn("flex items-start gap-2 rounded-xl border p-4 text-sm", overdueDefects ? DEFECT_STATE.OVERDUE.soft : DEFECT_STATE.OPEN.soft)}>

@@ -475,7 +475,7 @@ export async function seedDemoPlant(prisma: PrismaClient, options: { force?: boo
   if (!options.force && Number(marker?.value ?? 0) >= DEMO_PLANT_VERSION) return { ...result, skipped: true };
 
   for (const layout of DEMO_FLOOR_LAYOUTS) {
-    const floor = await prisma.floor.findUnique({ where: { id: layout.floorId }, select: { id: true, name: true, studioLayoutJson: true, building: { select: { name: true, plantId: true } } } });
+    const floor = await prisma.floor.findUnique({ where: { id: layout.floorId }, select: { id: true, name: true, studioLayoutJson: true, building: { select: { name: true, plantId: true, type: true, crowdOver200: true } } } });
     if (!floor) continue;
     const isDemo = !floor.studioLayoutJson || !parseLayout(floor.studioLayoutJson) || /"demo":\s*\d+/.test(floor.studioLayoutJson);
     if (!isDemo) {
@@ -524,7 +524,7 @@ export async function seedDemoPlant(prisma: PrismaClient, options: { force?: boo
           protectionClass: def.protectionClass ?? null,
           inventoryNumber: portable ? `INV-${tag}` : null,
           assignedZone: room ? `${room} – ${layout.zoneSuffix}` : null,
-          inspectionIntervalMonths: inspectionRuleFor({ type: def.type, usageGroup: def.usageGroup ?? null }).months,
+          inspectionIntervalMonths: inspectionRuleFor({ type: def.type, usageGroup: def.usageGroup ?? null, protectionClass: def.protectionClass ?? null, buildingType: floor.building.type, crowdOver200: floor.building.crowdOver200 }).months,
           qrToken: newQrToken(),
           fedFromEquipmentId: parent?.id ?? null,
           fedFromCircuit: parent ? def.circuit : null,

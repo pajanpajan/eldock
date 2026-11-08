@@ -29,7 +29,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { EQUIPMENT_TYPE_LABELS, formatDate } from "@/lib/format";
 import { pragueToday, summarizeInspections } from "@/lib/inspection";
-import { USAGE_GROUP_LABELS, inspectionRuleFor, isLightCard, type UsageGroup } from "@/lib/inspection-rules";
+import { USAGE_GROUP_LABELS, inspectionRuleFor, isLightCard, ruleInputFrom, type UsageGroup } from "@/lib/inspection-rules";
+import { reportDefaults } from "@/lib/inspection-report";
 import { renderPanelSheetSvg } from "@/lib/mock-graphics/pcschematic";
 import { buildPanelModel } from "@/lib/panel-model";
 import { buildingHref, caeTicketHref, equipmentHref, floorHref, plantHref } from "@/lib/routes";
@@ -164,7 +165,22 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
   // Spotřebiče, nářadí a bezpečnostní zařízení: lehká karta jen s revizemi a měřením.
   const light = isLightCard(equipment.type);
   const activeMods = equipment.temporaryMods.filter((mod) => mod.status === "ACTIVE");
-  const rule = inspectionRuleFor({ ...equipment, externalInfluences: equipment.externalInfluences });
+  // Fáze 66: lhůta podle účelu objektu, provedení a prostoru (NV 190/2022 Sb., příloha č. 4)
+  const rule = inspectionRuleFor(ruleInputFrom(equipment, building));
+  const lastReport = equipment.inspections.find((record) => record.type === "INITIAL" || record.type === "PERIODIC") ?? null;
+  const reportDefaultTexts = reportDefaults(
+    {
+      equipment,
+      location: `${building.name} › ${floor.name}`,
+      kind: rule.kind,
+      type: "PERIODIC",
+      previous: lastReport,
+      activeRevision: equipment.revisions.find((revision) => revision.status === "ACTIVE") ?? null,
+      influencesProtocol: equipment.complianceDocuments.find((document) => document.category === "EXTERNAL_INFLUENCES") ?? null,
+      activeTemporaryMods: activeMods.length,
+    },
+    { evaluation: true },
+  );
   // Rozváděče a stroje: vícelistová kniha PCSCHEMATIC a diagnostika nad stejným modelem rozváděče.
   const panelModel = !light && hasPanelBook(equipment.type)
     ? buildPanelModel({
@@ -220,6 +236,19 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
       summary={inspection}
       today={today}
       now={now}
+      building={{ name: building.name, type: building.type, crowdOver200: building.crowdOver200 }}
+      settings={{
+        externalInfluences: equipment.externalInfluences,
+        installationKind: equipment.installationKind,
+        lpsCritical: equipment.lpsCritical,
+        preventiveMaintenance: equipment.preventiveMaintenance,
+        usageGroup: equipment.usageGroup,
+        protectionClass: equipment.protectionClass,
+        handHeld: equipment.handHeld,
+        intervalMonths: equipment.inspectionIntervalMonths,
+      }}
+      ratedVoltage={equipment.ratedVoltage}
+      reportDefaults={reportDefaultTexts}
       canRecord={account.can("recordInspection")}
       canResolveDefects={account.can("resolveDefects")}
       showReports={modules.on("inspections.pdf_reports")}

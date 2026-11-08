@@ -232,6 +232,7 @@ const REPORT_TITLES: Record<InspectionType, string> = {
   PERIODIC: "Zpráva o pravidelné revizi",
   EXTRAORDINARY: "Zpráva o mimořádné revizi",
   THERMOVISION: "Protokol o termovizním měření",
+  VISUAL_CHECK: "Záznam o vizuální kontrole LPS",
 };
 
 const VERDICTS: Record<InspectionResult, { label: string; tone: DocumentTone }> = {
@@ -258,7 +259,7 @@ export function renderInspectionReportSvg(ctx: InspectionReportContext): string 
       ["Datum provedení", ctx.inspectionDate],
       [thermo ? "Doporučené příští měření" : "Příští pravidelná revize", ctx.validUntil],
       [thermo ? "Termodiagnostik" : "Revizní technik", ctx.inspectorName],
-      [thermo ? "Certifikát" : "Ev. č. osvědčení TIČR", ctx.inspectorLicense],
+      [thermo ? "Certifikát" : "Ev. č. osvědčení RT", ctx.inspectorLicense],
     ],
     sections: thermo
       ? [
@@ -334,7 +335,7 @@ export function renderBatchProtocolSvg(ctx: BatchProtocolContext): string {
       ["Datum provedení", ctx.inspectionDate],
       ["Počet zařízení", String(ctx.items.length)],
       ["Revizní technik", ctx.inspectorName],
-      ["Ev. č. osvědčení TIČR", ctx.inspectorLicense],
+      ["Ev. č. osvědčení RT", ctx.inspectorLicense],
       ["Měřicí přístroj", ctx.instrument ?? "–"],
       ["Celkový posudek", verdict.label.replace("Elektrické zařízení ", "")],
     ],

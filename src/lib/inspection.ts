@@ -124,7 +124,12 @@ export function compareByUrgency(a: InspectionSummary, b: InspectionSummary): nu
   return rank[a.state] - rank[b.state] || (a.daysLeft ?? Infinity) - (b.daysLeft ?? Infinity);
 }
 
+/** Vizuální kontrola LPS nejméně 1× ročně (NV 190/2022 Sb., příl. 4, doplňující informace k LPS, písm. a). */
+export const VISUAL_CHECK_INTERVAL_MONTHS = 12;
+
 /** Výchozí platnost nového záznamu podle typu revize a lhůty zařízení. */
 export function defaultValidityMonths(type: InspectionType, equipmentIntervalMonths: number): number {
-  return type === "THERMOVISION" ? THERMOVISION_INTERVAL_MONTHS : equipmentIntervalMonths;
+  if (type === "THERMOVISION") return THERMOVISION_INTERVAL_MONTHS;
+  if (type === "VISUAL_CHECK") return VISUAL_CHECK_INTERVAL_MONTHS;
+  return equipmentIntervalMonths;
 }

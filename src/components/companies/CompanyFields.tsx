@@ -122,11 +122,11 @@ export function CompanyFields({
       {showAuthorization ? (
         <Field
           id={id("authorizationNumber")}
-          label="Ev. č. oprávnění TIČR (nepovinné)"
+          label="Ev. č. oprávnění firmy (zákon 250/2021 Sb., § 8) – nepovinné"
           value={value.authorizationNumber}
           onChange={(authorizationNumber) => onChange({ authorizationNumber })}
           className="sm:col-span-6"
-          placeholder="např. E-0815/2021 (NV 190/2022 Sb.)"
+          placeholder="číslo z rozhodnutí TIČR o oprávnění"
           maxLength={80}
         />
       ) : null}

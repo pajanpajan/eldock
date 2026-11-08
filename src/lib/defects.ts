@@ -31,12 +31,37 @@ export function compareDefects(a: { status: DefectStatus; deadline: Date }, b: {
   return rank(a) - rank(b) || a.deadline.getTime() - b.deadline.getTime();
 }
 
-/** Rozdělí souhrn závad z revizní zprávy na jednotlivé položky (věty / středníky / odrážky). */
+/**
+ * Rozdělí souhrn závad z revizní zprávy na jednotlivé položky (věty / středníky / odrážky). Text v hranatých
+ * závorkách (porušené ustanovení, např. „[ČSN 33 2000-4-41 ed. 3, čl. 411.3.2]“) se nedělí.
+ */
 export function splitDefects(summary: string | null | undefined): string[] {
-  return (summary ?? "")
-    .split(/(?:[;\n]|\.\s+)/)
-    .map((part) => part.replace(/^[-•\s]+/, "").replace(/\.$/, "").trim())
-    .filter((part) => part.length >= 3);
+  const text = summary ?? "";
+  const parts: string[] = [];
+  let current = "";
+  let depth = 0;
+  for (let index = 0; index < text.length; index++) {
+    const char = text[index];
+    if (char === "[") depth++;
+    else if (char === "]") depth = Math.max(0, depth - 1);
+    const boundary = depth === 0 && (char === ";" || char === "\n" || (char === "." && /\s/.test(text[index + 1] ?? "")));
+    if (boundary) {
+      parts.push(current);
+      current = "";
+    } else current += char;
+  }
+  parts.push(current);
+  return parts.map((part) => part.replace(/^[-•\s]+/, "").replace(/\.$/, "").trim()).filter((part) => part.length >= 3);
+}
+
+/**
+ * Závada „popis [ustanovení]“ → popis a porušené ustanovení předpisu nebo normy
+ * (NV 190/2022 Sb., § 10 odst. 1 písm. k – fáze 66). Bez hranatých závorek je ustanovení `null`.
+ */
+export function splitProvision(text: string): { description: string; provision: string | null } {
+  const match = /^(.*?)\s*\[([^\]]{2,200})\]\s*\.?$/.exec(text.trim());
+  if (!match || match[1].trim().length < 3) return { description: text.trim(), provision: null };
+  return { description: match[1].trim(), provision: match[2].trim() };
 }
 
 // ---------------------------------------------------------------------------

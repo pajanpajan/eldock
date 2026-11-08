@@ -27,6 +27,7 @@ export function DefectList({ defects, now, canResolve = true }: { defects: Equip
                 {status.label}
               </span>
               <span className="text-sm font-medium">{defect.description}</span>
+              {defect.provision ? <span className="font-mono text-xs text-muted-foreground">[{defect.provision}]</span> : null}
             </div>
             {state === "RESOLVED" ? (
               <p className="text-sm text-muted-foreground">

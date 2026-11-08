@@ -34,7 +34,7 @@ export default async function InspectionsPage() {
     <PageTransition>
       <PageHeader
         title="Přehled revizí"
-        description={`${plant ? plant.name : "Všechny závody"} · rozváděče a VTZ (ČSN 33 1500), stroje (NV 378/2001 Sb.), spotřebiče a nářadí (ČSN 33 1600 ed. 2), hromosvody a nouzové osvětlení.`}
+        description={`${plant ? plant.name : "Všechny závody"} · rozváděče a VTZ (NV 190/2022 Sb., příloha č. 4), stroje (NV 378/2001 Sb.), spotřebiče a nářadí (ČSN 33 1600 ed. 2), hromosvody a nouzové osvětlení.`}
         actions={
           <>
             {account.can("audit") && modules.on("inspections.audit") ? (

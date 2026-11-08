@@ -7,11 +7,13 @@ import { fileURLToPath } from "node:url";
 
 import type { EquipmentType } from "../src/generated/prisma/enums";
 import type { PrismaClient } from "../src/generated/prisma/client";
-import { inspectionRuleFor } from "../src/lib/inspection-rules";
+import { inspectionRuleFor, ruleInputFrom } from "../src/lib/inspection-rules";
 import { renderInspectionReportSvg } from "../src/lib/mock-graphics/compliance";
 import { renderEquipmentPhotoSvg, type EquipmentPhotoKind } from "../src/lib/mock-graphics/equipment-photo";
 import { buildParts } from "../src/lib/mock-graphics/parts";
 import { newQrToken } from "../src/lib/qr-label";
+
+import { day } from "./seed-data";
 
 const UPLOADS = fileURLToPath(new URL("../storage/uploads", import.meta.url));
 
@@ -273,20 +275,34 @@ const DEMO_APPLIANCES = [
 const czDate = (date: Date) => date.toLocaleDateString("cs-CZ", { timeZone: "UTC" });
 const DAY = 86_400_000;
 
-export const INSPECTOR_APPLIANCES = { name: "Milan Černý", license: "Technik revizí spotřebičů – ČSN 33 1600 ed. 2" };
-const INSPECTOR_VTZ = { name: "Ing. Jiří Kovář", license: "TIČR č. E-2210/2019 (E2A)" };
+export const INSPECTOR_APPLIANCES = { name: "Milan Černý", license: "Technik revizí spotřebičů – ČSN 33 1600 ed. 2", scope: null, validUntil: null };
+const INSPECTOR_VTZ = { name: "Ing. Jiří Kovář", license: "E-2210/2025", scope: "E2A", validUntil: day("2030-02-28") };
 
 /** Pravidelná revize se zprávou (SVG v documents/seed) – před `daysAgo` dny, lhůta podle zařízení. */
 export async function addInspection(
   prisma: PrismaClient,
   equipmentId: string,
-  options: { daysAgo: number; inspector: { name: string; license: string }; measurements?: { rpe: number | null; riso: number; leakage: number } },
+  options: {
+    daysAgo: number;
+    inspector: { name: string; license: string; scope?: string | null; validUntil?: Date | null };
+    measurements?: { rpe: number | null; riso: number; leakage: number };
+  },
 ) {
   const eq = await prisma.equipment.findUniqueOrThrow({
     where: { id: equipmentId },
-    select: { tag: true, name: true, type: true, usageGroup: true, ratedVoltage: true, ratedCurrent: true, inspectionIntervalMonths: true, floor: { select: { name: true, building: { select: { name: true } } } } },
+    select: {
+      tag: true,
+      name: true,
+      type: true,
+      usageGroup: true,
+      protectionClass: true,
+      ratedVoltage: true,
+      ratedCurrent: true,
+      inspectionIntervalMonths: true,
+      floor: { select: { name: true, building: { select: { name: true, type: true, crowdOver200: true } } } },
+    },
   });
-  const rule = inspectionRuleFor(eq);
+  const rule = inspectionRuleFor(ruleInputFrom(eq, eq.floor.building));
   const inspectionDate = new Date(Date.now() - options.daysAgo * DAY);
   inspectionDate.setUTCHours(9, 0, 0, 0);
   const validUntil = new Date(inspectionDate);
@@ -326,6 +342,8 @@ export async function addInspection(
       reportNumber,
       inspectorName: options.inspector.name,
       inspectorLicense: options.inspector.license,
+      inspectorScope: options.inspector.scope ?? null,
+      inspectorValidUntil: options.inspector.validUntil ?? null,
       result: "CAPABLE",
       reportUrl: `/api/files/documents/seed/${fileName}`,
       measuringInstrument: measurements?.instrument ?? null,
@@ -366,7 +384,7 @@ async function seedDemoAppliances(prisma: PrismaClient): Promise<number> {
         protectionClass: item.protectionClass,
         inventoryNumber: item.inventoryNumber,
         assignedZone: item.assignedZone,
-        inspectionIntervalMonths: inspectionRuleFor({ type: item.type, usageGroup: item.usageGroup }).months,
+        inspectionIntervalMonths: inspectionRuleFor({ type: item.type, usageGroup: item.usageGroup, protectionClass: item.protectionClass }).months,
         qrToken: newQrToken(),
         ...pin(...item.at),
       },

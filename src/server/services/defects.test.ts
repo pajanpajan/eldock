@@ -28,6 +28,9 @@ const inspect = (result: "CAPABLE" | "CAPABLE_WITH_DEFECTS" | "INCAPABLE", defec
       reportNumber: "RZ-2026-300/TST",
       inspectorName: "Ing. Pavel Horák",
       inspectorLicense: "TIČR č. E-0815/2021",
+      // Fáze 66: osvědčení revizního technika (rozsah a platnost) – zákon 250/2021 Sb., § 11 a § 17
+      inspectorScope: "E1A",
+      inspectorValidUntil: "2029-03-31",
       result,
       defectsSummary,
       reportUrl: "/api/files/documents/x.svg",
@@ -37,7 +40,7 @@ const inspect = (result: "CAPABLE" | "CAPABLE_WITH_DEFECTS" | "INCAPABLE", defec
 
 describe("revizní závady", () => {
   it("revize s výhradou založí závady s lhůtou 30 dnů, bez závad žádné", async () => {
-    await inspect("CAPABLE_WITH_DEFECTS", "Uvolněná svorka PE na X1. Chybí výstražná tabulka na dveřích.");
+    await inspect("CAPABLE_WITH_DEFECTS", "Uvolněná svorka PE na X1 [ČSN 33 2000-5-54 ed. 3, čl. 526.1]. Chybí výstražná tabulka na dveřích [ČSN EN 61439-1 ed. 3, čl. 6.1].");
     const defects = await prisma.inspectionDefect.findMany({ orderBy: { description: "asc" } });
     expect(defects.map((defect) => [defect.description, defect.severity, defect.status])).toEqual([
       ["Chybí výstražná tabulka na dveřích", "MAJOR", "OPEN"],
@@ -49,12 +52,12 @@ describe("revizní závady", () => {
   });
 
   it("neschopno provozu = kritická závada s okamžitou lhůtou", async () => {
-    await inspect("INCAPABLE", "Poškozená izolace přívodu");
+    await inspect("INCAPABLE", "Poškozená izolace přívodu [ČSN 33 2000-4-41 ed. 3, čl. 411.2]");
     expect(await prisma.inspectionDefect.findFirstOrThrow()).toMatchObject({ severity: "CRITICAL", deadline: new Date("2026-10-20T10:00:00Z") });
   });
 
   it("potvrzení odstranění uloží opravu, kdo a kdy; podruhé nejde", async () => {
-    await inspect("CAPABLE_WITH_DEFECTS", "Uvolněná svorka PE na X1");
+    await inspect("CAPABLE_WITH_DEFECTS", "Uvolněná svorka PE na X1 [ČSN 33 2000-5-54 ed. 3, čl. 526.1]");
     const defect = await prisma.inspectionDefect.findFirstOrThrow();
     const resolved = await resolveDefect(
       prisma,

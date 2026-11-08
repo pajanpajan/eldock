@@ -98,7 +98,7 @@ export const ACCOUNT_TYPES: Record<AccountType, AccountDefinition> = {
   },
   INSPECTOR_VTZ: {
     label: "Revizní technik VTZ",
-    scopeDescription: "Jen vyhrazená technická zařízení (ČSN 33 1500, NV 190/2022 Sb.) – bez spotřebičů a nářadí.",
+    scopeDescription: "Jen vyhrazená technická zařízení (zákon 250/2021 Sb., NV 190/2022 Sb.) – bez spotřebičů a nářadí.",
     layers: [...FIXED, "SAFETY"],
     permissions: ["recordInspection", "inspections", "planner", "temporaryMods", "resolveDefects"],
     workflowRole: "MAINTENANCE",

@@ -105,6 +105,7 @@ export const INSPECTION_TYPE_LABELS: Record<InspectionType, string> = {
   PERIODIC: "Pravidelná revize",
   EXTRAORDINARY: "Mimořádná revize",
   THERMOVISION: "Termovize",
+  VISUAL_CHECK: "Vizuální kontrola LPS",
 };
 
 export const COMPLIANCE_CATEGORY_LABELS: Record<ComplianceCategory, { label: string; hint: string }> = {

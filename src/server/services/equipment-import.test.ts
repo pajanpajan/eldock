@@ -47,8 +47,17 @@ describe("hromadný import zařízení", () => {
     expect(kettle.inspections[0].validUntil.toISOString().slice(0, 10)).toBe("2028-03-12");
     expect(kettle.inspections[0].reportUrl).toBe("/api/files/documents/import-1.svg");
     const drill = await prisma.equipment.findFirstOrThrow({ where: { tag: "NR-1" } });
-    expect(drill.inspectionIntervalMonths).toBe(12);
+    // Fáze 66: ruční nářadí třídy I ve skupině C – 6 měsíců (ČSN 33 1600 ed. 2, tab. 1)
+    expect(drill.inspectionIntervalMonths).toBe(6);
     expect(drill.usageGroup).toBe("C");
+  });
+
+  it("fáze 66: lhůtu VTZ delší než zákonnou zkrátí a vrátí v seznamu úprav", async () => {
+    const result = await importEquipment(prisma, { items: [item("RX-1", { type: "SWITCHBOARD", intervalMonths: 60, lastInspection: new Date("2025-03-12T12:00:00Z") })], writeReport });
+    expect(result.adjusted).toEqual([{ tag: "RX-1", from: 60, to: 36 }]);
+    const board = await prisma.equipment.findFirstOrThrow({ where: { tag: "RX-1" }, include: { inspections: true } });
+    expect(board.inspectionIntervalMonths).toBe(36);
+    expect(board.inspections[0].validUntil.toISOString().slice(0, 10)).toBe("2028-03-12");
   });
 
   it("přeskočí evidenční čísla, která v závodě už jsou (i duplicitní v souboru)", async () => {

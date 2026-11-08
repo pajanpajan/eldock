@@ -20,44 +20,77 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import type { DefectSeverity, InspectionResult, InspectionType } from "@/generated/prisma/enums";
+import type { DefectSeverity, EquipmentType, InspectionResult, InspectionType } from "@/generated/prisma/enums";
 import { INSPECTION_TYPE_LABELS, formatDateShort } from "@/lib/format";
-import { computeValidUntil, defaultValidityMonths } from "@/lib/inspection";
-import { evaluateMeasurements, measurementLimits } from "@/lib/inspection-rules";
+import { DEADLINE_TYPES, computeValidUntil, defaultValidityMonths } from "@/lib/inspection";
+import { isReportType, type ReportDefaults } from "@/lib/inspection-report";
+import { evaluateMeasurements, measurementLimits, requiresCertificate, type InspectionRule } from "@/lib/inspection-rules";
 import { leakageLimitMa } from "@/lib/inspection-protocol";
+import { INSPECTOR_SCOPES, certificateIssues } from "@/lib/inspector-certificate";
 import { MAX_TRIP_TIME_MS, RCD_TEST_TYPES, maxMeasuredLoopOhm, tripCurrentRange, type RcdTestType } from "@/lib/rcd-test";
-import { DEFECT_DEADLINE_DAYS, severityForResult, thermalLevel } from "@/lib/defects";
+import { DEFECT_DEADLINE_DAYS, severityForResult, splitDefects, splitProvision, thermalLevel } from "@/lib/defects";
 import { DEFECT_SEVERITY, INSPECTION_RESULT, THERMAL_LEVEL } from "@/lib/status";
 import { uploadFile, type UploadedFile } from "@/lib/upload-client";
 import { cn } from "@/lib/utils";
 import { recordInspectionAction } from "@/server/actions/inspection";
 
-const TYPES: InspectionType[] = ["PERIODIC", "EXTRAORDINARY", "THERMOVISION", "INITIAL"];
+const BASE_TYPES: InspectionType[] = ["PERIODIC", "EXTRAORDINARY", "THERMOVISION", "INITIAL"];
 const RESULTS: InspectionResult[] = ["CAPABLE", "CAPABLE_WITH_DEFECTS", "INCAPABLE"];
 const ITEM = "touch-target rounded-md border-0! px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground";
+const SELECT = "h-11 w-full rounded-md border border-input bg-transparent px-3 text-sm dark:bg-input/30";
 
 export interface KnownInspector {
   name: string;
   license: string;
+  /** Rozsah osvědčení „E2A“ (NV 190/2022 Sb., příloha č. 5). */
+  scope: string | null;
+  /** Platnost osvědčení `YYYY-MM-DD`. */
+  validUntil: string | null;
 }
 
 interface Props {
   equipmentId: string;
   tag: string;
+  type: EquipmentType;
+  /** Lhůta, se kterou se revize zapíše (u VTZ nejvýš zákonná). */
   intervalMonths: number;
+  rule: InspectionRule;
+  /** Údaje pro kontrolu rozsahu osvědčení (VN, prostor s nebezpečím výbuchu). */
+  ratedVoltage: string | null;
+  externalInfluences: string | null;
   /** Dnešní den `YYYY-MM-DD` (ze serveru, ať se neliší hydratace). */
   today: string;
   suggestedReportNumber: string;
   inspectors: KnownInspector[];
+  /** Předvyplněné náležitosti zprávy (NV 190/2022 Sb., § 10 odst. 1). */
+  reportDefaults: ReportDefaults;
+  lastInstrument?: string | null;
   /** Přenosný spotřebič / nářadí – zobrazí pole měření R_PE a R_iso. */
   measurable?: boolean;
   protectionClass?: string | null;
 }
 
-/** Dialog „Zapsat novou revizi“: druh, datum, platnost, technik s osvědčením TIČR, posudek, závady a zpráva. */
-export function RecordInspectionDialog({ equipmentId, tag, intervalMonths, today, suggestedReportNumber, inspectors, measurable = false, protectionClass = null }: Props) {
+const day = (value: string) => new Date(`${value}T10:00:00Z`);
+
+/** Dialog „Zapsat novou revizi“: druh, data, platnost, technik s osvědčením, posudek, závady s ustanoveními, náležitosti zprávy. */
+export function RecordInspectionDialog({
+  equipmentId,
+  tag,
+  type: equipmentType,
+  intervalMonths,
+  rule,
+  ratedVoltage,
+  externalInfluences,
+  today,
+  suggestedReportNumber,
+  inspectors,
+  reportDefaults,
+  lastInstrument = null,
+  measurable = false,
+  protectionClass = null,
+}: Props) {
   const limits = measurementLimits(protectionClass);
-  const [instrument, setInstrument] = useState("Metrel MI 3309 BT");
+  const [instrument, setInstrument] = useState(lastInstrument ?? (measurable ? "Metrel MI 3309 BT" : ""));
   const [rpe, setRpe] = useState(limits.typical.rpe === null ? "" : String(limits.typical.rpe));
   const [riso, setRiso] = useState(String(limits.typical.riso));
   const [leakage, setLeakage] = useState(measurable ? "0,4" : "");
@@ -77,31 +110,62 @@ export function RecordInspectionDialog({ equipmentId, tag, intervalMonths, today
   const [reportNumber, setReportNumber] = useState(suggestedReportNumber);
   const [inspectorName, setInspectorName] = useState(inspectors[0]?.name ?? "");
   const [inspectorLicense, setInspectorLicense] = useState(inspectors[0]?.license ?? "");
+  const [scope, setScope] = useState(inspectors[0]?.scope ?? "");
+  const [certValidUntil, setCertValidUntil] = useState(inspectors[0]?.validUntil ?? "");
   const [result, setResult] = useState<InspectionResult>("CAPABLE");
   const [defects, setDefects] = useState("");
+  // Fáze 66: náležitosti zprávy o revizi (NV 190/2022 Sb., § 10 odst. 1)
+  const [reason, setReason] = useState("");
+  const [startedAt, setStartedAt] = useState("");
+  const [reportedAt, setReportedAt] = useState("");
+  const [handedOverAt, setHandedOverAt] = useState("");
+  const [scopeNote, setScopeNote] = useState(reportDefaults.scopeNote);
+  const [documentsUsed, setDocumentsUsed] = useState(reportDefaults.documentsUsed);
+  const [actsPerformed, setActsPerformed] = useState(reportDefaults.actsPerformed);
+  const [previousEvaluation, setPreviousEvaluation] = useState(reportDefaults.previousEvaluation);
   const [file, setFile] = useState<UploadedFile | null>(null);
   const [progress, setProgress] = useState<number | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
+  const types = equipmentType === "LIGHTNING_ROD" ? [...BASE_TYPES, "VISUAL_CHECK" as const] : BASE_TYPES;
+  const report = isReportType(type);
   const validity = months ?? defaultValidityMonths(type, intervalMonths);
   let validUntil: string | null = null;
   try {
-    validUntil = date && validity > 0 ? formatDateShort(computeValidUntil(new Date(`${date}T10:00:00Z`), validity)) : null;
+    validUntil = date && validity > 0 ? formatDateShort(computeValidUntil(day(date), validity)) : null;
   } catch {
     validUntil = null;
   }
+  const overLimit = rule.binding && DEADLINE_TYPES.includes(type) && validity > rule.maxMonths;
   const needsDefects = result !== "CAPABLE";
   const toNumber = (value: string) => (value.trim() === "" ? null : Number(value.replace(",", ".")));
   const measurement = measurable ? evaluateMeasurements(protectionClass, { rpe: toNumber(rpe), riso: toNumber(riso) }) : null;
+  const certificateRequired = report && requiresCertificate(rule);
+  const certificate = certificateRequired && date
+    ? certificateIssues({ scope, validUntil: certValidUntil ? day(certValidUntil) : null, inspectionDate: day(date), rule, equipment: { type: equipmentType, ratedVoltage, externalInfluences } })
+    : [];
+  // U zprávy o revizi VTZ a LPS musí mít každá závada porušené ustanovení (§ 10 odst. 1 písm. k)
+  const defectItems = needsDefects && defects.trim() ? splitDefects(defects).map(splitProvision) : [];
+  const missingProvision = certificateRequired && defectItems.some((item) => !item.provision);
+  const dateIssues = [
+    report && startedAt && date && startedAt > date ? "Zahájení revize nemůže být po jejím ukončení." : null,
+    report && reportedAt && (reportedAt < date || reportedAt > today) ? "Vypracování zprávy musí být mezi ukončením revize a dneškem." : null,
+    report && handedOverAt && (handedOverAt < (reportedAt || date) || handedOverAt > today) ? "Předání zprávy musí být mezi vypracováním a dneškem." : null,
+  ].filter(Boolean) as string[];
   const valid =
     !!date &&
     date <= today &&
     validity >= 1 &&
     validity <= 120 &&
+    !overLimit &&
     reportNumber.trim() !== "" &&
     inspectorName.trim() !== "" &&
     inspectorLicense.trim() !== "" &&
+    certificate.length === 0 &&
+    (type !== "EXTRAORDINARY" || reason.trim().length >= 3) &&
     (!needsDefects || defects.trim().length >= 3) &&
+    !missingProvision &&
+    dateIssues.length === 0 &&
     progress === null;
 
   async function onFile(selected: File | undefined) {
@@ -128,6 +192,8 @@ export function RecordInspectionDialog({ equipmentId, tag, intervalMonths, today
         reportNumber,
         inspectorName,
         inspectorLicense,
+        inspectorScope: scope || null,
+        inspectorValidUntil: certValidUntil || null,
         result,
         defectsSummary: needsDefects ? defects : defects.trim() || null,
         reportUrl: file?.url ?? null,
@@ -135,9 +201,9 @@ export function RecordInspectionDialog({ equipmentId, tag, intervalMonths, today
         defectSeverity: needsDefects ? (severity ?? severityForResult(result)) : null,
         ...(measurable
           ? { measuringInstrument: instrument || null, protectiveConductorResistance: toNumber(rpe), insulationResistance: toNumber(riso), leakageCurrent: toNumber(leakage) }
-          : {}),
-        ...(type === "THERMOVISION" ? {} : { functionalTest: functional === "" ? null : functional === "ok" }),
-        ...(!measurable && type !== "THERMOVISION" && (rcd.noTrip || rcd.tripTime || rcd.tripCurrent || rcd.loop)
+          : { measuringInstrument: instrument.trim() || null }),
+        ...(type === "THERMOVISION" || type === "VISUAL_CHECK" ? {} : { functionalTest: functional === "" ? null : functional === "ok" }),
+        ...(!measurable && report && (rcd.noTrip || rcd.tripTime || rcd.tripCurrent || rcd.loop)
           ? {
               rcdTest: {
                 ratedMa: toNumber(rcd.ratedMa) ?? 30,
@@ -151,6 +217,18 @@ export function RecordInspectionDialog({ equipmentId, tag, intervalMonths, today
               },
             }
           : {}),
+        ...(report
+          ? {
+              extraordinaryReason: type === "EXTRAORDINARY" ? reason : null,
+              startedAt: startedAt || null,
+              reportedAt: reportedAt || null,
+              handedOverAt: handedOverAt || null,
+              scopeNote,
+              documentsUsed,
+              actsPerformed,
+              previousEvaluation,
+            }
+          : {}),
       });
       if (!response.ok) {
         toast.error(response.error);
@@ -162,6 +240,7 @@ export function RecordInspectionDialog({ equipmentId, tag, intervalMonths, today
       setOpen(false);
       setFile(null);
       setDefects("");
+      setReason("");
       setResult("CAPABLE");
       router.refresh();
     });
@@ -178,7 +257,11 @@ export function RecordInspectionDialog({ equipmentId, tag, intervalMonths, today
         <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Zapsat novou revizi – {tag}</DialogTitle>
-            <DialogDescription>Revizní zpráva dle ČSN 33 1500. Platnost se dopočítá z data a lhůty.</DialogDescription>
+            <DialogDescription>
+              {rule.kind === "VTZ" || rule.kind === "LPS"
+                ? "Zpráva o revizi VTZ podle NV 190/2022 Sb., § 10. Platnost se dopočítá z data a lhůty, nejvýš zákonné."
+                : `Revize podle ${rule.standard}. Platnost se dopočítá z data a lhůty.`}
+            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-5">
@@ -197,17 +280,29 @@ export function RecordInspectionDialog({ equipmentId, tag, intervalMonths, today
                 aria-labelledby="inspection-type-label"
                 className="flex-wrap border border-border bg-card/60 p-0.5"
               >
-                {TYPES.map((value) => (
+                {types.map((value) => (
                   <ToggleGroupItem key={value} value={value} className={ITEM}>
                     {INSPECTION_TYPE_LABELS[value]}
                   </ToggleGroupItem>
                 ))}
               </ToggleGroup>
+              {type === "VISUAL_CHECK" ? (
+                <p className="text-xs text-muted-foreground">Vizuální kontrola LPS nejméně 1× ročně (NV 190/2022 Sb., příloha č. 4) – ověří, že LPS není viditelně poškozen. Lhůtu revize neposouvá.</p>
+              ) : null}
             </div>
+
+            {type === "EXTRAORDINARY" ? (
+              <div className="space-y-2">
+                <Label htmlFor="inspection-reason">
+                  Důvod mimořádné revize <span className="text-red-400">*</span>
+                </Label>
+                <Input id="inspection-reason" value={reason} onChange={(event) => setReason(event.target.value)} maxLength={500} placeholder="Např. po rekonstrukci rozváděče, po úderu blesku, na žádost pojišťovny" className="h-11" />
+              </div>
+            ) : null}
 
             <div className="grid gap-4 sm:grid-cols-3">
               <div className="space-y-2">
-                <Label htmlFor="inspection-date">Datum provedení</Label>
+                <Label htmlFor="inspection-date">{report ? "Ukončení revize" : "Datum provedení"}</Label>
                 <Input id="inspection-date" type="date" value={date} max={today} onChange={(event) => setDate(event.target.value)} className="h-11" />
               </div>
               <div className="space-y-2">
@@ -217,16 +312,22 @@ export function RecordInspectionDialog({ equipmentId, tag, intervalMonths, today
                   type="number"
                   inputMode="numeric"
                   min={1}
-                  max={120}
+                  max={rule.binding && DEADLINE_TYPES.includes(type) ? rule.maxMonths : 120}
                   value={validity}
                   onChange={(event) => setMonths(event.target.value === "" ? 0 : Number(event.target.value))}
                   className="h-11"
+                  aria-invalid={overLimit || undefined}
                 />
               </div>
               <div className="space-y-2">
                 <Label>Platí do</Label>
                 <p className="flex h-11 items-center rounded-md border border-border bg-muted/40 px-3 font-mono">{validUntil ?? "–"}</p>
               </div>
+              {overLimit ? (
+                <p className="text-sm text-red-300 sm:col-span-3" data-testid="inspection-over-limit">
+                  Nejdelší zákonná lhůta je {rule.maxMonths} měsíců – {rule.basis}
+                </p>
+              ) : null}
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
@@ -235,11 +336,11 @@ export function RecordInspectionDialog({ equipmentId, tag, intervalMonths, today
                 <Input id="inspection-number" value={reportNumber} onChange={(event) => setReportNumber(event.target.value)} maxLength={60} className="h-11 font-mono" />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="inspection-inspector">{type === "THERMOVISION" ? "Termodiagnostik" : "Revizní technik"}</Label>
+                <Label htmlFor="inspection-inspector">{type === "THERMOVISION" ? "Termodiagnostik" : type === "VISUAL_CHECK" ? "Kontrolu provedl" : "Revizní technik"}</Label>
                 <Input id="inspection-inspector" value={inspectorName} onChange={(event) => setInspectorName(event.target.value)} maxLength={120} className="h-11" />
               </div>
               <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor="inspection-license">Ev. č. osvědčení TIČR (NV 190/2022 Sb.) / certifikát</Label>
+                <Label htmlFor="inspection-license">{report ? "Ev. č. osvědčení revizního technika (zákon 250/2021 Sb., § 11)" : "Číslo osvědčení / certifikátu"}</Label>
                 <Input id="inspection-license" value={inspectorLicense} onChange={(event) => setInspectorLicense(event.target.value)} maxLength={120} className="h-11 font-mono" />
                 {inspectors.length ? (
                   <div className="flex flex-wrap gap-2">
@@ -253,14 +354,47 @@ export function RecordInspectionDialog({ equipmentId, tag, intervalMonths, today
                         onClick={() => {
                           setInspectorName(inspector.name);
                           setInspectorLicense(inspector.license);
+                          setScope(inspector.scope ?? "");
+                          setCertValidUntil(inspector.validUntil ?? "");
                         }}
                       >
                         {inspector.name}
+                        {inspector.scope ? <span className="font-mono text-xs text-muted-foreground">{inspector.scope}</span> : null}
                       </Button>
                     ))}
                   </div>
                 ) : null}
               </div>
+              {report ? (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="inspection-scope">
+                      Rozsah osvědčení {certificateRequired ? <span className="text-red-400">*</span> : <span className="text-muted-foreground">(nepovinné)</span>}
+                    </Label>
+                    <select id="inspection-scope" value={scope} onChange={(event) => setScope(event.target.value)} className={SELECT}>
+                      <option value="">Neuvedeno</option>
+                      {INSPECTOR_SCOPES.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="inspection-cert-valid">
+                      Osvědčení platí do {certificateRequired ? <span className="text-red-400">*</span> : <span className="text-muted-foreground">(nepovinné)</span>}
+                    </Label>
+                    <Input id="inspection-cert-valid" type="date" value={certValidUntil} onChange={(event) => setCertValidUntil(event.target.value)} className="h-11" />
+                  </div>
+                  {certificate.length ? (
+                    <ul className="space-y-1 text-sm text-red-300 sm:col-span-2" data-testid="inspection-certificate-issues">
+                      {certificate.map((issue) => (
+                        <li key={issue}>{issue}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </>
+              ) : null}
             </div>
 
             {type === "THERMOVISION" ? (
@@ -308,7 +442,7 @@ export function RecordInspectionDialog({ equipmentId, tag, intervalMonths, today
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="inspection-instrument">Měřicí přístroj</Label>
-                  <Input id="inspection-instrument" value={instrument} onChange={(event) => setInstrument(event.target.value)} maxLength={120} className="h-11" />
+                  <Input id="inspection-instrument" value={instrument} onChange={(event) => setInstrument(event.target.value)} maxLength={500} className="h-11" />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="inspection-leakage">
@@ -322,7 +456,7 @@ export function RecordInspectionDialog({ equipmentId, tag, intervalMonths, today
               </div>
             ) : null}
 
-            {!measurable && type !== "THERMOVISION" ? (
+            {!measurable && report ? (
               <details className="rounded-md border border-border p-3" data-testid="rcd-test">
                 <summary className="cursor-pointer text-sm font-semibold">Zkouška proudového chrániče (ČSN EN 61557-6 ed. 2) a impedance smyčky</summary>
                 <div className="mt-3 grid gap-3 sm:grid-cols-4">
@@ -332,7 +466,7 @@ export function RecordInspectionDialog({ equipmentId, tag, intervalMonths, today
                   </div>
                   <div className="space-y-1">
                     <Label htmlFor="rcd-type">Typ chrániče</Label>
-                    <select id="rcd-type" value={rcd.type} onChange={(event) => setRcd({ ...rcd, type: event.target.value as RcdTestType })} className="h-11 w-full rounded-md border border-input bg-transparent px-3 text-sm dark:bg-input/30">
+                    <select id="rcd-type" value={rcd.type} onChange={(event) => setRcd({ ...rcd, type: event.target.value as RcdTestType })} className={SELECT}>
                       {RCD_TEST_TYPES.map((value) => (
                         <option key={value} value={value}>
                           {value}
@@ -342,7 +476,7 @@ export function RecordInspectionDialog({ equipmentId, tag, intervalMonths, today
                   </div>
                   <div className="space-y-1 sm:col-span-2">
                     <Label htmlFor="rcd-notrip">1) 0,5 · I<sub>Δn</sub> po dobu ≥ 300 ms</Label>
-                    <select id="rcd-notrip" value={rcd.noTrip} onChange={(event) => setRcd({ ...rcd, noTrip: event.target.value as "" | "ok" | "trip" })} className="h-11 w-full rounded-md border border-input bg-transparent px-3 text-sm dark:bg-input/30">
+                    <select id="rcd-notrip" value={rcd.noTrip} onChange={(event) => setRcd({ ...rcd, noTrip: event.target.value as "" | "ok" | "trip" })} className={SELECT}>
                       <option value="">Neměřeno</option>
                       <option value="ok">Nevybavil (vyhovuje)</option>
                       <option value="trip">Vybavil (nevyhovuje)</option>
@@ -376,15 +510,10 @@ export function RecordInspectionDialog({ equipmentId, tag, intervalMonths, today
               </details>
             ) : null}
 
-            {type !== "THERMOVISION" ? (
+            {report ? (
               <div className="space-y-2">
                 <Label htmlFor="inspection-functional">Funkční zkouška</Label>
-                <select
-                  id="inspection-functional"
-                  value={functional}
-                  onChange={(event) => setFunctional(event.target.value as "ok" | "fail" | "")}
-                  className="h-11 w-full rounded-md border border-input bg-transparent px-3 text-sm dark:bg-input/30"
-                >
+                <select id="inspection-functional" value={functional} onChange={(event) => setFunctional(event.target.value as "ok" | "fail" | "")} className={SELECT}>
                   <option value="ok">Vyhovuje</option>
                   <option value="fail">Nevyhovuje</option>
                   <option value="">Neprováděla se</option>
@@ -429,9 +558,15 @@ export function RecordInspectionDialog({ equipmentId, tag, intervalMonths, today
                 onChange={(event) => setDefects(event.target.value)}
                 rows={3}
                 maxLength={4000}
-                placeholder="Např. Chybí krytí živých částí IP2X u stykače K2."
-                aria-invalid={needsDefects && defects.length > 0 && defects.trim().length < 3 ? true : undefined}
+                placeholder={certificateRequired ? "Každá závada na řádek, porušené ustanovení v hranatých závorkách: Chybí krytí živých částí IP2X u stykače K2 [ČSN 33 2000-4-41 ed. 3, čl. 411.2]" : "Např. Chybí krytí živých částí IP2X u stykače K2."}
+                aria-invalid={(needsDefects && defects.length > 0 && defects.trim().length < 3) || missingProvision ? true : undefined}
               />
+              {certificateRequired && needsDefects ? (
+                <p className={cn("text-xs", missingProvision ? "text-red-300" : "text-muted-foreground")} data-testid="inspection-provision-hint">
+                  U zprávy o revizi VTZ uveďte u každé závady porušené ustanovení předpisu nebo normy v hranatých závorkách (NV 190/2022 Sb., § 10 odst. 1 písm. k).
+                  {defectItems.length ? ` Závady: ${defectItems.length}, s ustanovením ${defectItems.filter((item) => item.provision).length}.` : ""}
+                </p>
+              ) : null}
               {needsDefects ? (
                 <div className="flex flex-wrap items-center gap-2" role="radiogroup" aria-label="Závažnost závad">
                   <span className="text-sm text-muted-foreground">Závažnost (lhůta odstranění):</span>
@@ -453,6 +588,54 @@ export function RecordInspectionDialog({ equipmentId, tag, intervalMonths, today
                 </div>
               ) : null}
             </div>
+
+            {report ? (
+              <details className="rounded-md border border-border p-3" data-testid="inspection-report-details">
+                <summary className="cursor-pointer text-sm font-semibold">
+                  Náležitosti zprávy (NV 190/2022 Sb., § 10) – rozsah, data, přístroje, podklady, úkony a předchozí revize
+                </summary>
+                <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                  <div className="space-y-1">
+                    <Label htmlFor="inspection-started">Zahájení revize</Label>
+                    <Input id="inspection-started" type="date" value={startedAt} max={date} onChange={(event) => setStartedAt(event.target.value)} className="h-11" />
+                    <p className="text-[11px] text-muted-foreground">Prázdné = den ukončení.</p>
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="inspection-reported">Vypracování zprávy</Label>
+                    <Input id="inspection-reported" type="date" value={reportedAt} min={date} max={today} onChange={(event) => setReportedAt(event.target.value)} className="h-11" />
+                    <p className="text-[11px] text-muted-foreground">Prázdné = den ukončení.</p>
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="inspection-handed">Předání zprávy</Label>
+                    <Input id="inspection-handed" type="date" value={handedOverAt} min={reportedAt || date} max={today} onChange={(event) => setHandedOverAt(event.target.value)} className="h-11" />
+                    <p className="text-[11px] text-muted-foreground">Prázdné = potvrdí se podpisem převzetí.</p>
+                  </div>
+                  {dateIssues.length ? <p className="text-sm text-red-300 sm:col-span-3">{dateIssues.join(" ")}</p> : null}
+                  {!measurable ? (
+                    <div className="space-y-1 sm:col-span-3">
+                      <Label htmlFor="inspection-instruments">Měřicí přístroje (typ, výrobní číslo, kalibrace)</Label>
+                      <Input id="inspection-instruments" value={instrument} onChange={(event) => setInstrument(event.target.value)} maxLength={500} placeholder="Metrel MI 3152 EurotestXC, v. č. 21460312, kalibrace do 05/2027" className="h-11" />
+                    </div>
+                  ) : null}
+                  <div className="space-y-1 sm:col-span-3">
+                    <Label htmlFor="inspection-scope-note">Rozsah revize</Label>
+                    <Textarea id="inspection-scope-note" value={scopeNote} onChange={(event) => setScopeNote(event.target.value)} rows={2} maxLength={4000} />
+                  </div>
+                  <div className="space-y-1 sm:col-span-3">
+                    <Label htmlFor="inspection-documents">Podklady a jejich vyhodnocení</Label>
+                    <Textarea id="inspection-documents" value={documentsUsed} onChange={(event) => setDocumentsUsed(event.target.value)} rows={3} maxLength={4000} />
+                  </div>
+                  <div className="space-y-1 sm:col-span-3">
+                    <Label htmlFor="inspection-acts">Provedené úkony</Label>
+                    <Textarea id="inspection-acts" value={actsPerformed} onChange={(event) => setActsPerformed(event.target.value)} rows={3} maxLength={4000} />
+                  </div>
+                  <div className="space-y-1 sm:col-span-3">
+                    <Label htmlFor="inspection-previous">Vyhodnocení předchozí revize, provozu a údržby</Label>
+                    <Textarea id="inspection-previous" value={previousEvaluation} onChange={(event) => setPreviousEvaluation(event.target.value)} rows={2} maxLength={4000} />
+                  </div>
+                </div>
+              </details>
+            ) : null}
 
             <div className="space-y-2">
               <Label>Revizní zpráva</Label>

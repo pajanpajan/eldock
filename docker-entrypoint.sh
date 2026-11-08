@@ -9,6 +9,8 @@
 #      a ukázky legislativy 2027 – návody, zálohy SW, pas baterie (`npm run db:demo-legislation`)
 #      a životnost součástek + kabelové pasporty (`npm run db:demo-lifespan`, fáze 53)
 #   4. spustí aplikaci (CMD, výchozí `node server.js`)
+# Přepočet lhůt revizí podle NV 190/2022 Sb. (fáze 66, `npm run db:fix-intervals`) se při startu NEspouští – mění
+# platnosti revizí, proto jen ručně se souhlasem provozovatele (viz CLAUDE.md, oddíl 7).
 set -eu
 
 if [ "$(id -u)" = "0" ]; then

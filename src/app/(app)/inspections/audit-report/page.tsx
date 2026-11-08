@@ -15,7 +15,7 @@ import { summarizeAudit } from "@/lib/audit-report";
 import { BRAND_PRINT_LINE } from "@/lib/brand";
 import { defectState } from "@/lib/defects";
 import { EQUIPMENT_TYPE_LABELS, formatDateShort, formatDateTime } from "@/lib/format";
-import { inspectionRuleFor } from "@/lib/inspection-rules";
+import { effectiveIntervalMonths, inspectionRuleFor, legalDeadline } from "@/lib/inspection-rules";
 import { equipmentHref } from "@/lib/routes";
 import { DEFECT_SEVERITY, DEFECT_STATE, INSPECTION_RESULT, INSPECTION_STATE, TEMP_MOD_OVERDUE, TEMP_MOD_STATUS, inspectionBadgeLabel } from "@/lib/status";
 import { tempModCountdown } from "@/lib/temporary-mod";
@@ -40,21 +40,30 @@ export default async function AuditReportPage() {
   const overdueDefects = defects.filter((defect) => defectState(defect, now).state === "OVERDUE").length;
   const overdueMods = mods.filter((mod) => tempModCountdown(mod.expiresAt, now).overdue).length;
   const plantName = plant?.name ?? "Všechny závody";
+  // Fáze 66: lhůta zařízení nejvýš zákonná a nejzazší termín VTZ do konce roku (NV 190/2022 Sb., příloha č. 4, pozn. b)
+  const view = new Map(
+    rows.map((row) => {
+      const rule = inspectionRuleFor(row);
+      const deadline = row.summary.validUntil && row.last && row.last.result !== "INCAPABLE" ? legalDeadline(row.last.inspectionDate, row.summary.validUntil, rule) : null;
+      return [row.id, { rule, months: effectiveIntervalMonths(row.inspectionIntervalMonths, rule), deadline }] as const;
+    }),
+  );
 
   const csvRows = [
-    ["Tag", "Zařízení", "Typ", "Umístění", "Norma", "Lhůta (měsíce)", "Poslední revize", "Číslo zprávy", "Revizní technik", "Posudek", "Platnost do", "Stav"],
+    ["Tag", "Zařízení", "Typ", "Umístění", "Předpis", "Lhůta (měsíce)", "Poslední revize", "Číslo zprávy", "Revizní technik", "Posudek", "Platnost do", "Nejzazší zákonný termín", "Stav"],
     ...rows.map((row) => [
       row.tag,
       row.name.replace(`${row.tag} - `, ""),
       EQUIPMENT_TYPE_LABELS[row.type],
       row.location,
-      inspectionRuleFor(row).standard,
-      String(row.inspectionIntervalMonths),
+      view.get(row.id)!.rule.standard,
+      String(view.get(row.id)!.months),
       row.last ? formatDateShort(row.last.inspectionDate) : "",
       row.last?.reportNumber ?? "",
       row.last?.inspectorName ?? "",
       row.last ? INSPECTION_RESULT[row.last.result].label : "",
       row.summary.validUntil ? formatDateShort(row.summary.validUntil) : "",
+      view.get(row.id)!.deadline ? formatDateShort(view.get(row.id)!.deadline!) : "",
       inspectionBadgeLabel(row.summary.state, row.summary.validUntil, row.summary.daysLeft),
     ]),
   ];
@@ -68,7 +77,7 @@ export default async function AuditReportPage() {
         </p>
         <PageHeader
           title="Auditní report – Kniha revizí"
-          description={`${plantName} · stav k ${formatDateTime(now)} · ČSN 33 1500, ČSN 33 1600 ed. 2, NV 378/2001 Sb., NV 190/2022 Sb.`}
+          description={`${plantName} · stav k ${formatDateTime(now)} · zákon 250/2021 Sb., NV 190/2022 Sb. (příloha č. 4), NV 378/2001 Sb., ČSN 33 1500, ČSN 33 1600 ed. 2`}
           actions={<AuditReportActions csvRows={csvRows} fileName={`kniha-revizi-${now.toISOString().slice(0, 10)}.csv`} />}
         />
 
@@ -223,8 +232,8 @@ export default async function AuditReportPage() {
                       <span className="block text-xs text-muted-foreground">{EQUIPMENT_TYPE_LABELS[row.type]}</span>
                     </TableCell>
                     <TableCell className="text-sm whitespace-normal text-muted-foreground">{row.location}</TableCell>
-                    <TableCell className="text-sm">
-                      {inspectionRuleFor(row).standard} · {row.inspectionIntervalMonths} m
+                    <TableCell className="text-sm" title={view.get(row.id)!.rule.basis}>
+                      {view.get(row.id)!.rule.standard} · {view.get(row.id)!.months} m
                     </TableCell>
                     <TableCell className="text-sm">
                       {row.last ? (
@@ -240,6 +249,10 @@ export default async function AuditReportPage() {
                     </TableCell>
                     <TableCell>
                       <InspectionStatusBadge summary={row.summary} />
+                      {view.get(row.id)!.deadline && row.summary.validUntil && view.get(row.id)!.deadline!.getTime() !== row.summary.validUntil.getTime() ? (
+                        <span className="mt-1 block text-xs text-muted-foreground">zákonný termín do {formatDateShort(view.get(row.id)!.deadline!)}</span>
+                      ) : null}
+                      {row.last?.validUntilOriginal ? <span className="block text-xs text-muted-foreground">platnost zkrácena na zákonnou lhůtu</span> : null}
                     </TableCell>
                   </TableRow>
                 ))}

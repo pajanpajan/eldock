@@ -24,6 +24,14 @@ export async function canAccessPlant(plantId: string): Promise<boolean> {
   return (await prisma.plant.count({ where: { AND: [{ id: plantId }, await plantAccessWhere()] } })) > 0;
 }
 
+/** Všechna zařízení leží v závodech dostupných pro aktuálního uživatele (zápisy lhůtníku – fáze 66). */
+export async function canAccessEquipment(equipmentIds: readonly string[]): Promise<boolean> {
+  const ids = [...new Set(equipmentIds)];
+  if (!ids.length) return true;
+  const plant = await plantAccessWhere();
+  return (await prisma.equipment.count({ where: { id: { in: ids }, floor: { building: { plant } } } })) === ids.length;
+}
+
 export async function getPlants() {
   return prisma.plant.findMany({
     where: await plantAccessWhere(),

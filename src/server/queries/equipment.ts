@@ -23,6 +23,9 @@ async function loadEquipmentDetail(equipmentId: string) {
               id: true,
               code: true,
               name: true,
+              // Fáze 66: účel objektu a více než 200 osob (lhůty revizí VTZ, NV 190/2022 Sb., příloha č. 4)
+              type: true,
+              crowdOver200: true,
               plant: { select: { id: true, code: true, name: true, customerName: true } },
               _count: { select: { floors: true } },
             },

@@ -18,23 +18,23 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import type { EquipmentType, InspectionResult } from "@/generated/prisma/enums";
+import type { InspectionResult } from "@/generated/prisma/enums";
 import { formatCount, formatDateShort } from "@/lib/format";
 import { computeValidUntil } from "@/lib/inspection";
-import { inspectionRuleFor } from "@/lib/inspection-rules";
+import { effectiveIntervalMonths, inspectionRuleFor, requiresCertificate, type RuleInput } from "@/lib/inspection-rules";
+import { INSPECTOR_SCOPES, certificateIssues } from "@/lib/inspector-certificate";
 import { INSPECTION_RESULT } from "@/lib/status";
 import { cn } from "@/lib/utils";
 import { recordBatchInspectionAction } from "@/server/actions/inspection";
 
 import { useInspectorProfile } from "./inspector-profile";
 
-export interface BatchItem {
+/** Položka hromadné revize – pole pravidla lhůty (fáze 66: budova, provedení, LPS) a napětí pro kontrolu osvědčení. */
+export interface BatchItem extends RuleInput {
   id: string;
   tag: string;
   name: string;
-  type: EquipmentType;
-  usageGroup?: string | null;
-  protectionClass?: string | null;
+  ratedVoltage?: string | null;
   inspectionIntervalMonths: number;
 }
 
@@ -54,12 +54,35 @@ export function BatchInspectionBar({ items, today, onClear }: { items: BatchItem
   if (items.length === 0) return null;
 
   const needsDefects = result !== "CAPABLE";
+  const rules = new Map(items.map((item) => [item.id, inspectionRuleFor(item)]));
+  // Fáze 66: VTZ a LPS smí revidovat jen technik s osvědčením v odpovídajícím rozsahu (zákon 250/2021 Sb., § 17)
+  const certified = items.filter((item) => requiresCertificate(rules.get(item.id)!));
+  const certificate = date
+    ? [
+        ...new Set(
+          certified.flatMap((item) =>
+            certificateIssues({
+              scope: profile.scope,
+              validUntil: profile.validUntil ? new Date(`${profile.validUntil}T10:00:00Z`) : null,
+              inspectionDate: new Date(`${date}T10:00:00Z`),
+              rule: rules.get(item.id)!,
+              equipment: item,
+            }).map((issue) => (certified.length > 1 ? `${item.tag}: ${issue}` : issue)),
+          ),
+        ),
+      ]
+    : [];
   const valid =
-    !!date && date <= today && profile.name.trim() !== "" && profile.license.trim() !== "" && (!needsDefects || defects.trim().length >= 3);
+    !!date &&
+    date <= today &&
+    profile.name.trim() !== "" &&
+    profile.license.trim() !== "" &&
+    certificate.length === 0 &&
+    (!needsDefects || defects.trim().length >= 3);
   const preview = (item: BatchItem) => {
     if (result === "INCAPABLE") return "vyřazeno";
     try {
-      return formatDateShort(computeValidUntil(new Date(`${date}T10:00:00Z`), item.inspectionIntervalMonths));
+      return formatDateShort(computeValidUntil(new Date(`${date}T10:00:00Z`), effectiveIntervalMonths(item.inspectionIntervalMonths, rules.get(item.id)!)));
     } catch {
       return "–";
     }
@@ -73,6 +96,8 @@ export function BatchInspectionBar({ items, today, onClear }: { items: BatchItem
         inspectionDate: date,
         inspectorName: profile.name,
         inspectorLicense: profile.license,
+        inspectorScope: profile.scope || null,
+        inspectorValidUntil: profile.validUntil || null,
         measuringInstrument: profile.instrument || null,
         result,
         defectsSummary: needsDefects ? defects : defects.trim() || null,
@@ -121,9 +146,31 @@ export function BatchInspectionBar({ items, today, onClear }: { items: BatchItem
                 <Input id="batch-inspector" value={profile.name} onChange={(event) => updateProfile({ name: event.target.value })} maxLength={120} className="h-11" />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="batch-license">Ev. č. osvědčení TIČR</Label>
+                <Label htmlFor="batch-license">Ev. č. osvědčení revizního technika</Label>
                 <Input id="batch-license" value={profile.license} onChange={(event) => updateProfile({ license: event.target.value })} maxLength={120} className="h-11 font-mono" />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="batch-scope">Rozsah osvědčení {certified.length ? <span className="text-red-400">*</span> : null}</Label>
+                <select id="batch-scope" value={profile.scope} onChange={(event) => updateProfile({ scope: event.target.value })} className="h-11 w-full rounded-md border border-input bg-transparent px-3 text-sm dark:bg-input/30">
+                  <option value="">Neuvedeno</option>
+                  {INSPECTOR_SCOPES.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="batch-cert-valid">Osvědčení platí do {certified.length ? <span className="text-red-400">*</span> : null}</Label>
+                <Input id="batch-cert-valid" type="date" value={profile.validUntil} onChange={(event) => updateProfile({ validUntil: event.target.value })} className="h-11" />
+              </div>
+              {certificate.length ? (
+                <ul className="space-y-1 text-sm text-red-300 sm:col-span-2" data-testid="batch-certificate-issues">
+                  {certificate.map((issue) => (
+                    <li key={issue}>{issue}</li>
+                  ))}
+                </ul>
+              ) : null}
               <div className="space-y-2">
                 <Label htmlFor="batch-date">Datum revize</Label>
                 <Input id="batch-date" type="date" value={date} max={today} onChange={(event) => setDate(event.target.value)} className="h-11" />
@@ -166,6 +213,11 @@ export function BatchInspectionBar({ items, today, onClear }: { items: BatchItem
                   Soupis závad <span className="text-red-400">*</span>
                 </Label>
                 <Textarea id="batch-defects" value={defects} onChange={(event) => setDefects(event.target.value)} rows={3} maxLength={4000} />
+                {certified.length ? (
+                  <p className="text-xs text-muted-foreground">
+                    U VTZ uveďte u každé závady porušené ustanovení v hranatých závorkách, např. „Chybí kryt svorek [ČSN 33 2000-4-41 ed. 3, čl. 411.2]“ (NV 190/2022 Sb., § 10 odst. 1 písm. k).
+                  </p>
+                ) : null}
               </div>
             ) : null}
 
@@ -177,7 +229,7 @@ export function BatchInspectionBar({ items, today, onClear }: { items: BatchItem
                     <span className="min-w-0">
                       <span className="font-mono font-semibold">{item.tag}</span>{" "}
                       <span className="text-xs text-muted-foreground">
-                        {inspectionRuleFor(item).standard} · {formatCount(item.inspectionIntervalMonths, ["měsíc", "měsíce", "měsíců"])}
+                        {rules.get(item.id)!.standard} · {formatCount(effectiveIntervalMonths(item.inspectionIntervalMonths, rules.get(item.id)!), ["měsíc", "měsíce", "měsíců"])}
                       </span>
                     </span>
                     <span className="shrink-0 font-mono">{preview(item)}</span>

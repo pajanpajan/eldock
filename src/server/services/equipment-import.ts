@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@/generated/prisma/client";
 import type { EquipmentType } from "@/generated/prisma/enums";
-import { inspectionRuleFor, isPortable } from "@/lib/inspection-rules";
+import { inspectionRuleFor, isPortable, ruleInputFrom } from "@/lib/inspection-rules";
 import { renderInspectionReportSvg } from "@/lib/mock-graphics/compliance";
 import { newQrToken } from "@/lib/qr-label";
 import { WorkflowError } from "@/lib/workflow/state-machine";
@@ -35,7 +35,7 @@ export async function importEquipment(prisma: PrismaClient, input: { items: Impo
   const floorIds = [...new Set(input.items.map((item) => item.floorId))];
   const floors = await prisma.floor.findMany({
     where: { id: { in: floorIds } },
-    select: { id: true, name: true, building: { select: { name: true, plantId: true } }, _count: { select: { equipment: true } } },
+    select: { id: true, name: true, building: { select: { name: true, plantId: true, type: true, crowdOver200: true } }, _count: { select: { equipment: true } } },
   });
   const floorById = new Map(floors.map((floor) => [floor.id, floor]));
   const missing = input.items.find((item) => !floorById.has(item.floorId));
@@ -51,6 +51,17 @@ export async function importEquipment(prisma: PrismaClient, input: { items: Impo
 
   const skipped: { tag: string; reason: string }[] = [];
   const accepted: ImportItem[] = [];
+  /** Fáze 66: lhůta podle budovy patra; u VTZ a LPS nejvýš zákonná (NV 190/2022 Sb., příloha č. 4). */
+  const adjusted: { tag: string; from: number; to: number }[] = [];
+  const ruleOf = (item: ImportItem) => {
+    const portable = isPortable(item.type);
+    return inspectionRuleFor(ruleInputFrom({ type: item.type, usageGroup: portable ? "C" : null, protectionClass: portable ? "I" : null }, floorById.get(item.floorId)!.building));
+  };
+  const monthsOf = (item: ImportItem) => {
+    const rule = ruleOf(item);
+    const months = item.intervalMonths ?? rule.months;
+    return rule.binding ? Math.min(months, rule.maxMonths) : months;
+  };
   for (const item of input.items) {
     const key = `${floorById.get(item.floorId)!.building.plantId}|${item.tag}`;
     if (taken.has(key)) {
@@ -66,8 +77,8 @@ export async function importEquipment(prisma: PrismaClient, input: { items: Impo
   for (const item of accepted) {
     if (!item.lastInspection) continue;
     const floor = floorById.get(item.floorId)!;
-    const rule = inspectionRuleFor({ type: item.type, usageGroup: isPortable(item.type) ? "C" : null });
-    const validUntil = addMonths(item.lastInspection, item.intervalMonths ?? rule.months);
+    const rule = ruleOf(item);
+    const validUntil = addMonths(item.lastInspection, monthsOf(item));
     reports.set(
       item.tag,
       await input.writeReport(
@@ -96,8 +107,8 @@ export async function importEquipment(prisma: PrismaClient, input: { items: Impo
     const result: { id: string; tag: string; qrToken: string }[] = [];
     for (const item of accepted) {
       const portable = isPortable(item.type);
-      const rule = inspectionRuleFor({ type: item.type, usageGroup: portable ? "C" : null });
-      const months = item.intervalMonths ?? rule.months;
+      const months = monthsOf(item);
+      if (item.intervalMonths && months < item.intervalMonths) adjusted.push({ tag: item.tag, from: item.intervalMonths, to: months });
       const index = placed.get(item.floorId)!;
       placed.set(item.floorId, index + 1);
       const qrToken = newQrToken();
@@ -138,7 +149,7 @@ export async function importEquipment(prisma: PrismaClient, input: { items: Impo
     return result;
   });
 
-  return { created, skipped, importedAt: now };
+  return { created, skipped, adjusted, importedAt: now };
 }
 
 function addMonths(date: Date, months: number) {

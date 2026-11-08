@@ -1,12 +1,12 @@
 // Demo data fáze 13: hierarchie napájení, pasport rozváděčů (ČSN EN 61439) a lhůtník
-// revizí (ČSN 33 1500). Čistá data bez I/O; data revizí jsou relativní k okamžiku seedu,
+// revizí (od fáze 66 lhůty VTZ podle NV 190/2022 Sb., příloha č. 4). Čistá data bez I/O; data revizí jsou relativní k okamžiku seedu,
 // aby stavy 🟢 / 🟡 / 🔴 vycházely vždy stejně.
 import type { ComplianceCategory, DefectSeverity, InspectionResult, InspectionType } from "../src/generated/prisma/enums";
 import { addMonths, pragueToday } from "../src/lib/inspection";
 import { addDaysIso, monthWindowOffsets } from "../src/lib/month-window";
 import { inspectionRuleFor, isPortable, measurementLimits } from "../src/lib/inspection-rules";
 
-import { day, daysAgo, type EquipmentSeed } from "./seed-data";
+import { BUILDINGS, FLOORS, day, daysAgo, type EquipmentSeed } from "./seed-data";
 
 // ---------------------------------------------------------------------------
 //  Hierarchie napájení
@@ -77,19 +77,23 @@ const INFLUENCES_BY_FLOOR: Record<string, string> = {
 export const externalInfluencesFor = (eq: EquipmentSeed) =>
   eq.type === "SWITCHBOARD" ? (INFLUENCES_BY_FLOOR[eq.floor] ?? null) : null;
 
-/** Lhůta podle `inspection-rules` (ČSN 33 1500 dle vnějších vlivů, NV 378/2001 Sb., ČSN 33 1600 ed. 2 …). */
+/** Účel objektu (typ budovy) zařízení – lhůty VTZ podle NV 190/2022 Sb., příloha č. 4. */
+export const buildingTypeOf = (eq: EquipmentSeed) => BUILDINGS.find((building) => building.id === FLOORS.find((floor) => floor.key === eq.floor)?.buildingId)?.type ?? null;
+
+/** Lhůta podle `inspection-rules` (NV 190/2022 Sb. podle budovy a vnějších vlivů, NV 378/2001 Sb., ČSN 33 1600 ed. 2 …). */
 export const intervalFor = (eq: EquipmentSeed) =>
-  inspectionRuleFor({ type: eq.type, usageGroup: eq.usageGroup, protectionClass: eq.protectionClass, externalInfluences: externalInfluencesFor(eq) }).months;
+  inspectionRuleFor({ type: eq.type, usageGroup: eq.usageGroup, protectionClass: eq.protectionClass, externalInfluences: externalInfluencesFor(eq), buildingType: buildingTypeOf(eq) }).months;
 
 // ---------------------------------------------------------------------------
 //  Revizní technici
 // ---------------------------------------------------------------------------
 
-export const INSPECTORS = {
-  horak: { name: "Ing. Pavel Horák", license: "TIČR č. E-0815/2021 (E1A)" },
-  benes: { name: "Miroslav Beneš", license: "TIČR č. E-1432/2023 (E2A)" },
-  sykora: { name: "Bc. Radek Sýkora", license: "Certifikát ČSN EN ISO 9712 TT2 č. 0391" },
-} as const;
+/** Revizní technici s osvědčením (rozsah podle NV 190/2022 Sb., příloha č. 5, platnost 5 let – zákon 250/2021 Sb., § 11). */
+export const INSPECTORS: Record<"horak" | "benes" | "sykora", { name: string; license: string; scope: string | null; validUntil: Date | null }> = {
+  horak: { name: "Ing. Pavel Horák", license: "E-0815/2024", scope: "E1B", validUntil: day("2029-03-31") },
+  benes: { name: "Miroslav Beneš", license: "E-1432/2023", scope: "E2A", validUntil: day("2028-06-30") },
+  sykora: { name: "Bc. Radek Sýkora", license: "Certifikát ČSN EN ISO 9712 TT2 č. 0391", scope: null, validUntil: null },
+};
 
 type InspectorKey = keyof typeof INSPECTORS;
 
@@ -160,7 +164,7 @@ const SPECIAL: Record<string, { validUntil: () => Date; result?: InspectionResul
 };
 
 let reportSequence = 100;
-const reportNumber = (prefix: "RZ" | "TV", date: Date, plant: string) =>
+const reportNumber = (prefix: "RZ" | "TV" | "VK", date: Date, plant: string) =>
   `${prefix}-${date.getUTCFullYear()}-${String(++reportSequence).padStart(3, "0")}/${plant}`;
 
 /**
@@ -282,6 +286,22 @@ export function inspectionsFor(eq: EquipmentSeed, index: number, plantCode: stri
         { description: "Uvolněná svorka PE na X1:PE", severity: "MAJOR", resolved: { afterDays: 3, by: "Petr Novák", note: "Svorka dotažena momentem 2,5 Nm, ověřena spojitost PE." } },
         { description: "Chybí aktualizovaná výstražná tabulka na dveřích rozváděče", severity: "MINOR" },
       ],
+      ...measured(0),
+    });
+  }
+
+  // Fáze 66: vizuální kontrola LPS nejméně 1× ročně (NV 190/2022 Sb., příloha č. 4) – lhůtu revize neposouvá
+  if (eq.type === "LIGHTNING_ROD") {
+    const date = daysAgo(60 + (index % 5) * 20);
+    records.push({
+      type: "VISUAL_CHECK",
+      inspectionDate: date,
+      validUntil: addMonths(date, 12),
+      reportNumber: reportNumber("VK", date, plantCode),
+      inspector: "horak",
+      result: "CAPABLE",
+      defectsSummary: null,
+      defectsResolved: true,
       ...measured(0),
     });
   }

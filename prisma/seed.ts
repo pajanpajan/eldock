@@ -36,7 +36,7 @@ import { seedLegislation2027 } from "./seed-legislation-2027";
 import { seedLifespanCables } from "./seed-lifespan-cables";
 import { LIGHT_EQUIPMENT } from "./seed-appliances";
 import { TEMPORARY_MODS } from "./seed-temporary-mods";
-import { FEEDS, INSPECTORS, type DefectSeed, complianceFor, externalInfluencesFor, inspectionsFor, intervalFor } from "./seed-compliance";
+import { FEEDS, INSPECTORS, type DefectSeed, buildingTypeOf, complianceFor, externalInfluencesFor, inspectionsFor, intervalFor } from "./seed-compliance";
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error("Chybí DATABASE_URL (viz .env.example).");
@@ -308,10 +308,10 @@ async function main() {
           inspectionDate: czDate(record.inspectionDate),
           validUntil: czDate(record.validUntil),
           inspectorName: inspector.name,
-          inspectorLicense: inspector.license,
+          inspectorLicense: inspector.scope ? `${inspector.license} (${inspector.scope})` : inspector.license,
           result: record.result,
           defectsSummary: record.defectsSummary,
-          standard: inspectionRuleFor(eq).standard,
+          standard: inspectionRuleFor({ ...eq, externalInfluences: externalInfluencesFor(eq), buildingType: buildingTypeOf(eq) }).standard,
           measurements: record.measuringInstrument
             ? { instrument: record.measuringInstrument, rpe: record.protectiveConductorResistance, riso: record.insulationResistance }
             : null,
@@ -326,6 +326,8 @@ async function main() {
           reportNumber: record.reportNumber,
           inspectorName: inspector.name,
           inspectorLicense: inspector.license,
+          inspectorScope: record.type === "THERMOVISION" ? null : inspector.scope,
+          inspectorValidUntil: record.type === "THERMOVISION" ? null : inspector.validUntil,
           result: record.result,
           defectsSummary: record.defectsSummary,
           reportUrl: `/api/files/documents/seed/${fileName}`,

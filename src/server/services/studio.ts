@@ -308,6 +308,9 @@ async function saveBuildingInTx(prisma: Tx, draft: StudioDraft) {
     }
 
     const equipmentIds = new Map<string, string>();
+    // Fáze 66: lhůty nových zařízení podle účelu objektu (NV 190/2022 Sb., příloha č. 4)
+    const buildingType =
+      draft.building.mode === "new" ? draft.building.type : ((await tx.building.findUnique({ where: { id: buildingId! }, select: { type: true } }))?.type ?? null);
     for (const item of draft.equipment) {
       const floorId = item.floor.kind === "draft" ? floorIds.get(item.floor.key)! : item.floor.id;
       const pin = metersToPercent(item.floor.kind === "draft" ? frame : existingFrame(item.floor.id), item.pos);
@@ -321,7 +324,13 @@ async function saveBuildingInTx(prisma: Tx, draft: StudioDraft) {
           assignedZone: item.zone?.trim() || null,
           usageGroup: isPortable(item.type) ? "C" : null,
           protectionClass: isPortable(item.type) ? "I" : null,
-          inspectionIntervalMonths: inspectionRuleFor({ type: item.type, usageGroup: isPortable(item.type) ? "C" : null }).months,
+          inspectionIntervalMonths: inspectionRuleFor({
+            type: item.type,
+            usageGroup: isPortable(item.type) ? "C" : null,
+            protectionClass: isPortable(item.type) ? "I" : null,
+            // Fáze 66: účel objektu podle typu budovy (NV 190/2022 Sb., příloha č. 4)
+            buildingType,
+          }).months,
           description: "Osazeno ve Studiu výstavby závodu.",
           qrToken: newQrToken(),
         },

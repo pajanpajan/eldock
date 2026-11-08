@@ -53,7 +53,7 @@ export function EquipmentImportWizard({ floors, defaultPlantId }: { floors: Impo
   const [plantId, setPlantId] = useState(defaultPlantId ?? floors[0]?.plantId ?? "");
   const [building, setBuilding] = useState("");
   const [floorId, setFloorId] = useState("");
-  const [result, setResult] = useState<{ created: { id: string; tag: string; qrToken: string }[]; skipped: { tag: string; reason: string }[] } | null>(null);
+  const [result, setResult] = useState<{ created: { id: string; tag: string; qrToken: string }[]; skipped: { tag: string; reason: string }[]; adjusted?: { tag: string; from: number; to: number }[] } | null>(null);
   const [pending, startTransition] = useTransition();
 
   const plants = useMemo(() => [...new Map(floors.map((floor) => [floor.plantId, floor.plantName])).entries()], [floors]);
@@ -402,6 +402,18 @@ export function EquipmentImportWizard({ floors, defaultPlantId }: { floors: Impo
                 {result.skipped.map((row, index) => (
                   <li key={`${row.tag}-${index}`}>
                     <span className="font-mono">{row.tag}</span> – {row.reason}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {result.adjusted?.length ? (
+            <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-100" data-testid="import-adjusted">
+              <p className="font-medium">Lhůta zkrácena na nejdelší zákonnou (NV 190/2022 Sb., příloha č. 4): {result.adjusted.length}</p>
+              <ul className="mt-1 list-disc pl-5">
+                {result.adjusted.map((row) => (
+                  <li key={row.tag}>
+                    <span className="font-mono">{row.tag}</span> – {row.from} → {row.to} měsíců
                   </li>
                 ))}
               </ul>

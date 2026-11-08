@@ -1,8 +1,8 @@
-// Revizní protokol (tisk / PDF) ve dvou variantách: VTZ a pevná zařízení (NV 190/2022 Sb.,
+// Revizní protokol (tisk / PDF) ve dvou variantách: VTZ a pevná zařízení (zákon 250/2021 Sb., NV 190/2022 Sb.,
 // ČSN 33 1500, ČSN 33 2000-6) a elektrospotřebiče / nářadí (ČSN 33 1600 ed. 2).
 
 import type { EquipmentType, InspectionResult, InspectionType } from "@/generated/prisma/enums";
-import { inspectionRuleFor, isPortable, measurementLimits } from "@/lib/inspection-rules";
+import { inspectionRuleFor, isPortable, measurementLimits, type RuleInput } from "@/lib/inspection-rules";
 import { batteryPassportRows, parseBatteryPassport } from "@/lib/battery-passport";
 import { parseRcdTest, rcdTestRows } from "@/lib/rcd-test";
 
@@ -41,7 +41,7 @@ export const protocolVariant = (type: EquipmentType): ProtocolVariant => (isPort
 export const PROTOCOL_TITLES: Record<ProtocolVariant, { title: string; basis: string }> = {
   VTZ: {
     title: "Zpráva o revizi elektrického zařízení",
-    basis: "Vyhrazené technické zařízení elektrické dle NV 190/2022 Sb. · ČSN 33 1500 · ČSN 33 2000-6 ed. 2",
+    basis: "Vyhrazené technické zařízení elektrické · zákon 250/2021 Sb. · NV 190/2022 Sb. · ČSN 33 1500 · ČSN 33 2000-6 ed. 2",
   },
   APPLIANCE: {
     title: "Protokol o revizi elektrického spotřebiče",
@@ -101,11 +101,14 @@ export function protocolMeasurements({ record, equipment }: ProtocolInput): Prot
   ];
 }
 
-/** Hlavní údaje o rozsahu revize: norma a lhůta podle pravidla zařízení. */
-export function protocolScope(input: ProtocolInput["equipment"]) {
+/** Hlavní údaje o rozsahu revize: předpis a nejdelší lhůta podle pravidla zařízení (vč. budovy – fáze 66). */
+export function protocolScope(input: RuleInput) {
   const rule = inspectionRuleFor(input);
-  return { standard: rule.standard, basis: rule.basis, months: rule.months };
+  return { standard: rule.standard, basis: rule.basis, months: rule.months, maxMonths: rule.maxMonths, kind: rule.kind, binding: rule.binding };
 }
+
+/** Celé měsíce mezi datem revize a platností (doporučená lhůta příští revize, § 10 odst. 1 písm. n). */
+export const monthsBetween = (from: Date, to: Date) => (to.getUTCFullYear() - from.getUTCFullYear()) * 12 + to.getUTCMonth() - from.getUTCMonth();
 
 /** Sekce „Digitální pas baterie“ (Nařízení (EU) 2023/1542) u UPS / BESS – řádky protokolu, jinak null. */
 export function protocolBatteryPassport(equipment: { batteryPassportJson?: string | null }): [string, string][] | null {

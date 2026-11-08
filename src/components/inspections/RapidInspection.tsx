@@ -332,6 +332,11 @@ function RapidCard({ item, profile, onSaved }: CardProps) {
         <span className="text-muted-foreground">
           {rule.standard} · nová lhůta {formatCount(item.inspectionIntervalMonths, ["měsíc", "měsíce", "měsíců"])}
         </span>
+        {item.inspectionIntervalMonths > rule.maxMonths ? (
+          <span className="text-xs text-amber-300" title={rule.basis}>
+            ⚠ delší než {rule.maxMonths} m podle {rule.standard}
+          </span>
+        ) : null}
         {item.inspectedToday ? <span className="font-medium text-emerald-400">dnes už zrevidováno</span> : null}
       </div>
 

@@ -11,7 +11,7 @@ import { normalizeSearch } from "@/lib/equipment-filter";
 import { EQUIPMENT_TYPE_ICONS } from "@/lib/equipment-icons";
 import { EQUIPMENT_TYPE_LABELS, formatCount } from "@/lib/format";
 import { needsAttention } from "@/lib/inspection";
-import { inspectionRuleFor } from "@/lib/inspection-rules";
+import { effectiveIntervalMonths, inspectionRuleFor, intervalIssue } from "@/lib/inspection-rules";
 import { MAP_LAYERS, layerOf, type LayerKey } from "@/lib/map-layers";
 import { equipmentHref, inspectionReportHref } from "@/lib/routes";
 import { INSPECTION_STATE } from "@/lib/status";
@@ -164,7 +164,12 @@ export function InspectionOverviewTable({
                       {item.assignedZone ?? item.location}
                     </TableCell>
                     <TableCell className="hidden text-sm md:table-cell" title={rule.basis}>
-                      {rule.standard} · {formatCount(item.inspectionIntervalMonths, ["měsíc", "měsíce", "měsíců"])}
+                      {rule.standard} · {formatCount(effectiveIntervalMonths(item.inspectionIntervalMonths, rule), ["měsíc", "měsíce", "měsíců"])}
+                      {intervalIssue(item.inspectionIntervalMonths, rule) ? (
+                        <span className="block text-xs text-amber-300" title={intervalIssue(item.inspectionIntervalMonths, rule)!.message}>
+                          ⚠ uložená lhůta {item.inspectionIntervalMonths} m nad {rule.maxMonths} m
+                        </span>
+                      ) : null}
                     </TableCell>
                     <TableCell>
                       <InspectionStatusBadge summary={item.summary} />

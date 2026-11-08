@@ -2,18 +2,26 @@
 
 import { useCallback, useSyncExternalStore } from "react";
 
-// Technik, osvědčení a měřicí přístroj si zařízení pamatuje (localStorage) – technik je
+import { scopeFromLicense } from "@/lib/inspector-certificate";
+
+// Technik, osvědčení (číslo, rozsah, platnost) a měřicí přístroj si zařízení pamatuje (localStorage) – technik je
 // zadá jednou a hromadná i rychlá revize je předvyplní. Bez úložiště platí výchozí demo hodnoty.
 
 export interface InspectorProfile {
   name: string;
   license: string;
+  /** Rozsah osvědčení „E2A“ (NV 190/2022 Sb., příloha č. 5) – fáze 66. */
+  scope: string;
+  /** Platnost osvědčení `YYYY-MM-DD` (zákon 250/2021 Sb., § 11). */
+  validUntil: string;
   instrument: string;
 }
 
 export const DEFAULT_INSPECTOR: InspectorProfile = {
   name: "Miroslav Beneš",
-  license: "TIČR č. E-1432/2023 (E2A)",
+  license: "E-1432/2023",
+  scope: "E2A",
+  validUntil: "2028-06-30",
   instrument: "Metrel MI 3309 BT",
 };
 
@@ -39,6 +47,9 @@ function read(): InspectorProfile {
     cachedProfile = {
       name: typeof parsed.name === "string" ? parsed.name : DEFAULT_INSPECTOR.name,
       license: typeof parsed.license === "string" ? parsed.license : DEFAULT_INSPECTOR.license,
+      // Starší profil bez rozsahu: rozsah z čísla osvědčení „… (E2A)“, platnost technik doplní
+      scope: typeof parsed.scope === "string" ? parsed.scope : typeof parsed.license === "string" ? (scopeFromLicense(parsed.license) ?? "") : DEFAULT_INSPECTOR.scope,
+      validUntil: typeof parsed.validUntil === "string" ? parsed.validUntil : typeof parsed.license === "string" ? "" : DEFAULT_INSPECTOR.validUntil,
       instrument: typeof parsed.instrument === "string" ? parsed.instrument : DEFAULT_INSPECTOR.instrument,
     };
   } catch {

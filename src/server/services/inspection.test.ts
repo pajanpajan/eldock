@@ -48,6 +48,7 @@ const input: RecordInspectionInput = {
   reportNumber: " RZ-2026-201/JBC ",
   inspectorName: "Ing. Pavel Horák",
   inspectorLicense: "TIČR č. E-0815/2021 (E1A)",
+  inspectorValidUntil: "2029-03-31",
   result: "CAPABLE",
 };
 
@@ -79,6 +80,57 @@ describe("recordInspection", () => {
     expect(create).not.toHaveBeenCalled();
   });
 
+  it("fáze 66: delší platnost než zákonná lhůta odmítne, starší delší lhůtu zařízení ořízne", async () => {
+    const { prisma } = fakePrisma(36);
+    await expect(recordInspection(prisma, { ...input, validityMonths: 48, reportUrl: "/x" }, NOW)).rejects.toThrow(/překračuje nejdelší zákonnou lhůtu 36 měsíců/);
+    const legacy = fakePrisma(60);
+    expect((await recordInspection(legacy.prisma, { ...input, reportUrl: "/x" }, NOW)).validUntil).toEqual(new Date("2029-10-27T10:00:00Z"));
+  });
+
+  it("fáze 66: osvědčení revizního technika – rozsah, platnost a § 17 zákona 250/2021 Sb.", async () => {
+    const { prisma, create } = fakePrisma();
+    await expect(recordInspection(prisma, { ...input, inspectorValidUntil: null, reportUrl: "/x" }, NOW)).rejects.toThrow(/platnost osvědčení/);
+    await expect(recordInspection(prisma, { ...input, inspectorValidUntil: "2026-10-01", reportUrl: "/x" }, NOW)).rejects.toThrow(/neplatilo/);
+    await expect(recordInspection(prisma, { ...input, inspectorScope: "E3A", reportUrl: "/x" }, NOW)).rejects.toThrow(/E3 opravňuje jen/);
+    await expect(recordInspection(prisma, { ...input, inspectorLicense: "E-0815/2021", reportUrl: "/x" }, NOW)).rejects.toThrow(/rozsah osvědčení/);
+    expect(create).not.toHaveBeenCalled();
+    await recordInspection(prisma, { ...input, reportUrl: "/x" }, NOW);
+    expect(create.mock.calls[0][0].data).toMatchObject({ inspectorScope: "E1A", inspectorValidUntil: new Date("2029-03-31T10:00:00Z") });
+    // Termovize osvědčení RT nevyžaduje
+    await recordInspection(prisma, { ...input, type: "THERMOVISION", inspectorLicense: "Certifikát TT2", inspectorValidUntil: null, reportUrl: "/x" }, NOW);
+  });
+
+  it("fáze 66: náležitosti zprávy podle § 10 – výchozí texty, data a důvod mimořádné revize", async () => {
+    const { prisma, create } = fakePrisma();
+    await recordInspection(prisma, { ...input, reportUrl: "/x" }, NOW);
+    const data = create.mock.calls[0][0].data;
+    expect(data).toMatchObject({ startedAt: new Date("2026-10-27T10:00:00Z"), reportedAt: new Date("2026-10-27T10:00:00Z"), handedOverAt: null, extraordinaryReason: null });
+    expect(String(data.scopeNote)).toContain("R-ML-01 – Rozváděč montážní linky 1");
+    expect(String(data.actsPerformed)).toContain("ČSN 33 2000-6 ed. 2");
+    expect(String(data.previousEvaluation)).toContain("Předchozí zpráva o revizi není");
+    await expect(recordInspection(prisma, { ...input, type: "EXTRAORDINARY", reportUrl: "/x" }, NOW)).rejects.toThrow(/důvod/);
+    await recordInspection(
+      prisma,
+      { ...input, type: "EXTRAORDINARY", extraordinaryReason: " Po úderu blesku ", startedAt: "2026-10-26", reportedAt: "2026-10-28", handedOverAt: "2026-10-28", reportUrl: "/x" },
+      NOW,
+    );
+    expect(create.mock.calls[1][0].data).toMatchObject({ extraordinaryReason: "Po úderu blesku", startedAt: new Date("2026-10-26T10:00:00Z"), handedOverAt: new Date("2026-10-28T10:00:00Z") });
+    await expect(recordInspection(prisma, { ...input, startedAt: "2026-10-28", reportUrl: "/x" }, NOW)).rejects.toThrow(/Zahájení/);
+    await expect(recordInspection(prisma, { ...input, reportedAt: "2026-10-26", reportUrl: "/x" }, NOW)).rejects.toThrow(/vypracovat/);
+  });
+
+  it("fáze 66: závady VTZ s porušeným ustanovením", async () => {
+    const { prisma, create } = fakePrisma();
+    await expect(recordInspection(prisma, { ...input, result: "CAPABLE_WITH_DEFECTS", defectsSummary: "Chybí štítek jističe F3", reportUrl: "/x" }, NOW)).rejects.toThrow(/porušené ustanovení/);
+    await recordInspection(prisma, { ...input, result: "CAPABLE_WITH_DEFECTS", defectsSummary: "Chybí štítek jističe F3 [ČSN EN 61439-1 ed. 3, čl. 6.1]", reportUrl: "/x" }, NOW);
+    expect(create.mock.calls[0][0].data.defects).toMatchObject({ create: [{ description: "Chybí štítek jističe F3", provision: "ČSN EN 61439-1 ed. 3, čl. 6.1" }] });
+  });
+
+  it("fáze 66: vizuální kontrola jen u hromosvodů", async () => {
+    const { prisma } = fakePrisma();
+    await expect(recordInspection(prisma, { ...input, type: "VISUAL_CHECK", reportUrl: "/x" }, NOW)).rejects.toThrow(/hromosvodů/);
+  });
+
   it("odmítne datum v budoucnosti, neplatnou lhůtu a neznámé zařízení", async () => {
     const { prisma } = fakePrisma();
     await expect(recordInspection(prisma, { ...input, inspectionDate: "2026-10-29", reportUrl: "/x" }, NOW)).rejects.toThrow(/budoucnosti/);
@@ -90,7 +142,7 @@ describe("recordInspection", () => {
 describe("renderInspectionReport", () => {
   it("vygeneruje SVG zprávu s posudkem a závadami", async () => {
     const { prisma } = fakePrisma();
-    const svg = await renderInspectionReport(prisma, { ...input, result: "CAPABLE_WITH_DEFECTS", defectsSummary: "Chybí štítek jističe F3" }, NOW);
+    const svg = await renderInspectionReport(prisma, { ...input, result: "CAPABLE_WITH_DEFECTS", defectsSummary: "Chybí štítek jističe F3 [ČSN EN 61439-1 ed. 3, čl. 6.1]" }, NOW);
     expect(svg.startsWith("<svg")).toBe(true);
     expect(svg).toContain("Zpráva o pravidelné revizi");
     expect(svg).toContain("Chybí štítek jističe F3");
@@ -129,6 +181,7 @@ const KETTLE: FakeEquipment = {
 };
 const GRINDER = { ...KETTLE, id: "eq-nr-0112", tag: "NR-0112", name: "NR-0112 - Úhlová bruska", type: "POWER_TOOL", usageGroup: "C", protectionClass: "II", inspectionIntervalMonths: 12 };
 const SWITCHBOARD = { ...KETTLE, id: "eq-rm1", tag: "RM1", name: "RM1 - Hlavní rozváděč", type: "SWITCHBOARD", usageGroup: null, protectionClass: null, inspectionIntervalMonths: 60 };
+const LPS = { ...KETTLE, id: "eq-lps", tag: "LPS-A", name: "LPS-A - Hromosvod haly A", type: "LIGHTNING_ROD", usageGroup: null, protectionClass: null, inspectionIntervalMonths: 48 };
 
 function fakeDb(items: FakeEquipment[]) {
   const create = vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({ id: `insp-${String(data.equipmentId)}`, ...data }));
@@ -148,6 +201,7 @@ const batch = {
   inspectionDate: "2026-10-28",
   inspectorName: "Miroslav Beneš",
   inspectorLicense: "TIČR č. E-1432/2023 (E2A)",
+  inspectorValidUntil: "2028-06-30",
   measuringInstrument: "Metrel MI 3309 BT",
   result: "CAPABLE" as const,
 };
@@ -159,8 +213,16 @@ describe("recordBatchInspection", () => {
     expect(transaction).toHaveBeenCalledTimes(1);
     expect(result.count).toBe(3);
     const byTag = Object.fromEntries(result.items.map((item) => [item.tag, item.validUntil.toISOString().slice(0, 10)]));
-    expect(byTag).toEqual({ "SP-0201": "2028-10-28", "NR-0112": "2027-10-28", RM1: "2031-10-28" });
+    // Fáze 66: RM1 má uloženou starší lhůtu 60 měsíců – zapíše se nejdelší zákonná (36)
+    expect(byTag).toEqual({ "SP-0201": "2028-10-28", "NR-0112": "2027-10-28", RM1: "2029-10-28" });
     expect(create.mock.calls.every(([arg]) => arg.data.reportNumber === "HR-1" && arg.data.type === "PERIODIC")).toBe(true);
+  });
+
+  it("fáze 66: u VTZ v hromadné revizi kontroluje osvědčení technika", async () => {
+    const { prisma } = fakeDb([KETTLE, SWITCHBOARD]);
+    await expect(recordBatchInspection(prisma, { ...batch, inspectorValidUntil: null, equipmentIds: ["eq-sp-0201", "eq-rm1"], reportUrl: "/x" }, NOW)).rejects.toThrow(/^RM1: .*platnost osvědčení/);
+    // Jen spotřebiče: osvědčení VTZ se nevyžaduje
+    await expect(recordBatchInspection(prisma, { ...batch, inspectorValidUntil: null, equipmentIds: ["eq-sp-0201"], reportUrl: "/x" }, NOW)).resolves.toMatchObject({ count: 1 });
   });
 
   it("odmítne prázdný výběr a neznámé zařízení", async () => {
@@ -201,6 +263,13 @@ describe("recordQuickInspection", () => {
     const record = await recordQuickInspection(prisma, { ...quick, passed: false, insulationResistance: 0.2, defectsSummary: "Poškozená izolace", reportUrl: "/x" }, NOW);
     expect(record.result).toBe("INCAPABLE");
     expect(record.validUntil).toEqual(new Date("2026-10-28T10:00:00Z"));
+  });
+
+  it("fáze 66: vizuální kontrola LPS – platnost 12 měsíců bez náležitostí zprávy", async () => {
+    const { prisma, create } = fakeDb([LPS]);
+    const record = await recordInspection(prisma, { ...input, equipmentId: "eq-lps", type: "VISUAL_CHECK", inspectorLicense: "údržba", inspectorValidUntil: null, reportUrl: "/x" }, NOW);
+    expect(record.validUntil).toEqual(new Date("2027-10-27T10:00:00Z"));
+    expect(create.mock.calls[0][0].data).toMatchObject({ scopeNote: null, startedAt: null, actsPerformed: null });
   });
 
   it("je jen pro přenosné spotřebiče", async () => {

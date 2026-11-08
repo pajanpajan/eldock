@@ -4,9 +4,10 @@ import { cache } from "react";
 
 import { DEADLINE_TYPES, compareByUrgency, governingInspection, needsAttention, pragueToday, summarizeInspections, type InspectionSummary } from "@/lib/inspection";
 import type { PlannerItem } from "@/lib/inspection-planner";
-import { PORTABLE_TYPES } from "@/lib/inspection-rules";
+import { BUILDING_RULE_FIELDS, PORTABLE_TYPES, RULE_FIELDS, ruleInputFrom } from "@/lib/inspection-rules";
 import type { EquipmentType } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/prisma";
+import { plantAccessWhere } from "@/server/queries/plant";
 
 /** Výřez závodu a typů zařízení (účet) pro `equipment`. */
 const plantScope = (plantId?: string) => (plantId ? { floor: { building: { plantId } } } : {});
@@ -75,13 +76,10 @@ export async function getInspectionOverview(plantId?: string, now: Date = new Da
       id: true,
       tag: true,
       name: true,
-      type: true,
-      usageGroup: true,
-      protectionClass: true,
-      externalInfluences: true,
-      inspectionIntervalMonths: true,
+      ...RULE_FIELDS,
+      ratedVoltage: true,
       assignedZone: true,
-      floor: { select: { name: true, building: { select: { name: true, plant: { select: { name: true } } } } } },
+      floor: { select: { name: true, building: { select: { name: true, ...BUILDING_RULE_FIELDS, plant: { select: { name: true } } } } } },
       inspections: {
         where: { type: { in: [...DEADLINE_TYPES] } },
         select: { id: true, type: true, inspectionDate: true, validUntil: true, result: true },
@@ -90,7 +88,7 @@ export async function getInspectionOverview(plantId?: string, now: Date = new Da
   });
   return equipment
     .map(({ floor, inspections, ...item }) => ({
-      ...item,
+      ...ruleInputFrom(item, floor.building),
       location: `${floor.building.name} › ${floor.name}`,
       plantName: floor.building.plant.name,
       summary: summarizeInspections(inspections, now),
@@ -116,6 +114,7 @@ export async function getRapidQueue(plantId?: string, now: Date = new Date(), ty
       type: true,
       usageGroup: true,
       protectionClass: true,
+      handHeld: true,
       inventoryNumber: true,
       assignedZone: true,
       inspectionIntervalMonths: true,
@@ -206,16 +205,12 @@ export async function getAuditReport(plantId?: string, now: Date = new Date(), t
         id: true,
         tag: true,
         name: true,
-        type: true,
-        usageGroup: true,
-        protectionClass: true,
-        externalInfluences: true,
-        inspectionIntervalMonths: true,
-        floor: { select: { name: true, building: { select: { name: true, plant: { select: { name: true } } } } } },
+        ...RULE_FIELDS,
+        floor: { select: { name: true, building: { select: { name: true, ...BUILDING_RULE_FIELDS, plant: { select: { name: true } } } } } },
         inspections: {
           where: { type: { in: [...DEADLINE_TYPES] } },
           orderBy: { inspectionDate: "desc" },
-          select: { type: true, inspectionDate: true, validUntil: true, result: true, reportNumber: true, inspectorName: true },
+          select: { type: true, inspectionDate: true, validUntil: true, validUntilOriginal: true, result: true, reportNumber: true, inspectorName: true },
         },
       },
     }),
@@ -235,10 +230,12 @@ export async function getAuditReport(plantId?: string, now: Date = new Date(), t
     const summary = summarizeInspections(inspections, now);
     const last = inspections[0] ?? null;
     return {
-      ...item,
+      ...ruleInputFrom(item, floor.building),
       location: `${plantId ? "" : `${floor.building.plant.name} › `}${floor.building.name} › ${floor.name}`,
       summary,
-      last: last ? { inspectionDate: last.inspectionDate, reportNumber: last.reportNumber, inspectorName: last.inspectorName, result: last.result } : null,
+      last: last
+        ? { inspectionDate: last.inspectionDate, reportNumber: last.reportNumber, inspectorName: last.inspectorName, result: last.result, validUntilOriginal: last.validUntilOriginal }
+        : null,
     };
   });
   return { rows, defects, mods };
@@ -248,16 +245,17 @@ export type AuditReport = Awaited<ReturnType<typeof getAuditReport>>;
 
 /** Revizní protokol k tisku (`/inspections/report/[id]`): záznam, zařízení, umístění a závady. */
 async function loadInspectionProtocol(recordId: string) {
-  return prisma.inspectionRecord.findUnique({
-    where: { id: recordId },
+  // Jen záznam ze závodu přihlášeného uživatele (registrovaná firma nevidí cizí zprávy – fáze 66).
+  const plant = await plantAccessWhere();
+  return prisma.inspectionRecord.findFirst({
+    where: { id: recordId, equipment: { floor: { building: { plant } } } },
     include: {
-      defects: { orderBy: { createdAt: "asc" }, select: { id: true, description: true, severity: true, deadline: true, status: true } },
+      defects: { orderBy: { createdAt: "asc" }, select: { id: true, description: true, provision: true, severity: true, deadline: true, status: true } },
       equipment: {
         select: {
           id: true,
           tag: true,
           name: true,
-          type: true,
           manufacturer: true,
           model: true,
           serialNumber: true,
@@ -266,12 +264,31 @@ async function loadInspectionProtocol(recordId: string) {
           ratedVoltage: true,
           ratedCurrent: true,
           ipRating: true,
-          usageGroup: true,
-          protectionClass: true,
-          externalInfluences: true,
+          ...RULE_FIELDS,
           assignedZone: true,
           batteryPassportJson: true,
-          floor: { select: { name: true, building: { select: { name: true, plant: { select: { name: true, code: true, customerName: true, address: true, city: true } } } } } },
+          floor: {
+            select: {
+              name: true,
+              building: {
+                select: {
+                  name: true,
+                  ...BUILDING_RULE_FIELDS,
+                  plant: {
+                    select: {
+                      name: true,
+                      code: true,
+                      customerName: true,
+                      address: true,
+                      city: true,
+                      // Sídlo a IČO provozovatele (NV 190/2022 Sb., § 10 odst. 1 písm. a) – registrovaná firma závodu
+                      registeredCompanies: { where: { productScope: "PLANT_MANAGEMENT" }, take: 1, select: { companyName: true, ico: true, street: true, city: true, zip: true } },
+                    },
+                  },
+                },
+              },
+            },
+          },
         },
       },
     },

@@ -77,12 +77,13 @@ describe("normy 2027 a protokol o kusové zkoušce", () => {
     expect(parseRoutineTest("{")).toEqual(emptyRoutineTest());
   });
 
-  it("klasifikace zásahu, LOTO dle ČSN EN 50110-1 ed. 4, QR doložka a hromosvody ed. 3", () => {
+  it("klasifikace zásahu, LOTO dle ČSN EN 50110-1 ed. 4, QR doložka a lhůty hromosvodů", () => {
     expect(SAFETY_IMPACT.SUBSTANTIAL_SAFETY_MOD.label).toContain("čl. 18");
     expect(FIVE_SAFETY_RULES).toHaveLength(5);
     expect(LOTO_ROLES.map((role) => role.code)).toEqual(["OOEZ", "OPŘPČ"]);
     expect(QR_LEGAL_NOTE).toBe("Digitální provozní dokumentace dle čl. 10 Nařízení (EU) 2023/1230 a ČSN EN 50110-1 ed. 4");
-    expect(inspectionRuleFor({ type: "LIGHTNING_ROD" }).standard).toBe("ČSN EN IEC 62305-3 ed. 3");
+    // Fáze 66: lhůty LPS určuje NV 190/2022 Sb., příloha č. 4 (vydání ČSN EN IEC 62305-3 ed. 3 není ověřené)
+    expect(inspectionRuleFor({ type: "LIGHTNING_ROD" })).toMatchObject({ standard: "NV 190/2022 Sb.", months: 48 });
   });
 });
 
