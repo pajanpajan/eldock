@@ -5,7 +5,7 @@ revize VTZ, změny skutečného provedení mezi údržbou v hale a externími CA
 rozváděčů. Pracovní název byl Digitry, od fáze 20 je to **ELDOCK**. Produkce běží na https://eldock.cz.
 Původní zadání MVP je v `docs/archiv/SPECIFIKACE-MVP.md`, celá historie fází 0–35 v `docs/archiv/PLAN-faze-00-35.md`, celý archiv v jednom souboru `docs/archiv/ARCHIV-KOMPLET.md`.
 
-## 1. Milníky (fáze 0–69 nasazené, 70 k nasazení)
+## 1. Milníky (fáze 0–70 nasazené)
 
 | Fáze | Milník |
 |---|---|
@@ -153,7 +153,7 @@ Když uživatel řekne **„nasaď to na produkci“** nebo **„deploy“**:
 
 **Účty firem (fáze 67):** migrace `phase67_accounts_security` převezme heslo firmy do účtů jejích uživatelů (kdo není zakladatel, si ho při přihlášení změní). Po nasazení se uživatelé registrovaných firem Správy závodů musí přihlásit znovu (dosavadní tokeny bez relace přestanou platit), demo a Panel Builder beze změny.
 
-**Synchronizace aplikací (fáze 70):** migrace `phase70_sync` (`SyncDevice`, `SyncPairing`, `SyncMutation`, `SyncChange`, `SyncCounter`). Entrypoint hned po migracích spustí `npm run sync:setup` (triggery žurnálu; první spuštění zapíše do žurnálu všechny existující záznamy, výpis v logu kontejneru) a aplikace totéž ověří při startu. API `/api/sync/v1` prochází bránou bez cookie (token zařízení ověřuje route handler). Po výměně živých dat obnovenou zálohou (jen se souhlasem uživatele) navíc `ssh root@91.99.148.62 "docker exec -u eldock eldock-app sh -c 'cd /app/ops && npm run sync:setup -- --new-epoch'"` – aplikace pak stáhnou data znovu.
+**Synchronizace aplikací (fáze 70):** migrace `phase70_sync` (`SyncDevice`, `SyncPairing`, `SyncMutation`, `SyncChange`, `SyncCounter`). Entrypoint hned po migracích spustí `npm run sync:setup` (triggery žurnálu; první spuštění zapíše do žurnálu všechny existující záznamy, výpis v logu kontejneru) a aplikace totéž ověří při startu. API `/api/sync/v1` prochází bránou bez cookie (token zařízení ověřuje route handler). Po výměně živých dat obnovenou zálohou (jen se souhlasem uživatele) navíc `ssh root@91.99.148.62 "docker exec -u eldock eldock-app sh -c 'cd /app/ops && npm run sync:setup -- --new-epoch'"` – aplikace pak stáhnou data znovu. **Stav (ověřeno 2026-11-08):** 55 triggerů žurnálu, do žurnálu zapsáno 1 110 existujících záznamů, zatím žádné spárované zařízení (aplikace přijdou ve fázích 71–72).
 
 **Data firem (fáze 69):** migrace `phase69_data_requests` (`DataRequest`, `RegisteredCompany.closedAt`). Výmazy účtů po lhůtě provádí denní plánovač; velín → Registrované firmy ukazuje stav účtu, export ZIP a výmaz hned (potvrzení IČO) – výmaz účtu firmy na produkci jen na výslovný pokyn uživatele.
 
