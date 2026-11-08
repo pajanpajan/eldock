@@ -5,16 +5,16 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
-
-import { PrismaClient } from "@/generated/prisma/client";
+import type { PrismaClient } from "@/generated/prisma/client";
+import { createSqlitePrisma } from "@/lib/sqlite-adapter";
 import { ensureSyncTriggers } from "@/server/sync/journal";
 
 const MIGRATIONS = path.resolve("prisma", "migrations");
 
 export async function createTestDb() {
   const dir = mkdtempSync(path.join(os.tmpdir(), "eldock-test-"));
-  const prisma = new PrismaClient({ adapter: new PrismaBetterSqlite3({ url: `file:${path.join(dir, "test.db")}` }) });
+  // Stejný serializovaný adaptér jako aplikace, v přísném režimu: vnější klient uvnitř `$transaction` = chyba testu
+  const prisma = createSqlitePrisma({ url: `file:${path.join(dir, "test.db")}`, strict: true });
   const folders = readdirSync(MIGRATIONS, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)

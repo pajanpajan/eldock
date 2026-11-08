@@ -337,24 +337,12 @@ type PullInput = { cursor: number; limit?: number; scope?: string | null };
  * Změny od kurzoru (`cursor = 0` = první stažení celého závodu, bez značek smazání). Stránka nikdy nerozdělí
  * změny se stejným pořadím. Záznam mimo výřez kategorií účtu přijde jako smazání (aplikace ho zahodí).
  *
- * Čte se v transakci: adaptér SQLite má jediné spojení a dotaz mimo transakci vidí i nepotvrzené zápisy cizí otevřené
- * transakce (ověřeno) – po jejím vrácení by aplikace měla data, která neexistují, a kurzor za pořadím, které čítač
- * použije znovu (změny by přeskočila). Vlastní transakce počká, až cizí skončí. Chyba čtení transakci nevrací
- * (zápisy jiných požadavků, které do ní během čtení spadly, zůstanou).
+ * Čte se v transakci: čítač, žurnál i soubory jsou jeden konzistentní snímek – mezi dotazy stránky nikdo nezapíše
+ * (kurzor nikdy nepředběhne změny, které by aplikace neviděla). Nepotvrzené zápisy cizí transakce čtení nevidí –
+ * spojení SQLite se střídá ve frontě (sqlite-adapter.ts).
  */
 export async function pullChanges(prisma: PrismaClient, ctx: DeviceContext, input: PullInput, now: Date = new Date()): Promise<PullResult> {
-  const outcome = await prisma.$transaction(
-    async (tx) => {
-      try {
-        return { page: await readChanges(tx, ctx, input, now) };
-      } catch (error) {
-        return { error };
-      }
-    },
-    { timeout: 20_000, maxWait: 10_000 },
-  );
-  if ("error" in outcome) throw outcome.error;
-  const { page } = outcome;
+  const page = await prisma.$transaction((tx) => readChanges(tx, ctx, input, now), { timeout: 20_000, maxWait: 10_000 });
   if (!page.reset) await prisma.syncDevice.update({ where: { id: ctx.device.id }, data: { lastCursor: page.cursor, ...(page.hasMore ? {} : { lastPullAt: now }) } }).catch(() => undefined);
   return page;
 }

@@ -1,8 +1,7 @@
 import "server-only";
 
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
-
-import { PrismaClient } from "@/generated/prisma/client";
+import type { PrismaClient } from "@/generated/prisma/client";
+import { createSqlitePrisma } from "@/lib/sqlite-adapter";
 
 // Jediná instance klienta pro celou aplikaci. V dev režimu ji držíme
 // v globalThis, aby HMR nevytvářel při každé změně nové připojení.
@@ -23,8 +22,9 @@ function createPrismaClient() {
   if (!url) {
     throw new Error("Chybí proměnná prostředí DATABASE_URL (viz .env.example).");
   }
-  const adapter = new PrismaBetterSqlite3({ url, timeout: 5000 });
-  const client = new PrismaClient({ adapter });
+  // Transakce a dotazy mimo ně se na jediném spojení střídají ve frontě (sqlite-adapter.ts). Přísný režim
+  // (dotaz přes vnější klient uvnitř `$transaction` = chyba) mimo produkci – v dev, testech i E2E.
+  const client = createSqlitePrisma({ url, timeout: 5000, strict: process.env.NODE_ENV !== "production" });
   // WAL jen za běhu produkčního serveru. V dev režimu by soubory -wal / -shm v kořeni projektu
   // (mění se při každém dotazu) budily hlídač souborů Turbopacku a stránka by se donekonečna
   // znovu načítala; `next build` (také NODE_ENV=production) nesmí přepnout lokální dev.db.
@@ -44,8 +44,8 @@ function initPrisma() {
 const instance = initPrisma();
 export const prisma = instance.client;
 /**
- * PRAGMA po startu nastavené (fáze 70). Start serveru na ně počká před první transakcí – adaptér má jediné spojení
- * a `PRAGMA journal_mode` / `foreign_keys` uvnitř otevřené transakce nejde změnit.
+ * PRAGMA po startu nastavené (fáze 70). Start serveru na ně počká před první transakcí – `PRAGMA journal_mode` /
+ * `foreign_keys` uvnitř transakce nejde změnit a ve frontě spojení by jinak čekaly až za dlouhou úvodní transakcí.
  */
 export const prismaReady: Promise<void> = instance.ready;
 

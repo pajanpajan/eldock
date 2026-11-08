@@ -237,7 +237,9 @@ test("📐 Rozpracovaný nákres z prohlížeče (do fáze 63) se při otevřen�
   // Potvrzení je jen krátká hláška (v dev režimu může zmizet dřív, než doběhne načtení stránky) – ověřujeme výsledek
   const card = page.getByTestId("floorplan-card").filter({ hasText: "Půdorys z prohlížeče" });
   await expect(card).toContainText("1 místnost · 1 prvek", { timeout: 30_000 });
-  expect(await page.evaluate(() => window.localStorage.getItem("eldock.pb.floorplan"))).toBeNull();
+  // Převzetí přerušené obnovením stránky v dev režimu dokončí další otevření seznamu (stejný nákres se nezdvojí) –
+  // karta pak může být vidět dřív, než prohlížeč koncept smaže
+  await expect.poll(() => page.evaluate(() => window.localStorage.getItem("eldock.pb.floorplan")), { timeout: 30_000 }).toBeNull();
   // Další otevření seznamu nic nezdvojí
   await page.reload();
   await expect(page.getByTestId("floorplan-list")).toBeVisible();
