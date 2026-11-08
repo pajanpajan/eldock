@@ -8,6 +8,7 @@ import { z } from "zod";
 import { SUPERADMIN_COOKIE, SUPERADMIN_TTL_SECONDS, brandEnv, checkAccessPassword, signSuperadminToken, superadminPassword } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { actionFailure } from "@/server/panel-guards";
+import { startManualBackup } from "@/server/jobs";
 import { adjustCredits, cancelCreditOrder, confirmCreditOrder, resolveAiFeedback } from "@/server/services/credits";
 import { requireSuperadmin } from "@/server/superadmin-session";
 
@@ -75,6 +76,20 @@ export async function cancelCreditOrderAction(orderId: string): Promise<ActionRe
     return { ok: true, data: undefined };
   } catch (error) {
     return actionFailure(error, "Objednávku se nepodařilo stornovat.");
+  }
+}
+
+/** Fáze 68: „Zálohovat teď“ – záloha běží na pozadí, stav ukáže záložka Zálohy a data. */
+export async function runBackupNowAction(): Promise<ActionResult> {
+  try {
+    await requireSuperadmin();
+    if (await prisma.maintenanceRun.count({ where: { kind: "BACKUP", status: "RUNNING" } })) return { ok: false, error: "Záloha už běží – počkejte na její dokončení." };
+    startManualBackup({ prisma, log: (message) => console.error(message) });
+    revalidatePath("/superadmin");
+    return { ok: true, data: undefined };
+  } catch (error) {
+    if (error instanceof Error && !(error.name === "WorkflowError")) return { ok: false, error: error.message };
+    return actionFailure(error, "Zálohu se nepodařilo spustit.");
   }
 }
 

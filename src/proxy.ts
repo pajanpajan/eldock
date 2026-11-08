@@ -11,7 +11,8 @@ import { APP_HOME, isPlantRoute } from "@/lib/routes";
  * - Správa závodů (`PLANT_ROUTE_PREFIXES`) jen s přihlášením do závodu (cookie `digitry-auth`), jinak `/login`;
  *   ostatní adresy (veřejné soubory, neexistující stránky) projdou a Next.js vrátí soubor nebo 404 (fáze 54).
  * - velín `/superadmin` jen s cookie `eldock-superadmin` (fáze 50), jinak `/superadmin/login`.
- * API přijme kterékoli přihlášení; firma Panel Builderu a velín smí jen nahrávat a číst fotky.
+ * API přijme přihlášení do závodu; firma Panel Builderu a velín smí jen nahrávat a číst soubory (fáze 68: čtení
+ * souboru povolí jen jeho vlastník – registr `StoredFile`).
  */
 // Fáze 48: veřejná ukázka elaborátu a SEO soubory (sitemap.xml, náhled odkazu opengraph-image)
 // Fáze 54: právní stránky (zásady zpracování osobních údajů, obchodní podmínky)
@@ -58,9 +59,10 @@ export async function proxy(request: NextRequest) {
   }
 
   if (pathname.startsWith("/api/")) {
-    const panelApi = pathname === "/api/uploads" || pathname.startsWith("/api/files/photos/");
-    // Velín vidí fotky rozváděčů firem (hlášení chyb AI, projekty firem)
-    if (plant || ((company || superadmin) && panelApi)) return NextResponse.next();
+    // Fáze 68: nahrání a soubory pustí brána každému přihlášení – o přístupu k souboru rozhoduje jeho vlastník
+    // (registr `StoredFile` v GET /api/files): firma Panel Builderu tak vidí i své logo a razítko, velín vše.
+    const fileApi = pathname === "/api/uploads" || pathname.startsWith("/api/files/");
+    if (plant || ((company || superadmin) && fileApi)) return NextResponse.next();
     return NextResponse.json({ error: "Nepřihlášeno – přihlaste se na /login." }, { status: 401, headers: { "Cache-Control": "no-store" } });
   }
 

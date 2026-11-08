@@ -107,7 +107,7 @@ import {
 } from "@/lib/panel-builder/floorplan-pdf";
 import { appearanceLabel, colorForSeries, designColor } from "@/lib/panel-builder/wiring-designs";
 import { renderPdfFile } from "@/lib/pdf-client";
-import { resizeImage, uploadFile } from "@/lib/upload-client";
+import { resizeImage, uploadPanelFile } from "@/lib/upload-client";
 import { cn } from "@/lib/utils";
 import { compileFloorplanBom } from "@/lib/panel-builder/wiring-bom";
 import { createFloorplanProjectAction } from "@/server/actions/panel-projects";
@@ -1123,7 +1123,7 @@ export function FloorplanEditor({
       // Fáze 55: nevykreslená / prázdná stránka PDF by dala nesmyslné měřítko (plocha 0 × 0 m)
       if (!widthPx || !heightPx) throw new Error("Podklad se nepodařilo vykreslit (prázdná stránka). Zkuste jinou stránku nebo obrázek PNG / JPG.");
       setBusy("Nahrávám podklad…");
-      const uploaded = await uploadFile("photo", new File([blob], "pudorys.jpg", { type: "image/jpeg" }));
+      const uploaded = await uploadPanelFile("photo", new File([blob], "pudorys.jpg", { type: "image/jpeg" }));
       // Obrázek se načte dřív, než se přepne nákres – plátno ho pak ukáže hned, bez obnovení stránky
       setBusy("Načítám podklad…");
       await preloadImage(uploaded.url);

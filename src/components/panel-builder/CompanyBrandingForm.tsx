@@ -7,7 +7,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { whitenToTransparent } from "@/lib/image-alpha";
-import { uploadFile } from "@/lib/upload-client";
+import { uploadPanelFile } from "@/lib/upload-client";
 import { setCompanyBrandingAction } from "@/server/actions/panel-design";
 
 /** Razítko z fotky / skenu: bílé pozadí → průhledné (HTML5 Canvas), max. 1200 px, PNG. */
@@ -59,7 +59,7 @@ export function CompanyBrandingForm({ initial }: { initial: { logoUrl: string | 
     setBusy(kind);
     try {
       const prepared = kind === "stamp" ? await transparentStamp(file) : file;
-      const uploaded = await uploadFile("document", prepared);
+      const uploaded = await uploadPanelFile("document", prepared);
       save(kind === "logo" ? { logoUrl: uploaded.url } : { stampUrl: uploaded.url }, kind === "logo" ? "Logo uloženo – propíše se do dokumentace." : "Razítko uloženo s průhledným pozadím.");
     } catch (error) {
       setBusy(null);

@@ -52,21 +52,23 @@ COPY --from=build --chown=eldock:eldock /app/.next/standalone ./
 COPY --from=build --chown=eldock:eldock /app/.next/static ./.next/static
 COPY --from=build --chown=eldock:eldock /app/public ./public
 
-# Provozní nástroje (jen pro entrypoint): Prisma CLI s migracemi a seed demo dat (tsx).
-# Odděleně od běžící aplikace; seed zapisuje do /app/storage přes odkaz ops/storage.
+# Provozní nástroje (entrypoint a ruční údržba přes `docker exec -u eldock`): Prisma CLI s migracemi, seed demo dat
+# a provozní skripty (fáze 68: registr souborů, zálohy a obnova, úklid úložiště) přes tsx.
+# Odděleně od běžící aplikace; seed a skripty zapisují do /app/storage přes odkaz ops/storage.
 COPY --from=build --chown=eldock:eldock /app/node_modules ./ops/node_modules
 COPY --from=build --chown=eldock:eldock /app/package.json /app/prisma.config.ts /app/tsconfig.json ./ops/
 COPY --from=build --chown=eldock:eldock /app/prisma ./ops/prisma
 COPY --from=build --chown=eldock:eldock /app/src ./ops/src
+COPY --from=build --chown=eldock:eldock /app/scripts ./ops/scripts
 RUN ln -s /app/storage /app/ops/storage \
-  && mkdir -p /app/data/db /app/storage/uploads \
+  && mkdir -p /app/data/db /app/data/backups /app/storage/uploads \
   && chown -R eldock:eldock /app/data /app/storage
 
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 # Ochrana proti CRLF z Windows checkoutu
 RUN sed -i 's/\r$//' /usr/local/bin/docker-entrypoint.sh && chmod 755 /usr/local/bin/docker-entrypoint.sh
 
-VOLUME ["/app/data/db", "/app/storage"]
+VOLUME ["/app/data/db", "/app/data/backups", "/app/storage"]
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \

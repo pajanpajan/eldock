@@ -46,7 +46,8 @@ test("🪙 objednávka kredity → QR platba + zálohová faktura, 🐛 hlášen
   await page.getByRole("button", { name: "Vstoupit do velínu" }).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("SuperAdmin velín", { timeout: 60_000 });
   await expect(page.getByTestId("superadmin-kpi")).toContainText("Čekající objednávky");
-  await expect(page.getByTestId("company-12345679")).toContainText("Elektro Tester s.r.o.");
+  // Stejné IČO může mít víc registrací (obě služby, testy registrace fáze 41 / 67 / 68) – řádek firmy Tester podle názvu
+  await expect(page.getByTestId("company-12345679").filter({ hasText: "Elektro Tester s.r.o." })).toHaveCount(1);
 
   // Objednávky → ✅ potvrdit úhradu a připsat kredity
   await page.getByRole("link", { name: "Objednávky kreditů a fakturace" }).click();

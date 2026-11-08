@@ -10,7 +10,8 @@ import { actionFailure, guardCompany, guardProject } from "@/server/panel-guards
 import { consumeCredit } from "@/server/services/companies";
 import { linkGeneratedProject } from "@/server/services/floorplans";
 import { createProjectFromFloorplan, createProjectFromSchedule, deletePanelProjects, updateProjectHeader, type DeleteResult } from "@/server/services/panel-projects";
-import { removeStoredFile } from "@/server/storage";
+import { companyOwner } from "@/lib/file-ownership";
+import { removeOwnedFile } from "@/server/file-access";
 
 import type { ActionResult } from "./workflow";
 
@@ -27,7 +28,7 @@ export async function deletePanelProjectsAction(ids: string[], bulk = false): Pr
   if (!parsed.success) return { ok: false, error: "Vyberte projekty ke smazání." };
   try {
     const company = await guardCompany();
-    const result = await deletePanelProjects(prisma, company.id, parsed.data, { protectSample: bulk, removeFile: removeStoredFile });
+    const result = await deletePanelProjects(prisma, company.id, parsed.data, { protectSample: bulk, removeFile: (url) => removeOwnedFile(companyOwner(company.id), url) });
     revalidatePath("/panel-builder", "layout");
     return { ok: true, data: result };
   } catch (error) {

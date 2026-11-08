@@ -3,7 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { collectFileUrls } from "@/lib/file-ownership";
 import { prisma } from "@/lib/prisma";
+import { assertPanelFiles } from "@/server/file-access";
 import { actionFailure, guardCompany } from "@/server/panel-guards";
 import {
   MAX_DRAFT_CHARS,
@@ -45,12 +47,16 @@ export interface FloorplanVersionDto {
 
 const firstIssue = (error: z.ZodError, fallback: string) => error.issues[0]?.message || fallback;
 
+/** Fáze 68: podklad půdorysu jen ze souborů firmy – mírně, starší nákres s neznámým odkazem se dál ukládá. */
+const assertDraftFiles = (companyId: string, draft: unknown) => assertPanelFiles(companyId, collectFileUrls(draft), { strict: false });
+
 /** První uložení nového půdorysu z editoru (`/panel-builder/floorplan/novy`). */
 export async function createFloorplanAction(input: { meta: z.input<typeof metaSchema>; draft: unknown }): Promise<ActionResult<{ id: string; version: number; savedAt: string }>> {
   const parsed = z.object({ meta: metaSchema, draft: draftSchema }).safeParse(input);
   if (!parsed.success) return { ok: false, error: firstIssue(parsed.error, "Půdorys se nepodařilo uložit.") };
   try {
     const company = await guardCompany();
+    await assertDraftFiles(company.id, parsed.data.draft);
     const created = await createFloorplan(prisma, company.id, parsed.data);
     revalidatePath(LIST_PATH);
     return { ok: true, data: { id: created.id, version: created.version, savedAt: created.savedAt.toISOString() } };
@@ -65,6 +71,7 @@ export async function saveFloorplanAction(input: { id: string; baseVersion: numb
   if (!parsed.success) return { ok: false, error: firstIssue(parsed.error, "Půdorys se nepodařilo uložit.") };
   try {
     const company = await guardCompany();
+    await assertDraftFiles(company.id, parsed.data.draft);
     const result = await saveFloorplanDraft(prisma, company.id, parsed.data.id, parsed.data);
     return { ok: true, data: { status: result.status, version: result.version, savedAt: result.savedAt.toISOString() } };
   } catch (error) {
@@ -78,6 +85,7 @@ export async function stashFloorplanDraftAction(input: { id: string; baseVersion
   if (!parsed.success) return { ok: false, error: firstIssue(parsed.error, "Zálohu se nepodařilo uložit.") };
   try {
     const company = await guardCompany();
+    await assertDraftFiles(company.id, parsed.data.draft);
     const stored = await stashDraft(prisma, company.id, parsed.data.id, parsed.data);
     return { ok: true, data: { stored: !!stored } };
   } catch (error) {
@@ -185,6 +193,7 @@ export async function importBrowserFloorplanAction(input: { draft: unknown; name
   if (!parsed.success) return { ok: false, error: firstIssue(parsed.error, "Nákres z prohlížeče se nepodařilo převzít.") };
   try {
     const company = await guardCompany();
+    await assertDraftFiles(company.id, parsed.data.draft);
     const result = await importBrowserDraft(prisma, company.id, parsed.data);
     revalidatePath(LIST_PATH);
     return { ok: true, data: result };

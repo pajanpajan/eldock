@@ -8,13 +8,15 @@
 #      a katalog AI Panel Builderu se vzorovým rozváděčem PB-001 (`npm run db:panel-builder` – vždy, i bez dema; fáze 54)
 #      a ukázky legislativy 2027 – návody, zálohy SW, pas baterie (`npm run db:demo-legislation`)
 #      a životnost součástek + kabelové pasporty (`npm run db:demo-lifespan`, fáze 53)
-#   4. spustí aplikaci (CMD, výchozí `node server.js`)
+#   4. doplní registr souborů pro soubory nahrané před fází 68 (`npm run storage:registry` – vlastník podle záznamu,
+#      idempotentní; bez registru soubor vydá jen velín)
+#   5. spustí aplikaci (CMD, výchozí `node server.js`)
 # Přepočet lhůt revizí podle NV 190/2022 Sb. (fáze 66, `npm run db:fix-intervals`) se při startu NEspouští – mění
 # platnosti revizí, proto jen ručně se souhlasem provozovatele (viz CLAUDE.md, oddíl 7).
 set -eu
 
 if [ "$(id -u)" = "0" ]; then
-  mkdir -p /app/data/db /app/storage/uploads
+  mkdir -p /app/data/db /app/data/backups /app/storage/uploads
   chown -R eldock:eldock /app/data /app/storage
   exec setpriv --reuid=eldock --regid=eldock --init-groups "$0" "$@"
 fi
@@ -60,6 +62,9 @@ if [ "$PLANTS" != "0" ] && [ "${ELDOCK_SEED_DEMO:-1}" = "1" ]; then
   npm run db:demo-legislation --silent || echo "[eldock] Varování: doplnění ukázek legislativy 2027 selhalo."
   npm run db:demo-lifespan --silent || echo "[eldock] Varování: doplnění ukázek životnosti součástek a kabelů selhalo."
 fi
+
+# Fáze 68: vlastník souborů nahraných před registrem (jinak by je /api/files nevydalo) – podruhé nic nezapíše.
+npm run storage:registry --silent || echo "[eldock] Varování: doplnění registru souborů selhalo – starší soubory vydá jen velín."
 
 cd /app
 echo "[eldock] Startuji aplikaci na portu ${PORT:-3000}…"

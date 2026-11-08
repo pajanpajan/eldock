@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MANUFACTURER_OPTIONS, MIX } from "@/lib/panel-builder/catalog";
 import { DEFAULT_RAIL_MODULES } from "@/lib/panel-builder/rails";
-import { PANEL_PHOTO_MAX_PX, PANEL_PHOTO_QUALITY, resizeImage, uploadFile } from "@/lib/upload-client";
+import { PANEL_PHOTO_MAX_PX, PANEL_PHOTO_QUALITY, resizeImage, uploadPanelFile } from "@/lib/upload-client";
 import { cn } from "@/lib/utils";
 import { VIDEO_ACCEPT, captureFrame, extractVideoFrames, loadVideo } from "@/lib/video-frames";
 import { createPanelProjectAction } from "@/server/actions/panel-builder";
@@ -98,7 +98,7 @@ export function NewProjectDialog({ credits = null }: { credits?: number | null }
       const uploaded = [];
       for (const file of files) {
         const resized = await resizeImage(file, PANEL_PHOTO_MAX_PX, PANEL_PHOTO_QUALITY);
-        const result = await uploadFile("photo", resized);
+        const result = await uploadPanelFile("photo", resized);
         uploaded.push({ id: shotId(), url: result.url, preview: result.url, name: file.name, source: "photo" as const });
       }
       addShots(uploaded);
@@ -112,7 +112,7 @@ export function NewProjectDialog({ credits = null }: { credits?: number | null }
   async function uploadFrames(frames: { file: File; time: number }[]) {
     const uploaded = [];
     for (const frame of frames) {
-      const result = await uploadFile("photo", frame.file);
+      const result = await uploadPanelFile("photo", frame.file);
       uploaded.push({ id: shotId(), url: result.url, preview: result.url, name: `Snímek ${frame.time.toLocaleString("cs-CZ")} s`, source: "video" as const });
     }
     addShots(uploaded);

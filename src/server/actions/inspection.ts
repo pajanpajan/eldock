@@ -17,8 +17,8 @@ import {
 import { updateInspectionSettings } from "@/server/services/inspection-intervals";
 import { assertFeature } from "@/server/modules";
 import { assertPermission } from "@/server/permissions";
+import { assertPlantFiles, storePlantFile } from "@/server/file-access";
 import { canAccessEquipment } from "@/server/queries/plant";
-import { saveUpload } from "@/server/storage";
 
 import type { ActionResult } from "./workflow";
 
@@ -134,7 +134,7 @@ async function run<S extends z.ZodType, T>(schema: S, raw: unknown, action: (inp
   }
 }
 
-const saveReport = async (svg: string) => (await saveUpload("documents", ".svg", svg)).url;
+const saveReport = async (svg: string) => (await storePlantFile("documents", ".svg", svg)).url;
 
 /** Zápis jen k zařízení v závodu přihlášeného uživatele (registrovaná firma nevidí cizí závody). */
 async function assertEquipment(ids: readonly string[]) {
@@ -148,6 +148,8 @@ export async function recordInspectionAction(input: z.input<typeof recordSchema>
     async ({ reportUrl, ...data }) => {
       await assertPermission("recordInspection");
       await assertEquipment([data.equipmentId]);
+      // Fáze 68: nahraná zpráva jen ze souborů účtu
+      await assertPlantFiles([reportUrl]);
       const url = reportUrl ?? (await saveReport(await renderInspectionReport(prisma, data)));
       const record = await recordInspection(prisma, { ...data, reportUrl: url });
       return { id: record.id, validUntil: record.validUntil, generated: !reportUrl };

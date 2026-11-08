@@ -2,7 +2,9 @@ import "server-only";
 
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
+import { collectFileUrls } from "@/lib/file-ownership";
 import { WorkflowError } from "@/lib/workflow/state-machine";
+import { assertPlantFiles } from "@/server/file-access";
 import { plantAccessWhere } from "@/server/queries/plant";
 
 // Fáze 67: oddělení firem v serverových akcích. Akce nad daty závodu ověří, že záznamy ze vstupu patří do závodu
@@ -77,4 +79,6 @@ export async function assertTenantAccess(input: unknown, options: { id?: EntityK
   const plant = await plantAccessWhere();
   for (const [field, kind] of Object.entries(FIELD_KINDS)) if (field in record) await assertEntityAccess(kind, record[field], plant);
   if (options.id && "id" in record) await assertEntityAccess(options.id, record.id, plant);
+  // Fáze 68: soubory ze vstupu (fotky, přílohy, zprávy, zálohy SW) jen od vlastníka účtu – cizí soubor se nepřipojí
+  await assertPlantFiles(collectFileUrls(record));
 }

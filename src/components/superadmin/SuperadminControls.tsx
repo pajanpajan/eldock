@@ -2,13 +2,13 @@
 
 import { useActionState, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Loader2, XCircle } from "lucide-react";
+import { CheckCircle2, DatabaseBackup, Loader2, XCircle } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { adjustCreditsAction, cancelCreditOrderAction, confirmCreditOrderAction, loginSuperadminAction, resolveAiFeedbackAction } from "@/server/actions/superadmin";
+import { adjustCreditsAction, cancelCreditOrderAction, confirmCreditOrderAction, loginSuperadminAction, resolveAiFeedbackAction, runBackupNowAction } from "@/server/actions/superadmin";
 
 // Klientské ovládací prvky velínu /superadmin (fáze 50).
 
@@ -89,6 +89,31 @@ export function OrderActions({ orderId, variableSymbol }: { orderId: string; var
         <XCircle className="size-3.5" aria-hidden /> Storno
       </Button>
     </div>
+  );
+}
+
+/** Fáze 68: „Zálohovat teď“ – spustí zálohu na pozadí a za chvíli obnoví stav záložky. */
+export function BackupNowButton({ running }: { running: boolean }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  return (
+    <Button
+      type="button"
+      className="w-fit gap-1.5"
+      disabled={pending || running}
+      data-testid="backup-now"
+      onClick={() =>
+        startTransition(async () => {
+          const result = await runBackupNowAction();
+          if (!result.ok) return void toast.error(result.error);
+          toast.success("Záloha spuštěna – stav se za chvíli obnoví.");
+          router.refresh();
+          setTimeout(() => router.refresh(), 5000);
+        })
+      }
+    >
+      {pending || running ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <DatabaseBackup className="size-4" aria-hidden />} {running ? "Záloha běží…" : "Zálohovat teď"}
+    </Button>
   );
 }
 

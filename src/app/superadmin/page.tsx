@@ -1,16 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Bug, Building2, CircuitBoard, Download, Mail, Receipt } from "lucide-react";
+import { Bug, Building2, CircuitBoard, DatabaseBackup, Download, FolderLock, HardDrive, Mail, Receipt } from "lucide-react";
 
 import { KpiTile } from "@/components/common/KpiTile";
 import { NewsletterComposer } from "@/components/superadmin/NewsletterComposer";
-import { CreditControls, OrderActions, ResolveFeedback } from "@/components/superadmin/SuperadminControls";
+import { BackupNowButton, CreditControls, OrderActions, ResolveFeedback } from "@/components/superadmin/SuperadminControls";
 import { ORDER_STATUS, creditPackage, formatCzk } from "@/lib/credits";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatDateTime } from "@/lib/format";
 import { PROJECT_STATUS } from "@/lib/panel-builder/project";
 import { parseRailPhotos } from "@/lib/panel-builder/rails";
 import { cn } from "@/lib/utils";
+import { getBackupOverview } from "@/server/queries/backups";
 import { getSuperadminCompanies, getSuperadminFeedback, getSuperadminOrders, getSuperadminOverview } from "@/server/queries/superadmin";
 import { prisma } from "@/lib/prisma";
 import { audienceLabel } from "@/lib/newsletter";
@@ -25,6 +26,7 @@ const TABS = [
   { id: "orders", label: "Objednávky kreditů a fakturace" },
   { id: "feedback", label: "Hlášení chyb AI a fotky" },
   { id: "newsletter", label: "Newsletter" },
+  { id: "backups", label: "Zálohy a data" },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
@@ -54,7 +56,7 @@ export default async function SuperadminPage({ searchParams }: PageProps<"/super
           </Link>
         ))}
       </nav>
-      {tab === "companies" ? <CompaniesTab /> : tab === "orders" ? <OrdersTab /> : tab === "newsletter" ? <NewsletterTab /> : <FeedbackTab />}
+      {tab === "companies" ? <CompaniesTab /> : tab === "orders" ? <OrdersTab /> : tab === "newsletter" ? <NewsletterTab /> : tab === "backups" ? <BackupsTab /> : <FeedbackTab />}
     </div>
   );
 }
@@ -300,6 +302,139 @@ async function NewsletterTab() {
         </div>
       </div>
       <NewsletterComposer confirmed={overview.confirmed} />
+    </div>
+  );
+}
+
+const RUN_STATUS: Record<string, { label: string; className: string }> = {
+  RUNNING: { label: "běží", className: "text-sky-300" },
+  OK: { label: "v pořádku", className: "text-emerald-300" },
+  WARNING: { label: "s upozorněním", className: "text-amber-300" },
+  FAILED: { label: "selhala", className: "text-red-300" },
+};
+const TRIGGER_LABEL: Record<string, string> = { SCHEDULE: "plánovač", MANUAL: "velín", CLI: "příkaz" };
+const OWNER_LABEL: Record<string, string> = { COMPANY: "Firmy", DEMO: "Obchodní demo", SHARED: "Sdílené (starší / katalog)" };
+const mb = (bytes: number) => `${(bytes / (1024 * 1024)).toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} MB`;
+
+// Fáze 68: zálohy (místní a mimo server), retence a registr souborů podle vlastníků.
+async function BackupsTab() {
+  const overview = await getBackupOverview();
+  const { config, lastOk } = overview;
+  return (
+    <div className="grid gap-6 lg:grid-cols-[1.3fr_1fr]" data-testid="superadmin-backups">
+      <div className="flex flex-col gap-4">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <KpiTile label="Poslední záloha" value={lastOk ? formatDateTime(lastOk.startedAt) : "nikdy"} hint={lastOk?.summary ? `${mb(lastOk.summary.snapshot.archiveBytes)}${lastOk.summary.snapshot.encrypted ? " · šifrováno" : " · bez šifrování"}` : "zatím žádná úspěšná"} icon={DatabaseBackup} accent={overview.stale ? "text-red-300" : undefined} />
+          <KpiTile label="Mimo server" value={config.offsite ? `${overview.offsite.db.objects} snímků` : "nenastaveno"} hint={config.offsite ? `${overview.offsite.file.objects} souborů · ${mb(overview.offsite.db.bytes + overview.offsite.file.bytes)}` : "jen místní snímky na serveru"} icon={HardDrive} accent={config.offsite ? undefined : "text-amber-300"} />
+          <KpiTile label="Soubory v registru" value={overview.registry.total} hint={`${mb(overview.registry.bytes)} · ${overview.registry.companies} firem`} icon={FolderLock} />
+        </div>
+        {overview.stale ? (
+          <p className="rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-200" role="alert">
+            Poslední úspěšná záloha je starší než 36 hodin (nebo žádná není). Zkontrolujte běhy níže, případně spusťte zálohu ručně.
+          </p>
+        ) : null}
+        {config.issues.map((issue) => (
+          <p key={issue} className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-200">
+            {issue}
+          </p>
+        ))}
+        <BackupNowButton running={overview.running} />
+        <div className="overflow-x-auto rounded-xl border border-border">
+          <table className="w-full text-sm" data-testid="backup-runs">
+            <caption className="px-3 py-2 text-left font-semibold">Poslední běhy údržby</caption>
+            <thead className="bg-muted/40 text-xs text-muted-foreground">
+              <tr>
+                <th className={th}>Začátek</th>
+                <th className={th}>Druh</th>
+                <th className={th}>Stav</th>
+                <th className={th}>Výsledek</th>
+              </tr>
+            </thead>
+            <tbody>
+              {overview.runs.length ? (
+                overview.runs.map((run) => {
+                  const status = RUN_STATUS[run.status] ?? RUN_STATUS.OK;
+                  const s = run.summary;
+                  const detail = run.error
+                    ? run.error
+                    : s
+                      ? [`${s.snapshot.name} (${mb(s.snapshot.archiveBytes)})`, s.offsite ? `mimo server: soubory +${s.offsite.filesUploaded}, čeká ${s.offsite.filesPending}, smazáno ${s.offsite.filesDeleted}${s.offsite.errors.length ? `, chyby ${s.offsite.errors.length}` : ""}` : s.offsiteSkipped ?? ""].filter(Boolean).join(" · ")
+                      : run.retention
+                        ? `smazáno: deník ${run.retention.securityEvents}, relace ${run.retention.sessions}, odkazy ${run.retention.authTokens}`
+                        : "";
+                  return (
+                    <tr key={run.id} className="border-t border-border">
+                      <td className={cn(td, "whitespace-nowrap font-mono text-xs")}>{formatDateTime(run.startedAt)}</td>
+                      <td className={td}>
+                        {run.kind === "BACKUP" ? "Záloha" : "Retence"} <span className="text-xs text-muted-foreground">({TRIGGER_LABEL[run.trigger] ?? run.trigger})</span>
+                      </td>
+                      <td className={cn(td, status.className)}>{status.label}</td>
+                      <td className={cn(td, "text-xs text-muted-foreground")}>{detail}</td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td className={td} colSpan={4}>
+                    Zatím žádný běh – první záloha proběhne v {config.time} (Europe/Prague){config.scheduleEnabled ? "" : " po zapnutí plánovače v produkci"}.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div className="flex flex-col gap-4">
+        <div className="rounded-xl border border-border p-3 text-sm" data-testid="backup-config">
+          <h2 className="mb-2 font-semibold">Nastavení</h2>
+          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+            <dt className="text-muted-foreground">Denní záloha</dt>
+            <dd>{config.scheduleEnabled ? `v ${config.time} (Europe/Prague)` : "plánovač vypnutý (jen ručně / příkazem)"}</dd>
+            <dt className="text-muted-foreground">Místní snímky</dt>
+            <dd className="break-all">
+              {config.dir} · posledních {config.keepLocal}
+            </dd>
+            <dt className="text-muted-foreground">Šifrování</dt>
+            <dd>{config.encrypted ? `AES-256-GCM, otisk klíče ${config.keyFingerprint}` : "vypnuté (chybí ELDOCK_BACKUP_KEY)"}</dd>
+            <dt className="text-muted-foreground">Mimo server</dt>
+            <dd className="break-all">{config.offsite ? `${config.offsite.endpoint}/${config.offsite.bucket}/${config.offsite.prefix}` : "nenastaveno (ELDOCK_BACKUP_S3_*)"}</dd>
+            <dt className="text-muted-foreground">Retence</dt>
+            <dd>
+              snímky {config.keepDaily} dní + {config.keepMonthly} měsíců, smazané soubory {config.deletedRetentionDays} dní; bezpečnostní deník 1 rok, relace a odkazy na heslo 30 dní
+            </dd>
+          </dl>
+        </div>
+        <div className="rounded-xl border border-border p-3 text-sm">
+          <h2 className="mb-2 font-semibold">Místní snímky databáze</h2>
+          {overview.local.length ? (
+            <ul className="flex flex-col gap-1" data-testid="local-snapshots">
+              {overview.local.map((item) => (
+                <li key={item.name} className="flex justify-between gap-2 font-mono text-xs">
+                  <span className="truncate">{item.name}</span>
+                  <span className="shrink-0 text-muted-foreground">{mb(item.bytes)}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-muted-foreground">Zatím žádný snímek.</p>
+          )}
+        </div>
+        <div className="rounded-xl border border-border p-3 text-sm" data-testid="file-registry">
+          <h2 className="mb-2 font-semibold">Soubory podle vlastníka</h2>
+          <ul className="flex flex-col gap-1">
+            {overview.registry.byOwner.map((row) => (
+              <li key={row.ownerKind} className="flex justify-between gap-2">
+                <span>{OWNER_LABEL[row.ownerKind] ?? row.ownerKind}</span>
+                <span className="font-mono text-xs text-muted-foreground">
+                  {row.files} · {mb(row.bytes)}
+                </span>
+              </li>
+            ))}
+            {!overview.registry.byOwner.length ? <li className="text-muted-foreground">Registr je prázdný.</li> : null}
+          </ul>
+          <p className="mt-2 text-xs text-muted-foreground">Soubor firmy čtou jen její přihlášení, demo soubory jen obchodní demo; sdílené soubory (starší data s více vlastníky, katalog) každé přihlášení. Smazané: {overview.registry.deleted}.</p>
+        </div>
+      </div>
     </div>
   );
 }

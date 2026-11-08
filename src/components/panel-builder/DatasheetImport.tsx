@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { CATEGORY_LABELS, formatWatts } from "@/lib/panel-builder/catalog";
 import { extractPdfText } from "@/lib/pdf-client";
-import { uploadFile } from "@/lib/upload-client";
+import { uploadPanelFile } from "@/lib/upload-client";
 import { importDatasheetAction } from "@/server/actions/panel-builder";
 import type { ImportedComponent } from "@/server/services/panel-builder";
 
@@ -100,7 +100,7 @@ export function DatasheetImport() {
               onChange={(event) => {
                 const file = event.target.files?.[0];
                 event.target.value = "";
-                if (file) void run(file.name, async () => (await uploadFile("document", file)).url);
+                if (file) void run(file.name, async () => (await uploadPanelFile("document", file)).url);
               }}
             />
             <Button variant="outline" className="touch-target h-14 gap-2 border-dashed" onClick={() => input.current?.click()}>

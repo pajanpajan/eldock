@@ -10,6 +10,7 @@ import { actionFailure, guardCompany, guardItem, guardProject } from "@/server/p
 import { analyzeRailDetail, insertNextTo, moveItem } from "@/server/services/panel-design";
 import { analyzeRailPhoto } from "@/server/services/geminiPanelService";
 import { addItemWiring, searchWiringDevices, setItemWiringQuantity, setProjectFan, type WiringHit } from "@/server/services/panel-wiring";
+import { assertPanelFiles } from "@/server/file-access";
 import { readStoredFile } from "@/server/storage";
 import { saveRoutineTest, setStandardEdition } from "@/server/services/panel-design";
 import { ROUTINE_TEST_POINTS } from "@/lib/legislation-2027";
@@ -145,6 +146,7 @@ export async function setCompanyBrandingAction(input: { logoUrl?: string | null;
   if (!parsed.success) return { ok: false, error: "Nahrajte obrázek PNG, JPG nebo SVG." };
   try {
     const company = await guardCompany();
+    await assertPanelFiles(company.id, [parsed.data.logoUrl, parsed.data.stampUrl]);
     const result = await setCompanyBranding(prisma, company.id, parsed.data);
     revalidatePath("/panel-builder", "layout");
     return { ok: true, data: { logoUrl: result.logoUrl, stampUrl: result.stampUrl } };
@@ -284,7 +286,8 @@ const photoUrl = z.string().max(300).regex(/^\/api\/files\/photos\/[\w./-]+$/);
 export async function analyzeRailDetailAction(projectId: string, railIndex: number, url: string): Promise<ActionResult<{ mode: string; total: number; unresolved: number; warning?: string }>> {
   if (!id.safeParse(projectId).success || !rail.safeParse(railIndex).success || !photoUrl.safeParse(url).success) return { ok: false, error: "Neplatná fotka lišty." };
   try {
-    await guardProject(projectId);
+    const company = await guardProject(projectId);
+    await assertPanelFiles(company.id, [url]);
     const result = await analyzeRailDetail(prisma, projectId, railIndex, url, { analyze: analyzeRailPhoto, readPhoto: readStoredFile });
     revalidatePath(`/panel-builder/${projectId}`, "layout");
     return { ok: true, data: result };

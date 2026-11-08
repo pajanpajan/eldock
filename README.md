@@ -56,6 +56,8 @@ npm run dev                 # http://localhost:3000
 | `npm run smoke` | celá smyčka workflow přes služby nad **kopií** `dev.db` (dev.db zůstane beze změny) |
 | `npm run test:e2e` | Playwright E2E – vlastní dev server na portu 3200 s čistou `e2e.db` |
 | `npm run verify` | typecheck + lint + test + build (povinné před každým commitem) |
+| `npm run backup` / `npm run backup:restore` | záloha databáze (a s úložištěm mimo server i souborů) podle `ELDOCK_BACKUP_*`; obnova jen do prázdné složky (`-- --list`, `-- --from s3 --to <složka> --files`) |
+| `npm run storage:registry` / `npm run storage:cleanup` | doplnění registru souborů pro starší soubory (vlastník podle odkazů) / úklid osiřelých souborů (`--dry-run`) |
 | `npm run db:seed` / `db:reset` / `db:migrate` / `db:studio` | práce s databází (Prisma) |
 
 ### E2E testy
@@ -135,7 +137,7 @@ Produkční balíček tvoří `Dockerfile` (Node 22 LTS, Next.js `output: "stand
 | `eldock-app` | Next.js server na interním portu 3000. Při startu aplikuje migrace (`prisma migrate deploy`) a nad prázdnou databází nahraje demo data (`ELDOCK_SEED_DEMO=1`). |
 | `caddy` | Reverzní proxy na portech 80/443: automatický certifikát **Let's Encrypt** pro `eldock.cz`, `www.eldock.cz`, `app.eldock.cz`, HSTS, `X-Frame-Options: SAMEORIGIN` (vlastní náhledy PDF v `<iframe>` fungují, cizí weby aplikaci nevloží), `X-Content-Type-Options: nosniff`. |
 
-Trvalá data jsou na hostiteli v `./data`: `./data/db` (SQLite `eldock.db`), `./data/storage` (fotky, revize, schémata), `./data/caddy` (certifikáty). **Zálohujte celý adresář `./data`.**
+Trvalá data jsou na hostiteli v `./data`: `./data/db` (SQLite `eldock.db`), `./data/storage` (fotky, revize, schémata), `./data/backups` (denní snímky databáze), `./data/caddy` (certifikáty). Aplikace každý den v 02:30 uloží snímek databáze do `./data/backups`; s `ELDOCK_BACKUP_KEY` a `ELDOCK_BACKUP_S3_*` ho i se soubory úložiště šifrovaně pošle mimo server (viz `.env.production.example`, stav ve velínu → Zálohy a data). **Dokud záloha mimo server není nastavená, kopírujte celý adresář `./data` i jinam.**
 
 ### 1. Server u Hetzner Cloud
 
@@ -176,7 +178,7 @@ docker compose logs -f eldock-app   # „[eldock] Startuji aplikaci…“
 Aplikace pak běží na **https://app.eldock.cz** (i `eldock.cz` a `www.eldock.cz`). Pro ostrý provoz bez demo dat nastavte před prvním startem `ELDOCK_SEED_DEMO="0"`.
 
 **Aktualizace:** `git pull && docker compose --env-file .env.production up -d --build` – migrace se aplikují automaticky, data v `./data` zůstávají.
-**Záloha:** `docker compose stop eldock-app && tar czf eldock-$(date +%F).tgz data/db data/storage && docker compose start eldock-app` (nebo Hetzner Backups / Snapshots).
+**Záloha:** automaticky každý den (velín → Zálohy a data, ručně `docker exec -u eldock eldock-app sh -c 'cd /app/ops && npm run backup'`); obnova vždy do prázdné složky (`npm run backup:restore -- --list`, `-- --from s3 --to /app/data/backups/obnova --files`), výměnu dat pak dělá správce při zastavené aplikaci. Celý server navíc Hetzner Backups / Snapshots.
 
 ### On-premise / air-gapped server v továrně
 

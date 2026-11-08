@@ -41,6 +41,6 @@ export default defineConfig({
     reuseExistingServer: false,
     stdout: "ignore",
     stderr: "pipe",
-    env: { DATABASE_URL: "file:./e2e.db", NEXT_DIST_DIR: ".next-e2e", NEXT_TELEMETRY_DISABLED: "1", ELDOCK_AUTH_SECRET: E2E_AUTH_SECRET, ELDOCK_ACCESS_PASSWORD: "eldock2026", ELDOCK_BYPASS_AUTH: "", DIGITRY_BYPASS_AUTH: "", GEMINI_API_KEY: "" },
+    env: { DATABASE_URL: "file:./e2e.db", NEXT_DIST_DIR: ".next-e2e", NEXT_TELEMETRY_DISABLED: "1", ELDOCK_AUTH_SECRET: E2E_AUTH_SECRET, ELDOCK_ACCESS_PASSWORD: "eldock2026", ELDOCK_BYPASS_AUTH: "", DIGITRY_BYPASS_AUTH: "", GEMINI_API_KEY: "", ELDOCK_BACKUP_DIR: "test-results/e2e-backups", ELDOCK_BACKUP_KEY: "", ELDOCK_BACKUP_S3_ENDPOINT: "" },
   },
 });

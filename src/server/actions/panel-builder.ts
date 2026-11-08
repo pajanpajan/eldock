@@ -12,6 +12,7 @@ import { analyzeProject, assignCatalogComponent, createPanelProject, importDatas
 import { actionFailure, guardCompany, guardItem, guardProject } from "@/server/panel-guards";
 import { consumeCredit } from "@/server/services/companies";
 import { companyManufacturer } from "@/lib/registered-company";
+import { assertPanelFiles } from "@/server/file-access";
 import { readStoredFile } from "@/server/storage";
 import { analyzeRailDetails } from "@/server/services/panel-design";
 
@@ -40,7 +41,9 @@ export async function importDatasheetAction(input: z.input<typeof datasheetSchem
   const parsed = datasheetSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "PDF se nepodařilo přečíst (příliš velký nebo prázdný soubor)." };
   try {
-    await guard();
+    const company = await guard();
+    // Fáze 68: server čte jen soubor přihlášené firmy (nebo vzorové PDF)
+    await assertPanelFiles(company.id, [parsed.data.fileUrl]);
     const pdf = parsed.data.fileUrl ? await readStoredFile(parsed.data.fileUrl) : null;
     const result = await importDatasheet(prisma, parsed.data, (input) => extractDatasheetComponents({ pages: input.pages, pdf: pdf?.mimeType === "application/pdf" ? pdf.bytes : null }));
     revalidatePath("/panel-builder", "layout");
@@ -76,6 +79,8 @@ export async function createPanelProjectAction(input: z.input<typeof createSchem
     const company = await guard();
     const { dinRailsCount, modulesPerRail, designMode, railPhotos, ...rest } = parsed.data;
     if (designMode === "PHOTO" && !rest.photoUrl) return { ok: false, error: "Nahrajte fotku rozváděče, nebo zvolte návrh od nuly." };
+    // Fáze 68: fotky jen z vlastních nahrání firmy (před odečtením kreditu)
+    await assertPanelFiles(company.id, [rest.photoUrl, ...railPhotos.map((photo) => photo.url)]);
     // 1 kredit = 1 nový rozváděč; údaje firmy se propíšou jako výrobce rozváděče
     await consumeCredit(prisma, company.id);
     let project: Awaited<ReturnType<typeof createPanelProject>>;

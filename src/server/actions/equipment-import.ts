@@ -8,8 +8,8 @@ import { prisma } from "@/lib/prisma";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 import { assertFeature } from "@/server/modules";
 import { importEquipment } from "@/server/services/equipment-import";
-import { saveUpload } from "@/server/storage";
 import { getCurrentAccount } from "@/server/session";
+import { storePlantFile } from "@/server/file-access";
 import { assertEntityAccess } from "@/server/tenant";
 
 import type { ActionResult } from "./workflow";
@@ -46,7 +46,7 @@ export async function importEquipmentAction(input: z.input<typeof schema>): Prom
     await assertEntityAccess("floor", parsed.data.items.map((item) => item.floorId));
     const result = await importEquipment(prisma, {
       items: parsed.data.items.map((item) => ({ ...item, tag: item.tag.toUpperCase(), lastInspection: item.lastInspection ? new Date(`${item.lastInspection}T12:00:00Z`) : null })),
-      writeReport: async (svg) => (await saveUpload("documents", ".svg", svg)).url,
+      writeReport: async (svg) => (await storePlantFile("documents", ".svg", svg)).url,
     });
     revalidatePath("/", "layout");
     return { ok: true, data: { created: result.created, skipped: result.skipped } };

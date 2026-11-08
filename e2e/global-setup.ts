@@ -61,6 +61,9 @@ const WARM_ROUTES = [
   "/zapomenute-heslo",
   "/admin/users",
   "/ucet",
+  // Fáze 68: profil firmy Panel Builderu (logo) a velín (přihlášení velínu)
+  "/panel-builder/company",
+  "/superadmin",
 ];
 
 /**

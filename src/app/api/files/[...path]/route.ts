@@ -2,21 +2,31 @@ import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
 import { etagMatches, fileCacheControl, fileETag } from "@/lib/file-cache";
+import { FILES_PREFIX, canReadFile, isRegistrableUpload, isSignedIn } from "@/lib/file-ownership";
 import { contentTypeFor, resolveUploadPath } from "@/lib/files";
-import { getAuthState } from "@/server/session";
+import { prisma } from "@/lib/prisma";
+import { fileViewer } from "@/server/file-access";
 
 const UPLOAD_ROOT = path.join(process.cwd(), "storage", "uploads");
 
 /**
  * Servíruje soubory ze storage/uploads (fotky, revize, zákresy, hlasové poznámky).
  * Nahrané soubory (UUID) se cachují natrvalo, seed soubory den; opakovaný dotaz s ETagem → 304.
+ * Fáze 68: soubor vydá jen přihlášení jeho vlastníka (registr `StoredFile`); cizí nebo neznámý soubor = 404.
  */
 export async function GET(request: Request, ctx: RouteContext<"/api/files/[...path]">) {
-  // Fáze 67: zrušená relace uživatele firmy už soubory nečte (vlastnictví souborů řeší fáze 68)
-  if ((await getAuthState()).revoked) return new Response("Přihlášení vypršelo.", { status: 401 });
   const { path: segments } = await ctx.params;
   const filePath = resolveUploadPath(UPLOAD_ROOT, segments);
   if (!filePath) return new Response("Soubor nenalezen.", { status: 404 });
+
+  const url = FILES_PREFIX + segments.join("/");
+  const [viewer, registered] = await Promise.all([
+    fileViewer(),
+    isRegistrableUpload(url) ? prisma.storedFile.findUnique({ where: { url }, select: { ownerKind: true, companyId: true, deletedAt: true } }) : null,
+  ]);
+  // Fáze 67: zrušená relace uživatele firmy nic nečte; fáze 68: cizí soubor jako neexistující (neprozradí, že je)
+  if (!isSignedIn(viewer)) return new Response("Přihlášení vypršelo.", { status: 401 });
+  if (!canReadFile(viewer, url, registered)) return new Response("Soubor nenalezen.", { status: 404 });
 
   let info: Awaited<ReturnType<typeof stat>>;
   try {

@@ -9,8 +9,8 @@ import { generateRevisionSchematic } from "@/server/services/schematic";
 import * as workflow from "@/server/services/workflow";
 import { assertFeature } from "@/server/modules";
 import { assertPermission } from "@/server/permissions";
+import { storePlantFile } from "@/server/file-access";
 import { assertTenantAccess } from "@/server/tenant";
-import { saveUpload } from "@/server/storage";
 import { getCurrentRole, getCurrentUser } from "@/server/session";
 
 // Tenké Server Actions: role z cookie → validace zod → služba → revalidace.
@@ -174,7 +174,7 @@ export async function generateSchematicAction(input: z.input<typeof generateSche
     input,
     async (actor, data) => {
       const { svg, version, changed } = await generateRevisionSchematic(prisma, actor, data);
-      const { url } = await saveUpload("revisions", ".svg", svg);
+      const { url } = await storePlantFile("revisions", ".svg", svg);
       return { url, version, changed, fileName: `schema-${version}.svg`, sizeBytes: Buffer.byteLength(svg) };
     },
     false,

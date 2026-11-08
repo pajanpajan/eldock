@@ -1536,3 +1536,94 @@ model NewsletterIssue {
   sentAt     DateTime?
   createdAt  DateTime  @default(now())
 }
+
+// -----------------------------------------------------------------------------
+//  ÚLOŽIŠTĚ SOUBORŮ, ZÁLOHY A RETENCE (fáze 68)
+// -----------------------------------------------------------------------------
+
+/// Vlastník nahraného souboru – rozhoduje, kdo ho smí číst (`GET /api/files`) a převzít do svého záznamu.
+enum FileOwnerKind {
+  DEMO // obchodní demo (účty bez firmy) – čtou ho jen demo účty
+  COMPANY // registrovaná firma (Správa závodů i AI Panel Builder) – čtou ho jen její přihlášení
+  SHARED // starší soubor s odkazy více vlastníků nebo z tabulky bez vlastníka – čte ho každé přihlášení (jako před fází 68)
+}
+
+/// Registr nahraných souborů (fáze 68): vlastník, velikost a otisk. Vzorové soubory ze složek `seed/` v registru nejsou.
+model StoredFile {
+  id           String        @id @default(cuid())
+  /// Adresa v aplikaci `/api/files/<druh>/<soubor>`.
+  url          String        @unique
+  /// Složka úložiště (photos, documents, …).
+  kind         String
+  ownerKind    FileOwnerKind
+  /// Registrovaná firma (`RegisteredCompany.id`) u vlastníka COMPANY.
+  companyId    String?
+  /// Uživatel Správy závodů, který soubor nahrál (Panel Builder a soubory vytvořené serverem bez autora).
+  uploadedById String?
+  sizeBytes    Int
+  sha256       String?
+  mimeType     String
+  originalName String?
+  /// upload = POST /api/uploads · server = vytvořil server (zpráva, revize) · registry = doplněno `npm run storage:registry`
+  source       String        @default("upload")
+  createdAt    DateTime      @default(now())
+  /// Soubor smazaný z úložiště (úklid, smazání projektu) – číst nejde, záloha mimo server ho smaže po 30 dnech.
+  deletedAt    DateTime?
+
+  @@index([companyId])
+  @@index([ownerKind])
+}
+
+enum MaintenanceKind {
+  BACKUP // snímek databáze + soubory mimo server
+  RETENTION // úklid bezpečnostního deníku, relací a odkazů na heslo
+}
+
+enum MaintenanceTrigger {
+  SCHEDULE // denní plánovač v procesu aplikace
+  MANUAL // „Zálohovat teď“ ve velínu
+  CLI // npm run backup
+}
+
+enum MaintenanceStatus {
+  RUNNING
+  OK
+  WARNING // dokončeno, ale část se nepovedla (např. některé soubory mimo server)
+  FAILED
+}
+
+/// Běh údržby (fáze 68) – velín z něj ukazuje stav záloh, plánovač podle něj pozná, že dnešní záloha už proběhla.
+model MaintenanceRun {
+  id          String             @id @default(cuid())
+  kind        MaintenanceKind
+  trigger     MaintenanceTrigger
+  status      MaintenanceStatus  @default(RUNNING)
+  startedAt   DateTime           @default(now())
+  finishedAt  DateTime?
+  /// Souhrn běhu (JSON): velikost snímku, soubory mimo server, smazané záznamy…
+  summaryJson String?
+  error       String?
+
+  @@index([kind, startedAt])
+}
+
+/// Objekt zálohy mimo server (úložiště S3): šifrovaný snímek databáze nebo soubor úložiště.
+model BackupObject {
+  /// Klíč objektu v úložišti (s prefixem `ELDOCK_BACKUP_S3_PREFIX`): `eldock/db/eldock-20261108T013000Z.db.gz.enc`, `eldock/files/photos/<soubor>.enc`
+  key           String    @id
+  /// db | file
+  kind          String
+  /// Soubor úložiště (`photos/<soubor>`, `documents/seed/<soubor>`), u snímku databáze jeho název.
+  source        String
+  sizeBytes     Int
+  storedBytes   Int
+  sha256        String?
+  /// Čas změny zdrojového souboru (ms) – přepsaný vzorový soubor se nahraje znovu.
+  sourceMtimeMs Float?
+  uploadedAt    DateTime  @default(now())
+  /// Zdroj zmizel z úložiště (smazání v aplikaci) – objekt se smaže po 30 dnech.
+  missingSince  DateTime?
+
+  @@index([kind, uploadedAt])
+  @@index([source])
+}

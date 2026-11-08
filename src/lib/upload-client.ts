@@ -36,16 +36,18 @@ export async function resizeImage(file: File, maxSize = 2000, quality = 0.85): P
   }
 }
 
-/** POST /api/uploads s průběhem 0–100. */
-export function uploadFile(
-  kind: "photo" | "revision" | "markup" | "voice" | "document" | "attachment" | "software",
-  file: File,
-  onProgress?: (percent: number) => void,
-): Promise<UploadedFile> {
+export type UploadKindName = "photo" | "revision" | "markup" | "voice" | "document" | "attachment" | "software";
+
+/**
+ * POST /api/uploads s průběhem 0–100. Fáze 68: soubor patří účtu, pod kterým se nahrál – `scope: "panel"` = firma
+ * přihlášená do AI Panel Builderu (stránky Panel Builderu), jinak účet Správy závodů.
+ */
+export function uploadFile(kind: UploadKindName, file: File, onProgress?: (percent: number) => void, options: { scope?: "panel" } = {}): Promise<UploadedFile> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     const body = new FormData();
     body.append("kind", kind);
+    if (options.scope) body.append("scope", options.scope);
     body.append("file", file);
     xhr.open("POST", "/api/uploads");
     xhr.responseType = "json";
@@ -60,3 +62,6 @@ export function uploadFile(
     xhr.send(body);
   });
 }
+
+/** Nahrání ze stránek AI Panel Builderu – soubor patří přihlášené firmě Panel Builderu (fáze 68). */
+export const uploadPanelFile = (kind: UploadKindName, file: File, onProgress?: (percent: number) => void) => uploadFile(kind, file, onProgress, { scope: "panel" });
