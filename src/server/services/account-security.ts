@@ -164,6 +164,18 @@ export async function revokeSessions(prisma: PrismaClient, input: { userId: stri
   return result.count;
 }
 
+/**
+ * Odpojí spárované aplikace uživatele (fáze 70) – změna hesla, nastavení hesla z odkazu, blokace a odhlášení ze všech
+ * zařízení. Vrací počet; aplikace pak dostane 401 a musí se spárovat znovu.
+ */
+export async function revokeDevices(prisma: PrismaClient, input: { userId: string; deviceId?: string; actorId?: string | null; reason: string }, now: Date = new Date()) {
+  const result = await prisma.syncDevice.updateMany({
+    where: { userId: input.userId, revokedAt: null, ...(input.deviceId ? { id: input.deviceId } : {}) },
+    data: { revokedAt: now, revokedById: input.actorId ?? null, revokedReason: input.reason.slice(0, 120) },
+  });
+  return result.count;
+}
+
 export function listActiveSessions(prisma: PrismaClient, userId: string, now: Date = new Date()) {
   return prisma.userSession.findMany({
     where: { userId, revokedAt: null, expiresAt: { gt: now } },
@@ -209,6 +221,8 @@ export async function setPasswordFromLink(prisma: PrismaClient, input: { token: 
     prisma.user.update({ where: { id: link.userId }, data: { passwordHash, passwordChangedAt: now, mustChangePassword: false } }),
     prisma.authToken.updateMany({ where: { userId: link.userId, usedAt: null }, data: { usedAt: now } }),
     prisma.userSession.updateMany({ where: { userId: link.userId, revokedAt: null }, data: { revokedAt: now } }),
+    // Fáze 70: nové heslo z odkazu odpojí i spárované aplikace (účet mohl být zneužit)
+    prisma.syncDevice.updateMany({ where: { userId: link.userId, revokedAt: null }, data: { revokedAt: now, revokedReason: "nové heslo z odkazu" } }),
     prisma.securityEvent.create({
       data: { kind: "PASSWORD_SET", userId: link.userId, companyId: link.user.companyId, email: link.user.email, detail: link.kind === "INVITE" ? "z pozvánky" : "z odkazu na obnovu", createdAt: now },
     }),
@@ -240,8 +254,11 @@ export async function changePassword(prisma: PrismaClient, input: { userId: stri
   const passwordHash = await hashPassword(input.next);
   await prisma.user.update({ where: { id: user.id }, data: { passwordHash, passwordChangedAt: now, mustChangePassword: false } });
   const revoked = await revokeSessions(prisma, { userId: user.id, exceptSessionId: input.sessionId ?? null }, now);
-  await recordSecurityEvent(prisma, { kind: "PASSWORD_CHANGED", userId: user.id, companyId: user.companyId, actorId: user.id, email: user.email, detail: revoked ? `odhlášeno ${revoked} dalších zařízení` : null }, now);
-  return { revoked };
+  // Fáze 70: změna hesla odpojí i spárované aplikace
+  const devices = await revokeDevices(prisma, { userId: user.id, actorId: user.id, reason: "změna hesla" }, now);
+  const detail = [revoked ? `odhlášeno ${revoked} dalších zařízení` : null, devices ? `odpojeno aplikací: ${devices}` : null].filter(Boolean).join(", ");
+  await recordSecurityEvent(prisma, { kind: "PASSWORD_CHANGED", userId: user.id, companyId: user.companyId, actorId: user.id, email: user.email, detail: detail || null }, now);
+  return { revoked, devices };
 }
 
 // ---------------------------------------------------------------------------
@@ -277,6 +294,7 @@ export async function setUserDisabled(prisma: PrismaClient, actor: Actor, userId
   await prisma.user.update({ where: { id: user.id }, data: { disabledAt: disabled ? now : null } });
   if (disabled) {
     await revokeSessions(prisma, { userId: user.id }, now);
+    await revokeDevices(prisma, { userId: user.id, actorId: actor.id, reason: "blokace účtu" }, now);
     await prisma.authToken.updateMany({ where: { userId: user.id, usedAt: null }, data: { usedAt: now } });
   }
   await recordSecurityEvent(prisma, { kind: disabled ? "USER_DISABLED" : "USER_ENABLED", userId: user.id, companyId: user.companyId, actorId: actor.id, email: user.email }, now);
@@ -286,8 +304,10 @@ export async function setUserDisabled(prisma: PrismaClient, actor: Actor, userId
 export async function adminRevokeSessions(prisma: PrismaClient, actor: Actor, userId: string, now: Date = new Date()) {
   const user = await companyMember(prisma, actor, userId);
   const count = await revokeSessions(prisma, { userId: user.id }, now);
-  await recordSecurityEvent(prisma, { kind: "SESSION_REVOKED", userId: user.id, companyId: user.companyId, actorId: actor.id, email: user.email, detail: `zrušeno relací: ${count}` }, now);
-  return count;
+  // Fáze 70: „odhlásit ze všech zařízení“ odpojí i spárované aplikace
+  const devices = await revokeDevices(prisma, { userId: user.id, actorId: actor.id, reason: "odhlášení ze všech zařízení" }, now);
+  await recordSecurityEvent(prisma, { kind: "SESSION_REVOKED", userId: user.id, companyId: user.companyId, actorId: actor.id, email: user.email, detail: `zrušeno relací: ${count}${devices ? `, aplikací: ${devices}` : ""}` }, now);
+  return count + devices;
 }
 
 /** Bezpečnostní deník firmy (nejnovější nahoře). */

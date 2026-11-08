@@ -66,6 +66,8 @@ const WARM_ROUTES = [
   "/superadmin",
   // Fáze 69: data firmy (export a zrušení účtu)
   "/admin/data",
+  // Fáze 70: zařízení firmy (aplikace Windows, iOS, Android)
+  "/admin/devices",
 ];
 
 /**

@@ -1,12 +1,11 @@
 import "server-only";
 
 import { isAuthBypassed } from "@/lib/auth";
-import { CLAIM_MESSAGES, DEMO_OWNER, claimVerdict, companyOwner, isRegistrableUpload, type FileOwner, type FileViewer } from "@/lib/file-ownership";
+import { DEMO_OWNER, claimVerdict, companyOwner, isRegistrableUpload, type FileOwner, type FileViewer } from "@/lib/file-ownership";
 import { contentTypeFor, type UploadKind } from "@/lib/files";
 import { prisma } from "@/lib/prisma";
-import { WorkflowError } from "@/lib/workflow/state-machine";
 import { getPanelCompany } from "@/server/panel-session";
-import { markFilesDeleted, registerFile, sha256Hex } from "@/server/services/file-registry";
+import { assertFileClaims, markFilesDeleted, registerFile, sha256Hex } from "@/server/services/file-registry";
 import { getAuthState, getCurrentUser } from "@/server/session";
 import { removeStoredFile, saveUpload } from "@/server/storage";
 import { isSuperadmin } from "@/server/superadmin-session";
@@ -90,15 +89,7 @@ export async function storePlantFile(dir: UploadKind, extension: string, data: B
  * `strict: false` = neznámý soubor projde (průběžně ukládaný nákres se starším odkazem).
  */
 export async function assertFilesOwnedBy(urls: Iterable<string | null | undefined>, owner: FileOwner, options: { strict?: boolean } = {}) {
-  const list = [...new Set([...urls].filter((url): url is string => !!url))];
-  if (!list.length) return;
-  const lookup = list.filter(isRegistrableUpload);
-  const files = lookup.length ? await prisma.storedFile.findMany({ where: { url: { in: lookup } }, select: { url: true, ownerKind: true, companyId: true, deletedAt: true } }) : [];
-  const byUrl = new Map(files.map((file) => [file.url, file]));
-  for (const url of list) {
-    const verdict = claimVerdict(owner, url, byUrl.get(url) ?? null, options);
-    if (verdict !== "ok") throw new WorkflowError(verdict === "foreign" ? "FORBIDDEN" : "VALIDATION", CLAIM_MESSAGES[verdict]);
-  }
+  await assertFileClaims(prisma, urls, owner, options);
 }
 
 /** Soubory pro záznam aktuálního účtu Správy závodů. */

@@ -21,4 +21,8 @@ export const SECURITY_EVENT_LABELS: Record<SecurityEventKind, { label: string; t
   USER_REMOVED: { label: "Zaměstnanec odebrán (účet anonymizován)", tone: "bad" },
   COMPANY_CLOSURE_REQUESTED: { label: "Žádost o zrušení účtu firmy", tone: "bad" },
   COMPANY_CLOSURE_CANCELLED: { label: "Žádost o zrušení účtu firmy zrušena", tone: "ok" },
+  // Fáze 70: aplikace pro Windows, iOS a Android
+  DEVICE_PAIRED: { label: "Spárována aplikace", tone: "ok" },
+  DEVICE_REVOKED: { label: "Aplikace odpojena", tone: "warn" },
+  DEVICE_PAIR_FAILED: { label: "Chybný kód párování aplikace", tone: "warn" },
 };

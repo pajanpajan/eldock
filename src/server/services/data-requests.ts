@@ -71,6 +71,9 @@ export interface CompanyExportData {
 }
 
 /** Všechna data firmy jako seznamy záznamů (bez hesel a tajemství). */
+/** Zařízení aplikace do exportu – bez otisku tokenu. */
+const DEVICE_EXPORT = { id: true, userId: true, name: true, platform: true, appVersion: true, createdAt: true, lastSeenAt: true, lastPullAt: true, lastPushAt: true, revokedAt: true, revokedReason: true } as const;
+
 export async function companyExportData(prisma: PrismaClient, companyId: string): Promise<CompanyExportData> {
   const company = await activeCompany(prisma, companyId);
   const { passwordHash: _secret, ...companyRecord } = company;
@@ -137,6 +140,9 @@ export async function companyExportData(prisma: PrismaClient, companyId: string)
   }
 
   sections["bezpecnostni-denik"] = await prisma.securityEvent.findMany({ where: { companyId }, orderBy: { createdAt: "asc" }, select: { kind: true, userId: true, actorId: true, email: true, detail: true, createdAt: true } });
+  // Fáze 70: spárované aplikace (bez tokenu) a evidence úprav z aplikací
+  sections["zarizeni-aplikaci"] = await prisma.syncDevice.findMany({ where: { companyId }, orderBy: { createdAt: "asc" }, select: DEVICE_EXPORT });
+  sections["upravy-z-aplikaci"] = await prisma.syncMutation.findMany({ where: { user: { companyId } }, orderBy: { receivedAt: "asc" }, select: { clientId: true, userId: true, deviceId: true, type: true, status: true, code: true, message: true, entity: true, entityId: true, performedAt: true, receivedAt: true } });
   const registryFiles = await prisma.storedFile.findMany({ where: { companyId, deletedAt: null }, orderBy: { createdAt: "asc" }, select: { url: true, kind: true, originalName: true, sizeBytes: true, sha256: true, createdAt: true } });
   return { company: { id: company.id, companyName: company.companyName, ico: company.ico, productScope: company.productScope }, sections, registryFiles };
 }
@@ -255,8 +261,9 @@ export async function writeCompanyExport(prisma: PrismaClient, input: { companyI
 export async function personalExportData(prisma: PrismaClient, userId: string, now: Date = new Date()) {
   const user = await prisma.user.findUnique({ where: { id: userId }, include: { registeredCompany: { select: { companyName: true, ico: true } } } });
   if (!user || !user.accountType) throw new WorkflowError("NOT_FOUND", "Účet nebyl nalezen.");
-  const [sessions, events, reported, assigned, authored, approved, actions, attachments, documents, backups] = await Promise.all([
+  const [sessions, devices, events, reported, assigned, authored, approved, actions, attachments, documents, backups] = await Promise.all([
     prisma.userSession.findMany({ where: { userId }, orderBy: { createdAt: "desc" }, select: { device: true, createdAt: true, lastSeenAt: true, expiresAt: true, revokedAt: true } }),
+    prisma.syncDevice.findMany({ where: { userId }, orderBy: { createdAt: "desc" }, select: DEVICE_EXPORT }),
     prisma.securityEvent.findMany({ where: { userId }, orderBy: { createdAt: "desc" }, select: { kind: true, createdAt: true, detail: true } }),
     prisma.changeRequest.count({ where: { reporterId: userId } }),
     prisma.changeRequest.count({ where: { assigneeId: userId } }),
@@ -274,6 +281,7 @@ export async function personalExportData(prisma: PrismaClient, userId: string, n
     user: exportUser(user),
     company: user.registeredCompany,
     sessions,
+    devices,
     securityEvents: events,
     records: { changeRequestsReported: reported, changeRequestsAssigned: assigned, revisionsAuthored: authored, revisionsApproved: approved, workflowActions: actions, attachmentsUploaded: attachments, documentsUploaded: documents, softwareBackups: backups },
     note: "Záznamy, které jste ve firmě vytvořili (změny, revize, přílohy), jsou součástí dokumentace firmy – jejich úplný export má správce firmy (Administrace → Data firmy).",
@@ -306,6 +314,9 @@ export async function removeEmployee(prisma: PrismaClient, input: { companyId: s
   await prisma.$transaction([
     prisma.userSession.deleteMany({ where: { userId: user.id } }),
     prisma.authToken.deleteMany({ where: { userId: user.id } }),
+    // Fáze 70: spárované aplikace a kódy párování (token zařízení přestane platit)
+    prisma.syncDevice.deleteMany({ where: { userId: user.id } }),
+    prisma.syncPairing.deleteMany({ where: { userId: user.id } }),
     prisma.securityEvent.updateMany({ where: { userId: user.id }, data: { email: null } }),
     prisma.user.update({
       where: { id: user.id },
@@ -398,6 +409,12 @@ export async function executeCompanyClosure(prisma: PrismaClient, input: { compa
       summary.projects = (await tx.panelBoardProject.deleteMany({ where: { companyId: company.id } })).count;
       summary.securityEvents = (await tx.securityEvent.deleteMany({ where: { OR: [{ companyId: company.id }, ...(userIds.length ? [{ userId: { in: userIds } }] : [])] } })).count;
       await tx.storedFile.deleteMany({ where: { companyId: company.id } });
+      // Fáze 70: aplikace, kódy párování a evidence úprav (i u anonymizovaných uživatelů s odkazy v historii)
+      await tx.syncDevice.deleteMany({ where: { OR: [{ companyId: company.id }, ...(userIds.length ? [{ userId: { in: userIds } }] : [])] } });
+      if (userIds.length) {
+        await tx.syncPairing.deleteMany({ where: { userId: { in: userIds } } });
+        await tx.syncMutation.deleteMany({ where: { userId: { in: userIds } } });
+      }
       for (const id of userIds) {
         if (!(await userReferences(tx, id))) {
           await tx.user.delete({ where: { id } });

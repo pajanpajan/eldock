@@ -3,70 +3,20 @@ import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { collectFileUrls } from "@/lib/file-ownership";
-import { WorkflowError } from "@/lib/workflow/state-machine";
 import { assertPlantFiles } from "@/server/file-access";
 import { plantAccessWhere } from "@/server/queries/plant";
+import { FIELD_KINDS, assertAccessible, type EntityKind } from "@/server/services/tenant-access";
 
 // Fáze 67: oddělení firem v serverových akcích. Akce nad daty závodu ověří, že záznamy ze vstupu patří do závodu
 // přihlášeného uživatele (registrovaná firma jen svůj závod, obchodní demo jen demo závody) – stránky to hlídají už
 // přes `plantAccessWhere`, akce dosud ne. Cizí nebo neexistující záznam = „nenalezeno“ (nic se neprozradí).
+// Fáze 70: počty záznamů sdílí s úpravami z aplikací (`services/tenant-access.ts`).
 
 type Plant = Prisma.PlantWhereInput;
-type EntityKind =
-  | "equipment"
-  | "changeRequest"
-  | "revision"
-  | "defect"
-  | "temporaryMod"
-  | "equipmentDocument"
-  | "softwareBackup"
-  | "monitoredComponent"
-  | "schematicReference"
-  | "floor"
-  | "building"
-  | "plant";
-
-const viaEquipment = (plant: Plant) => ({ equipment: { floor: { building: { plant } } } });
-
-/** Počet záznamů s danými id, které leží v dostupných závodech. */
-const COUNTERS: Record<EntityKind, (ids: string[], plant: Plant) => Promise<number>> = {
-  equipment: (ids, plant) => prisma.equipment.count({ where: { id: { in: ids }, floor: { building: { plant } } } }),
-  changeRequest: (ids, plant) => prisma.changeRequest.count({ where: { id: { in: ids }, ...viaEquipment(plant) } }),
-  revision: (ids, plant) => prisma.documentRevision.count({ where: { id: { in: ids }, ...viaEquipment(plant) } }),
-  defect: (ids, plant) => prisma.inspectionDefect.count({ where: { id: { in: ids }, ...viaEquipment(plant) } }),
-  temporaryMod: (ids, plant) => prisma.temporaryModification.count({ where: { id: { in: ids }, ...viaEquipment(plant) } }),
-  equipmentDocument: (ids, plant) => prisma.equipmentDocument.count({ where: { id: { in: ids }, ...viaEquipment(plant) } }),
-  softwareBackup: (ids, plant) => prisma.softwareBackup.count({ where: { id: { in: ids }, ...viaEquipment(plant) } }),
-  monitoredComponent: (ids, plant) => prisma.monitoredComponent.count({ where: { id: { in: ids }, ...viaEquipment(plant) } }),
-  schematicReference: (ids, plant) => prisma.schematicReference.count({ where: { id: { in: ids }, revision: viaEquipment(plant) } }),
-  floor: (ids, plant) => prisma.floor.count({ where: { id: { in: ids }, building: { plant } } }),
-  building: (ids, plant) => prisma.building.count({ where: { id: { in: ids }, plant } }),
-  plant: (ids, plant) => prisma.plant.count({ where: { AND: [{ id: { in: ids } }, plant] } }),
-};
-
-/** Pole vstupu akcí → druh záznamu. */
-const FIELD_KINDS: Record<string, EntityKind> = {
-  equipmentId: "equipment",
-  equipmentIds: "equipment",
-  linkedEquipmentId: "equipment",
-  changeRequestId: "changeRequest",
-  revisionId: "revision",
-  defectId: "defect",
-  documentId: "equipmentDocument",
-  backupId: "softwareBackup",
-  componentId: "monitoredComponent",
-  floorId: "floor",
-  buildingId: "building",
-  plantId: "plant",
-};
-
-const idsOf = (value: unknown): string[] => (Array.isArray(value) ? value : [value]).filter((item): item is string => typeof item === "string" && item.length > 0);
 
 /** Ověří záznamy jednoho druhu (prázdný výběr projde). */
 export async function assertEntityAccess(kind: EntityKind, value: unknown, plant?: Plant) {
-  const ids = [...new Set(idsOf(value))];
-  if (!ids.length) return;
-  if ((await COUNTERS[kind](ids, plant ?? (await plantAccessWhere()))) !== ids.length) throw new WorkflowError("NOT_FOUND", "Záznam nebyl nalezen.");
+  await assertAccessible(prisma, kind, value, plant ?? (await plantAccessWhere()));
 }
 
 /**

@@ -6,6 +6,8 @@ import { FILES_PREFIX, canReadFile, isRegistrableUpload, isSignedIn } from "@/li
 import { contentTypeFor, resolveUploadPath } from "@/lib/files";
 import { prisma } from "@/lib/prisma";
 import { fileViewer } from "@/server/file-access";
+import { authenticateDevice } from "@/server/services/sync";
+import { bearerToken } from "@/server/sync/http";
 
 const UPLOAD_ROOT = path.join(process.cwd(), "storage", "uploads");
 
@@ -13,6 +15,7 @@ const UPLOAD_ROOT = path.join(process.cwd(), "storage", "uploads");
  * Servíruje soubory ze storage/uploads (fotky, revize, zákresy, hlasové poznámky).
  * Nahrané soubory (UUID) se cachují natrvalo, seed soubory den; opakovaný dotaz s ETagem → 304.
  * Fáze 68: soubor vydá jen přihlášení jeho vlastníka (registr `StoredFile`); cizí nebo neznámý soubor = 404.
+ * Fáze 70: i aplikacím s tokenem zařízení (`Authorization: Bearer`) a s otiskem `X-Content-SHA256` z registru.
  */
 export async function GET(request: Request, ctx: RouteContext<"/api/files/[...path]">) {
   const { path: segments } = await ctx.params;
@@ -20,9 +23,12 @@ export async function GET(request: Request, ctx: RouteContext<"/api/files/[...pa
   if (!filePath) return new Response("Soubor nenalezen.", { status: 404 });
 
   const url = FILES_PREFIX + segments.join("/");
+  const token = bearerToken(request);
+  const device = token ? await authenticateDevice(prisma, token) : null;
+  if (token && !device) return new Response("Zařízení není spárované nebo bylo odpojeno.", { status: 401 });
   const [viewer, registered] = await Promise.all([
-    fileViewer(),
-    isRegistrableUpload(url) ? prisma.storedFile.findUnique({ where: { url }, select: { ownerKind: true, companyId: true, deletedAt: true } }) : null,
+    device ? { demo: false, companyIds: [device.company.id], superadmin: false } : fileViewer(),
+    isRegistrableUpload(url) ? prisma.storedFile.findUnique({ where: { url }, select: { ownerKind: true, companyId: true, deletedAt: true, sha256: true } }) : null,
   ]);
   // Fáze 67: zrušená relace uživatele firmy nic nečte; fáze 68: cizí soubor jako neexistující (neprozradí, že je)
   if (!isSignedIn(viewer)) return new Response("Přihlášení vypršelo.", { status: 401 });
@@ -45,6 +51,8 @@ export async function GET(request: Request, ctx: RouteContext<"/api/files/[...pa
     "Last-Modified": info.mtime.toUTCString(),
     "X-Content-Type-Options": "nosniff",
   });
+  // Aplikace ověří stažený soubor a podle otisku ho drží v mezipaměti (fáze 70)
+  if (registered?.sha256) headers.set("X-Content-SHA256", registered.sha256);
   // SVG otevřené přímo v okně nesmí spouštět skripty.
   if (contentType === "image/svg+xml") headers.set("Content-Security-Policy", "sandbox");
   if (new URL(request.url).searchParams.has("download")) {

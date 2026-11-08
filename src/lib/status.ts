@@ -44,6 +44,7 @@ import { formatCount, formatDateShort, plural } from "@/lib/format";
 import { INSPECTION_WARNING_DAYS, type InspectionState } from "@/lib/inspection";
 import type { DefectState, ThermalLevel } from "@/lib/defects";
 import type { PlanBucket } from "@/lib/inspection-planner";
+import type { DeviceSyncState } from "@/lib/sync";
 
 // Jediný zdroj pravdy pro barvy a popisky stavů. Třídy Tailwindu jsou zapsané
 // doslova, aby je kompilátor našel; `hex` slouží SVG vrstvám (piny, mapa).
@@ -343,4 +344,13 @@ export const THERMAL_LEVEL: Record<ThermalLevel, StatusStyle> = {
   WATCH: { ...AMBER, label: "Sledovat", description: "ΔT 10–20 K – zkontrolovat při příští termovizi.", icon: Thermometer },
   PLAN: { ...ORANGE, label: "Naplánovat opravu", description: "ΔT 20–40 K – dotáhnout / vyměnit při nejbližší odstávce.", icon: Thermometer },
   CRITICAL: { ...RED, label: "Kritické – opravit ihned", description: "ΔT nad 40 K – hrozí poškození, opravit ihned.", icon: Thermometer },
+};
+
+/** Fáze 70: stav synchronizace spárované aplikace (offline provoz = synchronizace aspoň jednou denně). */
+export const DEVICE_SYNC_STATE: Record<DeviceSyncState, StatusStyle> = {
+  ok: { ...EMERALD, label: "Synchronizováno", description: "Aplikace stáhla změny během posledních 24 hodin.", icon: CircleCheck },
+  stale: { ...AMBER, label: "Nesynchronizováno déle než 24 h", description: "Offline provoz vyžaduje synchronizaci aspoň jednou denně – připojte zařízení k síti.", icon: Clock },
+  never: { ...SKY, label: "Zatím nesynchronizováno", description: "Aplikace je spárovaná, ale ještě nestáhla data závodu.", icon: Hourglass },
+  expired: { ...RED, label: "Vypršelo", description: "90 dní bez spojení – zařízení je nutné spárovat znovu.", icon: TimerOff },
+  revoked: { ...ZINC, label: "Odpojeno", description: "Token zařízení neplatí – aplikaci je nutné spárovat znovu.", icon: Ban },
 };

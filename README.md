@@ -24,6 +24,7 @@ Další screenshoty jsou v [`docs/screenshots/`](docs/screenshots/).
 - **CAE Back-Office:** KPI, tickety napříč závody s filtry a SLA, detail ticketu se zákresem a timeline, převzetí, nahrání revize (minor/major, editovatelný kusovník, demo „Vygenerovat upravené schéma“), storno, komentáře.
 - **Schválení údržbou:** porovnání revizí vedle sebe (synchronní zoom), posuvníkem a prolínáním, rozdíl kusovníku, „Potvrdit a propsat do systému“ / „Vrátit k přepracování“ s komentářem.
 - **Přihlašovací brána** (`/login`, přístupové heslo `ELDOCK_ACCESS_PASSWORD`) a přepínač účtů v hlavičce (ředitel, údržba, revizní technici, CAE projektant).
+- **Aplikace pro Windows, iOS a Android (fáze 70 – serverová část):** synchronizační API `/api/sync/v1` (`docs/SYNC_API.md`) – párování v „Můj účet“ kódem / QR, data závodu offline, fronta úprav z haly bez signálu (změny, provizoria, závady, fotky) a správa zařízení firmy v Administraci.
 - Instalovatelná PWA, tmavé vysoce kontrastní rozhraní, celé UI česky.
 
 ## Požadavky
@@ -57,6 +58,7 @@ npm run dev                 # http://localhost:3000
 | `npm run test:e2e` | Playwright E2E – vlastní dev server na portu 3200 s čistou `e2e.db` |
 | `npm run verify` | typecheck + lint + test + build (povinné před každým commitem) |
 | `npm run backup` / `npm run backup:restore` | záloha databáze (a s úložištěm mimo server i souborů) podle `ELDOCK_BACKUP_*`; obnova jen do prázdné složky (`-- --list`, `-- --from s3 --to <složka> --files`) |
+| `npm run sync:setup` | triggery žurnálu změn pro aplikace (po migracích, idempotentní; `-- --new-epoch` po obnově databáze ze zálohy) |
 | `npm run storage:registry` / `npm run storage:cleanup` | doplnění registru souborů pro starší soubory (vlastník podle odkazů) / úklid osiřelých souborů (`--dry-run`) |
 | `npm run db:seed` / `db:reset` / `db:migrate` / `db:studio` | práce s databází (Prisma) |
 

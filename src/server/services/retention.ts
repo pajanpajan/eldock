@@ -1,5 +1,8 @@
 import type { PrismaClient } from "@/generated/prisma/client";
 import type { MaintenanceTrigger } from "@/generated/prisma/enums";
+import { SYNC_POLICY } from "@/lib/sync";
+
+import { pruneSync, type SyncRetentionSummary } from "./sync";
 
 // Retence (fáze 68): jak dlouho se drží záznamy o přihlášení a údržbě. Běží denně se zálohou (plánovač v procesu
 // aplikace). Limit pokusů o přihlášení (15 min) ani „Můj účet“ (aktivní relace) tím nejsou dotčené.
@@ -17,11 +20,17 @@ export const RETENTION_DAYS = {
   dataRequests: 1095,
   /** Zrušená firma Panel Builderu s fakturačními údaji a objednávkami kreditů (doklady 10 let). */
   closedCompanies: 3653,
+  /** Fáze 70: značky smazání v žurnálu změn (starší kurzor aplikace = stáhnout vše znovu). */
+  syncTombstones: SYNC_POLICY.tombstoneDays,
+  /** Evidence úprav z aplikací (fronta offline). */
+  syncMutations: SYNC_POLICY.mutationDays,
+  /** Odpojená a vypršelá zařízení aplikací (po odpojení / vypršení). */
+  syncDevices: SYNC_POLICY.revokedDeviceDays,
 } as const;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-export interface RetentionSummary {
+export interface RetentionSummary extends SyncRetentionSummary {
   securityEvents: number;
   sessions: number;
   authTokens: number;
@@ -42,7 +51,8 @@ export async function applyRetention(prisma: PrismaClient, now: Date = new Date(
     // Objednávky kreditů se smažou kaskádou s firmou – až po uplynutí lhůty pro doklady
     prisma.registeredCompany.deleteMany({ where: { closedAt: { lt: before(RETENTION_DAYS.closedCompanies) } } }),
   ]);
-  return { securityEvents: securityEvents.count, sessions: sessions.count, authTokens: authTokens.count, maintenanceRuns: maintenanceRuns.count, dataRequests: dataRequests.count, closedCompanies: closedCompanies.count };
+  const sync = await pruneSync(prisma, now);
+  return { securityEvents: securityEvents.count, sessions: sessions.count, authTokens: authTokens.count, maintenanceRuns: maintenanceRuns.count, dataRequests: dataRequests.count, closedCompanies: closedCompanies.count, ...sync };
 }
 
 /** Retence jako běh údržby (záznam `MaintenanceRun` kind RETENTION). */

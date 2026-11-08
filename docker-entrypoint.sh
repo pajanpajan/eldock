@@ -8,6 +8,8 @@
 #      a katalog AI Panel Builderu se vzorovým rozváděčem PB-001 (`npm run db:panel-builder` – vždy, i bez dema; fáze 54)
 #      a ukázky legislativy 2027 – návody, zálohy SW, pas baterie (`npm run db:demo-legislation`)
 #      a životnost součástek + kabelové pasporty (`npm run db:demo-lifespan`, fáze 53)
+#   3a. založí triggery žurnálu změn pro aplikace Windows / iOS / Android (`npm run sync:setup`, fáze 70 – migrace,
+#      která tabulku přestaví, její triggery smaže; idempotentní, doplní i záznamy vzniklé bez triggeru)
 #   4. doplní registr souborů pro soubory nahrané před fází 68 (`npm run storage:registry` – vlastník podle záznamu,
 #      idempotentní; bez registru soubor vydá jen velín)
 #   5. spustí aplikaci (CMD, výchozí `node server.js`)
@@ -27,6 +29,9 @@ echo "[eldock] Databáze: ${DB_FILE}"
 cd /app/ops
 echo "[eldock] Aplikuji migrace (prisma migrate deploy)…"
 node node_modules/prisma/build/index.js migrate deploy
+
+# Fáze 70: žurnál změn pro aplikace hned po migracích (před seedem a doplňováním dat, ať se zapíše každá změna)
+npm run sync:setup --silent || echo "[eldock] Varování: triggery žurnálu změn se nepodařilo připravit – aplikace to zkusí znovu při startu."
 
 # Prázdná databáze = žádný závod
 PLANTS="$(node -e '

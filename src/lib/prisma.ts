@@ -8,6 +8,7 @@ import { PrismaClient } from "@/generated/prisma/client";
 // v globalThis, aby HMR nevytvářel při každé změně nové připojení.
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
+  prismaReady: Promise<void> | undefined;
 };
 
 /**
@@ -29,14 +30,26 @@ function createPrismaClient() {
   // znovu načítala; `next build` (také NODE_ENV=production) nesmí přepnout lokální dev.db.
   const runtime = process.env.NODE_ENV === "production" && process.env.NEXT_PHASE !== "phase-production-build";
   const pragmas = runtime ? SQLITE_PRAGMAS : ["PRAGMA journal_mode = DELETE"];
-  void (async () => {
+  const ready = (async () => {
     for (const pragma of pragmas) await client.$queryRawUnsafe(pragma);
   })().catch((error) => console.error("[prisma] PRAGMA se nepodařilo nastavit:", error));
-  return client;
+  return { client, ready };
 }
 
-export const prisma = globalForPrisma.prisma ?? createPrismaClient();
+function initPrisma() {
+  if (globalForPrisma.prisma) return { client: globalForPrisma.prisma, ready: globalForPrisma.prismaReady ?? Promise.resolve() };
+  return createPrismaClient();
+}
+
+const instance = initPrisma();
+export const prisma = instance.client;
+/**
+ * PRAGMA po startu nastavené (fáze 70). Start serveru na ně počká před první transakcí – adaptér má jediné spojení
+ * a `PRAGMA journal_mode` / `foreign_keys` uvnitř otevřené transakce nejde změnit.
+ */
+export const prismaReady: Promise<void> = instance.ready;
 
 if (process.env.NODE_ENV !== "production") {
   globalForPrisma.prisma = prisma;
+  globalForPrisma.prismaReady = prismaReady;
 }

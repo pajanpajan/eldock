@@ -2,8 +2,9 @@ import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 
 import type { PrismaClient } from "@/generated/prisma/client";
-import { DEMO_OWNER, companyOwner, ownerColumns, ownerKey, type FileOwner } from "@/lib/file-ownership";
+import { CLAIM_MESSAGES, DEMO_OWNER, claimVerdict, companyOwner, isRegistrableUpload, ownerColumns, ownerKey, type FileOwner } from "@/lib/file-ownership";
 import { contentTypeFor } from "@/lib/files";
+import { WorkflowError } from "@/lib/workflow/state-machine";
 
 import { listUploads, uploadReferenceRows, type ReferenceRow } from "./upload-references";
 
@@ -40,6 +41,22 @@ export interface RegisterFileInput {
 const registryColumns = (owner: RegisterFileInput["owner"]) => (owner === "SHARED" ? { ownerKind: "SHARED" as const, companyId: null } : ownerColumns(owner));
 
 /** Zapíše soubor do registru (stejná adresa podruhé = beze změny – registr nikdy nepřepíše vlastníka). */
+/**
+ * Záznam smí uložit jen soubor svého vlastníka (vzorové, veřejné a sdílené soubory kdokoli) – sdílí serverové akce
+ * (`assertFilesOwnedBy`) i úpravy z aplikací (fáze 70). `strict: false` = neznámý soubor projde.
+ */
+export async function assertFileClaims(prisma: PrismaClient, urls: Iterable<string | null | undefined>, owner: FileOwner, options: { strict?: boolean } = {}) {
+  const list = [...new Set([...urls].filter((url): url is string => !!url))];
+  if (!list.length) return;
+  const lookup = list.filter(isRegistrableUpload);
+  const files = lookup.length ? await prisma.storedFile.findMany({ where: { url: { in: lookup } }, select: { url: true, ownerKind: true, companyId: true, deletedAt: true } }) : [];
+  const byUrl = new Map(files.map((file) => [file.url, file]));
+  for (const url of list) {
+    const verdict = claimVerdict(owner, url, byUrl.get(url) ?? null, options);
+    if (verdict !== "ok") throw new WorkflowError(verdict === "foreign" ? "FORBIDDEN" : "VALIDATION", CLAIM_MESSAGES[verdict]);
+  }
+}
+
 export function registerFile(prisma: PrismaClient, input: RegisterFileInput) {
   const data = {
     url: input.url,

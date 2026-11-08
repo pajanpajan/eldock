@@ -232,6 +232,9 @@ model User {
   uploadedAttachments    Attachment[]
   equipmentDocuments     EquipmentDocument[]
   softwareBackups        SoftwareBackup[]
+  syncDevices            SyncDevice[]
+  syncPairings           SyncPairing[]
+  syncMutations          SyncMutation[]
 
   @@index([role])
   @@index([accountType])
@@ -294,6 +297,9 @@ enum SecurityEventKind {
   USER_REMOVED // odebrání zaměstnance (anonymizace účtu)
   COMPANY_CLOSURE_REQUESTED // žádost o zrušení účtu firmy (výmaz po lhůtě)
   COMPANY_CLOSURE_CANCELLED
+  DEVICE_PAIRED // fáze 70: spárování aplikace (Windows, iOS, Android, server závodu)
+  DEVICE_REVOKED // odpojení zařízení (uživatel, správce firmy, změna hesla, blokace)
+  DEVICE_PAIR_FAILED // chybný nebo prošlý kód párování (limit pokusů na IP)
 }
 
 /// Bezpečnostní deník (fáze 67): přihlášení, chyby, změny hesla a účtů. Slouží i k limitu pokusů – IP jen jako HMAC.
@@ -345,15 +351,15 @@ model Plant {
 
 /// Budova v areálu – klikací oblast v Campus View.
 model Building {
-  id          String       @id @default(cuid())
-  plantId     String
-  code        String // "A", "B", "E"
-  name        String // "Hala A - Lisovna"
-  shortName   String? // "Lisovna"
-  type        BuildingType @default(PRODUCTION)
-  description String?
+  id           String       @id @default(cuid())
+  plantId      String
+  code         String // "A", "B", "E"
+  name         String // "Hala A - Lisovna"
+  shortName    String? // "Lisovna"
+  type         BuildingType @default(PRODUCTION)
+  description  String?
   /// Objekt podle požárně bezpečnostního řešení umožňuje přítomnost více než 200 osob – VTZ I. třídy, revize 2 roky (fáze 66).
-  crowdOver200 Boolean @default(false)
+  crowdOver200 Boolean      @default(false)
 
   // Geometrie v Campus View (procenta vůči viewBoxu areálu)
   mapPolygon String // SVG points "x1,y1 x2,y2 ..." – obrys budovy
@@ -431,13 +437,13 @@ model Equipment {
   fedFromCircuit     String? // "Pole 3 / Jistič QF4"
 
   // Pasport a lhůtník revizí
-  inspectionIntervalMonths Int     @default(36) // lhůta pravidelné revize – nejvýš podle lib/inspection-rules.ts (NV 190/2022 Sb., příl. 4)
+  inspectionIntervalMonths Int              @default(36) // lhůta pravidelné revize – nejvýš podle lib/inspection-rules.ts (NV 190/2022 Sb., příl. 4)
   externalInfluences       String? // "AA5, AB4, BA4 – normální průmyslové"
   /// Fáze 66: provedení (staveniště 0,5 roku, pojízdné 1 rok), LPS chránící kritické systémy (2 roky)
   /// a lhůta stanovená řádem preventivní údržby (až dvojnásobná) – NV 190/2022 Sb., příloha č. 4.
-  installationKind      InstallationKind @default(STANDARD)
-  lpsCritical           Boolean          @default(false)
-  preventiveMaintenance Boolean          @default(false)
+  installationKind         InstallationKind @default(STANDARD)
+  lpsCritical              Boolean          @default(false)
+  preventiveMaintenance    Boolean          @default(false)
 
   // Spotřebiče a nářadí (ČSN 33 1600 ed. 2)
   usageGroup      String? // skupina A–E (C = průmysl, E = administrativa)
@@ -447,8 +453,8 @@ model Equipment {
   assignedZone    String? // "Kuchyňka – Energetika 1. NP", "Dílna údržby"
 
   // Vizuální karta a QR štítek
-  photoUrl String? // fotografie zařízení (/api/files/photos/…)
-  qrToken  String? @unique // kód fyzického QR štítku – přegenerováním přestane starý štítek platit
+  photoUrl            String? // fotografie zařízení (/api/files/photos/…)
+  qrToken             String? @unique // kód fyzického QR štítku – přegenerováním přestane starý štítek platit
   /// Digitální pas baterie dle Nařízení (EU) 2023/1542 (UPS, BESS > 2 kWh) – JSON (fáze 46).
   batteryPassportJson String?
 
@@ -867,35 +873,37 @@ enum ProductScope {
 
 /// Firma registrovaná do jednoho z produktů (IČO z ARES, odpovědná osoba, souhlas s VOP a přenesením odpovědnosti).
 model RegisteredCompany {
-  id                  String       @id @default(cuid())
-  productScope        ProductScope
-  ico                 String
-  dic                 String?
-  companyName         String // propisuje se jako Výrobce rozváděče
-  street              String
-  city                String
-  zip                 String
-  contactName         String // odpovědná osoba / projektant
-  email               String       @unique // přihlašovací e-mail
-  phone               String
-  passwordHash        String // scrypt (node:crypto), viz src/server/password.ts
-  authorizationNumber String? // ev. č. oprávnění firmy (zákon 250/2021 Sb., § 8) nebo osvědčení revizního technika (§ 11)
-  termsAcceptedAt     DateTime
-  termsVersion        String       @default("1.0-2026-11")
-  creditsRemaining    Int          @default(5)
-  plantId             String? // vlastní závod (PLANT_MANAGEMENT)
+  id                   String       @id @default(cuid())
+  productScope         ProductScope
+  ico                  String
+  dic                  String?
+  companyName          String // propisuje se jako Výrobce rozváděče
+  street               String
+  city                 String
+  zip                  String
+  contactName          String // odpovědná osoba / projektant
+  email                String       @unique // přihlašovací e-mail
+  phone                String
+  passwordHash         String // scrypt (node:crypto), viz src/server/password.ts
+  authorizationNumber  String? // ev. č. oprávnění firmy (zákon 250/2021 Sb., § 8) nebo osvědčení revizního technika (§ 11)
+  termsAcceptedAt      DateTime
+  termsVersion         String       @default("1.0-2026-11")
+  creditsRemaining     Int          @default(5)
+  plantId              String? // vlastní závod (PLANT_MANAGEMENT)
   /// Firemní logo (fáze 43) – titulní list, rohové razítko výkresů a výrobní štítek CE.
-  logoUrl             String?
+  logoUrl              String?
   /// Otisk razítka a podpisu odpovědné osoby (PNG s průhledným pozadím) – prohlášení o shodě a kusová zkouška.
-  stampUrl            String?
-  /** Rychlé štítky funkce obvodu se Smart Presety (fáze 45), JSON { chips, updatedAt }. */
-  circuitChipsJson    String?
+  stampUrl             String?
+  /**
+   * Rychlé štítky funkce obvodu se Smart Presety (fáze 45), JSON { chips, updatedAt }.
+   */
+  circuitChipsJson     String?
   /// Knihovna samostatných spotřebičů 2D půdorysu (fáze 63), JSON { specs, updatedAt } – vyhrává novější.
   applianceLibraryJson String?
   /// Fáze 69: zrušená firma – zůstávají jen fakturační údaje kvůli dokladům k objednávkám kreditů (bez kontaktu a přihlášení).
-  closedAt            DateTime?
-  createdAt           DateTime     @default(now())
-  updatedAt           DateTime     @updatedAt
+  closedAt             DateTime?
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
 
   plant         Plant?              @relation(fields: [plantId], references: [id], onDelete: SetNull)
   panelProjects PanelBoardProject[]
@@ -1026,55 +1034,57 @@ model PanelBoardProject {
   manufacturerInfoJson String             @default("{}") // výrobce rozváděče: { name, address, city, phone }
   status               PanelProjectStatus @default(DRAFT)
 
-  enclosureType        EnclosureType     @default(WALL_MOUNTED)
-  enclosureMaterial    EnclosureMaterial @default(PLASTIC)
-  enclosureModel       String            @default("")
-  norm                 String            @default("EN 61439-3")
-  widthMm              Int               @default(292)
-  heightMm             Int               @default(507)
-  depthMm              Int               @default(120)
-  ipRating             String            @default("IP 41")
-  networkSystem        String            @default("3 x 230/400 V, 50Hz, TN-S")
+  enclosureType          EnclosureType     @default(WALL_MOUNTED)
+  enclosureMaterial      EnclosureMaterial @default(PLASTIC)
+  enclosureModel         String            @default("")
+  norm                   String            @default("EN 61439-3")
+  widthMm                Int               @default(292)
+  heightMm               Int               @default(507)
+  depthMm                Int               @default(120)
+  ipRating               String            @default("IP 41")
+  networkSystem          String            @default("3 x 230/400 V, 50Hz, TN-S")
   /// Fáze 55: počet fází přívodu (1 = 1× 230 V, 3 = 3× 230/400 V); typ sítě TN-C-S / TN-S / TT je v `networkSystem` (lib/panel-builder/supply.ts).
-  supplyPhases         Int               @default(3)
-  shortCircuitKa       Float             @default(6)
-  ambientTempC         Float             @default(30)
-  simultaneityFactor   Float             @default(0.5)
-  internalWiringLossW  Float             @default(4.1)
-  dinRailsCount        Int               @default(3)
-  modulesPerRail       Int               @default(12)
-  photoUrl             String?
-  dominantManufacturer String            @default("ABB")
+  supplyPhases           Int               @default(3)
+  shortCircuitKa         Float             @default(6)
+  ambientTempC           Float             @default(30)
+  simultaneityFactor     Float             @default(0.5)
+  internalWiringLossW    Float             @default(4.1)
+  dinRailsCount          Int               @default(3)
+  modulesPerRail         Int               @default(12)
+  photoUrl               String?
+  dominantManufacturer   String            @default("ABB")
   /// Režim poslední analýzy fotky: "GEMINI" | "DEMO" (null = zatím neanalyzováno).
-  analysisMode         String?
+  analysisMode           String?
   /// Stav zakrytování z poslední analýzy: "UNCOVERED" (vidět šroubky svorek) | "COVERED" (čelní maska).
-  coverState           String?
+  coverState             String?
   /// Hlavní přívod rozváděče (fáze 42): "TOP" = přívod shora, "BOTTOM" = zespoda.
-  incomerFrom          String             @default("TOP")
+  incomerFrom            String            @default("TOP")
   /// Režim projektu (fáze 43): "PHOTO" = pasportizace z fotky, "DESIGN" = návrh od nuly bez fotky.
-  designMode           String             @default("PHOTO")
+  designMode             String            @default("PHOTO")
   /// Kapacita jednotlivých DIN lišt v modulech, JSON pole [12, 14, …]; null = všechny `modulesPerRail`.
-  railModulesJson      String?
+  railModulesJson        String?
   /// Vybraná skříň z katalogu rozvodnic a její max. ztrátový výkon P_max [W].
-  enclosureId          String?
-  enclosurePmaxW       Float?
-  /** Prostředí instalace dle ČSN 33 2000-5-51 ed. 3 (fáze 45): INDOOR_DRY | GARAGE | OUTDOOR | TIMBER | HOT. */
-  environment          String             @default("INDOOR_DRY")
+  enclosureId            String?
+  enclosurePmaxW         Float?
+  /**
+   * Prostředí instalace dle ČSN 33 2000-5-51 ed. 3 (fáze 45): INDOOR_DRY | GARAGE | OUTDOOR | TIMBER | HOT.
+   */
+  environment            String            @default("INDOOR_DRY")
   /// Fáze 57: kdy uživatel výslovně zvolil / potvrdil prostředí (bez potvrzení nelze tisknout ani propustit dokumentaci).
   environmentConfirmedAt DateTime?
   /// Edice normy rozváděče (fáze 46): CSN_61439_3_ED2 (DBO) | CSN_61439_2_ED3 (PSC) | CSN_60204_1_ED3 (stroje, EU 2023/1230).
-  standardEdition      String             @default("CSN_61439_3_ED2")
+  standardEdition        String            @default("CSN_61439_3_ED2")
   /// Protokol o kusové zkoušce dle čl. 11 ČSN EN IEC 61439-1 ed. 3 – JSON (8 bodů, R_iso, zkoušející, datum).
-  routineTestJson      String?
+  routineTestJson        String?
   /// Detailní fotky jednotlivých DIN lišt / sekcí (fáze 47) – JSON { "1": "/api/files/photos/…" }.
-  railPhotosJson       String?
+  railPhotosJson         String?
   /// Ventilátor rozváděče (nucené chlazení) a počet kusů (fáze 47).
-  fanId                String?
-  fanCount             Int                @default(1)
+  fanId                  String?
+  fanCount               Int               @default(1)
   /// 2D půdorys elektroinstalace (fáze 49) – nákres editoru, ze kterého projekt vznikl (JSON `FloorplanDraft`).
-  floorplanJson        String?
+  floorplanJson          String?
   /// Výkaz kabeláže z půdorysu (fáze 49) – 3 režimy vedení, rozpis kabelů, ΔU okruhů (JSON) pro dokumentaci.
-  cableReportJson      String?
+  cableReportJson        String?
 
   createdById String?
   /// Registrovaná firma (fáze 41): vidí jen své rozváděče, její údaje se propisují do dokumentace.
@@ -1083,12 +1093,12 @@ model PanelBoardProject {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  equipment Equipment?         @relation(fields: [equipmentId], references: [id], onDelete: SetNull)
-  company   RegisteredCompany? @relation(fields: [companyId], references: [id], onDelete: SetNull)
-  enclosure PanelEnclosure?    @relation(fields: [enclosureId], references: [id], onDelete: SetNull)
-  fan       EnclosureFan?      @relation(fields: [fanId], references: [id], onDelete: SetNull)
-  items     PanelBoardItem[]
-  feedback  AiFeedbackReport[]
+  equipment  Equipment?         @relation(fields: [equipmentId], references: [id], onDelete: SetNull)
+  company    RegisteredCompany? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  enclosure  PanelEnclosure?    @relation(fields: [enclosureId], references: [id], onDelete: SetNull)
+  fan        EnclosureFan?      @relation(fields: [fanId], references: [id], onDelete: SetNull)
+  items      PanelBoardItem[]
+  feedback   AiFeedbackReport[]
   /// Fáze 64: půdorysy, ze kterých byl rozváděč naposledy vygenerován.
   floorplans Floorplan[]
 
@@ -1331,25 +1341,25 @@ model SoftwareBackup {
 
 /// Filtrační ventilátor rozváděče (nucené chlazení) – parametry z datasheetu výrobce.
 model EnclosureFan {
-  id                    String   @id @default(cuid())
-  manufacturer          String
-  series                String
-  articleNumber         String   @unique
-  typeCode              String
+  id                String   @id @default(cuid())
+  manufacturer      String
+  series            String
+  articleNumber     String   @unique
+  typeCode          String
   /// Průtok vzduchu volně foukající / s výstupním filtrem [m³/h].
-  airflowFreeM3h        Float
-  airflowFilterM3h      Float?
-  ratedVoltage          String
-  powerW                Float?
-  ipRating              String
-  cutoutMm              String?
-  outerDimensionsMm     String?
-  noiseDbA              Float?
-  operatingTempC        String?
-  datasheetUrl          String?
-  source                String   @default("")
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  airflowFreeM3h    Float
+  airflowFilterM3h  Float?
+  ratedVoltage      String
+  powerW            Float?
+  ipRating          String
+  cutoutMm          String?
+  outerDimensionsMm String?
+  noiseDbA          Float?
+  operatingTempC    String?
+  datasheetUrl      String?
+  source            String   @default("")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   projects PanelBoardProject[]
 
@@ -1677,4 +1687,125 @@ model DataRequest {
 
   @@index([kind, status, scheduledAt])
   @@index([companyId, kind])
+}
+
+// -----------------------------------------------------------------------------
+//  SYNCHRONIZACE S APLIKACEMI (fáze 70) – Windows, iOS, Android, server závodu
+// -----------------------------------------------------------------------------
+
+enum SyncPlatform {
+  WINDOWS
+  IOS
+  ANDROID
+  PLANT_SERVER // server závodu (fáze 71) – synchronizuje celý závod pro interní síť
+  OTHER
+}
+
+enum SyncMutationStatus {
+  APPLIED // úprava provedena
+  REJECTED // úprava odmítnuta pravidlem (oprávnění, stav záznamu, souběh) – aplikace ji znovu neposílá
+}
+
+/// Spárovaná aplikace uživatele registrované firmy. Token zařízení je jen v aplikaci, v DB jeho SHA-256.
+/// Platí do odpojení; po `SYNC_POLICY.idleExpiryDays` dnech bez spojení vyprší (lib/sync.ts).
+model SyncDevice {
+  id            String       @id @default(cuid())
+  userId        String
+  companyId     String
+  /// Název od uživatele / z aplikace („iPhone – Petr“, „Tablet údržby hala A“)
+  name          String
+  platform      SyncPlatform
+  appVersion    String?
+  tokenHash     String       @unique
+  createdAt     DateTime     @default(now())
+  lastSeenAt    DateTime     @default(now())
+  /// Poslední úspěšné stažení změn (každodenní synchronizace) a odeslání fronty úprav
+  lastPullAt    DateTime?
+  lastPushAt    DateTime?
+  /// Kurzor žurnálu po posledním stažení (kolik změn má zařízení staženo)
+  lastCursor    Int?
+  revokedAt     DateTime?
+  revokedById   String?
+  /// Důvod odpojení: uživatel, správce firmy, změna hesla, blokace…
+  revokedReason String?
+
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mutations SyncMutation[]
+
+  @@index([userId, revokedAt])
+  @@index([companyId, revokedAt])
+}
+
+/// Jednorázový kód párování z „Můj účet“ (10 minut). V DB jen HMAC kódu.
+model SyncPairing {
+  id        String    @id @default(cuid())
+  userId    String
+  codeHash  String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  deviceId  String?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// Evidence úprav z aplikací (fronta offline): id úpravy z aplikace je unikátní pro uživatele → každá úprava
+/// proběhne přesně jednou i při opakovaném odeslání. Zapisuje se v jedné transakci se samotnou úpravou.
+model SyncMutation {
+  id          String             @id @default(cuid())
+  userId      String
+  deviceId    String?
+  /// Id úpravy přidělené aplikací (UUID)
+  clientId    String
+  /// Druh úpravy (`changeRequest.submit`, `defect.resolve` … – server/sync/mutations.ts)
+  type        String
+  status      SyncMutationStatus
+  /// Kód odmítnutí (NOT_FOUND, FORBIDDEN, CONFLICT, INVALID_STATE, VALIDATION, DUPLICATE_ID)
+  code        String?
+  message     String?
+  /// Záznam, který úprava vytvořila nebo změnila
+  entity      String?
+  entityId    String?
+  resultJson  String?
+  /// Kdy úpravu provedl uživatel v aplikaci (offline) a kdy ji server přijal
+  performedAt DateTime?
+  receivedAt  DateTime           @default(now())
+
+  user   User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device SyncDevice? @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, clientId])
+  @@index([deviceId, receivedAt])
+  @@index([receivedAt])
+}
+
+/// Žurnál změn (fáze 70): jeden řádek na synchronizovaný záznam s pořadím poslední změny. Zapisují ho jen triggery
+/// SQLite (`server/sync/journal.ts`, `ensureSyncTriggers`) – rozsah (závod, zařízení, firma) se dědí ze žurnálu rodiče.
+/// Smazaný záznam = `deleted` (značka se drží 90 dní). Bez osobních údajů.
+model SyncChange {
+  entity      String
+  entityId    String
+  plantId     String?
+  companyId   String?
+  /// Zařízení, pod které záznam patří (výřez kategorií účtu)
+  equipmentId String?
+  seq         Int
+  deleted     Boolean  @default(false)
+  changedAt   DateTime
+
+  @@id([entity, entityId])
+  @@index([plantId, seq])
+  @@index([companyId, seq])
+  @@index([equipmentId])
+  @@index([deleted, changedAt])
+}
+
+/// Čítač žurnálu (jediný řádek id = 1): `value` = poslední přidělené `seq`, `prunedSeq` = nejvyšší `seq` smazané
+/// značky – starší kurzor zařízení musí stáhnout vše znovu (`reset`).
+model SyncCounter {
+  id        Int @id
+  value     Int @default(0)
+  prunedSeq Int @default(0)
 }

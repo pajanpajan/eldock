@@ -33,6 +33,8 @@ export interface CreateTemporaryModInput {
   markupJson?: string | null;
   /** Kdo provizorium zapsal („Revizní technik“ / „Údržba“); výchozí podle role. */
   createdByRole?: string | null;
+  /** Fáze 70: id přidělené aplikací (offline) – akce webu ho nepředává. */
+  id?: string;
 }
 
 /** Založí aktivní provizorium (bez zásahu do revizí dokumentace a bez ticketu pro CAE). */
@@ -50,6 +52,7 @@ export async function createTemporaryMod(prisma: PrismaClient, actor: Actor, inp
     const numbers = await tx.temporaryModification.findMany({ where: { number: { startsWith: `PROV-${year}-` } }, select: { number: true } });
     return tx.temporaryModification.create({
       data: {
+        ...(input.id ? { id: input.id } : {}),
         equipmentId: equipment.id,
         number: formatTempModNumber(year, nextTempModSequence(numbers.map((item) => item.number), year)),
         title,

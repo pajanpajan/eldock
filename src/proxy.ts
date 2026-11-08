@@ -42,6 +42,10 @@ export async function proxy(request: NextRequest) {
   if (PUBLIC_PATHS.has(pathname) || PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix))) return NextResponse.next();
   // Cron (avízo lhůt revizí) se ověřuje vlastním tajným tokenem v Route Handleru.
   if (pathname.startsWith("/api/cron/")) return NextResponse.next();
+  // Fáze 70: API synchronizace aplikací (Windows, iOS, Android) ověřuje token zařízení samo; soubory s tokenem
+  // zařízení (`Authorization: Bearer`) vydá /api/files podle vlastníka firmy zařízení.
+  if (pathname.startsWith("/api/sync/")) return NextResponse.next();
+  if (pathname.startsWith("/api/files/") && /^Bearer\s/i.test(request.headers.get("authorization") ?? "")) return NextResponse.next();
 
   // Velín /superadmin (fáze 50): jen s cookie eldock-superadmin (vlastní podpis), jinak přihlášení velínu
   const superadmin = await isSuperadminToken(request.cookies.get(SUPERADMIN_COOKIE)?.value);

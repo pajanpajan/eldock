@@ -138,6 +138,10 @@ export interface SubmitChangeRequestInput {
   safetyImpact?: SafetyImpactLevel;
   /** Zásah zahrnuje úpravu řídicího SW / parametrů měniče. */
   requiresSoftwareUpdate?: boolean;
+  /** Fáze 70: id nového požadavku přidělené aplikací (offline) – akce webu ho nepředávají. */
+  id?: string;
+  /** Fáze 70: čas zadání z aplikace (offline), jinak teď. */
+  now?: Date;
   /** Záloha SW přiložená rovnou v průvodci (Minor +0.1 řídicího uzlu). */
   softwareBackup?: Omit<SoftwareBackupInput, "equipmentId" | "bump" | "changeRequestId" | "changeSummary"> & { changeSummary?: string | null } | null;
 }
@@ -169,7 +173,7 @@ export async function submitChangeRequestInTx(tx: Tx, actor: Actor, input: Submi
   }
   const to = assertCanPerform("submit", actor.role, null)!;
 
-  const now = new Date();
+  const now = input.now ?? new Date();
   const year = now.getFullYear();
   const numbers = await tx.changeRequest.findMany({ where: { number: { startsWith: `ZM-${year}-` } }, select: { number: true } });
   const number = formatTicketNumber(year, nextTicketSequence(numbers.map((item) => item.number), year));
@@ -180,6 +184,7 @@ export async function submitChangeRequestInTx(tx: Tx, actor: Actor, input: Submi
 
   const changeRequest = await tx.changeRequest.create({
     data: {
+      ...(input.id ? { id: input.id } : {}),
       number,
       equipmentId: equipment.id,
       status: to,

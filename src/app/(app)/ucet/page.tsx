@@ -4,17 +4,20 @@ import { redirect } from "next/navigation";
 import { ChangePasswordCard, SessionsCard, TwoFactorCard } from "@/components/account/AccountSecurity";
 import { PageHeader } from "@/components/common/PageHeader";
 import { PageTransition } from "@/components/layout/PageTransition";
+import { DevicesCard } from "@/components/sync/DevicesCard";
 import { formatDate } from "@/lib/format";
 import { getMyAccount } from "@/server/queries/accounts";
 import { getPendingClosure } from "@/server/queries/data-requests";
+import { getMyDevices } from "@/server/queries/sync";
 
 export const metadata: Metadata = { title: "Můj účet" };
 
 // Fáze 67: „Můj účet“ uživatele registrované firmy – heslo, přihlášená zařízení, dvoufázové ověření.
+// Fáze 70: spárované aplikace pro Windows, iOS a Android (párování kódem / QR).
 export default async function MyAccountPage() {
   const account = await getMyAccount();
   if (!account) redirect("/login");
-  const closure = await getPendingClosure(account.companyId ?? null);
+  const [closure, devices] = await Promise.all([getPendingClosure(account.companyId ?? null), account.companyId ? getMyDevices(account.id) : Promise.resolve([])]);
   return (
     <PageTransition>
       <PageHeader title="Můj účet" description={`${account.name} · ${account.email}`} />
@@ -31,6 +34,7 @@ export default async function MyAccountPage() {
             sessions={account.sessions.map((session) => ({ id: session.id, device: session.device, createdAt: session.createdAt.toISOString(), lastSeenAt: session.lastSeenAt.toISOString() }))}
             currentId={account.currentSessionId}
           />
+          <DevicesCard devices={devices} />
           <section aria-labelledby="my-data" className="space-y-2 rounded-xl border border-border bg-card p-4">
             <h2 id="my-data" className="text-lg font-semibold">
               Moje údaje
@@ -45,7 +49,7 @@ export default async function MyAccountPage() {
         </div>
       ) : (
         <p className="rounded-xl border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
-          Účty obchodního dema mají společné heslo dema – vlastní heslo, dvoufázové ověření a správa zařízení jsou pro účty registrovaných firem.
+          Účty obchodního dema mají společné heslo dema – vlastní heslo, dvoufázové ověření, správa zařízení a aplikace pro Windows, iOS a Android jsou pro účty registrovaných firem.
         </p>
       )}
     </PageTransition>

@@ -8,6 +8,7 @@ import path from "node:path";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 
 import { PrismaClient } from "@/generated/prisma/client";
+import { ensureSyncTriggers } from "@/server/sync/journal";
 
 const MIGRATIONS = path.resolve("prisma", "migrations");
 
@@ -27,6 +28,8 @@ export async function createTestDb() {
       await prisma.$executeRawUnsafe(statement);
     }
   }
+  // Fáze 70: triggery žurnálu změn jako v aplikaci (zakládá je kód, ne migrace) – každý test zapisuje i přes ně
+  await ensureSyncTriggers(prisma);
   return {
     prisma,
     async cleanup() {

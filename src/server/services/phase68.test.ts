@@ -286,7 +286,7 @@ describe("retence", () => {
         { userId: "emp", kind: "RESET", tokenHash: "c", expiresAt: new Date(NOW.getTime() + DAY) },
       ],
     });
-    expect(await applyRetention(prisma, NOW)).toEqual({ securityEvents: 1, sessions: 2, authTokens: 2, maintenanceRuns: 0, dataRequests: 0, closedCompanies: 0 });
+    expect(await applyRetention(prisma, NOW)).toEqual({ securityEvents: 1, sessions: 2, authTokens: 2, maintenanceRuns: 0, dataRequests: 0, closedCompanies: 0, syncTombstones: 0, syncMutations: 0, syncDevices: 0, syncPairings: 0 });
     expect(await prisma.securityEvent.count()).toBe(1);
     expect(await prisma.userSession.count()).toBe(2);
     expect(await prisma.authToken.count()).toBe(1);

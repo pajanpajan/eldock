@@ -145,7 +145,7 @@ describe("odkazy na nastavení hesla", () => {
     const other = await createUserSession(prisma, "owner", null, NOW);
     await expect(changePassword(prisma, { userId: "owner", sessionId: current.id, current: "spatne-heslo-2026", next: "novy-modry-kocour" }, NOW)).rejects.toThrow(/Současné heslo/);
     await expect(changePassword(prisma, { userId: "owner", sessionId: current.id, current: OWNER_PASSWORD, next: OWNER_PASSWORD }, NOW)).rejects.toThrow(/lišit/);
-    expect(await changePassword(prisma, { userId: "owner", sessionId: current.id, current: OWNER_PASSWORD, next: "novy-modry-kocour" }, NOW)).toEqual({ revoked: 1 });
+    expect(await changePassword(prisma, { userId: "owner", sessionId: current.id, current: OWNER_PASSWORD, next: "novy-modry-kocour" }, NOW)).toEqual({ revoked: 1, devices: 0 });
     expect(await activeSession(prisma, { userId: "owner", sessionId: current.id }, later(1))).not.toBeNull();
     expect(await activeSession(prisma, { userId: "owner", sessionId: other.id }, later(1))).toBeNull();
     await expect(changePassword(prisma, { userId: "demo", current: accessPassword(), next: "novy-modry-kocour" }, NOW)).rejects.toMatchObject({ code: "FORBIDDEN" });
