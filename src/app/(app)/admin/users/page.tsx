@@ -28,7 +28,7 @@ export default async function AdminUsersPage() {
   return (
     <PageTransition>
       <PageHeader title="Správa podúčtů" description="Účty závodu, jejich oprávnění a kategorie zařízení, které vidí (výřez dat na mapě i v přehledech)." />
-      <AdminTabs current="/admin/users" canUsers canModules={account.can("manageModules")} />
+      <AdminTabs current="/admin/users" canUsers canModules={account.can("manageModules")} canData={company} />
       <div className="space-y-6">
         {!company ? (
           <p className="rounded-xl border border-border bg-muted/30 p-3 text-sm text-muted-foreground">
@@ -75,7 +75,7 @@ export default async function AdminUsersPage() {
                         <span className="block text-xs text-muted-foreground">
                           {user.lastLoginAt ? `Naposledy ${formatDateTime(user.lastLoginAt)}` : "Zatím nepřihlášen"} · {user.totpEnabledAt ? "2FA zapnuté" : "bez 2FA"} · zařízení {user.activeSessions}
                         </span>
-                        <AccountSecurityActions userId={user.id} name={user.name} hasPassword={user.hasPassword} disabled={Boolean(user.disabledAt)} activeSessions={user.activeSessions} self={user.id === account.user.id} />
+                        <AccountSecurityActions userId={user.id} name={user.name} hasPassword={user.hasPassword} disabled={Boolean(user.disabledAt)} activeSessions={user.activeSessions} self={user.id === account.user.id} removable />
                       </TableCell>
                     ) : null}
                     <TableCell className="whitespace-normal">

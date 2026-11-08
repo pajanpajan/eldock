@@ -290,6 +290,10 @@ enum SecurityEventKind {
   USER_ENABLED
   TOTP_ENABLED
   TOTP_DISABLED
+  DATA_EXPORTED // fáze 69: export dat firmy / vlastních údajů
+  USER_REMOVED // odebrání zaměstnance (anonymizace účtu)
+  COMPANY_CLOSURE_REQUESTED // žádost o zrušení účtu firmy (výmaz po lhůtě)
+  COMPANY_CLOSURE_CANCELLED
 }
 
 /// Bezpečnostní deník (fáze 67): přihlášení, chyby, změny hesla a účtů. Slouží i k limitu pokusů – IP jen jako HMAC.
@@ -888,6 +892,8 @@ model RegisteredCompany {
   circuitChipsJson    String?
   /// Knihovna samostatných spotřebičů 2D půdorysu (fáze 63), JSON { specs, updatedAt } – vyhrává novější.
   applianceLibraryJson String?
+  /// Fáze 69: zrušená firma – zůstávají jen fakturační údaje kvůli dokladům k objednávkám kreditů (bez kontaktu a přihlášení).
+  closedAt            DateTime?
   createdAt           DateTime     @default(now())
   updatedAt           DateTime     @updatedAt
 
@@ -1577,6 +1583,7 @@ model StoredFile {
 enum MaintenanceKind {
   BACKUP // snímek databáze + soubory mimo server
   RETENTION // úklid bezpečnostního deníku, relací a odkazů na heslo
+  ERASURE // fáze 69: výmaz účtů firem po uplynutí lhůty
 }
 
 enum MaintenanceTrigger {
@@ -1626,4 +1633,48 @@ model BackupObject {
 
   @@index([kind, uploadedAt])
   @@index([source])
+}
+
+// -----------------------------------------------------------------------------
+//  ŽÁDOSTI O DATA – EXPORT A VÝMAZ (fáze 69, GDPR)
+// -----------------------------------------------------------------------------
+
+enum DataRequestKind {
+  COMPANY_EXPORT // export dat firmy (čl. 20 GDPR, vrácení dat zpracovatelem)
+  PERSONAL_EXPORT // vlastní údaje uživatele (čl. 15 GDPR)
+  COMPANY_CLOSURE // zrušení účtu firmy a výmaz dat po lhůtě (čl. 17, čl. 28 odst. 3 písm. g)
+  USER_REMOVAL // odebrání zaměstnance s anonymizací účtu
+}
+
+enum DataRequestStatus {
+  PENDING // čeká na lhůtu (zrušení účtu firmy) – do té doby jde zrušit
+  DONE
+  CANCELLED
+  FAILED
+}
+
+/// Evidence žádostí o data (fáze 69): export, odebrání zaměstnance, zrušení účtu firmy. Bez osobních údajů – jen firma
+/// (název, IČO), kdo žádost podal (role, ne jméno), časy a souhrn; slouží jako doklad o vyřízení (čl. 5 odst. 2 GDPR)
+/// a plánovač podle ní provede výmaz po lhůtě. Drží se 3 roky.
+model DataRequest {
+  id           String            @id @default(cuid())
+  kind         DataRequestKind
+  status       DataRequestStatus @default(DONE)
+  companyId    String?
+  companyName  String?
+  companyIco   String?
+  productScope ProductScope?
+  /// company-admin | panel-company | superadmin | user
+  requestedBy  String
+  requestedAt  DateTime          @default(now())
+  /// Zrušení účtu firmy: kdy proběhne výmaz (žádost + 30 dní)
+  scheduledAt  DateTime?
+  completedAt  DateTime?
+  cancelledAt  DateTime?
+  /// Souhrn (JSON): počty exportovaných / smazaných záznamů a souborů
+  summaryJson  String?
+  error        String?
+
+  @@index([kind, status, scheduledAt])
+  @@index([companyId, kind])
 }

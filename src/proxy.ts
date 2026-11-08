@@ -61,7 +61,8 @@ export async function proxy(request: NextRequest) {
   if (pathname.startsWith("/api/")) {
     // Fáze 68: nahrání a soubory pustí brána každému přihlášení – o přístupu k souboru rozhoduje jeho vlastník
     // (registr `StoredFile` v GET /api/files): firma Panel Builderu tak vidí i své logo a razítko, velín vše.
-    const fileApi = pathname === "/api/uploads" || pathname.startsWith("/api/files/");
+    // Fáze 69: export dat firmy (Panel Builder a velín) – oprávnění ověří route handler
+    const fileApi = pathname === "/api/uploads" || pathname.startsWith("/api/files/") || pathname === "/api/data-export";
     if (plant || ((company || superadmin) && fileApi)) return NextResponse.next();
     return NextResponse.json({ error: "Nepřihlášeno – přihlaste se na /login." }, { status: 401, headers: { "Cache-Control": "no-store" } });
   }

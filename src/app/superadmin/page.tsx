@@ -5,7 +5,10 @@ import { Bug, Building2, CircuitBoard, DatabaseBackup, Download, FolderLock, Har
 
 import { KpiTile } from "@/components/common/KpiTile";
 import { NewsletterComposer } from "@/components/superadmin/NewsletterComposer";
-import { BackupNowButton, CreditControls, OrderActions, ResolveFeedback } from "@/components/superadmin/SuperadminControls";
+import { BackupNowButton, ClosureControls, CreditControls, OrderActions, ResolveFeedback } from "@/components/superadmin/SuperadminControls";
+import { DATA_REQUESTER_LABELS, DATA_REQUEST_KIND_LABELS, DATA_REQUEST_STATUS_LABELS } from "@/lib/data-requests";
+import { TESTER_COMPANY } from "@/lib/registered-company";
+import { getSuperadminDataRequests } from "@/server/queries/data-requests";
 import { ORDER_STATUS, creditPackage, formatCzk } from "@/lib/credits";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { PROJECT_STATUS } from "@/lib/panel-builder/project";
@@ -62,7 +65,7 @@ export default async function SuperadminPage({ searchParams }: PageProps<"/super
 }
 
 async function CompaniesTab() {
-  const companies = await getSuperadminCompanies();
+  const [companies, requests] = await Promise.all([getSuperadminCompanies(), getSuperadminDataRequests()]);
   return (
     <div className="overflow-x-auto rounded-xl border border-border">
       <table className="w-full text-xs" data-testid="superadmin-companies">
@@ -75,6 +78,7 @@ async function CompaniesTab() {
             <th className={th}>Registrace</th>
             <th className={th}>Projekty</th>
             <th className={th}>Kredity</th>
+            <th className={th}>Účet a data</th>
           </tr>
         </thead>
         <tbody>
@@ -136,6 +140,19 @@ async function CompaniesTab() {
                   {company.creditsRemaining}
                 </p>
                 <CreditControls companyId={company.id} companyName={company.companyName} credits={company.creditsRemaining} />
+              </td>
+              <td className={td} data-testid="company-account">
+                {company.closedAt ? (
+                  <p className="text-muted-foreground">zrušena {formatDate(company.closedAt)} – jen fakturační údaje k dokladům</p>
+                ) : (
+                  <div className="flex flex-col gap-1">
+                    {requests.pendingByCompany.has(company.id) ? <p className="font-semibold text-red-300">výmaz {formatDate(requests.pendingByCompany.get(company.id) ?? new Date())}</p> : <p className="text-emerald-300">aktivní</p>}
+                    <a href={`/api/data-export?companyId=${company.id}`} className="text-primary hover:underline">
+                      Export dat (ZIP)
+                    </a>
+                    {company.id !== TESTER_COMPANY.id ? <ClosureControls companyId={company.id} companyName={company.companyName} ico={company.ico} pending={requests.pendingByCompany.has(company.id)} /> : null}
+                  </div>
+                )}
               </td>
             </tr>
           ))}
@@ -313,12 +330,13 @@ const RUN_STATUS: Record<string, { label: string; className: string }> = {
   FAILED: { label: "selhala", className: "text-red-300" },
 };
 const TRIGGER_LABEL: Record<string, string> = { SCHEDULE: "plánovač", MANUAL: "velín", CLI: "příkaz" };
+const RUN_KIND_LABEL: Record<string, string> = { BACKUP: "Záloha", RETENTION: "Retence", ERASURE: "Výmaz účtů" };
 const OWNER_LABEL: Record<string, string> = { COMPANY: "Firmy", DEMO: "Obchodní demo", SHARED: "Sdílené (starší / katalog)" };
 const mb = (bytes: number) => `${(bytes / (1024 * 1024)).toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} MB`;
 
 // Fáze 68: zálohy (místní a mimo server), retence a registr souborů podle vlastníků.
 async function BackupsTab() {
-  const overview = await getBackupOverview();
+  const [overview, requests] = await Promise.all([getBackupOverview(), getSuperadminDataRequests()]);
   const { config, lastOk } = overview;
   return (
     <div className="grid gap-6 lg:grid-cols-[1.3fr_1fr]" data-testid="superadmin-backups">
@@ -366,7 +384,7 @@ async function BackupsTab() {
                     <tr key={run.id} className="border-t border-border">
                       <td className={cn(td, "whitespace-nowrap font-mono text-xs")}>{formatDateTime(run.startedAt)}</td>
                       <td className={td}>
-                        {run.kind === "BACKUP" ? "Záloha" : "Retence"} <span className="text-xs text-muted-foreground">({TRIGGER_LABEL[run.trigger] ?? run.trigger})</span>
+                        {RUN_KIND_LABEL[run.kind] ?? run.kind} <span className="text-xs text-muted-foreground">({TRIGGER_LABEL[run.trigger] ?? run.trigger})</span>
                       </td>
                       <td className={cn(td, status.className)}>{status.label}</td>
                       <td className={cn(td, "text-xs text-muted-foreground")}>{detail}</td>
@@ -433,6 +451,27 @@ async function BackupsTab() {
             {!overview.registry.byOwner.length ? <li className="text-muted-foreground">Registr je prázdný.</li> : null}
           </ul>
           <p className="mt-2 text-xs text-muted-foreground">Soubor firmy čtou jen její přihlášení, demo soubory jen obchodní demo; sdílené soubory (starší data s více vlastníky, katalog) každé přihlášení. Smazané: {overview.registry.deleted}.</p>
+        </div>
+        <div className="rounded-xl border border-border p-3 text-sm" data-testid="data-requests-log">
+          <h2 className="mb-2 font-semibold">Žádosti o data (GDPR)</h2>
+          {requests.recent.length ? (
+            <ul className="flex flex-col gap-1.5">
+              {requests.recent.map((request) => (
+                <li key={request.id} className="flex flex-col">
+                  <span>
+                    {DATA_REQUEST_KIND_LABELS[request.kind]} · {request.companyName ?? "–"} {request.companyIco ? `(${request.companyIco})` : ""}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {formatDateTime(request.requestedAt)} · {DATA_REQUESTER_LABELS[request.requestedBy] ?? request.requestedBy} · {DATA_REQUEST_STATUS_LABELS[request.status].label}
+                    {request.status === "PENDING" && request.scheduledAt ? ` – výmaz ${formatDate(request.scheduledAt)}` : ""}
+                    {request.error ? ` – ${request.error}` : ""}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-muted-foreground">Zatím žádná žádost.</p>
+          )}
         </div>
       </div>
     </div>

@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { superadminCancelClosureAction, superadminCloseCompanyAction } from "@/server/actions/data-requests";
 import { adjustCreditsAction, cancelCreditOrderAction, confirmCreditOrderAction, loginSuperadminAction, resolveAiFeedbackAction, runBackupNowAction } from "@/server/actions/superadmin";
 
 // Klientské ovládací prvky velínu /superadmin (fáze 50).
@@ -114,6 +115,43 @@ export function BackupNowButton({ running }: { running: boolean }) {
     >
       {pending || running ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <DatabaseBackup className="size-4" aria-hidden />} {running ? "Záloha běží…" : "Zálohovat teď"}
     </Button>
+  );
+}
+
+/** Fáze 69: zrušení účtu firmy z velínu – výmaz hned (potvrzení IČO) nebo zrušení čekající žádosti. */
+export function ClosureControls({ companyId, companyName, ico, pending }: { companyId: string; companyName: string; ico: string; pending: boolean }) {
+  const router = useRouter();
+  const [busy, startTransition] = useTransition();
+  const closeNow = () => {
+    const typed = window.prompt(`Výmaz účtu ${companyName} je nevratný (data, soubory, uživatelé). Pro potvrzení napište IČO ${ico}:`);
+    if (typed === null) return;
+    if (typed.trim() !== ico) return void toast.error("IČO nesouhlasí – nic se nesmazalo.");
+    startTransition(async () => {
+      const result = await superadminCloseCompanyAction(companyId);
+      if (!result.ok) return void toast.error(result.error);
+      if (result.data.status === "FAILED") toast.error(`Výmaz selhal: ${result.data.error ?? "neznámá chyba"}`);
+      else toast.success(`${companyName}: účet zrušen a data smazána.`);
+      router.refresh();
+    });
+  };
+  const cancel = () =>
+    startTransition(async () => {
+      const result = await superadminCancelClosureAction(companyId);
+      if (!result.ok) return void toast.error(result.error);
+      toast.success(`${companyName}: žádost o zrušení účtu zrušena.`);
+      router.refresh();
+    });
+  return (
+    <div className="flex flex-wrap gap-1" data-testid={`closure-controls-${ico}`}>
+      {pending ? (
+        <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={busy} onClick={cancel}>
+          Zrušit žádost
+        </Button>
+      ) : null}
+      <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-xs text-red-300" disabled={busy} onClick={closeNow}>
+        {busy ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : null} Smazat hned
+      </Button>
+    </div>
   );
 }
 

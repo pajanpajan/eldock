@@ -1,16 +1,18 @@
 import Link from "next/link";
-import { Blocks, UsersRound } from "lucide-react";
+import { Blocks, DatabaseZap, UsersRound } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
 const TABS = [
   { href: "/admin/users", label: "Podúčty a oprávnění", icon: UsersRound, key: "users" },
   { href: "/admin/modules", label: "Moduly a tarif", icon: Blocks, key: "modules" },
+  // Fáze 69: export a výmaz dat registrované firmy
+  { href: "/admin/data", label: "Data firmy", icon: DatabaseZap, key: "data" },
 ] as const;
 
 /** Záložky administrace závodu – jen ty, na které má účet oprávnění. */
-export function AdminTabs({ current, canUsers, canModules }: { current: (typeof TABS)[number]["href"]; canUsers: boolean; canModules: boolean }) {
-  const tabs = TABS.filter((tab) => (tab.key === "users" ? canUsers : canModules));
+export function AdminTabs({ current, canUsers, canModules, canData = false }: { current: (typeof TABS)[number]["href"]; canUsers: boolean; canModules: boolean; canData?: boolean }) {
+  const tabs = TABS.filter((tab) => (tab.key === "users" ? canUsers : tab.key === "modules" ? canModules : canData));
   if (tabs.length < 2) return null;
   return (
     <nav aria-label="Administrace" className="mb-6 flex flex-wrap gap-1 rounded-xl border border-border bg-card p-1">

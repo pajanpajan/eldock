@@ -38,7 +38,8 @@ const companySelect = {
 export const getPanelCompany = cache(async () => {
   const id = isAuthBypassed() ? TESTER_COMPANY.id : companyIdOf(await verifyAuthToken((await cookies()).get(PANEL_AUTH_COOKIE)?.value));
   if (!id) return null;
-  return prisma.registeredCompany.findFirst({ where: { id, productScope: "PANEL_BUILDER" }, select: companySelect });
+  // Fáze 69: zrušená firma nemá přihlášení (platná cookie po zrušení účtu přestane platit)
+  return prisma.registeredCompany.findFirst({ where: { id, productScope: "PANEL_BUILDER", closedAt: null }, select: companySelect });
 });
 
 export type PanelCompany = NonNullable<Awaited<ReturnType<typeof getPanelCompany>>>;

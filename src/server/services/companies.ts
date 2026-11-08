@@ -43,9 +43,10 @@ export async function registerPanelCompany(prisma: PrismaClient, input: PanelReg
 
 /** Přihlášení firmy e-mailem a heslem v daném produktu; špatné údaje → `null` (bez rozlišení důvodu). */
 export async function authenticateCompany(prisma: PrismaClient, email: string, password: string, scope: ProductScope) {
-  const company = await prisma.registeredCompany.findUnique({ where: { email: email.trim().toLowerCase() }, select: { id: true, productScope: true, passwordHash: true, plantId: true } });
+  const company = await prisma.registeredCompany.findUnique({ where: { email: email.trim().toLowerCase() }, select: { id: true, productScope: true, passwordHash: true, plantId: true, closedAt: true } });
   const ok = company ? await verifyPassword(password, company.passwordHash) : false;
-  return company && ok && company.productScope === scope ? { id: company.id, plantId: company.plantId } : null;
+  // Fáze 69: zrušená firma (zůstaly jen fakturační údaje) se nepřihlásí
+  return company && ok && !company.closedAt && company.productScope === scope ? { id: company.id, plantId: company.plantId } : null;
 }
 
 /** „Firemní údaje do razítka“: IČO, sídlo, odpovědná osoba (propisují se do dokumentace). */

@@ -22,7 +22,7 @@ export default async function AdminModulesPage() {
         title="Správa modulů a tarifů"
         description="Eldock Core je součástí každého tarifu. Add-on moduly a jejich funkce zapněte podle zakoupeného tarifu – změna platí okamžitě pro všechny uživatele, data zůstávají uložená."
       />
-      <AdminTabs current="/admin/modules" canUsers={account.can("manageUsers")} canModules />
+      <AdminTabs current="/admin/modules" canUsers={account.can("manageUsers")} canModules canData={account.can("manageUsers") && Boolean(account.user.companyId)} />
       <ModuleConfigurator initial={config} />
     </PageTransition>
   );

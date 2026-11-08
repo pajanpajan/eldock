@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { SecurityEventKind } from "@/generated/prisma/enums";
 import { parseSubject, sessionSubject, signTwoFactorToken, verifyAuthToken, verifyTwoFactorToken } from "@/lib/auth";
 import { PASSWORD_MIN_LENGTH, passwordIssues } from "@/lib/password-policy";
 import { SECURITY_EVENT_LABELS } from "@/lib/security-events";
@@ -69,6 +70,7 @@ describe("token přihlášení s relací a čekající druhý krok", () => {
 
   it("popisky bezpečnostního deníku", () => {
     expect(SECURITY_EVENT_LABELS.LOGIN_LOCKED.tone).toBe("bad");
-    expect(Object.keys(SECURITY_EVENT_LABELS)).toHaveLength(14);
+    // Každý druh události (i nové z fáze 69) má popisek
+    expect(Object.keys(SECURITY_EVENT_LABELS).sort()).toEqual(Object.values(SecurityEventKind).sort());
   });
 });

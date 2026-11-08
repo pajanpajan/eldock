@@ -4,11 +4,13 @@ import type { PrismaClient } from "@/generated/prisma/client";
 import type { MaintenanceTrigger } from "@/generated/prisma/enums";
 import { backupConfig, type BackupConfig } from "@/server/backup/config";
 import { runBackup } from "@/server/services/backup";
+import { executeDueClosures } from "@/server/services/data-requests";
 import { runRetention } from "@/server/services/retention";
 
-// Plánovač údržby v procesu aplikace (fáze 68): jednou denně po čase `ELDOCK_BACKUP_TIME` (Europe/Prague) záloha
-// a retence. Spouští ho `src/instrumentation.ts` jen v produkčním serveru; běh se pozná podle `MaintenanceRun`,
-// takže restart aplikace dnešní zálohu nezopakuje. Neúspěšnou zálohu zkusí ještě dvakrát týž den.
+// Plánovač údržby v procesu aplikace (fáze 68): jednou denně po čase `ELDOCK_BACKUP_TIME` (Europe/Prague) záloha,
+// retence a (fáze 69) výmaz účtů firem po lhůtě. Spouští ho `src/instrumentation.ts` jen v produkčním serveru; běh se
+// pozná podle `MaintenanceRun`, takže restart aplikace dnešní údržbu nezopakuje. Neúspěšný krok zkusí ještě dvakrát
+// týž den. `ELDOCK_BACKUP=0` vypne jen zálohu – retence a výmazy běží dál.
 
 const CHECK_INTERVAL_MS = 10 * 60 * 1000;
 const FIRST_CHECK_MS = 60 * 1000;
@@ -39,16 +41,32 @@ export interface JobContext {
   log?: (message: string) => void;
 }
 
-/** Denní údržba: záloha (pokud je čas) a po ní retence – vrací, co se spustilo. */
+/** Výmaz účtů firem, kterým uplynula lhůta (fáze 69) – záznam běhu jen tehdy, když nějaký výmaz čeká. */
+export async function runErasure(prisma: PrismaClient, trigger: MaintenanceTrigger, input: { storageRoot: string; now: Date }) {
+  const due = await prisma.dataRequest.count({ where: { kind: "COMPANY_CLOSURE", status: "PENDING", scheduledAt: { lte: input.now } } });
+  if (!due) return null;
+  const run = await prisma.maintenanceRun.create({ data: { kind: "ERASURE", trigger, startedAt: input.now } });
+  const results = await executeDueClosures(prisma, input);
+  const failed = results.filter((result) => result.status === "FAILED").length;
+  return prisma.maintenanceRun.update({
+    where: { id: run.id },
+    data: { status: failed ? (failed === results.length ? "FAILED" : "WARNING") : "OK", finishedAt: new Date(), summaryJson: JSON.stringify({ closures: results.length, failed, companies: results.map((result) => result.companyName) }) },
+  });
+}
+
+/** Denní údržba: záloha (je-li zapnutá), retence a výmaz účtů po lhůtě – každé jednou denně; vrací, co se spustilo. */
 export async function runDueMaintenance(context: JobContext, trigger: MaintenanceTrigger = "SCHEDULE") {
   const config = context.config ?? backupConfig();
   const now = context.now?.() ?? new Date();
-  const recent = await context.prisma.maintenanceRun.findMany({ where: { kind: "BACKUP", trigger, startedAt: { gte: new Date(now.getTime() - 36 * 60 * 60 * 1000) } }, select: { status: true, startedAt: true } });
-  if (!isBackupDue(now, config.time, recent)) return { backup: null, retention: null };
-  const backup = await runBackup({ prisma: context.prisma, config, storageRoot: context.storageRoot ?? defaultStorageRoot(), now: context.now, log: context.log }, trigger);
-  const retention = await runRetention(context.prisma, trigger, now);
-  context.log?.(`[eldock] Denní údržba: záloha ${backup.status}, retence ${retention.status}.`);
-  return { backup, retention };
+  const recent = await context.prisma.maintenanceRun.findMany({ where: { kind: { in: ["BACKUP", "RETENTION"] }, trigger, startedAt: { gte: new Date(now.getTime() - 36 * 60 * 60 * 1000) } }, select: { kind: true, status: true, startedAt: true } });
+  const storageRoot = context.storageRoot ?? defaultStorageRoot();
+  const backupDue = config.scheduleEnabled && isBackupDue(now, config.time, recent.filter((run) => run.kind === "BACKUP"));
+  const dailyDue = isBackupDue(now, config.time, recent.filter((run) => run.kind === "RETENTION"));
+  const backup = backupDue ? await runBackup({ prisma: context.prisma, config, storageRoot, now: context.now, log: context.log }, trigger) : null;
+  const retention = dailyDue ? await runRetention(context.prisma, trigger, now) : null;
+  const erasure = dailyDue ? await runErasure(context.prisma, trigger, { storageRoot, now }) : null;
+  if (backup || retention) context.log?.(`[eldock] Denní údržba: záloha ${backup?.status ?? "vypnutá"}, retence ${retention?.status ?? "–"}${erasure ? `, výmaz účtů ${erasure.status}` : ""}.`);
+  return { backup, retention, erasure };
 }
 
 export const defaultStorageRoot = () => path.join(process.cwd(), "storage", "uploads");

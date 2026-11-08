@@ -16,4 +16,9 @@ export const SECURITY_EVENT_LABELS: Record<SecurityEventKind, { label: string; t
   USER_ENABLED: { label: "Účet odblokován", tone: "ok" },
   TOTP_ENABLED: { label: "Zapnuto dvoufázové ověření", tone: "ok" },
   TOTP_DISABLED: { label: "Vypnuto dvoufázové ověření", tone: "warn" },
+  // Fáze 69: export a výmaz dat
+  DATA_EXPORTED: { label: "Export dat", tone: "warn" },
+  USER_REMOVED: { label: "Zaměstnanec odebrán (účet anonymizován)", tone: "bad" },
+  COMPANY_CLOSURE_REQUESTED: { label: "Žádost o zrušení účtu firmy", tone: "bad" },
+  COMPANY_CLOSURE_CANCELLED: { label: "Žádost o zrušení účtu firmy zrušena", tone: "ok" },
 };

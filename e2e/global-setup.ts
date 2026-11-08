@@ -64,6 +64,8 @@ const WARM_ROUTES = [
   // Fáze 68: profil firmy Panel Builderu (logo) a velín (přihlášení velínu)
   "/panel-builder/company",
   "/superadmin",
+  // Fáze 69: data firmy (export a zrušení účtu)
+  "/admin/data",
 ];
 
 /**
