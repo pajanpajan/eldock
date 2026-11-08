@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Blocks, CalendarCheck, CalendarRange, FileCheck2, Inbox, PencilRuler, ScanLine, UsersRound, type LucideIcon } from "lucide-react";
+import { Blocks, CalendarCheck, CalendarRange, FileCheck2, Inbox, PencilRuler, ScanLine, UserRoundCog, UsersRound, type LucideIcon } from "lucide-react";
 
 import { isAccountSwitcherLocked } from "@/lib/auth";
 import type { Permission } from "@/lib/accounts";
@@ -87,6 +87,16 @@ export async function AppHeader() {
             currentId={account.user.id}
             locked={isAccountSwitcherLocked()}
           />
+          {account.user.companyId ? (
+            <Link
+              href="/ucet"
+              className="touch-target flex items-center gap-2 rounded-lg border border-border bg-card/60 px-2.5 text-sm text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+              aria-label="Můj účet – heslo, zařízení a dvoufázové ověření"
+            >
+              <UserRoundCog className="size-4" aria-hidden />
+              <span className="hidden lg:inline">Můj účet</span>
+            </Link>
+          ) : null}
           <LogoutButton />
         </div>
       </div>

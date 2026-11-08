@@ -9,6 +9,7 @@ import { generateRevisionSchematic } from "@/server/services/schematic";
 import * as workflow from "@/server/services/workflow";
 import { assertFeature } from "@/server/modules";
 import { assertPermission } from "@/server/permissions";
+import { assertTenantAccess } from "@/server/tenant";
 import { saveUpload } from "@/server/storage";
 import { getCurrentRole, getCurrentUser } from "@/server/session";
 
@@ -100,6 +101,7 @@ async function run<S extends z.ZodType, T>(
   if (!parsed.success) return { ok: false, error: "Neplatná data formuláře. Zkontrolujte vyplněné údaje." };
   try {
     const [role, user] = await Promise.all([getCurrentRole(), getCurrentUser()]);
+    await assertTenantAccess(parsed.data);
     const data = await service({ id: user.id, role }, parsed.data);
     // Mění se barvy pinů, počty v areálu, detail i CAE dashboard → celý layout.
     if (revalidate) revalidatePath("/", "layout");

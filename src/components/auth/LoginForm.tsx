@@ -1,6 +1,7 @@
 "use client";
 
 import { startTransition, useActionState, useState, type FormEvent } from "react";
+import Link from "next/link";
 import { Check, KeyRound, Loader2, LogIn } from "lucide-react";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -12,6 +13,8 @@ import { ACCOUNT_TYPES } from "@/lib/accounts";
 import { initials } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { login, type LoginState } from "@/server/actions/auth";
+
+import { TwoFactorForm } from "./TwoFactorForm";
 
 interface LoginAccount {
   id: string;
@@ -26,6 +29,9 @@ export function LoginForm({ accounts, next }: { accounts: LoginAccount[]; next?:
   const [state, action, pending] = useActionState<LoginState, FormData>(login, {});
   const [accountId, setAccountId] = useState(state.accountId ?? accounts[0]?.id ?? "");
   const [email, setEmail] = useState(state.email ?? "");
+
+  // Fáze 67: heslo ověřeno, účet má dvoufázové ověření → kód z aplikace
+  if (state.needsTotp) return <TwoFactorForm next={state.next ?? next} />;
 
   // Odeslání přes transition: automatický reset formuláře po akci by vrátil výběr účtu na první dlaždici.
   function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -93,10 +99,15 @@ export function LoginForm({ accounts, next }: { accounts: LoginAccount[]; next?:
       ) : null}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="flex items-center gap-2 text-xs text-muted-foreground">
-          <KeyRound className="size-4" aria-hidden />
-          Přístupové heslo nastavuje správce (proměnná <code className="font-mono">ELDOCK_ACCESS_PASSWORD</code>).
-        </p>
+        <div className="grid gap-1 text-xs text-muted-foreground">
+          <p className="flex items-center gap-2">
+            <KeyRound className="size-4" aria-hidden />
+            Zaměstnanci firem: e-mail a vlastní heslo. Obchodní demo: účet a heslo dema (<code className="font-mono">ELDOCK_ACCESS_PASSWORD</code>).
+          </p>
+          <Link href="/zapomenute-heslo" className="font-medium text-primary underline-offset-4 hover:underline">
+            Zapomenuté heslo?
+          </Link>
+        </div>
         <Button type="submit" size="lg" disabled={pending} className="h-11 min-w-40">
           {pending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <LogIn className="size-4" aria-hidden />}
           Přihlásit se

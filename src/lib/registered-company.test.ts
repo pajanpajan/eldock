@@ -27,7 +27,9 @@ describe("registrace firmy", () => {
     const issue = (input: object) => panelRegistrationSchema.safeParse({ ...valid, ...input }).error?.issues[0];
     expect(issue({ termsAccepted: false })?.path).toEqual(["termsAccepted"]);
     expect(issue({ ico: "12345678" })?.message).toMatch(/Neplatné IČO/);
-    expect(issue({ password: "kratke" })?.message).toMatch(/8 znaků/);
+    // Fáze 67: pravidla hesla jako u účtů zaměstnanců (aspoň 10 znaků, ne e-mail, jméno ani běžné heslo)
+    expect(issue({ password: "kratke" })?.message).toMatch(/10 znaků/);
+    expect(issue({ password: "heslo123456" })?.message).toMatch(/běžné/);
     expect(issue({ zip: "511" })?.message).toMatch(/PSČ/);
     expect(issue({ dic: "123" })?.message).toMatch(/DIČ/);
     expect(TERMS_CONSENT).toContain("nese výhradně uživatel (výrobce rozváděče / projektant)");

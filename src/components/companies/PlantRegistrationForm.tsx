@@ -50,7 +50,7 @@ export function PlantRegistrationForm() {
           <Input id="plant-reg-email" type="email" autoComplete="email" value={account.email} onChange={(event) => setAccount({ ...account, email: event.target.value })} aria-invalid={error?.field === "email" || undefined} className="h-11" />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="plant-reg-password">Heslo (min. 8 znaků)</Label>
+          <Label htmlFor="plant-reg-password">Heslo (min. 10 znaků)</Label>
           <Input id="plant-reg-password" type="password" autoComplete="new-password" value={account.password} onChange={(event) => setAccount({ ...account, password: event.target.value })} aria-invalid={error?.field === "password" || undefined} className="h-11" />
         </div>
       </div>

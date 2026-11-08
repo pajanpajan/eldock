@@ -22,9 +22,14 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
         <Logo className="scale-125" withTagline />
         <h1 className="text-2xl font-semibold tracking-tight">Přihlášení do Eldock</h1>
         <p className="max-w-xl text-sm text-muted-foreground">
-          Elektrodokumentace a údržba závodu. Vyberte svůj účet (nebo zadejte e-mail) a přístupové heslo / PIN závodu.
+          Elektrodokumentace a údržba závodu. Zaměstnanci firem se přihlašují e-mailem a vlastním heslem, obchodní demo výběrem účtu a heslem dema.
         </p>
       </div>
+      {params.heslo === "nastaveno" ? (
+        <p role="status" className="rounded-md border border-emerald-500/50 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">
+          Heslo je nastavené. Přihlaste se e-mailem, novým heslem a kódem z aplikace Authenticator.
+        </p>
+      ) : null}
       <LoginForm accounts={accounts} next={next} />
     </div>
   );

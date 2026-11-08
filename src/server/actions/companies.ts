@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
-import { AUTH_COOKIE, AUTH_TTL_SECONDS, PANEL_AUTH_COOKIE, PANEL_AUTH_TTL_SECONDS, brandEnv, panelSubject, safeNextPath, signAuthToken } from "@/lib/auth";
+import { AUTH_COOKIE, AUTH_TTL_SECONDS, PANEL_AUTH_COOKIE, PANEL_AUTH_TTL_SECONDS, brandEnv, panelSubject, safeNextPath, sessionSubject, signAuthToken } from "@/lib/auth";
 import { TESTER_COMPANY, companyDetailsSchema, companyLoginSchema, panelRegistrationSchema, plantRegistrationSchema } from "@/lib/registered-company";
 import { prisma } from "@/lib/prisma";
 import { PLANT_COOKIE } from "@/lib/roles";
@@ -12,6 +12,8 @@ import { plantHref } from "@/lib/routes";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 import { applyAccount } from "@/server/account-switch";
 import { getPanelCompany } from "@/server/panel-session";
+import { requestMeta } from "@/server/request-meta";
+import { createUserSession, recordSecurityEvent } from "@/server/services/account-security";
 import { authenticateCompany, registerPanelCompany, registerPlantCompany, updateCompanyDetails } from "@/server/services/companies";
 
 import type { ActionResult } from "./workflow";
@@ -115,7 +117,11 @@ export async function registerPlantAction(input: unknown): Promise<ActionResult 
     return failure(error, "Registraci závodu se nepodařilo dokončit. Zkuste to prosím znovu.");
   }
   const store = await cookies();
-  store.set(AUTH_COOKIE, await signAuthToken(result.userId), { path: "/", maxAge: AUTH_TTL_SECONDS, sameSite: "lax", httpOnly: true, secure: secure() });
+  // Fáze 67: uživatel registrované firmy je přihlášený jen s relací na serveru (odhlášení a blokace ji zruší)
+  const { device, ipKey } = await requestMeta();
+  const session = await createUserSession(prisma, result.userId, device);
+  await recordSecurityEvent(prisma, { kind: "LOGIN_OK", userId: result.userId, companyId: result.companyId, email: parsed.data.email, ipKey, detail: "registrace závodu" });
+  store.set(AUTH_COOKIE, await signAuthToken(sessionSubject(result.userId, session.id)), { path: "/", maxAge: AUTH_TTL_SECONDS, sameSite: "lax", httpOnly: true, secure: secure() });
   store.set(PLANT_COOKIE, result.plant.id, { path: "/", maxAge: 60 * 60 * 24 * 365, sameSite: "lax", httpOnly: true });
   await applyAccount(result.userId, plantHref(result.plant.id), plantHref(result.plant.id));
   return { ok: true, data: undefined };

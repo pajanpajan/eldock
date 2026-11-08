@@ -17,7 +17,9 @@ const routeDirs = (group: string) =>
 
 describe("fáze 54 – trasy Správy závodů a 404", () => {
   it("každá trasa skupin (app) a (print) je chráněná přihlášením (jinak by byla veřejná)", () => {
-    const routes = [...routeDirs("(app)").filter((name) => name !== "login"), ...routeDirs("(print)")];
+    // Veřejné jsou jen přihlášení a (fáze 67) obnova / nastavení hesla – ty proxy pouští bez přihlášení (PUBLIC_PATHS)
+    const PUBLIC = new Set(["login", "zapomenute-heslo", "nastavit-heslo"]);
+    const routes = [...routeDirs("(app)").filter((name) => !PUBLIC.has(name)), ...routeDirs("(print)")];
     expect(routes.length).toBeGreaterThan(5);
     for (const route of routes) expect(isPlantRoute(`/${route}`), `/${route} chybí v PLANT_ROUTE_PREFIXES`).toBe(true);
     expect(PLANT_ROUTE_PREFIXES).toContain("/demo-docs");

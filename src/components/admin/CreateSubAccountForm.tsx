@@ -12,10 +12,12 @@ import type { AccountType } from "@/generated/prisma/enums";
 import { ACCOUNT_ORDER, ACCOUNT_TYPES } from "@/lib/accounts";
 import { MAP_LAYERS, type LayerKey } from "@/lib/map-layers";
 import { cn } from "@/lib/utils";
-import { createSubAccountAction } from "@/server/actions/accounts";
+import { createSubAccountAction, type PasswordLinkResult } from "@/server/actions/accounts";
 
-/** Formulář „Přidat podúčet“: osoba, typ účtu a případně vlastní výřez kategorií zařízení. */
-export function CreateSubAccountForm() {
+import { PasswordLinkNotice } from "./PasswordLinkNotice";
+
+/** Formulář „Přidat podúčet“: osoba, typ účtu a případně vlastní výřez kategorií zařízení; u firmy pozvánka (fáze 67). */
+export function CreateSubAccountForm({ company = false }: { company?: boolean }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [name, setName] = useState("");
@@ -23,6 +25,7 @@ export function CreateSubAccountForm() {
   const [title, setTitle] = useState("");
   const [accountType, setAccountType] = useState<AccountType>("MAINTENANCE_TECH");
   const [layers, setLayers] = useState<ReadonlySet<LayerKey>>(new Set(ACCOUNT_TYPES.MAINTENANCE_TECH.layers));
+  const [invite, setInvite] = useState<PasswordLinkResult | null>(null);
   const valid = name.trim().length >= 3 && email.includes("@") && layers.size > 0;
 
   function chooseType(type: AccountType) {
@@ -34,7 +37,10 @@ export function CreateSubAccountForm() {
     startTransition(async () => {
       const result = await createSubAccountAction({ name, email, title: title || null, accountType, layers: [...layers] });
       if (!result.ok) return void toast.error(result.error);
-      toast.success(`Podúčet ${result.data.name} založen.`, { description: "Najdete ho v přepínači účtů v hlavičce." });
+      toast.success(`Podúčet ${result.data.name} založen.`, {
+        description: result.data.invite ? (result.data.invite.emailed ? "Pozvánka k nastavení hesla odešla e-mailem." : "Předejte zaměstnanci odkaz na nastavení hesla.") : "Najdete ho v přepínači účtů v hlavičce.",
+      });
+      setInvite(result.data.invite);
       setName("");
       setEmail("");
       setTitle("");
@@ -48,6 +54,8 @@ export function CreateSubAccountForm() {
         <UserPlus className="size-5 text-primary" aria-hidden />
         Přidat podúčet
       </h2>
+      {company ? <p className="text-sm text-muted-foreground">Zaměstnanec dostane pozvánku a heslo si nastaví sám (odkaz platí 7 dní). Bez SMTP odkaz zkopírujete zde.</p> : null}
+      {invite ? <PasswordLinkNotice result={invite} onClose={() => setInvite(null)} /> : null}
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="space-y-2">
           <Label htmlFor="account-name">Jméno a příjmení</Label>

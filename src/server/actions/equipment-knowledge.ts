@@ -8,6 +8,7 @@ import { equipmentHref } from "@/lib/routes";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 import { activateSoftwareBackup, addEquipmentDocument, createSoftwareBackup, deleteEquipmentDocument } from "@/server/services/equipment-knowledge";
 import { getCurrentAccount, getCurrentUser } from "@/server/session";
+import { assertEntityAccess, assertTenantAccess } from "@/server/tenant";
 
 import type { ActionResult } from "./workflow";
 
@@ -28,6 +29,7 @@ async function run<S extends z.ZodType, T>(schema: S, raw: unknown, allowed: rea
     const account = await getCurrentAccount();
     if (!allowed.some((permission) => account.can(permission))) throw new WorkflowError("FORBIDDEN", `Účet ${account.definition.label} nemůže měnit dokumentaci zařízení.`);
     const user = await getCurrentUser();
+    await assertTenantAccess(parsed.data);
     return { ok: true, data: await action(parsed.data, user.id) };
   } catch (error) {
     if (error instanceof WorkflowError) return { ok: false, error: error.message };
@@ -59,6 +61,7 @@ export async function addEquipmentDocumentAction(input: z.input<typeof documentS
 
 export async function deleteEquipmentDocumentAction(documentId: string): Promise<ActionResult> {
   return run(id, documentId, ["submitChange", "caeOffice"], async (value) => {
+    await assertEntityAccess("equipmentDocument", value);
     const document = await deleteEquipmentDocument(prisma, value);
     revalidatePath(equipmentHref(document.equipmentId));
     return undefined;
@@ -92,6 +95,7 @@ export async function createSoftwareBackupAction(input: z.input<typeof backupSch
 /** Rollback: starší verzi nastavit jako aktuálně ve stroji. */
 export async function activateSoftwareBackupAction(backupId: string): Promise<ActionResult<{ version: string }>> {
   return run(id, backupId, ["submitChange", "caeOffice"], async (value) => {
+    await assertEntityAccess("softwareBackup", value);
     const backup = await activateSoftwareBackup(prisma, value);
     revalidatePath(equipmentHref(backup.equipmentId));
     return { version: `v${backup.major}.${backup.minor}` };

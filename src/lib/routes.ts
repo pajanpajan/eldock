@@ -7,7 +7,7 @@ export const APP_HOME = "/app";
  * Fáze 54: trasy Správy závodů (skupiny `(app)` a `(print)`) a reálné PDF projekty. Jen ty bez přihlášení přesměrují na `/login`;
  * neznámá adresa dostane 404. Nová trasa ve skupině `(app)` / `(print)` sem musí přibýt (hlídá `phase54.test.ts`).
  */
-export const PLANT_ROUTE_PREFIXES = ["/app", "/admin", "/cae", "/equipment", "/inspections", "/plant", "/studio", "/demo-docs"] as const;
+export const PLANT_ROUTE_PREFIXES = ["/app", "/admin", "/cae", "/equipment", "/inspections", "/plant", "/studio", "/demo-docs", "/ucet"] as const;
 
 export const isPlantRoute = (pathname: string) => PLANT_ROUTE_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 

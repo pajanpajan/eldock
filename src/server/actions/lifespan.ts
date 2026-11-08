@@ -15,6 +15,7 @@ import {
   updateOperatingProfile,
 } from "@/server/services/lifespan";
 import { getCurrentAccount } from "@/server/session";
+import { assertTenantAccess } from "@/server/tenant";
 
 import type { ActionResult } from "./workflow";
 
@@ -80,6 +81,7 @@ async function run<S extends z.ZodType, T>(
         `Účet ${account.definition.label} nemá oprávnění: ${PERMISSION_LABELS.submitChange} nebo ${PERMISSION_LABELS.recordInspection}.`,
       );
     }
+    await assertTenantAccess(parsed.data);
     const data = await action(parsed.data);
     revalidatePath(
       equipmentHref((parsed.data as { equipmentId: string }).equipmentId),

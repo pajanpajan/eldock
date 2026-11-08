@@ -15,7 +15,9 @@ import { APP_HOME, isPlantRoute } from "@/lib/routes";
  */
 // Fáze 48: veřejná ukázka elaborátu a SEO soubory (sitemap.xml, náhled odkazu opengraph-image)
 // Fáze 54: právní stránky (zásady zpracování osobních údajů, obchodní podmínky)
-const PUBLIC_PATHS = new Set(["/", "/login", "/register-plant", "/panel-builder/auth", "/api/ares", "/ukazka-elaboratu", "/ochrana-osobnich-udaju", "/obchodni-podminky", "/sitemap.xml", "/robots.txt", "/superadmin/login", "/api/consent", "/newsletter/potvrzeni", "/newsletter/odhlaseni", "/api/newsletter/unsubscribe"]);
+// Fáze 67: obnova a nastavení hesla (pozvánka zaměstnance) bez přihlášení
+const PUBLIC_PATHS = new Set(["/", "/login", "/register-plant", "/panel-builder/auth", "/api/ares", "/ukazka-elaboratu", "/ochrana-osobnich-udaju", "/obchodni-podminky", "/sitemap.xml", "/robots.txt", "/superadmin/login", "/api/consent", "/newsletter/potvrzeni", "/newsletter/odhlaseni", "/api/newsletter/unsubscribe", "/zapomenute-heslo"]);
+const PUBLIC_PREFIXES = ["/opengraph-image", "/brands/", "/api/brand-logo/", "/nastavit-heslo/"];
 const SUPERADMIN_PREFIX = "/superadmin";
 const PANEL_PREFIX = "/panel-builder";
 
@@ -36,7 +38,7 @@ export async function proxy(request: NextRequest) {
   if (isAuthBypassed()) return NextResponse.next();
   const { pathname, search } = request.nextUrl;
   // Loga výrobců (fáze 51) nejsou tajná – soubory public/brands a /api/brand-logo bez přihlášení
-  if (PUBLIC_PATHS.has(pathname) || pathname.startsWith("/opengraph-image") || pathname.startsWith("/brands/") || pathname.startsWith("/api/brand-logo/")) return NextResponse.next();
+  if (PUBLIC_PATHS.has(pathname) || PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix))) return NextResponse.next();
   // Cron (avízo lhůt revizí) se ověřuje vlastním tajným tokenem v Route Handleru.
   if (pathname.startsWith("/api/cron/")) return NextResponse.next();
 

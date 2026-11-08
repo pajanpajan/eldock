@@ -53,6 +53,14 @@ const WARM_ROUTES = [
   "/panel-builder/floorplan",
   "/panel-builder/floorplan/novy",
   "/cae",
+  // Fáze 67: veřejné stránky webu, registrace závodu, přihlášení a účty (testy fáze 41 a 67 je otevírají jako první)
+  "/domovni-elektroinstalace",
+  "/prumysl",
+  "/register-plant",
+  "/login",
+  "/zapomenute-heslo",
+  "/admin/users",
+  "/ucet",
 ];
 
 /**

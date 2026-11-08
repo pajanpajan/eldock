@@ -2,27 +2,48 @@ import "server-only";
 
 import { cache } from "react";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 
 import { ACCOUNT_TYPES, canSeeType, can, equipmentScope, visibleTypes, type Permission } from "@/lib/accounts";
-import { AUTH_COOKIE, isAccountSwitcherLocked, isAuthBypassed, verifyAuthToken } from "@/lib/auth";
+import { AUTH_COOKIE, companyIdOf, isAccountSwitcherLocked, isAuthBypassed, parseSubject, verifyAuthToken } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ACCOUNT_COOKIE, DEMO_USER_ID, PLANT_COOKIE, ROLE_COOKIE, parseRole, type AppRole } from "@/lib/roles";
+import { activeSession } from "@/server/services/account-security";
 
-/** Přihlášený uživatel z podepsané cookie (bez ohledu na přepínač účtů), pokud existuje. */
-export const getSignedInUser = cache(async () => {
-  const session = await verifyAuthToken((await cookies()).get(AUTH_COOKIE)?.value);
-  return session ? prisma.user.findFirst({ where: { id: session.userId, accountType: { not: null } } }) : null;
+/**
+ * Ověřené přihlášení z cookie `digitry-auth` (fáze 67): podpis a platnost tokenu, u uživatele registrované firmy
+ * navíc platná relace na serveru (`UserSession`). `revoked` = token má správný podpis, ale relace byla zrušená,
+ * vypršela, účet je zablokovaný nebo jde o starší token firmy bez relace → přihlášení neplatí (zpět na /login).
+ */
+export const getAuthState = cache(async () => {
+  const token = await verifyAuthToken((await cookies()).get(AUTH_COOKIE)?.value);
+  if (!token || companyIdOf(token)) return { token: null, user: null, sessionId: null, revoked: false };
+  const { userId, sessionId } = parseSubject(token.userId);
+  if (sessionId) {
+    const session = await activeSession(prisma, { userId, sessionId });
+    return session ? { token, user: session.user, sessionId, revoked: false } : { token, user: null, sessionId, revoked: true };
+  }
+  const user = await prisma.user.findFirst({ where: { id: userId, accountType: { not: null } } });
+  // Účet registrované firmy se přihlašuje jen s relací – bezstavový token (z doby před fází 67) neplatí.
+  if (user?.companyId) return { token, user: null, sessionId: null, revoked: true };
+  return { token, user, sessionId: null, revoked: false };
 });
 
-/** Uživatel aktuálního účtu: cookie účtu, jinak výchozí účet podle (starší) cookie role. */
+/** Přihlášený uživatel z podepsané cookie (bez ohledu na přepínač účtů), pokud existuje. */
+export const getSignedInUser = cache(async () => (await getAuthState()).user);
+
+/** Uživatel aktuálního účtu: přihlášený uživatel firmy, jinak cookie přepínače (jen demo účty), jinak výchozí účet role. */
 export const getCurrentUser = cache(async () => {
+  const state = await getAuthState();
+  if (state.revoked) redirect("/login");
   const store = await cookies();
   // Uzamčený přepínač nebo registrovaná firma (fáze 41): účet určuje jen podepsaná přihlašovací cookie.
-  const signedIn = await getSignedInUser();
+  const signedIn = state.user;
   if (signedIn && (isAccountSwitcherLocked() || signedIn.companyId)) return signedIn;
   const accountId = store.get(ACCOUNT_COOKIE)?.value;
   if (accountId) {
-    const user = await prisma.user.findFirst({ where: { id: accountId, accountType: { not: null } } });
+    // Fáze 67: nepodepsaná cookie přepínače smí vybrat jen demo účet – nikdy uživatele registrované firmy.
+    const user = await prisma.user.findFirst({ where: { id: accountId, accountType: { not: null }, companyId: null } });
     if (user) return user;
   }
   return prisma.user.findUniqueOrThrow({ where: { id: DEMO_USER_ID[parseRole(store.get(ROLE_COOKIE)?.value)] } });
@@ -57,9 +78,9 @@ export const getRememberedPlantId = cache(async (): Promise<string | undefined> 
   return store.get(PLANT_COOKIE)?.value;
 });
 
-/** Přihlášení z cookie `digitry-auth` (při `ELDOCK_BYPASS_AUTH=1` vždy platné). */
+/** Platné přihlášení (při `ELDOCK_BYPASS_AUTH=1` vždy); zrušená relace firmy = nepřihlášen. */
 export const getAuthSession = cache(async () => {
   if (isAuthBypassed()) return { userId: "bypass", expires: Number.MAX_SAFE_INTEGER };
-  const store = await cookies();
-  return verifyAuthToken(store.get(AUTH_COOKIE)?.value);
+  const state = await getAuthState();
+  return state.user ? state.token : null;
 });

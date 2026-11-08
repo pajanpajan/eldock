@@ -1,4 +1,5 @@
 import { UPLOAD_RULES, contentTypeFor, validateUpload } from "@/lib/files";
+import { getAuthState } from "@/server/session";
 import { saveUpload } from "@/server/storage";
 
 const error = (message: string, status = 400) => Response.json({ error: message }, { status });
@@ -8,6 +9,8 @@ const error = (message: string, status = 400) => Response.json({ error: message 
  * Route Handler místo Server Action kvůli limitu těla akce (1 MB). Vrací URL pro `/api/files`.
  */
 export async function POST(request: Request) {
+  // Fáze 67: zrušená relace uživatele firmy (odhlášení na jiném zařízení, blokace) už nenahrává
+  if ((await getAuthState()).revoked) return error("Přihlášení vypršelo – přihlaste se znovu.", 401);
   let form: FormData;
   try {
     form = await request.formData();

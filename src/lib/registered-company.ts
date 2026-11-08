@@ -3,6 +3,7 @@
 import { z } from "zod";
 
 import { isValidIco, normalizeIco } from "./ares";
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, passwordIssues } from "./password-policy";
 import type { ManufacturerInfo } from "./panel-builder/project";
 
 export const TERMS_VERSION = "1.0-2026-11";
@@ -58,12 +59,19 @@ export const companyDetailsSchema = z.object({
 
 const credentials = {
   email: z.string().trim().toLowerCase().email("Zadejte platný e-mail.").max(200),
-  password: z.string().min(8, "Heslo musí mít alespoň 8 znaků.").max(200),
+  // Fáze 67: pravidla hesla jako u účtů zaměstnanců (src/lib/password-policy.ts)
+  password: z.string().min(PASSWORD_MIN_LENGTH, `Heslo musí mít alespoň ${PASSWORD_MIN_LENGTH} znaků.`).max(PASSWORD_MAX_LENGTH),
   termsAccepted: z.literal(true, { error: "Bez souhlasu s podmínkami a přenesením odpovědnosti nelze registraci odeslat." }),
 };
 
-export const panelRegistrationSchema = companyDetailsSchema.extend(credentials);
-export const plantRegistrationSchema = companyDetailsSchema.extend({ ...credentials, plantName: text(3, 120, "Zadejte název závodu.") });
+/** Heslo nesmí obsahovat e-mail ani jméno odpovědné osoby a nesmí být běžné. */
+const strongPassword = (value: { password: string; email: string; contactName: string }, ctx: z.RefinementCtx) => {
+  const issue = passwordIssues(value.password, { email: value.email, name: value.contactName })[0];
+  if (issue) ctx.addIssue({ code: "custom", path: ["password"], message: issue });
+};
+
+export const panelRegistrationSchema = companyDetailsSchema.extend(credentials).superRefine(strongPassword);
+export const plantRegistrationSchema = companyDetailsSchema.extend({ ...credentials, plantName: text(3, 120, "Zadejte název závodu.") }).superRefine(strongPassword);
 export const companyLoginSchema = z.object({ email: z.string().trim().toLowerCase().max(200), password: z.string().max(200) });
 
 export type CompanyDetails = z.output<typeof companyDetailsSchema>;

@@ -9,6 +9,7 @@ import { WorkflowError } from "@/lib/workflow/state-machine";
 import { assertFeature } from "@/server/modules";
 import { createReference, deleteReference, updateReference } from "@/server/services/schematic-references";
 import { getCurrentAccount } from "@/server/session";
+import { assertEntityAccess, assertTenantAccess } from "@/server/tenant";
 
 import type { ActionResult } from "./workflow";
 
@@ -47,6 +48,8 @@ export async function saveReferenceAction(input: z.input<typeof referenceSchema>
   const parsed = referenceSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Neplatné údaje reference." } as const;
   return run(async () => {
+    await assertTenantAccess(parsed.data);
+    if (input.id) await assertEntityAccess("schematicReference", input.id);
     const saved = input.id ? await updateReference(prisma, input.id, parsed.data) : await createReference(prisma, parsed.data);
     return { id: saved.id, designation: saved.designation };
   });
@@ -56,6 +59,7 @@ export async function deleteReferenceAction(input: { id: string }) {
   const parsed = z.object({ id }).safeParse(input);
   if (!parsed.success) return { ok: false, error: "Neplatná reference." } as const;
   return run(async () => {
+    await assertEntityAccess("schematicReference", parsed.data.id);
     await deleteReference(prisma, parsed.data.id);
     return null;
   });

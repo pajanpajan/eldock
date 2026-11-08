@@ -11,6 +11,7 @@ import { floorHref, plantHref } from "@/lib/routes";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 import { assertFeature } from "@/server/modules";
 import { assertPermission } from "@/server/permissions";
+import { assertEntityAccess } from "@/server/tenant";
 import { getCurrentUser } from "@/server/session";
 import { saveStudioConcept, saveStudioMenu } from "@/server/services/studio";
 import { studioMenuSchema, type StudioMenu } from "@/lib/studio-menu";
@@ -111,6 +112,25 @@ const conceptSchema = z.object({
   buildings: z.array(buildingSchema).min(1).max(12),
 });
 
+/** Fáze 67: koncept smí měnit jen budovy, patra a zařízení závodu přihlášeného uživatele. */
+async function assertConceptAccess(concept: z.infer<typeof conceptSchema>) {
+  if (!concept.newPlant) await assertEntityAccess("plant", concept.plantId);
+  const buildings = concept.buildings.flatMap((entry) => (entry.building.mode === "existing" ? [entry.building.id] : []));
+  const floors = concept.buildings.flatMap((entry) => [
+    ...entry.floors.flatMap((floor) => (floor.existingId ? [floor.existingId] : [])),
+    ...entry.equipment.flatMap((item) => (item.floor.kind === "existing" ? [item.floor.id] : [])),
+    ...(entry.floorRenames ?? []).map((rename) => rename.id),
+  ]);
+  const equipment = concept.buildings.flatMap((entry) => [
+    ...entry.equipment.flatMap((item) => (item.parent?.kind === "existing" ? [item.parent.id] : [])),
+    ...(entry.equipmentEdits ?? []).flatMap((edit) => [edit.id, ...(edit.parentId ? [edit.parentId] : [])]),
+    ...(entry.equipmentDeletes ?? []),
+  ]);
+  await assertEntityAccess("building", buildings);
+  await assertEntityAccess("floor", floors);
+  await assertEntityAccess("equipment", equipment);
+}
+
 type Summary = { href: string; buildings: number; floors: number; editedFloors: number; equipment: number; editedEquipment: number; deletedEquipment: number; plantCreated: boolean };
 
 /** Uloží celý koncept Studia (jedna či více budov) v jedné transakci a vrátí odkaz na první patro; nový závod si zapamatuje. */
@@ -120,6 +140,7 @@ export async function saveStudioAction(input: z.input<typeof conceptSchema>): Pr
   try {
     await assertPermission("studio");
     await assertFeature("enterprise.studio");
+    await assertConceptAccess(parsed.data);
     const results = await saveStudioConcept(prisma, parsed.data);
     const first = results[0];
     if (first.plantCreated) {

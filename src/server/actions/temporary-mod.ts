@@ -6,6 +6,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 import { assertPermission } from "@/server/permissions";
+import { assertTenantAccess } from "@/server/tenant";
 import { resolveDefect } from "@/server/services/inspection";
 import { createTemporaryMod, resolveAndConvertToChangeRequest, resolveAsOneToOne } from "@/server/services/temporary-mod";
 import type { Actor } from "@/server/services/workflow";
@@ -40,6 +41,7 @@ async function run<S extends z.ZodType, T>(schema: S, raw: unknown, action: (act
   if (!parsed.success) return { ok: false, error: "Neplatná data formuláře. Zkontrolujte vyplněné údaje." };
   try {
     const [role, user] = await Promise.all([getCurrentRole(), getCurrentUser()]);
+    await assertTenantAccess(parsed.data, { id: "temporaryMod" });
     const data = await action({ id: user.id, role }, parsed.data);
     // Banner v detailu, audit, případně nový ticket v CAE a stav pinu.
     revalidatePath("/", "layout");

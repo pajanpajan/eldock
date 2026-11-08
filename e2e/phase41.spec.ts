@@ -15,16 +15,18 @@ async function mockAres(page: Page, company: { ico: string; companyName: string;
 }
 
 test("úvodní stránka: dva produkty; nepřihlášený do Panel Builderu → registrace firmy s ARES a souhlasem → vlastní lišta, kredity a izolované projekty", async ({ page }) => {
-  await page.goto("/");
+  // Od fáze 58 jsou karty produktů na stránkách částí webu (domov / průmysl), ne na úvodní stránce
+  await page.goto("/domovni-elektroinstalace");
   const builder = page.getByTestId("product-panel-builder");
-  await expect(builder).toContainText("ELDOCK AI Panel Builder – Výrobní dokumentace, oteplení a CE štítek rozváděče z fotky za 3 minuty");
+  await expect(builder).toContainText("ELDOCK AI Panel Builder – výrobní dokumentace, oteplení a CE štítek rozváděče z fotky za 3 minuty");
+  await page.goto("/prumysl");
   await expect(page.getByTestId("product-plant")).toContainText("ELDOCK Průmyslový dok – Správa výrobních závodů, dokumentace a revizí");
   await expect(page.getByTestId("product-plant").getByRole("link", { name: "Registrovat výrobní závod" })).toHaveAttribute("href", "/register-plant");
 
   // Přímý vstup bez přihlášení firmy → /panel-builder/auth
   await page.goto("/panel-builder");
   await expect(page).toHaveURL(/\/panel-builder\/auth/);
-  await page.goto("/");
+  await page.goto("/domovni-elektroinstalace");
   await page.getByRole("link", { name: /Spustit AI Panel Builder/ }).click();
   await expect(page).toHaveURL(/\/panel-builder\/auth/);
 
@@ -38,9 +40,9 @@ test("úvodní stránka: dva produkty; nepřihlášený do Panel Builderu → re
   await expect(page.getByLabel("PSČ")).toHaveValue("511 01");
   await page.getByLabel("Jméno a příjmení odpovědné osoby / projektanta").fill("Ing. Petra Rozvaděčová");
   await page.getByLabel("Telefon").fill("+420 603 111 222");
-  await page.getByLabel("Ev. č. oprávnění TIČR (nepovinné)").fill("E-1234/2025");
+  await page.getByLabel("Ev. č. oprávnění firmy (zákon 250/2021 Sb., § 8) – nepovinné").fill("E-1234/2025");
   await page.getByLabel("E-mail (přihlášení)").fill("petra@rozvadece-turnov.example");
-  await page.getByLabel("Heslo (min. 8 znaků)").fill("Rozvadec2026!");
+  await page.getByLabel("Heslo (min. 10 znaků)").fill("Modry-Kocour-2026");
   // Bez souhlasu s přenesením odpovědnosti nelze odeslat; celé znění v modalu
   const submit = page.getByRole("button", { name: "Zaregistrovat firmu a spustit Panel Builder" });
   await expect(submit).toBeDisabled();
@@ -107,7 +109,7 @@ test("registrace výrobního závodu: firma z ARES, nový závod a Technický ř
   await expect(page.getByLabel("Název prvního závodu")).toHaveValue("Hlavní výrobní závod");
   await page.getByLabel("Název prvního závodu").fill("Závod Liberec – Strojírna");
   await page.getByLabel("E-mail (přihlášení)").fill("karel@strojirny-liberec.example");
-  await page.getByLabel("Heslo (min. 8 znaků)").fill("Strojirna2026!");
+  await page.getByLabel("Heslo (min. 10 znaků)").fill("Strojirna2026!");
   await page.getByRole("checkbox", { name: /Souhlas s obchodními podmínkami/ }).check();
   await page.getByRole("button", { name: "Registrovat závod a přihlásit se" }).click();
 
@@ -129,7 +131,8 @@ test("registrace výrobního závodu: firma z ARES, nový závod a Technický ř
   await page.getByLabel("nebo e-mail").fill("karel@strojirny-liberec.example");
   await page.getByLabel("Heslo / PIN").fill("eldock2026");
   await page.getByRole("button", { name: /Přihlásit/ }).click();
-  await expect(page.getByText("Nesprávné heslo / PIN.")).toBeVisible();
+  // Fáze 67: stejná hláška pro neznámý e-mail i špatné heslo
+  await expect(page.getByText("Nesprávný e-mail nebo heslo.")).toBeVisible();
   await page.getByLabel("Heslo / PIN").fill("Strojirna2026!");
   await page.getByRole("button", { name: /Přihlásit/ }).click();
   await expect(page).toHaveURL(/\/plant\//);

@@ -8,6 +8,7 @@ import { WorkflowError } from "@/lib/workflow/state-machine";
 import { smtpTransportFromEnv } from "@/server/mailer";
 import { assertFeature } from "@/server/modules";
 import { assertPermission } from "@/server/permissions";
+import { assertTenantAccess } from "@/server/tenant";
 import { requestOrigin } from "@/server/request-url";
 import { sendInspectionDigest } from "@/server/services/notifications";
 import { getCurrentUser } from "@/server/session";
@@ -25,6 +26,7 @@ export async function sendInspectionDigestAction(input: z.input<typeof schema>):
   try {
     await assertPermission("inspections");
     await assertFeature("inspections.alerts");
+    await assertTenantAccess(parsed.data);
     const user = await getCurrentUser();
     const log = await sendInspectionDigest(prisma, {
       plantId: parsed.data.plantId,

@@ -91,6 +91,38 @@ export async function verifyAuthToken(token: string | undefined, options: { now?
   return valid ? { userId, expires } : null;
 }
 
+// ---------------------------------------------------------------------------
+//  Fáze 67: relace uživatelů registrovaných firem a čekající dvoufázové ověření
+// ---------------------------------------------------------------------------
+
+const SESSION_SEPARATOR = "~";
+
+/**
+ * Předmět tokenu přihlášení: demo účet = `<userId>` (bezstavové, sdílené heslo dema), uživatel registrované firmy
+ * = `<userId>~<sessionId>` – relaci ověří server proti `UserSession` (odhlášení a blokace ji zruší).
+ */
+export const sessionSubject = (userId: string, sessionId: string) => `${userId}${SESSION_SEPARATOR}${sessionId}`;
+
+export function parseSubject(subject: string): { userId: string; sessionId: string | null } {
+  const index = subject.indexOf(SESSION_SEPARATOR);
+  return index < 0 ? { userId: subject, sessionId: null } : { userId: subject.slice(0, index), sessionId: subject.slice(index + 1) || null };
+}
+
+/** Krok 2 přihlášení (kód z aplikace Authenticator): krátká cookie s vlastním odvozeným podpisem, ne přihlášení. */
+export const TWO_FACTOR_COOKIE = "eldock-2fa";
+export const TWO_FACTOR_TTL_SECONDS = 60 * 5;
+const TWO_FACTOR_SUBJECT = "2fa:";
+const twoFactorSecret = () => `${authSecret()}:two-factor`;
+
+export const signTwoFactorToken = (userId: string, options: { now?: number } = {}) =>
+  signAuthToken(`${TWO_FACTOR_SUBJECT}${userId}`, { ...options, ttl: TWO_FACTOR_TTL_SECONDS, secret: twoFactorSecret() });
+
+/** Id uživatele čekajícího na kód TOTP, jinak `null`. */
+export async function verifyTwoFactorToken(token: string | undefined, options: { now?: number } = {}): Promise<string | null> {
+  const session = await verifyAuthToken(token, { ...options, secret: twoFactorSecret() });
+  return session?.userId.startsWith(TWO_FACTOR_SUBJECT) ? session.userId.slice(TWO_FACTOR_SUBJECT.length) : null;
+}
+
 /** Porovnání hesla v konstantním čase (přes HMAC obou hodnot). */
 export async function checkAccessPassword(candidate: string, expected = accessPassword()): Promise<boolean> {
   const key = await hmacKey("digitry-password-check");

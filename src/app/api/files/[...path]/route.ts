@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { etagMatches, fileCacheControl, fileETag } from "@/lib/file-cache";
 import { contentTypeFor, resolveUploadPath } from "@/lib/files";
+import { getAuthState } from "@/server/session";
 
 const UPLOAD_ROOT = path.join(process.cwd(), "storage", "uploads");
 
@@ -11,6 +12,8 @@ const UPLOAD_ROOT = path.join(process.cwd(), "storage", "uploads");
  * Nahrané soubory (UUID) se cachují natrvalo, seed soubory den; opakovaný dotaz s ETagem → 304.
  */
 export async function GET(request: Request, ctx: RouteContext<"/api/files/[...path]">) {
+  // Fáze 67: zrušená relace uživatele firmy už soubory nečte (vlastnictví souborů řeší fáze 68)
+  if ((await getAuthState()).revoked) return new Response("Přihlášení vypršelo.", { status: 401 });
   const { path: segments } = await ctx.params;
   const filePath = resolveUploadPath(UPLOAD_ROOT, segments);
   if (!filePath) return new Response("Soubor nenalezen.", { status: 404 });

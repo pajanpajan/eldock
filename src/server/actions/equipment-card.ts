@@ -9,6 +9,7 @@ import { equipmentHref } from "@/lib/routes";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 import { regenerateQrToken, setEquipmentPhoto } from "@/server/services/equipment-card";
 import { getCurrentAccount } from "@/server/session";
+import { assertTenantAccess } from "@/server/tenant";
 
 import type { ActionResult } from "./workflow";
 
@@ -34,6 +35,7 @@ async function run<S extends z.ZodType, T>(schema: S, raw: unknown, action: (inp
   if (!parsed.success) return { ok: false, error: "Neplatná data." };
   try {
     await assertCardEditor();
+    await assertTenantAccess(parsed.data);
     const data = await action(parsed.data);
     return { ok: true, data };
   } catch (error) {

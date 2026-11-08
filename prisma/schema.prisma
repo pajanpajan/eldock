@@ -198,14 +198,31 @@ model User {
   title       String? // „Technický ředitel“
   scopeLayers String? // vlastní výřez kategorií (klíče vrstev mapy oddělené čárkou); null = výchozí pro typ účtu
   sortOrder   Int          @default(0)
-  /// Registrovaný uživatel (fáze 41): vidí jen svůj závod, přihlašuje se vlastním heslem firmy, bez přepínače účtů.
+  /// Registrovaný uživatel (fáze 41): vidí jen svůj závod, bez přepínače účtů.
   homePlantId String?
   companyId   String?
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+
+  /// Fáze 67: vlastní heslo uživatele registrované firmy (scrypt, src/server/password.ts). Demo účty ho nemají –
+  /// přihlašují se sdíleným heslem obchodního dema. Bez hesla = čeká na nastavení z pozvánky.
+  passwordHash       String?
+  passwordChangedAt  DateTime?
+  /// Po převzetí společného hesla firmy si zaměstnanec heslo změní při prvním přihlášení.
+  mustChangePassword Boolean   @default(false)
+  /// Zablokovaný účet (odchod zaměstnance) – nepřihlásí se a jeho relace jsou zrušené.
+  disabledAt         DateTime?
+  lastLoginAt        DateTime?
+  /// Dvoufázové ověření TOTP (RFC 6238): tajemství šifrované klíčem aplikace, záložní kódy jako SHA-256 (JSON pole).
+  totpSecret         String?
+  totpEnabledAt      DateTime?
+  totpRecoveryJson   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   homePlant         Plant?             @relation("UserHomePlant", fields: [homePlantId], references: [id], onDelete: SetNull)
   registeredCompany RegisteredCompany? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  sessions          UserSession[]
+  authTokens        AuthToken[]
 
   authoredRevisions      DocumentRevision[]   @relation("RevisionAuthor")
   approvedRevisions      DocumentRevision[]   @relation("RevisionApprover")
@@ -219,6 +236,77 @@ model User {
   @@index([role])
   @@index([accountType])
   @@index([homePlantId])
+}
+
+/// Přihlášení uživatele registrované firmy na jednom zařízení (fáze 67) – odhlášení a blokace relaci zruší.
+model UserSession {
+  id         String    @id @default(cuid())
+  userId     String
+  createdAt  DateTime  @default(now())
+  lastSeenAt DateTime  @default(now())
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  /// Popis zařízení z User-Agent („Chrome · Windows“), bez IP adresy.
+  device     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+}
+
+enum AuthTokenKind {
+  INVITE // pozvánka zaměstnance – nastavení prvního hesla (7 dní)
+  RESET // obnova zapomenutého hesla (1 h; od správce firmy 24 h)
+}
+
+/// Jednorázový odkaz na nastavení hesla (fáze 67). Samotný token je jen v odkazu, v databázi SHA-256.
+model AuthToken {
+  id          String        @id @default(cuid())
+  userId      String
+  kind        AuthTokenKind
+  tokenHash   String        @unique
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdById String?
+  createdAt   DateTime      @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, kind])
+}
+
+enum SecurityEventKind {
+  LOGIN_OK
+  LOGIN_FAILED
+  LOGIN_LOCKED // pokus během zablokování po opakovaných chybách
+  TOTP_FAILED
+  LOGOUT
+  PASSWORD_SET // nastavení hesla z pozvánky / obnovy
+  PASSWORD_CHANGED
+  RESET_REQUESTED
+  INVITE_CREATED
+  SESSION_REVOKED
+  USER_DISABLED
+  USER_ENABLED
+  TOTP_ENABLED
+  TOTP_DISABLED
+}
+
+/// Bezpečnostní deník (fáze 67): přihlášení, chyby, změny hesla a účtů. Slouží i k limitu pokusů – IP jen jako HMAC.
+model SecurityEvent {
+  id        String            @id @default(cuid())
+  kind      SecurityEventKind
+  userId    String?
+  companyId String?
+  actorId   String?
+  email     String?
+  ipKey     String?
+  detail    String?
+  createdAt DateTime          @default(now())
+
+  @@index([kind, email, createdAt])
+  @@index([kind, ipKey, createdAt])
+  @@index([companyId, createdAt])
 }
 
 // -----------------------------------------------------------------------------

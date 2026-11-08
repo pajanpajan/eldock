@@ -86,6 +86,9 @@ export async function registerPlantCompany(prisma: PrismaClient, input: PlantReg
         company: input.companyName,
         homePlantId: plant.id,
         companyId: company.id,
+        // Fáze 67: zakladatel má vlastní heslo (zaměstnanci dostanou pozvánku od správce firmy)
+        passwordHash,
+        passwordChangedAt: now,
       },
       select: { id: true },
     });

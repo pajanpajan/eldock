@@ -10,6 +10,7 @@ import { assertFeature } from "@/server/modules";
 import { importEquipment } from "@/server/services/equipment-import";
 import { saveUpload } from "@/server/storage";
 import { getCurrentAccount } from "@/server/session";
+import { assertEntityAccess } from "@/server/tenant";
 
 import type { ActionResult } from "./workflow";
 
@@ -42,6 +43,7 @@ export async function importEquipmentAction(input: z.input<typeof schema>): Prom
       throw new WorkflowError("FORBIDDEN", `Účet ${account.definition.label} nemá oprávnění: ${PERMISSION_LABELS.recordInspection} nebo ${PERMISSION_LABELS.studio}.`);
     }
     await assertFeature("enterprise.csv_import");
+    await assertEntityAccess("floor", parsed.data.items.map((item) => item.floorId));
     const result = await importEquipment(prisma, {
       items: parsed.data.items.map((item) => ({ ...item, tag: item.tag.toUpperCase(), lastInspection: item.lastInspection ? new Date(`${item.lastInspection}T12:00:00Z`) : null })),
       writeReport: async (svg) => (await saveUpload("documents", ".svg", svg)).url,
