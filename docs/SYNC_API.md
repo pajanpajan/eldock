@@ -206,6 +206,19 @@ Server závodu vůči cloudu:
   `actorId` jiného uživatele poslat nesmí.
 - Synchronizuje se každých 5 minut, pár sekund po úpravě z haly a ručně ze správy; bez spojení pracuje dál offline.
 
+Instalace a omezení:
+
+- **Instalace (IT zákazníka):** Eldock pro Windows na počítači, který běží trvale, pak jako správce
+  `powershell -ExecutionPolicy Bypass -File "<instalační složka>\resources\plant-server-task.ps1" [-Port 8787]`.
+  Skript založí naplánovanou úlohu po startu Windows pod účtem SYSTEM (po pádu restart), pravidlo brány firewall
+  pro doménovou a privátní síť a složku dat `%ProgramData%\Eldock\Server zavodu` jen pro SYSTEM a správce.
+  Volba `-Remove` úlohu a pravidlo odebere, data zůstanou. Potom na tom počítači `http://localhost:8787`:
+  heslo správy a kód z cloudu.
+- **Bez TLS:** zařízení v hale mluví se serverem závodu přes `http`, takže tokeny a data jdou po síti závodu
+  nešifrovaně. Server patří jen do uzavřené interní sítě závodu. Spojení serveru závodu s eldock.cz jde přes HTTPS.
+- **Jeden server = jeden závod:** domovský závod správce, který server spároval. Kód pro zařízení jde vytvořit jen
+  pro uživatele s domovským závodem v tomto závodě. Další závod firmy potřebuje vlastní server.
+
 ## 9. Provoz
 
 - Žurnál plní triggery SQLite (`ensureSyncTriggers`: start aplikace, `npm run sync:setup` po migracích v kontejneru).
