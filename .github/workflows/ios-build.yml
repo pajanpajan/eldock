@@ -24,10 +24,14 @@ jobs:
     runs-on: ${{ inputs.runner || 'macos-26' }}
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/client/package-lock.json
       - name: Xcode 26 nebo novější
         run: |
           major=$(xcodebuild -version | awk 'NR==1 { split($2, v, "."); print v[1] }')
