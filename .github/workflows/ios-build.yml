@@ -1,23 +1,42 @@
 # Fáze 73: kontrolní sestavení aplikace Eldock pro iOS (simulátor, bez podpisu) – spouští se jen ručně
-# (Actions → „iOS – sestavení pro simulátor“ → Run workflow). Minuty macOS se v soukromém repozitáři počítají 10×.
+# (Actions → „iOS – sestavení pro simulátor“ → Run workflow). Repozitář je veřejný, minuty macOS jsou zdarma.
+# Capacitor 8 potřebuje Xcode 26 nebo novější: macos-26 ho má jako výchozí, macos-15-intel (záloha, když GitHubu
+# chybí runnery Apple Silicon) má výchozí Xcode 16, proto krok níže vybere nejnovější nainstalované Xcode 26.
 # Podepsané sestavení pro iPhone a TestFlight až s účtem Apple Eldock s.r.o.
 name: iOS – sestavení pro simulátor
 
 on:
   workflow_dispatch:
+    inputs:
+      runner:
+        description: Runner macOS (macos-15-intel jako záloha při nedostatku runnerů Apple Silicon)
+        type: choice
+        options:
+          - macos-26
+          - macos-15-intel
+        default: macos-26
 
 permissions:
   contents: read
 
 jobs:
   ios-simulator:
-    runs-on: macos-15
+    runs-on: ${{ inputs.runner || 'macos-26' }}
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+      - name: Xcode 26 nebo novější
+        run: |
+          major=$(xcodebuild -version | awk 'NR==1 { split($2, v, "."); print v[1] }')
+          if [ "$major" -lt 26 ]; then
+            xcode=$(ls -d /Applications/Xcode_26*.app | grep -iv beta | sort -V | tail -n 1)
+            [ -n "$xcode" ] || { echo "::error::Na runneru chybí Xcode 26 – Capacitor 8 ho vyžaduje"; exit 1; }
+            sudo xcode-select -s "$xcode"
+          fi
+          xcodebuild -version
       # Rozhraní aplikace bere sdílené moduly webu ze src/ (štítky, formáty) a jejich závislosti z kořene
       - name: Závislosti webu
         run: npm ci --ignore-scripts
@@ -29,4 +48,4 @@ jobs:
         run: npx vite build && npx cap sync ios
       - name: Xcode – simulátor bez podpisu
         working-directory: apps/client/ios/App
-        run: xcodebuild -project App.xcodeproj -scheme App -configuration Debug -sdk iphonesimulator -destination "generic/platform=iOS Simulator" CODE_SIGNING_ALLOWED=NO build
+        run: xcodebuild -project App.xcodeproj -scheme App -configuration Debug -sdk iphonesimulator -destination "generic/platform=iOS Simulator" CODE_SIGNING_ALLOWED=NO -quiet build
