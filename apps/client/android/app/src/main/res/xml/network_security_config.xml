@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fáze 73: eldock.cz jede přes https. Server závodu v interní síti (fáze 72) jede přes http na adrese, kterou
+     zadá správce (IP nebo jméno počítače) – předem ji neznáme, proto nešifrované spojení povolené obecně.
+     Aplikace před http mimo místní adresy varuje už při párování. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

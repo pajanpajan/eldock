@@ -1,0 +1,32 @@
+# Fáze 73: kontrolní sestavení aplikace Eldock pro iOS (simulátor, bez podpisu) – spouští se jen ručně
+# (Actions → „iOS – sestavení pro simulátor“ → Run workflow). Minuty macOS se v soukromém repozitáři počítají 10×.
+# Podepsané sestavení pro iPhone a TestFlight až s účtem Apple Eldock s.r.o.
+name: iOS – sestavení pro simulátor
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ios-simulator:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      # Rozhraní aplikace bere sdílené moduly webu ze src/ (štítky, formáty) a jejich závislosti z kořene
+      - name: Závislosti webu
+        run: npm ci --ignore-scripts
+      - name: Závislosti aplikace
+        working-directory: apps/client
+        run: npm ci --ignore-scripts
+      - name: Rozhraní do projektu iOS
+        working-directory: apps/client
+        run: npx vite build && npx cap sync ios
+      - name: Xcode – simulátor bez podpisu
+        working-directory: apps/client/ios/App
+        run: xcodebuild -project App.xcodeproj -scheme App -configuration Debug -sdk iphonesimulator -destination "generic/platform=iOS Simulator" CODE_SIGNING_ALLOWED=NO build

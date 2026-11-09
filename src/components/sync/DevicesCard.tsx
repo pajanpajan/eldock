@@ -96,7 +96,7 @@ export function DevicesCard({ devices }: { devices: DeviceRow[] }) {
       </h2>
       <p className="text-sm text-muted-foreground">
         Aplikace Eldock pro Windows, iPhone a Android pracují s daty závodu i bez signálu v hale – úpravy (změny, provizoria, odstranění závad, fotky) odešlou po připojení. Offline zařízení synchronizujte aspoň jednou denně.
-        Aplikace pro Windows je ve zkušebním provozu, mobilní aplikace připravujeme.
+        Aplikace pro Windows a Android jsou ve zkušebním provozu (instalace mimo obchody), aplikace pro iPhone vyjde s účtem v App Store.
       </p>
 
       {pairing ? (
@@ -125,7 +125,7 @@ export function DevicesCard({ devices }: { devices: DeviceRow[] }) {
                 {pairing.code}
               </p>
               <p className="text-xs text-muted-foreground">
-                Aplikace Eldock pro Windows na tomto počítači:{" "}
+                Aplikace Eldock na tomto počítači nebo telefonu:{" "}
                 <a href={pairing.uri} className="font-medium text-primary underline-offset-2 hover:underline" data-testid="pair-open-app">
                   otevřít a spárovat jedním klikem
                 </a>

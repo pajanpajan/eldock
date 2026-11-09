@@ -5,7 +5,7 @@ data závodu offline, skenování QR štítků a úpravy z haly bez signálu, kt
 `src/server/services/sync.ts` (párování, token, stahování), `src/server/sync/mutations.ts` (fronta úprav),
 `src/server/sync/journal.ts` (žurnál změn), trasy `src/app/api/sync/v1/*`, pravidla `src/lib/sync.ts`, schémata
 a oprávnění úprav `src/lib/sync-mutations.ts`. Referenční klient (fáze 71): jádro synchronizace `src/sync-client/`
-(bez frameworku, jen `fetch` a Web Crypto) a aplikace pro Windows `apps/desktop`.
+(bez frameworku, jen `fetch` a Web Crypto) a aplikace Eldock `apps/client` (Windows fáze 71, Android a iOS fáze 73).
 
 ## 1. Základ
 
@@ -224,3 +224,31 @@ Instalace a omezení:
 - Žurnál plní triggery SQLite (`ensureSyncTriggers`: start aplikace, `npm run sync:setup` po migracích v kontejneru).
   Po obnově databáze ze zálohy spusťte `npm run sync:setup -- --new-epoch` – aplikace stáhnou vše znovu.
 - Retence: značky smazání v žurnálu a evidence úprav 90 dní, odpojená a vypršelá zařízení 30 dní, kódy párování 1 den.
+
+## 10. Mobilní aplikace (fáze 73)
+
+Aplikace Eldock pro Android a iOS (`apps/client`, Capacitor 8) je stejný klient jako aplikace pro Windows – stejné
+rozhraní, jádro `src/sync-client/` i protokol. Rozdíly:
+
+- Párování s `platform: "ANDROID"` / `"IOS"`, výchozí název zařízení podle telefonu. QR z Můj účet
+  (`eldock://pair?server=…&code=…`) aplikace naskenuje sama a spáruje rovnou; odkaz otevře aplikaci i z prohlížeče
+  v telefonu.
+- Token jen v Klíčence iOS (`afterFirstUnlockThisDeviceOnly`, bez synchronizace přes iCloud) nebo v Android
+  Keystore (AES-GCM); zálohy a přenos dat aplikace na nový telefon jsou vypnuté.
+- Data WebView (IndexedDB) smí iOS při nedostatku místa smazat. Klient proto drží i v souborech aplikace
+  (`DurableStore`, `src/sync-client/durable.ts`):
+  - neodeslané, převzaté a odmítnuté úpravy;
+  - fotky čekající na nahrání;
+  - údaje spárování (bez tokenu).
+
+  Při startu doplní, co v úložišti chybí, a data závodu stáhne znovu od kurzoru 0. Opakované odeslání obnovené
+  úpravy je bezpečné – server ji provede přesně jednou podle `id`.
+- Kdy se synchronizuje:
+  - při startu, návratu do popředí a připojení k síti;
+  - každých 5 minut v popředí;
+  - ručně.
+
+  Na pozadí aplikace nesynchronizuje. 24 h po poslední úplné synchronizaci (`policy.staleAfterHours`) ji
+  připomene místním oznámením.
+- Server závodu přes http v interní síti: Android povoluje nešifrované spoje a smíšený obsah WebView, iOS místní
+  síť (ATS `NSAllowsLocalNetworking`, dotaz na přístup k místní síti).

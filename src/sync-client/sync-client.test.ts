@@ -26,7 +26,7 @@ const { createPairingCode } = await import("@/server/services/sync");
 const { registerFile } = await import("@/server/services/file-registry");
 const { UPLOAD_ROOT } = await import("@/server/storage");
 const { SYNC_ENTITIES } = await import("@/server/sync/journal");
-const { MemoryStore, MemoryTokenStore, SyncEngine, ENTITY_NAMES, parseScan, labelState, sha256Hex } = await import("./index");
+const { DurableStore, MemoryBackup, MemoryStore, MemoryTokenStore, SyncEngine, ENTITY_NAMES, parseScan, labelState, sha256Hex } = await import("./index");
 
 const SERVER = "https://cloud.test";
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0xff, 0xd9]);
@@ -307,6 +307,40 @@ describe("jádro synchronizace proti trasám API", () => {
     await expect(engine.pair({ server: "cloud.test", code: "123", name: "Tablet" })).rejects.toThrow(/8 znaků/);
     control.online = false;
     await expect(engine.pair({ server: "cloud.test", code: "K7QX-3MZP", name: "Tablet" })).rejects.toMatchObject({ network: true });
+  });
+
+  it("fáze 73: úprava s fotkou zadaná offline přežije ztrátu dat aplikace (zrcadlo) a odejde po připojení", async () => {
+    const backup = new MemoryBackup();
+    const tokens = new MemoryTokenStore();
+    const phone = new DurableStore(new MemoryStore(), backup);
+    const engine = new SyncEngine({ store: phone, tokens, platform: "IOS", appVersion: "1.0.0-test", fetcher });
+    const { code } = await createPairingCode(prisma, { userId: "admin1" });
+    await engine.pair({ server: "cloud.test", code, name: "iPhone – hala A" });
+    await engine.sync();
+    control.online = false;
+    const ref = await engine.addLocalFile(new Blob([JPEG], { type: "image/jpeg" }), { name: "foto.jpg" });
+    await engine.queue(
+      "changeRequest.submit",
+      { id: "cr-app-0073-mobil", equipmentId: "e-tool", note: "Prasklý kryt přívodu", attachments: [{ url: ref, type: "PHOTO", fileName: "foto.jpg", mimeType: "image/jpeg", sizeBytes: JPEG.byteLength }] },
+      { label: "Zadání změny – VR-01", equipmentId: "e-tool" },
+    );
+    await phone.flush();
+
+    // iOS smazal data WebView: prázdné úložiště, token zůstal v Klíčence, zrcadlo v souborech aplikace
+    const inner = new MemoryStore();
+    const restored = new DurableStore(inner, backup);
+    expect(await restored.restore()).toEqual({ pairing: true, outbox: 1, files: 1 });
+    const again = new SyncEngine({ store: restored, tokens, platform: "IOS", appVersion: "1.0.0-test", fetcher });
+    expect(await again.status()).toMatchObject({ paired: true, pending: 1, server: SERVER });
+    control.online = true;
+    expect(await again.sync()).toMatchObject({ ok: true, applied: 1, rejected: 0 });
+    const attachment = await prisma.attachment.findFirstOrThrow({ where: { changeRequestId: "cr-app-0073-mobil" } });
+    expect(attachment.url).toMatch(/^\/api\/files\/photos\//);
+    // Data závodu se stáhla znovu, odeslaná úprava a nahraná fotka ze zrcadla zmizely
+    expect(records(inner, "Equipment")).toEqual(["e-sw", "e-tool"]);
+    await restored.flush();
+    expect(JSON.parse((await backup.readText("outbox.json")) ?? "null")).toEqual([]);
+    expect(JSON.parse((await backup.readText("files.json")) ?? "null")).toEqual({});
   });
 });
 

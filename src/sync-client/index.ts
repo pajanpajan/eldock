@@ -1,7 +1,8 @@
-// Fáze 71: jádro synchronizace aplikací Eldock (Windows, mobilní aplikace, server závodu) – protokol
+// Fáze 71 a 73: jádro synchronizace aplikací Eldock (Windows, Android, iOS, server závodu) – protokol
 // `docs/SYNC_API.md`. Bez frameworku a bez Node API: jen `fetch`, Web Crypto a rozhraní úložiště.
 
 export * from "./api";
+export * from "./durable";
 export * from "./engine";
 export * from "./entities";
 export * from "./files";

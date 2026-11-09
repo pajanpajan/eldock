@@ -9,11 +9,11 @@ import { createSqlitePrisma } from "../src/lib/sqlite-adapter";
 
 // Fáze 71: aplikace Eldock pro Windows (Electron) proti E2E serveru – spárování kódem z webu, první
 // synchronizace, štítek ze čtečky čárových kódů, zadání změny s fotkou a odstranění závady offline, odeslání
-// po připojení (výsledek vidět na webu) a odpojení. Předpoklad: `npm --prefix apps/desktop install` a
-// `npm --prefix apps/desktop run build` (jinak se test přeskočí – během E2E se v projektu nic nesestavuje).
+// po připojení (výsledek vidět na webu) a odpojení. Předpoklad: `npm --prefix apps/client install` a
+// `npm --prefix apps/client run build` (jinak se test přeskočí – během E2E se v projektu nic nesestavuje).
 test.describe.configure({ mode: "serial" });
 
-const DESKTOP = path.resolve("apps/desktop");
+const DESKTOP = path.resolve("apps/client");
 const ELECTRON = path.join(DESKTOP, "node_modules", "electron", "dist", "electron.exe");
 const BUILT = [path.join(DESKTOP, "dist", "index.html"), path.join(DESKTOP, "dist-electron", "main.cjs")];
 const OWNER = { name: "Radek Lisovna", email: "radek@lisovna-kolin.example", password: "Svorkovnice-X1-Kryt-2026" };
@@ -22,7 +22,7 @@ const QR = "B4E2E71C0D";
 
 test.describe("aplikace Eldock pro Windows", () => {
   test.use({ storageState: { cookies: [], origins: [] } });
-  test.skip(![ELECTRON, ...BUILT].every((file) => existsSync(file)), "Aplikace pro Windows není nainstalovaná a sestavená (apps/desktop)");
+  test.skip(![ELECTRON, ...BUILT].every((file) => existsSync(file)), "Aplikace pro Windows není nainstalovaná a sestavená (apps/client)");
 
   test("spárování kódem z webu, synchronizace, štítek, úpravy offline a odeslání po připojení", async ({ page }) => {
     test.setTimeout(300_000);

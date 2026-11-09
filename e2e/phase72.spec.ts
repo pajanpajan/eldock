@@ -10,10 +10,10 @@ import { createSqlitePrisma } from "../src/lib/sqlite-adapter";
 // Fáze 72: server závodu se skutečnými procesy – E2E cloud (port 3200) ↔ server závodu (Eldock.exe jako Node,
 // sestavený plant-server.cjs) ↔ aplikace pro Windows. Správce spáruje server kódem z Administrace → Zařízení přes
 // stránku správy serveru, tablet se spáruje se serverem závodu, provizorium z haly cloud provede jménem technika.
-// Předpoklad: `npm --prefix apps/desktop install` a `run build` (jinak se test přeskočí).
+// Předpoklad: `npm --prefix apps/client install` a `run build` (jinak se test přeskočí).
 test.describe.configure({ mode: "serial" });
 
-const DESKTOP = path.resolve("apps/desktop");
+const DESKTOP = path.resolve("apps/client");
 const ELECTRON = path.join(DESKTOP, "node_modules", "electron", "dist", "electron.exe");
 const BUILT = [path.join(DESKTOP, "dist", "index.html"), path.join(DESKTOP, "dist-electron", "main.cjs"), path.join(DESKTOP, "dist-electron", "plant-server.cjs")];
 const OWNER = { name: "Jana Lisovací", email: "jana@lisovna-mlada.example", password: "Rozvadec-Hala-2026" };
@@ -36,7 +36,7 @@ async function waitForPlant(child: ChildProcess) {
 
 test.describe("server závodu", () => {
   test.use({ storageState: { cookies: [], origins: [] } });
-  test.skip(![ELECTRON, ...BUILT].every((file) => existsSync(file)), "Aplikace pro Windows není nainstalovaná a sestavená (apps/desktop)");
+  test.skip(![ELECTRON, ...BUILT].every((file) => existsSync(file)), "Aplikace pro Windows není nainstalovaná a sestavená (apps/client)");
 
   test("správce spáruje server závodu, tablet v hale přes něj zapíše provizorium a cloud ho provede", async ({ page, context }) => {
     test.setTimeout(300_000);

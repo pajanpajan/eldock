@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="cs" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- Síť jen na zvolený server Eldock (http povoleno kvůli serveru závodu v interní síti a vývoji); stejné rozhraní
+         ve Windows (eldock-app://), Androidu (https://localhost) a iOS (capacitor://localhost) -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; connect-src 'self' https: http: ws://localhost:*; font-src 'self' data:; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#09090b" />
+    <title>Eldock</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./src/main.tsx"></script>
+  </body>
+</html>

@@ -55,6 +55,6 @@ npm-debug.log*
 public/*.mp4
 
 # Fáze 71: sestavená aplikace pro Windows a instalátor
-/apps/desktop/dist/
-/apps/desktop/dist-electron/
-/apps/desktop/release/
+/apps/client/dist/
+/apps/client/dist-electron/
+/apps/client/release/

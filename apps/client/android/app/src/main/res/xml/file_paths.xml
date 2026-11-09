@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fáze 73: jen soubory aplikace – fotka fotoaparátem z formuláře (WebView ji ukládá do Pictures aplikace)
+     a dočasné kopie dokumentů v mezipaměti. -->
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <external-files-path name="fotky" path="Pictures/" />
+    <cache-path name="mezipamet" path="." />
+</paths>
