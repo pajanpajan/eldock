@@ -24,6 +24,7 @@ Další screenshoty jsou v [`docs/screenshots/`](docs/screenshots/).
 - **CAE Back-Office:** KPI, tickety napříč závody s filtry a SLA, detail ticketu se zákresem a timeline, převzetí, nahrání revize (minor/major, editovatelný kusovník, demo „Vygenerovat upravené schéma“), storno, komentáře.
 - **Schválení údržbou:** porovnání revizí vedle sebe (synchronní zoom), posuvníkem a prolínáním, rozdíl kusovníku, „Potvrdit a propsat do systému“ / „Vrátit k přepracování“ s komentářem.
 - **Přihlašovací brána** (`/login`, přístupové heslo `ELDOCK_ACCESS_PASSWORD`) a přepínač účtů v hlavičce (ředitel, údržba, revizní technici, CAE projektant).
+- **Aplikace Eldock pro Windows (fáze 71):** offline klient údržby v `apps/desktop` (Electron) – spárování kódem z „Můj účet“ nebo odkazem `eldock://`, data závodu v zařízení (IndexedDB), token zašifrovaný Windows DPAPI, vyhledání zařízení a QR štítek webkamerou i čtečkou čárových kódů, detail zařízení s dokumentací offline, úpravy z haly ve frontě (změna s fotkami, komentář, provizorium, závada, součástka, fotka) a automatické odeslání po připojení. Jádro synchronizace `src/sync-client/` sdílí s budoucí mobilní aplikací a serverem závodu.
 - **Aplikace pro Windows, iOS a Android (fáze 70 – serverová část):** synchronizační API `/api/sync/v1` (`docs/SYNC_API.md`) – párování v „Můj účet“ kódem / QR, data závodu offline, fronta úprav z haly bez signálu (změny, provizoria, závady, fotky) a správa zařízení firmy v Administraci.
 - Instalovatelná PWA, tmavé vysoce kontrastní rozhraní, celé UI česky.
 
@@ -59,6 +60,7 @@ npm run dev                 # http://localhost:3000
 | `npm run verify` | typecheck + lint + test + build (povinné před každým commitem) |
 | `npm run backup` / `npm run backup:restore` | záloha databáze (a s úložištěm mimo server i souborů) podle `ELDOCK_BACKUP_*`; obnova jen do prázdné složky (`-- --list`, `-- --from s3 --to <složka> --files`) |
 | `npm run sync:setup` | triggery žurnálu změn pro aplikace (po migracích, idempotentní; `-- --new-epoch` po obnově databáze ze zálohy) |
+| `npm --prefix apps/desktop install` / `run build` / `run start` / `run dist` | aplikace pro Windows: závislosti (Electron), sestavení, spuštění, instalátor NSIS do `apps/desktop/release/` (zatím nepodepsaný) |
 | `npm run storage:registry` / `npm run storage:cleanup` | doplnění registru souborů pro starší soubory (vlastník podle odkazů) / úklid osiřelých souborů (`--dry-run`) |
 | `npm run db:seed` / `db:reset` / `db:migrate` / `db:studio` | práce s databází (Prisma) |
 

@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { deviceSession, revokeDevice } from "@/server/services/sync";
-import { syncJson, withDevice } from "@/server/sync/http";
+import { syncJson, syncPreflight, withDevice } from "@/server/sync/http";
 
 /** Fáze 70: relace aplikace – uživatel, oprávnění, výřez, závod, moduly a pravidla synchronizace (na začátku každé synchronizace). */
 export async function GET(request: Request) {
@@ -13,4 +13,9 @@ export async function DELETE(request: Request) {
     await revokeDevice(prisma, { deviceId: ctx.device.id, actorId: ctx.user.id, companyId: ctx.company.id, admin: false, reason: "odpojeno v aplikaci" });
     return syncJson({ ok: true });
   });
+}
+
+/** Fáze 71: předběžný dotaz CORS z rozhraní aplikací. */
+export function OPTIONS() {
+  return syncPreflight("GET, DELETE");
 }

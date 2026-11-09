@@ -1,0 +1,35 @@
+# Fáze 71: instalátor Eldock pro Windows (NSIS). Zatím NEPODEPSANÝ – SmartScreen při instalaci varuje.
+# Podpis po zápisu Eldock s.r.o.: Azure Artifact Signing, např.
+#   win.azureSignOptions: { publisherName, endpoint, certificateProfileName, codeSigningAccountName }
+# (přihlašovací údaje Azure jen v prostředí sestavení, nikdy v repozitáři).
+appId: cz.eldock.desktop
+productName: Eldock
+copyright: Copyright © 2026 Eldock
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/**
+  - dist-electron/**
+  - build/icon.png
+  - package.json
+asar: true
+protocols:
+  - name: Eldock
+    schemes:
+      - eldock
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: build/icon.png
+  artifactName: Eldock-Setup-${version}.${ext}
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Eldock
+  language: "1029"

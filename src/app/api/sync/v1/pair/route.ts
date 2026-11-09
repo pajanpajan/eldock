@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { SYNC_PLATFORMS } from "@/lib/sync";
 import { ipKeyOf } from "@/server/services/account-security";
 import { authenticateDevice, deviceSession, pairDevice } from "@/server/services/sync";
-import { readJson, syncError, syncErrorResponse, syncJson } from "@/server/sync/http";
+import { readJson, syncError, syncErrorResponse, syncJson, syncPreflight } from "@/server/sync/http";
 
 const pairSchema = z.object({
   code: z.string().min(4).max(20),
@@ -30,4 +30,9 @@ export async function POST(request: Request) {
   } catch (error) {
     return syncErrorResponse(error);
   }
+}
+
+/** Fáze 71: předběžný dotaz CORS z rozhraní aplikací. */
+export function OPTIONS() {
+  return syncPreflight("POST");
 }

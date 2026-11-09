@@ -7,7 +7,7 @@ import { contentTypeFor, resolveUploadPath } from "@/lib/files";
 import { prisma } from "@/lib/prisma";
 import { fileViewer } from "@/server/file-access";
 import { authenticateDevice } from "@/server/services/sync";
-import { bearerToken } from "@/server/sync/http";
+import { SYNC_CORS_HEADERS, bearerToken, syncPreflight } from "@/server/sync/http";
 
 const UPLOAD_ROOT = path.join(process.cwd(), "storage", "uploads");
 
@@ -16,14 +16,27 @@ const UPLOAD_ROOT = path.join(process.cwd(), "storage", "uploads");
  * Nahrané soubory (UUID) se cachují natrvalo, seed soubory den; opakovaný dotaz s ETagem → 304.
  * Fáze 68: soubor vydá jen přihlášení jeho vlastníka (registr `StoredFile`); cizí nebo neznámý soubor = 404.
  * Fáze 70: i aplikacím s tokenem zařízení (`Authorization: Bearer`) a s otiskem `X-Content-SHA256` z registru.
+ * Fáze 71: požadavek s tokenem dostane hlavičky CORS (rozhraní aplikace stahuje soubory z jiného původu); s tokenem
+ * se cookie relace nečte, odpověď bez tokenu CORS nedostane – cizí stránka soubor přihlášeného uživatele nepřečte.
  */
 export async function GET(request: Request, ctx: RouteContext<"/api/files/[...path]">) {
+  const token = bearerToken(request);
+  const response = await serveFile(request, ctx, token);
+  if (token) for (const [name, value] of Object.entries(SYNC_CORS_HEADERS)) response.headers.set(name, value);
+  return response;
+}
+
+/** Předběžný dotaz CORS aplikace (stažení s hlavičkou `Authorization`). */
+export function OPTIONS() {
+  return syncPreflight("GET");
+}
+
+async function serveFile(request: Request, ctx: RouteContext<"/api/files/[...path]">, token: string | null): Promise<Response> {
   const { path: segments } = await ctx.params;
   const filePath = resolveUploadPath(UPLOAD_ROOT, segments);
   if (!filePath) return new Response("Soubor nenalezen.", { status: 404 });
 
   const url = FILES_PREFIX + segments.join("/");
-  const token = bearerToken(request);
   const device = token ? await authenticateDevice(prisma, token) : null;
   if (token && !device) return new Response("Zařízení není spárované nebo bylo odpojeno.", { status: 401 });
   const [viewer, registered] = await Promise.all([

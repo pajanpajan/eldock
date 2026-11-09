@@ -1,5 +1,5 @@
 import { SYNC_API, SYNC_API_VERSION, SYNC_PLATFORMS, SYNC_POLICY, SYNC_SCHEMA_VERSION } from "@/lib/sync";
-import { syncJson } from "@/server/sync/http";
+import { syncJson, syncPreflight } from "@/server/sync/http";
 
 /**
  * Fáze 70: informace o serveru pro aplikace (bez přihlášení) – aplikace po naskenování QR ověří, že na adrese běží
@@ -15,4 +15,9 @@ export function GET() {
     pairing: { codeLength: 8, ttlMinutes: SYNC_POLICY.pairingTtlMinutes },
     platforms: SYNC_PLATFORMS,
   });
+}
+
+/** Fáze 71: předběžný dotaz CORS z rozhraní aplikací. */
+export function OPTIONS() {
+  return syncPreflight("GET");
 }

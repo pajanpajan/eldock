@@ -2,7 +2,7 @@ import { revalidatePath } from "next/cache";
 
 import { prisma } from "@/lib/prisma";
 import { pushMutations } from "@/server/sync/mutations";
-import { readJson, syncJson, withDevice } from "@/server/sync/http";
+import { readJson, syncJson, syncPreflight, withDevice } from "@/server/sync/http";
 
 const MAX_BODY = 8 * 1024 * 1024;
 
@@ -17,4 +17,9 @@ export async function POST(request: Request) {
     if (result.results.some((item) => item.status === "applied" && !item.duplicate)) revalidatePath("/", "layout");
     return syncJson(result);
   });
+}
+
+/** Fáze 71: předběžný dotaz CORS z rozhraní aplikací. */
+export function OPTIONS() {
+  return syncPreflight("POST");
 }

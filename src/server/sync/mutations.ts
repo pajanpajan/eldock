@@ -8,6 +8,7 @@ import { z } from "zod";
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import { ACCOUNT_TYPES, PERMISSION_LABELS, type Permission } from "@/lib/accounts";
 import { CLIENT_ID_PATTERN, SYNC_MUTATION_LABELS, SYNC_POLICY, effectivePerformedAt, type SyncMutationType } from "@/lib/sync";
+import { SYNC_MUTATION_PERMISSIONS, SYNC_MUTATION_SCHEMAS, type AttachmentPayload } from "@/lib/sync-mutations";
 import { OPEN_STATUSES, WorkflowError } from "@/lib/workflow/state-machine";
 import { setEquipmentPhoto } from "@/server/services/equipment-card";
 import { assertFileClaims } from "@/server/services/file-registry";
@@ -107,42 +108,14 @@ function define<S extends z.ZodType>(schema: S, spec: Spec<z.infer<S>>): Mutatio
   };
 }
 
-const id = z.string().min(1).max(64);
-const clientId = z.string().regex(CLIENT_ID_PATTERN, "id musí mít 8–64 znaků A–Z, a–z, 0–9, _ nebo -");
-const text = (max: number) => z.string().max(max).optional().nullable();
-/** Soubory jen z našeho úložiště (nahrané přes `POST /api/sync/v1/files`). */
-const fileUrl = z.string().max(300).regex(/^\/api\/files\/(photos|revisions|markups|voice)\/[\w./-]+$/, "Neplatná adresa souboru");
-const photoUrl = z.string().max(300).regex(/^\/api\/files\/photos\/[\w./-]+$/, "Neplatná adresa fotky");
-const attachment = z.object({
-  url: fileUrl,
-  type: z.enum(["PHOTO", "VOICE_NOTE", "MARKUP_IMAGE", "OTHER"]).optional(),
-  fileName: text(255),
-  mimeType: text(100),
-  sizeBytes: z.number().int().nonnegative().optional().nullable(),
-  caption: text(200),
-  originalUrl: fileUrl.optional().nullable(),
-});
-type AttachmentPayload = z.infer<typeof attachment>;
+// Schémata dat úprav sdílí server s aplikacemi (fáze 71: `lib/sync-mutations.ts`) – tady jen pravidla a provedení.
 const attachmentFiles = (attachments: AttachmentPayload[] | undefined) => (attachments ?? []).flatMap((item) => [item.url, item.originalUrl]);
-
-const submitSchema = z.object({
-  /** Id nového požadavku z aplikace (offline na něj jde navázat). */
-  id: clientId.optional(),
-  equipmentId: id,
-  priority: z.enum(["LOW", "NORMAL", "HIGH", "CRITICAL"]).optional(),
-  markupData: z.string().max(500_000).optional().nullable(),
-  markupSheet: z.number().int().positive().optional(),
-  markupImageUrl: fileUrl.optional().nullable(),
-  voiceTranscript: text(4000),
-  note: text(4000),
-  attachments: z.array(attachment).max(20).optional(),
-  safetyImpact: z.enum(["NONE_1_TO_1", "OPERATIONAL_ONLY", "SUBSTANTIAL_SAFETY_MOD"]).optional(),
-  requiresSoftwareUpdate: z.boolean().optional(),
-});
+const S = SYNC_MUTATION_SCHEMAS;
+const P = SYNC_MUTATION_PERMISSIONS;
 
 export const SYNC_MUTATIONS: Record<SyncMutationType, MutationHandler> = {
-  "changeRequest.submit": define(submitSchema, {
-    permissions: ["submitChange"],
+  "changeRequest.submit": define(S["changeRequest.submit"], {
+    permissions: P["changeRequest.submit"],
     refs: (input) => [["equipment", input.equipmentId]],
     files: (input) => [input.markupImageUrl, ...attachmentFiles(input.attachments)],
     async apply(db, ctx, input, at) {
@@ -163,8 +136,8 @@ export const SYNC_MUTATIONS: Record<SyncMutationType, MutationHandler> = {
       return { entity: "ChangeRequest", entityId: created.id, result: { number: created.number, merged: false } };
     },
   }),
-  "changeRequest.comment": define(z.object({ changeRequestId: id, comment: text(4000), attachments: z.array(attachment).max(20).optional() }), {
-    permissions: [],
+  "changeRequest.comment": define(S["changeRequest.comment"], {
+    permissions: P["changeRequest.comment"],
     refs: (input) => [["changeRequest", input.changeRequestId]],
     files: (input) => attachmentFiles(input.attachments),
     async apply(db, ctx, input) {
@@ -173,17 +146,9 @@ export const SYNC_MUTATIONS: Record<SyncMutationType, MutationHandler> = {
     },
   }),
   "temporaryMod.create": define(
-    z.object({
-      id: clientId.optional(),
-      equipmentId: id,
-      title: z.string().min(1).max(200),
-      description: z.string().min(1).max(4000),
-      days: z.union([z.literal(7), z.literal(14)]),
-      photoUrl: photoUrl.optional().nullable(),
-      createdByRole: z.string().max(60).optional().nullable(),
-    }),
+    S["temporaryMod.create"],
     {
-      permissions: ["temporaryMods"],
+      permissions: P["temporaryMod.create"],
       refs: (input) => [["equipment", input.equipmentId]],
       files: (input) => [input.photoUrl],
       async apply(db, ctx, input, at) {
@@ -192,8 +157,8 @@ export const SYNC_MUTATIONS: Record<SyncMutationType, MutationHandler> = {
       },
     },
   ),
-  "temporaryMod.restore": define(z.object({ temporaryModId: id, note: text(4000) }), {
-    permissions: ["temporaryMods"],
+  "temporaryMod.restore": define(S["temporaryMod.restore"], {
+    permissions: P["temporaryMod.restore"],
     refs: (input) => [["temporaryMod", input.temporaryModId]],
     base: (input) => ["temporaryMod", input.temporaryModId],
     async apply(db, ctx, input, at) {
@@ -201,8 +166,8 @@ export const SYNC_MUTATIONS: Record<SyncMutationType, MutationHandler> = {
       return { entity: "TemporaryModification", entityId: mod.id, result: { number: mod.number } };
     },
   }),
-  "defect.resolve": define(z.object({ defectId: id, note: z.string().min(1).max(4000), photoUrl: photoUrl.optional().nullable() }), {
-    permissions: ["resolveDefects"],
+  "defect.resolve": define(S["defect.resolve"], {
+    permissions: P["defect.resolve"],
     refs: (input) => [["defect", input.defectId]],
     files: (input) => [input.photoUrl],
     base: (input) => ["defect", input.defectId],
@@ -211,8 +176,8 @@ export const SYNC_MUTATIONS: Record<SyncMutationType, MutationHandler> = {
       return { entity: "InspectionDefect", entityId: defect.id };
     },
   }),
-  "component.replace": define(z.object({ componentId: id, equipmentId: id }), {
-    permissions: ["submitChange", "recordInspection"],
+  "component.replace": define(S["component.replace"], {
+    permissions: P["component.replace"],
     refs: (input) => [
       ["monitoredComponent", input.componentId],
       ["equipment", input.equipmentId],
@@ -223,8 +188,8 @@ export const SYNC_MUTATIONS: Record<SyncMutationType, MutationHandler> = {
       return { entity: "MonitoredComponent", entityId: component.id, result: { installedAt: component.installedAt.toISOString(), replacementStockCount: component.replacementStockCount } };
     },
   }),
-  "equipment.photo": define(z.object({ equipmentId: id, photoUrl: photoUrl.nullable() }), {
-    permissions: ["submitChange", "recordInspection"],
+  "equipment.photo": define(S["equipment.photo"], {
+    permissions: P["equipment.photo"],
     refs: (input) => [["equipment", input.equipmentId]],
     files: (input) => [input.photoUrl],
     base: (input) => ["equipment", input.equipmentId],

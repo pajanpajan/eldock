@@ -46,6 +46,8 @@ export async function proxy(request: NextRequest) {
   // zařízení (`Authorization: Bearer`) vydá /api/files podle vlastníka firmy zařízení.
   if (pathname.startsWith("/api/sync/")) return NextResponse.next();
   if (pathname.startsWith("/api/files/") && /^Bearer\s/i.test(request.headers.get("authorization") ?? "")) return NextResponse.next();
+  // Fáze 71: předběžný dotaz CORS rozhraní aplikace před stažením s tokenem (sám hlavičku Authorization nenese)
+  if (pathname.startsWith("/api/files/") && request.method === "OPTIONS" && /(^|[\s,])authorization($|[\s,])/i.test(request.headers.get("access-control-request-headers") ?? "")) return NextResponse.next();
 
   // Velín /superadmin (fáze 50): jen s cookie eldock-superadmin (vlastní podpis), jinak přihlášení velínu
   const superadmin = await isSuperadminToken(request.cookies.get(SUPERADMIN_COOKIE)?.value);

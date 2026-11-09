@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { storeUpload } from "@/server/file-access";
 import { sha256Hex } from "@/server/services/file-registry";
 import { findCompanyFileBySha } from "@/server/services/sync";
-import { syncError, syncJson, withDevice } from "@/server/sync/http";
+import { syncError, syncJson, syncPreflight, withDevice } from "@/server/sync/http";
 
 const decodeName = (value: string | null) => {
   try {
@@ -41,4 +41,9 @@ export async function POST(request: Request) {
     const { url, storedName } = await storeUpload({ dir, extension: check.extension, data, owner: ctx.owner, uploadedById: ctx.user.id, originalName: name });
     return syncJson({ url, sha256, sizeBytes: data.byteLength, mimeType: contentTypeFor(storedName), fileName: name, deduplicated: false }, 201);
   });
+}
+
+/** Fáze 71: předběžný dotaz CORS z rozhraní aplikací. */
+export function OPTIONS() {
+  return syncPreflight("POST");
 }

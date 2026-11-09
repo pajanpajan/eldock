@@ -7,7 +7,30 @@ import { SyncError, authenticateDevice, type DeviceContext } from "@/server/serv
 // Fáze 70: společné části Route Handlerů `/api/sync/v1/*` – token zařízení z hlavičky, odpovědi bez cache a chyby
 // ve tvaru `{ error: { code, message } }` (protokol `docs/SYNC_API.md`).
 
-const NO_STORE = { "Cache-Control": "no-store" };
+/**
+ * Fáze 71: API synchronizace volá přímo rozhraní aplikací (Electron, WebView mobilních aplikací) z jiného původu.
+ * Ověření jen tokenem v hlavičce `Authorization`, cookies API nečte → `*` nic neprozradí: prohlížeč s `*` nepustí
+ * požadavek s cookies (`credentials: "include"`) a cizí stránka bez tokenu dostane jen 401.
+ */
+export const SYNC_CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Expose-Headers": "X-Content-SHA256, ETag, Content-Disposition, Content-Length",
+} as const;
+
+const NO_STORE = { "Cache-Control": "no-store", ...SYNC_CORS_HEADERS };
+
+/** Předběžný dotaz CORS (`OPTIONS`) před požadavkem s tokenem nebo tělem JSON. */
+export function syncPreflight(methods: string) {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      ...SYNC_CORS_HEADERS,
+      "Access-Control-Allow-Methods": `${methods}, OPTIONS`,
+      "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Content-SHA256, If-None-Match",
+      "Access-Control-Max-Age": "86400",
+    },
+  });
+}
 
 export function syncJson(data: unknown, status = 200) {
   return Response.json(data, { status, headers: NO_STORE });

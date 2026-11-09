@@ -21,3 +21,5 @@ coverage
 .claude
 npm-debug.log*
 .env.production
+# Fáze 71: aplikace pro Windows (vlastní package.json, sestavuje se zvlášť)
+apps

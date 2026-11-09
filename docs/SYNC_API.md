@@ -1,16 +1,22 @@
 # Synchronizační API Eldocku (v1) – protokol pro aplikace Windows, iOS a Android
 
-Fáze 70 (2026-11-08). Serverová část pro aplikace údržbářů (fáze 71 Windows a server závodu, fáze 72 iOS / Android):
+Fáze 70 (2026-11-08). Serverová část pro aplikace údržbářů (fáze 71 aplikace pro Windows, fáze 72 server závodu, fáze 73 iOS / Android):
 data závodu offline, skenování QR štítků a úpravy z haly bez signálu, které se odešlou po připojení. Kód:
 `src/server/services/sync.ts` (párování, token, stahování), `src/server/sync/mutations.ts` (fronta úprav),
-`src/server/sync/journal.ts` (žurnál změn), trasy `src/app/api/sync/v1/*`, pravidla `src/lib/sync.ts`.
+`src/server/sync/journal.ts` (žurnál změn), trasy `src/app/api/sync/v1/*`, pravidla `src/lib/sync.ts`, schémata
+a oprávnění úprav `src/lib/sync-mutations.ts`. Referenční klient (fáze 71): jádro synchronizace `src/sync-client/`
+(bez frameworku, jen `fetch` a Web Crypto) a aplikace pro Windows `apps/desktop`.
 
 ## 1. Základ
 
-- Adresa API: `<server>/api/sync/v1` – `https://eldock.cz` nebo server závodu na interní síti (fáze 71). Adresu
+- Adresa API: `<server>/api/sync/v1` – `https://eldock.cz` nebo server závodu na interní síti (fáze 72). Adresu
   serveru nese QR kód párování.
 - Data JSON v UTF-8, časy ISO 8601 v UTC. Odpovědi API se necachují (`Cache-Control: no-store`).
 - Chyba = HTTP stav + `{ "error": { "code": "…", "message": "česká hláška pro uživatele" } }`.
+- **CORS (fáze 71):** API synchronizace a stažení souborů `/api/files/…` s tokenem posílají
+  `Access-Control-Allow-Origin: *` a zpřístupní hlavičky `X-Content-SHA256`, `ETag`; předběžné dotazy `OPTIONS` projdou.
+  Rozhraní aplikace (Electron, WebView) tak volá server přímo. Ověření je jen tokenem v hlavičce – cookies API nečte
+  a odpovědi s cookie relací CORS nemají.
 
 | Stav | Kód | Co udělat |
 |---|---|---|
@@ -38,7 +44,7 @@ POST /api/sync/v1/pair
 { "code": "K7QX-3MZP", "platform": "ANDROID", "name": "Samsung údržba hala A", "appVersion": "1.0.0" }
 ```
 
-`platform`: `WINDOWS` · `IOS` · `ANDROID` · `PLANT_SERVER` (server závodu, fáze 71) · `OTHER`.
+`platform`: `WINDOWS` · `IOS` · `ANDROID` · `PLANT_SERVER` (server závodu, fáze 72) · `OTHER`.
 Odpověď 201: `{ token, device: { id, name, platform, createdAt }, session }` (`session` = jako `GET /session`).
 Token (`eldk_…`) uložte do zabezpečeného úložiště systému (Keychain, Android Keystore, Windows DPAPI) – server
 má jen jeho SHA-256 a znovu ho neukáže. Párovat smí jen aktivní účet registrované firmy se závodem (obchodní demo
@@ -169,10 +175,10 @@ kolega): server ho připojí k otevřenému požadavku jako komentář s přílo
 Web ukazuje u zařízení „Nesynchronizováno déle než 24 h“ (Můj účet, Administrace → Zařízení) – aplikace má uživatele
 upozornit stejně (`policy.staleAfterHours`).
 
-## 8. Server závodu (fáze 71) a provoz
+## 8. Server závodu (fáze 72) a provoz
 
 - Server závodu poběží stejnou aplikací Eldock (Docker v síti závodu) se stejným API – aplikace v hale se párují
-  s ním (QR nese jeho adresu). Se cloudem se bude synchronizovat jako zařízení `PLANT_SERVER` (doplní fáze 71).
+  s ním (QR nese jeho adresu). Se cloudem se bude synchronizovat jako zařízení `PLANT_SERVER` (doplní fáze 72, na jádru `src/sync-client/`).
 - Žurnál plní triggery SQLite (`ensureSyncTriggers`: start aplikace, `npm run sync:setup` po migracích v kontejneru).
   Po obnově databáze ze zálohy spusťte `npm run sync:setup -- --new-epoch` – aplikace stáhnou vše znovu.
 - Retence: značky smazání v žurnálu a evidence úprav 90 dní, odpojená a vypršelá zařízení 30 dní, kódy párování 1 den.
