@@ -250,9 +250,10 @@ describe("fáze 63 – zařizovací předměty ve skutečném rozměru, zóny a 
       ],
     };
     const issues = floorplanNorms(draft);
-    const band = issues.find((issue) => issue.rule === "basin-band");
-    expect(band?.elementIds).toEqual(["z"]);
-    expect(band?.source).toContain("ČSN 33 2130 ed. 4");
+    // Fáze 74: zásuvka přímo nad umyvadlem = v umývacím prostoru (průmět umyvadla ke stěně)
+    const area = issues.find((issue) => issue.rule === "basin-area");
+    expect(area?.elementIds).toEqual(["z"]);
+    expect(area?.source).toContain("ČSN 33 2130");
     // Hrana vany 1800 mm sahá do x = 2400; spínač 30 cm od hrany je v zóně 2
     const zone = issues.find((issue) => issue.rule === "bath-zone");
     expect(zone?.elementIds).toEqual(["s"]);

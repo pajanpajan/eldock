@@ -202,7 +202,7 @@ const thermalSchema = z.object({
   operatingCurrents: z.array(z.object({ itemId: id, value: z.number().positive().max(6300).nullable() })).max(300),
 });
 
-/** Krok 3: parametry skříně a výpočtové proudy (autosave). */
+/** Krok 4 (oteplení): parametry skříně a výpočtové proudy (autosave). */
 export async function saveThermalInputsAction(input: z.input<typeof thermalSchema>): Promise<ActionResult> {
   const parsed = thermalSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Zkontrolujte parametry skříně (rozměry, teplota, soudobost 0–1)." };
@@ -217,7 +217,7 @@ export async function saveThermalInputsAction(input: z.input<typeof thermalSchem
   }
 }
 
-/** Krok 4: „Propustit dokumentaci do provozu“ – přiřazení pasportu ke kartě rozváděče. */
+/** Krok 5: „Propustit dokumentaci do provozu“ – přiřazení pasportu ke kartě rozváděče. */
 export async function releaseDocumentationAction(projectId: string, equipmentId: string): Promise<ActionResult<{ equipmentId: string; tag: string }>> {
   if (!id.safeParse(projectId).success || !id.safeParse(equipmentId).success) return { ok: false, error: "Vyberte rozváděč v Eldocku." };
   try {

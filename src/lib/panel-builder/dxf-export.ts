@@ -338,7 +338,7 @@ function writeSymbol(writer: DxfWriter, draft: FloorplanDraft, element: EditorEl
     const h = size * 1.3 * 0.35;
     writer.polyline(layer, [place({ x: -w, y: -h }), place({ x: w, y: -h }), place({ x: w, y: h }), place({ x: -w, y: h })], true);
     writer.line(layer, place({ x: -w, y: h }), place({ x: w, y: -h }));
-    writer.text("POPISY_A_KOTY", { x: at.x - w * 0.55, y: at.y - h * 0.2 }, size * 0.3, item.symbol, 0, "center");
+    writer.text("POPISY_A_KOTY", { x: at.x - w * 0.55, y: at.y - h * 0.2 }, size * 0.3, element.boardCode ?? item.symbol, 0, "center");
     return;
   }
   const parts = symbolParts(item, size, {});

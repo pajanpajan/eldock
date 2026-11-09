@@ -67,7 +67,7 @@ test("2D půdorys: akordeon palety, předměty X × Y, spotřebiče, úprava tra
   await palette.getByTestId("palette-expand-all").click();
   await expect(palette.locator('[data-group][data-open="false"]')).toHaveCount(0);
 
-  // 2) Umyvadlo a zásuvka nad ním (pás nad a pod umyvadlem), vana se žlutým rohem, kótami, přesným rozměrem a 45°
+  // 2) Umyvadlo a zásuvka vedle něj (fáze 74: níž než 1,2 m blíž než 0,2 m od umývacího prostoru), vana se žlutým rohem, kótami, přesným rozměrem a 45°
   await choose("Umyvadlo (600 × 450 mm)");
   await clickAt(3000, 1300);
   // Osazený předmět (při vkládání je u kurzoru ještě náhled se stejnou kresbou)
@@ -81,7 +81,7 @@ test("2D půdorys: akordeon palety, předměty X × Y, spotřebiče, úprava tra
   await choose("Vana (1700 × 750 mm)");
   await clickAt(6500, 1600);
   await page.keyboard.press("Escape");
-  await expect(page.getByTestId("plan-checks")).toContainText("nad nebo pod umyvadlem");
+  await expect(page.getByTestId("plan-checks")).toContainText("blíž než 20 cm od umývacího prostoru");
   await clickAt(6500, 1600);
   const placedBath = canvas.locator('[data-element="bath"]');
   const bath = placedBath.getByTestId("fixture");
@@ -123,6 +123,10 @@ test("2D půdorys: akordeon palety, předměty X × Y, spotřebiče, úprava tra
   await choose("Jednozásuvka");
   await clickAt(8000, 6950);
   await page.getByTestId("mode-done").click();
+  // Fáze 74: úchyty úseků má jen vybraný okruh – okruh se vybere v soupisu okruhů (nebo klikem na trasu)
+  await expect(canvas.getByTestId("route-segment")).toHaveCount(0);
+  await page.locator('[data-testid="circuit-row"][data-layer="sockets"]').first().click();
+  await expect(canvas.getByTestId("route-layer")).toHaveAttribute("data-focus", /.+/);
   const longest = async (axis: string, scope = "") =>
     page.evaluate(({ wanted, within }) => {
       const lines = [...document.querySelectorAll<SVGLineElement>(`${within} [data-testid="route-segment"][data-axis="${wanted}"]`)];

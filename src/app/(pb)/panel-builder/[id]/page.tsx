@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 
 import { PageTransition } from "@/components/layout/PageTransition";
 import { panelBuilderGuard } from "@/components/panel-builder/access";
-import { PanelSteps } from "@/components/panel-builder/PanelSteps";
+import { NextStepBar, PanelSteps } from "@/components/panel-builder/PanelSteps";
 import { ProjectHeader } from "@/components/panel-builder/ProjectHeader";
 import { RecognitionWorkspace, type WorkspaceItem } from "@/components/panel-builder/RecognitionWorkspace";
 import { configFromComponent, parseConfig } from "@/lib/panel-builder/configurator";
@@ -105,6 +105,8 @@ export default async function PanelProjectPage({ params }: PageProps<"/panel-bui
         chipsJson={project.company?.circuitChipsJson ?? null}
         boardManufacturers={boardManufacturers}
       />
+      {/* Fáze 75: výrazný další krok dole na stránce */}
+      <NextStepBar project={project} current="recognition" />
     </PageTransition>
   );
 }

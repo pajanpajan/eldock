@@ -54,7 +54,7 @@ export const isHiddenManufacturer = (name: string | null | undefined) => {
 
 /**
  * Výrobci samotných ventilátorů skříní (fáze 51): v rozcestníku katalogu ani v konfigurátoru nejsou,
- * nabízí je jen výběr ventilátoru v kroku 3 (Oteplení).
+ * nabízí je jen výběr ventilátoru v kroku 4 (Oteplení).
  */
 export const FAN_ONLY_MANUFACTURERS = ["Pfannenberg", "STEGO"] as const;
 export const isFanOnlyManufacturer = (name: string | null | undefined) => FAN_ONLY_MANUFACTURERS.some((brand) => normalizeSearch(brand) === normalizeSearch(name ?? "").trim());

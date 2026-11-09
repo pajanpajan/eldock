@@ -5,7 +5,7 @@ import { PageTransition } from "@/components/layout/PageTransition";
 import { panelBuilderGuard } from "@/components/panel-builder/access";
 import { DocumentationActions } from "@/components/panel-builder/documentation/DocumentationActions";
 import { DocumentationSheets } from "@/components/panel-builder/documentation/DocumentationSheets";
-import { PanelSteps } from "@/components/panel-builder/PanelSteps";
+import { NextStepBar, PanelSteps } from "@/components/panel-builder/PanelSteps";
 import { ProjectHeader } from "@/components/panel-builder/ProjectHeader";
 import { getPanelProject, getReleaseTargets } from "@/server/queries/panel-builder";
 import { requestOrigin } from "@/server/request-url";
@@ -23,7 +23,7 @@ export async function generateMetadata({ params }: PageProps<"/panel-builder/[id
   return { title: project ? `${project.code} – dokumentace rozváděče` : "Dokumentace rozváděče" };
 }
 
-// Krok 4: kompletní elaborát rozváděče (6 listů A4) k tisku / PDF a propuštění do provozu.
+// Krok 5: kompletní elaborát rozváděče (6 listů A4) k tisku / PDF a propuštění do provozu.
 export default async function PanelDocumentationPage({ params }: PageProps<"/panel-builder/[id]/documentation">) {
   const guard = await panelBuilderGuard();
   if (guard) return guard;
@@ -84,6 +84,8 @@ export default async function PanelDocumentationPage({ params }: PageProps<"/pan
         />
         <DocumentationSheets data={data} />
       </div>
+      {/* Fáze 75: výrazný další krok dole na stránce */}
+      <NextStepBar project={project} current="documentation" />
     </PageTransition>
   );
 }

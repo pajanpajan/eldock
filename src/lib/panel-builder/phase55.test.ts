@@ -131,7 +131,9 @@ describe("kusovník domovní instalace", () => {
     const decento = compileFloorplanBom({ ...emptyDraft(), series: "ABB|Decento", color: seriesColors("ABB|Decento")[0].id, elements: [el("z", "socket")] });
     expect(decento.find((row) => row.category === "Zásuvky")?.mpn).toBeNull();
     const twoTone = compileFloorplanBom({ ...emptyDraft(), series: "ABB|Zoni", color: "abb-zoni-241-141", elements: [el("z", "socket")] });
-    expect(twoTone.find((row) => row.category === "Zásuvky")).toMatchObject({ mpn: "6619T-A06657 241", verified: false });
+    // Fáze 74: dvoubarevný kód „241/141“ = rámeček 241 / kryt 141 – zásuvka (kryt) dostane 141, rámeček 241 (obojí ověřit)
+    expect(twoTone.find((row) => row.category === "Zásuvky")).toMatchObject({ mpn: "6619T-A06657 141", verified: false });
+    expect(twoTone.find((row) => row.category === "Rámečky")).toMatchObject({ mpn: "3901T-A00010 241", verified: false });
     expect(compileFloorplanBom({ ...emptyDraft(), elements: [el("z", "socket")] }, { installation: "smart_retrofit" }).find((row) => row.category === "Instalační krabice")?.mpn).toBe("KPR 68");
   });
 });

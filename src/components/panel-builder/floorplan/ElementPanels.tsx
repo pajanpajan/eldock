@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils";
 
 import { AddToFrameControl } from "./FrameAssemblyPalette";
 import { FixtureControls } from "./FixtureShape";
+import type { BasinZone } from "@/lib/panel-builder/fixtures";
 import { protectionLabel, type ApplianceSpec } from "@/lib/panel-builder/appliances";
 
 /** Měřítko značky v detailu prvku (1 = 300 mm v půdorysu). */
@@ -100,6 +101,8 @@ export function ElementDetail({
   onRotateStep,
   onEditAppliances,
   socketCircuit,
+  board,
+  onBasinZone,
 }: {
   draft: FloorplanDraft;
   element: EditorElement;
@@ -120,6 +123,10 @@ export function ElementDetail({
   onEditAppliances: () => void;
   /** Fáze 65: okruh zásuvky (jen jedno- / dvojzásuvky). */
   socketCircuit?: ReactNode;
+  /** Fáze 74: rozváděč prvku (výběr) / údaje podružného rozváděče. */
+  board?: ReactNode;
+  /** Fáze 74: ochranná zóna umyvadla (volba nákresu). */
+  onBasinZone?: (zone: BasinZone) => void;
 }) {
   const item = paletteItem(element.item)!;
   const isPanel = item.kind === "panel" || item.kind === "riser" || item.kind === "fixture";
@@ -149,6 +156,7 @@ export function ElementDetail({
         </div>
       </div>
       {socketCircuit}
+      {board}
       {/* Fáze 57: měřítko značky (násobek velikosti značek nákresu) */}
       <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground" role="radiogroup" aria-label="Měřítko značky">
         Měřítko značky:
@@ -160,7 +168,7 @@ export function ElementDetail({
       </div>
       {item.kind === "fixture" ? (
         // Fáze 63: přesný rozměr X × Y a natočení po 90° / 45°
-        <FixtureControls element={element} onChange={onChange} onRotate={onRotateStep} />
+        <FixtureControls element={element} onChange={onChange} onRotate={onRotateStep} basinZone={draft.basinZone} onBasinZone={onBasinZone} />
       ) : isPanel ? (
         <p className="text-xs text-muted-foreground">
           {item.kind === "riser"
@@ -258,7 +266,7 @@ export function ElementDetail({
                 </select>
               </label>
               <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-                Barva
+                Barva klapky / krytu
                 <select value={element.color ?? ""} onChange={(event) => onChange({ color: event.target.value || null })} className="h-8 rounded-md border border-input bg-transparent px-2 text-sm text-foreground dark:bg-input/30" aria-label="Barva prvku">
                   <option value="">podle nákresu</option>
                   {/* Fáze 55: jen barvy řady prvku (ABB 2026 s kódy), jinak obecné skupiny */}
@@ -269,8 +277,26 @@ export function ElementDetail({
                   ))}
                 </select>
               </label>
+              {/* Fáze 74: barva rámečku zvlášť (výchozí podle nákresu / stejná jako klapka) */}
+              <label className="col-span-2 flex flex-col gap-1 text-xs text-muted-foreground">
+                Barva rámečku
+                <select
+                  value={element.frameColor ?? ""}
+                  onChange={(event) => onChange({ frameColor: event.target.value || undefined })}
+                  className="h-8 rounded-md border border-input bg-transparent px-2 text-sm text-foreground dark:bg-input/30"
+                  aria-label="Barva rámečku prvku"
+                  data-testid="element-frame-color"
+                >
+                  <option value="">podle nákresu ({draft.frameColor ? "vlastní barva rámečku" : "stejná jako klapka"})</option>
+                  {seriesColors(element.series ?? draft.series).map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <p className="col-span-2 text-[11px] text-muted-foreground" data-testid="element-appearance">
-                {appearanceLabel(element.series ?? draft.series, element.color ?? draft.color)}
+                {appearanceLabel(element.series ?? draft.series, element.color ?? draft.color, element.frameColor ?? draft.frameColor ?? element.color ?? draft.color)}
               </p>
             </div>
           ) : null}

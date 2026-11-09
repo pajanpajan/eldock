@@ -2,7 +2,9 @@
 // (souběžné stěny sousedních místností se sloučí, úsečky se rozdělí v průsečících a styčných bodech, mezery do
 // tloušťky zdi se přemostí). Trasa mezi dvěma body = kolmice ke stěně + nejkratší cesta po stěnách (Dijkstra)
 // + kolmice k cíli – tak, jak se kabel skutečně vede v instalačních zónách podél stěn (ČSN 33 2130 ed. 4).
-// Čisté funkce bez UI; měřidlo `wallMetric` se dosadí do `floorMetric` (cable-routing.ts).
+// Fáze 74: vnitřní stěna má vždy přednost – obvodová stěna (za ní do 0,7 m žádná místnost) stojí v hledání cesty
+// `EXTERIOR_COST`× víc, délka kabelu zůstává skutečná; bod uprostřed místnosti (svítidlo) se smí připojit k blízké
+// vnitřní stěně místo obvodové. Čisté funkce bez UI; měřidlo `wallMetric` se dosadí do `floorMetric` (cable-routing.ts).
 
 import type { RouteMetric, RoutePoint } from "./cable-routing";
 
@@ -18,12 +20,36 @@ interface Point {
   y: number;
 }
 
+export interface WallEdge {
+  a: number;
+  b: number;
+  /** Skutečná délka úseku [mm]. */
+  length: number;
+  /** Fáze 74: obvodová stěna (za ní žádná místnost) – v hledání cesty `EXTERIOR_COST`× dražší. */
+  exterior: boolean;
+}
+
 export interface WallGraph {
   nodes: Point[];
-  /** Hrany grafu (úseky stěn) – indexy uzlů a délka [mm]. */
-  edges: { a: number; b: number; length: number }[];
+  /** Hrany grafu (úseky stěn) – indexy uzlů, délka [mm] a druh stěny. */
+  edges: WallEdge[];
   adjacency: { to: number; edge: number }[][];
 }
+
+/** Fáze 74: místnost pro rozlišení vnitřní a obvodové stěny (obdélník nebo mnohoúhelník). */
+export interface WallRoom {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  points?: readonly Point[] | null;
+}
+
+/** Fáze 74: kolikrát je metr po obvodové stěně „dražší“ než po vnitřní (přednost vnitřních stěn). */
+export const EXTERIOR_COST = 4;
+/** Fáze 74: bod se smí připojit k vnitřní stěně místo obvodové, je-li kolmice k ní nejvýš o tolik delší (nebo nejvýš 1,5×). */
+export const INTERIOR_ATTACH_MM = 600;
+const costOf = (edge: WallEdge) => edge.length * (edge.exterior ? EXTERIOR_COST : 1);
 
 /** Tolerance shody souřadnic [mm] (rastr editoru je 50 mm, podklad z PDF může mít drobné odchylky). */
 const EPS = 2;
@@ -97,6 +123,33 @@ function intersection(a: WallSegment, b: WallSegment): number | null {
   return t >= -tolA && t <= 1 + tolA && u >= -tolB && u <= 1 + tolB ? Math.min(1, Math.max(0, t)) : null;
 }
 
+/** Bod uvnitř místnosti (obdélník / mnohoúhelník, paprskový test). */
+function insideRoom(room: WallRoom, point: Point): boolean {
+  const polygon = room.points && room.points.length >= 3 ? room.points : null;
+  if (!polygon) return point.x > room.x && point.x < room.x + room.w && point.y > room.y && point.y < room.y + room.h;
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const a = polygon[i];
+    const b = polygon[j];
+    if (a.y > point.y !== b.y > point.y && point.x < ((b.x - a.x) * (point.y - a.y)) / (b.y - a.y || 1e-9) + a.x) inside = !inside;
+  }
+  return inside;
+}
+
+/**
+ * Fáze 74: obvodová stěna = na jedné její straně do `bridgeMm` není žádná místnost (vnější líc domu). Vnitřní stěna má
+ * místnost po obou stranách (společná stěna, mezera na tloušťku zdi, příčka uvnitř místnosti).
+ */
+export function isExteriorWall(a: Point, b: Point, rooms: readonly WallRoom[], bridgeMm = BRIDGE_MM): boolean {
+  const length = dist(a, b);
+  if (length < EPS || !rooms.length) return false;
+  const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  const normal = { x: -(b.y - a.y) / length, y: (b.x - a.x) / length };
+  const probes = [10, 150, 350, Math.max(20, bridgeMm - 10)];
+  const occupied = (side: 1 | -1) => probes.some((offset) => rooms.some((room) => insideRoom(room, { x: mid.x + normal.x * offset * side, y: mid.y + normal.y * offset * side })));
+  return !(occupied(1) && occupied(-1));
+}
+
 /** Kolmý průmět bodu na úsečku: parametr t ∈ [0, 1], bod a vzdálenost. */
 function project(point: Point, segment: WallSegment) {
   const dx = segment.x2 - segment.x1;
@@ -111,7 +164,7 @@ function project(point: Point, segment: WallSegment) {
  * Rovinný graf stěn: sloučení souběžných stěn, rozdělení úseček v průsečících a v koncových bodech jiných stěn
  * (T-spoj), přemostění mezer mezi místnostmi do `bridgeMm` (tloušťka zdi / nepřesný zákres).
  */
-export function buildWallGraph(input: readonly WallSegment[], options: { bridgeMm?: number } = {}): WallGraph {
+export function buildWallGraph(input: readonly WallSegment[], options: { bridgeMm?: number; rooms?: readonly WallRoom[] } = {}): WallGraph {
   const segments = mergeCollinear(input);
   const nodes: Point[] = [];
   const index = new Map<string, number>();
@@ -123,10 +176,10 @@ export function buildWallGraph(input: readonly WallSegment[], options: { bridgeM
     index.set(key, nodes.length - 1);
     return nodes.length - 1;
   };
-  const edges: WallGraph["edges"] = [];
-  const addEdge = (a: number, b: number) => {
+  const edges: WallEdge[] = [];
+  const addEdge = (a: number, b: number, exterior = false) => {
     if (a === b) return;
-    edges.push({ a, b, length: dist(nodes[a], nodes[b]) });
+    edges.push({ a, b, length: dist(nodes[a], nodes[b]), exterior });
   };
   for (const [i, segment] of segments.entries()) {
     const cuts = new Set<number>([0, 1]);
@@ -148,6 +201,8 @@ export function buildWallGraph(input: readonly WallSegment[], options: { bridgeM
   }
   // Přemostění mezer mezi komponentami (místnosti nakreslené s mezerou na tloušťku zdi)
   const bridge = options.bridgeMm ?? BRIDGE_MM;
+  /** Přemostění mezery vede tloušťkou vnitřní zdi – nikdy obvodová stěna. */
+  const bridges = new Set<WallEdge>();
   for (let pass = 0; pass < 6; pass++) {
     const component = components(nodes.length, edges);
     if (new Set(component).size <= 1) break;
@@ -167,12 +222,19 @@ export function buildWallGraph(input: readonly WallSegment[], options: { bridgeM
       const edge = edges[candidate.edge];
       const split = candidate.t <= 1e-6 ? edge.a : candidate.t >= 1 - 1e-6 ? edge.b : nodeAt(candidate.at);
       if (split !== edge.a && split !== edge.b) {
-        edges[candidate.edge] = { a: edge.a, b: split, length: dist(nodes[edge.a], nodes[split]) };
-        addEdge(split, edge.b);
+        const first: WallEdge = { a: edge.a, b: split, length: dist(nodes[edge.a], nodes[split]), exterior: edge.exterior };
+        edges[candidate.edge] = first;
+        addEdge(split, edge.b, edge.exterior);
+        if (bridges.delete(edge)) bridges.add(first).add(edges[edges.length - 1]);
       }
+      const before = edges.length;
       addEdge(candidate.node, split);
+      if (edges.length > before) bridges.add(edges[edges.length - 1]);
     }
   }
+  // Fáze 74: druh stěny podle místností – obvodová stěna nemá za sebou místnost
+  const rooms = options.rooms ?? [];
+  if (rooms.length) for (const edge of edges) edge.exterior = !bridges.has(edge) && isExteriorWall(nodes[edge.a], nodes[edge.b], rooms, bridge);
   const adjacency: WallGraph["adjacency"] = nodes.map(() => []);
   for (const [e, edge] of edges.entries()) {
     adjacency[edge.a].push({ to: edge.b, edge: e });
@@ -195,14 +257,23 @@ interface Attach {
   stub: number;
 }
 
-/** Nejbližší místo na stěně pro bod (kolmice ke stěně); bez stěn null. */
-function attach(graph: WallGraph, point: Point): Attach | null {
+/**
+ * Místa připojení bodu ke stěně (kolmice): nejbližší stěna a – je-li obvodová – i nejbližší vnitřní stěna, pokud je
+ * kolmice k ní nejvýš o `INTERIOR_ATTACH_MM` delší nebo nejvýš 1,5× delší (svítidlo uprostřed místnosti, prvek u rohu
+ * s vnitřní stěnou). Bez stěn prázdné.
+ */
+function attachments(graph: WallGraph, point: Point): Attach[] {
   let best: Attach | null = null;
+  let interior: Attach | null = null;
   for (const [e, edge] of graph.edges.entries()) {
     const projected = project(point, { x1: graph.nodes[edge.a].x, y1: graph.nodes[edge.a].y, x2: graph.nodes[edge.b].x, y2: graph.nodes[edge.b].y });
-    if (!best || projected.distance < best.stub - 1e-9) best = { edge: e, t: projected.t, at: projected.at, stub: projected.distance };
+    const candidate = { edge: e, t: projected.t, at: projected.at, stub: projected.distance };
+    if (!best || projected.distance < best.stub - 1e-9) best = candidate;
+    if (!edge.exterior && (!interior || projected.distance < interior.stub - 1e-9)) interior = candidate;
   }
-  return best;
+  if (!best) return [];
+  if (!graph.edges[best.edge].exterior || !interior || interior.stub > Math.max(best.stub + INTERIOR_ATTACH_MM, best.stub * 1.5)) return [best];
+  return [best, interior];
 }
 
 interface Search {
@@ -211,15 +282,15 @@ interface Search {
   previous: Int32Array;
 }
 
-/** Dijkstra z místa na stěně (dva počáteční uzly hrany s částečnou délkou). */
+/** Dijkstra z místa na stěně (dva počáteční uzly hrany s částečnou cenou); obvodová stěna stojí `EXTERIOR_COST`×. */
 function search(graph: WallGraph, from: Attach): Search {
   const count = graph.nodes.length;
   const distance = new Float64Array(count).fill(Infinity);
   const previous = new Int32Array(count).fill(-1);
   const done = new Uint8Array(count);
   const edge = graph.edges[from.edge];
-  distance[edge.a] = from.t * edge.length;
-  distance[edge.b] = (1 - from.t) * edge.length;
+  distance[edge.a] = from.t * costOf(edge);
+  distance[edge.b] = (1 - from.t) * costOf(edge);
   // Jednoduchá prioritní fronta (binární halda)
   const heap: [number, number][] = [];
   const push = (node: number, value: number) => {
@@ -256,7 +327,7 @@ function search(graph: WallGraph, from: Attach): Search {
     if (done[node] || value > distance[node]) continue;
     done[node] = 1;
     for (const next of graph.adjacency[node]) {
-      const candidate = value + graph.edges[next.edge].length;
+      const candidate = value + costOf(graph.edges[next.edge]);
       if (candidate < distance[next.to]) {
         distance[next.to] = candidate;
         previous[next.to] = node;
@@ -267,19 +338,22 @@ function search(graph: WallGraph, from: Attach): Search {
   return { from, distance, previous };
 }
 
-/** Délka a lomená čára po stěnách mezi dvěma místy na stěně. */
-function along(graph: WallGraph, found: Search, to: Attach): { length: number; points: Point[] } {
+const polylineLength = (points: readonly Point[]) => points.reduce((sum, point, index) => (index ? sum + dist(points[index - 1], point) : 0), 0);
+
+/** Cena (přednost vnitřních stěn), skutečná délka a lomená čára po stěnách mezi dvěma místy na stěně. */
+function along(graph: WallGraph, found: Search, to: Attach): { cost: number; length: number; points: Point[] } {
   const edge = graph.edges[to.edge];
-  const viaA = found.distance[edge.a] + to.t * edge.length;
-  const viaB = found.distance[edge.b] + (1 - to.t) * edge.length;
-  let length = Math.min(viaA, viaB);
+  const viaA = found.distance[edge.a] + to.t * costOf(edge);
+  const viaB = found.distance[edge.b] + (1 - to.t) * costOf(edge);
+  const cost = Math.min(viaA, viaB);
   // Obě místa na téže hraně: přímo po ní
-  if (to.edge === found.from.edge && Math.abs(to.t - found.from.t) * edge.length <= length) return { length: Math.abs(to.t - found.from.t) * edge.length, points: [found.from.at, to.at] };
-  if (!Number.isFinite(length)) return { length: Infinity, points: [] };
+  const direct = Math.abs(to.t - found.from.t);
+  if (to.edge === found.from.edge && direct * costOf(edge) <= cost) return { cost: direct * costOf(edge), length: direct * edge.length, points: [found.from.at, to.at] };
+  if (!Number.isFinite(cost)) return { cost: Infinity, length: Infinity, points: [] };
   const chain: number[] = [];
   for (let node = viaA <= viaB ? edge.a : edge.b; node !== -1; node = found.previous[node]) chain.unshift(node);
-  length = Math.min(viaA, viaB);
-  return { length, points: [found.from.at, ...chain.map((node) => graph.nodes[node]), to.at] };
+  const points = [found.from.at, ...chain.map((node) => graph.nodes[node]), to.at];
+  return { cost, length: polylineLength(points), points };
 }
 
 /**
@@ -288,26 +362,31 @@ function along(graph: WallGraph, found: Search, to: Attach): { length: number; p
  */
 export function wallMetric(graph: WallGraph, fallback: RouteMetric): RouteMetric {
   if (!graph.edges.length) return fallback;
-  const attachments = new Map<string, Attach | null>();
+  const attached = new Map<string, Attach[]>();
   const searches = new Map<string, Search>();
   const key = (point: Point) => `${Math.round(point.x)}:${Math.round(point.y)}`;
   const attachOf = (point: Point) => {
     const k = key(point);
-    if (!attachments.has(k)) attachments.set(k, attach(graph, point));
-    return attachments.get(k)!;
+    if (!attached.has(k)) attached.set(k, attachments(graph, point));
+    return attached.get(k)!;
   };
   const searchOf = (point: Point, from: Attach) => {
-    const k = key(point);
+    const k = `${key(point)}|${from.edge}`;
     if (!searches.has(k)) searches.set(k, search(graph, from));
     return searches.get(k)!;
   };
+  // Fáze 74: nejlevnější kombinace míst připojení (kolmice skutečnou délkou, stěny podle druhu); délka je skutečná
   const route = (a: RoutePoint, b: RoutePoint) => {
-    const from = attachOf(a);
-    const to = attachOf(b);
-    if (!from || !to) return null;
-    const result = along(graph, searchOf(a, from), to);
-    if (!Number.isFinite(result.length)) return null;
-    return { length: from.stub + result.length + to.stub, points: [a, ...result.points, b] };
+    let best: { cost: number; length: number; points: Point[] } | null = null;
+    for (const from of attachOf(a)) {
+      for (const to of attachOf(b)) {
+        const result = along(graph, searchOf(a, from), to);
+        if (!Number.isFinite(result.cost)) continue;
+        const cost = from.stub + result.cost + to.stub;
+        if (!best || cost < best.cost - 1e-6) best = { cost, length: from.stub + result.length + to.stub, points: [a, ...result.points, b] };
+      }
+    }
+    return best;
   };
   return {
     distance(a, b) {

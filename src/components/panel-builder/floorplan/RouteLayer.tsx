@@ -36,6 +36,11 @@ export function RouteLayer({
   drag = null,
   onSegmentDown,
   onReset,
+  colorOf,
+  focusId = null,
+  hoverId = null,
+  onPick,
+  links,
 }: {
   circuits: DisplayCircuit[];
   bus: DisplayCircuit | null;
@@ -43,35 +48,52 @@ export function RouteLayer({
   onPaper: boolean;
   unit: number;
   stroke: number;
+  /** Fáze 74: úchyty úseků má jen vybraný okruh (`focusId`), ostatní trasy se nedají omylem posunout. */
   editable?: boolean;
   drag?: RouteDrag | null;
   /** Stisk úseku – tažení; dva stisky na stejném úseku = dvojklik (odskok) rozpozná editor. */
   onSegmentDown?: (event: ReactPointerEvent, circuit: DisplayCircuit, leg: DisplayLeg, index: number) => void;
   onReset?: (circuit: DisplayCircuit) => void;
+  /** Fáze 74: barva okruhu (stejná v soupisu okruhů i na plátně). */
+  colorOf?: (id: string, index: number) => string;
+  /** Fáze 74: vybraný okruh (ostatní ztlumené) a okruh pod myší v soupisu (zvýraznění). */
+  focusId?: string | null;
+  hoverId?: string | null;
+  /** Fáze 74: klik na trasu okruhu = výběr okruhu. */
+  onPick?: (circuit: DisplayCircuit) => void;
+  /** Fáze 75: odkaz okruhu (chytré PDF – trasa i štítek odkazují na řádek okruhu v rozcestníku dokumentace). */
+  links?: Readonly<Record<string, string>>;
 }) {
   const cad = view === "cad";
   const ink = onPaper ? "#111827" : "#e4e4e7";
   const halo = onPaper ? "#ffffff" : "#09090b";
   const legPoints = (leg: DisplayLeg) => (drag && drag.key === leg.key ? drag.points : leg.points);
   const all = bus ? [...circuits, bus] : circuits;
+  const lead = focusId ?? hoverId;
   return (
-    <g data-testid="route-layer" data-view={view}>
+    <g data-testid="route-layer" data-view={view} data-focus={focusId ?? undefined}>
       {all.map((circuit, index) => {
         const isBus = circuit.id === "bus";
         const runs = circuit.legs.map(legPoints);
-        const color = isBus ? "#22c55e" : ROUTE_COLORS[index % ROUTE_COLORS.length];
+        const color = isBus ? "#22c55e" : colorOf ? colorOf(circuit.id, index) : ROUTE_COLORS[index % ROUTE_COLORS.length];
         const offset = cad || isBus ? 0 : ((index % 7) - 3) * stroke * 2.4;
         const dashed = cad ? circuit.lowVoltage : isBus || circuit.routing === "TOP";
         const stretch = longestStretch(runs);
         const last = runs[runs.length - 1]?.[runs[runs.length - 1].length - 1];
-        return (
-          <g key={circuit.id} transform={offset ? `translate(${offset} ${offset})` : undefined} data-circuit={circuit.id} data-edited={circuit.edited ? "true" : undefined}>
+        // Fáze 74: vybraný / zvýrazněný okruh silněji, ostatní ztlumené
+        const strong = lead === circuit.id;
+        const dim = lead !== null && !strong;
+        const handles = editable && focusId === circuit.id;
+        const link = links?.[circuit.id];
+        const body = (
+          <g key={circuit.id} transform={offset ? `translate(${offset} ${offset})` : undefined} opacity={dim ? 0.16 : 1} data-circuit={circuit.id} data-layer={circuit.layer} data-focused={focusId === circuit.id ? "true" : undefined} data-edited={circuit.edited ? "true" : undefined}>
             <g data-testid={isBus ? "bus-line" : "cable-route"} pointerEvents="none">
+              {strong && !cad ? <path d={pathOf(runs)} fill="none" stroke={halo} strokeWidth={stroke * 9} strokeLinejoin="round" opacity={0.7} /> : null}
               <path
                 d={pathOf(runs)}
                 fill="none"
                 stroke={cad ? ink : color}
-                strokeWidth={cad ? stroke * (circuit.lowVoltage ? 1.8 : 2.4) : stroke * (isBus ? 2.5 : 3.5)}
+                strokeWidth={(cad ? stroke * (circuit.lowVoltage ? 1.8 : 2.4) : stroke * (isBus ? 2.5 : 3.5)) * (strong ? 1.7 : 1)}
                 strokeLinejoin="round"
                 strokeDasharray={dashed ? (cad ? `${unit / 2.5} ${unit / 5}` : isBus ? `${unit / 6} ${unit / 6}` : `${unit / 2} ${unit / 5}`) : undefined}
                 opacity={cad ? 1 : 0.9}
@@ -99,8 +121,26 @@ export function RouteLayer({
                 </text>
               ) : null}
             </g>
+            {/* Fáze 74: klik na trasu vybere okruh (vybraný okruh má místo toho úchyty úseků) */}
+            {onPick && !handles && !isBus ? (
+              <path
+                d={pathOf(runs)}
+                fill="none"
+                stroke="transparent"
+                strokeWidth={unit * 0.5}
+                strokeLinejoin="round"
+                pointerEvents="stroke"
+                className="cursor-pointer"
+                onPointerDown={(event) => {
+                  if (event.button !== 0) return;
+                  event.stopPropagation();
+                  onPick(circuit);
+                }}
+                data-testid="route-pick"
+              />
+            ) : null}
             {/* Úchyty úseků pro ruční úpravu trasy */}
-            {editable
+            {handles
               ? circuit.legs
                   .filter((leg) => leg.editable)
                   .map((leg) => {
@@ -147,6 +187,14 @@ export function RouteLayer({
                   })
               : null}
           </g>
+        );
+        // Fáze 75: chytré PDF – celá trasa okruhu je odkaz na jeho řádek v rozcestníku dokumentace
+        return link ? (
+          <a key={circuit.id} href={link} data-testid="route-link">
+            {body}
+          </a>
+        ) : (
+          body
         );
       })}
     </g>

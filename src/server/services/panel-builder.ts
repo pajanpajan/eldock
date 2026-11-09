@@ -365,7 +365,7 @@ export async function applyProposedTree(prisma: PrismaClient, projectId: string,
 }
 
 // ---------------------------------------------------------------------------
-//  Výpočet oteplení (krok 3) – vstupy skříně a výpočtové proudy vývodů
+//  Výpočet oteplení (krok 4) – vstupy skříně a výpočtové proudy vývodů
 // ---------------------------------------------------------------------------
 
 export interface ThermalInputs {
@@ -396,7 +396,7 @@ export async function saveThermalInputs(prisma: PrismaClient, projectId: string,
 }
 
 // ---------------------------------------------------------------------------
-//  Výstupní dokumentace (krok 4) – propuštění do provozu
+//  Výstupní dokumentace (krok 5) – propuštění do provozu
 // ---------------------------------------------------------------------------
 
 /** Stav projektu pro dokumentaci: výpočet oteplení, zapojení a překážky propuštění. */

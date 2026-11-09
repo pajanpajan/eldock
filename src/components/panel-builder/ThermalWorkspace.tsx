@@ -46,7 +46,7 @@ function NumberField({ id, label, value, onChange, step = 1, min, max, unit }: {
   );
 }
 
-/** Krok 3: vstupy skříně (živý přepočet), verdikt, teplotní křivka, fázová bilance a tabulka. */
+/** Krok 4: vstupy skříně (živý přepočet), verdikt, teplotní křivka, fázová bilance a tabulka. */
 export function ThermalWorkspace({
   projectId,
   initialProject,

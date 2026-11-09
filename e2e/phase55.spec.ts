@@ -25,12 +25,14 @@ test("🎨 2D půdorys: horní lišta s řadami ABB 2026, barvy podle řady, sou
   const palette = page.getByRole("complementary", { name: "Paleta elektroinstalačních značek" });
   await expect(palette.getByTestId("device-appearance")).toHaveCount(0);
   const appearance = page.getByTestId("device-appearance");
+  // Fáze 74: barvy klapky / krytu (řada barev rámečku pod ní má stejné názvy)
+  const insert = appearance.getByTestId("insert-colors");
   await appearance.getByRole("radio", { name: "Levit M" }).click();
-  await expect(appearance.getByRole("radio", { name: /Onyx \/ kouřová černá \(63\)/ })).toBeVisible();
-  await expect(appearance.getByRole("radio", { name: /Bílá \(500\)/ })).toHaveCount(0);
+  await expect(insert.getByRole("radio", { name: /Onyx \/ kouřová černá \(63\)/ })).toBeVisible();
+  await expect(insert.getByRole("radio", { name: /Bílá \(500\)/ })).toHaveCount(0);
   await appearance.getByRole("radio", { name: "Zoni" }).click();
-  await expect(appearance.getByRole("radio", { name: /Pudrová \/ bílá \(242\/142\)/ })).toBeVisible();
-  await expect(appearance.getByRole("radio", { name: /Bílá \(500\)/ })).toHaveAttribute("aria-checked", "true");
+  await expect(insert.getByRole("radio", { name: /Pudrová \/ bílá \(242\/142\)/ })).toBeVisible();
+  await expect(insert.getByRole("radio", { name: /Bílá \(500\)/ })).toHaveAttribute("aria-checked", "true");
   await page.getByTestId("floorplan-supply").selectOption("1F_TNS");
 
   // Zásuvka a vypínač jako elektrotechnické značky

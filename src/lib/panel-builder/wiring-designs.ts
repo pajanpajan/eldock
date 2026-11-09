@@ -143,10 +143,25 @@ export function dbSeriesFor(key: string | null | undefined): { manufacturer: str
   return manufacturer && name ? { manufacturer, series: [name] } : null;
 }
 
-/** „ABB Levit · Bílá / Alpská bílá“ – popis do kusovníku a soupisu domovní instalace. */
-export function appearanceLabel(seriesKey: string | null | undefined, colorId: string | null | undefined): string {
+/**
+ * „ABB Levit · Bílá / Alpská bílá“ – popis do kusovníku a soupisu domovní instalace. Fáze 74: jiná barva rámečku
+ * → „ABB Tango · rámeček Bílá (B) · klapka Černá (N)“.
+ */
+export function appearanceLabel(seriesKey: string | null | undefined, colorId: string | null | undefined, frameColorId?: string | null): string {
   const found = designSeriesOf(seriesKey);
   if (!found) return "bez domovních přístrojů";
   const color = designColor(colorId) ?? designColor(DEFAULT_COLOR)!;
-  return `${found.brand.label} ${found.series.name} · ${color.label}`;
+  const frame = frameColorId && frameColorId !== color.id ? designColor(frameColorId) : null;
+  return frame ? `${found.brand.label} ${found.series.name} · rámeček ${frame.label} · klapka ${color.label}` : `${found.brand.label} ${found.series.name} · ${color.label}`;
+}
+
+/**
+ * Fáze 74: kód barvy pro díl – dvoubarevný kód katalogu „241/141“ = rámeček / kryt (klapka); jednoduchý kód platí
+ * pro oba díly. Vrací kód a příznak, že vznikl rozdělením dvoubarevného kódu (objednací číslo ověřte).
+ */
+export function colorCodeFor(code: string | null | undefined, part: "frame" | "insert"): { code: string | null; split: boolean } {
+  if (!code) return { code: null, split: false };
+  if (!code.includes("/")) return { code, split: false };
+  const [frame, insert] = code.split("/");
+  return { code: (part === "frame" ? frame : (insert ?? frame)).trim() || null, split: true };
 }

@@ -1,12 +1,13 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { ExternalLink, Palette } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import type { SeriesColor, SeriesMaterial, SeriesShape } from "@/lib/panel-builder/abb-catalog-2026";
 import { seriesLink } from "@/lib/panel-builder/series-links";
+import { seriesPhoto, type SeriesPhotoPart } from "@/lib/panel-builder/series-photos";
 import { DESIGN_BRANDS, designSeriesOf, seriesColors, type DesignSeries } from "@/lib/panel-builder/wiring-designs";
 import { cn } from "@/lib/utils";
 
@@ -134,16 +135,17 @@ const SERIES_STYLE: Record<string, MockStyle> = {
   "ABB|Levit": { radius: 3, border: 14, insetRadius: 2, rocker: "flat", base: true },
   "ABB|Levit M": { radius: 3, border: 15, insetRadius: 2, rocker: "flat", base: true },
   "ABB|Zoni": { radius: 9, border: 9, insetRadius: 6, rocker: "flat" },
-  "ABB|Tango": { radius: 28, border: 13, insetRadius: 18, rocker: "rounded", convex: true, lamp: true },
+  // Fáze 74: Tango – měkký čtverec (ne „pilulka“ u víceramečku), běžný spínač bez průzoru doutnavky
+  "ABB|Tango": { radius: 17, border: 13, insetRadius: 11, rocker: "rounded", convex: true },
   "ABB|Time": { radius: 6, border: 15, insetRadius: 3, rocker: "flat", metalLine: true },
   "ABB|Time Arbo": { radius: 6, border: 17, insetRadius: 3, rocker: "flat", metalLine: true },
   "ABB|Decento": { radius: 46, border: 15, insetRadius: 30, rocker: "lever", round: true },
-  "ABB|Swing": { radius: 18, border: 13, insetRadius: 10, rocker: "rounded" },
-  "ABB|Swing L": { radius: 18, border: 13, insetRadius: 10, rocker: "rounded" },
+  "ABB|Swing": { radius: 13, border: 13, insetRadius: 8, rocker: "rounded" },
+  "ABB|Swing L": { radius: 13, border: 11, insetRadius: 8, rocker: "rounded" },
   "ABB|Classic": { radius: 4, border: 16, insetRadius: 3, rocker: "flat" },
   "ABB|future linear": { radius: 3, border: 8, insetRadius: 2, rocker: "flat" },
-  "ABB|solo": { radius: 30, border: 11, insetRadius: 20, rocker: "rounded" },
-  "ABB|solo carat": { radius: 30, border: 12, insetRadius: 20, rocker: "rounded" },
+  "ABB|solo": { radius: 22, border: 11, insetRadius: 14, rocker: "rounded" },
+  "ABB|solo carat": { radius: 20, border: 12, insetRadius: 13, rocker: "rounded" },
   "ABB|Busch-axcent": { radius: 7, border: 19, insetRadius: 4, rocker: "flat" },
   "Legrand|Céliane": { radius: 10, border: 11, insetRadius: 8, rocker: "circle", circle: true },
   "Legrand|Valena Life": { radius: 16, border: 12, insetRadius: 10, rocker: "rounded" },
@@ -169,7 +171,8 @@ export function mockStyle(seriesKey: string | null | undefined, shape: SeriesSha
 /** Jeden přístroj v rámečku (100 × 100 jednotek na pozici). */
 function Gang({ id, kind, x, look, style }: { id: string; kind: MockupItem; x: number; look: Look; style: MockStyle }) {
   if (kind === "blank") return null;
-  const inset = 22;
+  // Fáze 74: klapka podle šířky rámečku řady (tenký rámeček = velká klapka, Busch-axcent = široký rámeček)
+  const inset = Math.min(27, Math.max(14, 7 + style.border));
   const dark = lightness(look.insert) < 0.45;
   const ink = dark ? "#d4d4d8" : "#52525b";
   const hole = dark ? "#0a0a0a" : "#3f3f46";
@@ -234,10 +237,8 @@ function Gang({ id, kind, x, look, style }: { id: string; kind: MockupItem; x: n
             // Levit: vodorovný proužek indikace
             <rect x={cover.x + 10} y={cover.y + cover.height - 9} width={cover.width - 20} height={2} rx={1} fill={ink} opacity={0.55} data-testid="mockup-strip" />
           ) : (
-            <>
-              <line x1={cx} y1={inset + 10} x2={cx} y2={100 - inset - 10} stroke={ink} strokeOpacity={0.25} strokeWidth={0.8} />
-              <rect x={cx - 4} y={inset + 8} width={8} height={2.4} rx={1.2} fill="#f59e0b" opacity={0.85} />
-            </>
+            // Fáze 74: běžný spínač – hladká klapka s jemnou spárou dole (bez kontrolky, ta je jen u řazení s doutnavkou)
+            <rect x={cover.x + 6} y={cover.y + cover.height - 5} width={cover.width - 12} height={1.2} rx={0.6} fill={ink} opacity={0.22} />
           )}
         </>
       ) : (
@@ -284,17 +285,49 @@ export function DeviceMockup({ shape, color, items, className, label, seriesKey 
 }
 
 
-/** Galerie designových řad: výrobce → řada (velký náhled, víceramček, materiál) → barvy s kódy a čísly rámečků. */
-export function SeriesGallery({ seriesKey, color, available, onChoose }: { seriesKey: string | null; color: string; available: Map<string, number>; onChoose: (patch: { series: string; color: string }) => void }) {
+type LookColor = Pick<SeriesColor, "swatch" | "frame" | "insert" | "material">;
+
+/**
+ * Fáze 74: vzhled z barvy klapky / krytu a (jiné) barvy rámečku – dvoubarevná barva řady dává rámečku svou barvu
+ * rámečku a klapce svou barvu krytu. Bez barvy rámečku platí barva klapky pro obojí.
+ */
+export function combineLook(insert: LookColor | null | undefined, frame?: LookColor | null): LookColor | null {
+  if (!insert) return frame ?? null;
+  if (!frame) return insert;
+  return { swatch: insert.swatch, insert: insert.insert ?? insert.swatch, frame: frame.frame ?? frame.swatch, material: insert.material ?? frame.material };
+}
+
+/** Fáze 74: originální fotka dílu (je-li schválená v `series-photos.ts`) se zdrojem, jinak vektorový náhled. */
+function PhotoOrMockup({ series, color, part, caption, mockup }: { series: string; color: string; part: SeriesPhotoPart; caption: string; mockup: ReactNode }) {
+  const photo = seriesPhoto(series, color, part);
+  return (
+    <figure className="flex flex-col items-center gap-1 text-[11px] text-muted-foreground" data-photo={photo ? "true" : "false"}>
+      {photo ? (
+        // eslint-disable-next-line @next/next/no-img-element -- schválené fotky výrobců z public/series (statické soubory)
+        <img src={photo.src} alt={`${caption} – fotografie výrobce`} className="h-28 w-auto max-w-full rounded-lg object-contain" data-testid="gallery-photo" />
+      ) : (
+        mockup
+      )}
+      {caption}
+      {photo ? <span className="text-[10px]">Foto: {photo.source} · {photo.license}</span> : null}
+    </figure>
+  );
+}
+
+/** Galerie designových řad: výrobce → řada (velký náhled, víceramček, materiál) → barvy klapky a rámečku s kódy a čísly rámečků. */
+export function SeriesGallery({ seriesKey, color, frameColor = null, available, onChoose }: { seriesKey: string | null; color: string; frameColor?: string | null; available: Map<string, number>; onChoose: (patch: { series: string; color: string; frameColor: string | null }) => void }) {
   const [open, setOpen] = useState(false);
-  const [pick, setPick] = useState<{ series: string; color: string }>({ series: seriesKey ?? "ABB|Zoni", color });
+  const [pick, setPick] = useState<{ series: string; color: string; frameColor: string | null }>({ series: seriesKey ?? "ABB|Zoni", color, frameColor });
   const current = designSeriesOf(pick.series);
   const brand = current?.brand ?? DESIGN_BRANDS[0];
   const series: DesignSeries = current?.series ?? brand.series[0];
   const colors = seriesColors(`${brand.manufacturer}|${series.name}`);
   const chosen = (series.colors ?? []).find((option) => option.id === pick.color) ?? series.colors?.[0] ?? null;
   const generic = colors.find((option) => option.id === pick.color) ?? colors[0];
-  const look = chosen ?? { swatch: generic.swatch };
+  // Fáze 74: barva rámečku zvlášť (null = stejná jako klapka)
+  const frameChosen = pick.frameColor ? ((series.colors ?? []).find((option) => option.id === pick.frameColor) ?? null) : null;
+  const frameGeneric = pick.frameColor ? (colors.find((option) => option.id === pick.frameColor) ?? null) : null;
+  const look = combineLook(chosen ?? { swatch: generic.swatch }, frameChosen ?? (frameGeneric ? { swatch: frameGeneric.swatch } : null))!;
   const shape = series.shape ?? "square";
   const count = series.dbSeries.reduce((sum, name) => sum + (available.get(`${brand.manufacturer}|${name}`) ?? 0), 0);
   const details = chosen;
@@ -305,7 +338,7 @@ export function SeriesGallery({ seriesKey, color, available, onChoose }: { serie
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
-        if (next) setPick({ series: seriesKey ?? "ABB|Zoni", color });
+        if (next) setPick({ series: seriesKey ?? "ABB|Zoni", color, frameColor });
       }}
     >
       <DialogTrigger asChild>
@@ -316,11 +349,11 @@ export function SeriesGallery({ seriesKey, color, available, onChoose }: { serie
       <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-5xl" data-testid="series-gallery">
         <DialogHeader>
           <DialogTitle>Designové řady a barvy</DialogTitle>
-          <DialogDescription>Náhled rámečku, krytů a víceramečku v barvách řady (ABB podle katalogu 2026). Barvy na obrazovce jsou orientační.</DialogDescription>
+          <DialogDescription>Náhled rámečku, krytů a víceramečku v barvách řady (ABB podle katalogu 2026) – barvu klapky a rámečku jde zvolit zvlášť. Bez schválené fotky výrobce je náhled kreslený a barvy na obrazovce jsou orientační; přesný vzhled ověřte odkazem na web výrobce.</DialogDescription>
         </DialogHeader>
         <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Výrobce">
           {DESIGN_BRANDS.map((option) => (
-            <button key={option.manufacturer} type="button" role="radio" aria-checked={brand.manufacturer === option.manufacturer} aria-label={option.label} onClick={() => setPick({ series: `${option.manufacturer}|${option.series[0].name}`, color: seriesColors(`${option.manufacturer}|${option.series[0].name}`)[0].id })} className={cn("flex h-10 w-24 items-center justify-center rounded-md border bg-white p-1", brand.manufacturer === option.manufacturer ? "border-primary ring-2 ring-primary" : "border-border")}>
+            <button key={option.manufacturer} type="button" role="radio" aria-checked={brand.manufacturer === option.manufacturer} aria-label={option.label} onClick={() => setPick({ series: `${option.manufacturer}|${option.series[0].name}`, color: seriesColors(`${option.manufacturer}|${option.series[0].name}`)[0].id, frameColor: null })} className={cn("flex h-10 w-24 items-center justify-center rounded-md border bg-white p-1", brand.manufacturer === option.manufacturer ? "border-primary ring-2 ring-primary" : "border-border")}>
               <ManufacturerLogo manufacturer={option.manufacturer} className="h-7 w-full" />
             </button>
           ))}
@@ -332,7 +365,7 @@ export function SeriesGallery({ seriesKey, color, available, onChoose }: { serie
               const first = option.colors?.[0] ?? null;
               return (
                 <li key={option.name}>
-                  <button type="button" role="radio" aria-checked={series.name === option.name} onClick={() => setPick({ series: key, color: seriesColors(key)[0].id })} className={cn("flex w-full items-center gap-2 rounded-lg border p-1.5 text-left text-xs", series.name === option.name ? "border-primary bg-primary/15" : "border-border hover:border-primary/60")} data-testid={`gallery-series-${option.name}`}>
+                  <button type="button" role="radio" aria-checked={series.name === option.name} onClick={() => setPick({ series: key, color: seriesColors(key)[0].id, frameColor: null })} className={cn("flex w-full items-center gap-2 rounded-lg border p-1.5 text-left text-xs", series.name === option.name ? "border-primary bg-primary/15" : "border-border hover:border-primary/60")} data-testid={`gallery-series-${option.name}`}>
                     <DeviceMockup seriesKey={key} shape={option.shape ?? "square"} color={first ?? { swatch: "#f8fafc" }} items={["switch"]} className="h-10 w-10 shrink-0 rounded" />
                     <span className="min-w-0">
                       <b className="block">{option.name}</b>
@@ -355,19 +388,12 @@ export function SeriesGallery({ seriesKey, color, available, onChoose }: { serie
               </span>
             </div>
             <div className="grid gap-3 sm:grid-cols-[1fr_1fr_2fr]" data-testid="gallery-preview">
-              <figure className="flex flex-col items-center gap-1 text-[11px] text-muted-foreground">
-                <DeviceMockup seriesKey={seriesKeyOf} shape={shape} color={look} items={["switch"]} className="h-28 w-28 rounded-lg" label={`Spínač ${series.name}`} />
-                Spínač 1R
-              </figure>
-              <figure className="flex flex-col items-center gap-1 text-[11px] text-muted-foreground">
-                <DeviceMockup seriesKey={seriesKeyOf} shape={shape} color={look} items={["socket"]} className="h-28 w-28 rounded-lg" label={`Zásuvka ${series.name}`} />
-                Zásuvka 1R
-              </figure>
-              <figure className="flex flex-col items-center gap-1 text-[11px] text-muted-foreground">
-                <DeviceMockup seriesKey={seriesKeyOf} shape={shape} color={look} items={["switch", "socket", "socket"]} className="h-28 w-full max-w-80 rounded-lg" label={`Víceramček 3R ${series.name}`} />
-                Víceramček 3R – vypínač + 2 zásuvky
-              </figure>
+              {/* Fáze 74: schválená fotka výrobce (zdroj a licence pod fotkou), jinak kreslený náhled */}
+              <PhotoOrMockup series={seriesKeyOf} color={pick.color} part="switch" caption="Spínač 1R" mockup={<DeviceMockup seriesKey={seriesKeyOf} shape={shape} color={look} items={["switch"]} className="h-28 w-28 rounded-lg" label={`Spínač ${series.name}`} />} />
+              <PhotoOrMockup series={seriesKeyOf} color={pick.color} part="socket" caption="Zásuvka 1R" mockup={<DeviceMockup seriesKey={seriesKeyOf} shape={shape} color={look} items={["socket"]} className="h-28 w-28 rounded-lg" label={`Zásuvka ${series.name}`} />} />
+              <PhotoOrMockup series={seriesKeyOf} color={pick.color} part="set" caption="Víceramček 3R – vypínač + 2 zásuvky" mockup={<DeviceMockup seriesKey={seriesKeyOf} shape={shape} color={look} items={["switch", "socket", "socket"]} className="h-28 w-full max-w-80 rounded-lg" label={`Víceramček 3R ${series.name}`} />} />
             </div>
+            <p className="-mb-1.5 text-xs font-semibold text-muted-foreground">Barva klapky / krytu</p>
             <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Barva řady">
               {colors.map((option) => {
                 const seriesColor = (series.colors ?? []).find((candidate) => candidate.id === option.id) ?? null;
@@ -379,25 +405,50 @@ export function SeriesGallery({ seriesKey, color, available, onChoose }: { serie
                 );
               })}
             </div>
+            {/* Fáze 74: barva rámečku zvlášť – výchozí stejná jako klapka */}
+            <p className="-mb-1.5 text-xs font-semibold text-muted-foreground">Barva rámečku</p>
+            <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="Barva rámečku" data-testid="gallery-frame-colors">
+              <button type="button" role="radio" aria-checked={!pick.frameColor} onClick={() => setPick((value) => ({ ...value, frameColor: null }))} className={cn("rounded-full border px-2.5 py-1 text-[11px]", !pick.frameColor ? "border-primary bg-primary/15 text-foreground" : "border-border text-muted-foreground hover:text-foreground")} data-testid="gallery-frame-same">
+                stejná jako klapka
+              </button>
+              {colors.map((option) => {
+                const seriesColor = (series.colors ?? []).find((candidate) => candidate.id === option.id) ?? null;
+                return (
+                  <button key={option.id} type="button" role="radio" aria-checked={pick.frameColor === option.id} onClick={() => setPick((value) => ({ ...value, frameColor: option.id === value.color ? null : option.id }))} className={cn("flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px]", pick.frameColor === option.id ? "border-primary bg-primary/15 text-foreground" : "border-border text-muted-foreground hover:text-foreground")} data-testid="gallery-frame-color">
+                    <span className="size-3.5 rounded-[3px] border-[3px]" style={{ borderColor: seriesColor?.frame ?? option.swatch }} aria-hidden />
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
             {details ? (
               <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 rounded-lg border border-border p-2 text-xs" data-testid="gallery-details">
-                <dt className="text-muted-foreground">Barva</dt>
+                <dt className="text-muted-foreground">Klapka / kryt</dt>
                 <dd>
                   {details.label}
-                  {details.frame && details.insert ? " (rámeček / kryt)" : ""}
+                  {details.frame && details.insert && !frameChosen ? " (rámeček / kryt)" : ""}
                 </dd>
+                {frameChosen || frameGeneric ? (
+                  <>
+                    <dt className="text-muted-foreground">Rámeček</dt>
+                    <dd data-testid="gallery-frame-label">
+                      {(frameChosen ?? frameGeneric)!.label}
+                      {frameChosen?.code ? <span className="font-mono"> · kód {frameChosen.code.split("/")[0]}</span> : null}
+                    </dd>
+                  </>
+                ) : null}
                 <dt className="text-muted-foreground">Povrch</dt>
                 <dd>{MATERIAL_LABEL[lookOf(details, shape).material]}</dd>
                 {details.code ? (
                   <>
                     <dt className="text-muted-foreground">Kód barvy</dt>
-                    <dd className="font-mono">{details.code} (přípona objednacího čísla krytu / rámečku)</dd>
+                    <dd className="font-mono">{details.code} (přípona objednacího čísla krytu{frameChosen ? "" : " / rámečku"})</dd>
                   </>
                 ) : null}
-                {details.frameMpn?.some(Boolean) ? (
+                {(frameChosen ?? details).frameMpn?.some(Boolean) ? (
                   <>
                     <dt className="text-muted-foreground">Rámečky 1R–5R</dt>
-                    <dd className="font-mono">{details.frameMpn.map((mpn, index) => `${index + 1}R ${mpn ?? "–"}`).join(" · ")}</dd>
+                    <dd className="font-mono">{(frameChosen ?? details).frameMpn!.map((mpn, index) => `${index + 1}R ${mpn ?? "–"}`).join(" · ")}</dd>
                   </>
                 ) : null}
               </dl>
@@ -415,12 +466,13 @@ export function SeriesGallery({ seriesKey, color, available, onChoose }: { serie
               <Button
                 type="button"
                 onClick={() => {
-                  onChoose({ series: `${brand.manufacturer}|${series.name}`, color: pick.color });
+                  onChoose({ series: `${brand.manufacturer}|${series.name}`, color: pick.color, frameColor: pick.frameColor });
                   setOpen(false);
                 }}
                 data-testid="gallery-apply"
               >
                 Použít {series.name} · {generic.label}
+                {frameGeneric ? ` · rámeček ${frameGeneric.label}` : ""}
               </Button>
             </div>
           </div>

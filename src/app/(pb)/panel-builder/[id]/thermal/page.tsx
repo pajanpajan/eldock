@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 
 import { PageTransition } from "@/components/layout/PageTransition";
 import { panelBuilderGuard } from "@/components/panel-builder/access";
-import { PanelSteps } from "@/components/panel-builder/PanelSteps";
+import { NextStepBar, PanelSteps } from "@/components/panel-builder/PanelSteps";
 import { ProjectHeader } from "@/components/panel-builder/ProjectHeader";
 import { EnclosurePicker } from "@/components/panel-builder/EnclosurePicker";
 import { ThermalWorkspace } from "@/components/panel-builder/ThermalWorkspace";
@@ -16,7 +16,7 @@ export async function generateMetadata({ params }: PageProps<"/panel-builder/[id
   return { title: project ? `${project.code} – výpočet oteplení` : "Výpočet oteplení" };
 }
 
-// Krok 3: výpočet oteplení dle ČSN EN 61439 / IEC TR 60890 a fázová bilance.
+// Krok 4: výpočet oteplení dle ČSN EN 61439 / IEC TR 60890 a fázová bilance.
 export default async function PanelThermalPage({ params }: PageProps<"/panel-builder/[id]/thermal">) {
   const guard = await panelBuilderGuard();
   if (guard) return guard;
@@ -59,6 +59,8 @@ export default async function PanelThermalPage({ params }: PageProps<"/panel-bui
           catalogComponent: item.catalogComponent,
         }))}
       />
+      {/* Fáze 75: výrazný další krok dole na stránce */}
+      <NextStepBar project={project} current="thermal" />
     </PageTransition>
   );
 }

@@ -28,6 +28,24 @@ export interface DrawingItem {
   symbol?: SymbolKind;
 }
 
+/**
+ * Fáze 75: klikací oblast přístroje ve výkresu (chytré PDF) – obdélník v souřadnicích viewBoxu SVG; `size` = šířka a
+ * výška viewBoxu (oblast se nad obrázkem umístí v procentech).
+ */
+export interface DrawingHotspot {
+  id: string;
+  designation: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+export interface HotspotSink {
+  hotspots: DrawingHotspot[];
+  width: number;
+  height: number;
+}
+
 const INK = "#111";
 const BLUE = "#1d4ed8";
 const FONT = "Arial, Helvetica, sans-serif";
@@ -60,7 +78,7 @@ function busbarStripSvg(plan: BusbarPlan, x: number, y: number, width: number): 
   return `<defs><pattern id="pe-stripes" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="2" height="4" fill="#16a34a"/><rect x="2" width="2" height="4" fill="#facc15"/></pattern></defs>${out.join("")}`;
 }
 
-export function renderPanelDrawingSvg(dims: EnclosureDims & { depthMm?: number }, items: readonly DrawingItem[], enclosureLabel = "", busbars?: { plan: BusbarPlan; position: "TOP" | "BOTTOM" }): string {
+export function renderPanelDrawingSvg(dims: EnclosureDims & { depthMm?: number }, items: readonly DrawingItem[], enclosureLabel = "", busbars?: { plan: BusbarPlan; position: "TOP" | "BOTTOM" }, sink?: HotspotSink): string {
   const margin = 34;
   const W = dims.widthMm;
   const H = dims.heightMm;
@@ -120,6 +138,15 @@ export function renderPanelDrawingSvg(dims: EnclosureDims & { depthMm?: number }
   }
 
   const total = { w: W + margin * 2, h: H + margin * 2 };
+  // Fáze 75: polohy přístrojů pro klikací oblasti chytrého PDF
+  if (sink) {
+    sink.width = total.w;
+    sink.height = total.h;
+    for (const item of items) {
+      const r = rect.get(item.id)!;
+      sink.hotspots.push({ id: item.id, designation: item.designation, x: r.x, y: r.y, w: r.w, h: r.h });
+    }
+  }
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${total.w} ${total.h}" font-family="${FONT}">
 <rect x="${margin}" y="${margin}" width="${W}" height="${H}" rx="4" fill="#f9fafb" stroke="${INK}" stroke-width="1.2"/>
 <rect x="${margin + 8}" y="${margin + 8}" width="${W - 16}" height="${H - 16}" rx="2" fill="none" stroke="${INK}" stroke-width="0.3" stroke-dasharray="2 2"/>
@@ -154,7 +181,7 @@ function conductorLabel(item: DrawingItem, cx: number, y: number): string {
   return `${ticks}<text x="${cx + 4}" y="${y + 9}" font-size="6.5" fill="#374151">${esc(phases)}</text>`;
 }
 
-export function renderSingleLineDiagramSvg(items: readonly DrawingItem[], options: { incomer: string; network: string }): string {
+export function renderSingleLineDiagramSvg(items: readonly DrawingItem[], options: { incomer: string; network: string }, sink?: HotspotSink): string {
   // Fáze 58: cívky a spouště leží vlevo od osy – s nimi širší rozteč, aby nezasahovaly do popisu souseda
   const slot = items.some((item) => WIDE_SYMBOLS.has(drawingSymbolOf(item))) ? 92 : SLOT;
   const byParent = new Map<string | null, DrawingItem[]>();
@@ -198,6 +225,8 @@ export function renderSingleLineDiagramSvg(items: readonly DrawingItem[], option
     out.push(`<line x1="${cx}" y1="${y}" x2="${cx}" y2="${y + 14}" stroke="${INK}" stroke-width="1.4"/>`);
     out.push(drawSymbol(drawingSymbolOf(item), cx, y + 14));
     out.push(`<text x="${cx + 9}" y="${y + 34}" font-size="9" font-weight="700">${esc(item.designation)}</text>`);
+    // Fáze 75: značka a popis přístroje = klikací oblast
+    sink?.hotspots.push({ id: item.id, designation: item.designation, x: cx - 14, y, w: Math.min(slot - 4, 70), h: 58 });
     out.push(`<text x="${cx + 9}" y="${y + 44}" font-size="6.5" fill="#374151">${esc(item.typeCode.length > 16 ? `${item.typeCode.slice(0, 15)}…` : item.typeCode)}</text>`);
     if (item.manufacturer) out.push(`<text x="${cx + 9}" y="${y + 52}" font-size="6" fill="#6b7280">${esc(item.manufacturer)}</text>`);
     const outY = y + 58;
@@ -248,6 +277,10 @@ export function renderSingleLineDiagramSvg(items: readonly DrawingItem[], option
     cursor += (leaves.get(root.id) ?? 1) * slot;
   });
   if (loose.length) out.push(`<text x="${left}" y="${height - 8}" font-size="8" fill="#b91c1c">Nezapojeno ve stromu: ${esc(loose.map((item) => item.designation).join(", "))}</text>`);
+  if (sink) {
+    sink.width = width;
+    sink.height = height;
+  }
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" font-family="${FONT}" fill="${INK}">${out.join("\n")}</svg>`;
 }

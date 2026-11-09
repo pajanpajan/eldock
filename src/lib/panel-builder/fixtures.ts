@@ -31,7 +31,18 @@ export const FIXTURES: Record<string, FixtureSpec> = {
 
 /** Zóna 2 koupelny sahá 0,6 m od hrany vany / sprchového koutu (ČSN 33 2000-7-701 ed. 2). */
 export const ZONE2_MM = 600;
-/** Přesah pásu nad a pod umyvadlem na každou stranu [mm]. */
+/**
+ * Fáze 74: umývací prostor umyvadla (ČSN 33 2130, převzato z ed. 3 čl. 7.8 – v ed. 4 ověřit v plném znění): svislý
+ * průmět umyvadla ke stěně do výšky 2,25 m nad podlahou. Zásuvky a spínače jen vně; ve výšce od 1,2 m smí být těsně
+ * u hranice, níž nejméně 0,2 m od hranice (`BASIN_MARGIN_MM`). Zóny 0–2 ČSN 33 2000-7-701 umyvadlo nemá.
+ */
+export const WASH_AREA_TOP_MM = 2250;
+export const WASH_HIGH_MM = 1200;
+/** Fáze 74: volitelná přísnější projekční zásada – kolem umyvadla 0,6 m jako zóna 2 u vany a sprchy. */
+export const BASIN_STRICT_MM = 600;
+export type BasinZone = "norm" | "strict";
+export const isBasinZone = (value: unknown): value is BasinZone => value === "norm" || value === "strict";
+/** Přesah pásu u umývacího prostoru na každou stranu [mm] (prvek níž než 1,2 m). */
 export const BASIN_MARGIN_MM = 200;
 /** Pás u umyvadla sahá za zadní hranu až ke stěně (zásuvka / spínač na stěně za umyvadlem) [mm]. */
 export const BASIN_WALL_MM = 250;
@@ -124,6 +135,31 @@ export function inBasinBand(geometry: FixtureGeometry, x: number, y: number): bo
   const local = toLocal(geometry, x, y);
   const band = basinBand(geometry);
   return local.u >= band.u1 && local.u <= band.u2 && local.v >= band.v1 && local.v <= band.v2;
+}
+
+/** Fáze 74: místní obdélník umývacího prostoru – svislý průmět umyvadla od přední hrany ke stěně (bez přesahu). */
+export function washArea(geometry: Pick<FixtureGeometry, "w" | "d">) {
+  return { u1: -geometry.w / 2, u2: geometry.w / 2, v1: -geometry.d / 2 - BASIN_WALL_MM, v2: geometry.d / 2 };
+}
+
+/** Fáze 74: bod v umývacím prostoru umyvadla (prvek níž než 2,25 m). */
+export function inWashArea(geometry: FixtureGeometry, x: number, y: number, heightMm = 0): boolean {
+  if (geometry.zone !== "basin" || heightMm >= WASH_AREA_TOP_MM) return false;
+  const local = toLocal(geometry, x, y);
+  const area = washArea(geometry);
+  return local.u >= area.u1 && local.u <= area.u2 && local.v >= area.v1 && local.v <= area.v2;
+}
+
+/**
+ * Fáze 74: umístění zásuvky / spínače u umyvadla podle výšky krabice – „area“ v umývacím prostoru (vždy chyba),
+ * „band“ níž než 1,2 m blíž než 0,2 m od hranice (chyba), „strict“ jen při přísnější zásadě 0,6 m, jinak null.
+ */
+export function basinPlacement(geometry: FixtureGeometry, x: number, y: number, heightMm: number, zone: BasinZone = "norm"): "area" | "band" | "strict" | null {
+  if (geometry.zone !== "basin" || heightMm >= WASH_AREA_TOP_MM) return null;
+  if (inWashArea(geometry, x, y, heightMm)) return "area";
+  if (heightMm < WASH_HIGH_MM && inBasinBand(geometry, x, y)) return "band";
+  if (zone === "strict" && distanceToFixture(geometry, x, y) < BASIN_STRICT_MM) return "strict";
+  return null;
 }
 
 /** Obrys zóny 2 (obdélník předmětu zvětšený o 0,6 m se zaoblenými rohy) v místních souřadnicích jako cesta SVG. */

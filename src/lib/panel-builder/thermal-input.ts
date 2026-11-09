@@ -1,4 +1,4 @@
-// Projekt rozváděče (řádky z databáze) → vstupy výpočtu oteplení. Sdílí krok 3 i dokumentace.
+// Projekt rozváděče (řádky z databáze) → vstupy výpočtu oteplení. Sdílí krok 4 (oteplení) i dokumentace.
 
 import type { ComponentCategory, EnclosureMaterial, EnclosureType } from "@/generated/prisma/enums";
 import type { ThermalDevice, ThermalEnclosure } from "@/lib/thermalCalculation";

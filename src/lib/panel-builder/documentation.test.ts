@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { CATALOG } from "../../../prisma/seed-panel-builder";
 import { componentsList, partsList, releaseBlockers, type DocItem } from "./documentation";
-import { renderPanelDrawingSvg, renderSingleLineDiagramSvg, type DrawingItem } from "./drawings";
+import { renderPanelDrawingSvg, renderSingleLineDiagramSvg, type DrawingItem, type HotspotSink } from "./drawings";
 import { REFERENCE_DEVICES, REFERENCE_DIMS, withPositions } from "./reference";
 import { proposeTree, type TreeNode } from "./tree";
 
@@ -30,6 +30,22 @@ const docItems: DocItem[] = connected.map((node, index) => {
 });
 const enclosure = { articleNumber: "1SPE007717F0620", typeCode: "RES12x320", manufacturer: "ABB", description: "MISTRAL41W, 36M 3R", category: "ENCLOSURE" as const };
 const drawing: DrawingItem[] = connected.map((node, index) => ({ ...node, typeCode: placed[index].typeCode, modulesWidth: placed[index].modules }));
+
+describe("fáze 75 – chytré PDF: klikací přístroje ve výkresech", () => {
+  it("výkres osazení i jednopólové schéma vrátí oblast každého přístroje v rozměrech viewBoxu", () => {
+    const panel: HotspotSink = { hotspots: [], width: 0, height: 0 };
+    const svg = renderPanelDrawingSvg(REFERENCE_DIMS, drawing, "MISTRAL41W, 36M 3R", undefined, panel);
+    expect(panel.hotspots.map((spot) => spot.designation).sort()).toEqual(drawing.map((item) => item.designation).sort());
+    expect(svg).toContain(`viewBox="0 0 ${panel.width} ${panel.height}"`);
+    expect(panel.hotspots.every((spot) => spot.x >= 0 && spot.y >= 0 && spot.x + spot.w <= panel.width && spot.y + spot.h <= panel.height)).toBe(true);
+    const sld: HotspotSink = { hotspots: [], width: 0, height: 0 };
+    const diagram = renderSingleLineDiagramSvg(drawing, { incomer: "L1,L2,L3,N", network: "" }, sld);
+    expect(diagram).toContain(`viewBox="0 0 ${sld.width} ${sld.height}"`);
+    expect(new Set(sld.hotspots.map((spot) => spot.designation))).toEqual(new Set(drawing.map((item) => item.designation)));
+    // Bez sběrného objektu beze změny výstupu
+    expect(renderPanelDrawingSvg(REFERENCE_DIMS, drawing, "MISTRAL41W, 36M 3R")).toBe(svg);
+  });
+});
 
 describe("kusovník a seznam komponent (referenční PDF)", () => {
   it("kusovník podle objednacích čísel se skříní na prvním řádku", () => {
@@ -65,7 +81,7 @@ describe("kusovník a seznam komponent (referenční PDF)", () => {
     const ready = docItems.map((item) => ({ ...item, recognitionStatus: "VERIFIED" }));
     expect(releaseBlockers({ items: ready, connected: true, thermalOk: true })).toEqual([]);
     const blockers = releaseBlockers({ items: ready.map((item, i) => (i === 6 ? { ...item, recognitionStatus: "UNRECOGNIZED", component: null } : item)), connected: false, thermalOk: false });
-    expect(blockers).toEqual(["Nepotvrzené přístroje (krok 1): -F4.", "Strom zapojení není kompletní (krok 2).", "Výpočet oteplení nevyhovuje (krok 3)."]);
+    expect(blockers).toEqual(["Nepotvrzené přístroje (krok 1): -F4.", "Strom zapojení není kompletní (krok 2).", "Výpočet oteplení nevyhovuje (krok 4)."]);
   });
 });
 

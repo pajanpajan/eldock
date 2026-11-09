@@ -135,6 +135,6 @@ export function releaseBlockers(input: { items: readonly (DocItem & { recognitio
   if (!input.items.length) blockers.push("Rozváděč nemá žádné přístroje.");
   if (unresolved.length) blockers.push(`Nepotvrzené přístroje (krok 1): ${unresolved.map((item) => item.designation).join(", ")}.`);
   if (!input.connected) blockers.push("Strom zapojení není kompletní (krok 2).");
-  if (!input.thermalOk) blockers.push("Výpočet oteplení nevyhovuje (krok 3).");
+  if (!input.thermalOk) blockers.push("Výpočet oteplení nevyhovuje (krok 4).");
   return blockers;
 }

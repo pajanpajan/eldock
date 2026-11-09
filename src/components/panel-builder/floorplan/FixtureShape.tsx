@@ -3,7 +3,9 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
 
 import type { EditorElement } from "@/lib/panel-builder/floorplan-editor";
-import { BASIN_MARGIN_MM, basinBand, clampFixture, fixtureDims, fixtureGeometry, zone2Path, type FixtureHandle } from "@/lib/panel-builder/fixtures";
+import { BASIN_MARGIN_MM, BASIN_STRICT_MM, WASH_AREA_TOP_MM, WASH_HIGH_MM, basinBand, clampFixture, fixtureDims, fixtureGeometry, washArea, zone2Path, type BasinZone, type FixtureHandle } from "@/lib/panel-builder/fixtures";
+
+const metres = (mm: number) => (mm / 1000).toLocaleString("cs-CZ");
 
 /**
  * Fáze 63: zařizovací předmět jako architektonická 2D značka ve skutečném rozměru (šířka X × hloubka Y, natočení):
@@ -30,6 +32,7 @@ export function FixtureShape({
   interactive,
   onBodyDown,
   onHandleDown,
+  basinZone = "norm",
 }: {
   element: EditorElement;
   active: boolean;
@@ -37,6 +40,8 @@ export function FixtureShape({
   /** Jednotka popisků a úchytů (drží velikost na obrazovce). */
   unit: number;
   interactive: boolean;
+  /** Fáze 74: ochranná zóna umyvadla – umývací prostor + 0,2 m (norma), nebo navíc 0,6 m (přísněji). */
+  basinZone?: BasinZone;
   onBodyDown?: (event: ReactPointerEvent) => void;
   onHandleDown?: (event: ReactPointerEvent, handle: FixtureHandle) => void;
 }) {
@@ -48,6 +53,7 @@ export function FixtureShape({
   const d = geometry.d / 2;
   const rotation = geometry.rotation;
   const band = geometry.zone === "basin" ? basinBand(geometry) : null;
+  const area = geometry.zone === "basin" ? washArea(geometry) : null;
   const edge = unit * 0.35;
   const handle = unit * 0.5;
   // Kóty nad obálkou natočeného předmětu (text se neotáčí)
@@ -62,8 +68,15 @@ export function FixtureShape({
         {geometry.zone === "bath" ? (
           <path d={zone2Path(geometry.w, geometry.d)} fill="rgba(56,189,248,0.06)" stroke="#38bdf8" strokeOpacity={0.7} strokeWidth={line} strokeDasharray={`${line * 5} ${line * 3}`} pointerEvents="none" data-testid="fixture-zone2" />
         ) : null}
+        {/* Fáze 74: ochranná zóna umyvadla jako zóny vany – volitelně 0,6 m, pás 0,2 m (pod 1,2 m) a umývací prostor */}
+        {geometry.zone === "basin" && basinZone === "strict" ? (
+          <path d={zone2Path(geometry.w, geometry.d, BASIN_STRICT_MM)} fill="rgba(56,189,248,0.04)" stroke="#38bdf8" strokeOpacity={0.6} strokeWidth={line} strokeDasharray={`${line * 1.5} ${line * 3}`} pointerEvents="none" data-testid="fixture-basin-strict" />
+        ) : null}
         {band ? (
-          <rect x={band.u1} y={band.v1} width={band.u2 - band.u1} height={band.v2 - band.v1} fill="rgba(248,113,113,0.08)" stroke="#f87171" strokeOpacity={0.75} strokeWidth={line} strokeDasharray={`${line * 4} ${line * 3}`} pointerEvents="none" data-testid="fixture-band" />
+          <rect x={band.u1} y={band.v1} width={band.u2 - band.u1} height={band.v2 - band.v1} fill="rgba(56,189,248,0.06)" stroke="#38bdf8" strokeOpacity={0.75} strokeWidth={line} strokeDasharray={`${line * 5} ${line * 3}`} pointerEvents="none" data-testid="fixture-band" />
+        ) : null}
+        {area ? (
+          <rect x={area.u1} y={area.v1} width={area.u2 - area.u1} height={area.v2 - area.v1} fill="rgba(248,113,113,0.12)" stroke="#f87171" strokeOpacity={0.85} strokeWidth={line * 1.2} pointerEvents="none" data-testid="fixture-wash-area" />
         ) : null}
         {/* Tělo předmětu (zóna 1) – klik = výběr, tažení = přesun */}
         <rect
@@ -127,7 +140,7 @@ export function FixtureShape({
             </text>
           ) : (
             <text x={geometry.cx} y={geometry.cy + halfHeight + unit * 0.9} fontSize={unit * 0.45} textAnchor="middle" fill="#f87171" stroke="#09090b" strokeWidth={unit * 0.04} paintOrder="stroke">
-              pás nad a pod umyvadlem = šíře + {BASIN_MARGIN_MM / 10} cm na každou stranu (bez zásuvek a spínačů)
+              umývací prostor do {metres(WASH_AREA_TOP_MM)} m · pod {metres(WASH_HIGH_MM)} m navíc +{BASIN_MARGIN_MM / 10} cm{basinZone === "strict" ? ` · přísněji ${BASIN_STRICT_MM / 10} cm` : ""}
             </text>
           )}
         </g>
@@ -137,7 +150,20 @@ export function FixtureShape({
 }
 
 /** Fáze 63: přesný rozměr a natočení předmětu v bočním panelu (zóny se přepočítají hned). */
-export function FixtureControls({ element, onChange, onRotate }: { element: EditorElement; onChange: (patch: Partial<EditorElement>) => void; onRotate: (step: number) => void }) {
+export function FixtureControls({
+  element,
+  onChange,
+  onRotate,
+  basinZone = "norm",
+  onBasinZone,
+}: {
+  element: EditorElement;
+  onChange: (patch: Partial<EditorElement>) => void;
+  onRotate: (step: number) => void;
+  /** Fáze 74: ochranná zóna umyvadla pro celý nákres. */
+  basinZone?: BasinZone;
+  onBasinZone?: (zone: BasinZone) => void;
+}) {
   const geometry = fixtureGeometry(element);
   if (!geometry) return null;
   const size = { w: geometry.w, d: geometry.d };
@@ -175,8 +201,23 @@ export function FixtureControls({ element, onChange, onRotate }: { element: Edit
       <p className="text-muted-foreground">
         {geometry.zone === "bath"
           ? "Zóna 1 = půdorys předmětu, zóna 2 = 0,6 m od hrany (ČSN 33 2000-7-701 ed. 2) – zásuvky a spínače jen mimo. Rozměr měňte tažením za strany nebo žlutý roh."
-          : `Pás nad a pod umyvadlem v šíři umyvadla + ${BASIN_MARGIN_MM / 10} cm na každou stranu (ČSN 33 2130 ed. 4) – bez zásuvek a spínačů. Zadní hrana = strana u stěny.`}
+          : `Umývací prostor (červeně) = svislý průmět umyvadla ke stěně do ${metres(WASH_AREA_TOP_MM)} m – zásuvky a spínače jen vně. Níž než ${metres(WASH_HIGH_MM)} m nejméně ${BASIN_MARGIN_MM / 10} cm od hranice (modře čárkovaně), od ${metres(WASH_HIGH_MM)} m smí být těsně u hranice (ČSN 33 2130). Zóny 0–2 má jen vana a sprcha. Zadní hrana = strana u stěny.`}
       </p>
+      {geometry.zone === "basin" && onBasinZone ? (
+        <div className="flex flex-col gap-1" role="radiogroup" aria-label="Ochranná zóna umyvadla" data-testid="basin-zone">
+          {(
+            [
+              ["norm", `Podle normy – umývací prostor + ${BASIN_MARGIN_MM / 10} cm`],
+              ["strict", `Přísněji – ${BASIN_STRICT_MM / 10} cm kolem umyvadla (jako zóna 2)`],
+            ] as const
+          ).map(([value, label]) => (
+            <label key={value} className="flex items-center gap-1.5 text-foreground">
+              <input type="radio" name="basin-zone" checked={basinZone === value} onChange={() => onBasinZone(value)} data-testid={`basin-zone-${value}`} />
+              {label}
+            </label>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

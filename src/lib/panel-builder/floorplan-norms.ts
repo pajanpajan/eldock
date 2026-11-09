@@ -5,7 +5,9 @@
 // Fáze 63: zóny podle skutečného rozměru a natočení předmětu (`fixtures.ts`), umyvadla – zásuvky a spínače mimo svislý
 // pás nad a pod umyvadlem (ČSN 33 2130 ed. 4), vzdálenost od hrany vany / sprchy / umyvadla v textu zjištění.
 
-import { BASIN_MARGIN_MM, ZONE2_MM, distanceToFixture, fixtureGeometry, inBasinBand, type FixtureGeometry } from "./fixtures";
+import { mountHeight } from "@/engine/floorplan-bridge";
+
+import { BASIN_MARGIN_MM, BASIN_STRICT_MM, WASH_AREA_TOP_MM, WASH_HIGH_MM, ZONE2_MM, basinPlacement, distanceToFixture, fixtureGeometry, type FixtureGeometry } from "./fixtures";
 import { floorsOf, paletteItem, type EditorElement, type FloorplanDraft } from "./floorplan-editor";
 
 export { ZONE2_MM };
@@ -14,7 +16,7 @@ export type NormLevel = "error" | "warning" | "info";
 
 export interface NormIssue {
   id: string;
-  rule: "bath-zone" | "basin-band" | "wet-room-ip" | "outdoor-ip" | "afdd" | "fixture-missing";
+  rule: "bath-zone" | "basin-area" | "basin-band" | "basin-strict" | "wet-room-ip" | "outdoor-ip" | "afdd" | "fixture-missing";
   level: NormLevel;
   text: string;
   source: string;
@@ -65,16 +67,50 @@ export function floorplanNorms(draft: FloorplanDraft): NormIssue[] {
         elementIds: inZone.map((element) => element.id),
       });
     }
-    // Fáze 63: umyvadlo – zásuvky a spínače ne ve svislém pásu nad a pod umyvadlem (šíře umyvadla + 0,2 m na každou stranu)
-    const inBand = devices.filter((element) => fixtures.some((fixture) => fixture.geometry.zone === "basin" && fixture.element.room === element.room && inBasinBand(fixture.geometry, element.x, element.y)));
+    // Fáze 74: umyvadlo – umývací prostor (svislý průmět ke stěně do 2,25 m) bez zásuvek a spínačů; níž než 1,2 m navíc
+    // 0,2 m od hranice; volitelně přísněji 0,6 m kolem umyvadla (jako zóna 2). Rozhoduje výška krabice.
+    const heightOf = (element: EditorElement) => {
+      const item = paletteItem(element.item);
+      if (!item || item.kind === "panel" || item.kind === "riser" || item.kind === "fixture") return 0;
+      return element.mountHeightMm ?? item.heightMm ?? mountHeight({ kind: item.kind, variant: item.variant, tag: item.tag }, draft.profile);
+    };
+    const basinOf = (element: EditorElement) => {
+      const placements = fixtures.filter((fixture) => fixture.geometry.zone === "basin" && fixture.element.room === element.room).map((fixture) => basinPlacement(fixture.geometry, element.x, element.y, heightOf(element), draft.basinZone ?? "norm"));
+      return placements.includes("area") ? "area" : placements.includes("band") ? "band" : placements.includes("strict") ? "strict" : null;
+    };
+    const atBasin = devices.map((element) => ({ element, placement: basinOf(element) }));
+    const inArea = atBasin.filter((entry) => entry.placement === "area").map((entry) => entry.element);
+    const inBand = atBasin.filter((entry) => entry.placement === "band").map((entry) => entry.element);
+    const strict = atBasin.filter((entry) => entry.placement === "strict").map((entry) => entry.element);
+    const basinSource = `ČSN 33 2130 – umývací prostor: svislý průmět umyvadla do ${(WASH_AREA_TOP_MM / 1000).toLocaleString("cs-CZ")} m, zásuvky a spínače jen vně, níž než ${(WASH_HIGH_MM / 1000).toLocaleString("cs-CZ")} m nejméně ${cm(BASIN_MARGIN_MM)} od hranice (převzato z ed. 3 čl. 7.8 – v ed. 4 ověřte v plném znění); zóny 0–2 ČSN 33 2000-7-701 platí jen pro vanu a sprchu`;
+    if (inArea.length) {
+      issues.push({
+        id: `basin-area:${floor.id}`,
+        rule: "basin-area",
+        level: "error",
+        text: `${floor.name}: ${inArea.length}× zásuvka / spínač v umývacím prostoru umyvadla (nad nebo pod umyvadlem) – posuňte je mimo průmět umyvadla.`,
+        source: basinSource,
+        elementIds: inArea.map((element) => element.id),
+      });
+    }
     if (inBand.length) {
       issues.push({
         id: `basin-band:${floor.id}`,
         rule: "basin-band",
         level: "error",
-        text: `${floor.name}: ${inBand.length}× zásuvka / spínač nad nebo pod umyvadlem (pás v šíři umyvadla + ${cm(BASIN_MARGIN_MM)} na každou stranu) – posuňte je stranou od hrany umyvadla.`,
-        source: "ČSN 33 2130 ed. 4 – zásuvky a spínače mimo prostor nad a pod umyvadlem; odstup 20 cm od hrany je projekční zásada Eldocku (ověřte v projektu)",
+        text: `${floor.name}: ${inBand.length}× zásuvka / spínač níž než ${(WASH_HIGH_MM / 1000).toLocaleString("cs-CZ")} m blíž než ${cm(BASIN_MARGIN_MM)} od umývacího prostoru – posuňte je dál od umyvadla, nebo výš (od 1,2 m smí být těsně u hranice).`,
+        source: basinSource,
         elementIds: inBand.map((element) => element.id),
+      });
+    }
+    if (strict.length) {
+      issues.push({
+        id: `basin-strict:${floor.id}`,
+        rule: "basin-strict",
+        level: "warning",
+        text: `${floor.name}: ${strict.length}× zásuvka / spínač blíž než ${cm(BASIN_STRICT_MM)} od umyvadla – zvolená přísnější zásada (ochranná zóna jako zóna 2).`,
+        source: "Přísnější projekční zásada Eldocku zvolená v půdorysu (norma u umyvadla vyžaduje jen umývací prostor + 0,2 m)",
+        elementIds: strict.map((element) => element.id),
       });
     }
     // Koupelna bez vany / sprchy v nákresu: zóny nejdou ověřit

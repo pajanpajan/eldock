@@ -59,6 +59,8 @@ const companyProfile = { companyName: true, ico: true, dic: true, street: true, 
 
 const projectDetail = {
   equipment: { select: { id: true, tag: true, name: true } },
+  // Fáze 75: vybraná skříň (krok 3 – kontrola, že se do ní návrh vejde)
+  enclosure: true,
   company: { select: companyProfile },
   items: {
     orderBy: [{ dinRailIndex: "asc" as const }, { positionOnRail: "asc" as const }],
@@ -82,7 +84,7 @@ export const hasShowcaseProject = cache(async () => (await prisma.panelBoardProj
 export type PanelProjectDetail = NonNullable<Awaited<ReturnType<typeof getPanelProject>>>;
 export type PanelItemDetail = PanelProjectDetail["items"][number];
 
-/** Rozváděče ve vlastním závodě firmy, ke kterým lze pasport propustit (krok 4); firma bez závodu → nic. */
+/** Rozváděče ve vlastním závodě firmy, ke kterým lze pasport propustit (krok 5); firma bez závodu → nic. */
 export const getReleaseTargets = cache(async () => {
   const plantId = (await getPanelCompany())?.plantId;
   if (!plantId) return [];
@@ -140,6 +142,19 @@ export const getBoardManufacturers = cache(async (): Promise<{ name: string; cou
 
 /** Vybraná skříň z katalogu rozvodnic (kusovník, P_max). */
 export const getProjectEnclosure = cache((enclosureId: string | null) => (enclosureId ? prisma.panelEnclosure.findUnique({ where: { id: enclosureId } }) : null));
+
+/** Fáze 74: propojené rozváděče z jednoho půdorysu – nadřazený rozváděč a podružné rozváděče (jen v rámci firmy). */
+export async function getLinkedBoards(project: { id: string; parentBoardId: string | null; companyId: string | null }) {
+  const scope = project.companyId ? { companyId: project.companyId } : { companyId: null };
+  const [parent, children] = await Promise.all([
+    project.parentBoardId ? prisma.panelBoardProject.findFirst({ where: { id: project.parentBoardId, ...scope }, select: { id: true, code: true, name: true, boardCode: true } }) : null,
+    prisma.panelBoardProject.findMany({ where: { parentBoardId: project.id, ...scope }, select: { id: true, code: true, name: true, boardCode: true, feederJson: true }, orderBy: { code: "asc" } }),
+  ]);
+  return { parent, children };
+}
+
+/** Fáze 75: všechny skříně rozvodnic pro krok 3 (filtry výrobce, montáže, materiálu a krytí běží v prohlížeči). */
+export const getEnclosureCatalog = cache(async () => (await prisma.panelEnclosure.findMany({ orderBy: [{ totalModules: "asc" }, { model: "asc" }] })).filter((row) => !isHiddenManufacturer(row.manufacturer)));
 
 // ---------------------------------------------------------------------------
 //  Katalog po výrobcích a kategoriích (fáze 47)

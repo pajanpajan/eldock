@@ -7,10 +7,14 @@ import { buildWallGraph, wallMetric, wallSegments } from "@/engine/wall-routing"
 import { isSocketGrouping, type SocketGrouping } from "@/engine/socket-zones";
 import {
   DEFAULT_ELEVATION,
+  DEFAULT_SUPPLY_LOOP_OHM,
+  MAIN_BOARD,
   calibrateFloorplanScale,
   elevationProfile,
+  feederLoopOhm,
   generateCircuitsFromFloorplan,
   homeRunLength,
+  subBoardFeeder,
   isInstallLevel,
   isInstallMethod,
   mountHeight,
@@ -20,6 +24,8 @@ import {
   type ApplianceTag,
   type CableRoutingMode,
   type Calibration,
+  type Circuit,
+  type CircuitPlan,
   type ElevationProfile,
   type FloorNode,
   type Floorplan,
@@ -29,7 +35,7 @@ import {
 
 import { DEFAULT_COLOR, appearanceLabel, designColor } from "./wiring-designs";
 import { CUSTOM_APPLIANCE_ITEM, applianceOverride, applianceSpecFor, parseApplianceList, type ApplianceSpec } from "./appliances";
-import { clampFixture, fixtureSpecOf } from "./fixtures";
+import { clampFixture, fixtureSpecOf, isBasinZone, type BasinZone } from "./fixtures";
 import { isPolygonRoom, nearestWall, pointInRoom, polygonBounds, roomArea, translatePolygon } from "./room-geometry";
 import { productById } from "./smart-catalog";
 import { DEFAULT_SUPPLY, supplyById, type SupplySystem } from "./supply";
@@ -75,20 +81,21 @@ export interface PaletteItem {
   hidden?: boolean;
 }
 
-export const PALETTE_GROUPS: { id: PaletteGroup; label: string }[] = [
-  { id: "panel", label: "⚡ Rozváděč" },
-  { id: "sockets", label: "🔌 Zásuvky" },
-  { id: "lights", label: "💡 Světla" },
-  { id: "controls", label: "🎛️ Ovládání" },
-  { id: "appliances", label: "🔥 Samostatné spotřebiče (vlastní jisticí okruh)" },
-  { id: "fixtures", label: "🛁 Zařizovací předměty (koupelnové zóny ČSN 33 2000-7-701)" },
+/** Fáze 74: kategorie palety – ikona, krátký název a podtitul (norma, rozsah) pro přehledný levý panel. */
+export const PALETTE_GROUPS: { id: PaletteGroup; icon: string; label: string; hint: string }[] = [
+  { id: "panel", icon: "⚡", label: "Rozváděče", hint: "hlavní, podružný, stoupací vedení" },
+  { id: "sockets", icon: "🔌", label: "Zásuvky", hint: "jednozásuvky, dvojzásuvky, IP44, RJ45" },
+  { id: "lights", icon: "💡", label: "Světla", hint: "stropní a nástěnná svítidla" },
+  { id: "controls", icon: "🎛️", label: "Ovládání", hint: "vypínače a ovladače" },
+  { id: "appliances", icon: "🔥", label: "Spotřebiče", hint: "vlastní jisticí okruh" },
+  { id: "fixtures", icon: "🛁", label: "Zařizovací předměty", hint: "zóny ČSN 33 2000-7-701, umývací prostor" },
 ];
 
-/** Nadpis skupiny ovládání podle úrovně instalace (fáze 57). */
-export const CONTROLS_LABEL: Record<InstallLevel, string> = {
-  classic: "🎛️ Vypínače a ovladače 230 V (řazení dle ČSN)",
-  bus_loxone: "🎛️ Sběrnicové ovládání 24 V DC (KNX / Loxone Tree / free@home)",
-  smart_retrofit: "🎛️ Vypínače s chytrým modulem a bezdrátová tlačítka (Zigbee / Matter)",
+/** Nadpis a podtitul skupiny ovládání podle úrovně instalace (fáze 57, fáze 74 krátce). */
+export const CONTROLS_LABEL: Record<InstallLevel, { label: string; hint: string }> = {
+  classic: { label: "Vypínače 230 V", hint: "řazení dle ČSN, stmívače, čidla" },
+  bus_loxone: { label: "Sběrnicové ovládání", hint: "24 V DC – KNX / Loxone Tree / free@home" },
+  smart_retrofit: { label: "Chytré vypínače", hint: "moduly pod vypínač, bezdrátová tlačítka" },
 };
 
 const CLASSIC: readonly InstallLevel[] = ["classic", "smart_retrofit"];
@@ -97,6 +104,8 @@ const RETROFIT: readonly InstallLevel[] = ["smart_retrofit"];
 
 export const PALETTE: PaletteItem[] = [
   { id: "panel", group: "panel", label: "Hlavní domovní / bytový rozváděč", symbol: "RH", kind: "panel" },
+  // Fáze 74: podružný rozváděč (RP1, RP2 …) – vlastní okruhy, přívod z hlavního rozváděče
+  { id: "subpanel", group: "panel", label: "Podružný rozváděč (RP)", symbol: "RP", kind: "panel" },
   // Fáze 59: průchod kabelů mezi podlažími (jedno na podlaží) – bez něj vede trasa svisle nad / pod rozváděčem
   { id: "riser", group: "panel", label: "Stoupací vedení (průchod do jiného podlaží)", symbol: "↕", kind: "riser" },
   { id: "socket", group: "sockets", label: "Jednozásuvka", symbol: "Z", kind: "single_socket" },
@@ -183,8 +192,10 @@ export interface EditorElement {
   frameUnits: number;
   /** Designová řada domovních přístrojů („ABB|Levit“); null = řada celého nákresu. */
   series: string | null;
-  /** Barva přístrojů (`DESIGN_COLORS`, fáze 51); null = barva celého nákresu. */
+  /** Barva přístrojů – klapka / kryt (`DESIGN_COLORS`, fáze 51); null = barva celého nákresu. */
   color: string | null;
+  /** Fáze 74: barva rámečku, liší-li se od klapky; bez údaje = výchozí barva rámečku nákresu, jinak stejná jako klapka. */
+  frameColor?: string;
   /** Vypínač: světla, která ovládá. */
   controls: string[];
   /**
@@ -203,6 +214,10 @@ export interface EditorElement {
   product?: string;
   /** Fáze 65: ruční zásuvkový okruh („Z1“ … „Z99“) – zásuvky se stejným okruhem jdou na jeden jistič; bez = automaticky. */
   socketCircuit?: string;
+  /** Fáze 74: kód podružného rozváděče („RP1“) – jen u značky podružného rozváděče. */
+  boardCode?: string;
+  /** Fáze 74: ruční přiřazení prvku k rozváděči („RH“ / „RP1“ …); bez = automaticky (`boardOfElement`). */
+  board?: string;
 }
 
 /** Fáze 61: zátěž svítidla pro chytrou domácnost. */
@@ -344,8 +359,10 @@ export interface FloorplanDraft {
   mode: CableRoutingMode;
   /** Výchozí designová řada („ABB|Levit“) – platí pro nově vkládané prvky. */
   series: string | null;
-  /** Výchozí barva přístrojů (fáze 51). */
+  /** Výchozí barva přístrojů – klapka / kryt (fáze 51). */
   color: string;
+  /** Fáze 74: výchozí barva rámečku; null = stejná jako klapka. */
+  frameColor: string | null;
   /** Fáze 52: úroveň instalace, způsob uložení kabelů, souběh kabelů a počítání dvojzásuvky. */
   installation: InstallLevel;
   installMethod: InstallMethod;
@@ -365,6 +382,8 @@ export interface FloorplanDraft {
   socketGrouping: SocketGrouping;
   /** Fáze 65: ručně přidané moduly chytré domácnosti na DIN lištu nad výpočet (id modulu → kusy). */
   smartExtras: Record<string, number>;
+  /** Fáze 74: ochranná zóna umyvadla – podle ČSN 33 2130 (umývací prostor + 0,2 m pod 1,2 m), nebo přísněji 0,6 m. */
+  basinZone: BasinZone;
   updatedAt: number;
 }
 
@@ -389,6 +408,7 @@ export const emptyDraft = (): FloorplanDraft => ({
   mode: "OPTIMIZED",
   series: "ABB|Levit",
   color: DEFAULT_COLOR,
+  frameColor: null,
   installation: "classic",
   installMethod: "C",
   groupedCables: 1,
@@ -400,6 +420,7 @@ export const emptyDraft = (): FloorplanDraft => ({
   cableView: "color",
   socketGrouping: "compact",
   smartExtras: {},
+  basinZone: "norm",
   updatedAt: 0,
 });
 
@@ -418,7 +439,8 @@ export function parseDraft(value: unknown): FloorplanDraft | null {
     .slice(0, MAX_FLOORS - 1)
     .map((floor, index) => parseSheet(floor, num, { id: `f${index + 2}`, name: `${index + 2}. NP`, levelMm: (index + 1) * DEFAULT_STOREY_MM }))
     .filter((floor) => !seen.has(floor.id) && seen.add(floor.id));
-  return {
+  // Fáze 74: podružné rozváděče s jedinečným kódem RPn
+  return ensureBoardCodes({
     ...base,
     background: sheet.background,
     calibration: sheet.calibration,
@@ -439,6 +461,7 @@ export function parseDraft(value: unknown): FloorplanDraft | null {
     mode: draft.mode === "BOTTOM" || draft.mode === "TOP" || draft.mode === "OPTIMIZED" ? draft.mode : "OPTIMIZED",
     series: typeof draft.series === "string" ? draft.series.slice(0, 80) : null,
     color: typeof draft.color === "string" && designColor(draft.color) ? draft.color : DEFAULT_COLOR,
+    frameColor: typeof draft.frameColor === "string" && designColor(draft.frameColor) ? draft.frameColor : null,
     installation: isInstallLevel(draft.installation) ? draft.installation : base.installation,
     installMethod: isInstallMethod(draft.installMethod) ? draft.installMethod : base.installMethod,
     groupedCables: Math.round(num(draft.groupedCables, 1, 1, 20)),
@@ -451,8 +474,9 @@ export function parseDraft(value: unknown): FloorplanDraft | null {
     // Fáze 65: nákres z doby před volbou rozdělení zůstane u dosavadního rozdělení (stejné okruhy jako vygenerovaný rozváděč)
     socketGrouping: isSocketGrouping(draft.socketGrouping) ? draft.socketGrouping : "distance",
     smartExtras: parseSmartExtras(draft.smartExtras),
+    basinZone: isBasinZone(draft.basinZone) ? draft.basinZone : "norm",
     updatedAt: num(draft.updatedAt, 0, 0, 1e15),
-  };
+  });
 }
 
 type Num = (input: unknown, fallback: number, min: number, max: number) => number;
@@ -503,6 +527,8 @@ function parseSheet(raw: Partial<FloorSheet> & Partial<Pick<FloorplanDraft, "flo
       frameUnits: Math.round(num(element.frameUnits, 1, 1, 5)),
       series: typeof element.series === "string" ? element.series.slice(0, 80) : null,
       color: typeof element.color === "string" && designColor(element.color) ? element.color : null,
+      // Fáze 74: barva rámečku zvlášť
+      ...(typeof element.frameColor === "string" && designColor(element.frameColor) ? { frameColor: element.frameColor } : {}),
       controls: Array.isArray(element.controls) ? element.controls.filter((id): id is string => typeof id === "string").slice(0, 20) : [],
       rotation: normalizeRotation(element.rotation),
       scale: typeof element.scale === "number" && Number.isFinite(element.scale) ? clampSymbolScale(element.scale) : null,
@@ -569,6 +595,96 @@ function parseSheet(raw: Partial<FloorSheet> & Partial<Pick<FloorplanDraft, "flo
 /** Fáze 65: ruční zásuvkový okruh „Z1“ … „Z99“. */
 export const SOCKET_CIRCUIT = /^Z[1-9]\d?$/;
 
+// ---------------------------------------------------------------------------
+//  Fáze 74: hlavní a podružné rozváděče
+// ---------------------------------------------------------------------------
+
+/** Značka podružného rozváděče v paletě. */
+export const SUBPANEL_ITEM = "subpanel";
+/** Kód podružného rozváděče „RP1“ … „RP99“. */
+export const SUBPANEL_CODE = /^RP[1-9]\d?$/;
+/** Přiřazení prvku: hlavní rozváděč nebo podružný. */
+export const BOARD_CODE = /^(RH|RP[1-9]\d?)$/;
+
+export interface BoardInfo {
+  /** „RH“ / „RP1“ … */
+  code: string;
+  main: boolean;
+  /** Prvek nákresu (značka rozváděče). */
+  element: EditorElement;
+  floorId: string;
+  floorName: string;
+  /** Místnost, ve které rozváděč visí. */
+  room: string;
+}
+
+export const isSubpanel = (element: Pick<EditorElement, "item">) => element.item === SUBPANEL_ITEM;
+
+/** Patří prvek k rozváděči (elektrický vývod – ne rozváděč, stoupací vedení ani zařizovací předmět)? */
+export function hasBoard(element: Pick<EditorElement, "item">): boolean {
+  const kind = paletteItem(element.item)?.kind;
+  return Boolean(kind) && kind !== "panel" && kind !== "riser" && kind !== "fixture";
+}
+
+const byBoardCode = (a: string, b: string) => (a === MAIN_BOARD ? -1 : b === MAIN_BOARD ? 1 : a.localeCompare(b, "cs", { numeric: true }));
+
+/** Rozváděče nákresu přes všechna podlaží: hlavní (je-li vložený) a podružné, seřazené RH, RP1, RP2 … */
+export function boardsOf(draft: Pick<FloorplanDraft, "elements" | "otherFloors" | "floorId" | "floorName" | "floorLevelMm"> & Partial<FloorplanDraft>): BoardInfo[] {
+  const sheets = [{ id: draft.floorId, name: draft.floorName, elements: draft.elements }, ...(draft.otherFloors ?? []).map((floor) => ({ id: floor.id, name: floor.name, elements: floor.elements }))];
+  const boards: BoardInfo[] = [];
+  const seen = new Set<string>();
+  for (const sheet of sheets) {
+    for (const element of sheet.elements) {
+      const code = element.item === "panel" ? MAIN_BOARD : isSubpanel(element) ? element.boardCode : undefined;
+      if (!code || seen.has(code)) continue;
+      seen.add(code);
+      boards.push({ code, main: code === MAIN_BOARD, element, floorId: sheet.id, floorName: sheet.name, room: element.room });
+    }
+  }
+  return boards.sort((a, b) => byBoardCode(a.code, b.code));
+}
+
+/** Automatické přiřazení: podlaží s podružným rozváděčem bez hlavního → nejbližší podružný rozváděč podlaží, jinak hlavní. */
+export function autoBoard(boards: readonly BoardInfo[], element: Pick<EditorElement, "x" | "y">, floorId: string): string {
+  const here = boards.filter((board) => board.floorId === floorId);
+  if (!here.length || here.some((board) => board.main)) return MAIN_BOARD;
+  return [...here].sort((a, b) => Math.hypot(a.element.x - element.x, a.element.y - element.y) - Math.hypot(b.element.x - element.x, b.element.y - element.y))[0].code;
+}
+
+/** Rozváděč prvku: ruční přiřazení k existujícímu rozváděči, jinak automaticky (`autoBoard`). */
+export function boardOfElement(boards: readonly BoardInfo[], element: Pick<EditorElement, "x" | "y" | "board">, floorId: string): string {
+  if (element.board && boards.some((board) => board.code === element.board)) return element.board;
+  return autoBoard(boards, element, floorId);
+}
+
+/** Podružné rozváděče bez platného nebo s duplicitním kódem dostanou první volný kód RPn (načtení nákresu). */
+function ensureBoardCodes(draft: FloorplanDraft): FloorplanDraft {
+  const used = new Set<string>();
+  let missing = false;
+  for (const element of allElements(draft)) {
+    if (!isSubpanel(element)) continue;
+    if (element.boardCode && !used.has(element.boardCode)) used.add(element.boardCode);
+    else missing = true;
+  }
+  if (!missing) return draft;
+  const taken = new Set<string>();
+  const next = () => {
+    for (let index = 1; index <= 99; index++) if (!used.has(`RP${index}`) && !taken.has(`RP${index}`)) return `RP${index}`;
+    return null;
+  };
+  return mapAllElements(draft, (element) => {
+    if (!isSubpanel(element)) return element;
+    if (element.boardCode && !taken.has(element.boardCode)) {
+      taken.add(element.boardCode);
+      return element;
+    }
+    const code = next();
+    if (!code) return element;
+    taken.add(code);
+    return { ...element, boardCode: code };
+  });
+}
+
 /** Fáze 65: ručně přidané moduly chytré domácnosti (id modulu → 1 … 20 kusů). */
 function parseSmartExtras(value: unknown): Record<string, number> {
   if (!value || typeof value !== "object") return {};
@@ -580,8 +696,8 @@ function parseSmartExtras(value: unknown): Record<string, number> {
   );
 }
 
-/** Fáze 63: rozměr předmětu, vlastní spotřebič a výrobek prvku z uložených dat; fáze 65 ruční zásuvkový okruh. */
-function parseExtras(element: Partial<EditorElement> & { item: string }, num: Num): Pick<EditorElement, "sizeMm" | "appliance" | "product" | "socketCircuit"> {
+/** Fáze 63: rozměr předmětu, vlastní spotřebič a výrobek prvku z uložených dat; fáze 65 ruční zásuvkový okruh, fáze 74 rozváděč. */
+function parseExtras(element: Partial<EditorElement> & { item: string }, num: Num): Pick<EditorElement, "sizeMm" | "appliance" | "product" | "socketCircuit" | "boardCode" | "board"> {
   const fixture = fixtureSpecOf(element.item);
   const size = element.sizeMm && typeof element.sizeMm === "object" ? element.sizeMm : null;
   return {
@@ -589,6 +705,8 @@ function parseExtras(element: Partial<EditorElement> & { item: string }, num: Nu
     ...(element.item === CUSTOM_APPLIANCE_ITEM && typeof element.appliance === "string" && /^[\w-]{1,40}$/.test(element.appliance) ? { appliance: element.appliance } : {}),
     ...(typeof element.product === "string" && productById(element.product) ? { product: element.product } : {}),
     ...(typeof element.socketCircuit === "string" && SOCKET_CIRCUIT.test(element.socketCircuit) ? { socketCircuit: element.socketCircuit } : {}),
+    ...(element.item === SUBPANEL_ITEM && typeof element.boardCode === "string" && SUBPANEL_CODE.test(element.boardCode) ? { boardCode: element.boardCode } : {}),
+    ...(element.item !== SUBPANEL_ITEM && element.item !== "panel" && typeof element.board === "string" && BOARD_CODE.test(element.board) ? { board: element.board } : {}),
   };
 }
 
@@ -953,7 +1071,17 @@ export interface PlanBuild {
   metric: RouteMetric;
   /** Fáze 60: podlaží s trasami podél stěn (místnosti / nové příčky); ostatní pravoúhle. */
   wallFloors: string[];
+  /**
+   * Fáze 74: rozváděče – hlavní RH a podružné RP1 … (výchozí body tras jejich okruhů). Podružný rozváděč má uzel
+   * trasy `board-RPn` (cíl přívodu z RH) a délku přívodu.
+   */
+  boards: { code: string; point: RoutePoint; room: string; roomName: string; nodeId: string | null; feederLengthMm: number }[];
+  /** Fáze 74: rozváděč každého uzlu výpočtu (uzel → „RH“ / „RP1“). */
+  boardOf: Map<string, string>;
 }
+
+/** Fáze 74: uzel trasy podružného rozváděče (cíl přívodu z hlavního rozváděče). */
+export const boardNodeId = (code: string) => `board-${code}`;
 
 /** Fáze 59: osa víceramečku podle natočení kotvy (stěna nahoře / dole = vodorovně, vlevo / vpravo = svisle). */
 export const frameAxis = (rotation: number) => {
@@ -991,7 +1119,8 @@ export function buildPlan(draft: FloorplanDraft): PlanBuild {
   const bases = new Map<string, RouteMetric>();
   for (const floor of floors) {
     const partitions = floor.annotations.filter((note) => note.kind === "wall").map((note) => ({ x1: note.x, y1: note.y, x2: note.x2, y2: note.y2 }));
-    const graph = buildWallGraph(wallSegments(floor.rooms, partitions));
+    // Fáze 74: místnosti určí obvodové stěny (přednost vnitřních stěn v trasách)
+    const graph = buildWallGraph(wallSegments(floor.rooms, partitions), { rooms: floor.rooms });
     if (graph.edges.length) bases.set(floor.id, wallMetric(graph, MANHATTAN));
   }
   const metric = floorMetric(links, bases);
@@ -1003,7 +1132,27 @@ export function buildPlan(draft: FloorplanDraft): PlanBuild {
   const busNodeIds: string[] = [];
   /** Výška krabice pro výpočet (vlastní, z palety, jinak podle druhu). */
   const heightOf = (element: EditorElement, item: PaletteItem) => (element.mountHeightMm !== null ? element.mountHeightMm : (item.heightMm ?? null));
-  const homeRun = (point: RoutePoint, heightMm: number) => homeRunLength({ x: 0, y: 0 }, { x: metric.distance(panel, point), y: 0 }, heightMm, draft.mode, profile);
+  const homeRunFrom = (origin: RoutePoint, point: RoutePoint, heightMm: number) => homeRunLength({ x: 0, y: 0 }, { x: metric.distance(origin, point), y: 0 }, heightMm, draft.mode, profile);
+  // Fáze 74: rozváděče (hlavní + podružné) a rozváděč každého prvku
+  const boardInfos = boardsOf(draft);
+  const boardPoint = new Map(boardInfos.map((board) => [board.code, { x: board.element.x, y: board.element.y, floor: board.floorId } as RoutePoint]));
+  const boardOf = new Map<string, string>();
+  const boards: PlanBuild["boards"] = [];
+  for (const board of boardInfos) {
+    const floor = floors.find((candidate) => candidate.id === board.floorId)!;
+    const point = boardPoint.get(board.code)!;
+    const room = roomId(floor, board.room);
+    if (board.main) {
+      boards.push({ code: board.code, point, room, roomName: board.room, nodeId: null, feederLengthMm: 0 });
+      continue;
+    }
+    // Podružný rozváděč = cíl přívodu z hlavního rozváděče (uzel trasy, ne elektrický vývod)
+    const nodeId = boardNodeId(board.code);
+    const heightMm = profile.switchboardHeightMm;
+    routeNodes.push({ id: nodeId, x: point.x, y: point.y, heightMm, room, floor: floor.id, board: MAIN_BOARD });
+    elementOf.set(nodeId, board.element);
+    boards.push({ code: board.code, point, room, roomName: board.room, nodeId, feederLengthMm: homeRunFrom(panel, point, heightMm) });
+  }
   for (const floor of floors) {
     // Fáze 59: víceramček = krabice vedle sebe v rozteči 71 mm od kotvy (propojení přímo v krabici)
     const frameSlot = new Map<string, { frame: string; origin: { x: number; y: number }; axis: { x: number; y: number }; start: number }>();
@@ -1029,6 +1178,8 @@ export function buildPlan(draft: FloorplanDraft): PlanBuild {
       const units = item.kind === "single_socket" || item.kind === "double_socket" || item.kind === "data_socket" || item.kind === "switch" ? element.frameUnits : 1;
       const slot = frameSlot.get(element.id);
       const frame = slot?.frame ?? (units > 1 ? element.id : null);
+      const board = boardOfElement(boardInfos, element, floor.id);
+      const origin = boardPoint.get(board) ?? panel;
       for (let unit = 0; unit < units; unit++) {
         const id = units > 1 ? `${element.id}#${unit + 1}` : element.id;
         const offset = ((slot?.start ?? 0) + unit) * FRAME_PITCH_MM;
@@ -1049,10 +1200,12 @@ export function buildPlan(draft: FloorplanDraft): PlanBuild {
           ...(element.socketCircuit && (item.kind === "single_socket" || item.kind === "double_socket") ? { socketCircuit: element.socketCircuit } : {}),
         };
         const heightMm = mountHeight(node, profile);
-        node.lengthMm = homeRun({ x: px[0], y: px[1], floor: floor.id }, heightMm);
+        // Fáze 74: délka přívodu prvku z jeho rozváděče
+        node.lengthMm = homeRunFrom(origin, { x: px[0], y: px[1], floor: floor.id }, heightMm);
         nodes.push(node);
         elementOf.set(id, element);
-        routeNodes.push({ id, x: px[0], y: px[1], heightMm, room: node.room, floor: floor.id, ...(frame ? { frame } : {}) });
+        boardOf.set(id, board);
+        routeNodes.push({ id, x: px[0], y: px[1], heightMm, room: node.room, floor: floor.id, board, ...(frame ? { frame } : {}) });
         if (item.kind === "data_socket") dataNodeIds.push(id);
         // Bezdrátový výrobek / samostatný systém (videotelefon) nejde na sběrnicovou linku
         if (item.bus && draft.installation === "bus_loxone" && !product?.noBus) busNodeIds.push(id);
@@ -1086,7 +1239,7 @@ export function buildPlan(draft: FloorplanDraft): PlanBuild {
     return { id: room.id, name: room.name, ...(multi ? { floor: floor.id } : {}), ...(lights.length && switches.size ? { lighting: { groups: 1 as const, switchCount: Math.min(6, switches.size) } } : {}) };
   });
   const calibration = calibrateFloorplanScale({ walls: [{ px: [0, 0, 1000, 0], lengthMm: 1000 }], panelPx: [panel.x, panel.y], elevation: profile, routing: draft.mode });
-  return { plan: { rooms, nodes, mode: draft.installation }, calibration, panel, routeNodes, switchLinks, controlRuns, dataNodeIds, busNodeIds, elementOf, floors: links, metric, wallFloors: [...bases.keys()] };
+  return { plan: { rooms, nodes, mode: draft.installation }, calibration, panel, routeNodes, switchLinks, controlRuns, dataNodeIds, busNodeIds, elementOf, floors: links, metric, wallFloors: [...bases.keys()], boards, boardOf };
 }
 
 /** Kalibrace na 2 kliky: úsečka v mm současného měřítka a skutečná délka → nové měřítko a přepočet prvků. */
@@ -1153,11 +1306,61 @@ export const designOptionsOf = (draft: Pick<FloorplanDraft, "installMethod" | "g
   ...(draft.socketGrouping ? { socketGrouping: draft.socketGrouping } : {}),
 });
 
+/**
+ * Fáze 74: okruhy po rozváděčích – každý podružný rozváděč má vlastní návrh okruhů (1 světelný okruh stačí, limit
+ * úbytku a impedance smyčky po odečtení přívodu), hlavní rozváděč navíc přívody podružných rozváděčů. Okruhy
+ * podružného rozváděče mají id s kódem rozváděče („RP1.sockets-1“). Bez podružného rozváděče beze změny.
+ */
+export function boardCircuits(build: PlanBuild, draft: Pick<FloorplanDraft, "supplySystem">, options: DesignOptions): CircuitPlan {
+  const subBoards = build.boards.filter((board) => board.code !== MAIN_BOARD);
+  if (!subBoards.length) return generateCircuitsFromFloorplan(build.plan, build.calibration, options);
+  const partOf = (code: string): Floorplan => {
+    const nodes = build.plan.nodes.filter((node) => (build.boardOf.get(node.id) ?? MAIN_BOARD) === code);
+    const roomIds = new Set(nodes.map((node) => node.room));
+    return { ...build.plan, nodes, rooms: build.plan.rooms.filter((room) => roomIds.has(room.id)) };
+  };
+  const supply = supplyById(draft.supplySystem);
+  const main = generateCircuitsFromFloorplan(partOf(MAIN_BOARD), build.calibration, options);
+  const parts: CircuitPlan[] = [];
+  const feeders: Circuit[] = [];
+  const warnings: string[] = [...main.warnings];
+  const roomName = new Map(build.plan.rooms.map((room) => [room.id, room.name]));
+  for (const board of subBoards) {
+    const part = partOf(board.code);
+    const local = { ...options, minLightingCircuits: 1 };
+    const first = generateCircuitsFromFloorplan(part, build.calibration, local);
+    const feeder = subBoardFeeder({ board: board.code, nodeId: board.nodeId!, room: board.room, roomName: roomName.get(board.room) ?? board.roomName, circuits: first.circuits, supplyPhases: supply.phases, lengthMm: board.feederLengthMm, method: options.installMethod, groupedCables: options.groupedCables, supplyLoopOhm: options.supplyLoopOhm });
+    // Druhý průchod: koncové okruhy podružného rozváděče s úbytkem a impedancí přívodu
+    const final = generateCircuitsFromFloorplan(part, build.calibration, { ...local, upstreamDropPct: feeder.circuit.voltageDropPct, supplyLoopOhm: (options.supplyLoopOhm ?? DEFAULT_SUPPLY_LOOP_OHM) + feederLoopOhm(feeder.circuit) });
+    parts.push({ ...final, circuits: final.circuits.map((circuit) => ({ ...circuit, id: `${board.code}.${circuit.id}`, board: board.code, upstreamDropPct: feeder.circuit.voltageDropPct })) });
+    feeders.push(feeder.circuit);
+    warnings.push(...feeder.warnings, ...final.warnings.map((warning) => `${board.code}: ${warning}`));
+    if (supply.system === "TT") warnings.push(`Přívod ${board.code} v soustavě TT: doplňte na začátek přívodu chránič typu S (100 / 300 mA) nebo veďte přívod v provedení třídy ochrany II.`);
+    if (!first.circuits.length) warnings.push(`${board.code}: podružný rozváděč nemá žádný okruh – přiřaďte mu prvky (soupis okruhů nebo detail prvku), nebo ho smažte.`);
+  }
+  const bom = new Map<string, number>();
+  for (const plan of [main, ...parts]) for (const entry of plan.bom) bom.set(entry.item, (bom.get(entry.item) ?? 0) + entry.count);
+  const io = { di: 0, do: 0, impulseRelays: 0, treeDevices: 0 };
+  for (const plan of [main, ...parts]) for (const key of ["di", "do", "impulseRelays", "treeDevices"] as const) io[key] += plan.io[key];
+  return {
+    circuits: [...main.circuits, ...feeders, ...parts.flatMap((plan) => plan.circuits)],
+    bom: [...bom.entries()].map(([item, count]) => ({ item, count })),
+    switching: [main, ...parts].flatMap((plan) => plan.switching),
+    io,
+    warnings,
+  };
+}
+
+/** Fáze 74: okruhy jednoho rozváděče (pro generátor projektu rozváděče). */
+export const circuitsOfBoard = (plan: CircuitPlan, code: string): Circuit[] => plan.circuits.filter((circuit) => (circuit.board ?? MAIN_BOARD) === code);
+
 /** Živý výpočet nad nákresem (klient i server): okruhy dle ČSN 33 2130 ed. 4 a výkaz kabeláže ve 3 režimech. */
 export function analyzeDraft(draft: FloorplanDraft) {
   const build = buildPlan(draft);
-  const circuits = generateCircuitsFromFloorplan(build.plan, build.calibration, designOptionsOf(draft));
-  const summary = summarizeCabling({ circuits: circuits.circuits, nodes: build.routeNodes, panel: build.panel, profile: draft.profile, selected: draft.mode, switchLinks: build.switchLinks, controlRuns: build.controlRuns, dataNodeIds: build.dataNodeIds, busNodeIds: build.busNodeIds, installation: draft.installation, metric: build.metric, routeEdits: draft.routeEdits });
+  const circuits = boardCircuits(build, draft, designOptionsOf(draft));
+  // Fáze 74: okruhy podružných rozváděčů vedou ze svého rozváděče
+  const panels = Object.fromEntries(build.boards.map((board) => [board.code, board.point]));
+  const summary = summarizeCabling({ circuits: circuits.circuits, nodes: build.routeNodes, panel: build.panel, panels, profile: draft.profile, selected: draft.mode, switchLinks: build.switchLinks, controlRuns: build.controlRuns, dataNodeIds: build.dataNodeIds, busNodeIds: build.busNodeIds, installation: draft.installation, metric: build.metric, routeEdits: draft.routeEdits });
   return { build, circuits, summary };
 }
 
@@ -1251,12 +1454,21 @@ export const hasWiringDevice = (element: EditorElement) => {
 
 /** „🔄 Použít na celý půdorys“ (všechna podlaží) / „Použít na vybranou místnost“ (aktivní podlaží): řada a barva. */
 export function applyAppearance(draft: FloorplanDraft, scope: { room?: string } = {}): FloorplanDraft {
-  const apply = (element: EditorElement) => (hasWiringDevice(element) ? { ...element, series: draft.series, color: draft.color } : element);
+  // Fáze 74: i barva rámečku – výchozí rámeček nákresu (bez vlastní barvy prvku)
+  const apply = (element: EditorElement) => {
+    if (!hasWiringDevice(element)) return element;
+    const rest = { ...element, series: draft.series, color: draft.color };
+    delete rest.frameColor;
+    return rest;
+  };
   if (scope.room !== undefined) return { ...draft, elements: draft.elements.map((element) => (element.room === scope.room ? apply(element) : element)) };
   return mapAllElements(draft, apply);
 }
 
-/** Soupis domovní instalace: druh prvku × vzhled (výrobce, řada, barva) → počet kusů. */
+/** Fáze 74: barva rámečku prvku – vlastní, jinak výchozí rámeček nákresu, jinak barva klapky. */
+export const frameColorOf = (draft: Pick<FloorplanDraft, "color" | "frameColor">, element: Pick<EditorElement, "color" | "frameColor">) => element.frameColor ?? draft.frameColor ?? element.color ?? draft.color;
+
+/** Soupis domovní instalace: druh prvku × vzhled (výrobce, řada, barva klapky a rámečku) → počet kusů. */
 export function wiringInventory(draft: FloorplanDraft): { label: string; appearance: string; seriesKey: string | null; color: string; count: number }[] {
   const rows = new Map<string, { label: string; appearance: string; seriesKey: string | null; color: string; count: number }>();
   for (const element of allElements(draft)) {
@@ -1264,8 +1476,9 @@ export function wiringInventory(draft: FloorplanDraft): { label: string; appeara
     const item = paletteItem(element.item)!;
     const seriesKey = element.series ?? draft.series;
     const color = element.color ?? draft.color;
-    const key = `${item.id}|${seriesKey}|${color}`;
-    const row = rows.get(key) ?? { label: item.label, appearance: appearanceLabel(seriesKey, color), seriesKey, color, count: 0 };
+    const frame = frameColorOf(draft, element);
+    const key = `${item.id}|${seriesKey}|${color}|${frame}`;
+    const row = rows.get(key) ?? { label: item.label, appearance: appearanceLabel(seriesKey, color, frame), seriesKey, color, count: 0 };
     row.count += element.frameUnits;
     rows.set(key, row);
   }

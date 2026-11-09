@@ -60,18 +60,21 @@ export function nextProjectCode(codes: readonly string[]): string {
   return `PB-${String(max + 1).padStart(3, "0")}`;
 }
 
-export type StepKey = "recognition" | "tree" | "thermal" | "documentation";
+/** Fáze 75: kroky projektu – 1 návrh, 2 zapojení, 3 skříň (nový krok), 4 oteplení, 5 dokumentace. */
+export type StepKey = "recognition" | "tree" | "enclosure" | "thermal" | "documentation";
 
 /**
- * Stav kroků projektu (fáze 48): ✓ Hotovo / Rozpracováno. Krok 1 = všechny prvky rozpoznané nebo
- * potvrzené, krok 2 = kompletní strom zapojení, krok 3 = vyhovující oteplení, krok 4 = propuštěno.
+ * Stav kroků projektu (fáze 48): ✓ Hotovo / Rozpracováno. Krok 1 = všechny prvky rozpoznané nebo potvrzené, krok 2 =
+ * kompletní strom zapojení, krok 3 = vybraná skříň, do které se návrh vejde (fáze 75), krok 4 = vyhovující oteplení,
+ * krok 5 = propuštěno.
  */
-export function stepProgress(input: { items: readonly { recognitionStatus: RecognitionStatus }[]; status: PanelProjectStatus; connected: boolean; thermalOk: boolean }): Record<StepKey, boolean> {
+export function stepProgress(input: { items: readonly { recognitionStatus: RecognitionStatus }[]; status: PanelProjectStatus; connected: boolean; thermalOk: boolean; enclosure?: boolean }): Record<StepKey, boolean> {
   const hasItems = input.items.length > 0;
   const recognition = hasItems && input.items.every((item) => item.recognitionStatus !== "UNRECOGNIZED");
   return {
     recognition,
     tree: recognition && input.connected,
+    enclosure: hasItems && input.enclosure === true,
     thermal: hasItems && input.thermalOk,
     documentation: input.status === "COMPLETED",
   };

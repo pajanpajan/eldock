@@ -38,8 +38,8 @@ describe("fáze 48 – přehled projektů Panel Builderu", () => {
 
   it("stav kroků ✓ Hotovo / Rozpracováno", () => {
     const items = [{ recognitionStatus: "VERIFIED" as const }, { recognitionStatus: "PARTIAL" as const }];
-    expect(stepProgress({ items, status: "TREE_BUILT", connected: true, thermalOk: true })).toEqual({ recognition: true, tree: true, thermal: true, documentation: false });
-    expect(stepProgress({ items: [...items, { recognitionStatus: "UNRECOGNIZED" }], status: "RECOGNIZED", connected: true, thermalOk: false })).toEqual({ recognition: false, tree: false, thermal: false, documentation: false });
+    expect(stepProgress({ items, status: "TREE_BUILT", connected: true, thermalOk: true, enclosure: true })).toEqual({ recognition: true, tree: true, enclosure: true, thermal: true, documentation: false });
+    expect(stepProgress({ items: [...items, { recognitionStatus: "UNRECOGNIZED" }], status: "RECOGNIZED", connected: true, thermalOk: false })).toEqual({ recognition: false, tree: false, enclosure: false, thermal: false, documentation: false });
     expect(stepProgress({ items: [], status: "DRAFT", connected: true, thermalOk: true })).toMatchObject({ recognition: false, thermal: false });
   });
 });

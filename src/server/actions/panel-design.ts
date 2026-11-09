@@ -140,7 +140,7 @@ const imageUrl = z
   .nullable()
   .optional();
 
-/** Logo a razítko firmy v profilu (propisují se do dokumentace kroku 4). */
+/** Logo a razítko firmy v profilu (propisují se do dokumentace kroku 5). */
 export async function setCompanyBrandingAction(input: { logoUrl?: string | null; stampUrl?: string | null }): Promise<ActionResult<{ logoUrl: string | null; stampUrl: string | null }>> {
   const parsed = z.object({ logoUrl: imageUrl, stampUrl: imageUrl }).safeParse(input);
   if (!parsed.success) return { ok: false, error: "Nahrajte obrázek PNG, JPG nebo SVG." };
@@ -217,7 +217,7 @@ export async function saveCircuitChipsAction(input: z.input<typeof chipSchema>):
   }
 }
 
-/** Edice normy rozváděče (krok 1 a krok 4) – propisuje se do Listu 5 a 6 dokumentace. */
+/** Edice normy rozváděče (krok 1 a krok 5) – propisuje se do Listu 5 a 6 dokumentace. */
 export async function setStandardEditionAction(projectId: string, edition: string): Promise<ActionResult> {
   if (!id.safeParse(projectId).success || !z.string().max(30).safeParse(edition).success) return { ok: false, error: "Neplatná norma." };
   try {
@@ -239,7 +239,7 @@ const routineSchema = z.object({
   note: z.string().max(1000),
 });
 
-/** Protokol o kusové zkoušce – autosave z kroku 4. */
+/** Protokol o kusové zkoušce – autosave z kroku 5. */
 export async function saveRoutineTestAction(projectId: string, test: z.input<typeof routineSchema>): Promise<ActionResult<{ verdict: string; missing: string[] }>> {
   const parsed = routineSchema.safeParse(test);
   if (!id.safeParse(projectId).success || !parsed.success) return { ok: false, error: "Neplatný protokol kusové zkoušky." };

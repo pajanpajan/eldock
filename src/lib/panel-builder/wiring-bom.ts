@@ -5,9 +5,9 @@
 // u řady, kde zadání uvádí jen jednoduchý kryt, dvoubarevný kód) má `verified: false`; bez podkladu je MPN null (doplnit).
 // Čisté funkce.
 
-import { allElements, effectiveSwitchNo, floorsOf, isWiredSwitch, paletteItem, type EditorElement, type FloorplanDraft, type FrameGroup } from "./floorplan-editor";
+import { allElements, effectiveSwitchNo, floorsOf, frameColorOf, isWiredSwitch, paletteItem, type EditorElement, type FloorplanDraft, type FrameGroup } from "./floorplan-editor";
 import { gangsOf } from "./floorplan-frames";
-import { appearanceLabel, designSeriesOf } from "./wiring-designs";
+import { appearanceLabel, colorCodeFor, designSeriesOf } from "./wiring-designs";
 
 export type BomCategory = "Přístroje spínačů" | "Kryty spínačů" | "Sběrnicové prvky" | "Chytré moduly" | "Zásuvky" | "Rámečky" | "Ostatní přístroje" | "Instalační krabice" | "Kabely";
 export const BOM_CATEGORIES: readonly BomCategory[] = ["Přístroje spínačů", "Kryty spínačů", "Sběrnicové prvky", "Chytré moduly", "Zásuvky", "Rámečky", "Ostatní přístroje", "Instalační krabice", "Kabely"];
@@ -90,12 +90,15 @@ const FREEATHOME_BUS: Record<string, { mpn: string; name: string }> = {
 
 const DIVIDED = new Set(["5", "6+6", "1/0+1/0", "1+1", "6+6/0"]);
 
-/** Objednací číslo s kódem barvy; dvoubarevný kód („241/141“) nebo barva bez kódu → neověřeno / chybí. */
-function withColor(base: string | null, code: string | null | undefined, verified: boolean): { mpn: string | null; verified: boolean } {
+/**
+ * Objednací číslo s kódem barvy dílu; barva bez kódu → chybí. Fáze 74: dvoubarevný kód („241/141“) se rozdělí na
+ * rámeček / kryt (klapku) – objednací číslo z rozděleného kódu je neověřené.
+ */
+function withColor(base: string | null, code: string | null | undefined, verified: boolean, part: "frame" | "insert" = "insert"): { mpn: string | null; verified: boolean } {
   if (!base) return { mpn: null, verified: false };
-  if (!code) return { mpn: null, verified: false };
-  if (code.includes("/")) return { mpn: `${base} ${code.split("/")[0]}`, verified: false };
-  return { mpn: `${base} ${code}`, verified };
+  const own = colorCodeFor(code, part);
+  if (!own.code) return { mpn: null, verified: false };
+  return { mpn: `${base} ${own.code}`, verified: verified && !own.split };
 }
 
 export interface BomOptions {
@@ -105,11 +108,11 @@ export interface BomOptions {
   cables?: readonly { cable: string; meters: number }[];
 }
 
-/** Objednací číslo rámečku NR: řady Busch-Jaeger mají číslo pro každou barvu (`frameMpn`), ostatní matice + kód barvy. */
-function frameNumber(style: { matrix?: SeriesMatrix; code: string | null; frameMpn?: (string | null)[] }, units: number): { mpn: string | null; verified: boolean } {
+/** Objednací číslo rámečku NR: řady Busch-Jaeger mají číslo pro každou barvu (`frameMpn`), ostatní matice + kód barvy rámečku. */
+function frameNumber(style: { matrix?: SeriesMatrix; frameCode: string | null; frameMpn?: (string | null)[] }, units: number): { mpn: string | null; verified: boolean } {
   const own = style.frameMpn?.[units - 1];
   if (own) return { mpn: own, verified: true };
-  return withColor(style.matrix?.frame(units) ?? null, style.code, true);
+  return withColor(style.matrix?.frame(units) ?? null, style.frameCode, true, "frame");
 }
 
 /** Kompletní kusovník domovní instalace (součty kusů podle objednacího čísla a popisu). */
@@ -126,13 +129,16 @@ export function compileFloorplanBom(draft: FloorplanDraft, options: BomOptions =
   // Fáze 59: víceramečky všech podlaží – člen rámečku nemá vlastní rámeček, za skupinu jeden rámeček NR
   const frameOf = new Map<string, FrameGroup>();
   for (const floor of floorsOf(draft)) for (const group of floor.frames) for (const id of group.members) frameOf.set(id, group);
-  const look = (element: Pick<EditorElement, "series" | "color">) => {
+  // Fáze 74: barva klapky / krytu (`color`) a barva rámečku (`frameColor`) zvlášť – kód barvy dílu do objednacího čísla
+  const look = (element: Pick<EditorElement, "series" | "color" | "frameColor">) => {
     const seriesKey = element.series ?? draft.series;
     const colorId = element.color ?? draft.color;
+    const frameId = frameColorOf(draft, element);
     const found = designSeriesOf(seriesKey);
     const isAbb = found?.brand.manufacturer === "ABB";
     const seriesColor = found?.series.colors?.find((color) => color.id === colorId);
-    return { seriesKey, colorId, found, isAbb, matrix: isAbb ? ABB_MATRIX[found!.series.name] : undefined, code: seriesColor?.code ?? null, frameMpn: seriesColor?.frameMpn, appearance: appearanceLabel(seriesKey, colorId) };
+    const frameColor = found?.series.colors?.find((color) => color.id === frameId) ?? seriesColor;
+    return { seriesKey, colorId, found, isAbb, matrix: isAbb ? ABB_MATRIX[found!.series.name] : undefined, code: seriesColor?.code ?? null, frameCode: frameColor?.code ?? null, frameMpn: frameColor?.frameMpn, appearance: appearanceLabel(seriesKey, colorId, frameId) };
   };
   const everything = allElements(draft);
   for (const element of everything) {

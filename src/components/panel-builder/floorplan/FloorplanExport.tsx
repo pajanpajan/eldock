@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { applianceSpecFor } from "@/lib/panel-builder/appliances";
 import { floorplanDxf } from "@/lib/panel-builder/dxf-export";
 import { paletteItem, symbolSizeOf, type FloorplanDraft, type PaletteItem, type analyzeDraft } from "@/lib/panel-builder/floorplan-editor";
+import { contentBox, scaleForBox } from "@/lib/panel-builder/plan-sheet";
 import { polygonArea, roomPolygon } from "@/lib/panel-builder/room-geometry";
 import { displayRoutes } from "@/lib/panel-builder/route-display";
 import { productById } from "@/lib/panel-builder/smart-catalog";
@@ -31,7 +32,6 @@ type Analysis = ReturnType<typeof analyzeDraft>;
 
 const PAPERS = { A3: { w: 420, h: 297 }, A4: { w: 297, h: 210 } } as const;
 type Paper = keyof typeof PAPERS;
-const SCALES = [20, 25, 50, 75, 100, 150, 200, 250, 500];
 const MARGIN = 8;
 const COLUMN = 92;
 
@@ -55,31 +55,80 @@ function itemOf(draft: FloorplanDraft, element: FloorplanDraft["elements"][numbe
   return product ? { ...base, label: product.label, ...(product.noBus ? { wireless: true } : {}) } : base;
 }
 
-/** Obálka obsahu výkresu (místnosti, prvky, zakreslené změny) s okrajem. */
-function contentBox(draft: FloorplanDraft) {
-  const xs: number[] = [];
-  const ys: number[] = [];
-  const add = (x: number, y: number) => {
-    xs.push(x);
-    ys.push(y);
-  };
-  for (const room of draft.rooms) for (const point of roomPolygon(room)) add(point.x, point.y);
-  for (const element of draft.elements) add(element.x, element.y);
-  for (const note of draft.annotations) {
-    add(note.x, note.y);
-    add(note.x2, note.y2);
-  }
-  if (!xs.length) return { x: 0, y: 0, w: draft.widthMm, h: draft.heightMm };
-  const pad = 800;
-  const x = Math.min(...xs) - pad;
-  const y = Math.min(...ys) - pad;
-  return { x, y, w: Math.max(...xs) + pad - x, h: Math.max(...ys) + pad - y };
+export function sheetScale(box: { w: number; h: number }, paper: Paper) {
+  return scaleForBox(box, PAPERS[paper].w - MARGIN * 2 - COLUMN, PAPERS[paper].h - MARGIN * 2);
 }
 
-export function sheetScale(box: { w: number; h: number }, paper: Paper) {
-  const drawW = PAPERS[paper].w - MARGIN * 2 - COLUMN;
-  const drawH = PAPERS[paper].h - MARGIN * 2;
-  return SCALES.find((scale) => box.w / scale <= drawW && box.h / scale <= drawH) ?? SCALES[SCALES.length - 1];
+/**
+ * Fáze 75: kresba půdorysu aktivního podlaží pro tisk (tiskový list i příloha dokumentace rozváděče) – místnosti,
+ * zakreslené změny, předměty se zónami, trasy v normovém značení a značky. `links` = odkaz okruhu (chytré PDF: klik
+ * na trasu otevře řádek okruhu v rozcestníku dokumentace). Bez stavu a efektů – vykreslí se i na serveru.
+ */
+export function FloorplanPlanSvg({
+  draft,
+  routes,
+  widthMm,
+  heightMm,
+  scale,
+  links,
+}: {
+  draft: FloorplanDraft;
+  routes: ReturnType<typeof displayRoutes>;
+  widthMm: number;
+  heightMm: number;
+  scale: number;
+  /** Okruh → odkaz (serializovatelné – kresba se vykresluje i ze serverové komponenty dokumentace). */
+  links?: Readonly<Record<string, string>>;
+}) {
+  const box = contentBox(draft);
+  const view = { w: widthMm * scale, h: heightMm * scale };
+  const origin = { x: box.x - (view.w - box.w) / 2, y: box.y - (view.h - box.h) / 2 };
+  const unit = 4 * scale;
+  const stroke = 0.15 * scale;
+  return (
+    <svg width={`${widthMm}mm`} height={`${heightMm}mm`} viewBox={`${origin.x} ${origin.y} ${view.w} ${view.h}`} style={{ border: "0.3mm solid #111827", flexShrink: 0 }} role="img" aria-label={`Půdorys elektroinstalace ${draft.floorName} 1 : ${scale}`} data-testid="plan-svg">
+      <defs>
+        <HatchPatterns notes={draft.annotations} extra={[]} />
+      </defs>
+      <rect x={origin.x} y={origin.y} width={view.w} height={view.h} fill="#fff" />
+      {draft.rooms.map((room) => {
+        const polygon = roomPolygon(room);
+        return (
+          <g key={room.id}>
+            <polygon points={polygon.map((point) => `${point.x},${point.y}`).join(" ")} fill="none" stroke="#111827" strokeWidth={0.5 * scale} strokeLinejoin="miter" />
+            <text x={room.x + unit * 0.4} y={room.y + unit * 0.9} fontSize={2.6 * scale} fill="#374151">
+              {room.name} · {(polygonArea(polygon) / 1e6).toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} m²
+            </text>
+          </g>
+        );
+      })}
+      {draft.annotations.map((note) => (
+        <AnnotationShape key={note.id} note={note} unit={unit} selected={false} interactive={false} />
+      ))}
+      {draft.elements
+        .filter((element) => paletteItem(element.item)?.kind === "fixture")
+        .map((element) => (
+          <FixtureShape key={element.id} element={element} active={false} onPaper unit={unit} interactive={false} basinZone={draft.basinZone} />
+        ))}
+      <RouteLayer circuits={routes.circuits} bus={routes.bus} view="cad" onPaper unit={unit} stroke={stroke} links={links} />
+      {draft.elements.flatMap((element) =>
+        element.controls.map((lightId) => {
+          const light = draft.elements.find((candidate) => candidate.id === lightId);
+          return light ? <line key={`${element.id}-${lightId}`} x1={element.x} y1={element.y} x2={light.x} y2={light.y} stroke="#6b7280" strokeWidth={stroke * 1.2} strokeDasharray={`${unit / 4} ${unit / 4}`} /> : null;
+        }),
+      )}
+      {draft.elements.map((element) => {
+        const item = itemOf(draft, element);
+        if (!item || item.kind === "fixture") return null;
+        const symbol = symbolSizeOf(draft, element);
+        return (
+          <g key={element.id} transform={`translate(${element.x} ${element.y})`}>
+            {item.kind === "panel" ? <PanelSymbol size={symbol * 1.3} active={false} onPaper label={element.boardCode ?? item.symbol} /> : <FloorSymbol item={item} size={symbol} active={false} onPaper rotation={element.rotation} level={draft.installation} />}
+          </g>
+        );
+      })}
+    </svg>
+  );
 }
 
 function PlanSheet({ draft, analysis, paper, fields }: { draft: FloorplanDraft; analysis: Analysis | null; paper: Paper; fields: SheetFields }) {
@@ -88,10 +137,6 @@ function PlanSheet({ draft, analysis, paper, fields }: { draft: FloorplanDraft; 
   const drawH = size.h - MARGIN * 2;
   const box = contentBox(draft);
   const scale = sheetScale(box, paper);
-  const view = { w: drawW * scale, h: drawH * scale };
-  const origin = { x: box.x - (view.w - box.w) / 2, y: box.y - (view.h - box.h) / 2 };
-  const unit = 4 * scale;
-  const stroke = 0.15 * scale;
   const routes = analysis ? displayRoutes(draft, analysis) : { circuits: [], bus: null };
   const legend = [...new Map(draft.elements.map((element) => [element.item === "appliance" ? `${element.item}:${element.appliance}` : element.item, element] as const)).values()]
     .map((element) => ({ element, item: itemOf(draft, element) }))
@@ -99,48 +144,7 @@ function PlanSheet({ draft, analysis, paper, fields }: { draft: FloorplanDraft; 
   const today = new Date().toLocaleDateString("cs-CZ");
   return (
     <div className="fp-sheet" style={{ width: `${size.w - MARGIN * 2}mm`, height: `${size.h - MARGIN * 2}mm`, display: "flex", gap: "3mm", fontFamily: "Arial, Helvetica, sans-serif", color: "#111827", background: "#fff" }} data-testid="print-sheet" data-paper={paper} data-scale={scale}>
-      <svg width={`${drawW}mm`} height={`${drawH}mm`} viewBox={`${origin.x} ${origin.y} ${view.w} ${view.h}`} style={{ border: "0.3mm solid #111827", flexShrink: 0 }} role="img" aria-label={`Půdorys elektroinstalace ${draft.floorName} 1 : ${scale}`}>
-        <defs>
-          <HatchPatterns notes={draft.annotations} extra={[]} />
-        </defs>
-        <rect x={origin.x} y={origin.y} width={view.w} height={view.h} fill="#fff" />
-        {draft.rooms.map((room) => {
-          const polygon = roomPolygon(room);
-          return (
-            <g key={room.id}>
-              <polygon points={polygon.map((point) => `${point.x},${point.y}`).join(" ")} fill="none" stroke="#111827" strokeWidth={0.5 * scale} strokeLinejoin="miter" />
-              <text x={room.x + unit * 0.4} y={room.y + unit * 0.9} fontSize={2.6 * scale} fill="#374151">
-                {room.name} · {(polygonArea(polygon) / 1e6).toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} m²
-              </text>
-            </g>
-          );
-        })}
-        {draft.annotations.map((note) => (
-          <AnnotationShape key={note.id} note={note} unit={unit} selected={false} interactive={false} />
-        ))}
-        {draft.elements
-          .filter((element) => paletteItem(element.item)?.kind === "fixture")
-          .map((element) => (
-            <FixtureShape key={element.id} element={element} active={false} onPaper unit={unit} interactive={false} />
-          ))}
-        <RouteLayer circuits={routes.circuits} bus={routes.bus} view="cad" onPaper unit={unit} stroke={stroke} />
-        {draft.elements.flatMap((element) =>
-          element.controls.map((lightId) => {
-            const light = draft.elements.find((candidate) => candidate.id === lightId);
-            return light ? <line key={`${element.id}-${lightId}`} x1={element.x} y1={element.y} x2={light.x} y2={light.y} stroke="#6b7280" strokeWidth={stroke * 1.2} strokeDasharray={`${unit / 4} ${unit / 4}`} /> : null;
-          }),
-        )}
-        {draft.elements.map((element) => {
-          const item = itemOf(draft, element);
-          if (!item || item.kind === "fixture") return null;
-          const symbol = symbolSizeOf(draft, element);
-          return (
-            <g key={element.id} transform={`translate(${element.x} ${element.y})`}>
-              {item.kind === "panel" ? <PanelSymbol size={symbol * 1.3} active={false} onPaper label={item.symbol} /> : <FloorSymbol item={item} size={symbol} active={false} onPaper rotation={element.rotation} level={draft.installation} />}
-            </g>
-          );
-        })}
-      </svg>
+      <FloorplanPlanSvg draft={draft} routes={routes} widthMm={drawW} heightMm={drawH} scale={scale} />
       <div style={{ width: `${COLUMN}mm`, display: "flex", flexDirection: "column", gap: "2mm", fontSize: "2.5mm", lineHeight: 1.25 }}>
         <section>
           <h2 style={{ fontSize: "3.2mm", fontWeight: 700, margin: 0 }}>Legenda značek (ČSN EN 60617-11)</h2>

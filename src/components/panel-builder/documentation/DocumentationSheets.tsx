@@ -1,5 +1,5 @@
 // Výstupní dokumentace rozváděče: 6 listů A4 (tiskově čisté, černá na bílé). Výkresy jsou SVG
-// generované ze stromu zapojení, oteplení počítá stejný engine jako krok 3.
+// generované ze stromu zapojení, oteplení počítá stejný engine jako krok 4 (oteplení).
 
 import type { ReactNode } from "react";
 
@@ -11,6 +11,12 @@ import type { ManufacturerInfo } from "@/lib/panel-builder/project";
 import type { ThermalResult } from "@/lib/thermalCalculation";
 import { ROUTINE_TEST_POINTS, minInsulationMOhm, routineTestVerdict, type RoutineTest, type StandardEdition } from "@/lib/legislation-2027";
 import type { WiringBomRow } from "@/lib/panel-builder/wiring-bom";
+import type { HotspotSink } from "@/lib/panel-builder/drawings";
+import type { FloorplanDraft } from "@/lib/panel-builder/floorplan-editor";
+import type { DisplayCircuit } from "@/lib/panel-builder/route-display";
+import type { FeederInfo } from "@/server/services/panel-projects";
+
+import { FloorplanPlanSvg } from "../floorplan/FloorplanExport";
 
 import { PhaseBalance, ThermalCurve, ThermalTable } from "../ThermalViews";
 import { CeLabelQr } from "./DocumentationActions";
@@ -56,7 +62,23 @@ export interface DocumentationData {
   legalFramework?: readonly string[];
   influences?: ExternalInfluencesProtocol;
   fullCover?: boolean;
+  /** Fáze 75: klikací oblasti přístrojů ve výkresu osazení a v jednopólovém schématu (chytré PDF). */
+  panelHotspots?: HotspotSink;
+  sldHotspots?: HotspotSink;
+  /** Fáze 75: příloha – půdorys elektroinstalace po podlažích s trasami okruhů tohoto rozváděče. */
+  floorplanSheets?: { floorId: string; floorName: string; scale: number; draft: FloorplanDraft; routes: { circuits: DisplayCircuit[]; bus: DisplayCircuit | null } }[];
+  /** Fáze 75: propojené rozváděče z jednoho půdorysu – nadřazený (přívod) a podružné. */
+  boards?: { code: string; parent: { code: string; projectCode: string; url: string; feeder: FeederInfo | null } | null; children: { code: string; projectCode: string; name: string; url: string; feeder: FeederInfo | null }[] };
 }
+
+/**
+ * Fáze 75: kotva přístroje / okruhu v chytrém PDF – `fn` rozcestník obvodů (List 2), `osa` výkres osazení, `sld`
+ * jednopólové schéma, `kab` výkaz kabeláže, `pud` příloha s půdorysem. Prohlížeč (Chrome / Edge) při „Uložit jako PDF“
+ * převede odkazy na vnitřní odkazy PDF.
+ */
+export const docAnchor = (prefix: "fn" | "osa" | "sld" | "kab" | "pud", designation: string) => `${prefix}-${designation.replace(/^-+/, "").replace(/[^A-Za-z0-9]+/g, "_") || "x"}`;
+/** Označení okruhu bez kódu rozváděče („RP1 -F3“ → „-F3“) pro odkaz do dokumentace rozváděče. */
+const plainDesignation = (designation: string | null) => designation?.replace(/^(RH|RP\d+)\s+/, "") ?? null;
 
 const svgUri = (svg: string) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 
@@ -78,7 +100,18 @@ function Sheet({ data, number, children }: { data: DocumentationData; number: nu
     <section id={`list-${number}`} className="doc-sheet mx-auto flex w-full max-w-[210mm] flex-col bg-white p-[10mm] text-[9pt] leading-snug text-black shadow-2xl shadow-black/50 sm:min-h-[297mm]" data-testid={`doc-sheet-${number}`} aria-label={`List ${number}: ${DOCUMENT_SHEETS[number - 1]}`}>
       <header className="mb-3 flex items-baseline justify-between border-b-2 border-black pb-1.5">
         <h2 className="text-[13pt] font-bold">{DOCUMENT_SHEETS[number - 1]}</h2>
-        <span className="font-mono text-[8pt]">
+        <span className="flex items-baseline gap-3 font-mono text-[8pt]">
+          {/* Fáze 75: chytré PDF – zpět na obsah a rozcestník obvodů */}
+          {number > 1 ? (
+            <a href="#list-1" className="text-zinc-500 underline decoration-dotted" data-testid="doc-back-toc">
+              ↩ obsah
+            </a>
+          ) : null}
+          {number !== 2 ? (
+            <a href="#doc-hub" className="text-zinc-500 underline decoration-dotted">
+              ↩ obvody
+            </a>
+          ) : null}
           {data.code} · list {number}/{DOCUMENT_SHEETS.length}
         </span>
       </header>
@@ -270,34 +303,54 @@ export function DocumentationSheets({ data }: { data: DocumentationData }) {
               {DOCUMENT_SHEETS.map((title, index) => (
                 <li key={title} className="flex gap-2">
                   <span className="w-8 font-mono">{index + 1}</span>
-                  <span className="flex-1 border-b border-dotted border-zinc-400">{title}</span>
+                  <a href={`#list-${index + 1}`} className="flex-1 border-b border-dotted border-zinc-400" data-testid="doc-toc-link">
+                    {title}
+                  </a>
                   <span className="font-mono">list {index + 1}</span>
+                </li>
+              ))}
+              {data.floorplanSheets?.map((sheet, index) => (
+                <li key={sheet.floorId} className="flex gap-2">
+                  <span className="w-8 font-mono">{String.fromCharCode(65 + index)}</span>
+                  <a href={`#priloha-${sheet.floorId}`} className="flex-1 border-b border-dotted border-zinc-400" data-testid="doc-toc-link">
+                    Příloha – půdorys elektroinstalace {sheet.floorName}
+                  </a>
+                  <span className="font-mono">příloha {String.fromCharCode(65 + index)}</span>
                 </li>
               ))}
             </ol>
           </div>
+          {data.boards ? <LinkedBoards boards={data.boards} /> : null}
         </div>
       </Sheet>
 
       {/* List 2 – výkres osazení a výpis funkcí */}
       <Sheet data={data} number={2}>
         <div className="grid flex-1 grid-cols-[1.35fr_1fr] gap-4">
-          {/* eslint-disable-next-line @next/next/no-img-element -- vektorový výkres generovaný kódem */}
-          <img src={svgUri(data.panelDrawingSvg)} alt="Výkres osazení rozváděče" className="h-auto w-full self-start" />
+          <HotspotImage svg={data.panelDrawingSvg} sink={data.panelHotspots} alt="Výkres osazení rozváděče" prefix="osa" className="self-start" />
           <div>
-            <h3 className="mb-1 font-bold">Výpis funkcí přístrojů</h3>
+            <h3 className="mb-1 font-bold" id="doc-hub">
+              Výpis funkcí přístrojů – rozcestník obvodů
+            </h3>
+            <p className="mb-1 text-[7pt] text-zinc-600">Klik na přístroj ve výkresu nebo na odkaz v řádku přejde na související list (schéma, osazení, kabel, půdorys).</p>
             <table className="w-full border-collapse" data-testid="doc-functions">
               <thead>
                 <tr>
                   <th className={cell}>Název</th>
                   <th className={cell}>Funkce</th>
+                  <th className={cell}>Odkazy</th>
                 </tr>
               </thead>
               <tbody>
                 {data.functions.map((row) => (
-                  <tr key={row.designation}>
-                    <td className={`${cell} font-mono font-semibold`}>{row.designation}</td>
+                  <tr key={row.designation} id={docAnchor("fn", row.designation)} data-testid="doc-hub-row">
+                    <td className={`${cell} font-mono font-semibold`}>
+                      <a href={`#${docAnchor("sld", row.designation)}`}>{row.designation}</a>
+                    </td>
                     <td className={cell}>{row.label || "–"}</td>
+                    <td className={`${cell} whitespace-nowrap text-[7pt]`}>
+                      <HubLinks designation={row.designation} label={row.label} data={data} />
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -308,8 +361,7 @@ export function DocumentationSheets({ data }: { data: DocumentationData }) {
 
       {/* List 3 – jednopólové schéma */}
       <Sheet data={data} number={3}>
-        {/* eslint-disable-next-line @next/next/no-img-element -- vektorové schéma ze stromu zapojení */}
-        <img src={svgUri(data.singleLineSvg)} alt="Jednopólové schéma rozváděče" className="h-auto w-full" data-testid="doc-sld" />
+        <HotspotImage svg={data.singleLineSvg} sink={data.sldHotspots} alt="Jednopólové schéma rozváděče" prefix="sld" testId="doc-sld" />
         {data.symbolLegend?.length ? (
           <div className="mt-3 border-t border-zinc-300 pt-2" data-testid="doc-symbol-legend">
             <p className="mb-1 text-[10px] font-bold">Legenda značek (ČSN EN 60617)</p>
@@ -439,7 +491,7 @@ export function DocumentationSheets({ data }: { data: DocumentationData }) {
             </table>
           </>
         ) : null}
-        {data.cableReport ? <CableReportTable report={data.cableReport} /> : null}
+        {data.cableReport ? <CableReportTable report={data.cableReport} designationOf={(label) => data.functions.find((row) => row.label === label)?.designation ?? null} /> : null}
       </Sheet>
 
       {/* List 5 – oteplení a technická data */}
@@ -565,7 +617,143 @@ export function DocumentationSheets({ data }: { data: DocumentationData }) {
           </div>
         </div>
       </Sheet>
+
+      {/* Fáze 75: přílohy – půdorys elektroinstalace po podlažích, trasy okruhů odkazují do rozcestníku obvodů */}
+      {data.floorplanSheets?.map((sheet, index) => (
+        <FloorplanAnnex key={sheet.floorId} data={data} sheet={sheet} letter={String.fromCharCode(65 + index)} />
+      ))}
     </div>
+  );
+}
+
+/** Fáze 75: výkres (SVG) s klikacími přístroji – průhledné odkazy nad obrázkem v procentech viewBoxu. */
+function HotspotImage({ svg, sink, alt, prefix, className, testId }: { svg: string; sink?: HotspotSink; alt: string; prefix: "osa" | "sld"; className?: string; testId?: string }) {
+  return (
+    <div className={`relative ${className ?? ""}`}>
+      {/* eslint-disable-next-line @next/next/no-img-element -- vektorový výkres generovaný kódem */}
+      <img src={svgUri(svg)} alt={alt} className="h-auto w-full" data-testid={testId} />
+      {sink && sink.width > 0 && sink.height > 0
+        ? sink.hotspots.map((spot) => (
+            <a
+              key={spot.id}
+              id={docAnchor(prefix, spot.designation)}
+              href={`#${docAnchor("fn", spot.designation)}`}
+              aria-label={`Přístroj ${spot.designation} – rozcestník obvodů`}
+              className="absolute block"
+              style={{ left: `${(spot.x / sink.width) * 100}%`, top: `${(spot.y / sink.height) * 100}%`, width: `${(spot.w / sink.width) * 100}%`, height: `${(spot.h / sink.height) * 100}%` }}
+              data-testid="doc-hotspot"
+            />
+          ))
+        : null}
+    </div>
+  );
+}
+
+/** Fáze 75: odkazy řádku rozcestníku – schéma, osazení, kabel a půdorys (jen existující cíle). */
+function HubLinks({ designation, label, data }: { designation: string; label: string; data: DocumentationData }) {
+  const has = (sink: HotspotSink | undefined) => sink?.hotspots.some((spot) => spot.designation === designation) ?? false;
+  const cable = Boolean(label) && (data.cableReport?.circuits.some((row) => row.label === label) ?? false);
+  const plan = data.floorplanSheets?.some((sheet) => sheet.routes.circuits.some((circuit) => plainDesignation(circuit.designation) === designation)) ?? false;
+  const links = [
+    has(data.sldHotspots) ? { href: `#${docAnchor("sld", designation)}`, label: "schéma" } : null,
+    has(data.panelHotspots) ? { href: `#${docAnchor("osa", designation)}`, label: "osazení" } : null,
+    cable ? { href: `#${docAnchor("kab", designation)}`, label: "kabel" } : null,
+    plan ? { href: `#${docAnchor("pud", designation)}`, label: "půdorys" } : null,
+  ].filter((link): link is { href: string; label: string } => link !== null);
+  if (!links.length) return <span className="text-zinc-400">–</span>;
+  return (
+    <span className="flex gap-1.5">
+      {links.map((link) => (
+        <a key={link.href} href={link.href} className="text-blue-800 underline">
+          {link.label}
+        </a>
+      ))}
+    </span>
+  );
+}
+
+/** Fáze 75: propojené rozváděče – přívod z nadřazeného rozváděče a podružné rozváděče (odkazy na jejich dokumentaci). */
+function LinkedBoards({ boards }: { boards: NonNullable<DocumentationData["boards"]> }) {
+  return (
+    <section className="max-w-lg rounded border border-black p-3 text-[9pt]" data-testid="doc-boards" aria-label="Propojené rozváděče">
+      <h2 className="mb-1 text-[10pt] font-bold">Rozváděč {boards.code} a propojené rozváděče</h2>
+      {boards.parent ? (
+        <p>
+          Napájen z rozváděče {boards.parent.code}{" "}
+          <a href={boards.parent.url} className="font-mono text-blue-800 underline">
+            {boards.parent.projectCode}
+          </a>
+          {boards.parent.feeder ? ` – jistič ${boards.parent.feeder.designation ?? "?"} ${boards.parent.feeder.protection}, ${boards.parent.feeder.cable}, ${num(boards.parent.feeder.lengthM)} m, ΔU ${num(boards.parent.feeder.voltageDropPct)} %` : ""}
+        </p>
+      ) : null}
+      {boards.children.length ? (
+        <ul className="mt-1 list-disc pl-5">
+          {boards.children.map((child) => (
+            <li key={child.code}>
+              Podružný rozváděč {child.code}{" "}
+              <a href={child.url} className="font-mono text-blue-800 underline">
+                {child.projectCode}
+              </a>
+              {child.feeder ? ` – přívod ${child.feeder.designation ?? "?"} ${child.feeder.protection}, ${child.feeder.cable}, ${num(child.feeder.lengthM)} m` : ""}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </section>
+  );
+}
+
+/** Fáze 75: příloha – půdorys podlaží s trasami okruhů rozváděče (trasy a řádky okruhů odkazují do rozcestníku). */
+function FloorplanAnnex({ data, sheet, letter }: { data: DocumentationData; sheet: NonNullable<DocumentationData["floorplanSheets"]>[number]; letter: string }) {
+  const links = Object.fromEntries(
+    sheet.routes.circuits.flatMap((circuit) => {
+      const designation = plainDesignation(circuit.designation);
+      return designation && data.functions.some((row) => row.designation === designation) ? [[circuit.id, `#${docAnchor("fn", designation)}`]] : [];
+    }),
+  );
+  return (
+    <section id={`priloha-${sheet.floorId}`} className="doc-sheet mx-auto flex w-full max-w-[210mm] flex-col bg-white p-[10mm] text-[9pt] leading-snug text-black shadow-2xl shadow-black/50 sm:min-h-[297mm]" data-testid="doc-annex" aria-label={`Příloha ${letter}: půdorys elektroinstalace ${sheet.floorName}`}>
+      <header className="mb-3 flex items-baseline justify-between border-b-2 border-black pb-1.5">
+        <h2 className="text-[13pt] font-bold">
+          Příloha {letter} – půdorys elektroinstalace {sheet.floorName}
+        </h2>
+        <span className="flex items-baseline gap-3 font-mono text-[8pt]">
+          <a href="#list-1" className="text-zinc-500 underline decoration-dotted">
+            ↩ obsah
+          </a>
+          <a href="#doc-hub" className="text-zinc-500 underline decoration-dotted">
+            ↩ obvody
+          </a>
+          {data.code} · 1 : {sheet.scale}
+        </span>
+      </header>
+      <FloorplanPlanSvg draft={sheet.draft} routes={sheet.routes} widthMm={190} heightMm={175} scale={sheet.scale} links={links} />
+      <table className="mt-2 w-full border-collapse text-[8pt]" data-testid="doc-annex-circuits">
+        <thead>
+          <tr>
+            <th className={cell}>Okruh</th>
+            <th className={cell}>Popis</th>
+            <th className={cell}>Kabel</th>
+            <th className={cellRight}>Délka</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sheet.routes.circuits.map((circuit) => {
+            const designation = plainDesignation(circuit.designation);
+            const inHub = designation !== null && data.functions.some((row) => row.designation === designation);
+            return (
+              <tr key={circuit.id} id={inHub && designation ? docAnchor("pud", designation) : undefined}>
+                <td className={cellMono}>{inHub && designation ? <a href={`#${docAnchor("fn", designation)}`}>{circuit.designation}</a> : (circuit.designation ?? "–")}</td>
+                <td className={cell}>{circuit.label}</td>
+                <td className={cellMono}>{circuit.cable}</td>
+                <td className={cellRight}>{num(circuit.lengthM)} m</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <p className="mt-1 text-[7pt] text-zinc-600">Trasy v normovém značení (rysky = počet žil). Klik na trasu nebo označení okruhu přejde do rozcestníku obvodů rozváděče.</p>
+    </section>
   );
 }
 
@@ -622,7 +810,7 @@ const cellRight = cell + " text-right font-mono";
 const cellMono = cell + " font-mono";
 
 /** List 4 – výkaz kabeláže z 2D půdorysu: režim vedení, porovnání metráže, kabely k nákupu a ΔU okruhů. */
-function CableReportTable({ report }: { report: CableReport }) {
+function CableReportTable({ report, designationOf = () => null }: { report: CableReport; designationOf?: (label: string) => string | null }) {
   return (
     <section className="mt-2" data-testid="doc-cables" aria-label="Výkaz kabeláže">
       <h3 className="font-bold">Výkaz kabeláže a okruhů (ČSN 33 2130 ed. 4) – {ROUTING_LABEL[report.mode]}</h3>
@@ -657,15 +845,19 @@ function CableReportTable({ report }: { report: CableReport }) {
             </tr>
           </thead>
           <tbody>
-            {report.circuits.map((row, index) => (
-              <tr key={row.label + "-" + index}>
-                <td className={cell}>{row.label}</td>
+            {report.circuits.map((row, index) => {
+              // Fáze 75: chytré PDF – řádek okruhu odkazuje do rozcestníku obvodů (List 2)
+              const designation = designationOf(row.label);
+              return (
+              <tr key={row.label + "-" + index} id={designation ? docAnchor("kab", designation) : undefined}>
+                <td className={cell}>{designation ? <a href={`#${docAnchor("fn", designation)}`}><b className="font-mono">{designation}</b> {row.label}</a> : row.label}</td>
                 <td className={cellMono}>{row.cable}</td>
                 <td className={cell}>{row.routing === "TOP" ? "vrchem" : "spodem"}</td>
                 <td className={cellRight}>{num(row.lengthM)} m</td>
                 <td className={row.ok ? cellRight : cellRight + " font-bold"}>{num(row.voltageDropPct)} % {row.ok ? "✓" : "✗"}</td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>

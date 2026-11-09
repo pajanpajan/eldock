@@ -91,18 +91,24 @@ export function planBusbars(items: readonly BusbarItem[], supply: SupplySystem):
   const peBar = pickBar(peConnections.length, PE_BAR_SIZES);
   const pe: Busbar = { id: "PE", kind: "PE", label: "PE", size: peBar.size, pieces: peBar.pieces, used: peConnections.length, connections: peConnections };
 
-  // Skupinové můstky N-FIx (za každým chráničem) a N0 (před chrániči)
+  // Skupinové můstky N-FIx (za každým chráničem) a N0 (před chrániči). Fáze 75: N vodič bere každý přístroj z můstku
+  // svého nejbližšího nadřazeného chrániče – i RCBO a chránič pod jiným chráničem (hlavní chránič typu S, TT); z N0 jen
+  // přístroje bez nadřazeného chrániče. Jinak by proud N obcházel nadřazený chránič a ten by vybavil.
   const rcds = items.filter((item) => item.category === "RCD").sort((a, b) => natural(a.designation, b.designation));
+  const feedsFrom = (item: BusbarItem) => nearestRcd(item, byId)?.id ?? null;
   const groups: Busbar[] = rcds.map((rcd, index) => {
-    const connections = finals.filter((item) => !threePhaseOnly(item) && item.category !== "RCBO" && nearestRcd(item, byId)?.id === rcd.id).map(circuit);
+    const connections = [
+      ...rcds.filter((other) => other.id !== rcd.id && hasNeutral(other) && feedsFrom(other) === rcd.id).map((other) => ({ designation: other.designation, label: "N pól chrániče" })),
+      ...finals.filter((item) => !threePhaseOnly(item) && feedsFrom(item) === rcd.id).map((item) => (item.category === "RCBO" ? { designation: item.designation, label: `N přívod RCBO – ${item.circuitLabel || "vývod"}` } : circuit(item))),
+    ];
     const bar = pickBar(Math.max(connections.length, 1), N_BAR_SIZES);
     return { id: `N${index + 1}`, kind: "N", label: `N${index + 1} (za ${rcd.designation})`, size: bar.size, pieces: bar.pieces, used: connections.length, connections, rcd: rcd.designation };
   });
   const n0Connections = [
     { designation: "přívod", label: supply.penSplit ? "N z bodu rozdělení PEN" : "N přívodu" },
-    ...rcds.filter(hasNeutral).map((rcd) => ({ designation: rcd.designation, label: "N pól chrániče" })),
+    ...rcds.filter((rcd) => hasNeutral(rcd) && !feedsFrom(rcd)).map((rcd) => ({ designation: rcd.designation, label: "N pól chrániče" })),
     ...spd.filter(hasNeutral).map((item) => ({ designation: item.designation, label: "N přepěťové ochrany" })),
-    ...finals.filter((item) => !threePhaseOnly(item) && (item.category === "RCBO" || !nearestRcd(item, byId))).map(circuit),
+    ...finals.filter((item) => !threePhaseOnly(item) && !feedsFrom(item)).map(circuit),
   ];
   const n0Bar = pickBar(n0Connections.length, N_BAR_SIZES);
   const n0: Busbar = { id: "N0", kind: "N", label: "N0 (před chrániči)", size: n0Bar.size, pieces: n0Bar.pieces, used: n0Connections.length, connections: n0Connections };

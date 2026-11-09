@@ -1,6 +1,6 @@
 // Fáze 52: legislativní rámec projektové dokumentace a protokol o určení vnějších vlivů
 // (TNI 33 2000-5-51:2022, ČSN 33 2000-5-51 ed. 3+Z1+Z2) generovaný z prostředí instalace rozváděče.
-// Čisté funkce – sdílí je krok 4 dokumentace i veřejná ukázka elaborátu.
+// Čisté funkce – sdílí je krok 5 dokumentace i veřejná ukázka elaborátu.
 
 import {
   constructionDetails,

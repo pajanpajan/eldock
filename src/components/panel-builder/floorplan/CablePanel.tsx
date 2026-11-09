@@ -36,6 +36,7 @@ export function CablePanel({
   wallFloors = 0,
   floorCount = 1,
   defaults,
+  boards = [],
 }: {
   analysis: Analysis;
   mode: CableRoutingMode;
@@ -52,6 +53,8 @@ export function CablePanel({
   floorCount?: number;
   /** Fáze 64: zákazník a místo stavby z údajů uloženého půdorysu (předvyplnění formuláře). */
   defaults?: { customer: string | null; site: string | null };
+  /** Fáze 74: rozváděče nákresu (RH, RP1 …) – podružné vzniknou jako propojené projekty. */
+  boards?: readonly string[];
 }) {
   const circuitById = new Map(analysis.ok ? analysis.circuits.circuits.map((circuit) => [circuit.id, circuit]) : []);
   return (
@@ -195,6 +198,11 @@ export function CablePanel({
           {pending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null} [ ⚡ Vygenerovat rozváděč z tohoto půdorysu ]
         </Button>
         <p className="text-[11px] text-muted-foreground">1 kredit · jističe, chrániče, fáze, skříň, domovní přístroje zvolené řady a výkaz kabeláže v dokumentaci.</p>
+        {boards.length > 1 ? (
+          <p className="rounded-md border border-violet-500/40 bg-violet-500/5 px-2 py-1 text-[11px] text-violet-100" data-testid="generate-boards">
+            {boards.length <= 4 ? `Vzniknou ${boards.length} propojené rozváděče` : `Vznikne ${boards.length} propojených rozváděčů`} ({boards.join(" + ")}) – hlavní rozváděč s přívody podružných, každý podružný jako vlastní projekt se svými okruhy. Stále 1 kredit.
+          </p>
+        ) : null}
       </form>
     </section>
   );

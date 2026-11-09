@@ -52,7 +52,7 @@ test("značky přístrojů: knihovna ČSN EN 60617, legenda na Listu 3 a náhled
 
   await page.goto("/panel-builder");
   await page.getByRole("link", { name: /PB-001/ }).click();
-  await page.getByRole("link", { name: /4\. Výstupní dokumentace/ }).click();
+  await page.getByRole("link", { name: /5\. Výstupní dokumentace/ }).click();
   const list = page.getByTestId("symbol-datasheets");
   await expect(list.getByTestId("symbol-row").first()).toBeVisible();
   // vzorový rozváděč: hlavní vypínač = odpínač, jističe, chrániče a přepěťová ochrana

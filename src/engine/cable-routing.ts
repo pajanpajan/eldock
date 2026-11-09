@@ -30,7 +30,14 @@ export interface RouteNode extends RoutePoint {
   room: string;
   /** Společný vícenásobný rámeček – propojení přímo v krabici. */
   frame?: string;
+  /** Fáze 74: rozváděč prvku (hlavní `RH` / podružný `RP1` …) – datové a ovládací vedení vedou z něj. */
+  board?: string;
 }
+
+/** Fáze 74: klíč výchozího bodu tras rozváděče v ručních úpravách („panel“ = hlavní, „panel-RP1“ = podružný). */
+export const panelKey = (board?: string | null) => (!board || board === "RH" ? "panel" : `panel-${board}`);
+/** Kód rozváděče z klíče výchozího bodu („panel“ → RH, „panel-RP1“ → RP1); jiný klíč (prvek) = null. */
+export const boardOfPanelKey = (key: string) => (key === "panel" ? "RH" : key.startsWith("panel-") ? key.slice(6) : null);
 
 export interface RouteSegment {
   from: string | "panel";
@@ -228,8 +235,20 @@ export interface CircuitCabling {
   route: CircuitRoute;
 }
 
+/** Fáze 74: datová zásuvka – samostatný UTP z jejího rozváděče (s lomenou čarou pro výkres). */
+export interface DataRun {
+  id: string;
+  nodeId: string;
+  board: string;
+  lengthsM: Record<CableRoutingMode, number>;
+  routing: "BOTTOM" | "TOP";
+  route: CircuitRoute;
+}
+
 export interface CableSummary {
   selected: CableRoutingMode;
+  /** Fáze 74: datové zásuvky (každá vlastní UTP) s trasou ve zvoleném režimu. */
+  dataRuns: DataRun[];
   /** Celková metráž všech kabelů v každém režimu [m]. */
   totals: Record<CableRoutingMode, number>;
   savingVsBottomM: number;
@@ -245,9 +264,11 @@ export interface CableSummary {
 }
 
 export interface CablingInput {
-  circuits: readonly Pick<Circuit, "id" | "label" | "cable" | "nodeIds" | "kind" | "phases" | "crossSectionMm2" | "protection">[];
+  circuits: readonly (Pick<Circuit, "id" | "label" | "cable" | "nodeIds" | "kind" | "phases" | "crossSectionMm2" | "protection"> & Partial<Pick<Circuit, "board" | "upstreamDropPct">>)[];
   nodes: readonly RouteNode[];
   panel: RoutePoint;
+  /** Fáze 74: rozváděče podle kódu (hlavní i podružné) – okruh vede z `panels[circuit.board]`, bez údaje z `panel`. */
+  panels?: Readonly<Record<string, RoutePoint>>;
   profile?: ElevationProfile;
   selected: CableRoutingMode;
   /** Fáze 59: měřidlo tras (podlaží se stoupacím vedením, fáze 60 podél stěn); výchozí pravoúhlé. */
@@ -288,13 +309,19 @@ function starRoutes(nodes: readonly RouteNode[], panel: RoutePoint, profile: Ele
   return { BOTTOM: bottom, TOP: top, OPTIMIZED: merge(optimized, optimized.filter((route) => route.mode === "TOP").length > optimized.length / 2 ? "TOP" : "BOTTOM") };
 }
 
+/** Fáze 74: výchozí úseky trasy z rozváděče okruhu – klíč „panel“ (hlavní) / „panel-RP1“ (podružný). */
+function fromBoard(route: CircuitRoute, key: string): CircuitRoute {
+  if (key === "panel") return route;
+  return { ...route, segments: route.segments.map((segment) => (segment.from === "panel" ? { ...segment, from: key } : segment)) };
+}
+
 /** Lomené čáry úseků trasy (jen pro zvolený režim – výkres). Hvězda začíná každou větev znovu v rozváděči. */
 function withPaths(route: CircuitRoute, byId: ReadonlyMap<string, RouteNode>, panel: RoutePoint, metric: RouteMetric): CircuitRoute {
   let last: RoutePoint = panel;
   const segments = route.segments.map((segment) => {
     const to = byId.get(segment.to);
     if (!to) return segment;
-    const from = segment.from === "panel" ? panel : (byId.get(segment.from) ?? last);
+    const from = segment.from === "panel" || segment.from.startsWith("panel-") ? panel : (byId.get(segment.from) ?? last);
     last = to;
     // Fáze 63: ručně upravený úsek už lomenou čáru má
     return segment.points ? segment : { ...segment, points: metric.path(from, to) };
@@ -314,13 +341,19 @@ export function summarizeCabling(input: CablingInput): CableSummary {
   const add = (cable: string, mm: number) => byCable.set(cable, (byCable.get(cable) ?? 0) + mm);
   const warnings: string[] = [];
   const slack = 1 + profile.slackPercent / 100;
+  // Fáze 74: výchozí bod rozváděče podle kódu (podružné rozváděče), jinak hlavní rozváděč
+  const originOf = (board: string | null | undefined): RoutePoint => (board ? input.panels?.[board] : undefined) ?? input.panel;
+  const pointOf = (key: string): RoutePoint | undefined => {
+    const board = boardOfPanelKey(key);
+    return board ? originOf(board) : byId.get(key);
+  };
   // Fáze 63: ruční úpravy tras – přichycené k aktuální poloze prvků, jen v rámci jednoho podlaží
   const edits = input.routeEdits ?? {};
   const editedPath = (segment: RouteSegment): RoutePoint[] | null => {
     const stored = edits[`${segment.from}>${segment.to}`];
     if (!stored || stored.length < 2) return null;
     const to = byId.get(segment.to);
-    const from = segment.from === "panel" ? input.panel : byId.get(segment.from);
+    const from = pointOf(segment.from);
     if (!to || !from || (from.floor ?? "") !== (to.floor ?? "")) return null;
     return reanchor(stored, from, to).map((point) => ({ x: point.x, y: point.y, floor: from.floor }));
   };
@@ -338,8 +371,8 @@ export function summarizeCabling(input: CablingInput): CableSummary {
     if (!changed) return route;
     return { ...route, segments, rawMm: route.rawMm + delta, totalMm: Math.round(route.totalMm + delta * slack), longestMm: Math.round(route.longestMm + delta * slack) };
   };
-  const withEdits = (routes: Record<CableRoutingMode, CircuitRoute>) => {
-    for (const mode of ["BOTTOM", "TOP", "OPTIMIZED"] as const) routes[mode] = applyEdits(routes[mode]);
+  const withEdits = (routes: Record<CableRoutingMode, CircuitRoute>, key = "panel") => {
+    for (const mode of ["BOTTOM", "TOP", "OPTIMIZED"] as const) routes[mode] = applyEdits(fromBoard(routes[mode], key));
     return routes;
   };
 
@@ -351,13 +384,16 @@ export function summarizeCabling(input: CablingInput): CableSummary {
         .sort((a, b) => (drawn.get(a.id) ?? 0) - (drawn.get(b.id) ?? 0));
       if (!nodes.length) return null;
       const star = input.installation === "bus_loxone" && circuit.kind === "lighting";
-      const routes = withEdits(star ? starRoutes(nodes, input.panel, profile, metric) : circuitRoutes(nodes, input.panel, profile, metric));
+      // Fáze 74: okruh vede ze svého rozváděče (podružný rozváděč, přívod podružného rozváděče z hlavního)
+      const origin = originOf(circuit.board);
+      const routes = withEdits(star ? starRoutes(nodes, origin, profile, metric) : circuitRoutes(nodes, origin, profile, metric), panelKey(circuit.board));
       for (const mode of ["BOTTOM", "TOP", "OPTIMIZED"] as const) totals[mode] += routes[mode].totalMm;
-      const route = withPaths(routes[input.selected], byId, input.panel, metric);
+      const route = withPaths(routes[input.selected], byId, origin, metric);
       const cable = star ? STAR_LIGHT_CABLE : cableLabel(circuit.cable);
       add(cable, route.totalMm);
       const limitPct: number = circuit.kind === "lighting" ? VOLTAGE_DROP_LIMIT.lighting : VOLTAGE_DROP_LIMIT.other;
-      const voltageDropPct = voltageDropPercent({ lengthMm: route.longestMm, currentA: circuit.protection.ratedA, crossSectionMm2: circuit.crossSectionMm2, phases: circuit.phases });
+      // Fáze 74: u okruhu podružného rozváděče i úbytek na jeho přívodu
+      const voltageDropPct = Math.round((voltageDropPercent({ lengthMm: route.longestMm, currentA: circuit.protection.ratedA, crossSectionMm2: circuit.crossSectionMm2, phases: circuit.phases }) + (circuit.upstreamDropPct ?? 0)) * 100) / 100;
       if (voltageDropPct > limitPct) warnings.push(`${circuit.label}: úbytek napětí ${String(voltageDropPct).replace(".", ",")} % > ${limitPct} % – zkraťte trasu nebo zvětšete průřez.`);
       return {
         id: circuit.id,
@@ -408,7 +444,7 @@ export function summarizeCabling(input: CablingInput): CableSummary {
     // Sběrnice: termostat je prostorová jednotka na lince (ventily spíná aktor), žaluzii napájí aktor z rozváděče
     if (busLine && run.kind === "thermostat") continue;
     if (busLine && run.kind === "blind") {
-      for (const mode of ["BOTTOM", "TOP"] as const) runs[mode] = Math.round((metric.distance(input.panel, node) + panelVertical(Math.min(profile.ceilingHeightMm, node.heightMm + BLIND_MOTOR_RUN_MM), mode, profile)) * slack + profile.panelAllowanceMm + profile.boxAllowanceMm);
+      for (const mode of ["BOTTOM", "TOP"] as const) runs[mode] = Math.round((metric.distance(originOf(node.board), node) + panelVertical(Math.min(profile.ceilingHeightMm, node.heightMm + BLIND_MOTOR_RUN_MM), mode, profile)) * slack + profile.panelAllowanceMm + profile.boxAllowanceMm);
       runs.OPTIMIZED = Math.min(runs.BOTTOM, runs.TOP);
     } else if (run.kind === "blind") {
       const mm = Math.round((Math.max(0, profile.ceilingHeightMm - node.heightMm) + BLIND_MOTOR_RUN_MM) * slack + profile.boxAllowanceMm * 2);
@@ -421,27 +457,31 @@ export function summarizeCabling(input: CablingInput): CableSummary {
             ? node.heightMm + target.heightMm + 2 * profile.floorDepthMm
             : Math.max(0, profile.ceilingHeightMm - node.heightMm) + Math.max(0, profile.ceilingHeightMm - target.heightMm)
           : panelVertical(node.heightMm, mode, profile);
-        runs[mode] = Math.round((metric.distance(target ?? input.panel, node) + vertical) * slack + (target ? profile.boxAllowanceMm : profile.panelAllowanceMm) + profile.boxAllowanceMm);
+        runs[mode] = Math.round((metric.distance(target ?? originOf(node.board), node) + vertical) * slack + (target ? profile.boxAllowanceMm : profile.panelAllowanceMm) + profile.boxAllowanceMm);
       }
       runs.OPTIMIZED = Math.min(runs.BOTTOM, runs.TOP);
     }
     for (const mode of ["BOTTOM", "TOP", "OPTIMIZED"] as const) totals[mode] += runs[mode];
     add(run.kind === "blind" ? BLIND_CABLE : THERMOSTAT_CABLE, runs[input.selected]);
   }
-  // Datové zásuvky: samostatný UTP z rozváděče, každá kratší cestou v režimu OPTIMIZED
+  // Datové zásuvky: samostatný UTP ze svého rozváděče, každá kratší cestou v režimu OPTIMIZED; fáze 74 s trasou na výkres
+  const dataRuns: DataRun[] = [];
   for (const id of input.dataNodeIds ?? []) {
     const node = byId.get(id);
     if (!node) continue;
-    const runs = { BOTTOM: 0, TOP: 0, OPTIMIZED: 0 } as Record<CableRoutingMode, number>;
-    for (const mode of ["BOTTOM", "TOP"] as const) runs[mode] = Math.round((metric.distance(input.panel, node) + panelVertical(node.heightMm, mode, profile)) * slack + profile.panelAllowanceMm + profile.boxAllowanceMm);
-    runs.OPTIMIZED = Math.min(runs.BOTTOM, runs.TOP);
-    for (const mode of ["BOTTOM", "TOP", "OPTIMIZED"] as const) totals[mode] += runs[mode];
-    add(DATA_CABLE, runs[input.selected]);
+    const board = node.board ?? "RH";
+    const origin = originOf(board);
+    const routes = withEdits(circuitRoutes([node], origin, profile, metric), panelKey(board));
+    for (const mode of ["BOTTOM", "TOP", "OPTIMIZED"] as const) totals[mode] += routes[mode].totalMm;
+    const route = withPaths(routes[input.selected], byId, origin, metric);
+    add(DATA_CABLE, route.totalMm);
+    dataRuns.push({ id: `data-${id}`, nodeId: id, board, lengthsM: { BOTTOM: meters(routes.BOTTOM.totalMm), TOP: meters(routes.TOP.totalMm), OPTIMIZED: meters(routes.OPTIMIZED.totalMm) }, routing: route.mode, route });
   }
 
   const totalsM = { BOTTOM: meters(totals.BOTTOM), TOP: meters(totals.TOP), OPTIMIZED: meters(totals.OPTIMIZED) };
   return {
     selected: input.selected,
+    dataRuns,
     totals: totalsM,
     savingVsBottomM: Math.max(0, Math.round((totalsM.BOTTOM - totalsM.OPTIMIZED) * 10) / 10),
     savingVsTopM: Math.max(0, Math.round((totalsM.TOP - totalsM.OPTIMIZED) * 10) / 10),

@@ -1,5 +1,5 @@
 // Výstupy výpočtu oteplení bez stavu: teplotní křivka, fázová bilance a inženýrská tabulka.
-// Používá je krok 3 (tmavé UI) i tisková dokumentace (`print` = černá na bílé).
+// Používá je krok 4 (tmavé UI) i tisková dokumentace (`print` = černá na bílé).
 
 import type { ReactNode } from "react";
 

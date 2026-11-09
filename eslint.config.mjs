@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     // Default ignores of eslint-config-next:
     ".next/**",
     ".next-e2e/**",
+    // Ruční testovací server (NEXT_DIST_DIR=.next-manual, e2e-manual.db)
+    ".next-manual/**",
     "playwright-report/**",
     "test-results/**",
     "out/**",

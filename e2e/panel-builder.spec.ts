@@ -341,10 +341,10 @@ test("krok 2: hlavní přívod, AI návrh na 1 klik, drag & drop na vektorovém 
   await expect(page.getByRole("button", { name: "⬇ Přívod SHORA", pressed: true })).toBeVisible();
 });
 
-test("krok 3: výpočet oteplení referenčního rozváděče, živý přepočet a uložení vstupů", async ({ page }) => {
+test("krok 4: výpočet oteplení referenčního rozváděče, živý přepočet a uložení vstupů", async ({ page }) => {
   await page.goto("/panel-builder");
   await page.getByRole("link", { name: /PB-001/ }).click();
-  await page.getByRole("link", { name: "3. Výpočet oteplení a bilance" }).click();
+  await page.getByRole("link", { name: "4. Výpočet oteplení a bilance" }).click();
   const verdict = page.getByTestId("thermal-verdict");
   await expect(verdict).toContainText("VYHOVUJE dle ČSN EN 61439 – Vypočítaná teplota 42,4 °C");
   await expect(verdict).toContainText("pod limitem 70 °C");
@@ -374,10 +374,10 @@ test("krok 3: výpočet oteplení referenčního rozváděče, živý přepočet
   await expect(page.getByTestId("thermal-save-state")).toHaveText("Uloženo");
 });
 
-test("krok 4: 6 listů dokumentace, tiskový režim a propuštění pasportu ke kartě rozváděče", async ({ page }) => {
+test("krok 5: 6 listů dokumentace, tiskový režim a propuštění pasportu ke kartě rozváděče", async ({ page }) => {
   await page.goto("/panel-builder");
   await page.getByRole("link", { name: /PB-001/ }).click();
-  await page.getByRole("link", { name: "4. Výstupní dokumentace a PDF export" }).click();
+  await page.getByRole("link", { name: "5. Výstupní dokumentace a PDF export" }).click();
   for (const sheet of [1, 2, 3, 4, 5, 6]) await expect(page.getByTestId(`doc-sheet-${sheet}`)).toBeVisible();
   await expect(page.getByTestId("doc-functions")).toContainText("Zásuvky kuchyně");
   await expect(page.getByTestId("doc-parts").getByRole("row", { name: /2CDS251001R1165/ })).toContainText("5");

@@ -67,7 +67,7 @@ export default async function SampleElaboratePage({ searchParams }: PageProps<"/
         <div className="no-print space-y-2 px-2 text-zinc-200">
           <h1 className={embed ? "text-lg font-bold" : "text-2xl font-bold tracking-tight"}>📄 {TITLE}</h1>
           <p className="max-w-3xl text-sm text-zinc-400">
-            Takto vypadá výstup z kroku 4 pro vzorový rozváděč <b className="text-zinc-200">{project.code}</b>. Každý projekt dostane stejných 6 listů s údaji vaší firmy v razítku:
+            Takto vypadá výstup z kroku 5 pro vzorový rozváděč <b className="text-zinc-200">{project.code}</b>. Každý projekt dostane stejných 6 listů s údaji vaší firmy v razítku:
           </p>
           <ol className="flex flex-wrap gap-1.5 text-xs" aria-label="Listy elaborátu">
             {DOCUMENT_SHEETS.map((sheet, index) => (

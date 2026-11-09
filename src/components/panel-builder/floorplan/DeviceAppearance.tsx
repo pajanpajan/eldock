@@ -13,7 +13,7 @@ import { DESIGN_BRANDS, designBrand, designSeriesOf, seriesColors } from "@/lib/
 import { cn } from "@/lib/utils";
 
 import { ManufacturerLogo } from "../ManufacturerLogo";
-import { DeviceMockup, SeriesGallery } from "./SeriesGallery";
+import { DeviceMockup, SeriesGallery, combineLook } from "./SeriesGallery";
 import { SmartHomeDeviceCatalog, type SmartCatalogProps } from "../SmartHomeDeviceCatalog";
 
 /**
@@ -31,6 +31,7 @@ const FAMILY_ICON: Record<string, LucideIcon> = { "abb-design": ToggleRight, "ab
 export function DeviceAppearance({
   seriesKey,
   color,
+  frameColor = null,
   available,
   selectedRoom,
   supply,
@@ -52,11 +53,13 @@ export function DeviceAppearance({
 }: {
   seriesKey: string | null;
   color: string;
+  /** Fáze 74: barva rámečku (null = stejná jako klapka). */
+  frameColor?: string | null;
   /** Počty přístrojů řad v katalogu („ABB|Levit“ → 258). */
   available: Map<string, number>;
   selectedRoom: string | null;
   supply: SupplySystem["id"];
-  onChange: (patch: { series?: string; color?: string }) => void;
+  onChange: (patch: { series?: string; color?: string; frameColor?: string | null }) => void;
   onSupply: (supply: SupplySystem["id"]) => void;
   onApplyAll: () => void;
   onApplyRoom: () => void;
@@ -185,13 +188,14 @@ export function DeviceAppearance({
                   title={count ? `${count} přístrojů v katalogu` : "Řada zatím není v katalogu – přístroje doplníte v konfigurátoru"}
                   className={cn("flex w-20 shrink-0 flex-col items-center gap-0.5 rounded-md border p-1 text-[10px] leading-tight", active ? "border-primary bg-primary/20 text-foreground" : count ? "border-border text-foreground hover:border-primary/60" : "border-dashed border-border text-muted-foreground")}
                 >
-                  <DeviceMockup seriesKey={key} shape={series.shape ?? "square"} color={(active ? series.colors?.find((option) => option.id === color) : null) ?? series.colors?.[0] ?? { swatch: active ? swatch : "#f8fafc" }} items={["switch"]} className="size-9 rounded" label={`Náhled řady ${series.name}`} />
+                  <DeviceMockup seriesKey={key} shape={series.shape ?? "square"} color={(active ? combineLook(series.colors?.find((option) => option.id === color), frameColor ? series.colors?.find((option) => option.id === frameColor) : null) : null) ?? series.colors?.[0] ?? { swatch: active ? swatch : "#f8fafc" }} items={["switch"]} className="size-9 rounded" label={`Náhled řady ${series.name}`} />
                   <span className="line-clamp-2 text-center">{series.name}</span>
                 </button>
               );
             })}
           </div>
-          <div className="flex flex-wrap items-center gap-1" role="radiogroup" aria-label="3. Barva přístrojů">
+          <div className="flex flex-wrap items-center gap-1" role="radiogroup" aria-label="3. Barva klapky / krytu" data-testid="insert-colors">
+            <span className="mr-0.5 text-[11px] font-semibold text-muted-foreground">Klapka / kryt:</span>
             {colors.map((option) => {
               const look = current?.series.colors?.find((candidate) => candidate.id === option.id);
               return (
@@ -208,8 +212,21 @@ export function DeviceAppearance({
                 </button>
               );
             })}
+          </div>
+          {/* Fáze 74: barva rámečku zvlášť (výchozí stejná jako klapka) */}
+          <div className="flex flex-wrap items-center gap-1" role="radiogroup" aria-label="4. Barva rámečku" data-testid="frame-colors">
+            <span className="mr-0.5 text-[11px] font-semibold text-muted-foreground">Rámeček:</span>
+            <button type="button" role="radio" aria-checked={!frameColor} onClick={() => onChange({ frameColor: null })} className={cn("rounded-full border px-2 py-0.5 text-[11px]", !frameColor ? "border-primary bg-primary/15 text-foreground" : "border-border text-muted-foreground hover:text-foreground")} data-testid="frame-color-same">
+              stejná jako klapka
+            </button>
+            {colors.map((option) => (
+              <button key={option.id} type="button" role="radio" aria-checked={frameColor === option.id} onClick={() => onChange({ frameColor: option.id === color ? null : option.id })} title={`Rámeček ${option.label}`} className={cn("flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px]", frameColor === option.id ? "border-primary bg-primary/15 text-foreground" : "border-border text-muted-foreground hover:text-foreground")} data-testid="frame-color">
+                <span className="size-3.5 shrink-0 rounded-[3px] border-2" style={{ borderColor: current?.series.colors?.find((candidate) => candidate.id === option.id)?.frame ?? option.swatch, background: "transparent" }} aria-hidden />
+                {option.label}
+              </button>
+            ))}
             <div className="ml-auto flex flex-wrap gap-1">
-              <SeriesGallery seriesKey={seriesKey} color={color} available={available} onChoose={(patch) => onChange(patch)} />
+              <SeriesGallery seriesKey={seriesKey} color={color} frameColor={frameColor} available={available} onChoose={(patch) => onChange(patch)} />
               {link ? (
                 <a href={link.url} target="_blank" rel="noopener noreferrer" title={link.label} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:border-primary/60" data-testid="series-web">
                   🌐 Prohlédnout řadu na webu výrobce <ExternalLink className="size-3.5" aria-hidden />

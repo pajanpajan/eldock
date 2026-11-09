@@ -65,11 +65,14 @@ test("🎨 2D půdorys: kaskáda výrobce → řada → barva, živé kóty a ú
   const appearance = page.getByTestId("device-appearance");
   await appearance.getByRole("radio", { name: "Schneider Electric" }).click();
   await appearance.getByRole("radio", { name: "Asfora" }).click();
-  await appearance.getByRole("radio", { name: /Černá matná/ }).click();
+  // Fáze 74: barva klapky / krytu (řada barev rámečku pod ní má stejné názvy)
+  await appearance.getByTestId("insert-colors").getByRole("radio", { name: /Černá matná/ }).click();
 
   // Kreslení místnosti s živými kótami
   const canvas = page.getByTestId("floorplan-canvas");
   await page.getByRole("button", { name: "Kreslit místnost" }).click();
+  // Fáze 74: nad plátnem přibyla řada barev rámečku – plátno nejdřív doprostřed okna (kreslí se od jeho horního rohu)
+  await canvas.evaluate((element) => element.scrollIntoView({ block: "center" }));
   const box = (await canvas.boundingBox())!;
   await page.mouse.move(box.x + 100, box.y + 100);
   await page.mouse.down();

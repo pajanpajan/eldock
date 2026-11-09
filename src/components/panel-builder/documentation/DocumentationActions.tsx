@@ -24,7 +24,7 @@ export interface ReleaseTarget {
   label: string;
 }
 
-/** Lišta kroku 4: tisk / export PDF a propuštění pasportu ke kartě rozváděče. */
+/** Lišta kroku 5: tisk / export PDF a propuštění pasportu ke kartě rozváděče. */
 export function DocumentationActions({
   projectId,
   released,

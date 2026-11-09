@@ -105,7 +105,7 @@ test("AI Panel Builder: norma strojního rozváděče a protokol o kusové zkou�
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("AI Panel Builder", { timeout: 5_000 });
   }).toPass({ timeout: 60_000 });
   await page.getByRole("link", { name: /PB-001/ }).click();
-  await page.getByRole("link", { name: /4\. Výstupní dokumentace/ }).click();
+  await page.getByRole("link", { name: /5\. Výstupní dokumentace/ }).click();
   await expect(page.getByTestId("declaration-norms")).toContainText("ČSN EN IEC 61439-3 ed. 2");
   await expect(page.getByTestId("declaration-directives")).toContainText("RoHS 2011/65/EU");
 

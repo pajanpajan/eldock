@@ -1085,6 +1085,11 @@ model PanelBoardProject {
   floorplanJson          String?
   /// Výkaz kabeláže z půdorysu (fáze 49) – 3 režimy vedení, rozpis kabelů, ΔU okruhů (JSON) pro dokumentaci.
   cableReportJson        String?
+  /// Fáze 74: rozváděč z půdorysu s podružnými rozváděči – kód rozváděče („RH“ / „RP1“), u podružného id projektu
+  /// hlavního rozváděče (bez cizího klíče – smazání hlavního rozváděče podružný nezruší) a jeho přívod (JSON `FeederInfo`).
+  boardCode              String?
+  parentBoardId          String?
+  feederJson             String?
 
   createdById String?
   /// Registrovaná firma (fáze 41): vidí jen své rozváděče, její údaje se propisují do dokumentace.
@@ -1105,6 +1110,7 @@ model PanelBoardProject {
   @@index([equipmentId])
   @@index([companyId, updatedAt])
   @@index([enclosureId])
+  @@index([parentBoardId])
 }
 
 /// Důvod snímku v historii verzí půdorysu (fáze 64).

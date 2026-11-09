@@ -21,7 +21,8 @@ test("chytrá domácnost: akční členy ABB-free@home / KNX podle svítidel, no
   await page.getByTestId("series-gallery-open").click();
   const gallery = page.getByTestId("series-gallery");
   await gallery.getByTestId("gallery-series-Busch-axcent").click();
-  await gallery.getByRole("radio", { name: /Mechová černá \/ beton/ }).click();
+  // Fáze 74: barva řady (klapka / kryt) – řada barev rámečku pod ní má stejné názvy
+  await gallery.getByRole("radiogroup", { name: "Barva řady" }).getByRole("radio", { name: /Mechová černá \/ beton/ }).click();
   await expect(gallery.getByTestId("gallery-preview").locator('[data-material="stone"]').first()).toBeAttached();
   await expect(gallery.getByTestId("gallery-details")).toContainText("2CKA001754A4795");
   await gallery.screenshot({ path: "test-results/phase61-gallery.png" });

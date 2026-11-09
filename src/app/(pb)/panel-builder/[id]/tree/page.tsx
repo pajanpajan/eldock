@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 
 import { PageTransition } from "@/components/layout/PageTransition";
 import { panelBuilderGuard } from "@/components/panel-builder/access";
-import { PanelSteps } from "@/components/panel-builder/PanelSteps";
+import { NextStepBar, PanelSteps } from "@/components/panel-builder/PanelSteps";
 import { ProjectHeader } from "@/components/panel-builder/ProjectHeader";
 import { TreeEditor } from "@/components/panel-builder/TreeEditor";
 import { treeNodeFrom } from "@/lib/panel-builder/tree";
@@ -39,6 +39,8 @@ export default async function PanelTreePage({ params }: PageProps<"/panel-builde
         networkSystem={project.networkSystem}
         supplyPhases={project.supplyPhases}
       />
+      {/* Fáze 75: výrazný další krok dole na stránce */}
+      <NextStepBar project={project} current="tree" />
     </PageTransition>
   );
 }

@@ -47,6 +47,80 @@ export function SocketCircuitPicker({ manual, current, rows, onMove }: { manual:
 const outlets = (count: number) => `${count} ${count === 1 ? "zásuvka" : count >= 2 && count <= 4 ? "zásuvky" : "zásuvek"}`;
 
 /**
+ * Fáze 74: plovoucí nabídka u vybrané zásuvky na plátně – barevné čipy okruhů (stejné barvy jako trasy), nový ruční
+ * okruh a návrat na automat; okruh zásuvky jde změnit jedním klikem bez hledání v bočním panelu. `left` / `top` = poloha
+ * zásuvky v % plochy plátna.
+ */
+export function SocketCircuitPopover({
+  left,
+  top,
+  manual,
+  current,
+  rows,
+  colorOf,
+  onMove,
+  onClose,
+}: {
+  left: number;
+  top: number;
+  manual: string | null;
+  current: SocketCircuitRow | null;
+  rows: SocketCircuitRow[];
+  colorOf: (id: string) => string;
+  onMove: (target: SocketMoveTarget) => void;
+  onClose: () => void;
+}) {
+  const below = top < 28;
+  return (
+    <div
+      className={cn("absolute z-20 w-72 max-w-[80%] -translate-x-1/2 rounded-lg border border-sky-500/60 bg-card/95 p-2 text-xs shadow-xl backdrop-blur", below ? "mt-6" : "-translate-y-full -mt-8")}
+      style={{ left: `${Math.min(88, Math.max(12, left))}%`, top: `${top}%` }}
+      onPointerDown={(event) => event.stopPropagation()}
+      role="dialog"
+      aria-label="Okruh zásuvky"
+      data-testid="socket-popover"
+    >
+      <div className="mb-1 flex items-center gap-1">
+        <b className="text-foreground">🔌 Okruh zásuvky</b>
+        <span className="truncate text-muted-foreground">{current ? `teď ${current.designation}${manual ? ` · ruční ${manual}` : " · automaticky"}` : "bez okruhu"}</span>
+        <button type="button" onClick={onClose} className="ml-auto rounded px-1 text-muted-foreground hover:text-foreground" aria-label="Zavřít nabídku okruhu">
+          ✕
+        </button>
+      </div>
+      <div className="flex flex-wrap gap-1">
+        {rows.map((row) => {
+          const active = current?.id === row.id;
+          return (
+            <button
+              key={row.id}
+              type="button"
+              onClick={() => (active ? undefined : onMove({ kind: "row", row }))}
+              aria-pressed={active}
+              title={`${row.designation} – ${row.label.replace(/^Zásuvky – /, "")} · ${outlets(row.outlets)} · ${m(row.lengthM)}`}
+              className={cn("inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 font-mono font-bold", active ? "border-sky-300 bg-sky-500/25 text-foreground" : "border-border text-foreground hover:border-sky-400")}
+              data-testid="socket-chip"
+              data-designation={row.designation}
+            >
+              <span className="size-2.5 rounded-full" style={{ background: colorOf(row.id) }} aria-hidden />
+              {row.designation}
+              <span className={cn("font-sans font-normal", row.outlets >= 10 ? "text-red-300" : "text-muted-foreground")}>{row.outlets}</span>
+            </button>
+          );
+        })}
+        <button type="button" onClick={() => onMove({ kind: "new" })} className="rounded-full border border-dashed border-sky-400/70 px-1.5 py-0.5 font-semibold text-sky-200 hover:bg-sky-500/10" data-testid="socket-chip-new">
+          + Nový okruh
+        </button>
+        {manual ? (
+          <button type="button" onClick={() => onMove({ kind: "auto" })} className="rounded-full border border-border px-1.5 py-0.5 text-muted-foreground hover:text-foreground" data-testid="socket-chip-auto">
+            Automaticky
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+/**
  * Fáze 65: zásuvkové okruhy půdorysu – volba rozdělení (optimalizované zóny / každá místnost zvlášť / podle vzdálenosti
  * od rozváděče), „✨ Optimalizovat zásuvkové okruhy“ a přehled okruhů s označením jističe; klik na okruh vybere jeho
  * zásuvky na plátně (pak jde okruh měnit v detailu zásuvky nebo ve výběru).

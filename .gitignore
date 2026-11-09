@@ -58,3 +58,5 @@ public/*.mp4
 /apps/client/dist/
 /apps/client/dist-electron/
 /apps/client/release/
+/.next-manual/
+/e2e-manual.db*

@@ -463,7 +463,11 @@ const OUTLET_POWER_W = 200;
 const SOCKET_SIMULTANEITY = 0.3;
 const LIGHT_SIMULTANEITY = 0.8;
 
-export type CircuitKind = "lighting" | "sockets" | "dedicated" | "cooktop" | "fridge" | "three_phase_rcd_b";
+/** Fáze 74: `feeder` = přívod hlavní → podružný rozváděč (bez chrániče 30 mA – chrániče má podružný rozváděč). */
+export type CircuitKind = "lighting" | "sockets" | "dedicated" | "cooktop" | "fridge" | "three_phase_rcd_b" | "feeder";
+
+/** Fáze 74: hlavní rozváděč – výchozí rozváděč okruhu bez `board`. */
+export const MAIN_BOARD = "RH";
 
 export interface Protection {
   device: "MCB" | "RCBO";
@@ -496,9 +500,14 @@ export interface Circuit {
    * Pod jakou proudovou ochranu okruh patří: společný chránič 30 mA typ A (zásuvky, spotřebiče),
    * chránič typ A vyhrazený jen pro světla (`A30L`), vlastní typ B (EV / TČ / FVE), nebo vlastní RCBO.
    */
-  rcd: "A30" | "A30L" | "B30" | "F30" | "own";
+  rcd: "A30" | "A30L" | "B30" | "F30" | "own" | "none";
   /** Spotřebič vyhrazeného okruhu (fáze 52 – synergický energetický management). */
   tag?: ApplianceTag;
+  /** Fáze 74: rozváděč okruhu (bez údaje hlavní `MAIN_BOARD`); přívod podružného rozváděče nese jeho kód v `feeds`. */
+  board?: string;
+  feeds?: string;
+  /** Fáze 74: úbytek napětí na přívodu podružného rozváděče [%] – přičítá se k úbytku okruhu ve výkazu kabeláže. */
+  upstreamDropPct?: number;
   /** Fáze 52: zatížitelnost Iz [A] v zadaném uložení a impedance smyčky. */
   izA: number;
   loop: { zsOhm: number; zsMaxOhm: number; iaA: number; ikMinA: number; ok: boolean };
@@ -520,6 +529,10 @@ export interface DesignOptions {
   environment?: string | null;
   /** Fáze 65: rozdělení běžných zásuvek do okruhů (`socket-zones.ts`); výchozí dosavadní „distance“, půdorys posílá svou volbu. */
   socketGrouping?: SocketGrouping;
+  /** Fáze 74: nejmenší počet světelných okruhů (byt = 2; podružný rozváděč 1 – dva okruhy už má hlavní rozváděč). */
+  minLightingCircuits?: number;
+  /** Fáze 74: úbytek napětí na přívodu podružného rozváděče [%] – koncovým okruhům zbude limit mínus tato hodnota. */
+  upstreamDropPct?: number;
 }
 
 export interface BomItem {
@@ -622,9 +635,11 @@ export function generateCircuitsFromFloorplan(plan: Floorplan, calibration: Cali
     return { mm2, drop: result.drop, izA: result.coordination.izA, loop: result.loop };
   }
 
+  // Fáze 74: okruh podružného rozváděče má k dispozici limit úbytku mínus úbytek na jeho přívodu
+  const upstream = Math.max(0, options.upstreamDropPct ?? 0);
   function push(base: Omit<Circuit, "id" | "cable" | "crossSectionMm2" | "voltageDropPct" | "lengthMm" | "izA" | "loop">, nodes: readonly FloorNode[], startMm2: number) {
     const lengthMm = Math.max(0, ...nodes.map(length));
-    const limit = base.kind === "lighting" ? VOLTAGE_DROP_LIMIT.lighting : VOLTAGE_DROP_LIMIT.other;
+    const limit = Math.max(0.5, (base.kind === "lighting" ? VOLTAGE_DROP_LIMIT.lighting : VOLTAGE_DROP_LIMIT.other) - upstream);
     const designA = base.phases === 3 ? base.designW / (Math.sqrt(3) * 400) : base.designW / NOMINAL_U0;
     const { mm2, drop, izA, loop } = sized(base.protection, base.phases, Math.min(designA, base.protection.ratedA), startMm2, lengthMm, limit, base.label);
     circuits.push({ ...base, id: nextId(base.kind), cable: cableFor(base.phases, mm2), crossSectionMm2: mm2, lengthMm, voltageDropPct: drop, izA, loop });
@@ -790,10 +805,11 @@ export function generateCircuitsFromFloorplan(plan: Floorplan, calibration: Cali
   // (každé podlaží s vlastními světelnými okruhy, jediné podlaží se světly = min. 2 okruhy)
   const lightFloors = [...new Set(lights.map((node) => node.floor ?? ""))];
   const lightGroups: FloorNode[][] = [];
+  const minLighting = Math.max(1, Math.round(options.minLightingCircuits ?? 2));
   for (const floor of lightFloors) {
     const floorLights = lights.filter((node) => (node.floor ?? "") === floor);
     const lightRooms = byRoom(floorLights);
-    const lightCount = Math.min(Math.max(floorLights.length, 1), Math.max(lightFloors.length === 1 ? 2 : 1, Math.ceil(floorLights.length / MAX_LIGHTS_PER_CIRCUIT)));
+    const lightCount = Math.min(Math.max(floorLights.length, 1), Math.max(lightFloors.length === 1 ? minLighting : 1, Math.ceil(floorLights.length / MAX_LIGHTS_PER_CIRCUIT)));
     const groups: FloorNode[][] = Array.from({ length: Math.max(1, lightCount) }, () => []);
     if (lightRooms.length === 1) floorLights.forEach((node, index) => groups[index % groups.length].push(node));
     else
@@ -823,7 +839,7 @@ export function generateCircuitsFromFloorplan(plan: Floorplan, calibration: Cali
       1.5,
     );
   }
-  if (lights.length && circuits.filter((circuit) => circuit.kind === "lighting").length < 2) warnings.push("Jen jeden světelný bod – druhý nezávislý světelný okruh nelze vytvořit.");
+  if (lights.length && minLighting >= 2 && circuits.filter((circuit) => circuit.kind === "lighting").length < 2) warnings.push("Jen jeden světelný bod – druhý nezávislý světelný okruh nelze vytvořit.");
 
   // Ovládání světel po místnostech (bod 2)
   const switching = plan.rooms.filter((room) => room.lighting).map((room) => ({ room: room.id, wiring: resolveSwitchWiring({ ...room.lighting!, mode: plan.mode }) }));
@@ -854,6 +870,86 @@ export function generateCircuitsFromFloorplan(plan: Floorplan, calibration: Cali
 
   return { circuits, bom: [...bom.entries()].map(([item, count]) => ({ item, count })), switching, io, warnings };
 }
+
+// ---------------------------------------------------------------------------
+//  3b. Fáze 74: přívod podružného rozváděče
+// ---------------------------------------------------------------------------
+
+/** Průřezy přívodu podružného rozváděče (CYKY-J) [mm²]. */
+const FEEDER_SECTIONS = [2.5, 4, 6, 10, 16] as const;
+/** Cílový úbytek napětí na přívodu podružného rozváděče [%] – zbytek limitu (3 / 5 %) zůstane koncovým okruhům. */
+export const FEEDER_DROP_LIMIT = 1.5;
+
+/**
+ * Přívod hlavní rozváděč → podružný rozváděč: výpočtový proud = nejzatíženější fáze soudobých příkonů okruhů
+ * podružného rozváděče (3f přívod, rozložení fází jako v rozváděči), jistič 3P / 1P+N nejbližší vyšší řady (min. 16 A),
+ * nejmenší průřez CYKY-J, který splní koordinaci IB ≤ In ≤ Iz, úbytek do `FEEDER_DROP_LIMIT` a impedanci smyčky.
+ * Přívod není pod chráničem 30 mA (`rcd: "none"`) – doplňkovou ochranu mají okruhy podružného rozváděče.
+ */
+export function subBoardFeeder(input: {
+  board: string;
+  /** Uzel trasy podružného rozváděče (cíl přívodu) a místnost, ve které visí. */
+  nodeId: string;
+  room: string;
+  roomName?: string;
+  circuits: readonly Pick<Circuit, "id" | "designW" | "installedW" | "phases">[];
+  supplyPhases: 1 | 3;
+  lengthMm: number;
+  method?: InstallMethod;
+  groupedCables?: number;
+  supplyLoopOhm?: number;
+}): { circuit: Circuit; warnings: string[] } {
+  const warnings: string[] = [];
+  const phases: 1 | 3 = input.supplyPhases === 1 ? 1 : 3;
+  const method = input.method ?? "C";
+  const designW = Math.round(input.circuits.reduce((sum, circuit) => sum + circuit.designW, 0));
+  const installedW = Math.round(input.circuits.reduce((sum, circuit) => sum + circuit.installedW, 0));
+  const phaseLoad = phases === 3 ? Math.max(0, ...Object.values(balancePhases(input.circuits).load)) : designW;
+  const designA = phaseLoad / NOMINAL_U0;
+  const ratedA = STANDARD_RATINGS.find((rating) => rating >= Math.max(16, designA)) ?? 63;
+  if (designA > 63) warnings.push(`Přívod ${input.board}: výpočtový proud ${Math.round(designA)} A překračuje jistič 63 A – rozdělte podružný rozváděč nebo zvolte pojistkový odpínač.`);
+  const protection: Protection = { device: "MCB", poles: phases === 3 ? "3P" : "1P+N", curve: "B", ratedA };
+  const evaluate = (mm2: number) => ({
+    mm2,
+    drop: voltageDropPercent({ lengthMm: input.lengthMm, currentA: ratedA, crossSectionMm2: mm2, phases }),
+    coordination: checkCoordination({ designCurrentA: Math.min(designA, ratedA), ratedA, crossSectionMm2: mm2, method, phases, groupedCables: input.groupedCables }),
+    loop: loopImpedanceCheck({ lengthMm: input.lengthMm, crossSectionMm2: mm2, ratedA, curve: protection.curve, supplyLoopOhm: input.supplyLoopOhm }),
+  });
+  const start = ratedA <= 16 ? 2.5 : ratedA <= 25 ? 4 : ratedA <= 32 ? 6 : 10;
+  const options = FEEDER_SECTIONS.filter((mm2) => mm2 >= start).map(evaluate);
+  const pick = options.find((option) => option.drop <= FEEDER_DROP_LIMIT && option.coordination.ok && option.loop.ok) ?? options[options.length - 1];
+  if (pick.drop > FEEDER_DROP_LIMIT) warnings.push(`Přívod ${input.board}: úbytek napětí ${String(pick.drop).replace(".", ",")} % i při ${String(pick.mm2).replace(".", ",")} mm² – zkraťte trasu nebo rozváděč přesuňte.`);
+  if (!pick.coordination.ok) warnings.push(`Přívod ${input.board}: nesplněna podmínka IB ≤ In ≤ Iz (Iz ${String(pick.coordination.izA).replace(".", ",")} A) – změňte uložení nebo jištění.`);
+  if (!pick.loop.ok) warnings.push(`Přívod ${input.board}: impedance smyčky ${String(pick.loop.zsOhm).replace(".", ",")} Ω nevyhoví samočinnému odpojení – zvětšete průřez nebo zkraťte trasu.`);
+  const where = input.roomName ? ` (${input.roomName})` : "";
+  return {
+    circuit: {
+      id: `feeder-${input.board}`,
+      label: `Přívod podružného rozváděče ${input.board}${where}`,
+      kind: "feeder",
+      phases,
+      protection,
+      cable: cableFor(phases, pick.mm2),
+      crossSectionMm2: pick.mm2,
+      rooms: [input.room],
+      nodeIds: [input.nodeId],
+      outlets: 0,
+      installedW,
+      designW,
+      lengthMm: input.lengthMm,
+      voltageDropPct: pick.drop,
+      rcd: "none",
+      izA: pick.coordination.izA,
+      loop: pick.loop,
+      board: MAIN_BOARD,
+      feeds: input.board,
+    },
+    warnings,
+  };
+}
+
+/** Fáze 74: odpor smyčky přívodu podružného rozváděče [Ω] (fázový + ochranný vodič, 20 °C) – přičte se k impedanci přívodu RH. */
+export const feederLoopOhm = (circuit: Pick<Circuit, "lengthMm" | "crossSectionMm2">) => (2 * (circuit.lengthMm / 1000) * COPPER_RESISTIVITY_20) / circuit.crossSectionMm2;
 
 // ===========================================================================
 //  4. Generátor rozváděče, vyvažování fází a výběr skříně
@@ -949,6 +1045,81 @@ export function balancePhases(circuits: readonly Pick<Circuit, "id" | "phases" |
   return { phaseOf, load };
 }
 
+const PHASES: readonly Phase[] = ["L1", "L2", "L3"];
+/** Fáze 75: náročnost součtu jističů pod chráničem v domácnosti – jmenovitý proud chrániče ≥ 0,7 × Σ In na fázi. */
+export const RCD_DIVERSITY = 0.7;
+
+/** Fáze 75: součet jmenovitých proudů jističů na nejzatíženější fázi chrániče × náročnost [A]. */
+export function rcdDemandA(circuits: readonly Pick<Circuit, "id" | "protection" | "phases">[], phaseOf: Readonly<Record<string, Phase | "L1,L2,L3">>): number {
+  const sum: Record<Phase, number> = { L1: 0, L2: 0, L3: 0 };
+  for (const circuit of circuits) {
+    const phase = phaseOf[circuit.id];
+    if (circuit.phases === 3 || phase === "L1,L2,L3") for (const p of PHASES) sum[p] += circuit.protection.ratedA;
+    else sum[(phase as Phase | undefined) ?? "L1"] += circuit.protection.ratedA;
+  }
+  return Math.round(Math.max(...PHASES.map((p) => sum[p])) * RCD_DIVERSITY * 10) / 10;
+}
+
+/** Fáze 75: jmenovitý proud chrániče 40 A, při větším součtu 63 A; nad 63 A vrací 64 (rozdělit skupinu – upozornění). */
+export function rcdRating(circuits: readonly Pick<Circuit, "id" | "protection" | "phases">[], phaseOf: Readonly<Record<string, Phase | "L1,L2,L3">>): number {
+  const demand = rcdDemandA(circuits, phaseOf);
+  return demand <= 40 ? 40 : demand <= 63 ? 63 : 64;
+}
+
+/**
+ * Fáze 75: fáze jističů podle pozice na hřebenové propojovací liště 3P pod 4P chráničem (a ve skupině RCBO): pozice
+ * po sobě L1, L2, L3, L1 … Pro každou skupinu se zvolí natočení napájení lišty (první pozice L1 / L2 / L3) a pořadí
+ * okruhů tak, aby byl soudobý příkon fází co nejvyrovnanější (nejtěžší okruh na nejméně zatíženou volnou fázi). 3f okruhy
+ * (a přívody `direct`) zatíží všechny fáze rovnoměrně a stojí ve skupině první. Vrací fáze, zatížení a pořadí skupin.
+ */
+export function combPhases(groups: readonly { key: string; circuits: readonly Circuit[] }[], direct: readonly Circuit[] = []): { phaseOf: Record<string, Phase | "L1,L2,L3">; load: Record<Phase, number>; order: Map<string, Circuit[]> } {
+  const load: Record<Phase, number> = { L1: 0, L2: 0, L3: 0 };
+  const phaseOf: Record<string, Phase | "L1,L2,L3"> = {};
+  for (const circuit of [...groups.flatMap((group) => group.circuits), ...direct].filter((c) => c.phases === 3)) {
+    phaseOf[circuit.id] = "L1,L2,L3";
+    for (const p of PHASES) load[p] += circuit.designW / 3;
+  }
+  // Přívod 1P+N (1f přívod podružného rozváděče) jako samostatný okruh na nejméně zatíženou fázi
+  for (const circuit of direct.filter((c) => c.phases === 1)) {
+    const phase = [...PHASES].sort((a, b) => load[a] - load[b])[0];
+    phaseOf[circuit.id] = phase;
+    load[phase] += circuit.designW;
+  }
+  const order = new Map<string, Circuit[]>();
+  for (const group of groups) {
+    const triples = group.circuits.filter((c) => c.phases === 3);
+    const singles = [...group.circuits.filter((c) => c.phases === 1)].sort((a, b) => b.designW - a.designW || a.id.localeCompare(b.id));
+    let best: { offset: number; assign: Map<string, Phase>; trial: Record<Phase, number>; spread: number } | null = null;
+    for (const offset of [0, 1, 2]) {
+      const slots: Record<Phase, number> = { L1: 0, L2: 0, L3: 0 };
+      for (let i = 0; i < singles.length; i++) slots[PHASES[(offset + i) % 3]] += 1;
+      const trial = { ...load };
+      const assign = new Map<string, Phase>();
+      for (const circuit of singles) {
+        const phase = PHASES.filter((p) => slots[p] > 0).sort((a, b) => trial[a] - trial[b] || PHASES.indexOf(a) - PHASES.indexOf(b))[0];
+        slots[phase] -= 1;
+        trial[phase] += circuit.designW;
+        assign.set(circuit.id, phase);
+      }
+      const spread = Math.max(...PHASES.map((p) => trial[p])) - Math.min(...PHASES.map((p) => trial[p]));
+      if (!best || spread < best.spread - 1e-6) best = { offset, assign, trial, spread };
+    }
+    const queues: Record<Phase, Circuit[]> = { L1: [], L2: [], L3: [] };
+    for (const circuit of singles) queues[best!.assign.get(circuit.id)!].push(circuit);
+    const ordered: Circuit[] = [];
+    for (let i = 0; i < singles.length; i++) {
+      const phase = PHASES[(best!.offset + i) % 3];
+      const circuit = queues[phase].shift()!;
+      ordered.push(circuit);
+      phaseOf[circuit.id] = phase;
+    }
+    Object.assign(load, best!.trial);
+    order.set(group.key, [...triples, ...ordered]);
+  }
+  for (const p of PHASES) load[p] = Math.round(load[p]);
+  return { phaseOf, load, order };
+}
+
 /**
  * Okruhy pod chrániče 30 mA typ A (nikdy AC): nejvýš 6 na chránič. Fáze 52 (ČSN 33 2130 ed. 4): světla
  * nikdy na společném chrániči se zásuvkami – buď RCBO na každém světelném okruhu (mimo chrániče), nebo
@@ -970,22 +1141,29 @@ export function groupUnderRcds(circuits: readonly Circuit[]): RcdGroup[] {
  * pod chrániči v pořadí skupin, pak okruhy s vlastní ochranou; jistič s chráničem (RCBO) má řadu -FA. Pro štítky tras.
  */
 export function circuitDesignations(circuits: readonly Circuit[]): Record<string, string> {
-  const counters = { F: 0, FA: 0 };
   const result: Record<string, string> = {};
-  const assign = (circuit: Circuit) => {
-    const prefix = circuit.protection.device === "RCBO" ? "FA" : "F";
-    counters[prefix] += 1;
-    result[circuit.id] = `-${prefix}${counters[prefix]}`;
-  };
-  const byId = new Map(circuits.map((circuit) => [circuit.id, circuit]));
-  for (const group of groupUnderRcds(circuits)) for (const id of group.circuitIds) assign(byId.get(id)!);
-  for (const circuit of circuits.filter((c) => c.rcd === "own")) assign(circuit);
+  // Fáze 74: každý rozváděč (hlavní, podružné) čísluje své jističe zvlášť – jako jeho vygenerovaný projekt
+  const boards = [...new Set(circuits.map((circuit) => circuit.board ?? MAIN_BOARD))];
+  for (const board of boards) {
+    const own = circuits.filter((circuit) => (circuit.board ?? MAIN_BOARD) === board);
+    const counters = { F: 0, FA: 0 };
+    const assign = (circuit: Circuit) => {
+      const prefix = circuit.protection.device === "RCBO" ? "FA" : "F";
+      counters[prefix] += 1;
+      result[circuit.id] = `-${prefix}${counters[prefix]}`;
+    };
+    const byId = new Map(own.map((circuit) => [circuit.id, circuit]));
+    for (const group of groupUnderRcds(own)) for (const id of group.circuitIds) assign(byId.get(id)!);
+    for (const circuit of own.filter((c) => c.rcd === "own")) assign(circuit);
+    // Přívody podružných rozváděčů (bez chrániče) za jističi s vlastní ochranou
+    for (const circuit of own.filter((c) => c.rcd === "none")) assign(circuit);
+  }
   return result;
 }
 
 /** Rozdělení okruhů jednoho druhu chráničů: max. 6 na chránič, světla rozprostřít, bez konfliktu místností. */
 function groupPool(shared: readonly Circuit[]): Circuit[][] {
-  const order: Record<CircuitKind, number> = { lighting: 0, sockets: 1, dedicated: 2, cooktop: 3, fridge: 9, three_phase_rcd_b: 9 };
+  const order: Record<CircuitKind, number> = { lighting: 0, sockets: 1, dedicated: 2, cooktop: 3, fridge: 9, three_phase_rcd_b: 9, feeder: 9 };
   const sorted = [...shared].sort((a, b) => order[a.kind] - order[b.kind] || a.id.localeCompare(b.id));
   const minimum = Math.max(shared.some((c) => c.kind === "lighting") && shared.some((c) => c.kind !== "lighting") ? 2 : 1, Math.ceil(shared.length / MAX_CIRCUITS_PER_RCD));
   const groups: { circuits: Circuit[] }[] = Array.from({ length: shared.length ? minimum : 0 }, () => ({ circuits: [] }));
@@ -1027,14 +1205,20 @@ export function buildSwitchboardFromCircuits(
   const bom = new Map(plan.bom.map((entry) => [entry.item, entry.count]));
   // Fáze 55: jednofázový přívod 1× 230 V – 2P hlavní vypínač, 1f svodič, 2P chrániče a všechny okruhy na L1
   const single = options.supplyPhases === 1;
-  const balanced = balancePhases(plan.circuits);
-  const phaseOf = single ? Object.fromEntries(plan.circuits.map((circuit) => [circuit.id, "L1" as Phase])) : balanced.phaseOf;
-  const load = single ? { L1: Math.round(plan.circuits.reduce((sum, circuit) => sum + circuit.designW, 0)), L2: 0, L3: 0 } : balanced.load;
   if (single) {
     for (const circuit of plan.circuits.filter((c) => c.phases === 3)) warnings.push(`${circuit.label}: třífázový spotřebič nelze napájet z 1f přívodu – zvolte 3f soustavu nebo jednofázovou variantu spotřebiče.`);
   }
   const rcdGroups = groupUnderRcds(plan.circuits);
   const byId = new Map(plan.circuits.map((circuit) => [circuit.id, circuit]));
+  // Fáze 75: fáze jističů pod 4P chráničem (a skupiny RCBO) podle pozice na hřebenové propojovací liště 3P – po sobě
+  // L1, L2, L3, L1 … Vyvažování fází se dělá pořadím okruhů ve skupině a natočením napájení lišty, ne libovolnou fází.
+  const ownGroup = plan.circuits.filter((circuit) => circuit.rcd === "own");
+  const placed = single
+    ? { phaseOf: Object.fromEntries(plan.circuits.map((circuit) => [circuit.id, "L1" as Phase])) as Record<string, Phase | "L1,L2,L3">, load: { L1: Math.round(plan.circuits.reduce((sum, circuit) => sum + circuit.designW, 0)), L2: 0, L3: 0 }, order: new Map<string, Circuit[]>() }
+    : combPhases([...rcdGroups.map((group) => ({ key: group.designation, circuits: group.circuitIds.map((id) => byId.get(id)!) })), { key: "own", circuits: ownGroup }], plan.circuits.filter((circuit) => circuit.rcd === "none"));
+  const phaseOf = placed.phaseOf;
+  const load = placed.load;
+  const orderOf = (key: string, circuits: Circuit[]) => placed.order.get(key) ?? circuits;
   const counters = new Map<string, number>();
   const designation = (prefix: string) => {
     const value = (counters.get(prefix) ?? 0) + 1;
@@ -1088,18 +1272,24 @@ export function buildSwitchboardFromCircuits(
   };
 
   for (const group of rcdGroups) {
-    const circuits = group.circuitIds.map((id) => byId.get(id)!);
-    const ratedA = 40;
+    const circuits = orderOf(group.designation, group.circuitIds.map((id) => byId.get(id)!));
+    // Fáze 75: jmenovitý proud chrániče podle součtu jističů na nejzatíženější fázi s náročností (min. 40 A, jinak 63 A)
+    const ratedA = rcdRating(circuits, phaseOf);
+    if (ratedA > 63) warnings.push(`${group.designation}: součet jističů pod chráničem ${Math.round(rcdDemandA(circuits, phaseOf))} A na fázi překračuje chránič 63 A – rozdělte okruhy na víc chráničů.`);
     const rcdPoles = single ? "2P" : "4P";
-    const rcd: PanelDevice = { ...device("FI", `Proudový chránič 30 mA typ ${group.type}${group.lightingOnly ? " – jen světla" : ""}`, "RCD", rcdPoles, single ? 2 : 4, ratedA, config({ category: "RCD", poles: rcdPoles, modules: single ? 2 : 4, ratedCurrentA: ratedA, rcdType: group.type, rcdSensitivityMa: 30 }), null, single ? "L1,N" : "L1,L2,L3"), key: `rcd:${group.designation}`, parentKey: "main" };
+    const rated = Math.min(63, ratedA);
+    const rcd: PanelDevice = { ...device("FI", `Proudový chránič 30 mA typ ${group.type}${group.lightingOnly ? " – jen světla" : ""}`, "RCD", rcdPoles, single ? 2 : 4, rated, config({ category: "RCD", poles: rcdPoles, modules: single ? 2 : 4, ratedCurrentA: rated, rcdType: group.type, rcdSensitivityMa: 30 }), null, single ? "L1,N" : "L1,L2,L3"), key: `rcd:${group.designation}`, parentKey: "main" };
     rcd.designation = group.designation;
     // Jističe skupiny pod svým chráničem (strom podle hierarchie, i když se skupina rozdělí na dvě lišty)
     groups.push([rcd, ...circuits.map((circuit) => ({ ...mcb(circuit), parentKey: rcd.key }))]);
     addBom(bom, "Izolovaný N-můstek (pod chránič)");
     addBom(bom, single ? "Hřebenová propojovací lišta 1P+N (pod chránič)" : "Hřebenová propojovací lišta 3P (pod chránič)");
   }
-  const own = plan.circuits.filter((circuit) => circuit.rcd === "own");
+  const own = orderOf("own", ownGroup);
   if (own.length) groups.push(own.map(mcb));
+  // Fáze 74: přívody podružných rozváděčů – jistič 3P / 1P+N přímo za hlavním vypínačem, bez chrániče
+  const direct = plan.circuits.filter((circuit) => circuit.rcd === "none");
+  if (direct.length) groups.push(direct.map(mcb));
 
   // Ovládání světel: impulzní relé a chytrá instalace
   const relays = plan.io.impulseRelays;
