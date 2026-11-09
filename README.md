@@ -25,6 +25,7 @@ Další screenshoty jsou v [`docs/screenshots/`](docs/screenshots/).
 - **Schválení údržbou:** porovnání revizí vedle sebe (synchronní zoom), posuvníkem a prolínáním, rozdíl kusovníku, „Potvrdit a propsat do systému“ / „Vrátit k přepracování“ s komentářem.
 - **Přihlašovací brána** (`/login`, přístupové heslo `ELDOCK_ACCESS_PASSWORD`) a přepínač účtů v hlavičce (ředitel, údržba, revizní technici, CAE projektant).
 - **Aplikace Eldock pro Windows (fáze 71):** offline klient údržby v `apps/desktop` (Electron) – spárování kódem z „Můj účet“ nebo odkazem `eldock://`, data závodu v zařízení (IndexedDB), token zašifrovaný Windows DPAPI, vyhledání zařízení a QR štítek webkamerou i čtečkou čárových kódů, detail zařízení s dokumentací offline, úpravy z haly ve frontě (změna s fotkami, komentář, provizorium, závada, součástka, fotka) a automatické odeslání po připojení. Jádro synchronizace `src/sync-client/` sdílí s budoucí mobilní aplikací a serverem závodu.
+- **Server závodu (fáze 72):** pro závod s interní sítí bez internetu – `src/plant-server/` na počítači v síti závodu (Eldock pro Windows jako služba bez okna): spáruje ho správce kódem z Administrace → Zařízení, stáhne celý závod, zařízení v hale se synchronizují s ním (stejný protokol), úpravy z haly ukáže ostatním hned a cloudu je přepošle jménem techniků, kdykoli má spojení. Správa serveru v prohlížeči (heslo, spárování, kódy pro tablety, přeposlané úpravy).
 - **Aplikace pro Windows, iOS a Android (fáze 70 – serverová část):** synchronizační API `/api/sync/v1` (`docs/SYNC_API.md`) – párování v „Můj účet“ kódem / QR, data závodu offline, fronta úprav z haly bez signálu (změny, provizoria, závady, fotky) a správa zařízení firmy v Administraci.
 - Instalovatelná PWA, tmavé vysoce kontrastní rozhraní, celé UI česky.
 
@@ -61,6 +62,7 @@ npm run dev                 # http://localhost:3000
 | `npm run backup` / `npm run backup:restore` | záloha databáze (a s úložištěm mimo server i souborů) podle `ELDOCK_BACKUP_*`; obnova jen do prázdné složky (`-- --list`, `-- --from s3 --to <složka> --files`) |
 | `npm run sync:setup` | triggery žurnálu změn pro aplikace (po migracích, idempotentní; `-- --new-epoch` po obnově databáze ze zálohy) |
 | `npm --prefix apps/desktop install` / `run build` / `run start` / `run dist` | aplikace pro Windows: závislosti (Electron), sestavení, spuštění, instalátor NSIS do `apps/desktop/release/` (zatím nepodepsaný) |
+| `npm run plant-server -- --data <složka> --port 8787` | server závodu ve vývoji (v instalaci `resources\plant-server.cmd`, jako služba `resources\plant-server-task.ps1` spuštěný správcem) |
 | `npm run storage:registry` / `npm run storage:cleanup` | doplnění registru souborů pro starší soubory (vlastník podle odkazů) / úklid osiřelých souborů (`--dry-run`) |
 | `npm run db:seed` / `db:reset` / `db:migrate` / `db:studio` | práce s databází (Prisma) |
 

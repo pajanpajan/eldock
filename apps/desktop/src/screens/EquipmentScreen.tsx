@@ -177,6 +177,8 @@ export function EquipmentScreen({ id, scannedToken, navigation }: { id: string; 
                 </span>
                 {item.status === "rejected" ? (
                   <span className="max-w-md text-xs text-red-300">Odmítnuto: {item.message}</span>
+                ) : item.status === "accepted" ? (
+                  <span className="rounded-full border border-sky-500/40 bg-sky-500/10 px-2 py-0.5 text-xs text-sky-300">Na serveru závodu – čeká na cloud</span>
                 ) : (
                   <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-300">Čeká na odeslání</span>
                 )}

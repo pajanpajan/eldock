@@ -67,7 +67,7 @@ export function SettingsScreen({ navigation }: { navigation: Navigation }) {
 
       <Section title="Server a zařízení" icon={<Server className="size-4 text-primary" aria-hidden />}>
         <dl className="grid gap-3 sm:grid-cols-2">
-          <Fact label="Server" value={status?.server} />
+          <Fact label="Server" value={status?.server ? `${status.server}${status.serverName && status.serverName !== "Eldock" ? ` (${status.serverName})` : ""}` : null} />
           <Fact label="Zařízení" value={session?.device.name} />
           <Fact label="Spárováno" value={session?.device.pairedAt ? formatDateTime(session.device.pairedAt) : null} />
           <Fact label="Poslední úplná synchronizace" value={status?.lastSyncAt ? formatDateTime(status.lastSyncAt) : "zatím ne"} />

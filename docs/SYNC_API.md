@@ -175,10 +175,39 @@ kolega): server ho připojí k otevřenému požadavku jako komentář s přílo
 Web ukazuje u zařízení „Nesynchronizováno déle než 24 h“ (Můj účet, Administrace → Zařízení) – aplikace má uživatele
 upozornit stejně (`policy.staleAfterHours`).
 
-## 8. Server závodu (fáze 72) a provoz
+## 8. Server závodu (fáze 72)
 
-- Server závodu poběží stejnou aplikací Eldock (Docker v síti závodu) se stejným API – aplikace v hale se párují
-  s ním (QR nese jeho adresu). Se cloudem se bude synchronizovat jako zařízení `PLANT_SERVER` (doplní fáze 72, na jádru `src/sync-client/`).
+Závod s interní sítí bez internetu: na počítači v síti závodu běží **server závodu** (`src/plant-server/`, po instalaci
+Eldock pro Windows `resources\plant-server.cmd` – `Eldock.exe` jako Node bez okna, správa v prohlížeči na portu 8787).
+Zařízení v hale se s ním párují a synchronizují **stejným protokolem** jako s eldock.cz (adresa serveru závodu místo
+eldock.cz). Rozdíly pro aplikace:
+
+- `GET /api/sync/v1` vrací navíc `plantServer: { name, plants, cloudSyncAt }`. Párovací kód vytvoří správa serveru
+  závodu pro konkrétního uživatele firmy – zařízení pak pracuje pod jeho jménem; relace nese jeho oprávnění a výřez
+  tak, jak je serveru závodu poslal cloud (`email` je prázdný).
+- **Úpravy:** server závodu je ověří (schéma, oprávnění, závod a výřez, stav záznamu, `baseUpdatedAt`) a odpoví
+  `status: "accepted"` – převzato. Ostatní zařízení v síti závodu je hned vidí jako **předběžná data** (nový požadavek
+  nebo provizorium s číslem „čeká na cloud“, odstraněná závada…). Aplikace převzatou úpravu posílá znovu při každé
+  synchronizaci; jakmile ji cloud provede nebo odmítne, opakované odeslání vrátí `applied` / `rejected` jako cloud.
+  Předběžná data pak nahradí data z cloudu (odmítnutá úprava se vrátí).
+- **Soubory:** fotky z haly server závodu uloží (`/api/files/photos/plant-<sha256>.jpg`) a nahraje je do cloudu před
+  přeposláním úpravy; po provedení přijdou záznamy s adresou z cloudu. Kopie souborů z cloudu obslouží sám (i bez spojení).
+
+Server závodu vůči cloudu:
+
+- Je to zařízení `PLANT_SERVER` – spáruje ho jen správce firmy (`PLANT_ADMIN`) kódem z **Administrace → Zařízení →
+  Spárovat server závodu** (kód s účelem `PLANT_SERVER`; aplikaci takovým kódem nespárujete a server závodu kódem
+  z Můj účet také ne). Při ztrátě oprávnění správce, blokaci nebo odebrání správce token přestane platit (401).
+- Stahuje celý závod bez výřezu kategorií; relace nese `plantServer.users` – přístupy uživatelů firmy v závodě
+  (`permissions`, `visibleTypes`, `layers`, `plantIds`, `disabled`) spočítané cloudem.
+- Úpravy z haly přeposílá `POST /mutations` s **`actorId`** u každé úpravy: cloud ji provede jako ten uživatel (stejná
+  firma a závod, aktivní účet, jeho oprávnění a výřez; evidence `SyncMutation` pod ním se zařízením serveru závodu,
+  přesně jednou podle `id`). Bez `actorId` nebo s neplatným uživatelem = `rejected` (`FORBIDDEN`). Běžné zařízení
+  `actorId` jiného uživatele poslat nesmí.
+- Synchronizuje se každých 5 minut, pár sekund po úpravě z haly a ručně ze správy; bez spojení pracuje dál offline.
+
+## 9. Provoz
+
 - Žurnál plní triggery SQLite (`ensureSyncTriggers`: start aplikace, `npm run sync:setup` po migracích v kontejneru).
   Po obnově databáze ze zálohy spusťte `npm run sync:setup -- --new-epoch` – aplikace stáhnou vše znovu.
 - Retence: značky smazání v žurnálu a evidence úprav 90 dní, odpojená a vypršelá zařízení 30 dní, kódy párování 1 den.

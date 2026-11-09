@@ -14,6 +14,14 @@ files:
   - build/icon.png
   - package.json
 asar: true
+# Fáze 72: server závodu běží mimo Electron (ELECTRON_RUN_AS_NODE) – soubor mimo asar, spouštěč a skript úlohy
+asarUnpack:
+  - dist-electron/plant-server.cjs
+extraResources:
+  - from: build/plant-server.cmd
+    to: plant-server.cmd
+  - from: build/plant-server-task.ps1
+    to: plant-server-task.ps1
 protocols:
   - name: Eldock
     schemes:

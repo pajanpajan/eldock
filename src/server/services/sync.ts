@@ -5,11 +5,11 @@
 import { createHash, createHmac, randomBytes } from "node:crypto";
 
 import { Prisma, type PrismaClient } from "@/generated/prisma/client";
-import type { AccountType, EquipmentType, SyncPlatform, UserRole } from "@/generated/prisma/enums";
+import type { AccountType, EquipmentType, SyncPairingPurpose, SyncPlatform, UserRole } from "@/generated/prisma/enums";
 import { ACCOUNT_TYPES, accountLayers, visibleTypes, type Permission } from "@/lib/accounts";
 import { authSecret } from "@/lib/auth";
 import { collectFileUrls, companyOwner, type FileOwner } from "@/lib/file-ownership";
-import type { LayerKey } from "@/lib/map-layers";
+import { ALL_LAYERS, type LayerKey } from "@/lib/map-layers";
 import { effectiveFeatures } from "@/lib/modules";
 import {
   PAIRING_CODE_LENGTH,
@@ -71,12 +71,21 @@ async function pairableUser(prisma: PrismaClient, userId: string) {
   if (user.disabledAt || !user.homePlantId || !company || company.closedAt || company.productScope !== "PLANT_MANAGEMENT") {
     throw new WorkflowError("FORBIDDEN", "Účet nemůže párovat aplikace (zablokovaný účet, zrušená firma nebo účet bez závodu).");
   }
-  return { ...user, registeredCompany: company };
+  return { ...user, accountType: user.accountType, registeredCompany: company };
 }
 
-/** Nový kód párování (10 minut). Starší nepoužitý kód uživatele přestane platit. */
-export async function createPairingCode(prisma: PrismaClient, input: { userId: string }, now: Date = new Date()) {
+/** Fáze 72: server závodu páruje a drží jen správce firmy (stejné oprávnění jako Administrace → Zařízení). */
+export const PLANT_SERVER_PERMISSION: Permission = "manageUsers";
+
+const canRunPlantServer = (accountType: AccountType) => ACCOUNT_TYPES[accountType].permissions.includes(PLANT_SERVER_PERMISSION);
+
+/** Nový kód párování (10 minut). Starší nepoužitý kód uživatele přestane platit. `PLANT_SERVER` = kód pro server závodu. */
+export async function createPairingCode(prisma: PrismaClient, input: { userId: string; purpose?: SyncPairingPurpose }, now: Date = new Date()) {
   const user = await pairableUser(prisma, input.userId);
+  const purpose = input.purpose ?? "DEVICE";
+  if (purpose === "PLANT_SERVER" && !canRunPlantServer(user.accountType)) {
+    throw new WorkflowError("FORBIDDEN", "Server závodu páruje jen správce firmy (technický ředitel nebo správce závodu).");
+  }
   const active = await prisma.syncDevice.count({ where: { userId: user.id, revokedAt: null } });
   if (active >= SYNC_POLICY.maxDevicesPerUser) {
     throw new WorkflowError("CONFLICT", `Máte spárováno ${active} zařízení (nejvýš ${SYNC_POLICY.maxDevicesPerUser}) – nejdřív některé odpojte.`);
@@ -84,10 +93,10 @@ export async function createPairingCode(prisma: PrismaClient, input: { userId: s
   const code = pairingCodeFrom(randomBytes(PAIRING_CODE_LENGTH));
   const expiresAt = new Date(now.getTime() + SYNC_POLICY.pairingTtlMinutes * 60_000);
   await prisma.$transaction([
-    prisma.syncPairing.updateMany({ where: { userId: user.id, usedAt: null }, data: { usedAt: now } }),
-    prisma.syncPairing.create({ data: { userId: user.id, codeHash: pairingHash(code), expiresAt, createdAt: now } }),
+    prisma.syncPairing.updateMany({ where: { userId: user.id, usedAt: null, purpose }, data: { usedAt: now } }),
+    prisma.syncPairing.create({ data: { userId: user.id, codeHash: pairingHash(code), purpose, expiresAt, createdAt: now } }),
   ]);
-  return { code: formatPairingCode(code), expiresAt };
+  return { code: formatPairingCode(code), expiresAt, purpose };
 }
 
 export interface PairDeviceInput {
@@ -119,8 +128,14 @@ export async function pairDevice(prisma: PrismaClient, input: PairDeviceInput, n
   if (!pairing) throw await fail(code ? "neznámý kód" : "neplatný formát kódu");
   if (pairing.usedAt) throw await fail("kód už byl použit");
   if (pairing.expiresAt <= now) throw await fail("kód vypršel");
+  // Fáze 72: server závodu jen kódem pro server závodu (od správce), kód pro server nespáruje aplikaci
+  if ((pairing.purpose === "PLANT_SERVER") !== (input.platform === "PLANT_SERVER")) {
+    await recordSecurityEvent(prisma, { kind: "DEVICE_PAIR_FAILED", userId: pairing.userId, companyId: pairing.user.companyId, ipKey: input.ipKey, detail: "kód pro jiný druh zařízení" }, now);
+    throw new WorkflowError("FORBIDDEN", pairing.purpose === "PLANT_SERVER" ? "Tento kód je pro server závodu – aplikaci spárujte kódem z „Můj účet“." : "Server závodu spárujte kódem z Administrace → Zařízení → Spárovat server závodu.");
+  }
 
   const user = await pairableUser(prisma, pairing.userId);
+  if (input.platform === "PLANT_SERVER" && !canRunPlantServer(user.accountType)) throw new WorkflowError("FORBIDDEN", "Server závodu páruje jen správce firmy.");
   const name = input.name.trim().slice(0, 80) || SYNC_PLATFORM_LABELS[input.platform];
   const token = DEVICE_TOKEN_PREFIX + randomBytes(32).toString("base64url");
   const device = await prisma.$transaction(async (tx) => {
@@ -171,6 +186,9 @@ export async function authenticateDevice(prisma: PrismaClient, token: string | n
   const company = user.registeredCompany;
   if (!user.accountType || user.disabledAt || user.companyId !== device.companyId || !user.homePlantId) return null;
   if (!company || company.closedAt || company.productScope !== "PLANT_MANAGEMENT") return null;
+  // Fáze 72: server závodu drží správce – bez oprávnění správce (jiný typ účtu) přestane platit
+  const plantServer = device.platform === "PLANT_SERVER";
+  if (plantServer && !canRunPlantServer(user.accountType)) return null;
   if (now.getTime() - device.lastSeenAt.getTime() > TOUCH_INTERVAL_MS) {
     await prisma.syncDevice.update({ where: { id: device.id }, data: { lastSeenAt: now } }).catch(() => undefined);
   }
@@ -180,13 +198,77 @@ export async function authenticateDevice(prisma: PrismaClient, token: string | n
     user: { id: user.id, name: user.name, email: user.email, title: user.title, role: user.role, accountType: user.accountType, scopeLayers: user.scopeLayers },
     company: { id: company.id, companyName: company.companyName, ico: company.ico },
     plantIds: [user.homePlantId],
-    visibleTypes: visibleTypes(account),
-    layers: accountLayers(account),
-    permissions: ACCOUNT_TYPES[user.accountType].permissions,
+    // Server závodu: celý závod (obslouží všechny účty v hale) a sám nic nemění – úpravy jen jménem techniků (`actorId`)
+    visibleTypes: plantServer ? null : visibleTypes(account),
+    layers: plantServer ? [...ALL_LAYERS] : accountLayers(account),
+    permissions: plantServer ? [] : ACCOUNT_TYPES[user.accountType].permissions,
     actor: { id: user.id, role: user.role },
     owner: companyOwner(company.id),
   };
 }
+
+/** Uživatel firmy a jeho přístup v závodě, jak ho spočítá cloud (relace serveru závodu, přeposlání úprav). */
+export interface PlantServerUser {
+  id: string;
+  name: string;
+  title: string | null;
+  role: UserRole;
+  accountType: AccountType;
+  accountLabel: string;
+  permissions: readonly Permission[];
+  visibleTypes: EquipmentType[] | null;
+  layers: LayerKey[];
+  plantIds: string[];
+  disabled: boolean;
+}
+
+const plantUser = (user: { id: string; name: string; title: string | null; role: UserRole; accountType: AccountType; scopeLayers: string | null; homePlantId: string; disabledAt: Date | null }): PlantServerUser => {
+  const account = { accountType: user.accountType, scopeLayers: user.scopeLayers };
+  return {
+    id: user.id,
+    name: user.name,
+    title: user.title,
+    role: user.role,
+    accountType: user.accountType,
+    accountLabel: ACCOUNT_TYPES[user.accountType].label,
+    permissions: ACCOUNT_TYPES[user.accountType].permissions,
+    visibleTypes: visibleTypes(account),
+    layers: accountLayers(account),
+    plantIds: [user.homePlantId],
+    disabled: Boolean(user.disabledAt),
+  };
+};
+
+/** Fáze 72: uživatelé firmy v závodech serveru závodu (i zablokovaní – server jim zařízení v hale odpojí). */
+export async function plantServerUsers(prisma: PrismaClient, ctx: DeviceContext): Promise<PlantServerUser[]> {
+  const users = await prisma.user.findMany({
+    where: { companyId: ctx.company.id, homePlantId: { in: ctx.plantIds }, accountType: { not: null } },
+    select: { id: true, name: true, title: true, role: true, accountType: true, scopeLayers: true, homePlantId: true, disabledAt: true },
+    orderBy: { name: "asc" },
+  });
+  return users.flatMap((user) => (user.accountType && user.homePlantId ? [plantUser({ ...user, accountType: user.accountType, homePlantId: user.homePlantId })] : []));
+}
+
+/**
+ * Fáze 72: kontext úpravy přeposlané serverem závodu – provede ji uživatel `actorId` (stejná firma a závod serveru,
+ * aktivní účet, jeho oprávnění a výřez), evidence se zařízením serveru. `null` = uživatel takovou úpravu poslat nesmí.
+ */
+export async function relayContext(prisma: PrismaClient, ctx: DeviceContext, actorId: string): Promise<DeviceContext | null> {
+  const user = await prisma.user.findUnique({ where: { id: actorId }, select: { id: true, name: true, email: true, title: true, role: true, accountType: true, scopeLayers: true, companyId: true, homePlantId: true, disabledAt: true } });
+  if (!user?.accountType || !user.homePlantId || user.disabledAt || user.companyId !== ctx.company.id || !ctx.plantIds.includes(user.homePlantId)) return null;
+  const access = plantUser({ ...user, accountType: user.accountType, homePlantId: user.homePlantId });
+  return {
+    ...ctx,
+    user: { id: user.id, name: user.name, email: user.email, title: user.title, role: user.role, accountType: user.accountType, scopeLayers: user.scopeLayers },
+    plantIds: access.plantIds,
+    visibleTypes: access.visibleTypes,
+    layers: access.layers,
+    permissions: access.permissions,
+    actor: { id: user.id, role: user.role },
+  };
+}
+
+export const isPlantServer = (ctx: DeviceContext) => ctx.device.platform === "PLANT_SERVER";
 
 export const canDevice = (ctx: DeviceContext, permission: Permission) => ctx.permissions.includes(permission);
 
@@ -225,11 +307,12 @@ export function scopeKeyOf(ctx: Pick<DeviceContext, "company" | "plantIds" | "vi
 
 /** Odpověď `GET /api/sync/v1/session`: kdo je přihlášen, co vidí a smí, závod, moduly a pravidla synchronizace. */
 export async function deviceSession(prisma: PrismaClient, ctx: DeviceContext, now: Date = new Date()) {
-  const [plants, config, epoch, counter] = await Promise.all([
+  const [plants, config, epoch, counter, users] = await Promise.all([
     prisma.plant.findMany({ where: { id: { in: ctx.plantIds } }, select: { id: true, code: true, name: true, city: true }, orderBy: { code: "asc" } }),
     loadModuleConfig(prisma),
     syncEpoch(prisma),
     prisma.syncCounter.findUnique({ where: { id: 1 } }),
+    isPlantServer(ctx) ? plantServerUsers(prisma, ctx) : null,
   ]);
   return {
     api: SYNC_API,
@@ -263,6 +346,8 @@ export async function deviceSession(prisma: PrismaClient, ctx: DeviceContext, no
       tombstoneDays: SYNC_POLICY.tombstoneDays,
     },
     journal: { head: counter?.value ?? 0 },
+    // Fáze 72: server závodu dostane přístupy uživatelů firmy v závodě (oprávnění, výřez) – sám je nepočítá
+    ...(users ? { plantServer: { users } } : {}),
   };
 }
 

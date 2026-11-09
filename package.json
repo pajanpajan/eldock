@@ -36,7 +36,8 @@
     "smoke": "tsx scripts/smoke-workflow.ts",
     "eval:recognition": "tsx scripts/eval-recognition.ts",
     "test:e2e": "playwright test",
-    "verify": "npm run typecheck && npm run lint && npm run test && npm run build"
+    "verify": "npm run typecheck && npm run lint && npm run test && npm run build",
+    "plant-server": "tsx scripts/plant-server.ts"
   },
   "dependencies": {
     "@prisma/adapter-better-sqlite3": "^7.10.1",

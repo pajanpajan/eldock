@@ -14,7 +14,7 @@ import { setEquipmentPhoto } from "@/server/services/equipment-card";
 import { assertFileClaims } from "@/server/services/file-registry";
 import { resolveDefect } from "@/server/services/inspection";
 import { replaceMonitoredComponent } from "@/server/services/lifespan";
-import { SyncError, canDevice, deviceEquipmentScope, type DeviceContext } from "@/server/services/sync";
+import { SyncError, canDevice, deviceEquipmentScope, isPlantServer, relayContext, type DeviceContext } from "@/server/services/sync";
 import { assertAccessible, type EntityKind } from "@/server/services/tenant-access";
 import { createTemporaryMod, resolveAsOneToOne } from "@/server/services/temporary-mod";
 import { addCommentInTx, submitChangeRequestInTx } from "@/server/services/workflow";
@@ -215,6 +215,8 @@ const pushSchema = z.object({
         payload: z.unknown(),
         performedAt: z.string().max(40).optional().nullable(),
         baseUpdatedAt: z.string().max(40).optional().nullable(),
+        /** Fáze 72: server závodu přeposílá úpravu jménem uživatele z haly. */
+        actorId: z.string().min(1).max(64).optional().nullable(),
       }),
     )
     .min(1)
@@ -297,6 +299,21 @@ async function processMutation(prisma: PrismaClient, ctx: DeviceContext, mutatio
   }
 }
 
+/**
+ * Fáze 72: úprava od serveru závodu se provede jako uživatel `actorId` z haly (stejná firma a závod, aktivní účet,
+ * jeho oprávnění a výřez), evidence pod ním se zařízením serveru. Běžné zařízení za jiného uživatele posílat nesmí.
+ */
+async function processRelayed(prisma: PrismaClient, ctx: DeviceContext, mutation: PushMutation, now: Date): Promise<MutationResult> {
+  if (isPlantServer(ctx)) {
+    if (!mutation.actorId) return { id: mutation.id, status: "rejected", code: "FORBIDDEN", message: "Server závodu posílá úpravy jen jménem uživatele z haly (actorId)." };
+    const actor = await relayContext(prisma, ctx, mutation.actorId);
+    if (!actor) return { id: mutation.id, status: "rejected", code: "FORBIDDEN", message: "Uživatel, který úpravu zadal v hale, nemá v závodě platný účet (zablokovaný, odebraný nebo z jiného závodu)." };
+    return processMutation(prisma, actor, mutation, now);
+  }
+  if (mutation.actorId && mutation.actorId !== ctx.user.id) return { id: mutation.id, status: "rejected", code: "FORBIDDEN", message: "Úpravy za jiného uživatele posílá jen server závodu." };
+  return processMutation(prisma, ctx, mutation, now);
+}
+
 /** Odeslání fronty úprav (nejvýš `SYNC_POLICY.maxBatch`): v pořadí z aplikace, každá samostatně. */
 export async function pushMutations(prisma: PrismaClient, ctx: DeviceContext, raw: unknown, now: Date = new Date()) {
   const parsed = pushSchema.safeParse(raw);
@@ -304,7 +321,7 @@ export async function pushMutations(prisma: PrismaClient, ctx: DeviceContext, ra
   const ids = parsed.data.mutations.map((mutation) => mutation.id);
   if (new Set(ids).size !== ids.length) throw new SyncError("BAD_REQUEST", "Id úprav v jednom odeslání se nesmí opakovat.", 400);
   const results: MutationResult[] = [];
-  for (const mutation of parsed.data.mutations) results.push(await processMutation(prisma, ctx, mutation, now));
+  for (const mutation of parsed.data.mutations) results.push(await processRelayed(prisma, ctx, mutation, now));
   await prisma.syncDevice.update({ where: { id: ctx.device.id }, data: { lastPushAt: now } }).catch(() => undefined);
   return { results, serverTime: now.toISOString() };
 }

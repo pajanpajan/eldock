@@ -15,7 +15,8 @@ export interface StoredRecord {
   data: Record<string, unknown>;
 }
 
-export type OutboxStatus = "pending" | "applied" | "rejected";
+/** `accepted` = úpravu převzal server závodu a čeká na cloud (fáze 72) – aplikace ji posílá znovu kvůli výsledku. */
+export type OutboxStatus = "pending" | "accepted" | "applied" | "rejected";
 
 /** Úprava ve frontě (offline). `payload` může do odeslání nést místní odkazy `local:<sha256>` na fotky. */
 export interface OutboxItem {

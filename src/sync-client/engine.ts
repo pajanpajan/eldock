@@ -44,6 +44,8 @@ export interface SyncReport {
   ok: boolean;
   applied: number;
   rejected: number;
+  /** Úpravy převzaté serverem závodu – výsledek z cloudu přijde při další synchronizaci (fáze 72). */
+  accepted: number;
   /** Úpravy, které server tentokrát nezpracoval (chyba serveru) – odejdou příště. */
   retry: number;
   pulled: number;
@@ -60,6 +62,8 @@ export interface SyncReport {
 export interface EngineStatus {
   paired: boolean;
   server: string | null;
+  /** Název serveru z `GET /api/sync/v1` („Eldock“ = cloud, „Server závodu – …“ = server v síti závodu). */
+  serverName: string | null;
   user: SessionUser | null;
   session: SyncSession | null;
   lastSyncAt: string | null;
@@ -69,6 +73,8 @@ export interface EngineStatus {
   /** Poslední úplná synchronizace je starší než `policy.staleAfterHours` (24 h) – upozornit uživatele. */
   stale: boolean;
   pending: number;
+  /** Na serveru závodu, čeká na cloud (fáze 72). */
+  accepted: number;
   rejected: number;
   foreign: number;
   unpairedReason: string | null;
@@ -86,6 +92,11 @@ export interface EngineOptions {
   shouldDownload?: (url: string, info: FileInfo) => boolean;
   onEvent?: (event: SyncEvent) => void;
   pageSize?: number;
+  /**
+   * Fáze 72: režim přeposílání (server závodu) – fronta nese úpravy více uživatelů z haly, odešlou se všechny
+   * s `actorId` = vlastník úpravy (cloud je provede jejich jménem).
+   */
+  relay?: boolean;
 }
 
 const AUTO_DOWNLOAD_BYTES = 50 * 1024 * 1024;
@@ -255,9 +266,10 @@ export class SyncEngine {
 
   async status(): Promise<EngineStatus> {
     const { store, tokens } = this.options;
-    const [token, server, session, userId, lastSyncAt, lastAttemptAt, lastError, offline, unpairedReason, outbox] = await Promise.all([
+    const [token, server, serverName, session, userId, lastSyncAt, lastAttemptAt, lastError, offline, unpairedReason, outbox] = await Promise.all([
       tokens.get(),
       store.getMeta("serverUrl"),
+      store.getMeta("serverName"),
       store.getMeta("session"),
       store.getMeta("userId"),
       store.getMeta("lastSyncAt"),
@@ -271,6 +283,7 @@ export class SyncEngine {
     return {
       paired: Boolean(token && server),
       server: server ?? null,
+      serverName: serverName ?? null,
       user: session?.user ?? null,
       session: session ?? null,
       lastSyncAt: lastSyncAt ?? null,
@@ -278,9 +291,10 @@ export class SyncEngine {
       lastError: lastError ?? null,
       offline: offline ?? false,
       stale: !lastSyncAt || this.now().getTime() - new Date(lastSyncAt).getTime() > staleAfter,
-      pending: outbox.filter((item) => item.status === "pending" && item.userId === userId).length,
+      pending: outbox.filter((item) => item.status === "pending" && (this.options.relay || item.userId === userId)).length,
+      accepted: outbox.filter((item) => item.status === "accepted" && (this.options.relay || item.userId === userId)).length,
       rejected: outbox.filter((item) => item.status === "rejected").length,
-      foreign: outbox.filter((item) => item.status === "pending" && item.userId !== userId).length,
+      foreign: this.options.relay ? 0 : outbox.filter((item) => (item.status === "pending" || item.status === "accepted") && item.userId !== userId).length,
       unpairedReason: unpairedReason ?? null,
     };
   }
@@ -299,7 +313,7 @@ export class SyncEngine {
 
   private async run(): Promise<SyncReport> {
     const { store, tokens } = this.options;
-    const report: SyncReport = { ok: false, applied: 0, rejected: 0, retry: 0, pulled: 0, reset: false, downloaded: 0, foreign: 0, unpaired: false, offline: false, error: null, finishedAt: "" };
+    const report: SyncReport = { ok: false, applied: 0, rejected: 0, accepted: 0, retry: 0, pulled: 0, reset: false, downloaded: 0, foreign: 0, unpaired: false, offline: false, error: null, finishedAt: "" };
     const [token, server] = await Promise.all([tokens.get(), store.getMeta("serverUrl")]);
     if (!token || !server) return this.finish({ ...report, unpaired: true, error: "Zařízení není spárované." });
     const api = this.api(server, token);
@@ -339,8 +353,9 @@ export class SyncEngine {
   /** Nahraje fotky čekajících úprav a odešle frontu po dávkách (`policy.maxBatch`). */
   private async pushOutbox(api: SyncApi, session: SyncSession, report: SyncReport) {
     const { store } = this.options;
-    const pending = (await store.listOutbox()).filter((item) => item.status === "pending");
-    const mine = pending.filter((item) => item.userId === session.user.id);
+    // Převzaté serverem závodu se posílají znovu – opakované odeslání vrátí výsledek z cloudu, až ho server má
+    const pending = (await store.listOutbox()).filter((item) => item.status === "pending" || item.status === "accepted");
+    const mine = this.options.relay ? pending : pending.filter((item) => item.userId === session.user.id);
     report.foreign = pending.length - mine.length;
     if (!mine.length) return;
 
@@ -390,7 +405,7 @@ export class SyncEngine {
       this.emit({ type: "progress", phase: "push", done: start, total: ready.length });
       const at = this.now().toISOString();
       for (const item of chunk) await store.updateOutbox(item.id, { attempts: item.attempts + 1, lastAttemptAt: at });
-      const wire: WireMutation[] = chunk.map((item) => ({ id: item.id, type: item.type, payload: item.payload, performedAt: item.performedAt, baseUpdatedAt: item.baseUpdatedAt }));
+      const wire: WireMutation[] = chunk.map((item) => ({ id: item.id, type: item.type, payload: item.payload, performedAt: item.performedAt, baseUpdatedAt: item.baseUpdatedAt, ...(this.options.relay ? { actorId: item.userId } : {}) }));
       const { results } = await api.pushMutations(wire);
       for (const result of results) {
         if (result.status === "applied") {
@@ -399,6 +414,9 @@ export class SyncEngine {
         } else if (result.status === "rejected") {
           report.rejected++;
           await store.updateOutbox(result.id, { status: "rejected", code: result.code, message: result.message, resolvedAt: at });
+        } else if (result.status === "accepted") {
+          report.accepted++;
+          await store.updateOutbox(result.id, { status: "accepted", code: undefined, message: result.message });
         } else {
           report.retry++;
           await store.updateOutbox(result.id, { code: result.code, message: result.message ?? "Server úpravu tentokrát nezpracoval – odešle se příště." });

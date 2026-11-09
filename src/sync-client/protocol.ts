@@ -14,6 +14,8 @@ export interface SyncInfo {
   serverTime: string;
   pairing: { codeLength: number; ttlMinutes: number };
   platforms: string[];
+  /** Fáze 72: odpovídá server závodu (interní síť) – název, závody a poslední spojení s cloudem. */
+  plantServer?: { name: string; plants: string[]; cloudSyncAt: string | null };
 }
 
 export interface SessionUser {
@@ -45,6 +47,23 @@ export interface SyncSession {
   mutations: string[];
   policy: { staleAfterHours: number; idleExpiryDays: number; maxBatch: number; defaultPageSize: number; maxPageSize: number; tombstoneDays: number };
   journal: { head: number };
+  /** Fáze 72: jen zařízení `PLANT_SERVER` – přístupy uživatelů firmy v závodě spočítané cloudem. */
+  plantServer?: { users: PlantUserAccess[] };
+}
+
+/** Přístup uživatele firmy v závodě (relace serveru závodu). */
+export interface PlantUserAccess {
+  id: string;
+  name: string;
+  title: string | null;
+  role: string;
+  accountType: string;
+  accountLabel: string;
+  permissions: string[];
+  visibleTypes: string[] | null;
+  layers: string[];
+  plantIds: string[];
+  disabled: boolean;
 }
 
 export interface PairResponse {
@@ -85,11 +104,14 @@ export interface WireMutation {
   payload: unknown;
   performedAt: string;
   baseUpdatedAt?: string | null;
+  /** Fáze 72: server závodu přeposílá úpravu jménem uživatele z haly. */
+  actorId?: string | null;
 }
 
 export interface MutationResult {
   id: string;
-  status: "applied" | "rejected" | "error";
+  /** `accepted` = převzal server závodu, výsledek z cloudu teprve přijde (aplikace úpravu pošle znovu). */
+  status: "applied" | "rejected" | "error" | "accepted";
   duplicate?: boolean;
   code?: string;
   message?: string;

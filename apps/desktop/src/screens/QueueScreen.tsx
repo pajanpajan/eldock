@@ -1,7 +1,7 @@
 // Fáze 71: fronta úprav z haly – čekající na odeslání, odmítnuté serverem (s důvodem, uživatel je zahodí
 // a zadá znovu opravené), odeslané za posledních 7 dní a úpravy jiného uživatele (neodešlou se).
 
-import { ArrowLeft, CheckCircle2, Clock, Send, Trash2, UserX, XCircle } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Clock, Send, Server, Trash2, UserX, XCircle } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { formatDateTime } from "@/lib/format";
@@ -18,7 +18,8 @@ export function QueueScreen({ navigation }: { navigation: Navigation }) {
   const outbox = useOutbox() ?? [];
   const userId = status?.user?.id;
   const pending = outbox.filter((item) => item.status === "pending" && item.userId === userId);
-  const foreign = outbox.filter((item) => item.status === "pending" && item.userId !== userId);
+  const accepted = outbox.filter((item) => item.status === "accepted" && item.userId === userId);
+  const foreign = outbox.filter((item) => (item.status === "pending" || item.status === "accepted") && item.userId !== userId);
   const rejected = outbox.filter((item) => item.status === "rejected");
   const applied = outbox.filter((item) => item.status === "applied").reverse();
 
@@ -39,6 +40,13 @@ export function QueueScreen({ navigation }: { navigation: Navigation }) {
       <Section title={`Čeká na odeslání (${pending.length})`} icon={<Clock className="size-4 text-amber-400" aria-hidden />} testId="queue-pending">
         {pending.length ? <Items items={pending} onOpen={(id) => navigation.open({ name: "equipment", id })} /> : <Empty>Nic nečeká – vše je na serveru.</Empty>}
       </Section>
+
+      {accepted.length ? (
+        <Section title={`Na serveru závodu – čeká na cloud (${accepted.length})`} icon={<Server className="size-4 text-sky-400" aria-hidden />} testId="queue-accepted">
+          <p className="text-sm text-muted-foreground">Server závodu úpravy převzal a ostatní zařízení v síti závodu je už vidí. Do cloudu je přepošle, jakmile se s ním spojí – výsledek se tu objeví po další synchronizaci.</p>
+          <Items items={accepted} onOpen={(id) => navigation.open({ name: "equipment", id })} />
+        </Section>
+      ) : null}
 
       {rejected.length ? (
         <Section title={`Odmítnuto serverem (${rejected.length})`} icon={<XCircle className="size-4 text-red-400" aria-hidden />} testId="queue-rejected">

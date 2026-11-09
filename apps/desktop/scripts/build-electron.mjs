@@ -13,3 +13,5 @@ const common = {
 
 await build({ ...common, entryPoints: ["electron/main.ts"], outfile: "dist-electron/main.cjs" });
 await build({ ...common, entryPoints: ["electron/preload.ts"], outfile: "dist-electron/preload.cjs" });
+// Fáze 72: server závodu bez okna (Eldock.exe s ELECTRON_RUN_AS_NODE=1 nebo node) – node:sqlite a node:http
+await build({ ...common, entryPoints: ["electron/plant-server.ts"], outfile: "dist-electron/plant-server.cjs" });

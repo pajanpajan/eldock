@@ -20,13 +20,7 @@ vi.mock("@/lib/prisma", () => ({
 // Bez tokenu se /api/files ptá na cookie relaci – v testu nikdo přihlášený není
 vi.mock("@/server/file-access", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/server/file-access")>()), fileViewer: async () => ({ demo: false, companyIds: [], superadmin: false }) }));
 
-const { GET: infoGET, OPTIONS: infoOPTIONS } = await import("@/app/api/sync/v1/route");
-const { POST: pairPOST } = await import("@/app/api/sync/v1/pair/route");
-const { GET: sessionGET, DELETE: sessionDELETE } = await import("@/app/api/sync/v1/session/route");
-const { GET: changesGET, OPTIONS: changesOPTIONS } = await import("@/app/api/sync/v1/changes/route");
-const { POST: mutationsPOST } = await import("@/app/api/sync/v1/mutations/route");
-const { POST: filesPOST } = await import("@/app/api/sync/v1/files/route");
-const { GET: fileGET, OPTIONS: fileOPTIONS } = await import("@/app/api/files/[...path]/route");
+const { cloudFetcher } = await import("@/server/services/test-cloud");
 const { createTestDb } = await import("@/server/services/test-db");
 const { createPairingCode } = await import("@/server/services/sync");
 const { registerFile } = await import("@/server/services/file-registry");
@@ -34,45 +28,20 @@ const { UPLOAD_ROOT } = await import("@/server/storage");
 const { SYNC_ENTITIES } = await import("@/server/sync/journal");
 const { MemoryStore, MemoryTokenStore, SyncEngine, ENTITY_NAMES, parseScan, labelState, sha256Hex } = await import("./index");
 
-type Handler = (request: Request) => Response | Promise<Response>;
-
 const SERVER = "https://cloud.test";
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0xff, 0xd9]);
 const PHOTO_TEXT = "fotka-rm1-z-registru";
 
 let db: Awaited<ReturnType<typeof createTestDb>>;
 let prisma: PrismaClient;
-let online = true;
-let calls: string[] = [];
 const written: string[] = [];
 
-function route(pathname: string, method: string): Handler | null {
-  const table: Record<string, Partial<Record<string, Handler>>> = {
-    "/api/sync/v1": { GET: () => infoGET(), OPTIONS: () => infoOPTIONS() },
-    "/api/sync/v1/pair": { POST: pairPOST },
-    "/api/sync/v1/session": { GET: sessionGET, DELETE: sessionDELETE },
-    "/api/sync/v1/changes": { GET: changesGET, OPTIONS: () => changesOPTIONS() },
-    "/api/sync/v1/mutations": { POST: mutationsPOST },
-    "/api/sync/v1/files": { POST: filesPOST },
-  };
-  if (table[pathname]) return table[pathname][method] ?? null;
-  if (pathname.startsWith("/api/files/")) {
-    const segments = pathname.slice("/api/files/".length).split("/").map(decodeURIComponent);
-    if (method === "OPTIONS") return () => fileOPTIONS();
-    if (method === "GET") return (request) => fileGET(request, { params: Promise.resolve({ path: segments }) } as never);
-  }
-  return null;
-}
-
-/** `fetch` aplikace → Route Handler (offline = výjimka jako bez sítě). */
+/** `fetch` aplikace → Route Handlery cloudu (offline = výjimka jako bez sítě). */
+const control = { online: true, calls: [] as string[] };
+let cloudFetch: Awaited<ReturnType<typeof cloudFetcher>> | null = null;
 async function fetcher(input: string, init?: RequestInit): Promise<Response> {
-  if (!online) throw new TypeError("fetch failed");
-  const request = new Request(input, init);
-  const { pathname } = new URL(request.url);
-  calls.push(`${request.method} ${pathname}`);
-  const handler = route(pathname, request.method);
-  if (!handler) return new Response("nenalezeno", { status: 404 });
-  return handler(request);
+  cloudFetch ??= await cloudFetcher(control);
+  return cloudFetch(input, init);
 }
 
 function engineFor(store = new MemoryStore(), tokens = new MemoryTokenStore()) {
@@ -151,8 +120,8 @@ beforeEach(async () => {
   db = await createTestDb();
   prisma = db.prisma;
   state.prisma = prisma;
-  online = true;
-  calls = [];
+  control.online = true;
+  control.calls = [];
   await seed();
 });
 
@@ -162,7 +131,7 @@ afterEach(async () => {
   for (const { url } of uploaded) {
     const file = path.join(UPLOAD_ROOT, ...url.slice("/api/files/".length).split("/"));
     if (written.includes(file) || url.startsWith("/api/files/photos/")) {
-      if (existsSync(file) && (written.includes(file) || calls.some((call) => call.startsWith("POST /api/sync/v1/files")))) rmSync(file, { force: true });
+      if (existsSync(file) && (written.includes(file) || control.calls.some((call) => call.startsWith("POST /api/sync/v1/files")))) rmSync(file, { force: true });
     }
   }
   written.length = 0;
@@ -191,7 +160,7 @@ describe("jádro synchronizace proti trasám API", () => {
   it("QR štítek najde zařízení offline a pozná přegenerovaný štítek", async () => {
     const { engine, store } = await pairedEngine("admin1");
     await engine.sync();
-    online = false;
+    control.online = false;
     const scan = parseScan("https://eldock.cz/equipment/e-sw?qr=A3F09C11B2");
     expect(scan).toEqual({ kind: "equipment", equipmentId: "e-sw", qrToken: "A3F09C11B2" });
     if (scan.kind !== "equipment") throw new Error("štítek");
@@ -206,7 +175,7 @@ describe("jádro synchronizace proti trasám API", () => {
   it("úprava zadaná offline s fotkou odejde po připojení a vrátí se jako záznam", async () => {
     const { engine, store } = await pairedEngine("admin1");
     await engine.sync();
-    online = false;
+    control.online = false;
     const ref = await engine.addLocalFile(new Blob([JPEG], { type: "image/jpeg" }), { name: "foto.jpg" });
     expect(ref).toMatch(/^local:[a-f0-9]{64}$/);
     const item = await engine.queue(
@@ -218,7 +187,7 @@ describe("jádro synchronizace proti trasám API", () => {
     expect(offline).toMatchObject({ ok: false, offline: true });
     expect((await engine.status()).pending).toBe(1);
 
-    online = true;
+    control.online = true;
     const report = await engine.sync();
     expect(report).toMatchObject({ ok: true, applied: 1, rejected: 0 });
     const sent = (await store.listOutbox()).find((entry) => entry.id === item.id);
@@ -245,9 +214,9 @@ describe("jádro synchronizace proti trasám API", () => {
     const rejected = (await store.listOutbox()).find((entry) => entry.id === item.id);
     expect(rejected).toMatchObject({ status: "rejected", code: "NOT_FOUND" });
     expect(rejected?.message).toBeTruthy();
-    calls = [];
+    control.calls = [];
     await engine.sync();
-    expect(calls).not.toContain("POST /api/sync/v1/mutations");
+    expect(control.calls).not.toContain("POST /api/sync/v1/mutations");
     expect((await engine.status()).rejected).toBe(1);
     await engine.dismiss(item.id);
     expect((await engine.status()).rejected).toBe(0);
@@ -292,15 +261,15 @@ describe("jádro synchronizace proti trasám API", () => {
   it("fronta jiného uživatele se po spárování jiným účtem neodešle", async () => {
     const base = await pairedEngine("admin1");
     await base.engine.sync();
-    online = false;
+    control.online = false;
     await base.engine.queue("equipment.photo", { equipmentId: "e-sw", photoUrl: null }, { equipmentId: "e-sw" });
-    online = true;
+    control.online = true;
     // Tablet převezme kolega – spáruje ho svým účtem (data se stáhnou znovu, fronta zůstane Olze)
     await pairedEngine("tech1", base);
-    calls = [];
+    control.calls = [];
     const report = await base.engine.sync();
     expect(report).toMatchObject({ ok: true, foreign: 1, applied: 0 });
-    expect(calls).not.toContain("POST /api/sync/v1/mutations");
+    expect(control.calls).not.toContain("POST /api/sync/v1/mutations");
     expect((await base.engine.status()).foreign).toBe(1);
     expect((await prisma.equipment.findUniqueOrThrow({ where: { id: "e-sw" } })).photoUrl).not.toBeNull();
   });
@@ -315,11 +284,11 @@ describe("jádro synchronizace proti trasám API", () => {
     expect(await cached?.data.text()).toBe(PHOTO_TEXT);
     // Soubory v registru bez obsahu na disku (404) synchronizaci nezastaví
     expect(report.ok).toBe(true);
-    calls = [];
+    control.calls = [];
     await engine.sync();
-    expect(calls.filter((call) => call === `GET ${photoUrl}`)).toEqual([]);
+    expect(control.calls.filter((call) => call === `GET ${photoUrl}`)).toEqual([]);
     // Offline se fotka zobrazí z mezipaměti
-    online = false;
+    control.online = false;
     expect(await (await engine.fileBlob(photoUrl))?.text()).toBe(PHOTO_TEXT);
   });
 
@@ -336,7 +305,7 @@ describe("jádro synchronizace proti trasám API", () => {
     const { engine } = engineFor();
     await expect(engine.pair({ server: "cloud.test", code: "K7QX-3MZP", name: "Tablet" })).rejects.toMatchObject({ status: 404 });
     await expect(engine.pair({ server: "cloud.test", code: "123", name: "Tablet" })).rejects.toThrow(/8 znaků/);
-    online = false;
+    control.online = false;
     await expect(engine.pair({ server: "cloud.test", code: "K7QX-3MZP", name: "Tablet" })).rejects.toMatchObject({ network: true });
   });
 });

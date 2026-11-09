@@ -117,7 +117,8 @@ function SyncPill() {
   const pending = status.pending ? ` · ${formatCount(status.pending, ["čeká úprava", "čekají úpravy", "čeká úprav"])}` : "";
   let tone = "border-emerald-500/40 bg-emerald-500/10 text-emerald-300";
   let icon = <ShieldCheck className="size-4" aria-hidden />;
-  let text = status.lastSyncAt ? `Synchronizováno ${formatRelative(status.lastSyncAt)}${pending}` : `Zatím nesynchronizováno${pending}`;
+  const via = status.serverName && status.serverName !== "Eldock" ? " se serverem závodu" : "";
+  let text = status.lastSyncAt ? `Synchronizováno${via} ${formatRelative(status.lastSyncAt)}${pending}` : `Zatím nesynchronizováno${pending}`;
   if (syncing) {
     tone = "border-sky-500/40 bg-sky-500/10 text-sky-300";
     icon = <Loader2 className="size-4 animate-spin" aria-hidden />;

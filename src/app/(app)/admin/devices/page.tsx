@@ -5,6 +5,7 @@ import { NoAccess } from "@/components/common/NoAccess";
 import { PageHeader } from "@/components/common/PageHeader";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { CompanyDevices } from "@/components/sync/CompanyDevices";
+import { PlantServerCard } from "@/components/sync/PlantServerCard";
 import { getCompanyDevices } from "@/server/queries/sync";
 import { getCurrentAccount } from "@/server/session";
 
@@ -22,7 +23,10 @@ export default async function AdminDevicesPage() {
       <PageHeader title="Zařízení firmy" description="Aplikace pro Windows, iPhone a Android spárované zaměstnanci – synchronizace, úpravy z haly a odpojení." />
       <AdminTabs current="/admin/devices" canUsers canModules={account.can("manageModules")} canData={Boolean(companyId)} canDevices={Boolean(companyId)} />
       {data ? (
-        <CompanyDevices devices={data.devices} rejected={data.rejected} />
+        <div className="space-y-4">
+          <CompanyDevices devices={data.devices} rejected={data.rejected} />
+          <PlantServerCard />
+        </div>
       ) : (
         <p className="rounded-xl border border-border bg-muted/30 p-3 text-sm text-muted-foreground">
           Obchodní demo nepáruje aplikace – aplikace pro Windows, iOS a Android jsou pro účty registrovaných firem.

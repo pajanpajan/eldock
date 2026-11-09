@@ -1697,8 +1697,14 @@ enum SyncPlatform {
   WINDOWS
   IOS
   ANDROID
-  PLANT_SERVER // server závodu (fáze 71) – synchronizuje celý závod pro interní síť
+  PLANT_SERVER // server závodu (fáze 72) – synchronizuje celý závod pro interní síť a přeposílá úpravy z haly
   OTHER
+}
+
+/// Fáze 72: k čemu kód párování slouží – server závodu spáruje jen kód od správce firmy.
+enum SyncPairingPurpose {
+  DEVICE // aplikace (Windows, iOS, Android) – Můj účet
+  PLANT_SERVER // server závodu – Administrace → Zařízení, jen správce firmy
 }
 
 enum SyncMutationStatus {
@@ -1738,13 +1744,14 @@ model SyncDevice {
 
 /// Jednorázový kód párování z „Můj účet“ (10 minut). V DB jen HMAC kódu.
 model SyncPairing {
-  id        String    @id @default(cuid())
+  id        String             @id @default(cuid())
   userId    String
-  codeHash  String    @unique
+  codeHash  String             @unique
+  purpose   SyncPairingPurpose @default(DEVICE)
   expiresAt DateTime
   usedAt    DateTime?
   deviceId  String?
-  createdAt DateTime  @default(now())
+  createdAt DateTime           @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

@@ -72,3 +72,20 @@ export async function revokeCompanyDeviceAction(deviceId: string) {
     ["/ucet", "/admin/devices"],
   );
 }
+
+/**
+ * Fáze 72: kód pro server závodu (10 minut, jednou) – jen správce firmy. Server závodu ho zadá ve své správě spolu
+ * s adresou tohoto serveru a dál se synchronizuje jako zařízení `PLANT_SERVER`.
+ */
+export async function createPlantServerPairingAction() {
+  return run(
+    async () => {
+      const account = await getCurrentAccount();
+      if (!account.can("manageUsers") || !account.user.companyId) throw new WorkflowError("FORBIDDEN", "Server závodu páruje jen technický ředitel nebo správce registrované firmy.");
+      const { code, expiresAt } = await createPairingCode(prisma, { userId: account.user.id, purpose: "PLANT_SERVER" });
+      return { code, expiresAt: expiresAt.toISOString(), server: await requestOrigin() };
+    },
+    "Kód pro server závodu se nepodařilo vytvořit.",
+    [],
+  );
+}
