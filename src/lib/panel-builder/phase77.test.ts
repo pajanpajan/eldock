@@ -8,6 +8,7 @@ import { isFrameable } from "./floorplan-frames";
 import { analyzeDraft, applyLightOption, circuitsOfBoard, emptyDraft, isPairController, isPairTarget, lightControlOf, pairNoun, pairsWith, paletteItem, parseDraft, pwmChannels, type EditorElement, type EditorRoom, type FloorplanDraft, type LightSpec } from "./floorplan-editor";
 import { ledSupplies } from "./smart-home";
 import { smartPlanOf } from "./smart-home-plan";
+import { circuitEntries } from "./route-display";
 import { symbolParts } from "./symbol-parts";
 
 const el = (id: string, item: string, x: number, y: number, extra: Partial<EditorElement> = {}): EditorElement => ({ id, item, x, y, room: "Obývák", mountHeightMm: null, frameUnits: 1, series: null, color: null, controls: [], rotation: 0, scale: null, ...extra });
@@ -185,6 +186,10 @@ describe("fáze 77 – pokročilé osvětlení: stmívání, CCT, RGB(W), DALI a
     const runs = Object.fromEntries(build.starRuns.map((run) => [run.id, run]));
     expect(runs.p1.cable).toBe(ledCableLabel(5, "RGBW"));
     expect(runs.p2.cable).toBe(ledCableLabel(3, "CCT"));
+    // Soupis okruhů: okruh zdroje je jen v rozváděči (bez trasy), ale v soupisu s jističem
+    const entries = circuitEntries(analyzeDraft(draft));
+    expect(entries.find((entry) => entry.label.startsWith("Zdroj 24 V DC – LED osvětlení"))).toMatchObject({ inBoard: true, lengthM: 0, layer: "lighting", board: "RH" });
+    expect(entries.find((entry) => entry.id === dali.id)?.inBoard).toBeUndefined();
   });
 });
 

@@ -1,11 +1,13 @@
 "use client";
 
-import { LayoutGrid, Minus, Plus } from "lucide-react";
-import { useState } from "react";
+import { LayoutGrid, Minus, Plus, Save, Star, Trash2 } from "lucide-react";
+import { useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import type { InstallLevel } from "@/engine/floorplan-bridge";
 import { MAX_FRAME_GANGS, assembliesFor, assemblyError, assemblyGangs, assemblyLabel, frameableItems, gangsOf } from "@/lib/panel-builder/floorplan-frames";
+import { TEMPLATE_LABEL_MAX, favoritesFirst, templatesFor, type AssemblyTemplate } from "@/lib/panel-builder/floorplan-library";
 import { cn } from "@/lib/utils";
 
 export interface AssemblyPick {
@@ -25,15 +27,93 @@ function readOpen(): boolean {
   }
 }
 
+/** Fáze 78: hvězdička oblíbené položky (zežloutne; oblíbené jdou na začátek seznamu). */
+export function FavoriteStar({ on, label, onToggle, className }: { on: boolean; label: string; onToggle: () => void; className?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation();
+        onToggle();
+      }}
+      aria-pressed={on}
+      // Krátký název (stav nese aria-pressed) – název položky by se pletl s jejím tlačítkem při hledání podle názvu
+      aria-label="Oblíbené"
+      title={on ? `${label}: odebrat z oblíbených (vrátí se na své místo)` : `${label}: přidat do oblíbených (přesune se nahoru)`}
+      className={cn("shrink-0 rounded p-0.5", on ? "text-amber-300" : "text-muted-foreground/50 hover:text-amber-200", className)}
+      data-testid="favorite-star"
+    >
+      <Star className={cn("size-3.5", on && "fill-current")} aria-hidden />
+    </button>
+  );
+}
+
+/** Fáze 78: pojmenování a uložení sestavy jako šablony firmy (vlastní sestava i osazený víceramček). */
+export function SaveTemplateControl({ members, onSave, compact = false }: { members: readonly string[]; onSave: (members: string[], label: string) => string | null; compact?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [label, setLabel] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const invalid = assemblyError([...members]) ?? (members.length < 2 ? "Šablona potřebuje aspoň 2 přístroje v rámečku." : null);
+  if (!open)
+    return (
+      <Button type="button" size="sm" variant="outline" className={cn("h-7 gap-1 text-xs", compact && "px-2")} disabled={Boolean(invalid)} title={invalid ?? undefined} onClick={() => (setLabel(assemblyLabel([...members])), setError(null), setOpen(true))} data-testid="template-save-open">
+        <Save className="size-3.5" aria-hidden /> 💾 Uložit tuto sestavu jako šablonu
+      </Button>
+    );
+  const submit = () => {
+    const failure = onSave([...members], label);
+    if (failure) return setError(failure);
+    setOpen(false);
+  };
+  return (
+    <div className="flex flex-col gap-1 rounded-md border border-amber-500/40 bg-background/60 p-1.5" data-testid="template-save">
+      <label className="flex flex-col gap-0.5 text-[11px] text-muted-foreground">
+        Název šablony (např. „Sestava TV stěna 4R“, „U postele 3R“)
+        <Input value={label} maxLength={TEMPLATE_LABEL_MAX} autoFocus onChange={(event) => setLabel(event.target.value)} onKeyDown={(event) => (event.key === "Enter" ? submit() : event.key === "Escape" ? setOpen(false) : undefined)} aria-label="Název šablony sestavy" className="h-7 text-xs" />
+      </label>
+      {error ? <p className="text-[11px] text-amber-200">{error}</p> : null}
+      <div className="flex gap-1">
+        <Button type="button" size="sm" className="h-7 flex-1 gap-1 text-xs" onClick={submit} data-testid="template-save-confirm">
+          <Save className="size-3.5" aria-hidden /> Uložit šablonu
+        </Button>
+        <Button type="button" size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setOpen(false)}>
+          Zrušit
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 /**
  * Fáze 62: sestavy ve víceramečku – samostatný panel nad paletou značek (ne v ní: „2× vypínač č. 1“ se nesmí plést
  * s jednotlivou značkou). Hotové sestavy (zásuvky, vypínače, kombinace) a vlastní složení po pozicích (nejvýš 5 pozic,
  * dvojzásuvka = 2). Vybraná sestava se vloží jedním klikem do půdorysu, přisazená a vyrovnaná v jednom rámečku.
+ * Fáze 78: šablony firmy („💾 Uložit tuto sestavu jako šablonu“) a ⭐ oblíbené nahoře (po odebrání zpět na své místo).
  */
-export function FrameAssemblyPalette({ level, active, onPick }: { level: InstallLevel; active: string | null; onPick: (pick: AssemblyPick) => void }) {
-  const presets = assembliesFor(level);
+export function FrameAssemblyPalette({
+  level,
+  active,
+  onPick,
+  templates,
+  favorites,
+  onFavorite,
+  onSaveTemplate,
+  onRemoveTemplate,
+}: {
+  level: InstallLevel;
+  active: string | null;
+  onPick: (pick: AssemblyPick) => void;
+  templates: readonly AssemblyTemplate[];
+  favorites: readonly string[];
+  onFavorite: (key: string) => void;
+  onSaveTemplate: (members: string[], label: string) => string | null;
+  onRemoveTemplate: (template: AssemblyTemplate) => void;
+}) {
   const options = frameableItems(level);
   const allowed = new Set(options.map((item) => item.id));
+  const presets = favoritesFirst(assembliesFor(level), (preset) => `assembly:${preset.id}`, favorites);
+  const own = favoritesFirst(templatesFor(templates, allowed), (template) => `template:${template.id}`, favorites);
+  const starred = new Set(favorites);
   const [expanded, setExpanded] = useState(readOpen);
   const [custom, setCustom] = useState<string[]>(["socket", "socket"]);
   const [customOpen, setCustomOpen] = useState(false);
@@ -58,34 +138,58 @@ export function FrameAssemblyPalette({ level, active, onPick }: { level: Install
     if (active === "custom" && !assemblyError(next)) onPick({ key: "custom", members: next, label: assemblyLabel(next) });
   };
 
+  /** Sestava k vložení: `pick` = klíč vkládání (id sestavy / „template:…“), `favorite` = klíč hvězdičky. */
+  const chip = (pick: string, favorite: string, label: string, chipMembers: readonly string[], extra?: ReactNode) => {
+    const size = assemblyGangs([...chipMembers]);
+    const pressed = active === pick;
+    return (
+      <span key={pick} className={cn("flex items-center rounded-md border pr-0.5", pressed ? "border-primary bg-primary/20" : "border-border")} data-favorite={starred.has(favorite) ? "true" : "false"}>
+        <button
+          type="button"
+          aria-pressed={pressed}
+          onClick={() => onPick({ key: pick, members: [...chipMembers], label })}
+          title={`${label} – rámeček ${size}R, přisazené a vyrovnané`}
+          className={cn("flex items-center gap-1 px-1.5 py-0.5 text-left text-[11px] leading-tight", pressed ? "text-foreground" : "text-muted-foreground hover:text-foreground")}
+          data-assembly={pick}
+        >
+          <span className="rounded bg-amber-500/20 px-1 font-mono text-[10px] font-bold text-amber-200">{size}R</span>
+          {label}
+        </button>
+        <FavoriteStar on={starred.has(favorite)} label={label} onToggle={() => onFavorite(favorite)} />
+        {extra}
+      </span>
+    );
+  };
+
   return (
     <section aria-label="Sestavy ve víceramečku" className="flex flex-col gap-1.5 rounded-xl border border-amber-500/40 bg-card p-3" data-testid="assembly-palette">
       <button type="button" onClick={toggle} aria-expanded={expanded} className="flex items-center justify-between gap-2 text-left text-xs font-bold text-amber-200" data-testid="assembly-palette-toggle">
         <span>▦ Sestavy ve víceramečku</span>
-        <span className="font-normal text-muted-foreground">{expanded ? "▾" : `▸ ${presets.length}`}</span>
+        <span className="font-normal text-muted-foreground">{expanded ? "▾" : `▸ ${presets.length + own.length}`}</span>
       </button>
       {expanded ? (
         <>
           <p className="text-[11px] text-muted-foreground">Vypínače a zásuvky v jednom rámečku – vloží se celé jedním klikem, u stěny přisazené a natočené ke stěně.</p>
-          <div className="flex flex-wrap gap-1">
-            {presets.map((preset) => {
-              const size = assemblyGangs(preset.members);
-              const pressed = active === preset.id;
-              return (
-                <button
-                  key={preset.id}
-                  type="button"
-                  aria-pressed={pressed}
-                  onClick={() => onPick({ key: preset.id, members: [...preset.members], label: preset.label })}
-                  title={`${preset.label} – rámeček ${size}R, přisazené a vyrovnané`}
-                  className={cn("flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-left text-[11px] leading-tight", pressed ? "border-primary bg-primary/20 text-foreground" : "border-border text-muted-foreground hover:border-primary/60 hover:text-foreground")}
-                  data-assembly={preset.id}
-                >
-                  <span className="rounded bg-amber-500/20 px-1 font-mono text-[10px] font-bold text-amber-200">{size}R</span>
-                  {preset.label}
-                </button>
-              );
-            })}
+          {own.length ? (
+            <div className="flex flex-col gap-1" data-testid="assembly-templates">
+              <p className="text-[11px] font-semibold text-amber-100">💾 Šablony firmy</p>
+              <div className="flex flex-wrap gap-1">
+                {own.map((template) =>
+                  chip(
+                    `template:${template.id}`,
+                    `template:${template.id}`,
+                    template.label,
+                    template.members,
+                    <button type="button" onClick={() => onRemoveTemplate(template)} aria-label="Smazat šablonu" title={`Smazat šablonu ${template.label}`} className="rounded p-0.5 text-muted-foreground/60 hover:text-red-300" data-testid="template-remove">
+                      <Trash2 className="size-3" aria-hidden />
+                    </button>,
+                  ),
+                )}
+              </div>
+            </div>
+          ) : null}
+          <div className="flex flex-wrap gap-1" data-testid="assembly-presets">
+            {presets.map((preset) => chip(preset.id, `assembly:${preset.id}`, preset.label, preset.members))}
           </div>
           <button type="button" onClick={() => setCustomOpen((value) => !value)} aria-expanded={customOpen} className="self-start text-xs font-semibold text-primary hover:underline" data-testid="assembly-custom-toggle">
             {customOpen ? "▾" : "▸"} Vlastní sestava (2–{MAX_FRAME_GANGS} pozic)
@@ -138,6 +242,8 @@ export function FrameAssemblyPalette({ level, active, onPick }: { level: Install
               >
                 <LayoutGrid className="size-3.5" aria-hidden /> Vložit sestavu {gangs}R
               </Button>
+              {/* Fáze 78: vlastní sestava jako šablona firmy (vloží se jedním klikem v dalších projektech) */}
+              <SaveTemplateControl members={members} onSave={onSaveTemplate} />
             </div>
           ) : null}
         </>

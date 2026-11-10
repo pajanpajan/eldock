@@ -154,8 +154,11 @@ import { PRODUCT_FAMILIES, productById, productForItem, productOfModule, type Ca
 import { deviceToneOf } from "@/lib/panel-builder/smart-datasheet";
 import { SmartHomeDatasheetModal } from "../SmartHomeDatasheetModal";
 import { FloorplanDocumentBar } from "./FloorplanDocumentBar";
+import { FloorplanFileMenu } from "./FloorplanFileMenu";
 import { useDraftHistory } from "./useDraftHistory";
 import { useFloorplanSync, type FloorplanMetaState } from "./useFloorplanSync";
+import { useFloorplanLibrary } from "./useFloorplanLibrary";
+import { addTemplate, favoritesFirst, removeTemplate, toggleFavorite } from "@/lib/panel-builder/floorplan-library";
 import { Dimensions, ElementDetail, ElementToolbar, RoomDetail, ToolButton } from "./ElementPanels";
 import { SocketCircuitPicker, SocketCircuitPopover, SocketCircuitsPanel, type SocketMoveTarget } from "./SocketCircuitsPanel";
 import { assignSocketCircuit, isSocketElement, moveSocketsToCircuit, nextSocketCircuit, optimizeSocketCircuits, socketCircuitRows, type SocketCircuitRow } from "@/lib/panel-builder/socket-circuits";
@@ -212,6 +215,8 @@ const DEFAULT_STYLES: Record<AnnotationKind, NoteStyle> = {
 /** Fáze 64: půdorys uložený na serveru (null = nový, vznikne při první změně). */
 export interface StoredFloorplan {
   id: string;
+  /** Fáze 78: kód půdorysu ve firmě („FP-001“). */
+  code?: string | null;
   name: string;
   customerName: string | null;
   installationSite: string | null;
@@ -247,12 +252,15 @@ export function FloorplanEditor({
   series,
   manufacturers = [],
   applianceJson = null,
+  libraryJson = null,
   company = null,
   stored = null,
 }: {
   series: SeriesOption[];
   manufacturers?: { name: string; count: number }[];
   applianceJson?: string | null;
+  /** Fáze 78: knihovna půdorysu firmy (šablony sestav, oblíbené ⭐) z profilu firmy. */
+  libraryJson?: string | null;
   company?: string | null;
   stored?: StoredFloorplan | null;
 }) {
@@ -265,7 +273,19 @@ export function FloorplanEditor({
   const [boot] = useState(() => bootDraft(stored, library?.specs ?? null));
   const { draft, setDraft, undo, redo, reset, canUndo, canRedo, gestureActive } = useDraftHistory(() => boot.initial);
   const [meta, setMeta] = useState<FloorplanMetaState>(() => ({ name: stored?.name ?? defaultFloorplanName(), customerName: stored?.customerName ?? null, installationSite: stored?.installationSite ?? null }));
-  const sync = useFloorplanSync({ stored: stored ? { id: stored.id, version: stored.version, savedAt: stored.updatedAt } : null, draft, initialSaved: boot.initialSaved, meta, replaceDraft: reset });
+  const sync = useFloorplanSync({ stored: stored ? { id: stored.id, code: stored.code ?? null, version: stored.version, savedAt: stored.updatedAt } : null, draft, initialSaved: boot.initialSaved, meta, replaceDraft: reset });
+  // Fáze 78: šablony sestav a oblíbené položky firmy (prohlížeč + profil firmy, novější vyhrává)
+  const [floorLibrary, saveFloorLibrary] = useFloorplanLibrary(libraryJson);
+  const favoriteKeys = useMemo(() => new Set(floorLibrary.favorites), [floorLibrary.favorites]);
+  const toggleFavoriteKey = (key: string) => saveFloorLibrary(toggleFavorite(floorLibrary, key));
+  /** Fáze 78: sestava jako šablona firmy – chyba jako text (formulář ji ukáže), jinak null. */
+  const saveTemplate = (members: string[], label: string): string | null => {
+    const result = addTemplate(floorLibrary, members, label);
+    if ("error" in result) return result.error;
+    saveFloorLibrary(result.library);
+    toast.success(`Šablona „${result.template.label}“ uložena do firmy – najdete ji v panelu ▦ Sestavy ve víceramečku.`);
+    return null;
+  };
   const [tool, setTool] = useState<Tool>({ kind: "select" });
   /** Fáze 59: vícenásobný výběr (Shift + klik, tažení obdélníku); jeden prvek = detail prvku. */
   const [selection, setSelection] = useState<string[]>([]);
@@ -1513,6 +1533,9 @@ export function FloorplanEditor({
               setTool(active ? { kind: "select" } : { kind: "place", item: itemId, ...(spec.custom ? { appliance: spec.id } : {}) });
               setHover(null);
             },
+            // Fáze 78: ⭐ oblíbené (klíč spotřebiče z knihovny)
+            favorite: favoriteKeys.has(`appliance:${spec.id}`),
+            onFavorite: () => toggleFavoriteKey(`appliance:${spec.id}`),
           };
         }),
       };
@@ -1541,16 +1564,48 @@ export function FloorplanEditor({
             },
             // Fáze 65: technický list sběrnicového prvku zvoleného systému chytré domácnosti
             ...(item.bus && busProduct(item.id) ? { onInfo: () => setDatasheet(busProduct(item.id)) } : {}),
+            // Fáze 78: ⭐ oblíbené
+            favorite: favoriteKeys.has(`item:${item.id}`),
+            onFavorite: () => toggleFavoriteKey(`item:${item.id}`),
           };
         }),
     };
-  }).filter((section) => section.entries.length);
+  })
+    .filter((section) => section.entries.length)
+    // Fáze 78: oblíbené na začátek kategorie (v pořadí katalogu), po odebrání hvězdičky zpět na původní místo
+    .map((section) => ({ ...section, entries: favoritesFirst(section.entries, (entry) => (section.id === "appliances" ? `appliance:${entry.id}` : `item:${entry.id}`), floorLibrary.favorites) }));
+  // Fáze 78: horní rychlá sekce ⭐ Oblíbené prvky (kopie oblíbených položek všech kategorií)
+  const favoriteEntries = paletteSections.flatMap((section) => section.entries.filter((entry) => entry.favorite).map((entry) => ({ ...entry, id: `fav-${section.id}-${entry.id}` })));
+  if (favoriteEntries.length) {
+    const favoritePlaced = draft.elements.filter((element) => favoriteKeys.has(`item:${element.item}`) || (element.appliance ? favoriteKeys.has(`appliance:${element.appliance}`) : favoriteKeys.has(`appliance:${element.item}`))).length;
+    paletteSections.unshift({ id: "favorites", label: "Oblíbené prvky", icon: "⭐", hint: "hvězdičkou u položky přidáte / odeberete", count: favoritePlaced, entries: favoriteEntries });
+  }
 
   return (
     <div className="flex flex-col gap-3" data-testid="floorplan-editor">
       {/* Fáze 64: uložený půdorys – údaje, Zpět / Znovu, stav ukládání, historie verzí, rozváděč, souběh dvou oken */}
       <FloorplanDocumentBar
         meta={meta}
+        code={sync.code}
+        fileMenu={
+          // Fáze 78: uložené zakázky firmy a soubor projektu .eldock.json
+          <FloorplanFileMenu
+            draft={draft}
+            meta={meta}
+            code={sync.code}
+            templates={floorLibrary.templates}
+            floorplanId={sync.floorplanId}
+            flush={sync.flush}
+            onTemplates={(templates) => {
+              let next = floorLibrary;
+              for (const template of templates) {
+                const result = addTemplate(next, template.members, template.label);
+                if ("library" in result) next = result.library;
+              }
+              if (next !== floorLibrary) saveFloorLibrary(next);
+            }}
+          />
+        }
         onMeta={renameFloorplan}
         floorplanId={sync.floorplanId}
         status={sync.status}
@@ -1859,6 +1914,17 @@ export function FloorplanEditor({
             onPick={(pick) => {
               setTool(tool.kind === "place-set" && tool.key === pick.key && pick.key !== "custom" ? { kind: "select" } : { kind: "place-set", ...pick });
               setHover(null);
+            }}
+            // Fáze 78: šablony sestav firmy a oblíbené ⭐
+            templates={floorLibrary.templates}
+            favorites={floorLibrary.favorites}
+            onFavorite={toggleFavoriteKey}
+            onSaveTemplate={saveTemplate}
+            onRemoveTemplate={(template) => {
+              if (!window.confirm(`Smazat šablonu „${template.label}“? Ve firmě ji pak nikdo nevloží (osazené sestavy v půdorysech zůstanou).`)) return;
+              saveFloorLibrary(removeTemplate(floorLibrary, template.id));
+              if (tool.kind === "place-set" && tool.key === `template:${template.id}`) setTool({ kind: "select" });
+              toast.success(`Šablona „${template.label}“ smazána.`);
             }}
           />
           {/* Fáze 63: paleta značek jako akordeon (počty osazených prvků, sbalit / rozbalit vše, jedna kategorie) */}
@@ -2324,6 +2390,7 @@ export function FloorplanEditor({
               onRotateStep={(step) => rotateSelection([selected.id], step)}
               onEditAppliances={() => setApplianceOpen(true)}
               onBasinZone={(basinZone) => update((current) => (current.basinZone === basinZone ? current : { ...current, basinZone }))}
+              onSaveTemplate={saveTemplate}
               socketCircuit={isSocketElement(selected) ? <SocketCircuitPicker manual={selected.socketCircuit ?? null} current={socketRowOf(selected.id)} rows={socketRows} onMove={(target) => moveSockets([selected.id], target)} /> : undefined}
               board={
                 hasBoard(selected) && boardInfos.length > 1 ? (

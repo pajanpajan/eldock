@@ -5,13 +5,15 @@ import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 import { getPanelCompany } from "@/server/panel-session";
 import { getApplianceLibraryJson, getBoardManufacturers, getWiringSeries } from "@/server/queries/panel-builder";
-import { getFloorplan, listFloorplans, type FloorplanListRow } from "@/server/services/floorplans";
+import { floorplanLibraryOf, getFloorplan, listFloorplans, type FloorplanListRow } from "@/server/services/floorplans";
 
 // Fáze 64: čtení uložených 2D půdorysů přihlášené firmy (seznam, editor).
 
 /** Řádek seznamu půdorysů pro klienta (datumy jako ISO). */
 export interface FloorplanRow {
   id: string;
+  /** Fáze 78: kód půdorysu ve firmě „FP-001“ (starší bez kódu do migrace null). */
+  code: string | null;
   name: string;
   customerName: string | null;
   installationSite: string | null;
@@ -25,6 +27,7 @@ export interface FloorplanRow {
 
 const toRow = (row: FloorplanListRow): FloorplanRow => ({
   id: row.id,
+  code: row.code,
   name: row.name,
   customerName: row.customerName,
   installationSite: row.installationSite,
@@ -54,8 +57,9 @@ export const getFloorplanForEditor = cache(async (id: string) => {
 
 export type FloorplanForEditor = NonNullable<Awaited<ReturnType<typeof getFloorplanForEditor>>>;
 
-/** Společná data editoru: řady přístrojů, výrobci rozváděčů, knihovna spotřebičů a název firmy. */
+/** Společná data editoru: řady přístrojů, výrobci rozváděčů, knihovna spotřebičů, knihovna půdorysu (fáze 78) a název firmy. */
 export async function getFloorplanEditorData() {
   const [series, manufacturers, applianceJson, company] = await Promise.all([getWiringSeries(), getBoardManufacturers(), getApplianceLibraryJson(), getPanelCompany()]);
-  return { series: series.map(({ key, label, count }) => ({ key, label, count })), manufacturers, applianceJson, company: company?.companyName ?? null };
+  const library = company ? await floorplanLibraryOf(prisma, company.id) : null;
+  return { series: series.map(({ key, label, count }) => ({ key, label, count })), manufacturers, applianceJson, libraryJson: library ? JSON.stringify(library) : null, company: company?.companyName ?? null };
 }

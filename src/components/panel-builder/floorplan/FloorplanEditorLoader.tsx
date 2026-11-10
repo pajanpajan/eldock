@@ -14,16 +14,19 @@ export function FloorplanEditorLoader({
   series,
   manufacturers = [],
   applianceJson = null,
+  libraryJson = null,
   company = null,
   stored = null,
 }: {
   series: SeriesOption[];
   manufacturers?: { name: string; count: number }[];
   applianceJson?: string | null;
+  /** Fáze 78: knihovna půdorysu firmy (šablony sestav, oblíbené). */
+  libraryJson?: string | null;
   company?: string | null;
   /** Fáze 64: uložený půdorys (null = nový). */
   stored?: StoredFloorplan | null;
 }) {
   // Jiný půdorys = nový editor (vlastní historie Zpět / Znovu a ukládání)
-  return <FloorplanEditor key={stored?.id ?? "novy"} series={series} manufacturers={manufacturers} applianceJson={applianceJson} company={company} stored={stored} />;
+  return <FloorplanEditor key={stored?.id ?? "novy"} series={series} manufacturers={manufacturers} applianceJson={applianceJson} libraryJson={libraryJson} company={company} stored={stored} />;
 }

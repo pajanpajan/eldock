@@ -87,7 +87,11 @@ export function FloorplanList({ active, deleted }: { active: FloorplanRow[]; del
           {active.map((row) => (
             <li key={row.id} className="flex flex-col gap-2 rounded-xl border border-border bg-card p-3" data-testid="floorplan-card">
               <Link href={`/panel-builder/floorplan/${row.id}`} className="group flex flex-col gap-1">
-                <span className="font-semibold group-hover:text-primary">📐 {row.name}</span>
+                <span className="font-semibold group-hover:text-primary">
+                  {/* Fáze 78: kód půdorysu ve firmě */}
+                  {row.code ? <span className="mr-1.5 rounded border border-border bg-muted px-1 font-mono text-xs font-normal text-muted-foreground" data-testid="floorplan-row-code">{row.code}</span> : null}
+                  📐 {row.name}
+                </span>
                 {row.customerName || row.installationSite ? (
                   <span className="text-xs text-muted-foreground">{[row.customerName, row.installationSite ? `📍 ${row.installationSite}` : null].filter(Boolean).join(" · ")}</span>
                 ) : null}
@@ -139,7 +143,10 @@ export function FloorplanList({ active, deleted }: { active: FloorplanRow[]; del
             <ul className="flex flex-col divide-y divide-border rounded-xl border border-border">
               {deleted.map((row) => (
                 <li key={row.id} className={cn("flex flex-wrap items-center gap-2 px-3 py-2 text-sm")} data-testid="floorplan-trash-row">
-                  <span className="font-medium">{row.name}</span>
+                  <span className="font-medium">
+                    {row.code ? <span className="mr-1 font-mono text-xs text-muted-foreground">{row.code}</span> : null}
+                    {row.name}
+                  </span>
                   <span className="text-xs text-muted-foreground" suppressHydrationWarning>
                     {summary(row)} · smazáno {formatRelative(row.deletedAt ?? row.updatedAt)}
                   </span>

@@ -29,12 +29,13 @@ export default async function FloorplanEditorPage({ params }: PageProps<"/panel-
           </Link>
         }
         title="📐 2D půdorys & kabeláž"
-        description="Úpravy se průběžně ukládají na server; starší stavy najdete v historii verzí. Zpět / Znovu: Ctrl+Z / Ctrl+Shift+Z."
+        description="Úpravy se průběžně ukládají do cloudu (do 1 s po změně); starší stavy najdete v historii verzí, projekt jde uložit i do počítače (.eldock). Zpět / Znovu: Ctrl+Z / Ctrl+Shift+Z."
       />
       <FloorplanEditorLoader
         {...data}
         stored={{
           id: floorplan.id,
+          code: floorplan.code,
           name: floorplan.name,
           customerName: floorplan.customerName,
           installationSite: floorplan.installationSite,

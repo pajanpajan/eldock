@@ -4,6 +4,7 @@
 
 import type { FloorplanVersionReason, PrismaClient } from "@/generated/prisma/client";
 import { allElements, floorsOf, parseDraft, type FloorplanDraft } from "@/lib/panel-builder/floorplan-editor";
+import { emptyLibrary, parseFloorplanLibrary, type FloorplanLibrary } from "@/lib/panel-builder/floorplan-library";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 
 /** Největší nákres (JSON) – Server Action má limit 1 MB. */
@@ -25,6 +26,7 @@ export type SaveResult = { status: "saved" | "conflict"; version: number; savedA
 
 const LIST_SELECT = {
   id: true,
+  code: true,
   name: true,
   customerName: true,
   installationSite: true,
@@ -101,18 +103,28 @@ async function addSnapshot(prisma: PrismaClient, floorplanId: string, input: Sna
   return created;
 }
 
+/** Fáze 78: další kód půdorysu firmy „FP-001“, „FP-002“ … (i půdorysy v koši – kód se neopakuje). */
+export async function nextFloorplanCode(prisma: Pick<PrismaClient, "floorplan">, companyId: string): Promise<string> {
+  const rows = await prisma.floorplan.findMany({ where: { companyId, code: { not: null } }, select: { code: true } });
+  const max = rows.reduce((top, row) => Math.max(top, Number(/^FP-(\d+)$/.exec(row.code ?? "")?.[1] ?? 0)), 0);
+  return `FP-${String(max + 1).padStart(3, "0")}`;
+}
+
 async function insertFloorplan(
   prisma: PrismaClient,
   companyId: string,
   input: { meta: FloorplanMeta; draft: FloorplanDraft; json: string; projectId?: string | null; snapshot: Pick<SnapshotInput, "reason" | "label">; at: Date },
 ) {
   const summary = draftSummary(input.draft);
-  const row = await prisma.floorplan.create({
-    data: { companyId, ...input.meta, draftJson: input.json, ...summary, projectId: input.projectId ?? null, createdAt: input.at, updatedAt: input.at },
-    select: { id: true, version: true, updatedAt: true },
-  });
+  // Fáze 78: kód a založení v jedné transakci (fronta SQLite – dvě založení ve firmě nedostanou stejný kód)
+  const row = await prisma.$transaction(async (tx) =>
+    tx.floorplan.create({
+      data: { companyId, code: await nextFloorplanCode(tx, companyId), ...input.meta, draftJson: input.json, ...summary, projectId: input.projectId ?? null, createdAt: input.at, updatedAt: input.at },
+      select: { id: true, code: true, version: true, updatedAt: true },
+    }),
+  );
   await addSnapshot(prisma, row.id, { ...input.snapshot, version: row.version, json: input.json, elementCount: summary.elementCount, at: input.at });
-  return { id: row.id, version: row.version, savedAt: row.updatedAt };
+  return { id: row.id, code: row.code, version: row.version, savedAt: row.updatedAt };
 }
 
 /** Půdorysy firmy (nejnověji upravené první); `deleted` = koš. */
@@ -284,4 +296,22 @@ export async function linkGeneratedProject(prisma: PrismaClient, companyId: stri
   await prisma.floorplan.update({ where: { id }, data: { projectId } });
   await addSnapshot(prisma, id, { version: row.version, reason: "GENERATE", label: `Vygenerován rozváděč ${project.code}`, json, elementCount: draftSummary(draft).elementCount, at: now });
   return { code: project.code };
+}
+
+/** Fáze 78: knihovna 2D půdorysu firmy (šablony sestav, oblíbené) – uloží se jen novější (vyhrává `updatedAt`). */
+export async function saveFloorplanLibrary(prisma: PrismaClient, companyId: string, library: unknown) {
+  const next = parseFloorplanLibrary(library);
+  if (!next) throw new WorkflowError("VALIDATION", "Neplatná knihovna půdorysu.");
+  const company = await prisma.registeredCompany.findUnique({ where: { id: companyId }, select: { floorplanLibraryJson: true } });
+  if (!company) throw new WorkflowError("NOT_FOUND", "Firma neexistuje.");
+  const stored = parseFloorplanLibrary(company.floorplanLibraryJson);
+  if (stored && stored.updatedAt >= next.updatedAt) return { saved: false, library: stored };
+  await prisma.registeredCompany.update({ where: { id: companyId }, data: { floorplanLibraryJson: JSON.stringify(next) } });
+  return { saved: true, library: next };
+}
+
+/** Knihovna firmy pro editor (bez záznamu prázdná). */
+export async function floorplanLibraryOf(prisma: PrismaClient, companyId: string): Promise<FloorplanLibrary> {
+  const company = await prisma.registeredCompany.findUnique({ where: { id: companyId }, select: { floorplanLibraryJson: true } });
+  return parseFloorplanLibrary(company?.floorplanLibraryJson) ?? emptyLibrary();
 }

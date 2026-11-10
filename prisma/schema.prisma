@@ -900,6 +900,8 @@ model RegisteredCompany {
   circuitChipsJson     String?
   /// Knihovna samostatných spotřebičů 2D půdorysu (fáze 63), JSON { specs, updatedAt } – vyhrává novější.
   applianceLibraryJson String?
+  /// Fáze 78: knihovna 2D půdorysu firmy – šablony sestav ve víceramečku a oblíbené položky levého panelu (JSON `FloorplanLibrary`).
+  floorplanLibraryJson String?
   /// Fáze 69: zrušená firma – zůstávají jen fakturační údaje kvůli dokladům k objednávkám kreditů (bez kontaktu a přihlášení).
   closedAt             DateTime?
   createdAt            DateTime     @default(now())
@@ -1128,6 +1130,8 @@ enum FloorplanVersionReason {
 model Floorplan {
   id               String    @id @default(cuid())
   companyId        String
+  /// Fáze 78: kód půdorysu ve firmě „FP-001“ (v pořadí založení, i v koši – neopakuje se).
+  code             String?
   name             String
   customerName     String?
   installationSite String?
@@ -1150,6 +1154,7 @@ model Floorplan {
   project  PanelBoardProject? @relation(fields: [projectId], references: [id], onDelete: SetNull)
   versions FloorplanVersion[]
 
+  @@unique([companyId, code])
   @@index([companyId, deletedAt, updatedAt])
   @@index([projectId])
 }

@@ -161,7 +161,8 @@ test("sběrnice: kanály 24 V PWM a binárních vstupů, zdroj LED s rezervou 20
   await expect(smart).toBeVisible();
   await expect(smart.getByTestId("smart-channels").locator('[data-role="pwm"]')).toBeVisible();
   await expect(smart.getByTestId("smart-channels").locator('[data-role="input"]')).toBeVisible();
-  await expect(smart.getByTestId("smart-channels").locator('[data-role="heating"]')).toContainText("2");
+  // 2 drátové hlavice + rezerva 20 % (aspoň 1 kanál) = 3 kanály topení
+  await expect(smart.getByTestId("smart-channels").locator('[data-role="heating"]')).toContainText("topení: 3");
   // 40 W × 1,2 = 48 W → zdroj HDR-60-24
   await expect(smart.getByTestId("smart-led-supply")).toContainText("48 W");
   await expect(smart.getByTestId("smart-modules")).toContainText("HDR-60-24");

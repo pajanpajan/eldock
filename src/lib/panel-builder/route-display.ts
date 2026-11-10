@@ -66,6 +66,8 @@ export interface DisplayCircuit {
   layer: CircuitLayer;
   board: string;
   elementIds: string[];
+  /** Fáze 77: okruh jen v rozváděči (zdroj LED 24 V, napájení žaluziových aktorů) – bez trasy v půdorysu. */
+  inBoard?: boolean;
 }
 
 type Analysis = ReturnType<typeof analyzeDraft>;
@@ -128,7 +130,27 @@ export function circuitEntries(analysis: Analysis): Omit<DisplayCircuit, "legs" 
       elementIds: element ? [element.id] : [],
     };
   });
-  return [...rows, ...data];
+  // Fáze 77: okruhy jen v rozváděči (bez prvku v půdorysu) – v soupisu s jističem, bez trasy a délky
+  const listed = new Set(rows.map((row) => row.id));
+  const inBoard = analysis.circuits.circuits
+    .filter((circuit) => !listed.has(circuit.id) && !circuit.nodeIds.length && circuit.kind !== "feeder")
+    .map((circuit) => {
+      const board = circuit.board ?? MAIN_BOARD;
+      return {
+        id: circuit.id,
+        label: circuit.label,
+        designation: boardDesignation(board, designations[circuit.id], multiple),
+        cable: "v rozváděči",
+        lengthM: 0,
+        routing: "BOTTOM" as const,
+        lowVoltage: false,
+        layer: layerOf(circuit.kind),
+        board,
+        elementIds: [] as string[],
+        inBoard: true,
+      };
+    });
+  return [...rows, ...inBoard, ...data];
 }
 
 /** Trasy okruhů a sběrnicové linky na aktivním podlaží. */

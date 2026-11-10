@@ -27,7 +27,7 @@ import { frameGangs, frameOf, isFrameable } from "@/lib/panel-builder/floorplan-
 import { DESIGN_BRANDS, appearanceLabel, colorForSeries, seriesColors } from "@/lib/panel-builder/wiring-designs";
 import { cn } from "@/lib/utils";
 
-import { AddToFrameControl } from "./FrameAssemblyPalette";
+import { AddToFrameControl, SaveTemplateControl } from "./FrameAssemblyPalette";
 import { DeviceControls, LightOptions } from "./LightOptions";
 import { FixtureControls } from "./FixtureShape";
 import type { BasinZone } from "@/lib/panel-builder/fixtures";
@@ -128,6 +128,7 @@ export function ElementDetail({
   socketCircuit,
   board,
   onBasinZone,
+  onSaveTemplate,
 }: {
   draft: FloorplanDraft;
   element: EditorElement;
@@ -152,6 +153,8 @@ export function ElementDetail({
   board?: ReactNode;
   /** Fáze 74: ochranná zóna umyvadla (volba nákresu). */
   onBasinZone?: (zone: BasinZone) => void;
+  /** Fáze 78: víceramček jako šablona firmy (chyba jako text, jinak null). */
+  onSaveTemplate?: (members: string[], label: string) => string | null;
 }) {
   const item = paletteItem(element.item)!;
   const isPanel = item.kind === "panel" || item.kind === "riser" || item.kind === "fixture";
@@ -254,6 +257,8 @@ export function ElementDetail({
                 </Button>
               </div>
               <AddToFrameControl level={draft.installation} defaultItem={element.item} gangs={usedGangs} onAdd={onAddToFrame} />
+              {/* Fáze 78: osazený víceramček jako šablona firmy (pořadí pozic zleva) */}
+              {onSaveTemplate ? <SaveTemplateControl members={frame.members.map((id) => draft.elements.find((other) => other.id === id)?.item).filter((id): id is string => Boolean(id))} onSave={onSaveTemplate} /> : null}
             </div>
           ) : legacyFrameable ? (
             <div className="flex flex-col gap-1">

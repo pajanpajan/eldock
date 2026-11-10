@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { AlertTriangle, CheckCircle2, CircleDot, Loader2, Pencil, Redo2, Undo2 } from "lucide-react";
 
@@ -13,16 +13,17 @@ import type { FloorplanMetaState, SyncStatus } from "./useFloorplanSync";
 import { VersionHistoryButton } from "./VersionHistory";
 
 // Fáze 64: lišta uloženého půdorysu nad editorem – název a údaje, Zpět / Znovu, stav ukládání, historie verzí,
-// vygenerovaný rozváděč a volba při souběhu dvou oken.
+// vygenerovaný rozváděč a volba při souběhu dvou oken. Fáze 78: kód půdorysu (FP-001), „☁️ Uloženo v cloudu (HH:MM:SS)“,
+// uložené půdorysy firmy a soubor projektu do počítače (`FloorplanFileMenu`).
 
-const time = (iso: string) => new Date(iso).toLocaleTimeString("cs-CZ", { hour: "2-digit", minute: "2-digit" });
+const time = (iso: string) => new Date(iso).toLocaleTimeString("cs-CZ", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
 function SaveState({ status, onRetry }: { status: SyncStatus; onRetry: () => void }) {
   const base = "flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs";
   if (status.kind === "saved")
     return (
       <span className={cn(base, status.at ? "border-emerald-500/50 text-emerald-300" : "border-border text-muted-foreground")} data-testid="floorplan-save-status" data-state="saved" role="status">
-        <CheckCircle2 className="size-3.5" aria-hidden /> {status.at ? `Uloženo ${time(status.at)}` : "Nový půdorys – uloží se po první změně"}
+        <CheckCircle2 className="size-3.5" aria-hidden /> {status.at ? `☁️ Uloženo v cloudu (${time(status.at)})` : "Nový půdorys – uloží se po první změně"}
       </span>
     );
   if (status.kind === "pending" || status.kind === "saving")
@@ -49,6 +50,8 @@ function SaveState({ status, onRetry }: { status: SyncStatus; onRetry: () => voi
 
 export function FloorplanDocumentBar({
   meta,
+  code = null,
+  fileMenu = null,
   onMeta,
   floorplanId,
   status,
@@ -63,6 +66,10 @@ export function FloorplanDocumentBar({
   onKeepMine,
 }: {
   meta: FloorplanMetaState;
+  /** Fáze 78: kód půdorysu ve firmě („FP-001“). */
+  code?: string | null;
+  /** Fáze 78: 📂 uložené půdorysy, 💾 / 📥 soubor projektu. */
+  fileMenu?: ReactNode;
   onMeta: (meta: FloorplanMetaState) => Promise<string | null>;
   floorplanId: string | null;
   status: SyncStatus;
@@ -90,6 +97,11 @@ export function FloorplanDocumentBar({
     <div className="flex flex-col gap-2 rounded-xl border border-border bg-card p-2" data-testid="floorplan-docbar">
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex min-w-0 flex-1 items-center gap-2">
+          {code ? (
+            <span className="shrink-0 rounded border border-border bg-muted px-1.5 font-mono text-xs" data-testid="floorplan-code">
+              {code}
+            </span>
+          ) : null}
           <span className="truncate font-semibold" data-testid="floorplan-name">
             📐 {meta.name}
           </span>
@@ -107,6 +119,7 @@ export function FloorplanDocumentBar({
           </Button>
           <SaveState status={status} onRetry={() => void flush()} />
           <VersionHistoryButton floorplanId={floorplanId} flush={flush} onRestored={onRestored} />
+          {fileMenu}
           {project ? (
             <Link href={`/panel-builder/${project.id}`} className="rounded-md border border-border px-2 py-1 text-xs hover:border-primary" title={`Rozváděč vygenerovaný z tohoto půdorysu: ${project.name}`} data-testid="floorplan-project-link">
               ⚡ Rozváděč <span className="font-mono">{project.code}</span>

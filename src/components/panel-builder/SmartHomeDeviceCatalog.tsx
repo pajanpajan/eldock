@@ -5,6 +5,8 @@ import { ExternalLink, FileText, Minus, Plus, Target } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import type { InstallLevel } from "@/engine/floorplan-bridge";
+import { productImage } from "@/lib/panel-builder/catalog-images";
+import { CATALOG_IMAGES } from "@/lib/panel-builder/catalog-images.generated";
 import { familyLink } from "@/lib/panel-builder/series-links";
 import { DEVICE_TABS, productsOfTab, type CatalogProduct, type DeviceTab, type ProductFamily } from "@/lib/panel-builder/smart-catalog";
 import { moduleOf, mpnOf, productBadges } from "@/lib/panel-builder/smart-datasheet";
@@ -47,10 +49,17 @@ function DeviceCard({ product, system, props }: { product: CatalogProduct; syste
   const auto = dinModule ? props.planned(dinModule.id) : 0;
   const extra = dinModule ? (props.extras[dinModule.id] ?? 0) : 0;
   const mpn = mpnOf(product);
+  // Fáze 78: oficiální náhled výrobce z public/catalog-images (se zdrojem a licencí), jinak vektorový náhled
+  const photo = productImage(product.id, CATALOG_IMAGES);
   return (
     <article className={cn("flex flex-col gap-2 rounded-lg border bg-background/40 p-2", active ? "border-primary ring-1 ring-primary" : "border-border")} data-testid="device-card" data-card={product.id}>
       <div className="flex gap-2">
-        <SmartHomeDeviceIllustration product={product} system={system} tone={props.tone} className="size-20 shrink-0 rounded-md bg-muted/40 p-1" />
+        {photo ? (
+          // eslint-disable-next-line @next/next/no-img-element -- schválené náhledy výrobců z public/catalog-images (statické soubory)
+          <img src={photo.src} alt={`${product.label} – náhled výrobce`} title={`Foto: ${photo.source} · ${photo.license}`} className="size-20 shrink-0 rounded-md bg-white object-contain p-1" data-testid="device-photo" />
+        ) : (
+          <SmartHomeDeviceIllustration product={product} system={system} tone={props.tone} className="size-20 shrink-0 rounded-md bg-muted/40 p-1" />
+        )}
         <div className="min-w-0">
           <h4 className="text-sm font-bold leading-tight">{product.label}</h4>
           <p className="mt-0.5 line-clamp-3 text-[11px] text-muted-foreground">{product.description}</p>

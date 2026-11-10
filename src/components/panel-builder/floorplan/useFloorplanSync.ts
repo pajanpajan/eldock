@@ -6,12 +6,12 @@ import { parseDraft, type FloorplanDraft } from "@/lib/panel-builder/floorplan-e
 import { clearBackup, writeBackup } from "@/lib/panel-builder/floorplan-storage";
 import { createFloorplanAction, loadFloorplanAction, saveFloorplanAction } from "@/server/actions/floorplans";
 
-// Fáze 64: průběžné ukládání 2D půdorysu na server. Změny se uloží 1,2 s po poslední úpravě (při nepřetržité práci
-// nejpozději po 10 s), nový půdorys vznikne na serveru při první změně. Před odesláním se změny zálohují v prohlížeči;
+// Fáze 64: průběžné ukládání 2D půdorysu na server. Změny se uloží 0,8 s po poslední úpravě (fáze 78; při nepřetržité
+// práci nejpozději po 10 s), nový půdorys vznikne na serveru při první změně (a dostane kód FP-001 …). Před odesláním se změny zálohují v prohlížeči;
 // výpadek spojení se zkouší znovu. Jiná verze na serveru (druhé okno) = souběh s volbou „Načíst aktuální verzi“
 // nebo „Ponechat mou verzi“ – odmítnutý i přepsaný stav zůstane v historii verzí.
 
-export const SAVE_DEBOUNCE_MS = 1200;
+export const SAVE_DEBOUNCE_MS = 800;
 export const SAVE_MAX_WAIT_MS = 10_000;
 const RETRY_MS = [3_000, 10_000, 30_000];
 const OFFLINE = "Spojení se serverem selhalo – změny zůstávají v tomto prohlížeči a uloží se znovu.";
@@ -41,7 +41,7 @@ export function useFloorplanSync({
   replaceDraft,
 }: {
   /** Půdorys na serveru při otevření (null = nový). */
-  stored: { id: string; version: number; savedAt: string } | null;
+  stored: { id: string; code?: string | null; version: number; savedAt: string } | null;
   draft: FloorplanDraft;
   /** Nákres odpovídající serveru při otevření (null = obnovená záloha / nový se zálohou → hned uložit). */
   initialSaved: FloorplanDraft | null;
@@ -50,6 +50,8 @@ export function useFloorplanSync({
   replaceDraft: (draft: FloorplanDraft) => void;
 }) {
   const [floorplanId, setFloorplanId] = useState<string | null>(stored?.id ?? null);
+  /** Fáze 78: kód půdorysu ve firmě (nový ho dostane při prvním uložení). */
+  const [code, setCode] = useState<string | null>(stored?.code ?? null);
   const [saved, setSaved] = useState<FloorplanDraft | null>(initialSaved);
   const [savedAt, setSavedAt] = useState<string | null>(stored?.savedAt ?? null);
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
@@ -87,6 +89,7 @@ export function useFloorplanSync({
           if (!result.ok) throw new SaveError(result.error);
           idRef.current = result.data.id;
           setFloorplanId(result.data.id);
+          setCode(result.data.code);
           clearBackup(null);
           // Adresa nového půdorysu bez přenačtení editoru (reload otevře uložený půdorys)
           window.history.replaceState(null, "", `/panel-builder/floorplan/${result.data.id}`);
@@ -213,5 +216,5 @@ export function useFloorplanSync({
             ? { kind: "pending" }
             : { kind: "saved", at: savedAt };
 
-  return { floorplanId, status, flush, reload, keepMine, adopt, currentId };
+  return { floorplanId, code, status, flush, reload, keepMine, adopt, currentId };
 }

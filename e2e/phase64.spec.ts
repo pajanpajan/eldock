@@ -57,11 +57,11 @@ function editor(page: Page) {
       await clickAt(x, y);
       await page.keyboard.press("Escape");
     },
-    /** Po změně: stav „Neuložené změny“ → „Uloženo HH:MM“. */
+    /** Po změně: stav „Neuložené změny“ → „☁️ Uloženo v cloudu (HH:MM:SS)“ (fáze 78). */
     waitSaved: async () => {
       await expect(status).not.toHaveAttribute("data-state", "saved");
       await expect(status).toHaveAttribute("data-state", "saved", { timeout: 30_000 });
-      await expect(status).toContainText(/Uloženo \d{1,2}:\d{2}/);
+      await expect(status).toContainText(/Uloženo v cloudu \(\d{1,2}:\d{2}:\d{2}\)/);
     },
   };
 }

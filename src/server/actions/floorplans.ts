@@ -14,11 +14,13 @@ import {
   floorplanForProject,
   importBrowserDraft,
   listFloorplanVersions,
+  listFloorplans,
   loadFloorplanDraft,
   purgeFloorplan,
   restoreFloorplan,
   restoreFloorplanVersion,
   saveFloorplanDraft,
+  saveFloorplanLibrary,
   saveFloorplanVersion,
   stashDraft,
   trashFloorplan,
@@ -51,7 +53,7 @@ const firstIssue = (error: z.ZodError, fallback: string) => error.issues[0]?.mes
 const assertDraftFiles = (companyId: string, draft: unknown) => assertPanelFiles(companyId, collectFileUrls(draft), { strict: false });
 
 /** První uložení nového půdorysu z editoru (`/panel-builder/floorplan/novy`). */
-export async function createFloorplanAction(input: { meta: z.input<typeof metaSchema>; draft: unknown }): Promise<ActionResult<{ id: string; version: number; savedAt: string }>> {
+export async function createFloorplanAction(input: { meta: z.input<typeof metaSchema>; draft: unknown }): Promise<ActionResult<{ id: string; code: string | null; version: number; savedAt: string }>> {
   const parsed = z.object({ meta: metaSchema, draft: draftSchema }).safeParse(input);
   if (!parsed.success) return { ok: false, error: firstIssue(parsed.error, "Půdorys se nepodařilo uložit.") };
   try {
@@ -59,7 +61,7 @@ export async function createFloorplanAction(input: { meta: z.input<typeof metaSc
     await assertDraftFiles(company.id, parsed.data.draft);
     const created = await createFloorplan(prisma, company.id, parsed.data);
     revalidatePath(LIST_PATH);
-    return { ok: true, data: { id: created.id, version: created.version, savedAt: created.savedAt.toISOString() } };
+    return { ok: true, data: { id: created.id, code: created.code, version: created.version, savedAt: created.savedAt.toISOString() } };
   } catch (error) {
     return actionFailure(error, "Půdorys se nepodařilo uložit.");
   }
@@ -212,5 +214,46 @@ export async function openProjectFloorplanAction(projectId: string): Promise<Act
     return { ok: true, data: result };
   } catch (error) {
     return actionFailure(error, "Půdorys projektu se nepodařilo otevřít.");
+  }
+}
+
+/** Fáze 78: řádek „📂 Moje uložené půdorysy“ v editoru (rozpracované zakázky firmy, nejnověji upravené první). */
+export interface CloudFloorplanRow {
+  id: string;
+  code: string | null;
+  name: string;
+  customerName: string | null;
+  installationSite: string | null;
+  elementCount: number;
+  floorCount: number;
+  updatedAt: string;
+  project: { id: string; code: string } | null;
+}
+
+export async function listFloorplansAction(): Promise<ActionResult<CloudFloorplanRow[]>> {
+  try {
+    const company = await guardCompany();
+    const rows = await listFloorplans(prisma, company.id);
+    return {
+      ok: true,
+      data: rows.map((row) => ({ id: row.id, code: row.code, name: row.name, customerName: row.customerName, installationSite: row.installationSite, elementCount: row.elementCount, floorCount: row.floorCount, updatedAt: row.updatedAt.toISOString(), project: row.project ? { id: row.project.id, code: row.project.code } : null })),
+    };
+  } catch (error) {
+    return actionFailure(error, "Seznam půdorysů se nepodařilo načíst.");
+  }
+}
+
+const librarySchema = z.object({ templates: z.array(z.unknown()).max(200), favorites: z.array(z.string().max(100)).max(400), updatedAt: z.number().int().nonnegative() });
+
+/** Fáze 78: knihovna 2D půdorysu firmy (šablony sestav, oblíbené ⭐) – z prohlížeče do firmy, novější vyhrává. */
+export async function saveFloorplanLibraryAction(input: z.input<typeof librarySchema>): Promise<ActionResult<{ saved: boolean }>> {
+  const parsed = librarySchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Neplatná knihovna půdorysu." };
+  try {
+    const company = await guardCompany();
+    const result = await saveFloorplanLibrary(prisma, company.id, parsed.data);
+    return { ok: true, data: { saved: result.saved } };
+  } catch (error) {
+    return actionFailure(error, "Šablony a oblíbené se nepodařilo uložit do firmy.");
   }
 }

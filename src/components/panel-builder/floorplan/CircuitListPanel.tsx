@@ -206,19 +206,19 @@ export function CircuitListPanel({
                         data-circuit={entry.id}
                         data-layer={entry.layer}
                         data-board={entry.board}
-                        title={!visible ? "Okruh je skrytý (oko) – na plátně se nekreslí" : layerHidden ? "Vrstva je skrytá – okruh se na plátně nekreslí" : entry.onFloor ? "Zvýraznit a vybrat okruh" : "Okruh je na jiném podlaží"}
+                        title={entry.inBoard ? "Okruh je jen v rozváděči – nemá trasu v půdorysu" : !visible ? "Okruh je skrytý (oko) – na plátně se nekreslí" : layerHidden ? "Vrstva je skrytá – okruh se na plátně nekreslí" : entry.onFloor ? "Zvýraznit a vybrat okruh" : "Okruh je na jiném podlaží"}
                       >
                         <span className="h-3 w-3 shrink-0 rounded-full border border-black/40" style={{ background: entry.color }} aria-hidden />
                         <span className="w-14 shrink-0 font-mono font-bold">{entry.designation ?? "–"}</span>
                         <span className="min-w-0 flex-1 truncate">{entry.label}</span>
                         {entry.edited ? <span className="text-[10px] text-amber-300" title="Ručně upravená trasa">✎</span> : null}
-                        {!entry.onFloor ? <span className="text-[10px] text-muted-foreground">jiné podl.</span> : null}
-                        <span className="w-12 shrink-0 text-right tabular-nums text-muted-foreground">{m(entry.lengthM)}</span>
+                        {!entry.onFloor && !entry.inBoard ? <span className="text-[10px] text-muted-foreground">jiné podl.</span> : null}
+                        <span className="w-12 shrink-0 text-right tabular-nums text-muted-foreground">{entry.inBoard ? `v ${entry.board}` : m(entry.lengthM)}</span>
                       </button>
                       {active ? (
                         <div className="flex w-full flex-col gap-1.5 border-t border-sky-500/30 px-2 py-1.5 text-xs" data-testid="circuit-detail">
                           <p className="text-muted-foreground">
-                            {entry.cable} · {entry.routing === "TOP" ? "vrchem" : "spodem"} · {count(entry.elementIds.length, "prvek", "prvky", "prvků")}
+                            {entry.inBoard ? "Okruh v rozváděči (zdroj / akční členy na DIN liště) – bez trasy v půdorysu" : `${entry.cable} · ${entry.routing === "TOP" ? "vrchem" : "spodem"} · ${count(entry.elementIds.length, "prvek", "prvky", "prvků")}`}
                           </p>
                           {multiple && entry.layer !== "feeder" ? <BoardSelect value={boardOf(entry)} auto={entry.board} boards={boards} onChange={(code) => onAssignBoard(entry, code)} label="Rozváděč okruhu" testId="circuit-board" /> : null}
                           <div className="flex flex-wrap gap-1">

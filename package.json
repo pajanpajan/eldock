@@ -38,7 +38,8 @@
     "eval:recognition": "tsx scripts/eval-recognition.ts",
     "test:e2e": "playwright test",
     "verify": "npm run typecheck && npm run lint && npm run test && npm run build",
-    "plant-server": "tsx scripts/plant-server.ts"
+    "plant-server": "tsx scripts/plant-server.ts",
+    "catalog:images": "tsx scripts/catalog-images.ts"
   },
   "dependencies": {
     "@prisma/adapter-better-sqlite3": "^7.10.1",

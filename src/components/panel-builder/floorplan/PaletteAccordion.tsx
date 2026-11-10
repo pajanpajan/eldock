@@ -5,6 +5,8 @@ import { ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, FileText } f
 
 import { cn } from "@/lib/utils";
 
+import { FavoriteStar } from "./FrameAssemblyPalette";
+
 /**
  * Fáze 63: paleta 2D půdorysu jako akordeon – záhlaví kategorie s počtem osazených prvků kategorie na aktivním podlaží,
  * „Sbalit vše“ / „Rozbalit vše“ a režim „jen jedna kategorie“. Stav si pamatuje prohlížeč (výchozí: vše rozbalené).
@@ -21,6 +23,9 @@ export interface PaletteEntry {
   onPick: () => void;
   /** Fáze 65: technický list (sběrnicové prvky chytré domácnosti). */
   onInfo?: () => void;
+  /** Fáze 78: oblíbená položka (⭐) – oblíbené jsou na začátku kategorie. */
+  favorite?: boolean;
+  onFavorite?: () => void;
 }
 
 export interface PaletteSection {
@@ -137,7 +142,7 @@ export function PaletteAccordion({ sections }: { sections: PaletteSection[] }) {
               <div id={`palette-${section.id}`} className="flex flex-col gap-0.5 px-1 pb-1.5">
                 {section.action ? <div className="flex justify-end px-1 pb-0.5">{section.action}</div> : null}
                 {section.entries.map((entry) => (
-                  <div key={entry.id} className="flex items-stretch gap-0.5">
+                  <div key={entry.id} className="flex items-stretch gap-0.5" data-entry={entry.id} data-favorite={entry.favorite ? "true" : undefined}>
                     <button
                       type="button"
                       aria-pressed={entry.active}
@@ -148,6 +153,7 @@ export function PaletteAccordion({ sections }: { sections: PaletteSection[] }) {
                       <span className="w-11 shrink-0 truncate rounded bg-muted px-1 py-0.5 text-center font-mono text-[10px] font-bold text-foreground">{entry.symbol}</span>
                       <span className="min-w-0 flex-1 line-clamp-2">{entry.label}</span>
                     </button>
+                    {entry.onFavorite ? <FavoriteStar on={Boolean(entry.favorite)} label={entry.label} onToggle={entry.onFavorite} className="self-center" /> : null}
                     {entry.onInfo ? (
                       <button type="button" onClick={entry.onInfo} className="rounded-md border border-transparent px-1 text-muted-foreground hover:border-border hover:text-foreground" aria-label={`Technický list ${entry.symbol}`} title={`Technický list: ${entry.label}`} data-testid="palette-datasheet">
                         <FileText className="size-3.5" aria-hidden />
