@@ -3,11 +3,13 @@ import { createHash } from "node:crypto";
 import type { PrismaClient } from "@/generated/prisma/client";
 import { standardEnclosureMatrix } from "@/lib/panel-builder/enclosures";
 import { EXTERNAL_SOURCE, deriveRelations, mapExternalProduct, type ExternalProduct, type MappedComponent, type MappedEnclosure } from "@/lib/panel-builder/external-catalog";
+import { VERIFIED_ENCLOSURES, VERIFIED_ENCLOSURE_SOURCE, verifiedEnclosureData } from "@/lib/panel-builder/verified-enclosures";
 import { mapWiringDevice, type ExternalWiringDevice } from "@/lib/panel-builder/wiring-devices";
 
 // Import externí databáze prvků „ai-panel-builder“ do katalogu Eldocku (fáze 43): dávkový upsert
 // přístrojů (CatalogComponent), skříní (PanelEnclosure) a vazeb příslušenství (CatalogRelation).
-// Nic nemaže; vlastní katalog Eldocku (externalSource = null) se stejným objednacím číslem nepřepíše.
+// Nic nemaže; vlastní katalog Eldocku (externalSource = null) se stejným objednacím číslem nepřepíše,
+// stejně tak ověřené rozvodnice z katalogů výrobců (fáze 86, dataSource MANUFACTURER_CATALOG).
 
 export const EXTERNAL_SYNC_MARKER = "catalog.external-sync";
 const BATCH = 150;
@@ -16,7 +18,8 @@ export interface SyncResult {
   skipped: boolean;
   products: number;
   components: { created: number; updated: number; kept: number };
-  enclosures: { created: number; updated: number };
+  /** `kept` = ověřená rozvodnice z katalogu výrobce (fáze 86) se stejným objednacím číslem – import ji nepřepíše. */
+  enclosures: { created: number; updated: number; kept: number };
   relations: number;
   skippedProducts: { key: string; reason: string }[];
 }
@@ -30,7 +33,7 @@ export const catalogHash = (products: readonly ExternalProduct[]) => createHash(
 
 export async function importExternalCatalog(prisma: PrismaClient, products: readonly ExternalProduct[], options: { force?: boolean } = {}): Promise<SyncResult> {
   const hash = catalogHash(products);
-  const result: SyncResult = { skipped: false, products: products.length, components: { created: 0, updated: 0, kept: 0 }, enclosures: { created: 0, updated: 0 }, relations: 0, skippedProducts: [] };
+  const result: SyncResult = { skipped: false, products: products.length, components: { created: 0, updated: 0, kept: 0 }, enclosures: { created: 0, updated: 0, kept: 0 }, relations: 0, skippedProducts: [] };
   const marker = await prisma.tenantSetting.findUnique({ where: { key: EXTERNAL_SYNC_MARKER }, select: { value: true } });
   if (!options.force && marker?.value === hash) return { ...result, skipped: true };
 
@@ -63,13 +66,21 @@ export async function importExternalCatalog(prisma: PrismaClient, products: read
     prisma.$transaction(batch.map((data) => prisma.catalogComponent.upsert({ where: { articleNumber: data.articleNumber }, create: data, update: data }))),
   );
 
-  // Skříně rozváděčů
-  const knownEnclosures = new Set((await prisma.panelEnclosure.findMany({ where: { articleNumber: { in: [...enclosures.keys()] } }, select: { articleNumber: true } })).map((row) => row.articleNumber));
-  for (const article of enclosures.keys()) {
-    if (knownEnclosures.has(article)) result.enclosures.updated++;
+  // Skříně rozváděčů – ověřené rozvodnice z katalogů výrobců (fáze 86) má Eldock vlastní, ty import nepřepíše
+  const knownEnclosures = new Map(
+    (await prisma.panelEnclosure.findMany({ where: { articleNumber: { in: [...enclosures.keys()] } }, select: { articleNumber: true, dataSource: true } })).map((row) => [row.articleNumber, row.dataSource]),
+  );
+  const writableEnclosures = [...enclosures.values()].filter((enclosure) => {
+    const source = knownEnclosures.get(enclosure.articleNumber);
+    if (source === VERIFIED_ENCLOSURE_SOURCE) {
+      result.enclosures.kept++;
+      return false;
+    }
+    if (source) result.enclosures.updated++;
     else result.enclosures.created++;
-  }
-  await inBatches([...enclosures.values()], (batch) =>
+    return true;
+  });
+  await inBatches(writableEnclosures, (batch) =>
     prisma.$transaction(batch.map((data) => prisma.panelEnclosure.upsert({ where: { articleNumber: data.articleNumber }, create: data, update: data }))),
   );
 
@@ -103,6 +114,17 @@ export async function seedStandardEnclosures(prisma: PrismaClient) {
   const matrix = standardEnclosureMatrix();
   await inBatches(matrix, (batch) => prisma.$transaction(batch.map((data) => prisma.panelEnclosure.upsert({ where: { articleNumber: data.articleNumber }, create: data, update: data }))));
   return matrix.length;
+}
+
+/**
+ * Fáze 86: ověřené rozvodnice z katalogů výrobců (ABB ComfortLine CA, Hager vector II a univers FWU, Schrack TOPO) –
+ * přírůstkový upsert podle objednacího čísla, nic nemaže. Orientační matice má jen klíče `STD-…`, import externí
+ * databáze řádky s `MANUFACTURER_CATALOG` přeskočí – data výrobce tak nic nepřebije.
+ */
+export async function seedVerifiedEnclosures(prisma: PrismaClient) {
+  const rows = VERIFIED_ENCLOSURES.map(verifiedEnclosureData);
+  await inBatches(rows, (batch) => prisma.$transaction(batch.map((data) => prisma.panelEnclosure.upsert({ where: { articleNumber: data.articleNumber }, create: data, update: data }))));
+  return rows.length;
 }
 
 export const WIRING_SYNC_MARKER = "catalog.wiring-sync";

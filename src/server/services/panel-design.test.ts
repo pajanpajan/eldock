@@ -4,6 +4,7 @@ import type { PrismaClient } from "@/generated/prisma/client";
 import { defaultConfig } from "@/lib/panel-builder/configurator";
 import type { ExternalProduct } from "@/lib/panel-builder/external-catalog";
 import { railCapacities } from "@/lib/panel-builder/rails";
+import { VERIFIED_ENCLOSURES } from "@/lib/panel-builder/verified-enclosures";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 
 import { seedPanelBuilder } from "../../../prisma/seed-panel-builder";
@@ -98,8 +99,8 @@ describe("návrh rozváděče od nuly (fáze 43)", () => {
     const { id } = await design();
     await selectEnclosure(prisma, id, target.id);
     expect(await project(id)).toMatchObject({ enclosureId: target.id, enclosureModel: `ABB ${target.model}`, enclosureType: "FLUSH_MOUNTED", ipRating: "IP 30", widthMm: target.widthMm, heightMm: target.heightMm, enclosurePmaxW: target.pMaxW });
-    // Standardní matice = všechny skříně kromě ABB CA35R 144M z rešerše (fáze 47)
-    expect(await seedStandardEnclosures(prisma)).toBe((await prisma.panelEnclosure.count()) - 1);
+    // Standardní matice = všechny skříně kromě ověřených rozvodnic výrobců (fáze 86, vč. ABB CA35R 144M z fáze 47)
+    expect(await seedStandardEnclosures(prisma)).toBe((await prisma.panelEnclosure.count()) - VERIFIED_ENCLOSURES.length);
   });
 
   it("logo a razítko firmy", async () => {
@@ -122,7 +123,7 @@ const external: ExternalProduct[] = [
 describe("catalog:sync – import externí databáze", () => {
   it("dávkový upsert přístrojů, skříní a vazeb; stejný otisk se přeskočí, vlastní katalog zůstane", async () => {
     const result = await importExternalCatalog(prisma, external);
-    expect(result).toMatchObject({ skipped: false, products: 5, components: { created: 2, updated: 0, kept: 1 }, enclosures: { created: 1, updated: 0 }, relations: 1 });
+    expect(result).toMatchObject({ skipped: false, products: 5, components: { created: 2, updated: 0, kept: 1 }, enclosures: { created: 1, updated: 0, kept: 0 }, relations: 1 });
     expect(result.skippedProducts.map((row) => row.key)).toEqual(["EATON|269163"]);
     const pl7 = await prisma.catalogComponent.findUniqueOrThrow({ where: { articleNumber: "EATON:262701" }, include: { relations: { include: { child: true } } } });
     expect(pl7).toMatchObject({ manufacturer: "Eaton", externalSource: "ai-panel-builder", archetypeId: "din_mcb_1M_1P" });

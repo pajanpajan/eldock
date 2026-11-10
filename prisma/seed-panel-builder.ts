@@ -14,14 +14,14 @@ import type { PrismaClient } from "../src/generated/prisma/client";
 import { renderPanelPhotoSvg } from "../src/lib/mock-graphics/panel-photo";
 import { GENERATED_CATALOG, type SeedComponent } from "./seed-catalog-generated";
 import { buildSearchText, estimatePowerLoss, iecSymbolFor } from "../src/lib/panel-builder/catalog";
-import { ABB_CA35R, ENCLOSURE_FANS, RESEARCH_COMPONENTS } from "./seed-catalog-research";
+import { ENCLOSURE_FANS, RESEARCH_COMPONENTS } from "./seed-catalog-research";
 import { ABB_2026_COMPONENTS } from "./seed-abb-2026";
 import { isHiddenManufacturer } from "../src/lib/panel-builder/brands";
 import { demoDetections } from "../src/lib/panel-builder/matching";
 import { REFERENCE_DEVICES, REFERENCE_DIMS, withPositions } from "../src/lib/panel-builder/reference";
 import { applyDetections, applyProposedTree } from "../src/server/services/panel-builder";
 import { ROUTINE_TEST_POINTS } from "../src/lib/legislation-2027";
-import { importExternalCatalog, importWiringDevices, seedStandardEnclosures } from "../src/server/services/catalog-sync";
+import { importExternalCatalog, importWiringDevices, seedStandardEnclosures, seedVerifiedEnclosures } from "../src/server/services/catalog-sync";
 import { readSnapshot, readWiringSnapshot } from "./external-catalog-source";
 import { TESTER_COMPANY } from "../src/lib/registered-company";
 import { hashPassword } from "../src/server/password";
@@ -414,20 +414,20 @@ export async function seedPanelBuilder(prisma: PrismaClient, options: { external
   const tester = options.demo === false ? { created: false, attached: 0 } : await step("demo firma Tester", () => seedTesterCompany(prisma), { created: false, attached: 0 });
   // Fáze 43: matice standardních rozvodnic a externí databáze prvků z exportu v Gitu (jen při změně otisku)
   const enclosures = await step("standardní rozvodnice", () => seedStandardEnclosures(prisma), 0);
-  // Fáze 47: ventilátory rozváděčů a rozvodnice ABB CA35R (144M) z rešerší výrobců
+  // Fáze 86: ověřené rozvodnice z katalogů výrobců (ABB ComfortLine CA vč. CA35R z fáze 47, Hager vector II a univers FWU,
+  // Schrack TOPO) – před importem externí databáze, který je pak nepřepíše
+  const verifiedEnclosures = await step("ověřené rozvodnice výrobců", () => seedVerifiedEnclosures(prisma), 0);
+  // Fáze 47: ventilátory rozváděčů z rešerší výrobců
   const fans = await step("ventilátory rozváděčů", () => seedFans(prisma), 0);
   const snapshot = options.external === false ? null : readSnapshot();
   const external = snapshot ? await step("externí databáze prvků", () => importExternalCatalog(prisma, snapshot), null) : null;
   const wiringRows = options.external === false ? null : readWiringSnapshot();
   if (wiringRows) await step("domovní přístroje", () => importWiringDevices(prisma, wiringRows), null);
-  return { components, project, tester, enclosures, external, fans, failures };
+  return { components, project, tester, enclosures, verifiedEnclosures, external, fans, failures };
 }
 
-/** Filtrační ventilátory rozváděčů a skříň ABB CA35R – upsert podle objednacího čísla. Vrací počet ventilátorů. */
+/** Filtrační ventilátory rozváděčů – upsert podle objednacího čísla. Vrací počet ventilátorů. */
 export async function seedFans(prisma: PrismaClient) {
-  await prisma.$transaction([
-    ...ENCLOSURE_FANS.map((fan) => prisma.enclosureFan.upsert({ where: { articleNumber: fan.articleNumber }, create: fan, update: fan })),
-    prisma.panelEnclosure.upsert({ where: { articleNumber: ABB_CA35R.articleNumber }, create: ABB_CA35R, update: ABB_CA35R }),
-  ]);
+  await prisma.$transaction(ENCLOSURE_FANS.map((fan) => prisma.enclosureFan.upsert({ where: { articleNumber: fan.articleNumber }, create: fan, update: fan })));
   return ENCLOSURE_FANS.length;
 }

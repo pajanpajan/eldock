@@ -1307,26 +1307,8 @@ export const RESEARCH_COMPONENTS: ResearchComponent[] = [
   },
 ];
 
-/** ABB ComfortLine CA35R – nástěnná rozvodnice 144M (4 řady × 36M = 3 pole × 12M), 800 × 800 × 160 mm, IP44. */
-export const ABB_CA35R = {
-  manufacturer: "ABB",
-  series: "ComfortLine CA",
-  model: "CA35R 144M 4×36 (3 pole × 12M)",
-  articleNumber: "2CPX052241R9999",
-  rows: 4,
-  modulesPerRow: 36,
-  totalModules: 144,
-  widthMm: 800,
-  heightMm: 800,
-  depthMm: 160,
-  ipRating: "IP44",
-  installation: "SURFACE",
-  material: "PAINTED_STEEL",
-  pMaxW: null,
-  dataSource: "EXTERNAL",
-  description:
-    "Nástěnná oceloplechová rozvodnice ComfortLine, IK07, dvoukřídlá dvířka, rozteč lišt 150 mm, max. 125 A – https://nizke-napeti.cz.abb.com/rozvodnice-s-rozteci-150-mm-mezi-listami-din-nastenne-oceloplechove-19965/ca35r-rozvodnice-nastenna-s-dvirky-2cpx052241r9999?mime=pdf",
-};
+// ABB ComfortLine CA35R (144M, fáze 47) je od fáze 86 v ověřeném katalogu rozvodnic `src/lib/panel-builder/verified-enclosures.ts`
+// spolu s celou řadou ComfortLine CA (seed `seedVerifiedEnclosures`).
 
 export interface ResearchFan {
   manufacturer: string;

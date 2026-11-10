@@ -110,6 +110,14 @@ export function ChosenEnclosureCard({
             </dl>
             <p className="text-xs text-muted-foreground" data-testid="chosen-enclosure-source">
               {summary.source}
+              {summary.sourceUrl ? (
+                <>
+                  {" "}
+                  <a href={summary.sourceUrl} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-foreground" data-testid="chosen-enclosure-source-link">
+                    Stránka výrobce ↗
+                  </a>
+                </>
+              ) : null}
             </p>
             <div className="flex flex-wrap gap-2">
               <Button type="button" className="gap-1.5" onClick={() => void copy()} disabled={!orderText} data-testid="copy-enclosure-order">

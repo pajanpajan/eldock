@@ -8,7 +8,7 @@ import "dotenv/config";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 
 import { PrismaClient } from "../src/generated/prisma/client";
-import { importExternalCatalog, importWiringDevices, seedStandardEnclosures } from "../src/server/services/catalog-sync";
+import { importExternalCatalog, importWiringDevices, seedStandardEnclosures, seedVerifiedEnclosures } from "../src/server/services/catalog-sync";
 import { DEFAULT_EXTERNAL_DIR, SNAPSHOT_FILE, WIRING_SNAPSHOT, readExternalFolder, readSnapshot, readWiringFolder, readWiringSnapshot, writeSnapshot, writeWiringSnapshot } from "../prisma/external-catalog-source";
 
 const args = process.argv.slice(2);
@@ -52,13 +52,15 @@ async function main() {
       console.log(imported.skipped ? "Domovní přístroje beze změny." : `Domovní přístroje: ${imported.imported} vypínačů, zásuvek, krytů a rámečků.`);
     }
     const enclosures = await seedStandardEnclosures(prisma);
+    // Fáze 86: ověřené rozvodnice výrobců před importem – import je pak nepřepíše
+    const verified = await seedVerifiedEnclosures(prisma);
     const result = await importExternalCatalog(prisma, products, { force: args.includes("--force") });
-    console.log(`Matice standardních rozvodnic: ${enclosures} skříní.`);
+    console.log(`Matice standardních rozvodnic: ${enclosures} skříní, ověřené rozvodnice výrobců: ${verified}.`);
     if (result.skipped) return void console.log("Externí katalog je beze změny (stejný otisk) – nic k importu. Použijte --force pro nový import.");
     console.log(
       [
         `Přístroje: ${result.components.created} nových, ${result.components.updated} aktualizovaných, ${result.components.kept} ponecháno z katalogu Eldocku.`,
-        `Skříně: ${result.enclosures.created} nových, ${result.enclosures.updated} aktualizovaných.`,
+        `Skříně: ${result.enclosures.created} nových, ${result.enclosures.updated} aktualizovaných, ${result.enclosures.kept} ponecháno z ověřeného katalogu výrobců.`,
         `Vazby příslušenství: ${result.relations}.`,
         `Přeskočeno (mimo DIN sortiment / bez rozměrů): ${result.skippedProducts.length}.`,
       ].join("\n"),

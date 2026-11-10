@@ -5,6 +5,7 @@
 
 import { INSTALLATION_LABELS, type EnclosureInstallation, type EnclosureLike } from "./enclosures";
 import { MAX_RAILS, MAX_RAIL_MODULES, MIN_RAIL_MODULES } from "./rails";
+import { VERIFIED_ENCLOSURE_SOURCE, VERIFIED_ON, enclosureSourceUrl } from "./verified-enclosures";
 
 /** Výrobci kaskády v dialogu nového projektu (hodnota = výrobce v katalogu skříní). */
 export const ENCLOSURE_CHOICE_BRANDS = [
@@ -92,7 +93,18 @@ export interface EnclosureSummary {
   dimensions: string;
   execution: string;
   source: string;
+  /** Fáze 86: stránka výrobce, ze které jsou údaje ověřené rozvodnice; jinak null. */
+  sourceUrl: string | null;
   door: DoorKind;
+}
+
+/** „2026-11-10“ → „10. 11. 2026“. */
+const czechDate = (iso: string) => iso.split("-").reverse().map(Number).join(". ");
+
+function sourceText(enclosure: Pick<EnclosureLike, "dataSource">, orientational: boolean) {
+  if (orientational) return "Orientační rozměry Eldocku – typ i objednací číslo ověřte v katalogu výrobce.";
+  if (enclosure.dataSource === VERIFIED_ENCLOSURE_SOURCE) return `Údaje z oficiálního katalogu výrobce (ověřeno ${czechDate(VERIFIED_ON)}).`;
+  return "Údaje z katalogu výrobce (databáze prvků Eldocku).";
 }
 
 /** Technický popis zvolené skříně pro kartu dokumentace a objednací údaje. */
@@ -110,7 +122,8 @@ export function enclosureSummary(enclosure: EnclosureLike & { description?: stri
     layout: `${enclosure.rows} ${rowsWord(enclosure.rows)} × ${enclosure.modulesPerRow} M (celkem ${enclosure.totalModules} M)`,
     dimensions: `${enclosure.heightMm} × ${enclosure.widthMm} × ${enclosure.depthMm} mm (V × Š × H)`,
     execution: [installation, MATERIAL_LABELS[enclosure.material] ?? enclosure.material, enclosure.ipRating, enclosure.pMaxW ? `P_max ${enclosure.pMaxW} W` : null].filter(Boolean).join(" · "),
-    source: orientational ? "Orientační rozměry Eldocku – typ i objednací číslo ověřte v katalogu výrobce." : "Údaje z katalogu výrobce (databáze prvků Eldocku).",
+    source: sourceText(enclosure, orientational),
+    sourceUrl: orientational ? null : enclosureSourceUrl(enclosure.description),
     door: doorOf(enclosure),
   };
 }

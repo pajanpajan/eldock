@@ -1199,7 +1199,8 @@ model PanelEnclosure {
   material      String   @default("PLASTIC")
   /// Max. ztrátový výkon skříně P_max [W] (výrobce, ΔT 35 K) – null = neuveden.
   pMaxW         Float?
-  /// "STANDARD_MATRIX" (orientační matice Eldocku) | "EXTERNAL" (databáze ai-panel-builder)
+  /// "STANDARD_MATRIX" (orientační matice Eldocku) | "EXTERNAL" (databáze ai-panel-builder) | "MANUFACTURER_CATALOG"
+  /// (fáze 86: ověřeno v katalogu výrobce, zdroj v `description`; import externí databáze ho nepřepíše)
   dataSource    String   @default("STANDARD_MATRIX")
   description   String   @default("")
   createdAt     DateTime @default(now())
