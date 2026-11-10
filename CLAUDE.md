@@ -5,7 +5,7 @@ revize VTZ, změny skutečného provedení mezi údržbou v hale a externími CA
 rozváděčů. Pracovní název byl Digitry, od fáze 20 je to **ELDOCK**. Produkce běží na https://eldock.cz.
 Původní zadání MVP je v `docs/archiv/SPECIFIKACE-MVP.md`, celá historie fází 0–35 v `docs/archiv/PLAN-faze-00-35.md`, celý archiv v jednom souboru `docs/archiv/ARCHIV-KOMPLET.md`.
 
-## 1. Milníky (fáze 0–82 nasazené, 83–85 k nasazení)
+## 1. Milníky (fáze 0–85 nasazené)
 
 | Fáze | Milník |
 |---|---|
@@ -204,11 +204,11 @@ Když uživatel řekne **„nasaď to na produkci“** nebo **„deploy“**:
 
 **Zásuvky na světelném okruhu (fáze 82):** bez migrace (volba je v JSON nákresu a soupisu). RCBO B13 do katalogu prvků zapíše seed `db:panel-builder` při startu kontejneru. Na serveru nic dalšího. Nasazeno 2026-11-10 (commit `bb1870f`; bez migrace, seed „katalog 628 prvků aktualizován“, kontejner `healthy`).
 
-**Plocha půdorysu (fáze 83):** bez migrace (plocha je v JSON nákresu). Na serveru nic dalšího.
+**Plocha půdorysu (fáze 83):** bez migrace (plocha je v JSON nákresu). Na serveru nic dalšího. Nasazeno 2026-11-10 (commit `af4e1f2`).
 
-**Účet pro QR platby (fáze 84):** bez migrace. Pokud produkční `.env` nastavuje `ELDOCK_BANK_IBAN` na jiný platný účet, má přednost – výchozí je účet Raiffeisenbank v `lib/company.ts` (vzorový IBAN SPD se ignoruje). Na serveru nic dalšího.
+**Účet pro QR platby (fáze 84):** bez migrace. Pokud produkční `.env` nastavuje `ELDOCK_BANK_IBAN` na jiný platný účet, má přednost – výchozí je účet Raiffeisenbank v `lib/company.ts` (vzorový IBAN SPD se ignoruje). Na serveru nic dalšího. Nasazeno 2026-11-10 (commit `af4e1f2`).
 
-**Zvolená rozvodnice (fáze 85):** migrace `phase85_enclosure_fixed` (sloupec `PanelBoardProject.enclosureFixed`, výchozí false) → před nasazením záloha databáze (`npm run backup` v kontejneru); migraci provede start kontejneru.
+**Zvolená rozvodnice (fáze 85):** migrace `phase85_enclosure_fixed` (sloupec `PanelBoardProject.enclosureFixed`, výchozí false) → před nasazením záloha databáze (`npm run backup` v kontejneru); migraci provede start kontejneru. Nasazeno 2026-11-10 (commit `af4e1f2`).
 
 **Testovací firma Správy závodů (2026-11-10):** entrypoint ji při každém startu s `ELDOCK_SEED_DEMO=1` založí, pokud chybí (`npm run db:plant-tester`, výpis v logu kontejneru); existující nemění. Hesla jsou veřejná v repozitáři – před registrací první skutečné firmy ji smažte (velín → Registrované firmy → Testovací závod s.r.o. → Smazat hned) a v `.env` nastavte `ELDOCK_SEED_DEMO=0`, jinak ji další start založí znovu (vypne i doplňování dema a firmy Tester). S nastaveným SMTP by šlo z testovacího účtu rozesílat pozvánky na libovolné adresy.
 
