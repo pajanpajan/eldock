@@ -5,7 +5,7 @@ revize VTZ, změny skutečného provedení mezi údržbou v hale a externími CA
 rozváděčů. Pracovní název byl Digitry, od fáze 20 je to **ELDOCK**. Produkce běží na https://eldock.cz.
 Původní zadání MVP je v `docs/archiv/SPECIFIKACE-MVP.md`, celá historie fází 0–35 v `docs/archiv/PLAN-faze-00-35.md`, celý archiv v jednom souboru `docs/archiv/ARCHIV-KOMPLET.md`.
 
-## 1. Milníky (fáze 0–75 nasazené, 76–79 k nasazení)
+## 1. Milníky (fáze 0–79 nasazené)
 
 | Fáze | Milník |
 |---|---|
@@ -186,7 +186,7 @@ Když uživatel řekne **„nasaď to na produkci“** nebo **„deploy“**:
 
 **Podružné rozváděče a chytré PDF (fáze 74–75):** migrace `phase74_sub_boards` (`PanelBoardProject.boardCode` / `parentBoardId` / `feederJson` + index – jen nové sloupce, data se nemění). Stávající projekty zůstanou samostatné rozváděče bez vazby; nový krok 3 „Skříň rozváděče“ posune oteplení na krok 4 a dokumentaci na krok 5. Na serveru nic dalšího.
 
-**Šablony, oblíbené a kód půdorysu (fáze 78):** migrace `phase78_floorplan_code` (`Floorplan.code` + unikátní index `(companyId, code)` a doplnění kódů FP-001… starším půdorysům podle pořadí založení, `RegisteredCompany.floorplanLibraryJson`). Před nasazením záloha databáze podle postupu výše. Na serveru nic dalšího; fotky výrobců se nasadí s repozitářem až po doplnění `public/catalog-images/`.
+**Šablony, oblíbené a kód půdorysu (fáze 78):** migrace `phase78_floorplan_code` (`Floorplan.code` + unikátní index `(companyId, code)` a doplnění kódů FP-001… starším půdorysům podle pořadí založení, `RegisteredCompany.floorplanLibraryJson`). Před nasazením záloha databáze podle postupu výše. Na serveru nic dalšího; fotky výrobců se nasadí s repozitářem až po doplnění `public/catalog-images/`. Nasazeno 2026-11-10 (commit `830bfdd`; záloha před migrací v pořádku, migrace bez chyb, kontejner `healthy`).
 
 **Testovací firma Správy závodů (2026-11-10):** entrypoint ji při každém startu s `ELDOCK_SEED_DEMO=1` založí, pokud chybí (`npm run db:plant-tester`, výpis v logu kontejneru); existující nemění. Hesla jsou veřejná v repozitáři – před registrací první skutečné firmy ji smažte (velín → Registrované firmy → Testovací závod s.r.o. → Smazat hned) a v `.env` nastavte `ELDOCK_SEED_DEMO=0`, jinak ji další start založí znovu (vypne i doplňování dema a firmy Tester). S nastaveným SMTP by šlo z testovacího účtu rozesílat pozvánky na libovolné adresy.
 
