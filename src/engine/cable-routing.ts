@@ -50,7 +50,25 @@ export interface RouteSegment {
   points?: RoutePoint[];
   /** Fáze 63: úsek s ručně upravenou trasou (délka z upravené lomené čáry). */
   edited?: boolean;
+  /** Fáze 76: lomená čára už leží v obvodové dráze místnosti – výkres ji neodsazuje od stěn. */
+  final?: boolean;
 }
+
+/** Fáze 76: úsek stromu trasy okruhu (obvodový router) – rozváděč („panel“) / prvek → prvek. */
+export interface TreeLeg {
+  from: string;
+  to: string;
+  horizontalMm: number;
+  points: RoutePoint[];
+  /** Lomená čára je už v obvodové dráze (výkres ji neodsazuje). */
+  final: boolean;
+}
+
+/**
+ * Fáze 76: trasování okruhu jako strom (obvodový router 2D půdorysu) – úseky v pořadí od rozváděče (rodič před
+ * potomkem); null = řetěz podle `optimalOrder`.
+ */
+export type CircuitTreeRouter = (nodes: readonly RouteNode[], origin: RoutePoint) => TreeLeg[] | null;
 
 /**
  * Fáze 59: měřidlo tras – vodorovná délka a lomená čára mezi dvěma body. Výchozí je pravoúhlé (Manhattan);
@@ -181,6 +199,55 @@ export function routeCircuit(nodes: readonly RouteNode[], panel: RoutePoint, mod
   return { mode, segments, rawMm: Math.round(rawMm), totalMm, longestMm: Math.round(rawMm * slack + (nodes.length ? profile.panelAllowanceMm : 0)), orderSavingMm: Math.max(0, Math.round((drawn - rawMm) * slack)) };
 }
 
+/**
+ * Fáze 76: okruh jako strom úseků (obvodový router) ve všech režimech – vodorovné délky a lomené čáry ze stromu, svislé
+ * úseky na koncích každého úseku (rozváděč, krabice prvku; víceramček a propojení ve zdi jen rozdíl výšek). Nejdelší
+ * větev = nejdelší cesta od rozváděče po stromu (úbytek napětí). `orderSavingMm` = rozdíl proti řetězu v pořadí kreslení.
+ */
+export function treeRoutes(nodes: readonly RouteNode[], legs: readonly TreeLeg[], panel: RoutePoint, profile: ElevationProfile = DEFAULT_ELEVATION, metric: RouteMetric = MANHATTAN): Record<CableRoutingMode, CircuitRoute> {
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const part = (node: RouteNode, mode: "BOTTOM" | "TOP") => (mode === "BOTTOM" ? node.heightMm + profile.floorDepthMm : Math.max(0, profile.ceilingHeightMm - node.heightMm));
+  const slack = 1 + profile.slackPercent / 100;
+  const boxes = nodes.length ? new Set(nodes.map((node) => node.frame ?? node.id)).size : 0;
+  const matrix = distanceMatrix(nodes, panel, metric);
+  const build = (mode: "BOTTOM" | "TOP", allowWall: boolean): CircuitRoute => {
+    const segments: RouteSegment[] = legs.flatMap((leg) => {
+      const to = byId.get(leg.to);
+      if (!to) return [];
+      const base = { from: leg.from, to: leg.to, horizontalMm: leg.horizontalMm, points: leg.points, ...(leg.final ? { final: true } : {}) };
+      const from = byId.get(leg.from);
+      if (!from) return [{ ...base, verticalMm: panelVertical(to.heightMm, mode, profile), wall: false }];
+      const linked = Boolean(from.frame && from.frame === to.frame) || (allowWall && wallLink(from, to));
+      return [{ ...base, verticalMm: linked ? Math.abs(from.heightMm - to.heightMm) : part(from, mode) + part(to, mode), wall: linked }];
+    });
+    const rawMm = segments.reduce((sum, segment) => sum + segment.horizontalMm + segment.verticalMm, 0);
+    const reach = new Map<string, number>();
+    for (const segment of segments) reach.set(segment.to, (reach.get(segment.from) ?? 0) + segment.horizontalMm + segment.verticalMm);
+    const longest = Math.max(0, ...reach.values());
+    const allowance = nodes.length ? profile.panelAllowanceMm : 0;
+    const drawn = pathCost(
+      nodes.map((_, index) => index),
+      chainStep(nodes, matrix, mode, profile, allowWall),
+    );
+    return { mode, segments, rawMm: Math.round(rawMm), totalMm: Math.round(rawMm * slack + allowance + boxes * profile.boxAllowanceMm), longestMm: Math.round(longest * slack + allowance), orderSavingMm: Math.max(0, Math.round((drawn - rawMm) * slack)) };
+  };
+  const candidates = [build("BOTTOM", true), build("TOP", true)];
+  return { BOTTOM: build("BOTTOM", false), TOP: build("TOP", false), OPTIMIZED: candidates.reduce((best, route) => (route.totalMm < best.totalMm ? route : best)) };
+}
+
+/** Cena přechodu řetězu (vodorovně + svislé úseky režimu) – sdílí řetěz okruhu i porovnání s pořadím kreslení. */
+function chainStep(nodes: readonly RouteNode[], matrix: DistanceMatrix, mode: "BOTTOM" | "TOP", profile: ElevationProfile, allowWall: boolean) {
+  return (from: number, to: number) => {
+    const node = nodes[to];
+    if (from < 0) return matrix.fromPanel[to] + panelVertical(node.heightMm, mode, profile);
+    const previous = nodes[from];
+    const horizontal = matrix.between[from][to];
+    if ((previous.frame && previous.frame === node.frame) || (allowWall && wallLink(previous, node))) return horizontal + Math.abs(previous.heightMm - node.heightMm);
+    const vertical = mode === "BOTTOM" ? previous.heightMm + profile.floorDepthMm + node.heightMm + profile.floorDepthMm : Math.max(0, profile.ceilingHeightMm - previous.heightMm) + Math.max(0, profile.ceilingHeightMm - node.heightMm);
+    return horizontal + vertical;
+  };
+}
+
 /** Okruh ve všech režimech; OPTIMIZED = kratší z variant spodem / vrchem (s přímým propojením ve zdi). */
 export function circuitRoutes(nodes: readonly RouteNode[], panel: RoutePoint, profile: ElevationProfile = DEFAULT_ELEVATION, metric: RouteMetric = MANHATTAN): Record<CableRoutingMode, CircuitRoute> {
   const matrix = distanceMatrix(nodes, panel, metric);
@@ -291,6 +358,11 @@ export interface CablingInput {
    * se počítá z automatických tras (ruční úprava ho nepřehází), délka úseku se vezme z upravené čáry.
    */
   routeEdits?: Readonly<Record<string, readonly { x: number; y: number }[]>>;
+  /**
+   * Fáze 76: obvodový router 2D půdorysu – okruhy a sběrnicová linka jako strom po stěnách (vstupní prvek místnosti,
+   * obvodové řazení bez vracení); bez něj řetěz v nejkratším pořadí.
+   */
+  treeRouter?: CircuitTreeRouter;
 }
 
 /** Hvězdicová topologie: každý prvek samostatným kabelem do rozváděče, trasy sečtené do jedné. */
@@ -386,7 +458,9 @@ export function summarizeCabling(input: CablingInput): CableSummary {
       const star = input.installation === "bus_loxone" && circuit.kind === "lighting";
       // Fáze 74: okruh vede ze svého rozváděče (podružný rozváděč, přívod podružného rozváděče z hlavního)
       const origin = originOf(circuit.board);
-      const routes = withEdits(star ? starRoutes(nodes, origin, profile, metric) : circuitRoutes(nodes, origin, profile, metric), panelKey(circuit.board));
+      // Fáze 76: obvodový router (strom po stěnách), jinak řetěz
+      const tree = star ? null : (input.treeRouter?.(nodes, origin) ?? null);
+      const routes = withEdits(star ? starRoutes(nodes, origin, profile, metric) : tree ? treeRoutes(nodes, tree, origin, profile, metric) : circuitRoutes(nodes, origin, profile, metric), panelKey(circuit.board));
       for (const mode of ["BOTTOM", "TOP", "OPTIMIZED"] as const) totals[mode] += routes[mode].totalMm;
       const route = withPaths(routes[input.selected], byId, origin, metric);
       const cable = star ? STAR_LIGHT_CABLE : cableLabel(circuit.cable);
@@ -418,7 +492,8 @@ export function summarizeCabling(input: CablingInput): CableSummary {
   if (busLine) {
     const busNodes = (input.busNodeIds ?? []).map((id) => byId.get(id)).filter((node): node is RouteNode => Boolean(node));
     if (busNodes.length) {
-      const routes = withEdits(circuitRoutes(busNodes, input.panel, profile, metric));
+      const tree = input.treeRouter?.(busNodes, input.panel) ?? null;
+      const routes = withEdits(tree ? treeRoutes(busNodes, tree, input.panel, profile, metric) : circuitRoutes(busNodes, input.panel, profile, metric));
       for (const mode of ["BOTTOM", "TOP", "OPTIMIZED"] as const) totals[mode] += routes[mode].totalMm;
       busRoute = withPaths(routes[input.selected], byId, input.panel, metric);
       add(BUS_LEG_CABLE, busRoute.totalMm);

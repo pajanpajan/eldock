@@ -7,6 +7,8 @@ import { SOCKET_GROUPINGS, type SocketGrouping } from "@/engine/socket-zones";
 import { SOCKET_GROUPING_LABEL, type SocketCircuitRow } from "@/lib/panel-builder/socket-circuits";
 import { cn } from "@/lib/utils";
 
+import { PanelSection } from "./RightPanels";
+
 const m = (value: number) => `${value.toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} m`;
 
 export type SocketMoveTarget = { kind: "auto" } | { kind: "new" } | { kind: "row"; row: SocketCircuitRow };
@@ -144,10 +146,8 @@ export function SocketCircuitsPanel({
   const manual = rows.filter((row) => row.manual).length;
   const longest = rows.reduce((best, row) => Math.max(best, row.lengthM), 0);
   return (
-    <section className="flex flex-col gap-2 rounded-xl border border-border bg-card p-3 text-sm" aria-label="Zásuvkové okruhy" data-testid="socket-circuits">
-      <h3 className="flex items-center gap-1.5 font-bold">
-        <Plug className="size-4 text-sky-300" aria-hidden /> Zásuvkové okruhy
-      </h3>
+    // Fáze 76: sbalovací karta pravého sloupce
+    <PanelSection id="sockets" title="Zásuvkové okruhy" testId="socket-circuits" icon={<Plug className="size-4 text-sky-300" aria-hidden />} badge={<span className="font-mono text-[11px] text-muted-foreground">{rows.length}</span>}>
       <div className="flex flex-col gap-1" role="radiogroup" aria-label="Rozdělení zásuvek do okruhů">
         {SOCKET_GROUPINGS.map((option) => (
           <button
@@ -208,6 +208,6 @@ export function SocketCircuitsPanel({
       ) : (
         <p className="text-xs text-muted-foreground">Vložte zásuvky – okruhy po max. 10 zásuvkách (ČSN 33 2130 ed. 4) se rozdělí samy.</p>
       )}
-    </section>
+    </PanelSection>
   );
 }

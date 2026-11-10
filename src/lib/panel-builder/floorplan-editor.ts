@@ -36,7 +36,8 @@ import {
 import { DEFAULT_COLOR, appearanceLabel, designColor } from "./wiring-designs";
 import { CUSTOM_APPLIANCE_ITEM, applianceOverride, applianceSpecFor, parseApplianceList, type ApplianceSpec } from "./appliances";
 import { clampFixture, fixtureSpecOf, isBasinZone, type BasinZone } from "./fixtures";
-import { isPolygonRoom, nearestWall, pointInRoom, polygonBounds, roomArea, translatePolygon } from "./room-geometry";
+import { isPolygonRoom, nearestWall, pointInRoom, polygonBounds, roomArea, roomPolygon, translatePolygon } from "./room-geometry";
+import { createPerimeterRouter, type PerimeterRoom } from "./perimeter-router";
 import { productById } from "./smart-catalog";
 import { DEFAULT_SUPPLY, supplyById, type SupplySystem } from "./supply";
 import { isEnvironmentId, type EnvironmentId } from "./environments";
@@ -384,8 +385,18 @@ export interface FloorplanDraft {
   smartExtras: Record<string, number>;
   /** Fáze 74: ochranná zóna umyvadla – podle ČSN 33 2130 (umývací prostor + 0,2 m pod 1,2 m), nebo přísněji 0,6 m. */
   basinZone: BasinZone;
+  /** Fáze 76: styl tras – po stěnách obvodově (výchozí, obvodový router), nebo nejkratší přímé L-trasy v podlaze. */
+  routeStyle: RouteStyle;
   updatedAt: number;
 }
+
+/** Fáze 76: „walls“ = obvodově po stěnách dle ČSN 33 2130 ed. 4, „direct“ = nejkratší přímé L-trasy podlahou. */
+export type RouteStyle = "walls" | "direct";
+export const ROUTE_STYLES: readonly { id: RouteStyle; label: string; hint: string }[] = [
+  { id: "walls", label: "🧱 Po stěnách (obvodově dle ČSN)", hint: "Kabely obíhají místnost po stěnách v instalačních zónách – bez průchodu středem a bez dvojitých čar." },
+  { id: "direct", label: "📐 Nejkratší v podlaze (přímé L-trasy)", hint: "Přímé pravoúhlé trasy podlahou (husí krky v betonu) – nejkratší, ale přes místnosti." },
+];
+export const isRouteStyle = (value: unknown): value is RouteStyle => value === "walls" || value === "direct";
 
 export const emptyDraft = (): FloorplanDraft => ({
   version: 1,
@@ -421,6 +432,7 @@ export const emptyDraft = (): FloorplanDraft => ({
   socketGrouping: "compact",
   smartExtras: {},
   basinZone: "norm",
+  routeStyle: "walls",
   updatedAt: 0,
 });
 
@@ -475,6 +487,8 @@ export function parseDraft(value: unknown): FloorplanDraft | null {
     socketGrouping: isSocketGrouping(draft.socketGrouping) ? draft.socketGrouping : "distance",
     smartExtras: parseSmartExtras(draft.smartExtras),
     basinZone: isBasinZone(draft.basinZone) ? draft.basinZone : "norm",
+    // Fáze 76: výchozí obvodově po stěnách (i u starších nákresů)
+    routeStyle: isRouteStyle(draft.routeStyle) ? draft.routeStyle : "walls",
     updatedAt: num(draft.updatedAt, 0, 0, 1e15),
   });
 }
@@ -1078,6 +1092,8 @@ export interface PlanBuild {
   boards: { code: string; point: RoutePoint; room: string; roomName: string; nodeId: string | null; feederLengthMm: number }[];
   /** Fáze 74: rozváděč každého uzlu výpočtu (uzel → „RH“ / „RP1“). */
   boardOf: Map<string, string>;
+  /** Fáze 76: nakreslené místnosti s prvky (obrys) pro obvodový router; prázdné u stylu „direct“. */
+  perimeterRooms: PerimeterRoom[];
 }
 
 /** Fáze 74: uzel trasy podružného rozváděče (cíl přívodu z hlavního rozváděče). */
@@ -1117,7 +1133,9 @@ export function buildPlan(draft: FloorplanDraft): PlanBuild {
   });
   // Fáze 60: trasy podél stěn – graf ze stěn místností a nově zakreslených příček každého podlaží
   const bases = new Map<string, RouteMetric>();
-  for (const floor of floors) {
+  // Fáze 76: styl „Nejkratší v podlaze“ = přímé pravoúhlé trasy bez stěn
+  const walls = draft.routeStyle !== "direct";
+  for (const floor of walls ? floors : []) {
     const partitions = floor.annotations.filter((note) => note.kind === "wall").map((note) => ({ x1: note.x, y1: note.y, x2: note.x2, y2: note.y2 }));
     // Fáze 74: místnosti určí obvodové stěny (přednost vnitřních stěn v trasách)
     const graph = buildWallGraph(wallSegments(floor.rooms, partitions), { rooms: floor.rooms });
@@ -1239,7 +1257,14 @@ export function buildPlan(draft: FloorplanDraft): PlanBuild {
     return { id: room.id, name: room.name, ...(multi ? { floor: floor.id } : {}), ...(lights.length && switches.size ? { lighting: { groups: 1 as const, switchCount: Math.min(6, switches.size) } } : {}) };
   });
   const calibration = calibrateFloorplanScale({ walls: [{ px: [0, 0, 1000, 0], lengthMm: 1000 }], panelPx: [panel.x, panel.y], elevation: profile, routing: draft.mode });
-  return { plan: { rooms, nodes, mode: draft.installation }, calibration, panel, routeNodes, switchLinks, controlRuns, dataNodeIds, busNodeIds, elementOf, floors: links, metric, wallFloors: [...bases.keys()], boards, boardOf };
+  // Fáze 76: obrysy nakreslených místností s prvky (stejná jména místností na podlaží jako u prvků)
+  const perimeterRooms: PerimeterRoom[] = walls
+    ? [...roomIds.values()].flatMap((room) => {
+        const drawn = floors.find((floor) => floor.id === room.floor)?.rooms.find((candidate) => candidate.name === room.source);
+        return drawn ? [{ id: room.id, floor: room.floor, outline: roomPolygon(drawn) }] : [];
+      })
+    : [];
+  return { plan: { rooms, nodes, mode: draft.installation }, calibration, panel, routeNodes, switchLinks, controlRuns, dataNodeIds, busNodeIds, elementOf, floors: links, metric, wallFloors: [...bases.keys()], boards, boardOf, perimeterRooms };
 }
 
 /** Kalibrace na 2 kliky: úsečka v mm současného měřítka a skutečná délka → nové měřítko a přepočet prvků. */
@@ -1360,7 +1385,9 @@ export function analyzeDraft(draft: FloorplanDraft) {
   const circuits = boardCircuits(build, draft, designOptionsOf(draft));
   // Fáze 74: okruhy podružných rozváděčů vedou ze svého rozváděče
   const panels = Object.fromEntries(build.boards.map((board) => [board.code, board.point]));
-  const summary = summarizeCabling({ circuits: circuits.circuits, nodes: build.routeNodes, panel: build.panel, panels, profile: draft.profile, selected: draft.mode, switchLinks: build.switchLinks, controlRuns: build.controlRuns, dataNodeIds: build.dataNodeIds, busNodeIds: build.busNodeIds, installation: draft.installation, metric: build.metric, routeEdits: draft.routeEdits });
+  // Fáze 76: obvodový router po stěnách (výchozí styl), u „Nejkratší v podlaze“ řetěz přímými trasami
+  const treeRouter = draft.routeStyle !== "direct" ? createPerimeterRouter({ rooms: build.perimeterRooms, metric: build.metric }) : undefined;
+  const summary = summarizeCabling({ circuits: circuits.circuits, nodes: build.routeNodes, panel: build.panel, panels, profile: draft.profile, selected: draft.mode, switchLinks: build.switchLinks, controlRuns: build.controlRuns, dataNodeIds: build.dataNodeIds, busNodeIds: build.busNodeIds, installation: draft.installation, metric: build.metric, routeEdits: draft.routeEdits, treeRouter });
   return { build, circuits, summary };
 }
 

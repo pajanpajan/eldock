@@ -5,6 +5,8 @@ import { AlertTriangle, CheckCircle2, Info, LayoutGrid, Plug, RotateCw, Trash2, 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+import { PanelSection } from "./RightPanels";
+
 export interface PlanCheck {
   id: string;
   level: "error" | "warning" | "info" | "ok";
@@ -25,10 +27,11 @@ const TONE = {
 /** Kontrola půdorysu (fáze 59: ovládání světel, stoupací vedení; fáze 61: normový hlídač) s opravou jedním klikem. */
 export function PlanChecks({ checks, title = "Kontrola půdorysu" }: { checks: readonly PlanCheck[]; title?: string }) {
   if (!checks.length) return null;
+  // Fáze 76: sbalovací karta pravého sloupce s počtem chyb a varování v záhlaví
+  const problems = checks.filter((check) => check.level === "error" || check.level === "warning").length;
   return (
-    <section className="flex flex-col gap-1.5 rounded-xl border border-border bg-card p-3 text-xs" aria-label={title} data-testid="plan-checks">
-      <h3 className="text-sm font-bold">{title}</h3>
-      <ul className="flex flex-col gap-1.5">
+    <PanelSection id="checks" title={title} ariaLabel={title} testId="plan-checks" badge={problems ? <span className="rounded-full bg-amber-500/20 px-1.5 font-mono text-[11px] text-amber-100">{problems}</span> : null}>
+      <ul className="flex flex-col gap-1.5 text-xs">
         {checks.map((check) => {
           const Icon = ICON[check.level];
           return (
@@ -47,7 +50,7 @@ export function PlanChecks({ checks, title = "Kontrola půdorysu" }: { checks: r
           );
         })}
       </ul>
-    </section>
+    </PanelSection>
   );
 }
 

@@ -139,7 +139,8 @@ export function displayRoutes(draft: FloorplanDraft, analysis: Analysis, options
     if (board) return boardRoom(board);
     return analysis.build.elementOf.get(id)?.room ?? "";
   };
-  const legsOf = (segments: readonly { from: string; to: string; points?: RoutePoint[]; edited?: boolean }[]): DisplayLeg[] =>
+  type Segment = { from: string; to: string; points?: RoutePoint[]; edited?: boolean; final?: boolean };
+  const legsOf = (segments: readonly Segment[]): DisplayLeg[] =>
     segments.flatMap((segment) => {
       if (!segment.points?.length) return [];
       const runs = runsOnFloor(segment.points, draft.floorId);
@@ -151,13 +152,14 @@ export function displayRoutes(draft: FloorplanDraft, analysis: Analysis, options
         key: runs.length > 1 ? `${key}#${index}` : key,
         from: segment.from,
         to: segment.to,
-        points: edited || !whole ? run : insetWallRoute(run, walls, inset, [roomOf(segment.from), roomOf(segment.to)]),
+        // Fáze 76: úsek obvodového routeru už leží v dráze místnosti (neodsazuje se)
+        points: edited || !whole || segment.final ? run : insetWallRoute(run, walls, inset, [roomOf(segment.from), roomOf(segment.to)]),
         edited,
         editable: whole,
       }));
     });
   // Fáze 74: okruhy, přívody podružných rozváděčů a datové zásuvky (vlastní UTP) jako jedna sada tras
-  const routesOf = new Map<string, { segments: readonly { from: string; to: string; points?: RoutePoint[]; edited?: boolean }[] }>([
+  const routesOf = new Map<string, { segments: readonly Segment[] }>([
     ...analysis.summary.circuits.map((row) => [row.id, row.route] as const),
     ...analysis.summary.dataRuns.map((run) => [run.id, run.route] as const),
   ]);

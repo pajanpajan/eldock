@@ -6,6 +6,7 @@ import { ROLE_LABEL, SMART_SYSTEMS, type SmartPlan, type SmartSystemId } from "@
 import { cn } from "@/lib/utils";
 
 import { ManufacturerLogo } from "../ManufacturerLogo";
+import { PanelSection } from "./RightPanels";
 
 const ROLE_ICON: Record<string, string> = { switch: "💡", dim: "🔆", dali: "🎛️", blind: "🪟", heating: "🌡️" };
 
@@ -23,10 +24,8 @@ export function SmartHomePanel({ plan, onSystem, onDatasheet }: { plan: SmartPla
   const offRail = plan.modules.filter((module) => module.modules === 0);
   const busOk = !plan.psuMa || plan.busMa <= plan.psuMa * 0.8;
   return (
-    <section className="flex flex-col gap-2 rounded-xl border-2 border-emerald-500/40 bg-card p-3 text-sm" aria-label="Chytrá domácnost" data-testid="smart-home">
-      <h3 className="flex items-center gap-1.5 font-bold">
-        <Cpu className="size-4 text-emerald-300" aria-hidden /> Chytrá domácnost – akční členy
-      </h3>
+    // Fáze 76: sbalovací karta pravého sloupce
+    <PanelSection id="smart" title="Chytrá domácnost – akční členy" ariaLabel="Chytrá domácnost" testId="smart-home" className="border-2 border-emerald-500/40" icon={<Cpu className="size-4 text-emerald-300" aria-hidden />}>
       <div className="flex flex-col gap-1" role="radiogroup" aria-label="Systém chytré domácnosti">
         {SMART_SYSTEMS.map((system) => (
           <button
@@ -121,6 +120,6 @@ export function SmartHomePanel({ plan, onSystem, onDatasheet }: { plan: SmartPla
           </ul>
         </details>
       ) : null}
-    </section>
+    </PanelSection>
   );
 }

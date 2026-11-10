@@ -1,15 +1,17 @@
 "use client";
 
-import { AlertTriangle, ArrowDown, ArrowUp, CheckCircle2, CircleAlert, Loader2 } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, CheckCircle2, CircleAlert, Loader2, Zap } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { analyzeDraft, generationChecklist } from "@/lib/panel-builder/floorplan-editor";
 import { ENVIRONMENTS, environmentOf, type EnvironmentId } from "@/lib/panel-builder/environments";
-import { ROUTING_LABEL } from "@/lib/panel-builder/floorplan-editor";
+import { ROUTING_LABEL, type RouteStyle } from "@/lib/panel-builder/floorplan-editor";
 import type { CableRoutingMode, Protection } from "@/engine/floorplan-bridge";
 import { cn } from "@/lib/utils";
+
+import { PanelSection } from "./RightPanels";
 
 type Analysis = ({ ok: true } & ReturnType<typeof analyzeDraft>) | { ok: false; error: string };
 
@@ -37,6 +39,7 @@ export function CablePanel({
   floorCount = 1,
   defaults,
   boards = [],
+  routeStyle = "walls",
 }: {
   analysis: Analysis;
   mode: CableRoutingMode;
@@ -55,11 +58,14 @@ export function CablePanel({
   defaults?: { customer: string | null; site: string | null };
   /** Fáze 74: rozváděče nákresu (RH, RP1 …) – podružné vzniknou jako propojené projekty. */
   boards?: readonly string[];
+  /** Fáze 76: styl tras (po stěnách / nejkratší v podlaze). */
+  routeStyle?: RouteStyle;
 }) {
   const circuitById = new Map(analysis.ok ? analysis.circuits.circuits.map((circuit) => [circuit.id, circuit]) : []);
+  // Fáze 76: dvě sbalovací karty pravého sloupce – výkaz kabeláže a založení rozváděče
   return (
-    <section className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3 text-sm" aria-label="Výkaz kabeláže a okruhů" data-testid="cable-panel">
-      <h3 className="font-bold">Výkaz kabeláže a okruhů (ČSN 33 2130 ed. 4)</h3>
+    <>
+    <PanelSection id="cables" title="Výkaz kabeláže a okruhů (ČSN 33 2130 ed. 4)" ariaLabel="Výkaz kabeláže a okruhů" testId="cable-panel" badge={analysis.ok ? <span className="font-mono text-[11px] font-normal text-muted-foreground">{m(analysis.summary.totals[mode])}</span> : null}>
       {!analysis.ok ? (
         <p className="rounded-md border border-dashed border-border p-3 text-xs text-muted-foreground" data-testid="cable-empty">
           {analysis.error}
@@ -78,10 +84,13 @@ export function CablePanel({
             Optimalizovaně: {m(analysis.summary.totals.OPTIMIZED)} – ušetřeno {m(analysis.summary.savingVsBottomM)} oproti vedení spodem a {m(analysis.summary.savingVsTopM)} oproti vedení vrchem.
           </p>
           {/* Fáze 60: trasy podél stěn a pořadí prvků nezávislé na pořadí kreslení */}
-          <p className={cn("text-xs", wallFloors ? "text-sky-200" : "text-amber-200")} data-testid="cable-walls">
-            {wallFloors
-              ? `Trasy vedou podél stěn v instalačních zónách (${wallFloors === floorCount ? "všechna podlaží" : `${wallFloors} z ${floorCount} podlaží`}).`
-              : "Trasy zatím pravoúhle – zakreslete místnosti nebo nové příčky (Úprava PDF), pak povedou podél stěn."}{" "}
+          <p className={cn("text-xs", wallFloors || routeStyle === "direct" ? "text-sky-200" : "text-amber-200")} data-testid="cable-walls">
+            {/* Fáze 76: obvodový router (po stěnách) nebo nejkratší přímé trasy podlahou */}
+            {routeStyle === "direct"
+              ? "Styl 📐 Nejkratší v podlaze: přímé pravoúhlé trasy podlahou (husí krky v betonu), nevedou po stěnách."
+              : wallFloors
+                ? `Trasy vedou podél stěn obvodově v instalačních zónách (${wallFloors === floorCount ? "všechna podlaží" : `${wallFloors} z ${floorCount} podlaží`}) – v místnosti bez průchodu středem a bez vracení po stěně.`
+                : "Trasy zatím pravoúhle – zakreslete místnosti nebo nové příčky (Úprava PDF), pak povedou podél stěn."}{" "}
             Pořadí prvků v okruzích se vždy přepočítá na nejkratší
             {analysis.summary.orderSavingM > 0 ? ` – o ${m(analysis.summary.orderSavingM)} kratší než v pořadí kreslení.` : "."}
           </p>
@@ -139,7 +148,9 @@ export function CablePanel({
           ))}
         </>
       )}
-      <form action={onGenerate} className="flex flex-col gap-2 border-t border-border pt-3" key={`${defaults?.customer ?? ""}|${defaults?.site ?? ""}`}>
+    </PanelSection>
+    <PanelSection id="generate" title="Založit rozváděč" testId="generate-panel" icon={<Zap className="size-4 text-primary" aria-hidden />}>
+      <form action={onGenerate} className="flex flex-col gap-2" key={`${defaults?.customer ?? ""}|${defaults?.site ?? ""}`}>
         <div className="flex flex-col gap-1">
           <Label htmlFor="fp-name">Název rozváděče</Label>
           <Input id="fp-name" name="name" required maxLength={120} defaultValue="Rozvodnice RD – z půdorysu" />
@@ -204,6 +215,7 @@ export function CablePanel({
           </p>
         ) : null}
       </form>
-    </section>
+    </PanelSection>
+    </>
   );
 }

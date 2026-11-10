@@ -38,6 +38,7 @@ import {
   recalibrate,
   removeFloor,
   resizeRect,
+  ROUTE_STYLES,
   roomAt,
   roomDimensions,
   snapToWall,
@@ -136,6 +137,7 @@ import { FloorplanExport } from "./FloorplanExport";
 import { PaletteAccordion, type PaletteSection } from "./PaletteAccordion";
 import { ROUTE_COLORS, RouteLayer } from "./RouteLayer";
 import { BoardSelect, CircuitListPanel, LayerChips, SubpanelInfo, type CircuitEntry } from "./CircuitListPanel";
+import { PanelSection, RightPanels } from "./RightPanels";
 import { CUSTOM_APPLIANCE_ITEM, applianceCatalog, applianceSpecFor, protectionLabel, storedSpecs, type ApplianceSpec } from "@/lib/panel-builder/appliances";
 import { resizeFixture, turnBy, type FixtureHandle } from "@/lib/panel-builder/fixtures";
 import { isPolygonRoom, polygonArea, polygonBounds, pointInRoom, roomPolygon, snapAngle, validPolygon, wallLabel } from "@/lib/panel-builder/room-geometry";
@@ -184,6 +186,8 @@ const HEIGHTS: { key: keyof ElevationProfile; label: string }[] = [
 ];
 
 const MODE_BUTTONS: Record<CableRoutingMode, string> = { BOTTOM: "⬇ Spodem (v podlaze)", TOP: "⬆ Vrchem (stropem/podhledem)", OPTIMIZED: "✨ Optimalizovaně (Auto)" };
+/** Fáze 76: sbalovací karty pravého sloupce (pro Sbalit / Rozbalit vše). */
+const RIGHT_PANEL_IDS = ["detail", "circuits", "smart", "checks", "sockets", "edited", "cables", "generate", "inventory"] as const;
 
 /** Co úroveň instalace v nákresu znamená (fáze 57). */
 const LEVEL_NOTES: Record<InstallLevel, string> = {
@@ -284,6 +288,7 @@ export function FloorplanEditor({
    * ztlumí a úseky trasy jdou posouvat jen u něj. Stav editoru, ne nákresu.
    */
   const [hiddenLayers, setHiddenLayers] = useState<ReadonlySet<CircuitLayer>>(() => new Set());
+  const [hiddenCircuits, setHiddenCircuits] = useState<ReadonlySet<string>>(() => new Set());
   const [hoverCircuit, setHoverCircuit] = useState<string | null>(null);
   const [focusCircuit, setFocusCircuit] = useState<string | null>(null);
   /** Fáze 74: plovoucí nabídka okruhů u vybrané zásuvky (zavřená křížkem do dalšího výběru). */
@@ -452,10 +457,12 @@ export function FloorplanEditor({
   }, [analysis, routes]);
   const colorOf = (id: string, index = 0) => entries.find((entry) => entry.id === id)?.color ?? ROUTE_COLORS[index % ROUTE_COLORS.length];
   const focused = entries.find((entry) => entry.id === focusCircuit) ?? null;
-  const shownRoutes = routes ? { circuits: routes.circuits.filter((circuit) => layerVisible(circuit.layer, hiddenLayers) || circuit.id === focused?.id), bus: routes.bus } : null;
+  // Fáze 76: oko u okruhu – skrytý okruh (ani jeho vrstva) se na plátně nekreslí, vybraný okruh vždy
+  const shownRoutes = routes ? { circuits: routes.circuits.filter((circuit) => (layerVisible(circuit.layer, hiddenLayers) && !hiddenCircuits.has(circuit.id)) || circuit.id === focused?.id), bus: routes.bus } : null;
   const boardInfos = boardsOf(draft);
   const boardOptions = boardInfos.map((board) => ({ code: board.code, label: boardLabel(board) }));
-  const highlightEntry = focused ?? entries.find((entry) => entry.id === hoverCircuit) ?? null;
+  const hovered = entries.find((entry) => entry.id === hoverCircuit && !hiddenCircuits.has(entry.id)) ?? null;
+  const highlightEntry = focused ?? hovered;
   const highlighted = new Set(highlightEntry?.elementIds ?? []);
   /** Ruční rozváděč okruhu: všechny prvky okruhu mají stejné ruční přiřazení, jinak automaticky. */
   const manualBoardOf = (entry: Pick<CircuitEntry, "elementIds">) => {
@@ -470,6 +477,19 @@ export function FloorplanEditor({
       else next.add(layer);
       return next;
     });
+  // Fáze 76: viditelnost jednotlivých okruhů (oko), všech a jen okruhů vybrané místnosti
+  const toggleCircuit = (id: string) =>
+    setHiddenCircuits((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const onlyRoomCircuits = (roomName: string) => {
+    const inRoom = new Set(draft.elements.filter((element) => element.room === roomName).map((element) => element.id));
+    setHiddenCircuits(new Set(entries.filter((entry) => !entry.elementIds.some((id) => inRoom.has(id))).map((entry) => entry.id)));
+    setHiddenLayers(new Set());
+  };
   // Fáze 65: osazené výrobky chytré domácnosti, výrobek sběrnicové položky palety a systém otevřeného technického listu
   const placedProducts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -486,6 +506,8 @@ export function FloorplanEditor({
   const panelFloorId = floors.find((floor) => floor.elements.some((element) => element.item === "panel"))?.id ?? null;
   const selected = draft.elements.find((element) => element.id === selectedId) ?? null;
   const selectedRoom = draft.rooms.find((room) => room.id === selectedRoomId) ?? null;
+  // Fáze 76: místnost pro „Jen vybraná místnost“ (vybraná místnost, jinak místnost vybraného prvku)
+  const focusRoomName = selectedRoom?.name ?? selected?.room ?? null;
   const selectedNote = draft.annotations.find((note) => note.id === selectedNoteId) ?? null;
   const available = useMemo(() => new Map(series.map((option) => [option.key, option.count ?? 1])), [series]);
   const inventory = useMemo(() => wiringInventory(draft), [draft]);
@@ -1631,6 +1653,23 @@ export function FloorplanEditor({
             </button>
           ))}
         </div>
+        {/* Fáze 76: styl tras – obvodově po stěnách (výchozí, obvodový router) / nejkratší přímé L-trasy v podlaze */}
+        <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="Styl tras kabelů">
+          {ROUTE_STYLES.map((style) => (
+            <button
+              key={style.id}
+              type="button"
+              role="radio"
+              aria-checked={draft.routeStyle === style.id}
+              title={style.hint}
+              onClick={() => update((current) => ({ ...current, routeStyle: style.id }))}
+              className={cn("rounded-md border px-2.5 py-1.5 text-sm font-semibold", draft.routeStyle === style.id ? "border-sky-400 bg-sky-500/20 text-foreground" : "border-border text-muted-foreground hover:text-foreground")}
+              data-testid={`route-style-${style.id}`}
+            >
+              [ {style.label} ]
+            </button>
+          ))}
+        </div>
         <div className="flex flex-wrap items-center gap-2 text-xs" aria-label="Výšky v mm od podlahy" role="group">
           {HEIGHTS.map((height) => (
             <label key={height.key} className="flex items-center gap-1 text-muted-foreground">
@@ -2208,7 +2247,10 @@ export function FloorplanEditor({
         </div>
 
         {/* Detail prvku + výkaz kabeláže */}
-        <aside className="flex flex-col gap-3" aria-label="Detail a výkaz kabeláže">
+        {/* Fáze 76: pravý sloupec ze sbalovacích karet se Sbalit / Rozbalit vše */}
+        <RightPanels label="Detail a výkaz kabeláže" ids={RIGHT_PANEL_IDS}>
+          <PanelSection id="detail" title="Detail vybraného prvku / místnosti" testId="right-detail" bare>
+          {!selectedRoom && !selectedNote && selection.length <= 1 && !selected ? <p className="px-2 pb-2 text-xs text-muted-foreground">Vyberte na plátně prvek nebo místnost – zobrazí se tu jejich vlastnosti.</p> : null}
           {selectedRoom ? (
             <RoomDetail
               key={selectedRoom.id}
@@ -2289,12 +2331,22 @@ export function FloorplanEditor({
               }}
             />
           ) : null}
+          </PanelSection>
           {/* Fáze 74: soupis okruhů – vrstvy, zvýraznění, výběr okruhu (úprava trasy jen u něj) a rozváděč okruhu */}
           {analysis.ok ? (
             <CircuitListPanel
               entries={entries}
               hidden={hiddenLayers}
               onToggleLayer={toggleLayer}
+              hiddenCircuits={hiddenCircuits}
+              onToggleCircuit={toggleCircuit}
+              onShowAll={() => {
+                setHiddenCircuits(new Set());
+                setHiddenLayers(new Set());
+              }}
+              onHideAll={() => setHiddenCircuits(new Set(entries.map((entry) => entry.id)))}
+              onOnlyRoom={() => focusRoomName && onlyRoomCircuits(focusRoomName)}
+              roomLabel={focusRoomName}
               focusId={focused?.id ?? null}
               onFocus={(id) => {
                 setFocusCircuit(id);
@@ -2326,9 +2378,8 @@ export function FloorplanEditor({
           ) : null}
           {/* Fáze 63: ručně upravené trasy – návrat na automat */}
           {routes && routes.circuits.some((circuit) => circuit.edited) ? (
-            <section className="flex flex-col gap-1.5 rounded-xl border border-amber-500/40 bg-card p-3 text-xs" aria-label="Ručně upravené trasy" data-testid="edited-routes">
-              <h3 className="text-sm font-bold">✎ Ručně upravené trasy</h3>
-              <ul className="flex flex-col gap-1">
+            <PanelSection id="edited" title="✎ Ručně upravené trasy" ariaLabel="Ručně upravené trasy" testId="edited-routes" className="border-amber-500/40">
+              <ul className="flex flex-col gap-1 text-xs">
                 {routes.circuits
                   .filter((circuit) => circuit.edited)
                   .map((circuit) => (
@@ -2343,8 +2394,8 @@ export function FloorplanEditor({
                     </li>
                   ))}
               </ul>
-              <p className="text-muted-foreground">Délka kabelu se počítá z upravené trasy. Pravé tlačítko na trase vrátí okruh na automat.</p>
-            </section>
+              <p className="text-xs text-muted-foreground">Délka kabelu se počítá z upravené trasy. Pravé tlačítko na trase vrátí okruh na automat.</p>
+            </PanelSection>
           ) : null}
           <CablePanel
             analysis={analysis}
@@ -2360,12 +2411,12 @@ export function FloorplanEditor({
             wallFloors={analysis.ok ? analysis.build.wallFloors.length : 0}
             floorCount={floors.length}
             boards={analysis.ok ? analysis.build.boards.map((board) => board.code) : []}
+            routeStyle={draft.routeStyle}
           />
           {/* Fáze 55: kusovník domovní instalace s objednacími čísly */}
           <WiringBomDialog rows={bom} />
           {inventory.length ? (
-            <section className="flex flex-col gap-1.5 rounded-xl border border-border bg-card p-3 text-sm" aria-label="Soupis domovní instalace" data-testid="wiring-inventory">
-              <h3 className="font-bold">Soupis domovní instalace{floors.length > 1 ? ` (${floors.length} podlaží)` : ""}</h3>
+            <PanelSection id="inventory" title={`Soupis domovní instalace${floors.length > 1 ? ` (${floors.length} podlaží)` : ""}`} ariaLabel="Soupis domovní instalace" testId="wiring-inventory">
               <ul className="flex flex-col gap-0.5 text-xs">
                 {inventory.map((row) => (
                   <li key={`${row.label}|${row.appearance}`} className="flex justify-between gap-2">
@@ -2376,9 +2427,9 @@ export function FloorplanEditor({
                   </li>
                 ))}
               </ul>
-            </section>
+            </PanelSection>
           ) : null}
-        </aside>
+        </RightPanels>
       </div>
 
       {/* Fáze 63: knihovna samostatných spotřebičů (✎ Upravit / + Přidat v paletě) */}

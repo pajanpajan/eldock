@@ -1,10 +1,12 @@
 "use client";
 
-import { Eye, EyeOff, ListTree, RotateCcw, X } from "lucide-react";
+import { DoorOpen, Eye, EyeOff, ListTree, RotateCcw, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { CIRCUIT_LAYERS, type CircuitLayer, type DisplayCircuit } from "@/lib/panel-builder/route-display";
 import { cn } from "@/lib/utils";
+
+import { PanelSection } from "./RightPanels";
 
 /** Řádek soupisu (okruh z výpočtu, přívod podružného rozváděče nebo datová zásuvka). */
 export type CircuitEntry = Omit<DisplayCircuit, "legs" | "edited" | "tag"> & { color: string; edited: boolean; onFloor: boolean };
@@ -101,10 +103,24 @@ export function CircuitListPanel({
   onAssignBoard,
   onSelectElements,
   onResetRoute,
+  hiddenCircuits = new Set<string>(),
+  onToggleCircuit,
+  onShowAll,
+  onHideAll,
+  onOnlyRoom,
+  roomLabel = null,
 }: {
   entries: readonly CircuitEntry[];
   hidden: ReadonlySet<CircuitLayer>;
   onToggleLayer: (layer: CircuitLayer) => void;
+  /** Fáze 76: skryté okruhy (oko 👁️) – trasa ani zvýraznění prvků se na plátně nekreslí. */
+  hiddenCircuits?: ReadonlySet<string>;
+  onToggleCircuit?: (id: string) => void;
+  onShowAll?: () => void;
+  onHideAll?: () => void;
+  /** Jen okruhy s prvky ve vybrané místnosti (`roomLabel` = název místnosti, bez výběru null). */
+  onOnlyRoom?: () => void;
+  roomLabel?: string | null;
   focusId: string | null;
   onFocus: (id: string | null) => void;
   onHover: (id: string | null) => void;
@@ -118,15 +134,35 @@ export function CircuitListPanel({
 }) {
   const multiple = boards.length > 1;
   const groups = multiple ? boards.map((board) => ({ board, rows: entries.filter((entry) => entry.board === board.code) })).filter((group) => group.rows.length) : [{ board: null, rows: [...entries] }];
+  const shownCount = entries.filter((entry) => !hiddenCircuits.has(entry.id)).length;
   return (
-    <section className="flex flex-col gap-2 rounded-xl border border-sky-500/40 bg-card p-3 text-sm" aria-label="Soupis okruhů" data-testid="circuit-list">
-      <div className="flex items-center gap-1.5">
-        <ListTree className="size-4 text-sky-300" aria-hidden />
-        <h3 className="font-bold">Soupis okruhů</h3>
-        <span className="ml-auto text-xs text-muted-foreground" data-testid="circuit-list-count">
+    // Fáze 76: sbalovací karta pravého sloupce s okem u každého okruhu
+    <PanelSection
+      id="circuits"
+      title="Soupis okruhů"
+      testId="circuit-list"
+      className="border-sky-500/40"
+      icon={<ListTree className="size-4 text-sky-300" aria-hidden />}
+      badge={
+        <span className="text-xs font-normal text-muted-foreground" data-testid="circuit-list-count">
+          {shownCount < entries.length ? `${shownCount} z ` : ""}
           {count(entries.length, "okruh", "okruhy", "okruhů")}
         </span>
-      </div>
+      }
+    >
+      {onShowAll ? (
+        <div className="flex flex-wrap gap-1" role="group" aria-label="Viditelnost okruhů">
+          <Button type="button" size="sm" variant="outline" className="h-7 gap-1 px-2 text-xs" onClick={onShowAll} disabled={!hiddenCircuits.size && !hidden.size} data-testid="circuits-show-all">
+            <Eye className="size-3.5" aria-hidden /> Zobrazit vše
+          </Button>
+          <Button type="button" size="sm" variant="outline" className="h-7 gap-1 px-2 text-xs" onClick={onHideAll} disabled={entries.length > 0 && hiddenCircuits.size >= entries.length} data-testid="circuits-hide-all">
+            <EyeOff className="size-3.5" aria-hidden /> Skrýt vše
+          </Button>
+          <Button type="button" size="sm" variant="outline" className="h-7 gap-1 px-2 text-xs" onClick={onOnlyRoom} disabled={!roomLabel} title={roomLabel ? `Jen okruhy s prvky v místnosti ${roomLabel}` : "Nejdřív vyberte místnost nebo prvek v ní"} data-testid="circuits-only-room">
+            <DoorOpen className="size-3.5" aria-hidden /> Jen vybraná místnost{roomLabel ? ` (${roomLabel})` : ""}
+          </Button>
+        </div>
+      ) : null}
       <LayerChips entries={entries} hidden={hidden} onToggle={onToggleLayer} />
       {entries.length ? (
         <div className="flex max-h-[22rem] flex-col gap-2 overflow-y-auto pr-0.5">
@@ -137,8 +173,26 @@ export function CircuitListPanel({
                 {group.rows.map((entry) => {
                   const active = entry.id === focusId;
                   const layerHidden = entry.layer !== "feeder" && entry.layer !== "bus" && hidden.has(entry.layer);
+                  const visible = !hiddenCircuits.has(entry.id);
+                  const name = entry.designation ?? entry.label;
                   return (
-                    <li key={entry.id} className={cn("rounded-md border", active ? "border-sky-400 bg-sky-500/10" : "border-transparent")}>
+                    <li key={entry.id} className={cn("flex flex-wrap items-stretch rounded-md border", active ? "border-sky-400 bg-sky-500/10" : "border-transparent")}>
+                      {/* Fáze 76: oko = zaškrtávátko viditelnosti okruhu na plátně */}
+                      {onToggleCircuit ? (
+                        <button
+                          type="button"
+                          role="checkbox"
+                          aria-checked={visible}
+                          aria-label={`${visible ? "Skrýt" : "Zobrazit"} okruh ${name}`}
+                          title={`${visible ? "Skrýt" : "Zobrazit"} okruh na plátně`}
+                          onClick={() => onToggleCircuit(entry.id)}
+                          className={cn("flex w-7 shrink-0 items-center justify-center rounded-md", visible ? "text-sky-200 hover:bg-muted/50" : "text-muted-foreground hover:bg-muted/50")}
+                          data-testid="circuit-eye"
+                          data-circuit={entry.id}
+                        >
+                          {visible ? <Eye className="size-3.5" aria-hidden /> : <EyeOff className="size-3.5" aria-hidden />}
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         onClick={() => onFocus(active ? null : entry.id)}
@@ -147,12 +201,12 @@ export function CircuitListPanel({
                         onFocus={() => onHover(entry.id)}
                         onBlur={() => onHover(null)}
                         aria-pressed={active}
-                        className={cn("flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-left text-xs hover:bg-muted/50", layerHidden && "opacity-45")}
+                        className={cn("flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1 text-left text-xs hover:bg-muted/50", (layerHidden || !visible) && "opacity-45")}
                         data-testid="circuit-row"
                         data-circuit={entry.id}
                         data-layer={entry.layer}
                         data-board={entry.board}
-                        title={layerHidden ? "Vrstva je skrytá – okruh se na plátně nekreslí" : entry.onFloor ? "Zvýraznit a vybrat okruh" : "Okruh je na jiném podlaží"}
+                        title={!visible ? "Okruh je skrytý (oko) – na plátně se nekreslí" : layerHidden ? "Vrstva je skrytá – okruh se na plátně nekreslí" : entry.onFloor ? "Zvýraznit a vybrat okruh" : "Okruh je na jiném podlaží"}
                       >
                         <span className="h-3 w-3 shrink-0 rounded-full border border-black/40" style={{ background: entry.color }} aria-hidden />
                         <span className="w-14 shrink-0 font-mono font-bold">{entry.designation ?? "–"}</span>
@@ -162,7 +216,7 @@ export function CircuitListPanel({
                         <span className="w-12 shrink-0 text-right tabular-nums text-muted-foreground">{m(entry.lengthM)}</span>
                       </button>
                       {active ? (
-                        <div className="flex flex-col gap-1.5 border-t border-sky-500/30 px-2 py-1.5 text-xs" data-testid="circuit-detail">
+                        <div className="flex w-full flex-col gap-1.5 border-t border-sky-500/30 px-2 py-1.5 text-xs" data-testid="circuit-detail">
                           <p className="text-muted-foreground">
                             {entry.cable} · {entry.routing === "TOP" ? "vrchem" : "spodem"} · {count(entry.elementIds.length, "prvek", "prvky", "prvků")}
                           </p>
@@ -193,6 +247,6 @@ export function CircuitListPanel({
       ) : (
         <p className="text-xs text-muted-foreground">Okruhy se objeví po vložení rozváděče a prvků.</p>
       )}
-    </section>
+    </PanelSection>
   );
 }
