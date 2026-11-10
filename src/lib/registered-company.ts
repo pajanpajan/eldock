@@ -81,6 +81,19 @@ export type PlantRegistration = z.output<typeof plantRegistrationSchema>;
 /** Demo účet „Tester“ AI Panel Builderu (předvyplněné přihlášení na /panel-builder/auth). */
 export const TESTER_COMPANY = { id: "company-tester", email: "tester@eldock.cz", password: "Tester2026!" } as const;
 
+/**
+ * Testovací firma Správy závodů (2026-11-10): obecné přihlášení na /login pro testy webu i aplikací Windows / iOS /
+ * Android (obchodní demo aplikace nepáruje) – technický ředitel a směnový údržbář se stejným heslem, závod s ukázkovou
+ * halou. Údaje jsou veřejné (repozitář) – před registrací první skutečné firmy firmu zrušit nebo změnit hesla.
+ */
+export const PLANT_TESTER = {
+  email: "test@eldock.cz",
+  password: "Zavod2026!",
+  companyName: "Testovací závod s.r.o.",
+  plantName: "Testovací závod Eldock",
+  technician: { email: "test-udrzba@eldock.cz", name: "Petr Zkušební", title: "Směnový údržbář" },
+} as const;
+
 export interface CompanyProfile {
   companyName: string;
   ico: string;

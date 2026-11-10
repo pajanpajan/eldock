@@ -18,6 +18,7 @@
     "db:studio": "prisma studio",
     "db:demo-docs": "tsx prisma/demo-docs.ts",
     "db:panel-builder": "tsx prisma/panel-builder.ts",
+    "db:plant-tester": "tsx prisma/plant-tester.ts",
     "db:demo-plant": "tsx prisma/demo-plant.ts",
     "db:demo-legislation": "tsx prisma/demo-legislation.ts",
     "db:demo-lifespan": "tsx prisma/demo-lifespan.ts",

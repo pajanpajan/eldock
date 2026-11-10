@@ -8,6 +8,7 @@
 #      a katalog AI Panel Builderu se vzorovým rozváděčem PB-001 (`npm run db:panel-builder` – vždy, i bez dema; fáze 54)
 #      a ukázky legislativy 2027 – návody, zálohy SW, pas baterie (`npm run db:demo-legislation`)
 #      a životnost součástek + kabelové pasporty (`npm run db:demo-lifespan`, fáze 53)
+#      a testovací firmu Správy závodů s obecným přihlášením (`npm run db:plant-tester`, jen s ELDOCK_SEED_DEMO=1)
 #   3a. založí triggery žurnálu změn pro aplikace Windows / iOS / Android (`npm run sync:setup`, fáze 70 – migrace,
 #      která tabulku přestaví, její triggery smaže; idempotentní, doplní i záznamy vzniklé bez triggeru)
 #   4. doplní registr souborů pro soubory nahrané před fází 68 (`npm run storage:registry` – vlastník podle záznamu,
@@ -61,6 +62,12 @@ fi
 # i bez demo dat (fáze 54). Demo firmu Tester založí jen s ELDOCK_SEED_DEMO=1; selhaný krok vypíše a ostatní doběhnou.
 if [ "$PLANTS" != "0" ] || [ "${ELDOCK_SEED_DEMO:-1}" != "1" ]; then
   npm run db:panel-builder --silent || echo "[eldock] Varování: některý krok katalogu AI Panel Builderu selhal (viz výpis výše)."
+fi
+
+# Testovací firma Správy závodů (obecné přihlášení pro testy webu a aplikací Windows / iOS / Android, 2026-11-10):
+# existující nemění. Před registrací první skutečné firmy ji smažte ve velínu a nastavte ELDOCK_SEED_DEMO=0 (CLAUDE.md, oddíl 7).
+if [ "${ELDOCK_SEED_DEMO:-1}" = "1" ]; then
+  npm run db:plant-tester --silent || echo "[eldock] Varování: testovací firmu Správy závodů se nepodařilo založit."
 fi
 
 if [ "$PLANTS" != "0" ] && [ "${ELDOCK_SEED_DEMO:-1}" = "1" ]; then
