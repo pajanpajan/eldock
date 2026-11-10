@@ -5,7 +5,7 @@ revize VTZ, změny skutečného provedení mezi údržbou v hale a externími CA
 rozváděčů. Pracovní název byl Digitry, od fáze 20 je to **ELDOCK**. Produkce běží na https://eldock.cz.
 Původní zadání MVP je v `docs/archiv/SPECIFIKACE-MVP.md`, celá historie fází 0–35 v `docs/archiv/PLAN-faze-00-35.md`, celý archiv v jednom souboru `docs/archiv/ARCHIV-KOMPLET.md`.
 
-## 1. Milníky (fáze 0–87 a 89 nasazené; 88 čeká na nasazení)
+## 1. Milníky (fáze 0–89 nasazené)
 
 | Fáze | Milník |
 |---|---|
@@ -216,6 +216,8 @@ Když uživatel řekne **„nasaď to na produkci“** nebo **„deploy“**:
 **Zvolená rozvodnice (fáze 85):** migrace `phase85_enclosure_fixed` (sloupec `PanelBoardProject.enclosureFixed`, výchozí false) → před nasazením záloha databáze (`npm run backup` v kontejneru); migraci provede start kontejneru. Nasazeno 2026-11-10 (commit `af4e1f2`).
 
 **Průvodce a kompaktní lišta 2D půdorysu (fáze 89):** bez migrace (režim lišty je v JSON knihovny půdorysu firmy `floorplanLibraryJson`). Na serveru nic dalšího. Nasazeno 2026-11-10 (commit `c5ce70e` spolu s fázemi 86 a 87; bez migrace, kontejner `healthy`).
+
+**Katalog ABB pro ČR (fáze 88):** bez migrace. Rozvodnice Mistral / ComfortLine CU, přístroje a příslušenství ABB i vazby příslušenství zapíše přírůstkový seed `db:panel-builder` při startu kontejneru (upsert, orientační řádek téhož typu dostane objednací číslo, nic se nemaže); ověřené rozvodnice převezmou řádky exportu se stejným objednacím číslem (MISTRAL65, CU24R / CU25R). Na serveru nic dalšího. Nasazeno 2026-11-10 (commit `1aacfdb`; seed „katalog 838 prvků aktualizován“, 163 ověřených skříní, kontejner `healthy`).
 
 **Testovací firma Správy závodů (2026-11-10):** entrypoint ji při každém startu s `ELDOCK_SEED_DEMO=1` založí, pokud chybí (`npm run db:plant-tester`, výpis v logu kontejneru); existující nemění. Hesla jsou veřejná v repozitáři – před registrací první skutečné firmy ji smažte (velín → Registrované firmy → Testovací závod s.r.o. → Smazat hned) a v `.env` nastavte `ELDOCK_SEED_DEMO=0`, jinak ji další start založí znovu (vypne i doplňování dema a firmy Tester). S nastaveným SMTP by šlo z testovacího účtu rozesílat pozvánky na libovolné adresy.
 
