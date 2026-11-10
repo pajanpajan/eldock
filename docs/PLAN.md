@@ -107,19 +107,19 @@ Fáze 69 nasazena 2026-11-08 (commit `3882589`; migrace `phase69_data_requests` 
 
 ## B. Otevřená fáze
 
-**Fáze 76 – zatím nezadaná** ⬜
+Zadání fází 76–79 (2D půdorys & kabeláž, vloženo 2026-11-10) → `docs/archiv/ZADANI-faze-76-79.md` (v zadání „57–60“ – čísla obsazená). Postup: fáze po fázi, po každé `npm run verify`, plán, `docs:bundle` a samostatný commit; po fázi 79 E2E a příkazy pro push a nasazení.
 
-Pokračování roadmapy (`ZADANI-faze-71.md` až `ZADANI-faze-73.md`): vydání aplikací v Google Play a App Store, podepsaný instalátor pro Windows a podpis vydání Androidu vlastním klíčem až s účty Eldock s.r.o.; ověření aplikace pro iOS na skutečném iPhonu (Mac nebo ruční workflow; server závodu přes http v interní síti – ATS a dotaz na místní síť); synchronizace na pozadí (iOS BGTask, Android WorkManager), univerzální odkazy https a push oznámení. **Rozhodnuto 2026-11-09:** provoz obojí podle závodu – aplikace vždy offline s denní synchronizací přímo s eldock.cz, závod s interní sítí bez internetu navíc server závodu (Windows, zařízení `PLANT_SERVER`, denní synchronizace s cloudem); účty Apple (Organization, 99 USD/rok), Google Play s ověřením vývojáře Android (organizace, 25 USD) a podpis aplikace pro Windows přes Azure Artifact Signing (9,99 USD/měsíc, v EU jen firmy) až na zapsanou Eldock s.r.o. s číslem D-U-N-S – do té doby vývoj a zkušební sestavení mimo obchody; e-maily přes schránku `noreply@eldock.cz` u Zoneru (MX i SPF domény jsou u Zoneru); zálohy mimo server do Hetzner Object Storage v Helsinkách (HEL1, server je ve Falkensteinu `fsn1-dc14`). **Na straně uživatele:** schránka u Zoneru → `ELDOCK_SMTP_URL` + `ELDOCK_MAIL_FROM` do `.env` (DKIM a DMARC v DNS doporučeno); bucket v HEL1, klíče S3 a heslo záloh → `ELDOCK_BACKUP_S3_*` + `ELDOCK_BACKUP_KEY` do `.env` (heslo uložit i mimo server); po zápisu do OR údaje firmy v `lib/company.ts`, D-U-N-S a účty Apple, Google a Artifact Signing. Další plánované fáze z analýzy webu (`docs/archiv/ZADANI-faze-54.md`): normový registr v Eldocku, Projekt elektroinstalace jako produkt.
+### Fáze 76 – Obvodový router kabelů, viditelnost okruhů 👁️ a sbalovací pravý panel 🟨
+**Cíl:** kabely po obvodu stěn bez průchodu středem místnosti a bez dvojitých čar, okruhy jde jednotlivě skrýt, pravý sloupec je přehledný.
+- [ ] `lib/panel-builder/perimeter-router.ts`: obvodová dráha místnosti (nakreslená nebo odvozená obálka prvků), přiřazení prvků ke stěně a společná osa stěny, obvodové řazení CW / CCW / rozvětvení ze vstupního bodu, spoje mezi stěnami přes rohy, výjimka stropní svítidlo / podlahová krabice, páteř z rozváděče po stěnách chodby; testy na modelové ložnici
+- [ ] napojení do výpočtu tras a výkazu (plátno, tisk, DXF), přepínač 🧱 Po stěnách (výchozí) / 📐 Nejkratší v podlaze uložený v nákresu, ruční posun úseků dál funguje
+- [ ] oko u každého okruhu se Zobrazit vše / Skrýt vše / Jen vybraná místnost; sbalovací karty pravého sloupce se Sbalit / Rozbalit vše
+**Hotovo když:** testy routeru a E2E půdorysu prochází · `npm run verify` OK
+**Commit:** `feat(faze76): …`
 
-Šablona pro nové zadání (vložte sem, nepřepisujte celý soubor):
+**Další fáze ze zadání:** 77 – stínění (vývod motoru žaluzie), čidla oken a vody, termostaty a hlavice, LED pásky a bodovky, stmívání / CCT / RGBW s moduly do rozváděče · 78 – šablony sestav víceramečků, oblíbené ⭐, fotky výrobců (`public/catalog-images/`), soubor `.eldock.json` a doplnění cloudového ukládání z fáze 64 · 79 – import DXF s hladinami, jednotkami a přichytáváním (DWG → návod na DXF).
 
-```
-### Fáze 76 – <název>
-**Cíl:** <jedna věta>
-- [ ] <úkol>
-**Hotovo když:** <ověřitelná kritéria> · `npm run verify` OK
-**Commit:** `feat(faze76): <popis>`
-```
+Roadmapa po fázi 79 (`ZADANI-faze-71.md` až `ZADANI-faze-73.md`): vydání aplikací v Google Play a App Store, podepsaný instalátor pro Windows a podpis vydání Androidu vlastním klíčem až s účty Eldock s.r.o.; ověření aplikace pro iOS na skutečném iPhonu (Mac nebo ruční workflow; server závodu přes http v interní síti – ATS a dotaz na místní síť); synchronizace na pozadí (iOS BGTask, Android WorkManager), univerzální odkazy https a push oznámení. **Rozhodnuto 2026-11-09:** provoz obojí podle závodu – aplikace vždy offline s denní synchronizací přímo s eldock.cz, závod s interní sítí bez internetu navíc server závodu (Windows, zařízení `PLANT_SERVER`, denní synchronizace s cloudem); účty Apple (Organization, 99 USD/rok), Google Play s ověřením vývojáře Android (organizace, 25 USD) a podpis aplikace pro Windows přes Azure Artifact Signing (9,99 USD/měsíc, v EU jen firmy) až na zapsanou Eldock s.r.o. s číslem D-U-N-S – do té doby vývoj a zkušební sestavení mimo obchody; e-maily přes schránku `noreply@eldock.cz` u Zoneru (MX i SPF domény jsou u Zoneru); zálohy mimo server do Hetzner Object Storage v Helsinkách (HEL1, server je ve Falkensteinu `fsn1-dc14`). **Na straně uživatele:** schránka u Zoneru → `ELDOCK_SMTP_URL` + `ELDOCK_MAIL_FROM` do `.env` (DKIM a DMARC v DNS doporučeno); bucket v HEL1, klíče S3 a heslo záloh → `ELDOCK_BACKUP_S3_*` + `ELDOCK_BACKUP_KEY` do `.env` (heslo uložit i mimo server); po zápisu do OR údaje firmy v `lib/company.ts`, D-U-N-S a účty Apple, Google a Artifact Signing. Další plánované fáze z analýzy webu (`docs/archiv/ZADANI-faze-54.md`): normový registr v Eldocku, Projekt elektroinstalace jako produkt.
 
 ## C. Deník (jen poslední záznamy, starší jsou v archivu)
 
