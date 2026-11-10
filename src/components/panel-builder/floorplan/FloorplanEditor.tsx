@@ -158,6 +158,10 @@ import { FloorplanFileMenu } from "./FloorplanFileMenu";
 import { useDraftHistory } from "./useDraftHistory";
 import { useFloorplanSync, type FloorplanMetaState } from "./useFloorplanSync";
 import { useFloorplanLibrary } from "./useFloorplanLibrary";
+import { CadLayersPanel } from "./CadLayersPanel";
+import { CadUnderlayLayer } from "./CadUnderlayLayer";
+import { DWG_MESSAGE, DxfError, parseDxf } from "@/lib/panel-builder/dxf-import";
+import { CAD_GEOMETRY_MAX_BYTES, buildSnapIndex, geometryOf, parseCadGeometry, planSizeFor, snapToCad, underlayOf, type CadGeometry } from "@/lib/panel-builder/cad-underlay";
 import { addTemplate, favoritesFirst, removeTemplate, toggleFavorite } from "@/lib/panel-builder/floorplan-library";
 import { Dimensions, ElementDetail, ElementToolbar, RoomDetail, ToolButton } from "./ElementPanels";
 import { SocketCircuitPicker, SocketCircuitPopover, SocketCircuitsPanel, type SocketMoveTarget } from "./SocketCircuitsPanel";
@@ -196,7 +200,7 @@ const HEIGHTS: { key: keyof ElevationProfile; label: string }[] = [
 
 const MODE_BUTTONS: Record<CableRoutingMode, string> = { BOTTOM: "⬇ Spodem (v podlaze)", TOP: "⬆ Vrchem (stropem/podhledem)", OPTIMIZED: "✨ Optimalizovaně (Auto)" };
 /** Fáze 76: sbalovací karty pravého sloupce (pro Sbalit / Rozbalit vše). */
-const RIGHT_PANEL_IDS = ["detail", "circuits", "smart", "checks", "sockets", "edited", "cables", "generate", "inventory"] as const;
+const RIGHT_PANEL_IDS = ["detail", "cad", "circuits", "smart", "checks", "sockets", "edited", "cables", "generate", "inventory"] as const;
 
 /** Co úroveň instalace v nákresu znamená (fáze 57). */
 const LEVEL_NOTES: Record<InstallLevel, string> = {
@@ -277,6 +281,8 @@ export function FloorplanEditor({
   // Fáze 78: šablony sestav a oblíbené položky firmy (prohlížeč + profil firmy, novější vyhrává)
   const [floorLibrary, saveFloorLibrary] = useFloorplanLibrary(libraryJson);
   const favoriteKeys = useMemo(() => new Set(floorLibrary.favorites), [floorLibrary.favorites]);
+  // Fáze 79: geometrie podkladu CAD aktivního podlaží (soubor v úložišti firmy) a mřížka pro přichytávání
+  const [cadGeometry, setCadGeometry] = useState<{ url: string; geometry: CadGeometry } | null>(null);
   const toggleFavoriteKey = (key: string) => saveFloorLibrary(toggleFavorite(floorLibrary, key));
   /** Fáze 78: sestava jako šablona firmy – chyba jako text (formulář ji ukáže), jinak null. */
   const saveTemplate = (members: string[], label: string): string | null => {
@@ -454,6 +460,29 @@ export function FloorplanEditor({
   /** Jednotka popisků, úchytů a lišt – při zoomu drží stejnou velikost na obrazovce. */
   const ui = Math.max(viewMm.w, viewHeight) / 55;
   const stroke = ui / 16;
+  // Fáze 79: geometrie podkladu CAD (načtená ze souboru) a přichytávání k viditelným nezamčeným hladinám
+  const cadReady = draft.cad && cadGeometry?.url === draft.cad.url ? cadGeometry.geometry : null;
+  const snapIndex = useMemo(() => (cadReady && draft.cad ? buildSnapIndex(cadReady, draft.cad) : null), [cadReady, draft.cad]);
+  const cadSnap = (point: { x: number; y: number }) => (draft.cad?.snap && snapIndex ? snapToCad(snapIndex, point.x, point.y, ui * 0.6) : null);
+  const snapPlan = (point: { x: number; y: number }) => {
+    const hit = cadSnap(point);
+    return hit ? { x: Math.round(hit.x), y: Math.round(hit.y) } : { x: snap(point.x), y: snap(point.y) };
+  };
+  const cadUrl = draft.cad?.url ?? null;
+  useEffect(() => {
+    if (!cadUrl || cadGeometry?.url === cadUrl) return;
+    let alive = true;
+    void fetch(cadUrl)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        const geometry = parseCadGeometry(data);
+        if (alive && geometry) setCadGeometry({ url: cadUrl, geometry });
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [cadUrl, cadGeometry?.url]);
 
   // Výpočet tras a okruhů na odloženém nákresu – tažení značky zůstane plynulé i u velkého domu
   const deferred = useDeferredValue(draft);
@@ -617,8 +646,11 @@ export function FloorplanEditor({
   /** Kam a jak se vloží značka v místě kurzoru: u stěny místnosti přicvaknutí a natočení ke stěně, jinak natočení předchozí. */
   function placement(item: NonNullable<ReturnType<typeof paletteItem>>, point: { x: number; y: number }) {
     const room = roomAt(draft.rooms, point.x, point.y);
-    const base = { x: snap(point.x), y: snap(point.y) };
+    // Fáze 79: zásuvky, vypínače, čidla a žaluzie se přichytí k čarám a vrcholům podkladu CAD
+    const cadHit = isWallMounted(item) || item.kind === "switch" || item.kind === "blind_motor" ? cadSnap(point) : null;
+    const base = cadHit ? { x: Math.round(cadHit.x), y: Math.round(cadHit.y) } : { x: snap(point.x), y: snap(point.y) };
     if (item.kind === "fixture") return { position: base, rotation: placeRotation, room };
+    if (cadHit) return { position: base, rotation: isWallMounted(item) && room ? wallRotation(room, point.x, point.y) : placeRotation, room };
     if (isWallMounted(item) && room) {
       const position = snapToWall(room, base.x, base.y);
       if (position.x !== base.x || position.y !== base.y) return { position, rotation: wallRotation(room, point.x, point.y), room };
@@ -790,7 +822,8 @@ export function FloorplanEditor({
       const first = polyDraft[0];
       if (first && polyDraft.length >= 3 && Math.hypot(point.x - first.x, point.y - first.y) <= ui * 0.8) return finishPolygon();
       const last = polyDraft[polyDraft.length - 1];
-      const corner = !last ? { x: snap(point.x), y: snap(point.y) } : event.shiftKey ? { x: Math.round(point.x), y: Math.round(point.y) } : snapAngle(last, point, 45);
+      const hit = cadSnap(point);
+      const corner = hit ? { x: Math.round(hit.x), y: Math.round(hit.y) } : !last ? { x: snap(point.x), y: snap(point.y) } : event.shiftKey ? { x: Math.round(point.x), y: Math.round(point.y) } : snapAngle(last, point, 45);
       if (last && Math.hypot(corner.x - last.x, corner.y - last.y) < 100) return;
       setPolyDraft([...polyDraft, corner]);
       setSelectedRoomId(null);
@@ -798,7 +831,8 @@ export function FloorplanEditor({
     }
     if (tool.kind === "room" || tool.kind === "crop") {
       capture(svg.current, event.pointerId);
-      setRoomDraft({ x: tool.kind === "crop" ? point.x : snap(point.x), y: tool.kind === "crop" ? point.y : snap(point.y), w: 0, h: 0 });
+      const start = tool.kind === "crop" ? point : snapPlan(point);
+      setRoomDraft({ x: start.x, y: start.y, w: 0, h: 0 });
       setSelectedRoomId(null);
       return;
     }
@@ -977,7 +1011,7 @@ export function FloorplanEditor({
       return;
     }
     const point = toPlan(event);
-    if (tool.kind === "place" || tool.kind === "place-set" || tool.kind === "polygon") setHover({ ...point, shift: event.shiftKey });
+    if (tool.kind === "place" || tool.kind === "place-set" || tool.kind === "polygon" || tool.kind === "room") setHover({ ...point, shift: event.shiftKey });
     // Fáze 63: změna rozměru předmětu, posun úseku trasy, posun rohu polygonální místnosti
     if (fixtureDrag) {
       setDraft((current) => ({
@@ -1027,7 +1061,8 @@ export function FloorplanEditor({
     }
     if (roomDraft) {
       const crop = tool.kind === "crop";
-      setRoomDraft({ ...roomDraft, w: (crop ? point.x : snap(point.x)) - roomDraft.x, h: (crop ? point.y : snap(point.y)) - roomDraft.y });
+      const corner = crop ? point : snapPlan(point);
+      setRoomDraft({ ...roomDraft, w: corner.x - roomDraft.x, h: corner.y - roomDraft.y });
     }
     if (marquee) setMarquee({ ...marquee, w: point.x - marquee.x, h: point.y - marquee.y });
     if (noteDraft) {
@@ -1217,6 +1252,9 @@ export function FloorplanEditor({
   }
 
   async function pickBackground(file: File) {
+    // Fáze 79: výkres CAD – DXF se převezme s hladinami v měřítku 1 : 1, DWG dostane návod na uložení jako DXF
+    if (/\.dwg$/i.test(file.name)) return void toast.error(DWG_MESSAGE, { duration: 12_000 });
+    if (/\.dxf$/i.test(file.name)) return void importDxf(file);
     try {
       let blob: Blob;
       let widthPx: number;
@@ -1247,13 +1285,45 @@ export function FloorplanEditor({
       // Výchozí odhad měřítka: šířka podkladu ≈ 15 m – přesně ho nastaví kalibrace
       const mmPerPx = 15_000 / widthPx;
       const background: FloorplanBackground = { url: uploaded.url, widthPx, heightPx, rotation: 0, crop: null, pagePt };
-      update((current) => ({ ...current, background, mmPerPx, ...planExtent(background, mmPerPx), calibration: emptyCalibration() }));
+      update((current) => ({ ...current, background, cad: null, mmPerPx, ...planExtent(background, mmPerPx), calibration: emptyCalibration() }));
       setView(FIT);
       setCalibration([]);
       setTool({ kind: "calibrate" });
       toast.info(`${pages > 1 ? `PDF má ${pages} stran – použita 1. strana. ` : ""}Podklad podlaží ${draft.floorName} nahrán. Teď klikněte na začátek a konec známé stěny nebo kóty (📏 kalibrace).`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Podklad se nepodařilo nahrát.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /** Fáze 79: výkres DXF → hladiny do souboru úložiště firmy, nastavení podkladu do podlaží (měřítko 1 : 1, bez kalibrace). */
+  async function importDxf(file: File) {
+    try {
+      setBusy("Načítám výkres DXF…");
+      const buffer = await file.arrayBuffer();
+      let text: string;
+      try {
+        text = new TextDecoder("utf-8", { fatal: true }).decode(buffer);
+      } catch {
+        // Starší DXF (do AutoCADu 2006) v kódové stránce Windows
+        text = new TextDecoder("windows-1250").decode(buffer);
+      }
+      const drawing = parseDxf(text);
+      const geometry = geometryOf(drawing);
+      const json = JSON.stringify(geometry);
+      if (json.length > CAD_GEOMETRY_MAX_BYTES) throw new DxfError("Výkres je po převodu větší než 10 MB – vyčistěte ho v CAD programu (zmrazte šrafy a nábytek) a nahrajte znovu.");
+      setBusy("Nahrávám hladiny výkresu…");
+      const uploaded = await uploadPanelFile("markup", new File([json], "vykres-cad.json", { type: "application/json" }));
+      const cad = underlayOf(drawing, uploaded.url, file.name);
+      setCadGeometry({ url: uploaded.url, geometry });
+      update((current) => ({ ...current, cad, background: null, calibration: emptyCalibration(), ...planSizeFor(drawing, current) }));
+      setView(FIT);
+      setTool({ kind: "select" });
+      const skipped = Object.entries(drawing.skipped).map(([type, count]) => `${count}× ${type}`).join(", ");
+      toast.success(`Výkres ${file.name}: ${drawing.layers.length} hladin, jednotky ${drawing.units}${drawing.unitsSource === "header" ? "" : " (odhad z rozměru – ověřte kótou)"} → měřítko 1 : 1 bez kalibrace.${skipped ? ` Nepřevzato: ${skipped}.` : ""}`);
+    } catch (error) {
+      toast.error(error instanceof DxfError ? error.message : "Výkres DXF se nepodařilo načíst.");
     } finally {
       setBusy(null);
     }
@@ -1360,6 +1430,8 @@ export function FloorplanEditor({
   const riserHere = analysis.ok ? analysis.build.floors.find((floor) => floor.id === draft.floorId) : null;
   const ghostItem = tool.kind === "place" ? paletteItem(tool.item) : null;
   const ghost = ghostItem && hover ? placement(ghostItem, hover) : null;
+  // Fáze 79: bod přichycení k podkladu CAD u kurzoru (místnost, polygon, vkládání)
+  const hoverSnap = hover && (tool.kind === "room" || tool.kind === "polygon" || tool.kind === "place" || tool.kind === "place-set") ? cadSnap(hover) : null;
   // Fáze 62: náhled celé sestavy u kurzoru (přístroje i obrys rámečku)
   const setGhost = (() => {
     if (tool.kind !== "place-set" || !hover) return null;
@@ -1634,9 +1706,10 @@ export function FloorplanEditor({
         <input
           ref={fileInput}
           type="file"
-          accept="image/png,image/jpeg,image/webp,image/svg+xml,application/pdf"
+          accept="image/png,image/jpeg,image/webp,image/svg+xml,application/pdf,.dxf,.dwg,application/dxf,image/vnd.dxf,image/vnd.dwg"
           className="sr-only"
           aria-label="Podklad půdorysu"
+          data-testid="floorplan-file-input"
           onChange={(event) => {
             const file = event.target.files?.[0];
             event.target.value = "";
@@ -1644,10 +1717,10 @@ export function FloorplanEditor({
           }}
         />
         <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => fileInput.current?.click()} disabled={busy !== null}>
-          {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <FileUp className="size-4" aria-hidden />} Nahrát půdorys (obrázek / PDF)
+          {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <FileUp className="size-4" aria-hidden />} Nahrát půdorys (obrázek / PDF / DXF)
         </Button>
         <PdfEditMenu hasBackground={Boolean(draft.background)} cropped={Boolean(draft.background?.crop)} zoomPercent={Math.round(zoom * 100)} calibration={draft.calibration.state} onAction={pdfAction} />
-        <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => update((current) => ({ ...current, background: null, calibration: emptyCalibration() }))} disabled={!draft.background}>
+        <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => update((current) => ({ ...current, background: null, cad: null, calibration: emptyCalibration() }))} disabled={!draft.background && !draft.cad}>
           <Grid3x3 className="size-4" aria-hidden /> Čistý rastr
         </Button>
         <ToolButton active={tool.kind === "select"} onClick={() => setTool({ kind: "select" })} icon={<MousePointer2 className="size-4" aria-hidden />} label="Výběr" />
@@ -1972,6 +2045,8 @@ export function FloorplanEditor({
                   <image key={draft.background.url} href={draft.background.url} width={draft.background.widthPx} height={draft.background.heightPx} preserveAspectRatio="none" opacity={0.9} data-testid="floorplan-background" />
                 </g>
               ) : null}
+              {/* Fáze 79: podklad CAD (DXF) po hladinách */}
+              {draft.cad && cadReady ? <CadUnderlayLayer geometry={cadReady} cad={draft.cad} onPaper={Boolean(draft.background)} unit={ui} /> : null}
               {draft.rooms.map((room) => {
                 const active = room.id === selectedRoomId;
                 const handle = ui * 0.45;
@@ -2237,6 +2312,7 @@ export function FloorplanEditor({
                 </g>
               ) : null}
 
+              {hoverSnap ? <rect x={hoverSnap.x - ui * 0.22} y={hoverSnap.y - ui * 0.22} width={ui * 0.44} height={ui * 0.44} fill="none" stroke="#e879f9" strokeWidth={stroke * 2.5} transform={hoverSnap.kind === "edge" ? `rotate(45 ${hoverSnap.x} ${hoverSnap.y})` : undefined} pointerEvents="none" data-testid="cad-snap-marker" data-kind={hoverSnap.kind} /> : null}
               {marquee ? <rect x={Math.min(marquee.x, marquee.x + marquee.w)} y={Math.min(marquee.y, marquee.y + marquee.h)} width={Math.abs(marquee.w)} height={Math.abs(marquee.h)} fill="rgba(56,189,248,0.08)" stroke="#38bdf8" strokeDasharray={`${ui / 4} ${ui / 6}`} strokeWidth={stroke * 2} pointerEvents="none" data-testid="marquee" /> : null}
 
               {/* Fáze 57: plovoucí lišta vybrané značky – otočit, zmenšit / zvětšit, smazat; fáze 59: 🔗 přiřadit */}
@@ -2417,6 +2493,12 @@ export function FloorplanEditor({
             />
           ) : null}
           </PanelSection>
+          {/* Fáze 79: hladiny podkladu CAD */}
+          {draft.cad ? (
+            <PanelSection id="cad" title="🗂️ Vrstvy CAD výkresu (Hladiny)" ariaLabel="Vrstvy CAD výkresu" testId="cad-panel" badge={<span className="rounded bg-muted px-1.5 font-mono text-[10px]">{draft.cad.layers.filter((layer) => layer.visible).length}/{draft.cad.layers.length}</span>}>
+              <CadLayersPanel cad={draft.cad} onChange={(cad) => update((current) => ({ ...current, cad }))} onRemove={() => update((current) => ({ ...current, cad: null }))} />
+            </PanelSection>
+          ) : null}
           {/* Fáze 74: soupis okruhů – vrstvy, zvýraznění, výběr okruhu (úprava trasy jen u něj) a rozváděč okruhu */}
           {analysis.ok ? (
             <CircuitListPanel

@@ -100,6 +100,7 @@ describe("fáze 74 – podružný rozváděč, okruhy po rozváděčích a datov
           name: "2. NP",
           levelMm: 3000,
           background: null,
+          cad: null,
           calibration: auto.calibration,
           mmPerPx: 10,
           widthMm: 14_000,

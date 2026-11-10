@@ -38,6 +38,7 @@ import { CUSTOM_APPLIANCE_ITEM, applianceOverride, applianceSpecFor, parseApplia
 import { clampFixture, fixtureSpecOf, isBasinZone, type BasinZone } from "./fixtures";
 import { isPolygonRoom, nearestWall, pointInRoom, polygonBounds, roomArea, roomPolygon, translatePolygon } from "./room-geometry";
 import { createPerimeterRouter, type PerimeterRoom } from "./perimeter-router";
+import { parseCadUnderlay, type CadUnderlay } from "./cad-underlay";
 import { productById } from "./smart-catalog";
 import { DEFAULT_SUPPLY, supplyById, type SupplySystem } from "./supply";
 import { isEnvironmentId, type EnvironmentId } from "./environments";
@@ -439,6 +440,8 @@ export interface FloorSheet {
   /** Výška čisté podlahy podlaží nad podlažím rozváděče ±0 [mm] (2. NP při konstrukční výšce 3 m = 3000). */
   levelMm: number;
   background: FloorplanBackground | null;
+  /** Fáze 79: podklad CAD (DXF) podlaží – hladiny a nastavení, geometrie v souboru úložiště firmy. */
+  cad: CadUnderlay | null;
   calibration: CalibrationRecord;
   mmPerPx: number;
   widthMm: number;
@@ -457,6 +460,8 @@ export interface FloorplanDraft {
   version: 1;
   /** Podklad: nahraný obrázek / PDF převedený na obrázek (otočení a ořez fáze 57); null = čistý rastr. */
   background: FloorplanBackground | null;
+  /** Fáze 79: vektorový podklad CAD (DXF) aktivního podlaží s hladinami; null = bez výkresu CAD. */
+  cad: CadUnderlay | null;
   /** Fáze 57: kalibrace měřítka a její ověření druhou kótou / měřítkem výkresu. */
   calibration: CalibrationRecord;
   /** Fáze 57: měřítko značek (1 = 300 mm v půdorysu). */
@@ -526,6 +531,7 @@ export const isRouteStyle = (value: unknown): value is RouteStyle => value === "
 export const emptyDraft = (): FloorplanDraft => ({
   version: 1,
   background: null,
+  cad: null,
   calibration: emptyCalibration(),
   symbolScale: 1,
   environment: null,
@@ -580,6 +586,7 @@ export function parseDraft(value: unknown): FloorplanDraft | null {
   return ensureBoardCodes({
     ...base,
     background: sheet.background,
+    cad: sheet.cad,
     calibration: sheet.calibration,
     symbolScale: clampSymbolScale(num(draft.symbolScale, 1, SYMBOL_SCALE_MIN, SYMBOL_SCALE_MAX)),
     environment: isEnvironmentId(draft.environment) ? draft.environment : null,
@@ -708,6 +715,7 @@ function parseSheet(raw: Partial<FloorSheet> & Partial<Pick<FloorplanDraft, "flo
     name: name.trim().slice(0, 30) || fallback.name,
     levelMm: Math.round(num(level, fallback.levelMm, -20_000, 60_000)),
     background,
+    cad: parseCadUnderlay(raw.cad),
     calibration: parseCalibration(raw.calibration, num),
     mmPerPx,
     widthMm: extent ? Math.max(100, extent.widthMm) : num(raw.widthMm, 14_000, 1000, 200_000),
@@ -912,6 +920,7 @@ export function activeSheet(draft: FloorplanDraft): FloorSheet {
     name: draft.floorName,
     levelMm: draft.floorLevelMm,
     background: draft.background,
+    cad: draft.cad,
     calibration: draft.calibration,
     mmPerPx: draft.mmPerPx,
     widthMm: draft.widthMm,
@@ -941,6 +950,7 @@ function loadSheet(draft: FloorplanDraft, sheet: FloorSheet): FloorplanDraft {
     floorName: sheet.name,
     floorLevelMm: sheet.levelMm,
     background: sheet.background,
+    cad: sheet.cad,
     calibration: sheet.calibration,
     mmPerPx: sheet.mmPerPx,
     widthMm: sheet.widthMm,
@@ -975,7 +985,7 @@ export function addFloor(draft: FloorplanDraft, input: { name?: string; levelMm?
   const names = new Set(floors.map((floor) => floor.name));
   let name = input.name?.trim().slice(0, 30) || `${Math.round(levelMm / DEFAULT_STOREY_MM) + 1}. NP`;
   for (let n = 2; names.has(name); n++) name = `${input.name?.trim() || "Podlaží"} ${n}`;
-  const sheet: FloorSheet = { id: `f${index}`, name, levelMm, background: null, calibration: emptyCalibration(), mmPerPx: draft.mmPerPx, widthMm: draft.widthMm, heightMm: draft.heightMm, rooms: [], elements: [], frames: [], annotations: [] };
+  const sheet: FloorSheet = { id: `f${index}`, name, levelMm, background: null, cad: null, calibration: emptyCalibration(), mmPerPx: draft.mmPerPx, widthMm: draft.widthMm, heightMm: draft.heightMm, rooms: [], elements: [], frames: [], annotations: [] };
   return switchFloor({ ...draft, otherFloors: [...draft.otherFloors, sheet] }, sheet.id);
 }
 

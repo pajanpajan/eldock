@@ -8,7 +8,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { MAX_ELDOCK_FILE_BYTES, backgroundUrls, buildEldockFile, eldockFileName, parseEldockFile, replaceBackgroundUrls } from "@/lib/panel-builder/eldock-file";
+import { MAX_ELDOCK_FILE_BYTES, assetUrls, buildEldockFile, eldockFileName, isCadAsset, parseEldockFile, replaceBackgroundUrls, stripMissingAssets } from "@/lib/panel-builder/eldock-file";
 import type { FloorplanDraft } from "@/lib/panel-builder/floorplan-editor";
 import type { AssemblyTemplate } from "@/lib/panel-builder/floorplan-library";
 import { uploadPanelFile } from "@/lib/upload-client";
@@ -29,15 +29,10 @@ const blobToDataUrl = (blob: Blob) =>
 
 async function dataUrlToFile(dataUrl: string, name: string): Promise<File> {
   const blob = await (await fetch(dataUrl)).blob();
-  const extension = blob.type === "image/png" ? "png" : blob.type === "image/webp" ? "webp" : "jpg";
+  const extension = blob.type === "application/json" ? "json" : blob.type === "image/png" ? "png" : blob.type === "image/webp" ? "webp" : "jpg";
   return new File([blob], `${name}.${extension}`, { type: blob.type || "image/jpeg" });
 }
 
-/** Podklady, které soubor neobsahoval (export bez přístupu k obrázku), se zahodí – žádný odkaz do cizího úložiště. */
-function stripBackgrounds(draft: FloorplanDraft, urls: ReadonlySet<string>): FloorplanDraft {
-  const strip = <T extends { background: FloorplanDraft["background"] }>(sheet: T): T => (sheet.background && urls.has(sheet.background.url) ? { ...sheet, background: null } : sheet);
-  return { ...strip(draft), otherFloors: draft.otherFloors.map(strip) };
-}
 
 export function FloorplanFileMenu({
   draft,
@@ -66,10 +61,12 @@ export function FloorplanFileMenu({
     setBusy("export");
     try {
       const assets: Record<string, string> = {};
-      for (const url of backgroundUrls(draft)) {
+      // Obrázky podkladů a fáze 79 geometrie podkladů CAD (JSON)
+      for (const url of assetUrls(draft)) {
         const response = await fetch(url);
         if (!response.ok) throw new Error("Podklad výkresu se nepodařilo načíst – zkuste to znovu.");
-        assets[url] = await blobToDataUrl(await response.blob());
+        const blob = await response.blob();
+        assets[url] = await blobToDataUrl(url.endsWith(".json") ? new Blob([await blob.text()], { type: "application/json" }) : blob);
       }
       const file = buildEldockFile({ meta: { code, ...meta }, draft, templates, assets });
       const link = document.createElement("a");
@@ -98,12 +95,13 @@ export function FloorplanFileMenu({
       await flush();
       const map = new Map<string, string>();
       for (const [url, data] of Object.entries(file.assets)) {
-        const uploaded = await uploadPanelFile("photo", await dataUrlToFile(data, "podklad"));
+        const cad = isCadAsset(data);
+        const uploaded = await uploadPanelFile(cad ? "markup" : "photo", await dataUrlToFile(data, cad ? "vykres-cad" : "podklad"));
         map.set(url, uploaded.url);
       }
-      const missing = new Set(backgroundUrls(file.draft).filter((url) => !map.has(url)));
+      const missing = new Set(assetUrls(file.draft).filter((url) => !map.has(url)));
       const moved = replaceBackgroundUrls(file.draft, map);
-      const result = await createFloorplanAction({ meta: { name: file.meta.name, customerName: file.meta.customerName, installationSite: file.meta.installationSite }, draft: missing.size ? stripBackgrounds(moved, missing) : moved });
+      const result = await createFloorplanAction({ meta: { name: file.meta.name, customerName: file.meta.customerName, installationSite: file.meta.installationSite }, draft: missing.size ? stripMissingAssets(moved, missing) : moved });
       if (!result.ok) throw new Error(result.error);
       if (file.templates.length) onTemplates(file.templates);
       toast.success(`Projekt „${file.meta.name}“ nahrán z počítače jako ${result.data.code ?? "nový půdorys"}${missing.size ? ` (bez ${missing.size} podkladů, které soubor neobsahoval)` : ""}.`);
