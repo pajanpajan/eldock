@@ -9,7 +9,7 @@ import { BackupNowButton, ClosureControls, CreditControls, OrderActions, Resolve
 import { DATA_REQUESTER_LABELS, DATA_REQUEST_KIND_LABELS, DATA_REQUEST_STATUS_LABELS } from "@/lib/data-requests";
 import { TESTER_COMPANY } from "@/lib/registered-company";
 import { getSuperadminDataRequests } from "@/server/queries/data-requests";
-import { ORDER_STATUS, creditPackage, formatCzk } from "@/lib/credits";
+import { ORDER_STATUS, creditPackage, formatCzk, formatIban } from "@/lib/credits";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { PROJECT_STATUS } from "@/lib/panel-builder/project";
 import { parseRailPhotos } from "@/lib/panel-builder/rails";
@@ -18,7 +18,7 @@ import { getBackupOverview } from "@/server/queries/backups";
 import { getSuperadminCompanies, getSuperadminFeedback, getSuperadminOrders, getSuperadminOverview } from "@/server/queries/superadmin";
 import { prisma } from "@/lib/prisma";
 import { audienceLabel } from "@/lib/newsletter";
-import { parseFeedbackSnapshot } from "@/server/services/credits";
+import { bankAccount, parseFeedbackSnapshot } from "@/server/services/credits";
 import { newsletterOverview } from "@/server/services/newsletter";
 import { isSuperadmin } from "@/server/superadmin-session";
 
@@ -165,48 +165,66 @@ async function CompaniesTab() {
 async function OrdersTab() {
   const rank = { PENDING: 0, PAID: 1, CANCELLED: 2 } as const;
   const orders = (await getSuperadminOrders()).sort((a, b) => rank[a.status] - rank[b.status] || b.createdAt.getTime() - a.createdAt.getTime());
-  if (!orders.length) return <p className="text-sm text-muted-foreground">Zatím žádná objednávka kreditů.</p>;
+  // Fáze 84: účet, na který chodí úhrady kreditů (párování podle variabilního symbolu)
+  const bank = bankAccount();
+  const account = (
+    <p className="text-xs text-muted-foreground" data-testid="superadmin-bank">
+      Úhrady kreditů na účet <b className="font-mono text-foreground">{bank.accountNumber ?? formatIban(bank.iban)}</b>
+      {bank.bankName ? ` · ${bank.bankName}` : ""} · IBAN <span className="font-mono">{formatIban(bank.iban)}</span>
+      {bank.bic ? ` · SWIFT / BIC ${bank.bic}` : ""} – platbu spárujte podle variabilního symbolu a potvrďte tlačítkem u objednávky.
+    </p>
+  );
+  if (!orders.length)
+    return (
+      <div className="flex flex-col gap-2">
+        {account}
+        <p className="text-sm text-muted-foreground">Zatím žádná objednávka kreditů.</p>
+      </div>
+    );
   return (
-    <div className="overflow-x-auto rounded-xl border border-border">
-      <table className="w-full text-xs" data-testid="superadmin-orders">
-        <thead className="bg-card text-muted-foreground">
-          <tr>
-            <th className={th}>VS</th>
-            <th className={th}>Firma</th>
-            <th className={th}>Balíček</th>
-            <th className={th}>Částka</th>
-            <th className={th}>Objednáno</th>
-            <th className={th}>Stav</th>
-            <th className={th}>Akce</th>
-          </tr>
-        </thead>
-        <tbody>
-          {orders.map((order) => (
-            <tr key={order.id} className="border-t border-border" data-testid={`order-${order.variableSymbol}`}>
-              <td className={cn(td, "font-mono font-bold")}>{order.variableSymbol}</td>
-              <td className={td}>
-                {order.company.companyName}
-                <br />
-                <span className="font-mono text-muted-foreground">IČO {order.company.ico}</span>
-              </td>
-              <td className={td}>
-                {creditPackage(order.packageCode)?.name ?? order.packageCode} · {order.creditsCount} kr.
-              </td>
-              <td className={cn(td, "font-mono tabular-nums")}>
-                {formatCzk(order.priceCzkInclVat)}
-                <br />
-                <span className="text-muted-foreground">{formatCzk(order.priceCzkExclVat)} bez DPH</span>
-              </td>
-              <td className={td}>{formatDate(order.createdAt)}</td>
-              <td className={td}>
-                <span className={cn("rounded-full border px-2 py-0.5", ORDER_STATUS[order.status].badge)}>{ORDER_STATUS[order.status].label}</span>
-                {order.paidAt ? <p className="mt-1 text-muted-foreground">{formatDate(order.paidAt)}</p> : null}
-              </td>
-              <td className={td}>{order.status === "PENDING" ? <OrderActions orderId={order.id} variableSymbol={order.variableSymbol} /> : null}</td>
+    <div className="flex flex-col gap-2">
+      {account}
+      <div className="overflow-x-auto rounded-xl border border-border">
+        <table className="w-full text-xs" data-testid="superadmin-orders">
+          <thead className="bg-card text-muted-foreground">
+            <tr>
+              <th className={th}>VS</th>
+              <th className={th}>Firma</th>
+              <th className={th}>Balíček</th>
+              <th className={th}>Částka</th>
+              <th className={th}>Objednáno</th>
+              <th className={th}>Stav</th>
+              <th className={th}>Akce</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {orders.map((order) => (
+              <tr key={order.id} className="border-t border-border" data-testid={`order-${order.variableSymbol}`}>
+                <td className={cn(td, "font-mono font-bold")}>{order.variableSymbol}</td>
+                <td className={td}>
+                  {order.company.companyName}
+                  <br />
+                  <span className="font-mono text-muted-foreground">IČO {order.company.ico}</span>
+                </td>
+                <td className={td}>
+                  {creditPackage(order.packageCode)?.name ?? order.packageCode} · {order.creditsCount} kr.
+                </td>
+                <td className={cn(td, "font-mono tabular-nums")}>
+                  {formatCzk(order.priceCzkInclVat)}
+                  <br />
+                  <span className="text-muted-foreground">{formatCzk(order.priceCzkExclVat)} bez DPH</span>
+                </td>
+                <td className={td}>{formatDate(order.createdAt)}</td>
+                <td className={td}>
+                  <span className={cn("rounded-full border px-2 py-0.5", ORDER_STATUS[order.status].badge)}>{ORDER_STATUS[order.status].label}</span>
+                  {order.paidAt ? <p className="mt-1 text-muted-foreground">{formatDate(order.paidAt)}</p> : null}
+                </td>
+                <td className={td}>{order.status === "PENDING" ? <OrderActions orderId={order.id} variableSymbol={order.variableSymbol} /> : null}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

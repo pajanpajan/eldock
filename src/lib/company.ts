@@ -12,7 +12,14 @@ export const COMPANY_INFO = {
   street: "Bude doplněno",
   city: "Jablonec nad Nisou",
   zip: "466 01",
-  /** Demo IBAN (vzorový účet z české dokumentace SPD) – skutečný účet nastavte v env `ELDOCK_BANK_IBAN`. */
-  demoIban: "CZ6508000000192000145399",
-  bankName: "Bankovní účet ELDOCK",
+  /**
+   * Fáze 84: bankovní účet pro QR platby (SPD) a zálohové faktury kreditů. Jiný účet jen přes env `ELDOCK_BANK_IBAN`
+   * (+ `ELDOCK_BANK_BIC`, `ELDOCK_BANK_NAME`).
+   */
+  bank: {
+    name: "Raiffeisenbank a.s.",
+    accountNumber: "918118002/5500",
+    iban: "CZ1755000000000918118002",
+    bic: "RZBCCZPP",
+  },
 } as const;

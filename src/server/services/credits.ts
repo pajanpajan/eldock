@@ -1,14 +1,26 @@
 import type { PrismaClient } from "@/generated/prisma/client";
 import { COMPANY_INFO } from "@/lib/company";
-import { creditPackage, nextVariableSymbol, normalizeIban, withVat } from "@/lib/credits";
+import { creditPackage, czAccountFromIban, isValidIban, nextVariableSymbol, normalizeBic, normalizeIban, withVat, type BankAccount } from "@/lib/credits";
 import { parseRailPhotos } from "@/lib/panel-builder/rails";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 
 // Kredity, objednávky a hlášení chyb AI (fáze 50). Potvrzení úhrady a ruční úpravy kreditů volá jen
 // velín /superadmin (kontrola přístupu v Server Actions), objednávku a hlášení zakládá přihlášená firma.
 
-/** Účet pro QR platbu: `ELDOCK_BANK_IBAN`, jinak demo IBAN z `COMPANY_INFO`. */
-export const bankIban = () => normalizeIban(process.env.ELDOCK_BANK_IBAN) ?? COMPANY_INFO.demoIban;
+/** Vzorový IBAN z dokumentace SPD (dřívější demo účet) – jako skutečný účet se nepoužije, ani když zůstal v env. */
+export const SPD_SAMPLE_IBAN = "CZ6508000000192000145399";
+
+/**
+ * Fáze 84: účet pro QR platbu a zálohovou fakturu kreditů – účet Eldock u Raiffeisenbank a.s. (`COMPANY_INFO.bank`).
+ * Jiný účet jen z env `ELDOCK_BANK_IBAN` s platnou kontrolní číslicí (BIC z `ELDOCK_BANK_BIC`, banka z
+ * `ELDOCK_BANK_NAME`, číslo účtu z českého IBAN).
+ */
+export function bankAccount(env: Partial<Record<string, string | undefined>> = process.env): BankAccount {
+  const own = COMPANY_INFO.bank;
+  const iban = normalizeIban(env.ELDOCK_BANK_IBAN);
+  if (!iban || iban === own.iban || iban === SPD_SAMPLE_IBAN || !isValidIban(iban)) return { iban: own.iban, bic: own.bic, accountNumber: own.accountNumber, bankName: own.name };
+  return { iban, bic: normalizeBic(env.ELDOCK_BANK_BIC), accountNumber: czAccountFromIban(iban), bankName: env.ELDOCK_BANK_NAME?.trim() || null };
+}
 
 /** Nová objednávka balíčku s variabilním symbolem roku (při souběhu se VS zkusí znovu). */
 export async function createCreditOrder(prisma: PrismaClient, companyId: string, packageCode: string, now = new Date()) {

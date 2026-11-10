@@ -6,13 +6,14 @@ import { ArrowLeft, Printer } from "lucide-react";
 import { PageHeader } from "@/components/common/PageHeader";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { panelBuilderGuard } from "@/components/panel-builder/access";
+import { BankDetails } from "@/components/panel-builder/credits/BankDetails";
 import { PaymentQr } from "@/components/panel-builder/credits/PaymentQr";
 import { Button } from "@/components/ui/button";
-import { ORDER_STATUS, creditPackage, formatCzk, formatIban, spdPayload } from "@/lib/credits";
+import { ORDER_STATUS, creditPackage, formatCzk, spdPayload } from "@/lib/credits";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { getCreditOrder } from "@/server/queries/panel-builder";
-import { bankIban } from "@/server/services/credits";
+import { bankAccount } from "@/server/services/credits";
 
 export const metadata: Metadata = { title: "Platba kreditů" };
 
@@ -22,8 +23,8 @@ export default async function CreditOrderPage({ params }: PageProps<"/panel-buil
   if (guard) return guard;
   const order = await getCreditOrder((await params).orderId);
   if (!order) notFound();
-  const iban = bankIban();
-  const payload = spdPayload({ iban, amountCzk: order.priceCzkInclVat, variableSymbol: order.variableSymbol, message: `ELDOCK Kredity ${order.company.companyName}` });
+  const bank = bankAccount();
+  const payload = spdPayload({ iban: bank.iban, bic: bank.bic, amountCzk: order.priceCzkInclVat, variableSymbol: order.variableSymbol, message: `ELDOCK Kredity ${order.company.companyName}` });
   const pkg = creditPackage(order.packageCode);
   const status = ORDER_STATUS[order.status];
   return (
@@ -51,10 +52,8 @@ export default async function CreditOrderPage({ params }: PageProps<"/panel-buil
             <dd className="tabular-nums">
               {formatCzk(order.priceCzkExclVat)} / {formatCzk(order.priceCzkInclVat - order.priceCzkExclVat)}
             </dd>
-            <dt className="text-muted-foreground">Účet (IBAN)</dt>
-            <dd className="font-mono">{formatIban(iban)}</dd>
-            <dt className="text-muted-foreground">Variabilní symbol</dt>
-            <dd className="font-mono font-bold">{order.variableSymbol}</dd>
+            {/* Fáze 84: banka, číslo účtu, IBAN, SWIFT / BIC a VS */}
+            <BankDetails bank={bank} variableSymbol={order.variableSymbol} labelClass="text-muted-foreground" />
             <dt className="text-muted-foreground">Kredity po úhradě</dt>
             <dd>+{order.creditsCount}</dd>
           </dl>

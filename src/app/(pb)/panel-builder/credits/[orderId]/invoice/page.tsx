@@ -3,13 +3,14 @@ import { notFound } from "next/navigation";
 
 import { LogoMark } from "@/components/layout/Logo";
 import { PrintButton } from "@/components/landing/PrintButton";
+import { BankDetails } from "@/components/panel-builder/credits/BankDetails";
 import { PaymentQr } from "@/components/panel-builder/credits/PaymentQr";
 import { panelBuilderGuard } from "@/components/panel-builder/access";
 import { COMPANY_INFO } from "@/lib/company";
-import { VAT_RATE, creditPackage, formatCzk, formatIban, spdPayload } from "@/lib/credits";
+import { VAT_RATE, creditPackage, formatCzk, spdPayload } from "@/lib/credits";
 import { formatDate } from "@/lib/format";
 import { getCreditOrder } from "@/server/queries/panel-builder";
-import { bankIban } from "@/server/services/credits";
+import { bankAccount } from "@/server/services/credits";
 
 export const metadata: Metadata = { title: "Zálohová faktura" };
 
@@ -32,12 +33,12 @@ export default async function InvoicePage({ params }: PageProps<"/panel-builder/
   if (guard) return guard;
   const order = await getCreditOrder((await params).orderId);
   if (!order) notFound();
-  const iban = bankIban();
+  const bank = bankAccount();
   const customer = order.company;
   const pkg = creditPackage(order.packageCode);
   const due = new Date(order.createdAt.getTime() + DUE_DAYS * 24 * 3600 * 1000);
   const vat = order.priceCzkInclVat - order.priceCzkExclVat;
-  const payload = spdPayload({ iban, amountCzk: order.priceCzkInclVat, variableSymbol: order.variableSymbol, message: `ELDOCK Kredity ${customer.companyName}` });
+  const payload = spdPayload({ iban: bank.iban, bic: bank.bic, amountCzk: order.priceCzkInclVat, variableSymbol: order.variableSymbol, message: `ELDOCK Kredity ${customer.companyName}` });
 
   return (
     <div className="flex flex-col items-center gap-4 py-4">
@@ -86,17 +87,15 @@ export default async function InvoicePage({ params }: PageProps<"/panel-builder/
         </section>
 
         <section className="mt-4 grid grid-cols-[1fr_auto] gap-6">
-          <dl className="grid grid-cols-[auto_1fr] content-start gap-x-6 gap-y-1">
+          <dl className="grid grid-cols-[auto_1fr] content-start gap-x-6 gap-y-1" data-testid="invoice-payment">
             <dt className="text-zinc-600">Datum vystavení</dt>
             <dd>{formatDate(order.createdAt)}</dd>
             <dt className="text-zinc-600">Datum splatnosti</dt>
             <dd>{formatDate(due)}</dd>
             <dt className="text-zinc-600">Forma úhrady</dt>
             <dd>bankovní převod / QR platba</dd>
-            <dt className="text-zinc-600">Účet (IBAN)</dt>
-            <dd className="font-mono">{formatIban(iban)}</dd>
-            <dt className="text-zinc-600">Variabilní symbol</dt>
-            <dd className="font-mono font-bold">{order.variableSymbol}</dd>
+            {/* Fáze 84: banka, číslo účtu, IBAN, SWIFT / BIC a VS – stejné údaje jako v QR platbě */}
+            <BankDetails bank={bank} variableSymbol={order.variableSymbol} labelClass="text-zinc-600" />
           </dl>
           <PaymentQr payload={payload} size={130} />
         </section>

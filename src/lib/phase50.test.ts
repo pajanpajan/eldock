@@ -26,19 +26,19 @@ describe("balíčky kreditů a DPH", () => {
 
 describe("český QR kód platby (SPD 1.0)", () => {
   it("řetězec s IBAN, částkou, měnou, VS a zprávou bez diakritiky a hvězdiček", () => {
-    expect(spdPayload({ iban: "CZ65 0800 0000 1920 0014 5399", amountCzk: 1198, variableSymbol: "20260001", message: "ELDOCK Kredity Elektro Tester s.r.o." })).toBe(
-      "SPD*1.0*ACC:CZ6508000000192000145399*AM:1198.00*CC:CZK*X-VS:20260001*MSG:ELDOCK Kredity Elektro Tester s.r.o.",
+    expect(spdPayload({ iban: "CZ17 5500 0000 0009 1811 8002", amountCzk: 1198, variableSymbol: "20260001", message: "ELDOCK Kredity Elektro Tester s.r.o." })).toBe(
+      "SPD*1.0*ACC:CZ1755000000000918118002*AM:1198.00*CC:CZK*X-VS:20260001*MSG:ELDOCK Kredity Elektro Tester s.r.o.",
     );
     expect(spdText("Žluťoučký*kůň\núpěl")).toBe("Zlutoucky kun upel");
     expect(spdText("x".repeat(80))).toHaveLength(60);
   });
 
   it("odmítne neplatný IBAN, částku i variabilní symbol", () => {
-    expect(normalizeIban("cz65 0800 0000 1920 0014 5399")).toBe("CZ6508000000192000145399");
+    expect(normalizeIban("cz17 5500 0000 0009 1811 8002")).toBe("CZ1755000000000918118002");
     expect(normalizeIban("123")).toBeNull();
     expect(() => spdPayload({ iban: "xx", amountCzk: 100, variableSymbol: "1", message: "" })).toThrow(/IBAN/);
-    expect(() => spdPayload({ iban: "CZ6508000000192000145399", amountCzk: 0, variableSymbol: "1", message: "" })).toThrow(/částka/);
-    expect(() => spdPayload({ iban: "CZ6508000000192000145399", amountCzk: 10, variableSymbol: "VS-1", message: "" })).toThrow(/Variabilní/);
+    expect(() => spdPayload({ iban: "CZ1755000000000918118002", amountCzk: 0, variableSymbol: "1", message: "" })).toThrow(/částka/);
+    expect(() => spdPayload({ iban: "CZ1755000000000918118002", amountCzk: 10, variableSymbol: "VS-1", message: "" })).toThrow(/Variabilní/);
   });
 });
 
