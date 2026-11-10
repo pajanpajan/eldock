@@ -4,6 +4,7 @@
 
 import { assemblyError, assemblyLabel } from "./floorplan-frames";
 import { paletteItem } from "./floorplan-editor";
+import { isFloorplanUiMode, type FloorplanUiMode } from "./floorplan-wizard";
 
 /** Uložená sestava ve víceramečku (pořadí pozic zleva = pořadí přístrojů v rámečku). */
 export interface AssemblyTemplate {
@@ -17,6 +18,8 @@ export interface FloorplanLibrary {
   templates: AssemblyTemplate[];
   /** Klíče oblíbených položek: `item:<id palety>`, `assembly:<id sestavy>`, `template:<id šablony>`, `appliance:<id>`. */
   favorites: string[];
+  /** Fáze 89: režim lišty 2D půdorysu firmy – průvodce v 5 krocích, nebo kompaktní CAD lišta pro zkušené. */
+  uiMode?: FloorplanUiMode;
   updatedAt: number;
 }
 
@@ -57,7 +60,7 @@ export function parseFloorplanLibrary(value: unknown): FloorplanLibrary | null {
   }
   const favorites = [...new Set((Array.isArray(input.favorites) ? input.favorites : []).filter((key): key is string => typeof key === "string" && FAVORITE_KEY.test(key)))].slice(0, MAX_FAVORITES);
   const updatedAt = typeof input.updatedAt === "number" && Number.isFinite(input.updatedAt) ? input.updatedAt : 0;
-  return { templates, favorites, updatedAt };
+  return { templates, favorites, ...(isFloorplanUiMode(input.uiMode) ? { uiMode: input.uiMode } : {}), updatedAt };
 }
 
 /** Novější knihovna vyhrává (prohlížeč vs. profil firmy); bez obou prázdná. */

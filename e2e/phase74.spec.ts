@@ -181,6 +181,7 @@ test("umyvadlo s ochrannou zónou, barva rámečku zvlášť, rozváděč RH + R
   await page.keyboard.press("Escape");
 
   // Barva rámečku jiná než klapka → vzhled v soupisu domovní instalace
+  await page.getByTestId("wizard-step-2").click();
   await page.getByTestId("frame-colors").getByTestId("frame-color").filter({ hasText: "Bílá (B)" }).click();
   await page.getByRole("button", { name: /Použít na celý půdorys/ }).click();
   await expect(page.getByTestId("wiring-inventory")).toContainText("rámeček Bílá (B) · klapka Černá (N)");

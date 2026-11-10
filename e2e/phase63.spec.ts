@@ -176,6 +176,7 @@ test("2D půdorys: akordeon palety, předměty X × Y, spotřebiče, úprava tra
   await expect(canvas.locator('[data-room="Místnost 2"]')).toHaveCount(1);
 
   // 6) Normové CAD značení: rysky počtu žil a štítky okruhů
+  await page.getByTestId("wizard-step-4").click();
   await page.getByTestId("cable-view-cad").click();
   await expect(canvas.locator('[data-testid="route-layer"][data-view="cad"]')).toBeAttached();
   await expect(canvas.getByTestId("cable-tick").first()).toBeAttached();
@@ -183,6 +184,7 @@ test("2D půdorys: akordeon palety, předměty X × Y, spotřebiče, úprava tra
   await page.screenshot({ path: "test-results/phase63-cad.png" });
 
   // 7) Export: DXF ke stažení s hladinami, PDF jako tiskový list s razítkem a tabulkou okruhů
+  await page.getByTestId("wizard-step-5").click();
   const [download] = await Promise.all([page.waitForEvent("download"), page.getByTestId("export-dxf").click()]);
   expect(download.suggestedFilename()).toMatch(/^pudorys-elektroinstalace-1-np\.dxf$/);
   const dxf = readFileSync((await download.path())!, "utf8");
@@ -201,6 +203,7 @@ test("2D půdorys: akordeon palety, předměty X × Y, spotřebiče, úprava tra
   await expect.poll(() => page.evaluate(() => (window as unknown as { printed: number }).printed)).toBe(1);
 
   // 8) Galerie řad: věrný náhled Levit (podložka v druhé barvě) a proklik na web výrobce
+  await page.getByTestId("wizard-step-2").click();
   const appearance = page.getByTestId("device-appearance");
   await expect(appearance.getByTestId("series-web")).toHaveAttribute("href", /nizke-napeti\.cz\.abb\.com/);
   await appearance.getByTestId("series-gallery-open").click();

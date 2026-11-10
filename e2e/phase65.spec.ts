@@ -123,6 +123,7 @@ test("🏠 Chytrá domácnost: segmentový přepínač ABB, obrázkový katalog,
   page.on("dialog", (dialog) => void dialog.accept());
   await openNew(page);
   const fp = editor(page);
+  await page.getByTestId("wizard-step-2").click();
   const appearance = page.getByTestId("device-appearance");
 
   // Segmentový přepínač rodin ABB s podtitulky

@@ -24,6 +24,7 @@ test("🎨 2D půdorys: horní lišta s řadami ABB 2026, barvy podle řady, sou
   // Lišta je nad plátnem, paleta vlevo už výběr řady neobsahuje
   const palette = page.getByRole("complementary", { name: "Paleta elektroinstalačních značek" });
   await expect(palette.getByTestId("device-appearance")).toHaveCount(0);
+  await page.getByTestId("wizard-step-2").click();
   const appearance = page.getByTestId("device-appearance");
   // Fáze 74: barvy klapky / krytu (řada barev rámečku pod ní má stejné názvy)
   const insert = appearance.getByTestId("insert-colors");

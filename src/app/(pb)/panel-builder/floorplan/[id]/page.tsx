@@ -1,9 +1,6 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
 
-import { PageHeader } from "@/components/common/PageHeader";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { panelBuilderGuard } from "@/components/panel-builder/access";
 import { FloorplanEditorLoader } from "@/components/panel-builder/floorplan/FloorplanEditorLoader";
@@ -22,17 +19,9 @@ export default async function FloorplanEditorPage({ params }: PageProps<"/panel-
   if (!floorplan) notFound();
   return (
     <PageTransition>
-      <PageHeader
-        breadcrumb={
-          <Link href="/panel-builder/floorplan" className="flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-            <ArrowLeft className="size-4" aria-hidden /> Půdorysy
-          </Link>
-        }
-        title="📐 2D půdorys & kabeláž"
-        description="Úpravy se průběžně ukládají do cloudu (do 1 s po změně); starší stavy najdete v historii verzí, projekt jde uložit i do počítače (.eldock). Zpět / Znovu: Ctrl+Z / Ctrl+Shift+Z."
-      />
       <FloorplanEditorLoader
         {...data}
+        help={"Úpravy se průběžně ukládají do cloudu (do 1 s po změně); starší stavy najdete v historii verzí, projekt jde uložit i do počítače (.eldock). Zpět / Znovu: Ctrl+Z / Ctrl+Shift+Z."}
         stored={{
           id: floorplan.id,
           code: floorplan.code,

@@ -49,6 +49,7 @@ function SaveState({ status, onRetry }: { status: SyncStatus; onRetry: () => voi
 }
 
 export function FloorplanDocumentBar({
+  leading = null,
   meta,
   code = null,
   fileMenu = null,
@@ -65,6 +66,8 @@ export function FloorplanDocumentBar({
   onReload,
   onKeepMine,
 }: {
+  /** Fáze 89: nadpis stránky s nápovědou (?) v jednom řádku s projektovou lištou. */
+  leading?: ReactNode;
   meta: FloorplanMetaState;
   /** Fáze 78: kód půdorysu ve firmě („FP-001“). */
   code?: string | null;
@@ -96,6 +99,7 @@ export function FloorplanDocumentBar({
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-border bg-card p-2" data-testid="floorplan-docbar">
       <div className="flex flex-wrap items-center gap-2">
+        {leading}
         <div className="flex min-w-0 flex-1 items-center gap-2">
           {code ? (
             <span className="shrink-0 rounded border border-border bg-muted px-1.5 font-mono text-xs" data-testid="floorplan-code">

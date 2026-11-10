@@ -17,6 +17,7 @@ export function FloorplanEditorLoader({
   libraryJson = null,
   company = null,
   stored = null,
+  help = null,
 }: {
   series: SeriesOption[];
   manufacturers?: { name: string; count: number }[];
@@ -26,7 +27,9 @@ export function FloorplanEditorLoader({
   company?: string | null;
   /** Fáze 64: uložený půdorys (null = nový). */
   stored?: StoredFloorplan | null;
+  /** Fáze 89: nápověda k nadpisu editoru (ikona „?“). */
+  help?: string | null;
 }) {
   // Jiný půdorys = nový editor (vlastní historie Zpět / Znovu a ukládání)
-  return <FloorplanEditor key={stored?.id ?? "novy"} series={series} manufacturers={manufacturers} applianceJson={applianceJson} libraryJson={libraryJson} company={company} stored={stored} />;
+  return <FloorplanEditor key={stored?.id ?? "novy"} series={series} manufacturers={manufacturers} applianceJson={applianceJson} libraryJson={libraryJson} company={company} stored={stored} help={help} />;
 }

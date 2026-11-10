@@ -18,6 +18,7 @@ test("chytrá domácnost: akční členy ABB-free@home / KNX podle svítidel, no
   const choose = (label: string) => palette.getByRole("button", { name: label, exact: false }).first().click();
 
   // Galerie řad: Busch-axcent v provedení beton → náhled s materiálem kámen → použít
+  await page.getByTestId("wizard-step-2").click();
   await page.getByTestId("series-gallery-open").click();
   const gallery = page.getByTestId("series-gallery");
   await gallery.getByTestId("gallery-series-Busch-axcent").click();
@@ -30,6 +31,7 @@ test("chytrá domácnost: akční členy ABB-free@home / KNX podle svítidel, no
   await expect(page.getByTestId("device-appearance").getByRole("radio", { name: "Busch-axcent" })).toHaveAttribute("aria-checked", "true");
 
   // Koupelna s vanou: zásuvka u vany = chyba zóny, oprava IP44 jedním klikem
+  await page.getByTestId("wizard-step-1").click();
   await page.getByRole("button", { name: "Kreslit místnost" }).click();
   await canvas.scrollIntoViewIfNeeded();
   const box = (await canvas.boundingBox())!;
@@ -57,6 +59,7 @@ test("chytrá domácnost: akční členy ABB-free@home / KNX podle svítidel, no
   await expect(canvas.locator('[data-element="ip44-socket"]')).toHaveCount(1);
 
   // Sběrnicová instalace: světla a tlačítka → výpočet akčních členů ABB-free@home, pak KNX
+  await page.getByTestId("wizard-step-2").click();
   await page.getByTestId("install-methodology").getByLabel("Úroveň instalace").selectOption("bus_loxone");
   await choose("Stropní svítidlo");
   await canvas.click({ position: { x: 500, y: 250 } });

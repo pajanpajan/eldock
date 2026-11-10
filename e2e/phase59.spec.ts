@@ -166,6 +166,8 @@ test("2D půdorys: natočení podle předchozí značky, víceramček, vypínač
   await page.getByTestId("floorplan-canvas").screenshot({ path: "test-results/phase59-floor1.png" });
 
   // Druhé podlaží: přidat, stoupací vedení a zásuvky; výpočet zahrne obě podlaží
+  // Fáze 89: správa podlaží je v kroku 1 průvodce pod tlačítkem „🏢 Podlaží“
+  await page.getByTestId("wizard-floors").click();
   await page.getByTestId("floor-add").click();
   await page.getByTestId("floor-add-form").getByLabel("Název nového podlaží").fill("2. NP");
   await page.getByTestId("floor-add-confirm").click();
@@ -179,7 +181,8 @@ test("2D půdorys: natočení podle předchozí značky, víceramček, vypínač
   await page.keyboard.press("Escape");
   await expect(page.getByTestId("cable-circuits")).toContainText("(2. NP)");
   await expect(canvas.getByTestId("cable-route").first()).toBeAttached();
-  await page.getByTestId("floor-bar").getByRole("tab", { name: /1\. NP/ }).click();
+  // Fáze 89: přepínač podlaží v řádku průvodce (ve všech krocích)
+  await page.getByTestId("floor-switch").selectOption({ label: "1. NP" });
   await expect(page.getByTestId("active-floor")).toContainText("1. NP");
   await expect(canvas.locator('[data-element="socket"]')).toHaveCount(4);
   await expect(page.getByTestId("wiring-inventory")).toContainText("2 podlaží");

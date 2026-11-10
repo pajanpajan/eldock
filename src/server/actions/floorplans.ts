@@ -243,7 +243,7 @@ export async function listFloorplansAction(): Promise<ActionResult<CloudFloorpla
   }
 }
 
-const librarySchema = z.object({ templates: z.array(z.unknown()).max(200), favorites: z.array(z.string().max(100)).max(400), updatedAt: z.number().int().nonnegative() });
+const librarySchema = z.object({ templates: z.array(z.unknown()).max(200), favorites: z.array(z.string().max(100)).max(400), uiMode: z.enum(["wizard", "compact"]).optional(), updatedAt: z.number().int().nonnegative() });
 
 /** Fáze 78: knihovna 2D půdorysu firmy (šablony sestav, oblíbené ⭐) – z prohlížeče do firmy, novější vyhrává. */
 export async function saveFloorplanLibraryAction(input: z.input<typeof librarySchema>): Promise<ActionResult<{ saved: boolean }>> {

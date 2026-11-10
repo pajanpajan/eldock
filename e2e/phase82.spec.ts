@@ -28,7 +28,8 @@ test("💡 Zásuvka na světelném okruhu: volba u zásuvky, jištění 10 / 13 
   const canvas = page.getByTestId("floorplan-canvas");
   const palette = page.getByRole("complementary", { name: "Paleta elektroinstalačních značek" });
   const clickAt = async (x: number, y: number) => {
-    await canvas.scrollIntoViewIfNeeded();
+    // Fáze 89: plátno je vyšší – vystředit, aby horní okraj nebyl pod pevnou hlavičkou stránky
+    await canvas.evaluate((svg) => svg.scrollIntoView({ block: "center", behavior: "instant" }));
     const at = await screen(canvas, x, y);
     await page.mouse.click(at.x, at.y);
   };

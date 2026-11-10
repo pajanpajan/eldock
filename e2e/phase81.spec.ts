@@ -29,6 +29,7 @@ test("🏠 Panely chytré domácnosti: barvy a krabice IP TOUCH, osazení, Loxon
   page.on("dialog", (dialog) => void dialog.accept());
   await openNew(page);
   const canvas = page.getByTestId("floorplan-canvas");
+  await page.getByTestId("wizard-step-2").click();
   const appearance = page.getByTestId("device-appearance");
   await appearance.getByTestId("abb-families").locator('[data-family="abb-fah"]').click();
   const catalog = appearance.getByTestId("smart-catalog");

@@ -82,6 +82,7 @@ test("📐 Plocha půdorysu: předvolby, vlastní rozměr, rozšíření u okraj
   await page.screenshot({ path: "test-results/phase83-plane.png" });
 
   // Plocha v DXF a v razítku tiskového listu PDF
+  await page.getByTestId("wizard-step-5").click();
   const [download] = await Promise.all([page.waitForEvent("download"), page.getByTestId("export-dxf").click()]);
   expect(readFileSync((await download.path())!, "utf8")).toContain(String.raw`plocha 25 \U+00D7 16 m`);
   await page.evaluate(() => {

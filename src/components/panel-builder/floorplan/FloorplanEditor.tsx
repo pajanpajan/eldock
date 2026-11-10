@@ -1,8 +1,9 @@
 "use client";
 
 import { useDeferredValue, useEffect, useMemo, useRef, useState, useTransition, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff, FileUp, Grid3x3, Loader2, Maximize2, Minus, MousePointer2, Plus, RotateCw, Ruler, Square, Trash2 } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, FileUp, Grid3x3, Loader2, Maximize2, Minus, MousePointer2, Plus, RotateCw, Ruler, Square, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -167,6 +168,11 @@ import { addTemplate, favoritesFirst, removeTemplate, toggleFavorite } from "@/l
 import { Dimensions, ElementDetail, ElementToolbar, RoomDetail, ToolButton } from "./ElementPanels";
 import { SocketCircuitPicker, SocketCircuitPopover, SocketCircuitsPanel, type SocketMoveTarget } from "./SocketCircuitsPanel";
 import { PlaneSizeControl } from "./PlaneSizeControl";
+import { CompactCadBar, FloorplanWizardBar, HelpTip, ToolbarPopover, UiModeToggle } from "./FloorplanWizardBar";
+import { RoomBySizeForm } from "./RoomBySizeForm";
+import { useFloorplanUiMode } from "./useFloorplanUiMode";
+import { initialStep, stepForTutorialChapter, TUTORIAL_CHAPTER_EVENT, type WizardStep } from "@/lib/panel-builder/floorplan-wizard";
+import { addRoomBySize, snapRoomRect, type SnapGuide } from "@/lib/panel-builder/room-builder";
 import { contentView, growPlane, meters, resizePlane } from "@/lib/panel-builder/floorplan-plane";
 import { assignLightingCircuit, assignSocketCircuit, isSocketElement, lightingSocketRows, moveSocketsToCircuit, nextSocketCircuit, optimizeSocketCircuits, socketCircuitRows, type SocketCircuitRow } from "@/lib/panel-builder/socket-circuits";
 import { BACKGROUND_PX, preloadImage, rasterizeSvg } from "@/lib/panel-builder/background-image";
@@ -264,6 +270,7 @@ export function FloorplanEditor({
   libraryJson = null,
   company = null,
   stored = null,
+  help = null,
 }: {
   series: SeriesOption[];
   manufacturers?: { name: string; count: number }[];
@@ -272,6 +279,8 @@ export function FloorplanEditor({
   libraryJson?: string | null;
   company?: string | null;
   stored?: StoredFloorplan | null;
+  /** Fáze 89: nápověda k nadpisu (ikona „?“ místo dvouřádkového popisu). */
+  help?: string | null;
 }) {
   const router = useRouter();
   const svg = useRef<SVGSVGElement>(null);
@@ -285,6 +294,19 @@ export function FloorplanEditor({
   const sync = useFloorplanSync({ stored: stored ? { id: stored.id, code: stored.code ?? null, version: stored.version, savedAt: stored.updatedAt } : null, draft, initialSaved: boot.initialSaved, meta, replaceDraft: reset });
   // Fáze 78: šablony sestav a oblíbené položky firmy (prohlížeč + profil firmy, novější vyhrává)
   const [floorLibrary, saveFloorLibrary] = useFloorplanLibrary(libraryJson);
+  // Fáze 89: průvodce v 5 krocích / kompaktní CAD lišta (prohlížeč i profil firmy), aktivní krok a vodicí čáry přichytávání
+  const [uiMode, setUiMode] = useFloorplanUiMode(floorLibrary, saveFloorLibrary);
+  const [wizard, setWizard] = useState<WizardStep>(() => initialStep(boot.initial));
+  const [snapGuides, setSnapGuides] = useState<SnapGuide[]>([]);
+  // Fáze 89: Interactive Tour video-návodu přepíná kroky průvodce podle kapitol (5 kapitol = 5 kroků)
+  useEffect(() => {
+    const onChapter = (event: Event) => {
+      const detail = (event as CustomEvent<{ tutorialId?: string; chapter?: number }>).detail;
+      if (detail?.tutorialId === "pudorys" && typeof detail.chapter === "number") setWizard(stepForTutorialChapter(detail.chapter));
+    };
+    window.addEventListener(TUTORIAL_CHAPTER_EVENT, onChapter);
+    return () => window.removeEventListener(TUTORIAL_CHAPTER_EVENT, onChapter);
+  }, []);
   const favoriteKeys = useMemo(() => new Set(floorLibrary.favorites), [floorLibrary.favorites]);
   // Fáze 79: geometrie podkladu CAD aktivního podlaží (soubor v úložišti firmy) a mřížka pro přichytávání
   const [cadGeometry, setCadGeometry] = useState<{ url: string; geometry: CadGeometry } | null>(null);
@@ -1068,10 +1090,14 @@ export function FloorplanEditor({
     if (roomDrag) {
       const dx = snap(point.x - roomDrag.start.x);
       const dy = snap(point.y - roomDrag.start.y);
+      // Fáze 89: magnetické přichytávání stěn a rohů k ostatním místnostem podlaží (Alt = bez přichytávání)
+      const target = { x: roomDrag.origin.x + dx, y: roomDrag.origin.y + dy, w: roomDrag.origin.w, h: roomDrag.origin.h };
+      const snapped = roomDrag.handle !== "move" ? null : event.altKey ? { ...target, guides: [] } : snapRoomRect(target, draft.rooms.filter((candidate) => candidate.id !== roomDrag.id));
+      if (snapped) setSnapGuides(snapped.guides);
       setDraft((current) => {
         const room = current.rooms.find((candidate) => candidate.id === roomDrag.id);
         if (!room) return current;
-        if (roomDrag.handle === "move") return moveRoom(current, room.id, roomDrag.origin.x + dx - room.x, roomDrag.origin.y + dy - room.y);
+        if (roomDrag.handle === "move") return moveRoom(current, room.id, (snapped?.x ?? target.x) - room.x, (snapped?.y ?? target.y) - room.y);
         const rect = resizeRect(roomDrag.origin, roomDrag.handle, { x: snap(point.x), y: snap(point.y) });
         return { ...current, rooms: current.rooms.map((candidate) => (candidate.id === room.id ? { ...candidate, ...rect } : candidate)) };
       });
@@ -1175,6 +1201,7 @@ export function FloorplanEditor({
         if (!room || roomDrag.handle === "move") return current;
         return { ...current, elements: current.elements.map((element) => (pointInRoom(room, element.x, element.y) ? { ...element, room: room.name } : element)) };
       });
+      setSnapGuides([]);
       setRoomDrag(null);
       return;
     }
@@ -1251,6 +1278,31 @@ export function FloorplanEditor({
         elements: current.elements.map((element) => (element.x >= rect.x && element.x <= rect.x + rect.w && element.y >= rect.y && element.y <= rect.y + rect.h ? { ...element, room: name.slice(0, 40) } : element)),
       }));
     }
+  }
+
+  /** Fáze 89: místnost podle rozměrů X × Y – na volné místo plochy, vybraná a hned k přesunu myší (stěny se přichytí). */
+  function createRoomBySize(input: { name: string; w: number; h: number }) {
+    const id = newId("m");
+    const result = addRoomBySize(draft, { ...input, id });
+    update((current) => addRoomBySize(current, { ...input, id }).draft);
+    lastRoom.current = result.room.name;
+    setTool({ kind: "select" });
+    setSelection([]);
+    setSelectedNoteId(null);
+    setSelectedRoomId(id);
+    toast.success(`Místnost ${result.room.name} ${roomDimensions(result.room.w, result.room.h).label} – chyťte ji myší za plochu a přisuňte k ostatním (stěny a rohy se přichytí, Alt = bez přichytávání).`);
+  }
+
+  /** Fáze 89: ⚡ z lišty průvodce / kompaktní lišty – stejné generování jako v kartě „Založit rozváděč“ (její údaje). */
+  function generateFromBar() {
+    if (!checklist.ready) {
+      document.querySelector('[data-testid="generation-checklist"]')?.scrollIntoView({ block: "center", behavior: "smooth" });
+      return void toast.error(checklist.items.find((item) => !item.ok)?.label ?? "Doplňte kontrolní seznam před generováním.");
+    }
+    const button = document.querySelector<HTMLButtonElement>('[data-testid="generate-from-floorplan"]');
+    if (!button || button.disabled) return void toast.error("Rozváděč zatím nejde vygenerovat – zkontrolujte výkaz kabeláže a okruhy v pravém panelu.");
+    button.scrollIntoView({ block: "center", behavior: "smooth" });
+    button.form?.requestSubmit(button);
   }
 
   function applyCrop(rect: { x: number; y: number; w: number; h: number }) {
@@ -1716,56 +1768,9 @@ export function FloorplanEditor({
     paletteSections.unshift({ id: "favorites", label: "Oblíbené prvky", icon: "⭐", hint: "hvězdičkou u položky přidáte / odeberete", count: favoritePlaced, entries: favoriteEntries });
   }
 
-  return (
-    <div className="flex flex-col gap-3" data-testid="floorplan-editor">
-      {/* Fáze 64: uložený půdorys – údaje, Zpět / Znovu, stav ukládání, historie verzí, rozváděč, souběh dvou oken */}
-      <FloorplanDocumentBar
-        meta={meta}
-        code={sync.code}
-        fileMenu={
-          // Fáze 78: uložené zakázky firmy a soubor projektu .eldock.json
-          <FloorplanFileMenu
-            draft={draft}
-            meta={meta}
-            code={sync.code}
-            templates={floorLibrary.templates}
-            floorplanId={sync.floorplanId}
-            flush={sync.flush}
-            onTemplates={(templates) => {
-              let next = floorLibrary;
-              for (const template of templates) {
-                const result = addTemplate(next, template.members, template.label);
-                if ("library" in result) next = result.library;
-              }
-              if (next !== floorLibrary) saveFloorLibrary(next);
-            }}
-          />
-        }
-        onMeta={renameFloorplan}
-        floorplanId={sync.floorplanId}
-        status={sync.status}
-        canUndo={canUndo}
-        canRedo={canRedo}
-        onUndo={() => stepHistory("undo")}
-        onRedo={() => stepHistory("redo")}
-        project={stored?.project ?? null}
-        flush={sync.flush}
-        onRestored={(state) => {
-          sync.adopt(state);
-          clearSelection();
-        }}
-        onReload={async () => {
-          const error = await sync.reload();
-          if (error) return void toast.error(error);
-          clearSelection();
-          toast.success("Načtena aktuální verze ze serveru – vaše změny najdete v historii verzí.");
-        }}
-        onKeepMine={async () => {
-          if (await sync.keepMine()) toast.success("Uložena vaše verze – předchozí stav ze serveru je v historii verzí.");
-        }}
-      />
-      {/* Horní lišta: podklad, úprava PDF, nástroje */}
-      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-2">
+  // Fáze 89: části lišt nad plátnem – skládá je průvodce po krocích nebo kompaktní lišta (vždy jen jedna lišta)
+  const fileInputEl = (
+    <>
         <input
           ref={fileInput}
           type="file"
@@ -1779,17 +1784,49 @@ export function FloorplanEditor({
             if (file) void pickBackground(file);
           }}
         />
+    </>
+  );
+  const uploadButton = (
+    <>
         <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => fileInput.current?.click()} disabled={busy !== null} data-tour="floorplan-upload">
           {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <FileUp className="size-4" aria-hidden />} Nahrát půdorys (obrázek / PDF / DXF)
         </Button>
+    </>
+  );
+  const pdfMenu = (
+    <>
         <PdfEditMenu hasBackground={Boolean(draft.background)} cropped={Boolean(draft.background?.crop)} zoomPercent={Math.round(zoom * 100)} calibration={draft.calibration.state} onAction={pdfAction} />
+    </>
+  );
+  const cleanGridButton = (
+    <>
         <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => update((current) => ({ ...current, background: null, cad: null, calibration: emptyCalibration() }))} disabled={!draft.background && !draft.cad}>
           <Grid3x3 className="size-4" aria-hidden /> Čistý rastr
         </Button>
+    </>
+  );
+  const selectTool = (
+    <>
         <ToolButton active={tool.kind === "select"} onClick={() => setTool({ kind: "select" })} icon={<MousePointer2 className="size-4" aria-hidden />} label="Výběr" />
+    </>
+  );
+  const roomTool = (
+    <>
         <ToolButton active={tool.kind === "room"} onClick={() => setTool({ kind: "room" })} icon={<Square className="size-4" aria-hidden />} label="Kreslit místnost (obdélník)" />
+    </>
+  );
+  const polygonTool = (
+    <>
         <ToolButton active={tool.kind === "polygon"} onClick={() => (setPolyDraft([]), setTool({ kind: "polygon" }))} icon={<span aria-hidden>📐</span>} label="Kreslit šikmou stěnu / polygonální místnost" />
+    </>
+  );
+  const calibrateTool = (
+    <>
         <ToolButton active={tool.kind === "calibrate"} onClick={() => (setCalibration([]), setTool({ kind: "calibrate" }))} icon={<Ruler className="size-4" aria-hidden />} label="📏 Kalibrovat měřítko" tour="floorplan-calibrate" />
+    </>
+  );
+  const clearButton = (
+    <>
         <Button
           type="button"
           variant="ghost"
@@ -1804,11 +1841,21 @@ export function FloorplanEditor({
         >
           <Trash2 className="size-4" aria-hidden /> Vymazat nákres
         </Button>
-        {/* Fáze 63: export výkresu do PDF (tiskový list A3 / A4) a do CAD (DXF) */}
+    </>
+  );
+  const exportButtons = (
+    <>
         <FloorplanExport draft={deferred} analysis={analysis.ok ? analysis : null} company={company} />
-        {/* Fáze 87: video-návod s kapitolami a Interactive Tour (zvýraznění prvků, o kterých kapitola mluví) */}
+    </>
+  );
+  const videoButton = (
+    <>
         <TutorialVideoButton tutorialId="pudorys" tour />
-        <span className="ml-auto flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+    </>
+  );
+  const planeInfo = (
+    <>
+        <span className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           {draft.background ? (
             <span className={cn("rounded-full border px-2 py-0.5", draft.calibration.state === "verified" ? "border-emerald-500/50 text-emerald-300" : "border-amber-400/60 text-amber-200")} data-testid="calibration-state">
               {draft.calibration.state === "verified" ? "✓ Měřítko ověřeno" : draft.calibration.state === "set" ? "Měřítko neověřeno" : "Měřítko nekalibrováno"}
@@ -1817,9 +1864,10 @@ export function FloorplanEditor({
           {/* Fáze 83: nastavitelná plocha (5–100 m, předvolby) a pohled na celý nákres */}
           <PlaneSizeControl widthMm={draft.widthMm} heightMm={draft.heightMm} fromBackground={Boolean(draft.background)} onResize={resizePlaneTo} onFit={() => setViewMm(contentView(draft))} />
         </span>
-      </div>
-      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-2">
-        {/* Fáze 63: zobrazení kabelů – barevně podle okruhů / normové CAD značení */}
+    </>
+  );
+  const cableViewGroup = (
+    <>
         <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="Zobrazení kabelů">
           {(
             [
@@ -1840,6 +1888,10 @@ export function FloorplanEditor({
             </button>
           ))}
         </div>
+    </>
+  );
+  const routingGroup = (
+    <>
         <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="Způsob vedení kabelů">
           {ROUTING_MODES.map((mode) => (
             <button
@@ -1854,7 +1906,10 @@ export function FloorplanEditor({
             </button>
           ))}
         </div>
-        {/* Fáze 76: styl tras – obvodově po stěnách (výchozí, obvodový router) / nejkratší přímé L-trasy v podlaze */}
+    </>
+  );
+  const routeStyleGroup = (
+    <>
         <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="Styl tras kabelů">
           {ROUTE_STYLES.map((style) => (
             <button
@@ -1871,6 +1926,10 @@ export function FloorplanEditor({
             </button>
           ))}
         </div>
+    </>
+  );
+  const heightsGroup = (
+    <>
         <div className="flex flex-wrap items-center gap-2 text-xs" aria-label="Výšky v mm od podlahy" role="group">
           {HEIGHTS.map((height) => (
             <label key={height.key} className="flex items-center gap-1 text-muted-foreground">
@@ -1889,8 +1948,10 @@ export function FloorplanEditor({
             </label>
           ))}
         </div>
-        {/* Fáze 57: rezerva kabeláže a měřítko značek */}
-        <div className="flex flex-wrap items-center gap-2 text-xs" role="group" aria-label="Rezerva a značky">
+    </>
+  );
+  const slackField = (
+    <>
           <label className="flex items-center gap-1 text-muted-foreground" title="Technologická rezerva na ohyby, nepřesnost trasy a prořez – přičte se ke všem trasám">
             Rezerva kabeláže:
             <input
@@ -1905,6 +1966,10 @@ export function FloorplanEditor({
             />
             %
           </label>
+    </>
+  );
+  const symbolScaleField = (
+    <>
           <label className="flex items-center gap-1 text-muted-foreground">
             Velikost značek:
             <input
@@ -1921,11 +1986,10 @@ export function FloorplanEditor({
               {Math.round(draft.symbolScale * 100)} %
             </span>
           </label>
-        </div>
-      </div>
-
-      <div className="flex flex-col gap-2 rounded-xl border border-border bg-card p-2 text-xs" role="group" aria-label="Metodika ČSN 33 2130 ed. 4" data-testid="install-methodology">
-        <div className="flex flex-wrap items-center gap-2">
+    </>
+  );
+  const levelField = (
+    <>
           <label className="flex items-center gap-1 text-muted-foreground">
             Úroveň instalace:
             <select
@@ -1942,6 +2006,10 @@ export function FloorplanEditor({
               ))}
             </select>
           </label>
+    </>
+  );
+  const methodField = (
+    <>
           <label className="flex items-center gap-1 text-muted-foreground">
             Uložení kabelů:
             <select
@@ -1957,6 +2025,10 @@ export function FloorplanEditor({
               ))}
             </select>
           </label>
+    </>
+  );
+  const groupedField = (
+    <>
           <label className="flex items-center gap-1 text-muted-foreground">
             Souběh kabelů:
             <input
@@ -1969,17 +2041,25 @@ export function FloorplanEditor({
               aria-label="Počet souběžných kabelů"
             />
           </label>
+    </>
+  );
+  const doubleField = (
+    <>
           <label className="flex items-center gap-1.5 text-muted-foreground">
             <input type="checkbox" checked={draft.countDoubleAsTwo} onChange={(event) => update((current) => ({ ...current, countDoubleAsTwo: event.target.checked }))} />
             Počítat dvojzásuvku jako 2 zásuvky dle ČSN 33 2130 ed. 4
           </label>
-        </div>
+    </>
+  );
+  const levelNote = (
+    <>
         <p className="rounded-md bg-primary/10 px-2 py-1 text-foreground" data-testid="level-note">
           {LEVEL_NOTES[draft.installation]}
         </p>
-      </div>
-
-      {/* Fáze 55: výrobce → řada (náhled tvaru) → barvy řady a soustava přívodu v horní liště nad rastrem */}
+    </>
+  );
+  const appearance = (
+    <>
       <DeviceAppearance
         seriesKey={draft.series}
         color={draft.color}
@@ -2025,8 +2105,10 @@ export function FloorplanEditor({
           setDatasheet(base ? { ...base, ...product, family: base.family } : null);
         }}
       />
-
-      {/* Fáze 59: podlaží domu */}
+    </>
+  );
+  const floorBar = (
+    <>
       <FloorBar
         floors={floors}
         activeId={draft.floorId}
@@ -2045,6 +2127,250 @@ export function FloorplanEditor({
           setView(FIT);
         }}
       />
+    </>
+  );
+  const modeToggle = <UiModeToggle mode={uiMode} onMode={setUiMode} />;
+  const designBadge = (
+    <button type="button" onClick={() => (uiMode === "wizard" ? setWizard(2) : undefined)} className="rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-xs font-semibold text-foreground hover:border-primary" title="Výrobce, designová řada a barvy – změníte v kroku 2" data-testid="design-badge">
+      🎨 {appearanceLabel(draft.series, draft.color, draft.frameColor)}
+    </button>
+  );
+  const floorSwitch =
+    floors.length > 1 ? (
+      <label className="flex items-center gap-1 text-xs text-muted-foreground">
+        Podlaží:
+        <select value={draft.floorId} onChange={(event) => selectFloor(event.target.value)} className="h-7 rounded-md border border-input bg-transparent px-1 text-xs text-foreground dark:bg-input/30" aria-label="Přepnout podlaží" data-testid="floor-switch">
+          {floors.map((floor) => (
+            <option key={floor.id} value={floor.id}>
+              {floor.name}
+            </option>
+          ))}
+        </select>
+      </label>
+    ) : null;
+  const methodology = (
+    <div className="flex flex-col gap-1.5 text-xs" role="group" aria-label="Metodika ČSN 33 2130 ed. 4" data-testid="install-methodology">
+      <div className="flex flex-wrap items-center gap-2">{levelField}</div>
+      {levelNote}
+    </div>
+  );
+  const cableInstall = (
+    <div className="flex flex-wrap items-center gap-2 text-xs" role="group" aria-label="Uložení kabelů" data-testid="install-cables">
+      {methodField}
+      {groupedField}
+      {doubleField}
+    </div>
+  );
+  const routesPanel = (
+    <>
+      {routingGroup}
+      {routeStyleGroup}
+      {cableViewGroup}
+      {cableInstall}
+      {heightsGroup}
+      <div className="flex flex-wrap items-center gap-2 text-xs" role="group" aria-label="Rezerva kabeláže">
+        {slackField}
+      </div>
+    </>
+  );
+  const outputActions = (
+    <>
+      <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => clickTestId("wiring-bom-open")} disabled={!bom.length} data-testid="wizard-bom">
+        📋 Kompletní kusovník (BOM)
+      </Button>
+      {exportButtons}
+      <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => clickTestId("floorplan-export")} data-testid="wizard-save-file">
+        💾 Uložit projekt do PC (.eldock)
+      </Button>
+      <Button type="button" size="sm" className="gap-1.5 bg-yellow-400 font-bold text-zinc-950 hover:bg-yellow-300" onClick={generateFromBar} disabled={pending} data-testid="wizard-generate">
+        ⚡ Vygenerovat rozváděč z tohoto půdorysu
+      </Button>
+    </>
+  );
+
+  return (
+    <div className="flex flex-col gap-3" data-testid="floorplan-editor">
+      {/* Fáze 64: uložený půdorys – údaje, Zpět / Znovu, stav ukládání, historie verzí, rozváděč, souběh dvou oken */}
+      <FloorplanDocumentBar
+        leading={
+          <span className="flex shrink-0 items-center gap-1.5">
+            <Link href="/panel-builder/floorplan" className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground" title="Zpět na seznam půdorysů firmy">
+              <ArrowLeft className="size-3.5" aria-hidden /> Půdorysy
+            </Link>
+            <h1 className="text-lg font-semibold tracking-tight">📐 2D půdorys & kabeláž</h1>
+            {help ? <HelpTip text={help} /> : null}
+          </span>
+        }
+        meta={meta}
+        code={sync.code}
+        fileMenu={
+          // Fáze 78: uložené zakázky firmy a soubor projektu .eldock.json
+          <FloorplanFileMenu
+            draft={draft}
+            meta={meta}
+            code={sync.code}
+            templates={floorLibrary.templates}
+            floorplanId={sync.floorplanId}
+            flush={sync.flush}
+            onTemplates={(templates) => {
+              let next = floorLibrary;
+              for (const template of templates) {
+                const result = addTemplate(next, template.members, template.label);
+                if ("library" in result) next = result.library;
+              }
+              if (next !== floorLibrary) saveFloorLibrary(next);
+            }}
+          />
+        }
+        onMeta={renameFloorplan}
+        floorplanId={sync.floorplanId}
+        status={sync.status}
+        canUndo={canUndo}
+        canRedo={canRedo}
+        onUndo={() => stepHistory("undo")}
+        onRedo={() => stepHistory("redo")}
+        project={stored?.project ?? null}
+        flush={sync.flush}
+        onRestored={(state) => {
+          sync.adopt(state);
+          clearSelection();
+        }}
+        onReload={async () => {
+          const error = await sync.reload();
+          if (error) return void toast.error(error);
+          clearSelection();
+          toast.success("Načtena aktuální verze ze serveru – vaše změny najdete v historii verzí.");
+        }}
+        onKeepMine={async () => {
+          if (await sync.keepMine()) toast.success("Uložena vaše verze – předchozí stav ze serveru je v historii verzí.");
+        }}
+      />
+      {/* Fáze 89: nad plátnem jediná lišta – průvodce v 5 krocích, nebo kompaktní CAD lišta pro zkušené */}
+      {fileInputEl}
+      {uiMode === "wizard" ? (
+        <FloorplanWizardBar
+          step={wizard}
+          onStep={setWizard}
+          summary={
+            <>
+              {floorSwitch}
+              {designBadge}
+            </>
+          }
+          aside={
+            <>
+              {videoButton}
+              {modeToggle}
+            </>
+          }
+        >
+          {wizard === 1 ? (
+            <>
+              <span className="flex flex-wrap items-center gap-1.5 rounded-lg border border-border/70 px-2 py-1" role="group" aria-label="Mám výkres od stavaře">
+                <span className="text-[11px] font-semibold text-muted-foreground">a) Mám výkres od stavaře:</span>
+                {uploadButton}
+                {calibrateTool}
+                {pdfMenu}
+                {cleanGridButton}
+              </span>
+              <span className="flex flex-wrap items-center gap-1.5 rounded-lg border border-border/70 px-2 py-1" role="group" aria-label="Kreslím místnosti od nuly">
+                <span className="text-[11px] font-semibold text-muted-foreground">b) Kreslím od nuly:</span>
+                <RoomBySizeForm onCreate={createRoomBySize} />
+                {roomTool}
+                {polygonTool}
+              </span>
+              {planeInfo}
+              <ToolbarPopover label={`🏢 Podlaží: ${draft.floorName}`} testId="wizard-floors" wide>
+                {floorBar}
+              </ToolbarPopover>
+              {clearButton}
+            </>
+          ) : wizard === 2 ? (
+            <>
+              {methodology}
+              <div className="w-full">{appearance}</div>
+            </>
+          ) : wizard === 3 ? (
+            <>
+              {selectTool}
+              <div className="flex flex-wrap items-center gap-2 text-xs" role="group" aria-label="Zobrazení značek">
+                {symbolScaleField}
+              </div>
+            </>
+          ) : wizard === 4 ? (
+            routesPanel
+          ) : (
+            outputActions
+          )}
+        </FloorplanWizardBar>
+      ) : (
+        <CompactCadBar
+          tools={
+            <>
+              {selectTool}
+              <ToolbarPopover label="+ Místnost (X×Y / Myší / Šikmá)" testId="compact-room">
+                <RoomBySizeForm onCreate={createRoomBySize} />
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {roomTool}
+                  {polygonTool}
+                </div>
+              </ToolbarPopover>
+              {calibrateTool}
+              <ToolbarPopover label={`Podlaží (${draft.floorName})`} testId="compact-floors" wide>
+                {floorBar}
+              </ToolbarPopover>
+            </>
+          }
+          menus={
+            <>
+              <ToolbarPopover label={`🎨 Design: ${appearanceLabel(draft.series, draft.color, draft.frameColor)}`} testId="compact-design" wide>
+                {methodology}
+                {appearance}
+              </ToolbarPopover>
+              <ToolbarPopover label="🔌 Trasy & Výšky" testId="compact-routes" wide>
+                <div className="flex flex-wrap items-center gap-2">
+                  {routesPanel}
+                  <div className="flex flex-wrap items-center gap-2 text-xs" role="group" aria-label="Zobrazení značek">
+                    {symbolScaleField}
+                  </div>
+                </div>
+              </ToolbarPopover>
+              <ToolbarPopover label="📁 Podklad & Uložení" testId="compact-files" wide>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {uploadButton}
+                  {pdfMenu}
+                  {cleanGridButton}
+                  {clearButton}
+                </div>
+                {planeInfo}
+                <div className="flex flex-wrap items-center gap-1.5 border-t border-border/60 pt-2">
+                  <Button type="button" variant="outline" size="sm" onClick={() => clickTestId("floorplan-cloud-list")}>
+                    📂 Moje půdorysy v cloudu
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => clickTestId("floorplan-export")}>
+                    💾 Uložit do PC (.eldock)
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => clickTestId("floorplan-import")}>
+                    📥 Nahrát z PC (.eldock)
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => clickTestId("floorplan-versions")}>
+                    🕘 Verze
+                  </Button>
+                </div>
+              </ToolbarPopover>
+              <ToolbarPopover label="📤 Export & Rozváděč" testId="compact-export" align="right">
+                <div className="flex flex-wrap items-center gap-1.5">{outputActions}</div>
+              </ToolbarPopover>
+            </>
+          }
+          aside={
+            <>
+              {videoButton}
+              {modeToggle}
+            </>
+          }
+        />
+      )}
 
       <div className="grid gap-3 xl:grid-cols-[15rem_minmax(0,1fr)_24rem]">
         <div className="flex flex-col gap-3">
@@ -2095,6 +2421,18 @@ export function FloorplanEditor({
               onPointerMove={onMove}
               onPointerUp={onUp}
               onPointerLeave={() => setHover(null)}
+              onDoubleClick={(event) => {
+                // Fáze 89: dvojklik na místnost (kótu) = přepis Šířky X / Hloubky Y v detailu místnosti
+                if (tool.kind !== "select") return;
+                const point = toPlan(event);
+                if (draft.elements.some((element) => Math.hypot(element.x - point.x, element.y - point.y) < ui)) return;
+                const room = roomAt(draft.rooms, point.x, point.y);
+                if (!room) return;
+                setSelection([]);
+                setSelectedNoteId(null);
+                setSelectedRoomId(room.id);
+                window.requestAnimationFrame(() => document.querySelector<HTMLInputElement>('[data-testid="room-detail"] input[aria-label="Šířka X [m]"]')?.select());
+              }}
               onContextMenu={(event) => {
                 // Pravé tlačítko = konec vkládání / měření / kreslení
                 event.preventDefault();
@@ -2418,6 +2756,22 @@ export function FloorplanEditor({
               {selectedNote && tool.kind === "select" ? (
                 <rect {...(() => { const box = annotationBounds(selectedNote); return { x: box.x - ui * 0.2, y: box.y - ui * 0.2, width: box.w + ui * 0.4, height: box.h + ui * 0.4 }; })()} fill="none" stroke="#38bdf8" strokeDasharray={`${ui / 4} ${ui / 6}`} strokeWidth={stroke * 1.5} pointerEvents="none" />
               ) : null}
+              {/* Fáze 89: vodicí čáry magnetického přichytávání (modrá = stěna ke stěně, žlutá = zarovnání) */}
+              {snapGuides.map((guide) => (
+                <line
+                  key={`${guide.axis}-${guide.at}-${guide.kind}`}
+                  x1={guide.axis === "x" ? guide.at : guide.from}
+                  y1={guide.axis === "x" ? guide.from : guide.at}
+                  x2={guide.axis === "x" ? guide.at : guide.to}
+                  y2={guide.axis === "x" ? guide.to : guide.at}
+                  stroke={guide.kind === "wall" ? "#38bdf8" : "#facc15"}
+                  strokeWidth={stroke * 2.5}
+                  strokeDasharray={`${ui * 0.35} ${ui * 0.2}`}
+                  pointerEvents="none"
+                  data-testid="snap-guide"
+                  data-kind={guide.kind}
+                />
+              ))}
             </svg>
             {/* Zoom */}
             <div className="absolute right-2 bottom-2 flex items-center gap-1 rounded-lg border border-border bg-card/90 p-1 text-xs shadow" role="group" aria-label="Zoom půdorysu">
@@ -2743,6 +3097,14 @@ export function FloorplanEditor({
       ) : null}
     </div>
   );
+}
+
+/** Fáze 89: rychlá akce lišty spustí stejné tlačítko jinde na stránce (kusovník, soubor projektu, verze). */
+function clickTestId(testId: string) {
+  const target = document.querySelector<HTMLElement>(`[data-testid="${testId}"]`);
+  if (!target) return false;
+  target.click();
+  return true;
 }
 
 /** Unikátní název místnosti („Místnost 3“, „Kuchyně 2“). */

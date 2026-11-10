@@ -170,6 +170,7 @@ test("značky dle ČSN EN 60617-11, přesun / otočení / mazání, úroveň ins
   await page.keyboard.press("Escape");
 
   // Měřítko všech značek
+  await page.getByTestId("wizard-step-3").click();
   const slider = page.getByLabel("Velikost značek");
   await slider.focus();
   for (let step = 0; step < 5; step++) await page.keyboard.press("ArrowRight");
@@ -195,11 +196,13 @@ test("značky dle ČSN EN 60617-11, přesun / otočení / mazání, úroveň ins
   // Rezerva kabeláže v %
   const optimized = page.getByTestId("cable-totals").locator('[data-mode="OPTIMIZED"]');
   const length10 = await optimized.textContent();
+  await page.getByTestId("wizard-step-4").click();
   await page.getByLabel("Rezerva kabeláže [%]").fill("25");
   await expect(optimized).not.toHaveText(length10 ?? "");
   await expect(page.getByTestId("cable-panel")).toContainText("rezervy 25 %");
 
   // Úroveň instalace „sběrnice“: převod vypínačů na sběrnicová tlačítka, nová paleta, sběrnicová linka místo CYKY-O
+  await page.getByTestId("wizard-step-2").click();
   await page.getByTestId("install-methodology").getByLabel("Úroveň instalace").selectOption("bus_loxone");
   const conversion = page.getByTestId("level-conversion");
   await expect(conversion).toContainText("Sběrnicové tlačítko 1násobné");

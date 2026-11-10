@@ -12,6 +12,7 @@ import { TUTORIAL_MEDIA } from "@/lib/tutorials.generated";
 import { cn } from "@/lib/utils";
 
 import { TutorialPlayer } from "./TutorialPlayer";
+import { TUTORIAL_CHAPTER_EVENT } from "@/lib/panel-builder/floorplan-wizard";
 
 const NO_TARGETS: readonly string[] = [];
 
@@ -28,6 +29,11 @@ export function TutorialVideoButton({ tutorialId, tour = false, size = "sm", cla
   const [chapter, setChapter] = useState(0);
   const [resume, setResume] = useState({ at: 0, playing: false });
   const [time, setTime] = useState({ at: 0, playing: false });
+
+  // Fáze 89: v Interactive Tour přepne průvodce 2D půdorysem na krok kapitoly, ať jsou zvýrazněné prvky na obrazovce
+  useEffect(() => {
+    if (touring) window.dispatchEvent(new CustomEvent(TUTORIAL_CHAPTER_EVENT, { detail: { tutorialId, chapter } }));
+  }, [touring, chapter, tutorialId]);
 
   const startTour = () => {
     setResume(time);

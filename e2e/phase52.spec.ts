@@ -45,6 +45,7 @@ test("📐 2D půdorys: retrofit = CYKY-J k vypínači, světla na RCBO typ A, I
   );
 
   // Retrofit: v každé krabici vypínače N → CYKY-J, žádné CYKY-O
+  await page.getByTestId("wizard-step-2").click();
   const methodology = page.getByTestId("install-methodology");
   await methodology
     .getByLabel("Úroveň instalace")
@@ -53,7 +54,8 @@ test("📐 2D půdorys: retrofit = CYKY-J k vypínači, světla na RCBO typ A, I
   await expect(page.getByTestId("cable-buy")).toContainText("CYKY-J 3×1,5");
 
   // Uložení A2 (tepelná izolace) → Iz 1,5 mm² = 14 A
-  await methodology.getByLabel("Způsob uložení kabelů").selectOption("A2");
+  await page.getByTestId("wizard-step-4").click();
+  await page.getByTestId("install-cables").getByLabel("Způsob uložení kabelů").selectOption("A2");
   await expect(page.getByTestId("circuit-protection").first()).toContainText(
     "Iz 14 A",
   );

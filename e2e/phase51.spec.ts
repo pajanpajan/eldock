@@ -62,6 +62,7 @@ test("🎨 2D půdorys: kaskáda výrobce → řada → barva, živé kóty a ú
   await expect(palette.getByRole("button", { name: /Pokojový termostat/ })).toBeVisible();
 
   // Kaskáda: Schneider Electric → Asfora → černá
+  await page.getByTestId("wizard-step-2").click();
   const appearance = page.getByTestId("device-appearance");
   await appearance.getByRole("radio", { name: "Schneider Electric" }).click();
   await appearance.getByRole("radio", { name: "Asfora" }).click();
@@ -70,6 +71,7 @@ test("🎨 2D půdorys: kaskáda výrobce → řada → barva, živé kóty a ú
 
   // Kreslení místnosti s živými kótami
   const canvas = page.getByTestId("floorplan-canvas");
+  await page.getByTestId("wizard-step-1").click();
   await page.getByRole("button", { name: "Kreslit místnost" }).click();
   // Fáze 74: nad plátnem přibyla řada barev rámečku – plátno nejdřív doprostřed okna (kreslí se od jeho horního rohu)
   await canvas.evaluate((element) => element.scrollIntoView({ block: "center" }));

@@ -42,6 +42,7 @@ test("📐 2D půdorys: osazení, párování, výkaz kabeláže Spodem / Vrchem
   await expect(page.getByTestId("cable-buy")).toContainText("CYKY-J 3×2,5");
   await expect(page.getByTestId("cable-buy")).toContainText("CYKY-O 3×1,5");
   await expect(page.getByTestId("cable-route").first()).toBeVisible();
+  await page.getByTestId("wizard-step-4").click();
   await page.getByRole("radio", { name: /Spodem \(v podlaze\)/ }).click();
   await expect(totals.locator('[data-mode="BOTTOM"]')).toHaveClass(/border-primary/);
   await page.getByRole("radio", { name: /Optimalizovaně \(Auto\)/ }).click();
