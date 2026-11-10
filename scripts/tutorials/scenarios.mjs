@@ -56,18 +56,41 @@ async function place(d, group, entry, points, { keepSelected = false } = {}) {
   if (!keepSelected) await d.press("Escape", 100);
 }
 
-/** Místnost tažením: nástroj v horní liště, plátno, tah a rychlý název v detailu místnosti. */
-async function drawRoom(d, room) {
+/**
+ * Fáze 89: krok průvodce 2D půdorysem (1 podklad a místnosti, 2 systém a design, 3 osazení, 4 trasy, 5 výstupy) –
+ * nad plátnem je vždy jen lišta aktivního kroku, kapitola videa proto začíná kliknutím na svůj krok.
+ */
+async function wizardStep(d, step) {
+  const wizard = d.page.getByTestId("floorplan-wizard");
+  if (!(await wizard.isVisible().catch(() => false))) return;
+  if ((await wizard.getAttribute("data-step")) === String(step)) return;
+  await d.click(d.page.getByTestId(`wizard-step-${step}`), { after: 250 });
+  await d.page
+    .waitForFunction((wanted) => document.querySelector('[data-testid="floorplan-wizard"]')?.getAttribute("data-step") === String(wanted), step, { timeout: 10_000 })
+    .catch(() => {});
+}
+
+/** Rychlý název vybrané místnosti v detailu místnosti (pravý sloupec). */
+async function nameRoom(d, name) {
+  const detail = d.page.getByTestId("room-detail");
+  const chip = detail.getByRole("group", { name: "Rychlé názvy místností" }).getByRole("button", { name, exact: true });
+  if (await chip.isVisible().catch(() => false)) await d.click(chip, { after: 200 });
+}
+
+/** Místnost tažením: nástroj v liště kroku 1, tah po plátně (posun stránky jen když by místnost byla mimo obraz) a rychlý název. */
+async function drawRoom(d, room, { name = true } = {}) {
   const { page } = d;
   const { canvas } = editor(page);
   await d.click(page.getByRole("button", { name: "Kreslit místnost (obdélník)" }), { after: 150 });
-  await frameCanvas(d);
-  const from = await d.planPoint(canvas, ...room.from);
-  const to = await d.planPoint(canvas, ...room.to);
+  let from = await d.planPoint(canvas, ...room.from);
+  let to = await d.planPoint(canvas, ...room.to);
+  if ([from, to].some((point) => point.y < SAFE.top + 60 || point.y > SAFE.bottom)) {
+    await frameCanvas(d);
+    from = await d.planPoint(canvas, ...room.from);
+    to = await d.planPoint(canvas, ...room.to);
+  }
   await d.drag(from, to, { ms: 700, steps: 18, hold: 100 });
-  const detail = page.getByTestId("room-detail");
-  const chip = detail.getByRole("group", { name: "Rychlé názvy místností" }).getByRole("button", { name: room.name, exact: true });
-  if (await chip.isVisible().catch(() => false)) await d.click(chip, { after: 200 });
+  if (name) await nameRoom(d, room.name);
 }
 
 const pudorys = {
@@ -87,7 +110,20 @@ const pudorys = {
       await d.click(page.getByTestId("floorplan-new"), { after: 150 });
       await editor(page).canvas.waitFor({ timeout: 120_000 });
       await d.idle(4000);
-      for (const room of ROOMS) await drawRoom(d, room);
+      const firstCanvas = await editor(page).canvas.elementHandle();
+      await drawRoom(d, ROOMS[0], { name: false });
+      // první změna založí půdorys na serveru (/novy → /<id>) a editor se přemontuje (klíč = id) – průvodce pak
+      // stojí na kroku 2 a úpravy z doby před přemontováním se ztratí; počkat na nový editor, vrátit se na krok 1
+      // a teprve pak první místnost pojmenovat
+      await page.waitForURL(/\/panel-builder\/floorplan\/(?!novy)[^/?#]+$/, { timeout: 30_000 }).catch(() => {});
+      for (let round = 0; round < 40 && (await firstCanvas?.evaluate((element) => element.isConnected).catch(() => false)); round++) await d.sleep(100);
+      await editor(page).canvas.waitFor({ timeout: 30_000 });
+      await d.sleep(300);
+      await wizardStep(d, 1);
+      const middle = await d.planPoint(editor(page).canvas, 5000, 4000);
+      await d.clickAt(middle.x, middle.y, { after: 250 });
+      await nameRoom(d, ROOMS[0].name);
+      await drawRoom(d, ROOMS[1]);
       await ch.until({ word: "nahrát", cue: 2 }, 500);
       await d.point(page.locator('[data-tour="floorplan-upload"]'), { hold: 450 });
       await ch.until({ word: "zkalibrovat", cue: 2 }, 500);
@@ -109,6 +145,7 @@ const pudorys = {
       const colors = appearance.getByTestId("insert-colors");
       const families = appearance.getByTestId("abb-families");
       const level = page.getByLabel("Úroveň instalace");
+      await wizardStep(d, 2);
       await d.reveal(appearance);
       await ch.until({ word: "výrobce" }, 450);
       await d.click(brands.getByRole("radio", { name: /Schneider/ }).first());
@@ -140,6 +177,7 @@ const pudorys = {
     // 3. Rozváděč, zásuvky, vypínač, ⭐, žaluzie, čidlo, spotřebič, svítidlo se stmíváním a RGBW, vana a umyvadlo
     async (d, ch) => {
       const { page } = d;
+      await wizardStep(d, 3);
       await frameCanvas(d);
       // sbalené sestavy ve víceramečku – celá paleta je pak vidět nad titulkovou lištou
       const assemblies = page.getByTestId("assembly-palette-toggle");
@@ -171,6 +209,7 @@ const pudorys = {
     async (d, ch) => {
       const { page } = d;
       const { canvas } = editor(page);
+      await wizardStep(d, 4);
       await frameCanvas(d);
       const route = canvas.getByTestId("cable-route").first();
       if (await route.count()) await d.point(route, { hold: 700 });
@@ -200,7 +239,10 @@ const pudorys = {
     // 5. Kusovník s objednacími čísly, export PDF / DXF a rozváděč z půdorysu na 1 klik
     async (d, ch) => {
       const { page } = d;
-      await d.click(page.getByTestId("wiring-bom-open").first(), { after: 700 });
+      // krok 5 průvodce: kusovník, export a žluté „⚡ Vygenerovat rozváděč z tohoto půdorysu“ v jedné liště
+      await wizardStep(d, 5);
+      const bom = page.getByTestId("wizard-bom");
+      await d.click((await bom.isVisible().catch(() => false)) ? bom : page.getByTestId("wiring-bom-open").first(), { after: 700 });
       const table = page.getByTestId("wiring-bom-table");
       if (await table.isVisible().catch(() => false)) {
         await d.point(table, { hold: 500, position: { x: 300, y: 90 } });
@@ -218,7 +260,8 @@ const pudorys = {
       await name.fill("RH – rodinný dům Novák");
       const environment = page.getByTestId("floorplan-environment");
       if (await environment.isVisible().catch(() => false)) await d.select(environment, "INDOOR_DRY", { after: 200 });
-      await d.click(page.getByTestId("generate-from-floorplan"), { after: 200 });
+      const generate = page.getByTestId("wizard-generate");
+      await d.click((await generate.isVisible().catch(() => false)) ? generate : page.getByTestId("generate-from-floorplan"), { after: 200 });
       await page.waitForURL(/\/panel-builder\/(?!floorplan)[^/]+$/, { timeout: 120_000 });
       await page.getByTestId("vector-panel").waitFor({ timeout: 120_000 });
       await d.idle(4000);

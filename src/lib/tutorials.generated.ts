@@ -15,40 +15,40 @@ export interface TutorialMedia {
   voice: string;
 }
 
-export const TUTORIAL_GENERATED_AT = "2026-11-10T19:01:49.093Z";
+export const TUTORIAL_GENERATED_AT = "2026-11-10T20:34:43.049Z";
 
 export const TUTORIAL_MEDIA: Partial<Record<TutorialId, TutorialMedia>> = {
   "pudorys": {
     "id": "pudorys",
-    "durationSec": 101.2,
-    "sizeBytes": 12486767,
+    "durationSec": 101.6,
+    "sizeBytes": 11379010,
     "width": 1920,
     "height": 1080,
     "video": "h264",
     "audio": "aac",
     "chapters": [
       0.2,
-      20.9,
-      39.7,
+      21.1,
+      40,
       65.5,
-      83.3
+      83.4
     ],
     "voice": "Edge TTS cs-CZ-AntoninNeural"
   },
   "panel-builder": {
     "id": "panel-builder",
-    "durationSec": 103.1,
-    "sizeBytes": 10664096,
+    "durationSec": 103.6,
+    "sizeBytes": 11090482,
     "width": 1920,
     "height": 1080,
     "video": "h264",
     "audio": "aac",
     "chapters": [
       0.2,
-      19.9,
-      42.1,
-      59.3,
-      81.4
+      20,
+      42.4,
+      59.6,
+      81.9
     ],
     "voice": "Edge TTS cs-CZ-AntoninNeural"
   }

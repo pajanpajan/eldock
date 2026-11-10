@@ -54,7 +54,8 @@ export const TUTORIALS: readonly Tutorial[] = [
           { text: "Můžete nahrát PDF či DXF výkres od stavaře, zkalibrovat měřítko na jednu známou stěnu,", say: "Můžete nahrát pé dé ef či dé iks ef výkres od stavaře, zkalibrovat měřítko na jednu známou stěnu," },
           { text: "nebo kreslit místnosti od nuly na volitelnou plochu až sto krát sto metrů." },
         ],
-        targets: ['[data-tour="floorplan-upload"]', '[data-tour="floorplan-calibrate"]', '[data-testid="plane-preset"]', '[data-testid="install-methodology"]'],
+        // Fáze 89: cíle jsou v liště kroku 1 průvodce (Tour na něj přepne – TUTORIAL_CHAPTER_EVENT)
+        targets: ['[data-tour="floorplan-upload"]', '[data-tour="floorplan-calibrate"]', '[data-testid="room-by-size"]', '[data-testid="plane-preset"]'],
       },
       {
         id: "vyrobci",
@@ -64,7 +65,7 @@ export const TUTORIALS: readonly Tutorial[] = [
           { text: "například ABB Zoni, Levit M nebo prvky chytré domácnosti ABB free@home, Loxone a TapHome.", say: "například á bé bé zoni, levit em nebo prvky chytré domácnosti á bé bé frí et houm, loxon a tep houm." },
           { text: "Kdykoliv změníte barvu nebo řadu, program automaticky přepočítá všechna objednací čísla strojků, krytů i vícerámečků." },
         ],
-        targets: ['[data-testid="device-appearance"]'],
+        targets: ['[data-testid="device-appearance"]', '[data-testid="install-methodology"]'],
       },
       {
         id: "osazeni",
@@ -98,7 +99,7 @@ export const TUTORIALS: readonly Tutorial[] = [
           { text: "vyexportujete výkres do PDF nebo AutoCADu", say: "vyexportujete výkres do pé dé ef nebo autokadu" },
           { text: "a jedním klikem vygenerujete z půdorysu kompletně osazený rozváděč." },
         ],
-        targets: ['[data-testid="wiring-bom-open"]', '[data-testid="export-pdf"]', '[data-testid="generate-from-floorplan"]'],
+        targets: ['[data-testid="wizard-bom"]', '[data-testid="export-pdf"]', '[data-testid="wizard-generate"]'],
       },
     ],
   },
