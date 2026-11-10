@@ -44,6 +44,8 @@ const WARM_ROUTES = [
   "/plant/plant-jbc",
   "/plant/plant-jbc/building/bld-jbc-a/floor/floor-jbc-a-1np",
   "/equipment/eq-rm1",
+  // Průvodce „Zadat změnu“ (fáze 21 – nahrání fotky čeká jen 30 s; na studeném serveru se stránka kompilovala déle)
+  "/equipment/eq-r-cnc-04/change-request",
   "/inspections",
   "/inspections/planner",
   "/studio",
