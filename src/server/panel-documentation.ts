@@ -6,6 +6,7 @@ import { isMix } from "@/lib/panel-builder/catalog";
 import { componentsList, partsList, technicalData } from "@/lib/panel-builder/documentation";
 import { MAIN_BOARD } from "@/engine/floorplan-bridge";
 import { drawingSymbolOf, renderPanelDrawingSvg, renderSingleLineDiagramSvg, type DrawingItem, type HotspotSink } from "@/lib/panel-builder/drawings";
+import { enclosureMpn, enclosureOrderText, enclosureSummary } from "@/lib/panel-builder/enclosure-choice";
 import { symbolKindOf, symbolLegend } from "@/lib/panel-builder/iec-symbols";
 import { LEGAL_FRAMEWORK, externalInfluencesProtocol, isFlushEnclosure } from "@/lib/panel-builder/external-influences";
 import { analyzeDraft, floorsOf, parseCableReport, parseDraft, switchFloor, type FloorplanDraft } from "@/lib/panel-builder/floorplan-editor";
@@ -41,7 +42,14 @@ export async function buildDocumentationData(project: PanelProjectDetail, origin
   const { thermal, docItems, blockers } = documentationState(project);
   // Skříň vybraná z katalogu rozvodnic (fáze 43) má přednost před dohledáním podle názvu modelu
   const enclosure = picked
-    ? { articleNumber: picked.articleNumber, typeCode: picked.model, manufacturer: picked.manufacturer, description: `Skříň rozváděče ${picked.model}, ${picked.rows}× ${picked.modulesPerRow} M, ${picked.heightMm} × ${picked.widthMm} × ${picked.depthMm} mm, ${picked.ipRating}`, category: "ENCLOSURE" as const }
+    ? {
+        // Fáze 85: objednací číslo jen z katalogu výrobce – orientační skříň Eldocku (STD-…) = ověřte
+        articleNumber: enclosureMpn(picked) ?? "ověřte u výrobce",
+        typeCode: picked.model,
+        manufacturer: picked.manufacturer,
+        description: `Skříň rozváděče ${picked.model}, ${picked.rows}× ${picked.modulesPerRow} M, ${picked.heightMm} × ${picked.widthMm} × ${picked.depthMm} mm, ${picked.ipRating}${enclosureMpn(picked) ? "" : " – orientační typ, objednací číslo ověřte v katalogu výrobce"}`,
+        category: "ENCLOSURE" as const,
+      }
     : enclosureRow
     ? { articleNumber: enclosureRow.articleNumber, typeCode: enclosureRow.typeCode, manufacturer: enclosureRow.manufacturer, description: enclosureRow.description, category: enclosureRow.category }
     : null;
@@ -155,7 +163,15 @@ export async function buildDocumentationData(project: PanelProjectDetail, origin
     data.stampUrl = null;
     data.qrUrl = `${origin}/ukazka-elaboratu`;
   }
-  return { data, blockers, edition, routineTest };
+  // Fáze 85: karta „Zvolená rozvodnice a skříň“ – popis, MPN, objednací údaje a náhled čela s dvířky
+  const enclosureCard = picked
+    ? {
+        summary: enclosureSummary(picked),
+        orderText: enclosureOrderText(picked, { code: project.code, name: project.name }),
+        doorSvg: renderPanelDrawingSvg(project, drawingItems, project.enclosureModel, { plan: busbars, position: project.incomerFrom === "BOTTOM" ? "BOTTOM" : "TOP" }, undefined, { door: enclosureSummary(picked).door }),
+      }
+    : null;
+  return { data, blockers, edition, routineTest, enclosureCard };
 }
 
 /**

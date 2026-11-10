@@ -67,6 +67,8 @@ const createSchema = z.object({
   railPhotos: z.array(z.object({ rail: z.number().int().min(1).max(12), url: z.string().max(300).regex(/^\/api\/files\/photos\/[\w./-]+$/) })).max(12).default([]),
   /** Fáze 55: soustava přívodu (1f / 3f, TN-C-S / TN-S / TT). */
   supplySystem: z.enum(["3F_TNCS", "3F_TNS", "3F_TT", "1F_TNS", "1F_TNCS"]).optional(),
+  /** Fáze 85: volitelně konkrétní skříň / rozvodnice z katalogu skříní. */
+  enclosureId: id.nullable().optional(),
 });
 
 const readPhoto = (url: string) => readStoredFile(url);
@@ -99,7 +101,10 @@ export async function createPanelProjectAction(input: z.input<typeof createSchem
     // Kombinovaná analýza: celková topologie + ostré hodnoty z detailních fotek lišt
     const details = railPhotos.length ? await analyzeRailDetails(prisma, project.id, railPhotos, { analyze: analyzeRailPhoto, readPhoto }) : null;
     revalidatePath("/panel-builder", "layout");
-    const warning = [result.warning, ...(details?.warnings ?? [])].filter(Boolean).join(" ") || undefined;
+    // Fáze 85: analýza našla víc DIN lišt, než má skříň zvolená při zakládání
+    const fixed = rest.enclosureId ? await prisma.panelBoardProject.findUnique({ where: { id: project.id }, select: { dinRailsCount: true, enclosureFixed: true, enclosure: { select: { rows: true, model: true } } } }) : null;
+    const overRails = fixed?.enclosureFixed && fixed.enclosure && fixed.dinRailsCount > fixed.enclosure.rows ? `Analýza našla ${fixed.dinRailsCount} DIN lišt, zvolená skříň ${fixed.enclosure.model} má ${fixed.enclosure.rows} – zkontrolujte skříň v kroku 3.` : null;
+    const warning = [result.warning, ...(details?.warnings ?? []), overRails].filter(Boolean).join(" ") || undefined;
     return { ok: true, data: { id: project.id, mode: result.mode, warning, details: details?.analyzed ?? 0 } };
   } catch (error) {
     return failure(error, "Projekt se nepodařilo založit.");

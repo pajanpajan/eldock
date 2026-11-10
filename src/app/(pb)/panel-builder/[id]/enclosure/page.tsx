@@ -3,7 +3,9 @@ import { notFound } from "next/navigation";
 
 import { PageTransition } from "@/components/layout/PageTransition";
 import { panelBuilderGuard } from "@/components/panel-builder/access";
+import { EnclosureLockBanner } from "@/components/panel-builder/EnclosureLockBanner";
 import { EnclosureWorkspace } from "@/components/panel-builder/EnclosureWorkspace";
+import { brandLabel } from "@/lib/panel-builder/enclosure-choice";
 import { NextStepBar, PanelSteps } from "@/components/panel-builder/PanelSteps";
 import { ProjectHeader } from "@/components/panel-builder/ProjectHeader";
 import { enclosureNeed } from "@/lib/panel-builder/enclosures";
@@ -32,6 +34,8 @@ export default async function PanelEnclosurePage({ params }: PageProps<"/panel-b
     <PageTransition>
       <ProjectHeader project={project} />
       <PanelSteps project={project} current="enclosure" />
+      {/* Fáze 85: skříň zvolená při zakládání – omezení lišt a jeho uvolnění */}
+      {project.enclosureFixed && project.enclosure ? <EnclosureLockBanner projectId={project.id} title={`${brandLabel(project.enclosure.manufacturer)} ${project.enclosure.model}`} rows={project.enclosure.rows} modulesPerRow={project.enclosure.modulesPerRow} /> : null}
       <EnclosureWorkspace
         projectId={project.id}
         need={need}

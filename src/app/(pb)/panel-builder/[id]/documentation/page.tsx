@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { PageTransition } from "@/components/layout/PageTransition";
 import { panelBuilderGuard } from "@/components/panel-builder/access";
+import { ChosenEnclosureCard } from "@/components/panel-builder/documentation/ChosenEnclosureCard";
 import { DocumentationActions } from "@/components/panel-builder/documentation/DocumentationActions";
 import { DocumentationSheets } from "@/components/panel-builder/documentation/DocumentationSheets";
 import { NextStepBar, PanelSteps } from "@/components/panel-builder/PanelSteps";
@@ -31,7 +32,7 @@ export default async function PanelDocumentationPage({ params }: PageProps<"/pan
   if (!project) notFound();
   const [targets, origin] = await Promise.all([getReleaseTargets(), requestOrigin()]);
 
-  const { data, blockers: baseBlockers, edition, routineTest } = await buildDocumentationData(project, origin);
+  const { data, blockers: baseBlockers, edition, routineTest, enclosureCard } = await buildDocumentationData(project, origin);
   // Fáze 57: bez výslovně zvoleného prostředí dle ČSN 33 2000-5-51 ed. 3 nelze tisknout ani propustit dokumentaci
   const environmentConfirmed = Boolean(project.environmentConfirmedAt);
   const blockers = environmentConfirmed ? baseBlockers : [ENVIRONMENT_BLOCKER, ...baseBlockers];
@@ -64,6 +65,16 @@ export default async function PanelDocumentationPage({ params }: PageProps<"/pan
         <div className="no-print">
           <EnvironmentConfirm projectId={project.id} environment={project.environment} confirmedAt={project.environmentConfirmedAt} />
         </div>
+        {/* Fáze 85: zvolená rozvodnice a skříň – náhled s dvířky i bez, popis, typ, MPN a objednací údaje */}
+        <ChosenEnclosureCard
+          projectId={project.id}
+          summary={enclosureCard?.summary ?? null}
+          fallbackModel={project.enclosureModel}
+          orderText={enclosureCard?.orderText ?? null}
+          openSvg={data.panelDrawingSvg}
+          doorSvg={enclosureCard?.doorSvg ?? null}
+          fixed={project.enclosureFixed}
+        />
         <div className="no-print grid gap-4 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
           <div className="rounded-xl border border-border bg-card p-4">
             <StandardEditionSelect projectId={project.id} value={edition.id as StandardEditionId} />

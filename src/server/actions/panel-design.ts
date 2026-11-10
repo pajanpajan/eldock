@@ -14,7 +14,7 @@ import { assertPanelFiles } from "@/server/file-access";
 import { readStoredFile } from "@/server/storage";
 import { saveRoutineTest, setStandardEdition } from "@/server/services/panel-design";
 import { ROUTINE_TEST_POINTS } from "@/lib/legislation-2027";
-import { listEnclosures, moveRail, placeComponents, previewConfig, saveApplianceLibrary, saveCircuitChips, selectEnclosure, setCompanyBranding, setEnvironment, setRailCapacity, type ConfigPreview } from "@/server/services/panel-design";
+import { listEnclosures, moveRail, placeComponents, previewConfig, releaseEnclosureLimit, saveApplianceLibrary, saveCircuitChips, selectEnclosure, setCompanyBranding, setEnvironment, setRailCapacity, type ConfigPreview } from "@/server/services/panel-design";
 import { MAX_CHIPS, type ChipSet } from "@/lib/panel-builder/circuit-chips";
 import { MAX_APPLIANCES, parseApplianceList } from "@/lib/panel-builder/appliances";
 
@@ -135,6 +135,19 @@ export async function selectEnclosureAction(projectId: string, enclosureId: stri
     return { ok: true, data: { enclosureModel: project.enclosureModel } };
   } catch (error) {
     return actionFailure(error, "Skříň se nepodařilo vybrat.");
+  }
+}
+
+/** Fáze 85: uvolnění omezení lišt skříní zvolenou při zakládání projektu. */
+export async function releaseEnclosureLimitAction(projectId: string): Promise<ActionResult<{ released: true }>> {
+  if (!id.safeParse(projectId).success) return { ok: false, error: "Neplatný projekt." };
+  try {
+    await guardProject(projectId);
+    await releaseEnclosureLimit(prisma, projectId);
+    revalidatePath(`/panel-builder/${projectId}`, "layout");
+    return { ok: true, data: { released: true } };
+  } catch (error) {
+    return actionFailure(error, "Omezení skříně se nepodařilo uvolnit.");
   }
 }
 

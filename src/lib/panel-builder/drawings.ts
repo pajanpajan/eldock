@@ -8,6 +8,7 @@ import { drawSymbol, symbolKindOf, type SymbolKind } from "./iec-symbols";
 import { DEVICE_HEIGHT_MM, MODULE_MM, railFraction, slotOffsets, type EnclosureDims } from "./layout";
 import type { BusbarPlan } from "./pe-n-busbars";
 import { phasesOf, readingOrder } from "./tree";
+import type { DoorKind } from "./enclosure-choice";
 
 export interface DrawingItem {
   id: string;
@@ -78,7 +79,25 @@ function busbarStripSvg(plan: BusbarPlan, x: number, y: number, width: number): 
   return `<defs><pattern id="pe-stripes" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="2" height="4" fill="#16a34a"/><rect x="2" width="2" height="4" fill="#facc15"/></pattern></defs>${out.join("")}`;
 }
 
-export function renderPanelDrawingSvg(dims: EnclosureDims & { depthMm?: number }, items: readonly DrawingItem[], enclosureLabel = "", busbars?: { plan: BusbarPlan; position: "TOP" | "BOTTOM" }, sink?: HotspotSink): string {
+/** Fáze 85: dvířka skříně v náhledu – kouřová průhledná (přístroje prosvítají) nebo plná; závěsy vlevo, klika vpravo. */
+function doorSvg(x: number, y: number, w: number, h: number, kind: DoorKind): string {
+  const panel =
+    kind === "transparent"
+      ? `<rect x="${x + 3}" y="${y + 3}" width="${w - 6}" height="${h - 6}" rx="3" fill="#1e293b" fill-opacity="0.42" stroke="#334155" stroke-width="2"/>`
+      : `<rect x="${x + 3}" y="${y + 3}" width="${w - 6}" height="${h - 6}" rx="3" fill="#e4e4e7" stroke="#71717a" stroke-width="2"/><text x="${x + w / 2}" y="${y + h / 2}" font-size="7" text-anchor="middle" fill="#52525b">dvířka (plná)</text>`;
+  const hinges = [0.18, 0.82].map((f) => `<rect x="${x - 2.5}" y="${y + h * f - 9}" width="5" height="18" rx="1.5" fill="#a1a1aa" stroke="${INK}" stroke-width="0.4"/>`).join("");
+  return `<g data-door="${kind}">${panel}${hinges}<rect x="${x + w - 16}" y="${y + h / 2 - 22}" width="7" height="44" rx="3.5" fill="#71717a" stroke="${INK}" stroke-width="0.5"/></g>`;
+}
+
+export function renderPanelDrawingSvg(
+  dims: EnclosureDims & { depthMm?: number },
+  items: readonly DrawingItem[],
+  enclosureLabel = "",
+  busbars?: { plan: BusbarPlan; position: "TOP" | "BOTTOM" },
+  sink?: HotspotSink,
+  /** Fáze 85: náhled zavřené skříně (dvířka přes lišty a přístroje). */
+  options: { door?: DoorKind } = {},
+): string {
   const margin = 34;
   const W = dims.widthMm;
   const H = dims.heightMm;
@@ -159,6 +178,7 @@ ${busbars ? busbarStripSvg(busbars.plan, margin + 10, busbars.position === "TOP"
 <line x1="${margin + W + 14}" y1="${margin}" x2="${margin + W + 14}" y2="${margin + H}" stroke="${INK}" stroke-width="0.4"/>
 <text transform="translate(${margin + W + 24} ${margin + H / 2}) rotate(-90)" font-size="6" text-anchor="middle">${H} mm</text>
 ${enclosureLabel ? `<text x="${margin}" y="${margin - 8}" font-size="6" font-weight="700">-A1 ${esc(enclosureLabel)}</text>` : ""}
+${options.door ? doorSvg(margin, margin, W, H, options.door) : ""}
 </svg>`;
 }
 

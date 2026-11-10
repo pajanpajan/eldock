@@ -13,6 +13,8 @@ import { thermalDevices, thermalEnclosure, type ThermalItemInput } from "@/lib/p
 import { ancestors, isConnected, isPhaseAssignment, proposeTree, renumber, treeNodeFrom, validateTree, type TreeAssignment } from "@/lib/panel-builder/tree";
 import { calculateThermal } from "@/lib/thermalCalculation";
 import { DEFAULT_RAIL_MODULES, MAX_RAILS, railCapacities, railColumns, withRailAdded, withRailRemoved } from "@/lib/panel-builder/rails";
+import { brandLabel, enclosureRails, railLimits } from "@/lib/panel-builder/enclosure-choice";
+import { enclosureProjectData } from "@/lib/panel-builder/enclosures";
 import { supplyById, supplyColumns } from "@/lib/panel-builder/supply";
 import { ENVIRONMENT_BLOCKER } from "@/lib/panel-builder/environments";
 import { WorkflowError } from "@/lib/workflow/state-machine";
@@ -112,11 +114,16 @@ export interface CreateProjectInput {
   designMode?: "PHOTO" | "DESIGN";
   /** Fáze 55: soustava přívodu (`SUPPLY_SYSTEMS`), výchozí 3f TN-S. */
   supplySystem?: string;
+  /** Fáze 85: skříň z katalogu zvolená při zakládání – lišty návrhu podle ní a omezení na její řady / moduly. */
+  enclosureId?: string | null;
 }
 
 export async function createPanelProject(prisma: PrismaClient, input: CreateProjectInput) {
   const name = input.name.trim();
   if (!name) throw new WorkflowError("VALIDATION", "Zadejte název rozváděče.");
+  // Fáze 85: zvolená skříň (rozměry, krytí, P_max do oteplení, u návrhu od nuly i lišty podle řad skříně)
+  const enclosure = input.enclosureId ? await prisma.panelEnclosure.findUnique({ where: { id: input.enclosureId } }) : null;
+  if (input.enclosureId && !enclosure) throw new WorkflowError("NOT_FOUND", "Skříň v katalogu neexistuje.");
   const codes = (await prisma.panelBoardProject.findMany({ select: { code: true } })).map((row) => row.code);
   return prisma.panelBoardProject.create({
     data: {
@@ -132,6 +139,7 @@ export async function createPanelProject(prisma: PrismaClient, input: CreateProj
       companyId: input.companyId ?? null,
       ...input.dims,
       ...(input.designMode === "DESIGN" ? { designMode: "DESIGN", photoUrl: null, status: "RECOGNIZED" as const, ...railColumns([DEFAULT_RAIL_MODULES]) } : {}),
+      ...(enclosure ? { enclosureId: enclosure.id, enclosureFixed: true, ...enclosureProjectData(enclosure), ...(input.designMode === "DESIGN" ? railColumns(enclosureRails(enclosure)) : {}) } : {}),
     },
   });
 }
@@ -739,8 +747,15 @@ export async function deleteRail(prisma: PrismaClient, projectId: string, rail: 
 
 /** „+ Přidat DIN lištu“ pod stávající lišty. */
 export async function addRail(prisma: PrismaClient, projectId: string) {
-  const project = await prisma.panelBoardProject.findUnique({ where: { id: projectId }, select: { dinRailsCount: true, modulesPerRail: true, railModulesJson: true } });
+  const project = await prisma.panelBoardProject.findUnique({
+    where: { id: projectId },
+    select: { dinRailsCount: true, modulesPerRail: true, railModulesJson: true, enclosureFixed: true, enclosure: { select: { manufacturer: true, model: true, rows: true, modulesPerRow: true } } },
+  });
   if (!project) throw new WorkflowError("NOT_FOUND", "Projekt rozváděče neexistuje.");
   if (project.dinRailsCount >= MAX_RAILS) throw new WorkflowError("VALIDATION", `Rozváděč může mít nejvýše ${MAX_RAILS} DIN lišt.`);
+  // Fáze 85: skříň zvolená při zakládání pustí jen tolik lišt, kolik má řad
+  const fixed = project.enclosureFixed ? project.enclosure : null;
+  if (fixed && project.dinRailsCount >= railLimits(fixed).maxRails)
+    throw new WorkflowError("VALIDATION", `Zvolená skříň ${brandLabel(fixed.manufacturer)} ${fixed.model} má jen ${fixed.rows} ${fixed.rows === 1 ? "řadu" : fixed.rows < 5 ? "řady" : "řad"} – další DIN lištu nepustí (omezení uvolníte v kroku 3 Skříň).`);
   return prisma.panelBoardProject.update({ where: { id: projectId }, data: railColumns(withRailAdded(railCapacities(project))), select: { dinRailsCount: true } });
 }

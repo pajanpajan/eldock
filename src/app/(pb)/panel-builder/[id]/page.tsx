@@ -13,6 +13,8 @@ import { vectorDeviceFrom } from "@/lib/panel-builder/vector-symbols";
 import { WIRING_CATEGORIES } from "@/lib/panel-builder/wiring-devices";
 import { ENCLOSURE_TYPES } from "@/lib/panel-builder/project";
 import { getBoardManufacturers, getBrandCounts, getPanelProject, getProjectEnclosure } from "@/server/queries/panel-builder";
+import { EnclosureLockBanner } from "@/components/panel-builder/EnclosureLockBanner";
+import { brandLabel } from "@/lib/panel-builder/enclosure-choice";
 
 export async function generateMetadata({ params }: PageProps<"/panel-builder/[id]">): Promise<Metadata> {
   const project = await getPanelProject((await params).id);
@@ -83,6 +85,8 @@ export default async function PanelProjectPage({ params }: PageProps<"/panel-bui
     <PageTransition>
       <ProjectHeader project={project} />
       <PanelSteps project={project} current="recognition" />
+      {/* Fáze 85: skříň zvolená při zakládání – lišty návrhu nepřekročí její řady ani moduly */}
+      {project.enclosureFixed && pickedEnclosure ? <EnclosureLockBanner projectId={project.id} title={`${brandLabel(pickedEnclosure.manufacturer)} ${pickedEnclosure.model}`} rows={pickedEnclosure.rows} modulesPerRow={pickedEnclosure.modulesPerRow} /> : null}
       <RecognitionWorkspace
         projectId={project.id}
         designMode={project.designMode === "DESIGN" ? "DESIGN" : "PHOTO"}

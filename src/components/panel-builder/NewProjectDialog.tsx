@@ -20,7 +20,10 @@ import { createScheduleProjectAction } from "@/server/actions/panel-projects";
 import { INSTALL_LEVELS, INSTALL_METHODS, type InstallLevel, type InstallMethod } from "@/engine/floorplan-bridge";
 import { SAMPLE_SCHEDULE, type ScheduleRoom } from "@/engine/room-schedule";
 
+import { EnclosureChoice } from "./EnclosureChoice";
 import { ScheduleEditor } from "./ScheduleEditor";
+import { brandLabel, enclosureRails } from "@/lib/panel-builder/enclosure-choice";
+import type { EnclosureLike } from "@/lib/panel-builder/enclosures";
 import { DEFAULT_SUPPLY, type SupplySystem } from "@/lib/panel-builder/supply";
 import { SupplySelect } from "./ProjectAdmin";
 
@@ -77,6 +80,9 @@ export function NewProjectDialog({ credits = null }: { credits?: number | null }
   const [countDoubleAsTwo, setCountDoubleAsTwo] = useState(true);
   // Fáze 82: jištění světelného okruhu se zásuvkami (sloupec 💡 zás. v soupisu)
   const [lightingSocketA, setLightingSocketA] = useState<10 | 13>(10);
+  // Fáze 85: volitelně konkrétní skříň / rozvodnice (návrh od nuly a pasport z fotky)
+  const [enclosure, setEnclosure] = useState<EnclosureLike | null>(null);
+  const enclosureLayout = enclosure ? enclosureRails(enclosure) : null;
   const design = mode === "DESIGN";
   const schedule = mode === "SCHEDULE";
   const main = shots.find((shot) => shot.id === mainId) ?? null;
@@ -190,9 +196,11 @@ export function NewProjectDialog({ credits = null }: { credits?: number | null }
         modulesPerRail: design ? DEFAULT_RAIL_MODULES : Number(form.get("modules")),
         designMode: design ? "DESIGN" : "PHOTO",
         railPhotos,
+        enclosureId: enclosure?.id ?? null,
       });
       if (!result.ok) return void toast.error(result.error);
-      if (result.data.design) toast.success("Návrh založen – 1 DIN lišta 12M, vkládejte přístroje z pravého menu.");
+      if (result.data.design)
+        toast.success(enclosure && enclosureLayout ? `Návrh založen ve skříni ${brandLabel(enclosure.manufacturer)} ${enclosure.model} –${enclosureLayout.length}× DIN lišta ${enclosureLayout[0]}M, vkládejte přístroje z pravého menu.` : "Návrh založen – 1 DIN lišta 12M, vkládejte přístroje z pravého menu.");
       else toast.success(`${result.data.mode === "GEMINI" ? "Fotka analyzována přes Gemini" : "Fotka analyzována (Demo AI režim)"}${result.data.details ? ` + ${result.data.details} ${result.data.details === 1 ? "detail lišty" : "detaily lišt"}` : ""}.`);
       if (result.data.warning) toast.warning(result.data.warning);
       setOpen(false);
@@ -278,6 +286,8 @@ export function NewProjectDialog({ credits = null }: { credits?: number | null }
           </div>
           {/* Fáze 55: soustava a počet fází přívodu (1f = 2P hlavní vypínač, 1f svodič, 2P chrániče, vše na L1) */}
           <SupplySelect id="pb-supply" value={supply} onChange={setSupply} />
+          {/* Fáze 85: volitelný úvodní krok – konkrétní skříň / rozvodnice (výrobce → řada → model) */}
+          {!schedule ? <EnclosureChoice value={enclosure} onChange={setEnclosure} /> : null}
           {schedule ? (
             <div className="flex flex-col gap-2">
               <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -311,8 +321,16 @@ export function NewProjectDialog({ credits = null }: { credits?: number | null }
               <ScheduleEditor rooms={rooms} onChange={setRooms} />
             </div>
           ) : design ? (
-            <p className="rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-              Začínáte s <b className="text-foreground">1 DIN lištou na 12 modulů</b>. Šířku řady (8–36M) i další lišty nastavíte přímo na plátně, skříň vyberete podle velikosti návrhu.
+            <p className="rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground" data-testid="design-start">
+              {enclosure && enclosureLayout ? (
+                <>
+                  Začínáte ve skříni <b className="text-foreground">{enclosure.model}</b>: {enclosureLayout.length}× DIN lišta po {enclosureLayout[0]} modulech podle řad skříně.
+                </>
+              ) : (
+                <>
+                  Začínáte s <b className="text-foreground">1 DIN lištou na 12 modulů</b>. Šířku řady (8–36M) i další lišty nastavíte přímo na plátně, skříň vyberete podle velikosti návrhu.
+                </>
+              )}
             </p>
           ) : (
             <>
@@ -329,11 +347,11 @@ export function NewProjectDialog({ credits = null }: { credits?: number | null }
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="pb-rails">DIN lišt</Label>
-                  <Input id="pb-rails" name="rails" type="number" min={1} max={12} defaultValue={3} />
+                  <Input key={`rails-${enclosure?.id ?? "free"}`} id="pb-rails" name="rails" type="number" min={1} max={12} defaultValue={enclosureLayout?.length ?? 3} />
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="pb-modules">Modulů na lištu</Label>
-                  <Input id="pb-modules" name="modules" type="number" min={4} max={48} defaultValue={12} />
+                  <Input key={`modules-${enclosure?.id ?? "free"}`} id="pb-modules" name="modules" type="number" min={4} max={48} defaultValue={enclosureLayout?.[0] ?? 12} />
                 </div>
               </div>
 

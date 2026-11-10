@@ -3,6 +3,7 @@ import { HIDDEN_MANUFACTURER_NAMES } from "@/lib/panel-builder/brands";
 import { catalogCategory, matchConfig, synthesizeComponent, type ItemConfig } from "@/lib/panel-builder/configurator";
 import { parseChipSet, type ChipSet } from "@/lib/panel-builder/circuit-chips";
 import { parseApplianceLibrary, parseApplianceList, type ApplianceLibrary } from "@/lib/panel-builder/appliances";
+import { brandLabel, railLimits } from "@/lib/panel-builder/enclosure-choice";
 import { enclosureProjectData } from "@/lib/panel-builder/enclosures";
 import { environmentOf, isEnvironmentId } from "@/lib/panel-builder/environments";
 import { isStandardEdition, parseRoutineTest, routineTestVerdict, standardEditionOf, type RoutineTest } from "@/lib/legislation-2027";
@@ -21,7 +22,15 @@ import { planRailMerge, signatureFromItem, signatureOf } from "@/lib/panel-build
 async function railProject(prisma: PrismaClient, projectId: string) {
   const project = await prisma.panelBoardProject.findUnique({
     where: { id: projectId },
-    select: { id: true, dinRailsCount: true, modulesPerRail: true, railModulesJson: true, items: { select: { id: true, dinRailIndex: true, positionOnRail: true, modulesWidth: true } } },
+    select: {
+      id: true,
+      dinRailsCount: true,
+      modulesPerRail: true,
+      railModulesJson: true,
+      enclosureFixed: true,
+      enclosure: { select: { manufacturer: true, model: true, rows: true, modulesPerRow: true } },
+      items: { select: { id: true, dinRailIndex: true, positionOnRail: true, modulesWidth: true } },
+    },
   });
   if (!project) throw new WorkflowError("NOT_FOUND", "Projekt rozváděče neexistuje.");
   return { ...project, capacities: railCapacities(project) };
@@ -33,6 +42,9 @@ const decimal = (value: number) => String(Math.round(value * 10) / 10).replace("
 export async function setRailCapacity(prisma: PrismaClient, projectId: string, rail: number, modules: number) {
   const project = await railProject(prisma, projectId);
   if (rail < 1 || rail > project.capacities.length) throw new WorkflowError("VALIDATION", "Neplatná DIN lišta.");
+  // Fáze 85: skříň zvolená při zakládání nepustí širší lištu, než má řadu
+  const fixed = project.enclosureFixed ? project.enclosure : null;
+  if (fixed && modules > railLimits(fixed).maxModules) throw new WorkflowError("VALIDATION", `Zvolená skříň ${brandLabel(fixed.manufacturer)} ${fixed.model} má řady po ${fixed.modulesPerRow} M – širší lištu nepustí (omezení uvolníte v kroku 3 Skříň).`);
   const capacities = withRailCapacity(project.capacities, rail, modules);
   await prisma.panelBoardProject.update({ where: { id: projectId }, data: railColumns(capacities) });
   return { capacities, overflow: Math.max(0, -freeOnRail(capacities, project.items, rail)) };
@@ -164,6 +176,11 @@ export async function selectEnclosure(prisma: PrismaClient, projectId: string, e
   const enclosure = await prisma.panelEnclosure.findUnique({ where: { id: enclosureId } });
   if (!enclosure) throw new WorkflowError("NOT_FOUND", "Skříň v katalogu neexistuje.");
   return prisma.panelBoardProject.update({ where: { id: projectId }, data: { enclosureId, ...enclosureProjectData(enclosure) }, select: { id: true, enclosureModel: true, widthMm: true, heightMm: true, depthMm: true, enclosurePmaxW: true } });
+}
+
+/** Fáze 85: uvolnění omezení lišt skříní zvolenou při zakládání (skříň zůstává vybraná). */
+export function releaseEnclosureLimit(prisma: PrismaClient, projectId: string) {
+  return prisma.panelBoardProject.update({ where: { id: projectId }, data: { enclosureFixed: false }, select: { id: true, enclosureFixed: true } });
 }
 
 /** Logo a razítko firmy (URL nahraného souboru; null = odebrat). */
