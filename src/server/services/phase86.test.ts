@@ -77,7 +77,7 @@ describe("fáze 86 – ověřené rozvodnice výrobců v katalogu skříní", ()
   });
 
   it("kaskáda dialogu nového projektu: nové řady s MPN, orientační typy zůstávají", async () => {
-    expect(await labels("ABB")).toEqual(["ComfortLine CA (rozteč 125 mm)", "ComfortLine CA (rozteč 150 mm)", "Mistral41W (orientační)", "UK600 (orientační)"]);
+    expect(await labels("ABB")).toEqual(["ComfortLine CA (rozteč 125 mm)", "ComfortLine CA (rozteč 150 mm)", "ComfortLine CU (rozteč 125 mm)", "ComfortLine CU (rozteč 150 mm)", "Mistral41F", "Mistral41W", "Mistral65", "Mistral65H", "Mistral41W (orientační)", "UK600 (orientační)"]);
     expect(await labels("Hager")).toEqual(["Univers FWU", "Vector II", "Golf (orientační)", "Volta (orientační)"]);
     expect(await labels("Schrack")).toEqual(["TOPO nástěnná", "TOPO zapuštěná", "Amparo (orientační)", "Amparo UP (orientační)"]);
     expect(await labels("Rittal")).toEqual(["AX (orientační)"]);

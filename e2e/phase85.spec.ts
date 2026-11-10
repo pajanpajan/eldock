@@ -18,13 +18,14 @@ test("🗄️ Nový návrh se zvolenou rozvodnicí: kaskáda, lišty podle skř�
     await expect(page.getByTestId("enclosure-choice")).toBeVisible({ timeout: 3_000 });
   }).toPass({ timeout: 60_000 });
 
-  // Volitelný krok: ABB → Mistral → MISTRAL65 3 × 18 M (objednací číslo z katalogu výrobce)
+  // Volitelný krok: ABB → Mistral65 → 65P18X32A 3 × 18 M (objednací číslo z katalogu výrobce; fáze 88: ověřená řada
+  // z katalogu ABB pro ČR převzala typy MISTRAL65 z externí databáze – dříve řada „Mistral“)
   const choice = page.getByTestId("enclosure-choice");
   await page.getByLabel("Název rozváděče").fill("RD fáze 85 – Mistral");
   await choice.getByTestId("enclosure-choice-toggle").click();
   await choice.getByTestId("enclosure-brand").selectOption("ABB");
-  await expect(choice.getByTestId("enclosure-series").locator('option[value="mistral|cat"]')).toHaveCount(1, { timeout: 30_000 });
-  await choice.getByTestId("enclosure-series").selectOption("mistral|cat");
+  await expect(choice.getByTestId("enclosure-series").locator('option[value="mistral65|cat"]')).toHaveCount(1, { timeout: 30_000 });
+  await choice.getByTestId("enclosure-series").selectOption("mistral65|cat");
   const model = choice.getByTestId("enclosure-model");
   const value = await model.locator("option", { hasText: "1SLM006501A1208" }).getAttribute("value");
   await model.selectOption(value!);
@@ -36,13 +37,13 @@ test("🗄️ Nový návrh se zvolenou rozvodnicí: kaskáda, lišty podle skř�
   await choice.getByTestId("enclosure-brand").selectOption("Schrack");
   await expect(choice.getByTestId("enclosure-series").locator("option", { hasText: "Amparo (orientační)" })).toHaveCount(1, { timeout: 30_000 });
   await choice.getByTestId("enclosure-brand").selectOption("ABB");
-  await expect(choice.getByTestId("enclosure-series").locator('option[value="mistral|cat"]')).toHaveCount(1, { timeout: 30_000 });
-  await choice.getByTestId("enclosure-series").selectOption("mistral|cat");
+  await expect(choice.getByTestId("enclosure-series").locator('option[value="mistral65|cat"]')).toHaveCount(1, { timeout: 30_000 });
+  await choice.getByTestId("enclosure-series").selectOption("mistral65|cat");
   await model.selectOption(value!);
   await page.getByRole("button", { name: /Založit návrh rozváděče/ }).click();
 
   // Krok 1: tři lišty po 18 M ze skříně, další řadu skříň nepustí
-  await expect(page.getByTestId("enclosure-lock")).toContainText("ABB MISTRAL65", { timeout: 90_000 });
+  await expect(page.getByTestId("enclosure-lock")).toContainText("ABB Mistral65 65P18X32A", { timeout: 90_000 });
   const panel = page.getByTestId("vector-panel");
   await expect(panel.locator("[data-rail]")).toHaveCount(3);
   await expect(panel.locator('[data-rail="1"]')).toHaveAttribute("data-capacity", "18");
@@ -56,7 +57,7 @@ test("🗄️ Nový návrh se zvolenou rozvodnicí: kaskáda, lišty podle skř�
   const card = page.getByTestId("chosen-enclosure");
   await expect(card).toBeVisible({ timeout: 90_000 });
   await expect(card.getByTestId("chosen-enclosure-fixed")).toBeVisible();
-  await expect(card.getByTestId("chosen-enclosure-type")).toContainText("MISTRAL65");
+  await expect(card.getByTestId("chosen-enclosure-type")).toContainText("Mistral65 65P18X32A");
   await expect(card.getByTestId("chosen-enclosure-mpn")).toHaveText("1SLM006501A1208");
   await expect(card.getByTestId("chosen-enclosure-render")).toHaveAttribute("data-door", "none");
   await card.getByTestId("enclosure-door-on").click();

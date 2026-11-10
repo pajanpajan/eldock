@@ -134,7 +134,8 @@ describe("catalog:sync – import externí databáze", () => {
     expect((await importExternalCatalog(prisma, external)).skipped).toBe(true);
     const again = await importExternalCatalog(prisma, external, { force: true });
     expect(again.components).toEqual({ created: 0, updated: 2, kept: 1 });
-    expect(await prisma.catalogRelation.count()).toBe(1);
+    // Fáze 88: seed má i vazby příslušenství ABB z katalogu ABB pro ČR – import přidal jedinou vazbu Eatonu
+    expect(await prisma.catalogRelation.count({ where: { parent: { manufacturer: "Eaton" } } })).toBe(1);
 
     // Karta k osazení ukáže příslušenství z databáze
     const preview = await previewConfig(prisma, { ...defaultConfig("MCB", { manufacturer: "Eaton", modules: 1 }), breakingCapacityKa: null });

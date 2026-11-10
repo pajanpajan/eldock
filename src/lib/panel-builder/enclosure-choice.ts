@@ -74,7 +74,8 @@ export type DoorKind = "transparent" | "opaque";
 /** Dvířka náhledu (orientační): ocelová a zapuštěná skříň plná, plastová na omítku kouřová průhledná. */
 export function doorOf(enclosure: Pick<EnclosureLike, "series" | "model" | "material" | "installation"> & { description?: string | null }): DoorKind {
   const text = `${enclosure.series} ${enclosure.model} ${enclosure.description ?? ""}`;
-  if (/neprůhledn|plné dv/i.test(text)) return "opaque";
+  // Fáze 88: ABB uvádí „plná dvířka“ (Mistral41), Schrack „plné dveře“
+  if (/neprůhledn|plné dv|plná dv/i.test(text)) return "opaque";
   if (/průhledn|kouřov|transparent/i.test(text)) return "transparent";
   return enclosure.material === "PLASTIC" && enclosure.installation === "SURFACE" ? "transparent" : "opaque";
 }

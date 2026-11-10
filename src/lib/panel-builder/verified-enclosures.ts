@@ -1,5 +1,5 @@
 // Fáze 86: ověřené rozvodnice z oficiálních katalogů výrobců pro kaskádu výběru skříně (fáze 85) – ABB ComfortLine CA,
-// Hager vector II a univers FWU, Schrack TOPO. Každý typ má objednací číslo výrobce, řady × moduly v řadě, V × Š × H,
+// Hager vector II a univers FWU, Schrack TOPO; fáze 88 přidala ABB Mistral41W / 41F, Mistral65 / 65H a ComfortLine CU. Každý typ má objednací číslo výrobce, řady × moduly v řadě, V × Š × H,
 // krytí, montáž, materiál, P_max (jen kde ho výrobce uvádí) a odkaz na stránku výrobce, ze které údaje jsou (ověřeno
 // 10. 11. 2026). Typ, u kterého výrobce údaje neuvádí nebo je uvádí rozporně, tu není – nic se nedopočítává.
 // Mimo: ABB Unifix (připojovací systém, ne rozvodnice), ComfortLine CW a Eaton DBP / DBM (v katalozích výrobců nejsou),
@@ -112,6 +112,157 @@ const abbComfortLine = (spacing: 125 | 150, rows: readonly AbbRow[]) =>
       pMaxW: null,
       sourceUrl: `${ABB_CATEGORY[spacing]}${type.toLowerCase()}-rozvodnice-nastenna-s-dvirky-${mpn.toLowerCase()}`,
       about: `ABB ComfortLine ${type} – nástěnná oceloplechová rozvodnice s ocelovými dvířky, ${rowCount} ${rowsWord(rowCount)} × ${columns} ${columns === 1 ? "sloupec" : columns <= 4 ? "sloupce" : "sloupců"} po 12 M, rozteč lišt DIN ${spacing} mm, N/PE svorky, IK 07, RAL 9016, In do 125 A`,
+    }),
+  );
+
+// ---------------------------------------------------------------------------
+//  Fáze 88: ABB Mistral41 / Mistral65 / Mistral65H (plast) a ComfortLine CU (zapuštěné, ocel) – nizke-napeti.cz.abb.com
+//  Údaje stránek: typové a objednací číslo, počet sloupců, řad a modulů „(moduly v řadě × řady)“, vnější rozměry
+//  š × v × h, stupeň krytí, jmenovitý proud. Vynechané: multimediální CU…VMW a svorkové CU…K (část skříně bez modulů).
+// ---------------------------------------------------------------------------
+
+/** [typové číslo, objednací číslo, řady, moduly v řadě, šířka, výška, hloubka, jmenovitý proud A]. */
+type MistralRow = [string, string, number, number, number, number, number, number];
+
+const ABB_CZ = "https://nizke-napeti.cz.abb.com/";
+
+const MISTRAL41W_TRANSPARENT: MistralRow[] = [
+  ["41P12X12A", "1SPE007717F0421", 1, 12, 297, 262, 119, 63],
+  ["41P12X22A", "1SPE007717F0821", 1, 18, 387, 262, 119, 63],
+  ["41P12X32A", "1SPE007717F0521", 2, 12, 297, 387, 119, 63],
+  ["41P12X42A", "1SPE007717F0921", 2, 18, 387, 387, 119, 63],
+  ["41P18X12A", "1SPE007717F0621", 3, 12, 297, 512, 119, 63],
+  ["41P18X22A", "1SPE007717F0721", 4, 12, 297, 659, 119, 63],
+  ["41P18X32A", "1SPE007717F1021", 3, 18, 387, 512, 119, 63],
+  ["41P18X42A", "1SPE007717F1121", 4, 18, 387, 659, 119, 63],
+];
+const MISTRAL41W_SOLID: MistralRow[] = [
+  ["41P12X11A", "1SLM004102A3103", 1, 12, 297, 262, 119, 63],
+  ["41P12X21A", "1SLM004102A3104", 1, 18, 387, 262, 119, 63],
+  ["41P12X31A", "1SLM004102A3105", 2, 12, 297, 387, 119, 63],
+  ["41P12X41A", "1SLM004102A3106", 2, 18, 387, 387, 119, 63],
+  ["41P18X11A", "1SLM004102A3107", 3, 12, 297, 512, 119, 63],
+  ["41P18X21A", "1SLM004102A3108", 4, 12, 297, 659, 119, 63],
+  ["41P18X31A", "1SLM004102A3109", 3, 18, 387, 512, 119, 63],
+  ["41P18X41A", "1SLM004102A3110", 4, 18, 387, 659, 119, 63],
+];
+const MISTRAL41F_TRANSPARENT: MistralRow[] = [
+  ["41A12X12A", "1SLM004101A1203", 1, 12, 320, 250, 107, 63],
+  ["41A18X12A", "1SLM004101A1204", 1, 18, 430, 250, 107, 125],
+  ["41A12X22A", "1SLM004101A1205", 2, 12, 320, 435, 107, 63],
+  ["41A18X22A", "1SLM004101A1206", 2, 18, 430, 435, 107, 125],
+  ["41A12X32A", "1SLM004101A1207", 3, 12, 320, 600, 107, 100],
+  ["41A12X42A", "1SLM004101A1208", 4, 12, 320, 735, 107, 100],
+  ["41A18X32A", "1SLM004101A1209", 3, 18, 430, 600, 127, 125],
+  ["41A18X42A", "1SLM004101A1210", 4, 18, 430, 735, 127, 125],
+];
+const MISTRAL41F_SOLID: MistralRow[] = [
+  ["41A12X11A", "1SLM004102A1103", 1, 12, 320, 250, 107, 63],
+  ["41A18X11A", "1SLM004102A1104", 1, 18, 430, 250, 107, 125],
+  ["41A12X21A", "1SLM004102A1105", 2, 12, 320, 435, 107, 63],
+  ["41A18X21A", "1SLM004102A1106", 2, 18, 430, 435, 107, 125],
+  ["41A12X31A", "1SLM004102A1107", 3, 12, 320, 600, 107, 100],
+  ["41A12X41A", "1SLM004102A1108", 4, 12, 320, 735, 107, 100],
+  ["41A18X31A", "1SLM004102A1109", 3, 18, 430, 600, 127, 125],
+  ["41A18X41A", "1SLM004102A1110", 4, 18, 430, 735, 127, 125],
+];
+const MISTRAL65: MistralRow[] = [
+  ["65P12X12A", "1SLM006501A1202", 1, 12, 320, 250, 155, 63],
+  ["65P18X12A", "1SLM006502A1203", 1, 18, 430, 250, 155, 125],
+  ["65P12X22A", "1SLM006502A1204", 2, 12, 320, 435, 155, 125],
+  ["65P18X22A", "1SLM006501A1205", 2, 18, 430, 435, 155, 125],
+  ["65P12X32A", "1SLM006501A1206", 3, 12, 320, 600, 155, 125],
+  ["65P12X42A", "1SLM006501A1207", 4, 12, 320, 735, 155, 125],
+  ["65P18X32A", "1SLM006501A1208", 3, 18, 430, 600, 155, 125],
+  ["65P18X42A", "1SLM006501A1209", 4, 18, 430, 735, 155, 125],
+];
+const MISTRAL65H: MistralRow[] = [
+  ["H65P04X120750", "1SLM006500A2210", 1, 4, 152, 202, 117, 63],
+  ["H65P08X120750", "1SLM006500A2211", 1, 8, 232, 250, 154, 63],
+  ["H65P12X120750", "1SLM006500A2212", 1, 12, 320, 250, 155, 63],
+  ["H65P18X120750", "1SLM006500A2213", 1, 18, 430, 250, 155, 125],
+  ["H65P12X220750", "1SLM006500A2214", 2, 12, 320, 435, 155, 125],
+  ["H65P18X220750", "1SLM006500A2215", 2, 18, 430, 435, 155, 125],
+  ["H65P12X320750", "1SLM006500A2216", 3, 12, 320, 600, 155, 125],
+  ["H65P12X420750", "1SLM006500A2217", 4, 12, 320, 735, 155, 125],
+  ["H65P18X320750", "1SLM006500A2218", 3, 18, 430, 600, 155, 125],
+  ["H65P18X420750", "1SLM006500A2219", 4, 18, 430, 735, 155, 125],
+];
+
+const abbMistral = (spec: { series: "Mistral41W" | "Mistral41F" | "Mistral65" | "Mistral65H"; category: string; slug: string; installation: "SURFACE" | "FLUSH"; ip: string; door: "průhledná" | "plná"; withDoorInModel: boolean }, rows: readonly MistralRow[]) =>
+  rows.map(([type, mpn, rowCount, perRow, width, height, depth, current]) =>
+    verified({
+      manufacturer: "ABB",
+      series: spec.series,
+      model: `${spec.series} ${type}${spec.withDoorInModel ? ` (${spec.door} dvířka)` : ""}`,
+      articleNumber: mpn,
+      rows: rowCount,
+      modulesPerRow: perRow,
+      widthMm: width,
+      heightMm: height,
+      depthMm: depth,
+      ipRating: spec.ip,
+      installation: spec.installation,
+      material: "PLASTIC",
+      pMaxW: null,
+      sourceUrl: `${ABB_CZ}${spec.category}/${type.toLowerCase()}-${spec.slug}-${mpn.toLowerCase()}`,
+      about: `ABB ${spec.series} ${type} – ${spec.installation === "SURFACE" ? "nástěnná" : "zapuštěná"} plastová rozvodnice, ${spec.door} dvířka, ${rowCount} ${rowsWord(rowCount)} × ${perRow} M, ${spec.ip.replace("IP", "IP ")}, In do ${current} A`,
+    }),
+  );
+
+/** ComfortLine CU (zapuštěné, ocelová dvířka, IP 30, do 125 A): [typ, objednací číslo, sloupce po 12 M, řady, šířka, výška] – hloubka 125 mm. */
+type CuRow = [string, string, number, number, number, number];
+
+const ABB_CU_125: CuRow[] = [
+  ["CU14V", "2CPX052607R9999", 1, 4, 365, 714],
+  ["CU15V", "2CPX052608R9999", 1, 5, 365, 864],
+  ["CU16V", "2CPX052609R9999", 1, 6, 365, 1014],
+  ["CU17V", "2CPX052610R9999", 1, 7, 365, 1164],
+  ["CU23V", "2CPX052612R9999", 2, 3, 615, 564],
+  ["CU24V", "2CPX052613R9999", 2, 4, 615, 714],
+  ["CU25V", "2CPX052614R9999", 2, 5, 615, 864],
+  ["CU26V", "2CPX052615R9999", 2, 6, 615, 1014],
+  ["CU27V", "2CPX052616R9999", 2, 7, 615, 1164],
+  ["CU28V", "2CPX052617R9999", 2, 8, 615, 1314],
+  ["CU34V", "2CPX052618R9999", 3, 4, 865, 714],
+  ["CU35V", "2CPX052619R9999", 3, 5, 865, 864],
+  ["CU36V", "2CPX052620R9999", 3, 6, 865, 1014],
+  ["CU37V", "2CPX052621R9999", 3, 7, 865, 1164],
+  ["CU45V", "2CPX052622R9999", 4, 5, 1115, 864],
+];
+const ABB_CU_150: CuRow[] = [
+  ["CU24R", "2CPX052600R9999", 2, 3, 615, 714],
+  ["CU25R", "2CPX052601R9999", 2, 4, 615, 864],
+  ["CU26R", "2CPX052602R9999", 2, 5, 615, 1014],
+  ["CU27R", "2CPX052603R9999", 2, 6, 615, 1164],
+  ["CU28R", "2CPX052604R9999", 2, 7, 615, 1314],
+  ["CU36R", "2CPX052605R9999", 3, 5, 865, 1014],
+  ["CU37R", "2CPX052606R9999", 3, 6, 865, 1164],
+];
+
+const ABB_CU_CATEGORY = {
+  125: "rozvodnice-s-rozteci-125-mm-mezi-listami-din-zapustene-oceloplechove-20908/",
+  150: "rozvodnice-s-rozteci-150-mm-mezi-listami-din-zapustene-oceloplechove-20909/",
+} as const;
+
+const abbComfortLineCu = (spacing: 125 | 150, rows: readonly CuRow[]) =>
+  rows.map(([type, mpn, columns, rowCount, width, height]) =>
+    verified({
+      manufacturer: "ABB",
+      series: `ComfortLine CU (rozteč ${spacing} mm)`,
+      model: `${type}${fieldsText(columns)}`,
+      articleNumber: mpn,
+      rows: rowCount,
+      modulesPerRow: columns * 12,
+      widthMm: width,
+      heightMm: height,
+      depthMm: 125,
+      ipRating: "IP30",
+      installation: "FLUSH",
+      material: "PAINTED_STEEL",
+      pMaxW: null,
+      sourceUrl: `${ABB_CZ}${ABB_CU_CATEGORY[spacing]}${type.toLowerCase()}-rozvodnice-zapustena-s-dvirky-${mpn.toLowerCase()}`,
+      about: `ABB ComfortLine ${type} – zapuštěná oceloplechová rozvodnice s ocelovými dvířky, ${rowCount} ${rowsWord(rowCount)} × ${columns} ${columns === 1 ? "sloupec" : "sloupce"} po 12 M, rozteč lišt DIN ${spacing} mm, IP 30, In do 125 A`,
     }),
   );
 
@@ -275,10 +426,18 @@ const schrackTopo = (installation: "SURFACE" | "FLUSH", list: readonly SchrackRo
     });
   });
 
-/** Všechny ověřené rozvodnice (ABB 31, Hager 23, Schrack 37). */
+/** Všechny ověřené rozvodnice (ABB 103 – z toho 72 od fáze 88, Hager 23, Schrack 37). */
 export const VERIFIED_ENCLOSURES: readonly VerifiedEnclosure[] = [
   ...abbComfortLine(125, ABB_CA_125),
   ...abbComfortLine(150, ABB_CA_150),
+  ...abbMistral({ series: "Mistral41W", category: "rozvodnice-nastenne-ip-41-pruhledna-dvirka-16990", slug: "rozvodnice-nastenna-pruhledna-dvirka", installation: "SURFACE", ip: "IP41", door: "průhledná", withDoorInModel: true }, MISTRAL41W_TRANSPARENT),
+  ...abbMistral({ series: "Mistral41W", category: "rozvodnice-nastenne-ip-41-plna-dvirka-16989", slug: "rozvodnice-nastenna-plna-dvirka", installation: "SURFACE", ip: "IP41", door: "plná", withDoorInModel: true }, MISTRAL41W_SOLID),
+  ...abbMistral({ series: "Mistral41F", category: "rozvodnice-zapustene-ip-41-pruhledna-dvirka-16988", slug: "rozvodnice-zapustena-pruhledna-dvirka", installation: "FLUSH", ip: "IP41", door: "průhledná", withDoorInModel: true }, MISTRAL41F_TRANSPARENT),
+  ...abbMistral({ series: "Mistral41F", category: "rozvodnice-zapustene-ip-41-plna-dvirka-16987", slug: "rozvodnice-zapustena-plna-dvirka", installation: "FLUSH", ip: "IP41", door: "plná", withDoorInModel: true }, MISTRAL41F_SOLID),
+  ...abbMistral({ series: "Mistral65", category: "rozvodnice-nastenne-ip-65-pruhledna-dvirka-16992", slug: "rozvodnice-nastenna-pruhledna-dvirka", installation: "SURFACE", ip: "IP65", door: "průhledná", withDoorInModel: false }, MISTRAL65),
+  ...abbMistral({ series: "Mistral65H", category: "rozvodnice-nastenne-pro-venkovni-pouziti-ip-65-pruhledna-dvirka-19564", slug: "rozvodnice-nastenna-pro-venkovni-pouziti-pruhledna-dvirka", installation: "SURFACE", ip: "IP65", door: "průhledná", withDoorInModel: false }, MISTRAL65H),
+  ...abbComfortLineCu(125, ABB_CU_125),
+  ...abbComfortLineCu(150, ABB_CU_150),
   ...hagerVector,
   ...hagerUnivers,
   ...schrackTopo("SURFACE", TOPO_SURFACE),

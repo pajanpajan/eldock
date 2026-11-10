@@ -22,6 +22,8 @@ export interface ResearchComponent {
   contactConfig?: string;
   coilVoltage?: string;
   moduleSubtype?: string;
+  /** Fáze 88: podtyp relé (IMPULSE / AUXILIARY / TIMER / STAIRCASE …). */
+  relaySubtype?: string;
   modulesCount: number;
   /** null = výrobce neuvádí (dopočte se odhad dle IEC a prvek se označí). */
   powerLossWatts: number | null;

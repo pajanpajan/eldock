@@ -268,8 +268,9 @@ const panelBuilder = {
       await d.click(choice.getByTestId("enclosure-choice-toggle"), { after: 300 });
       await d.select(choice.getByTestId("enclosure-brand"), "ABB", { after: 200 });
       const series = choice.getByTestId("enclosure-series");
-      await series.locator('option[value="mistral|cat"]').waitFor({ state: "attached", timeout: 30_000 });
-      await d.select(series, "mistral|cat", { after: 200 });
+      // Fáze 88: MISTRAL65 3 × 18 M (1SLM006501A1208) je v ověřené řadě Mistral65 z katalogu ABB pro ČR
+      await series.locator('option[value="mistral65|cat"]').waitFor({ state: "attached", timeout: 30_000 });
+      await d.select(series, "mistral65|cat", { after: 200 });
       const model = choice.getByTestId("enclosure-model");
       const value = await model.locator("option", { hasText: "1SLM006501A1208" }).getAttribute("value");
       await d.select(model, value, { after: 400 });

@@ -44,7 +44,7 @@ describe("AI Panel Builder – katalog a seed", () => {
     expect(project.items.filter((item) => item.recognitionStatus === "PARTIAL").map((item) => item.designation)).toEqual(["-F7"]);
     expect(project.items.filter((item) => item.recognitionStatus === "UNRECOGNIZED").map((item) => item.designation)).toEqual(["-F4"]);
     expect(project.items.find((item) => item.designation === "-F4")?.catalogComponentId).toBeNull();
-  });
+  }, 20_000); // Fáze 88: dva celé seedy katalogu (vč. katalogu ABB pro ČR) v jednom testu
 
   it("fáze 54: selhání katalogu nezastaví vzorový projekt PB-001, bez dema nevznikne firma Tester", async () => {
     // První $transaction (upsert katalogu) selže, ostatní kroky musí proběhnout.

@@ -16,6 +16,7 @@ import { GENERATED_CATALOG, type SeedComponent } from "./seed-catalog-generated"
 import { buildSearchText, estimatePowerLoss, iecSymbolFor } from "../src/lib/panel-builder/catalog";
 import { ENCLOSURE_FANS, RESEARCH_COMPONENTS } from "./seed-catalog-research";
 import { ABB_2026_COMPONENTS } from "./seed-abb-2026";
+import { ABB_CZ_COMPONENTS, ABB_CZ_RELATIONS } from "./seed-abb-cz";
 import { isHiddenManufacturer } from "../src/lib/panel-builder/brands";
 import { demoDetections } from "../src/lib/panel-builder/matching";
 import { REFERENCE_DEVICES, REFERENCE_DIMS, withPositions } from "../src/lib/panel-builder/reference";
@@ -226,7 +227,7 @@ const EXPLICIT: SeedComponent[] = [
  */
 export const CATALOG: SeedComponent[] = (() => {
   const seen = new Set<string>();
-  const key = (component: SeedComponent) => `${component.manufacturer.toLowerCase()}|${component.typeCode.toLowerCase().replace(/\s+/g, "")}`;
+  const key = (component: Pick<SeedComponent, "manufacturer" | "typeCode">) => `${component.manufacturer.toLowerCase()}|${component.typeCode.toLowerCase().replace(/\s+/g, "")}`;
   // Rešerše výrobců (fáze 47): Siemens SENTRON a ABB z reálného 144M rozváděče; chybějící Pv = odhad IEC
   // Fáze 61: chytrá domácnost z Katalogu ABB 2026 (free@home), KNX stmívač / DALI / IP rozhraní, Loxone Dimmer Extension
   const research: SeedComponent[] = [...ABB_2026_COMPONENTS, ...RESEARCH_COMPONENTS].map((entry) => {
@@ -239,7 +240,24 @@ export const CATALOG: SeedComponent[] = (() => {
       lossEstimated: powerLossWatts === null || lossEstimated === true,
     };
   });
-  return [...EXPLICIT, ...research, ...GENERATED_CATALOG].filter((component) => {
+  // Fáze 88: modulové přístroje a příslušenství ABB z katalogu ABB pro ČR – jen kusy, které katalog s tímto objednacím
+  // číslem a typem ještě nemá; před generovaným katalogem (jeho orientační řádek téhož typu nahradí), ruční zápis
+  // a rešerše vyhrávají. Pv ABB CZ neuvádí: typická hodnota nahrazeného generovaného řádku, jinak odhad IEC („odhad“).
+  const curatedArticles = new Set([...EXPLICIT, ...research].map((component) => component.articleNumber));
+  const generatedByArticle = new Map(GENERATED_CATALOG.map((component) => [component.articleNumber, component]));
+  const generatedByKey = new Map(GENERATED_CATALOG.map((component) => [key(component), component]));
+  const abbCz: SeedComponent[] = ABB_CZ_COMPONENTS.filter((entry) => {
+    if (curatedArticles.has(entry.articleNumber)) return false;
+    const generated = generatedByArticle.get(entry.articleNumber);
+    return !(generated && key(generated) === key(entry));
+  }).map((entry) => {
+    const { powerLossWatts, source, lossEstimated, ...component } = entry;
+    void source;
+    void lossEstimated;
+    const replaced = generatedByArticle.get(entry.articleNumber) ?? generatedByKey.get(key(entry));
+    return { ...component, powerLossWatts: powerLossWatts ?? replaced?.powerLossWatts ?? estimatePowerLoss(component.category, component.poles, component.ratedCurrentA), lossEstimated: true };
+  });
+  return [...EXPLICIT, ...research, ...abbCz, ...GENERATED_CATALOG].filter((component) => {
     // Vyřazení výrobci (fáze 47) se do katalogu už nedoplňují
     if (isHiddenManufacturer(component.manufacturer)) return false;
     const keys = [key(component), `article|${component.articleNumber}`];
@@ -248,6 +266,56 @@ export const CATALOG: SeedComponent[] = (() => {
     return true;
   });
 })();
+
+/** Fáze 88: objednací čísla kusů z katalogu ABB pro ČR, které seed katalogu zapisuje (bez kusů, které už katalog měl). */
+export const ABB_CZ_IN_CATALOG = new Set(ABB_CZ_COMPONENTS.map((component) => component.articleNumber).filter((article) => CATALOG.some((component) => component.articleNumber === article && component.ownCatalog)));
+
+const typeKey = (value: string) => value.toLowerCase().replace(/\s+/g, "");
+
+/**
+ * Fáze 88: kus z katalogu ABB pro ČR, který databáze zatím zná jen jako orientační řádek generovaného katalogu
+ * (objednací číslo = typové označení, např. „F204 A-40/0,03“), dostane skutečné objednací číslo – řádek se přeznačí,
+ * nic se nemaže a odkazy projektů na kus zůstávají. Vrací počet přeznačených řádků.
+ */
+export async function adoptVerifiedArticles(prisma: PrismaClient, components: readonly Pick<SeedComponent, "manufacturer" | "typeCode" | "articleNumber">[]) {
+  const known = new Set((await prisma.catalogComponent.findMany({ where: { articleNumber: { in: components.map((component) => component.articleNumber) } }, select: { articleNumber: true } })).map((row) => row.articleNumber));
+  const missing = components.filter((component) => !known.has(component.articleNumber));
+  if (!missing.length) return 0;
+  const candidates = await prisma.catalogComponent.findMany({
+    where: { manufacturer: { in: [...new Set(missing.map((component) => component.manufacturer))] }, typeCode: { in: missing.map((component) => component.typeCode) } },
+    select: { id: true, manufacturer: true, typeCode: true, articleNumber: true },
+  });
+  const taken = new Set<string>();
+  let adopted = 0;
+  for (const component of missing) {
+    const row = candidates.find((candidate) => !taken.has(candidate.id) && candidate.manufacturer === component.manufacturer && typeKey(candidate.typeCode) === typeKey(component.typeCode) && typeKey(candidate.articleNumber) === typeKey(candidate.typeCode));
+    if (!row) continue;
+    taken.add(row.id);
+    await prisma.catalogComponent.update({ where: { id: row.id }, data: { articleNumber: component.articleNumber } });
+    adopted++;
+  }
+  return adopted;
+}
+
+/** Fáze 88: vazby příslušenství ABB (přípojnice, koncové krytky, přídavné kontakty) – doplní chybějící, nic nemaže. Vrací počet vazeb. */
+export async function seedAbbRelations(prisma: PrismaClient) {
+  const articles = [...new Set(ABB_CZ_RELATIONS.flatMap((relation) => [...relation.parents, ...relation.children]))];
+  const ids = new Map((await prisma.catalogComponent.findMany({ where: { articleNumber: { in: articles } }, select: { id: true, articleNumber: true } })).map((row) => [row.articleNumber, row.id]));
+  const pairs = ABB_CZ_RELATIONS.flatMap((relation) =>
+    relation.parents.flatMap((parent) => relation.children.map((child) => ({ relation, parentId: ids.get(parent), childId: ids.get(child) }))),
+  ).filter((pair): pair is typeof pair & { parentId: string; childId: string } => !!pair.parentId && !!pair.childId);
+  const existing = new Set(
+    (await prisma.catalogRelation.findMany({ where: { parentId: { in: [...new Set(pairs.map((pair) => pair.parentId))] } }, select: { parentId: true, childId: true, relationType: true } })).map(
+      (row) => `${row.parentId}>${row.childId}>${row.relationType}`,
+    ),
+  );
+  const missing = pairs.filter((pair) => !existing.has(`${pair.parentId}>${pair.childId}>${pair.relation.relationType}`));
+  if (missing.length)
+    await prisma.catalogRelation.createMany({
+      data: missing.map(({ relation, parentId, childId }) => ({ parentId, childId, relationType: relation.relationType, basis: relation.basis, verified: relation.verified, note: relation.note })),
+    });
+  return pairs.length;
+}
 
 // ---------------------------------------------------------------------------
 //  Vzorový projekt PB-001 (referenční domovní / podružný rozváděč)
@@ -263,9 +331,16 @@ export const PB001 = {
   photoFile: "panel-pb-001.svg",
 };
 
-/** Upsert katalogu podle objednacího čísla (jedna transakce – rychlý start kontejneru). Vrací počet prvků. */
+/**
+ * Upsert katalogu podle objednacího čísla (jedna transakce – rychlý start kontejneru). Vrací počet prvků.
+ * Fáze 88: kusy, které databáze ještě nemá, založí jeden `createMany` (čistá databáze testů, E2E a nového serveru
+ * se naplní zlomkem času), existující řádky se aktualizují upsertem jako dřív.
+ */
 export async function seedCatalog(prisma: PrismaClient) {
-  const upserts = CATALOG.map((component) => {
+  // Fáze 88: orientační řádky téhož typu dostanou objednací číslo z katalogu ABB pro ČR dřív, než by upsert založil duplikát
+  await adoptVerifiedArticles(prisma, CATALOG.filter((component) => ABB_CZ_IN_CATALOG.has(component.articleNumber)));
+  const known = new Set((await prisma.catalogComponent.findMany({ select: { articleNumber: true } })).map((row) => row.articleNumber));
+  const rows = CATALOG.map((component) => {
     const [widthMm, heightMm, depthMm] = component.dims ?? [component.modulesCount * 17.5 || null, component.modulesCount ? 85 : null, component.modulesCount ? 69 : null];
     const data = {
       manufacturer: component.manufacturer,
@@ -297,9 +372,16 @@ export async function seedCatalog(prisma: PrismaClient) {
       // Fáze 81: kusy chytré domácnosti z `smart-home.ts` – import katalogu výrobců je nepřepíše
       ...(component.ownCatalog ? { externalSource: null } : {}),
     };
-    return prisma.catalogComponent.upsert({ where: { articleNumber: component.articleNumber }, create: { articleNumber: component.articleNumber, ...data }, update: data });
+    return { articleNumber: component.articleNumber, data };
   });
-  await prisma.$transaction(upserts);
+  const missing = rows.filter((row) => !known.has(row.articleNumber));
+  await prisma.$transaction([
+    ...(missing.length ? [prisma.catalogComponent.createMany({ data: missing.map((row) => ({ articleNumber: row.articleNumber, ...row.data })) })] : []),
+    ...rows
+      .filter((row) => known.has(row.articleNumber))
+      .map((row) => prisma.catalogComponent.upsert({ where: { articleNumber: row.articleNumber }, create: { articleNumber: row.articleNumber, ...row.data }, update: row.data })),
+  ]);
+  await seedAbbRelations(prisma);
   return CATALOG.length;
 }
 

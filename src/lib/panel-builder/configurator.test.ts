@@ -34,7 +34,8 @@ describe("katalog 220+ přístrojů", () => {
     for (const brand of ["Finder", "Elko EP", "Mean Well", "Weidmüller", "Shelly", "Dehn", "Relpol", "Pilz", "Pollmann"]) expect(CATALOG.some((c) => c.manufacturer === brand)).toBe(false);
     expect(CATALOG.find((c) => c.typeCode === "S203-C25")?.articleNumber).toBe("2CDS253001R0254");
     expect(CATALOG.find((c) => c.typeCode === "iC60N 1P B10")?.articleNumber).toBe("A9F03110");
-    expect(CATALOG.find((c) => c.typeCode === "E290-16-10")).toMatchObject({ category: "RELAY", relaySubtype: "IMPULSE", manufacturer: "ABB" });
+    // Fáze 88: typové označení podle katalogu ABB pro ČR (dříve „E290-16-10“ se stejným objednacím číslem)
+    expect(CATALOG.find((c) => c.typeCode === "E290-16-10/230")).toMatchObject({ category: "RELAY", relaySubtype: "IMPULSE", manufacturer: "ABB", articleNumber: "2TAZ312000R2011" });
     expect(CATALOG.find((c) => c.typeCode === "DS301C C16 A30")).toMatchObject({ category: "RCBO", manufacturer: "ABB" });
     expect(CATALOG.find((c) => c.typeCode === "5SY6116-6")).toMatchObject({ category: "MCB", manufacturer: "Siemens" });
   });

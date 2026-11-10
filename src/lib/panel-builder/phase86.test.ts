@@ -17,12 +17,19 @@ const SOURCES: Record<string, string> = { ABB: "https://nizke-napeti.cz.abb.com/
 
 describe("fáze 86 – ověřené rozvodnice z katalogů výrobců", () => {
   it("počty modelů po výrobcích a řadách", () => {
-    expect(VERIFIED_ENCLOSURES).toHaveLength(91);
+    // Fáze 88 přidala 72 rozvodnic ABB (Mistral41W / 41F, Mistral65 / 65H, ComfortLine CU)
+    expect(VERIFIED_ENCLOSURES).toHaveLength(163);
     const count = (key: "manufacturer" | "series") => Object.fromEntries([...new Set(VERIFIED_ENCLOSURES.map((enclosure) => enclosure[key]))].map((value) => [value, VERIFIED_ENCLOSURES.filter((enclosure) => enclosure[key] === value).length]));
-    expect(count("manufacturer")).toEqual({ ABB: 31, Hager: 23, Schrack: 37 });
+    expect(count("manufacturer")).toEqual({ ABB: 103, Hager: 23, Schrack: 37 });
     expect(count("series")).toEqual({
       "ComfortLine CA (rozteč 125 mm)": 16,
       "ComfortLine CA (rozteč 150 mm)": 15,
+      Mistral41W: 16,
+      Mistral41F: 16,
+      Mistral65: 8,
+      Mistral65H: 10,
+      "ComfortLine CU (rozteč 125 mm)": 15,
+      "ComfortLine CU (rozteč 150 mm)": 7,
       "Vector II": 9,
       "Univers FWU": 14,
       "TOPO nástěnná": 21,
@@ -89,7 +96,18 @@ describe("fáze 86 – ověřené rozvodnice z katalogů výrobců", () => {
 
   it("kaskáda: nové řady s MPN před orientačními, Rittal a Eaton beze změny", () => {
     expect(ENCLOSURE_CHOICE_BRANDS.map((brand) => brand.value)).toEqual(expect.arrayContaining(["ABB", "Hager", "Schrack"]));
-    expect(cascade("ABB")).toEqual(["ComfortLine CA (rozteč 125 mm) (16)", "ComfortLine CA (rozteč 150 mm) (15)", "Mistral41W (orientační) (12)", "UK600 (orientační) (9)"]);
+    expect(cascade("ABB")).toEqual([
+      "ComfortLine CA (rozteč 125 mm) (16)",
+      "ComfortLine CA (rozteč 150 mm) (15)",
+      "ComfortLine CU (rozteč 125 mm) (15)",
+      "ComfortLine CU (rozteč 150 mm) (7)",
+      "Mistral41F (16)",
+      "Mistral41W (16)",
+      "Mistral65 (8)",
+      "Mistral65H (10)",
+      "Mistral41W (orientační) (12)",
+      "UK600 (orientační) (9)",
+    ]);
     expect(cascade("Hager")).toEqual(["Univers FWU (14)", "Vector II (9)", "Golf (orientační) (12)", "Volta (orientační) (9)"]);
     expect(cascade("Schrack")).toEqual(["TOPO nástěnná (21)", "TOPO zapuštěná (16)", "Amparo (orientační) (12)", "Amparo UP (orientační) (9)"]);
     expect(cascade("Rittal")).toEqual(["AX (orientační) (12)"]);
