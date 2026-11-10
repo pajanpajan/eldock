@@ -14,6 +14,9 @@ const eslintConfig = defineConfig([
     ".next-e2e/**",
     // Ruční testovací server (NEXT_DIST_DIR=.next-manual, e2e-manual.db)
     ".next-manual/**",
+    // Fáze 87: server a pracovní soubory generátoru video-návodů (npm run tutorials:generate)
+    ".next-tutorials/**",
+    ".tutorials-work/**",
     "playwright-report/**",
     "test-results/**",
     "out/**",

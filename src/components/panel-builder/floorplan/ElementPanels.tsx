@@ -41,9 +41,10 @@ const SCALE_OPTIONS = [0.5, 0.75, 1, 1.5, 2, 3];
 // Fáze 64: podkomponenty editoru 2D půdorysu oddělené z FloorplanEditor.tsx – tlačítko nástroje, plovoucí lišta
 // vybrané značky, detail prvku (úroveň, výška, svítidlo, ovládání, vzhled, spotřebič, předmět), živé kóty a detail místnosti.
 
-export function ToolButton({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
+export function ToolButton({ active, onClick, icon, label, tour }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string; tour?: string }) {
   return (
-    <Button type="button" size="sm" variant={active ? "default" : "outline"} aria-pressed={active} className="gap-1.5" onClick={onClick}>
+    // Fáze 87: `data-tour` = cíl zvýraznění Interactive Tour u video-návodu
+    <Button type="button" size="sm" variant={active ? "default" : "outline"} aria-pressed={active} className="gap-1.5" onClick={onClick} data-tour={tour}>
       {icon} {label}
     </Button>
   );

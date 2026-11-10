@@ -74,12 +74,13 @@ describe("technické SEO", () => {
 
   it("sitemap.xml jen s veřejnými absolutními URL", () => {
     const urls = sitemap().map((entry) => entry.url);
-    // Fáze 54: + právní stránky; fáze 58: + části Domovní elektroinstalace a Průmysl
+    // Fáze 54: + právní stránky; fáze 58: + části Domovní elektroinstalace a Průmysl; fáze 87: + video-návody
     expect(urls).toEqual([
       "https://eldock.cz",
       "https://eldock.cz/domovni-elektroinstalace",
       "https://eldock.cz/prumysl",
       "https://eldock.cz/ukazka-elaboratu",
+      "https://eldock.cz/navody",
       "https://eldock.cz/panel-builder/auth",
       "https://eldock.cz/register-plant",
       "https://eldock.cz/obchodni-podminky",

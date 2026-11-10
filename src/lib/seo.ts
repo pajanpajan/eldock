@@ -34,6 +34,8 @@ export const PUBLIC_PAGES = [
   { path: "/domovni-elektroinstalace", priority: 0.9, changeFrequency: "monthly" },
   { path: "/prumysl", priority: 0.9, changeFrequency: "monthly" },
   { path: "/ukazka-elaboratu", priority: 0.8, changeFrequency: "monthly" },
+  // Fáze 87: video-návody s českým komentářem (odkaz pro testery a kolegy elektrikáře)
+  { path: "/navody", priority: 0.8, changeFrequency: "monthly" },
   { path: "/panel-builder/auth", priority: 0.8, changeFrequency: "monthly" },
   { path: "/register-plant", priority: 0.6, changeFrequency: "monthly" },
   // Fáze 54: právní stránky

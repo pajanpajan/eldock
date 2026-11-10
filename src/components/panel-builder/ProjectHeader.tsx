@@ -8,6 +8,8 @@ import { cn } from "@/lib/utils";
 import type { PanelProjectDetail } from "@/server/queries/panel-builder";
 import { isGeminiConfigured } from "@/server/services/geminiPanelService";
 
+import { TutorialVideoButton } from "@/components/tutorials/TutorialVideoButton";
+
 import { OpenFloorplanButton } from "./floorplan/OpenFloorplanButton";
 import { DeleteProjectButton, EditProjectButton } from "./ProjectAdmin";
 import { ReportAiErrorButton } from "./ReportAiErrorButton";
@@ -56,6 +58,8 @@ export function ProjectHeader({ project }: { project: PanelProjectDetail }) {
         .join(" · ")}
       actions={
         <>
+          {/* Fáze 87: video-návod AI Panel Builderu (kroky 1–5) s kapitolami */}
+          <TutorialVideoButton tutorialId="panel-builder" size="default" className="touch-target" />
           {/* Fáze 64: rozváděč z 2D půdorysu → zpět do editoru půdorysu (uložený půdorys, případně založený z kopie v projektu) */}
           {project.floorplanJson ? <OpenFloorplanButton projectId={project.id} /> : null}
           <Link

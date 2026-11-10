@@ -73,6 +73,8 @@ export function footerSections(options: { showcase: boolean }): { title: string;
         { href: SEGMENTS.domov.path, label: "Přehled pro elektrikáře" },
         { href: `${SEGMENTS.domov.path}#panel-builder`, label: "AI Panel Builder" },
         { href: `${SEGMENTS.domov.path}#pudorys`, label: "2D půdorys a kabeláž" },
+        // Fáze 87
+        { href: "/navody", label: "Video-návody" },
         ...(options.showcase ? [{ href: "/ukazka-elaboratu", label: "Ukázka dokumentace rozváděče" }] : []),
         { href: "/panel-builder/auth", label: "Registrace / přihlášení firmy" },
       ],

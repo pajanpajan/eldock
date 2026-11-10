@@ -23,3 +23,7 @@ npm-debug.log*
 .env.production
 # Fáze 71: aplikace pro Windows (vlastní package.json, sestavuje se zvlášť)
 apps
+# Fáze 87: ruční testovací server a generátor video-návodů (hotová MP4 v public/tutorials do obrazu patří)
+.next-manual
+.next-tutorials
+.tutorials-work

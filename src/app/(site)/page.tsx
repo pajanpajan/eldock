@@ -104,6 +104,12 @@ export default async function LandingPage() {
           <div className="grid gap-5 lg:grid-cols-2" data-testid="segment-chooser">
             <SegmentCard segment="domov" icon={<Home className="size-6" aria-hidden />} accent>
               {showcase ? <SampleElaborateDialog /> : null}
+              {/* Fáze 87: video-návody s českým komentářem hned vedle vzorového elaborátu */}
+              <Button asChild variant="outline" className="touch-target h-auto min-h-11 shrink gap-2 px-5 py-2 text-left text-sm whitespace-normal">
+                <Link href="/navody" data-testid="tutorials-link">
+                  🎬 Video-návody
+                </Link>
+              </Button>
             </SegmentCard>
             <SegmentCard segment="prumysl" icon={<Factory className="size-6" aria-hidden />} />
           </div>

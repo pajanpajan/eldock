@@ -66,6 +66,7 @@ npm run dev                 # http://localhost:3000
 | `npm --prefix apps/client run android:apk` / `run mobile:sync` / `run ios:open` | mobilní aplikace: zkušební APK do `apps/client/release/` (Android SDK, Java 17–24), rozhraní do projektů `android/` a `ios/`, projekt v Xcode (jen Mac) |
 | `npm run plant-server -- --data <složka> --port 8787` | server závodu ve vývoji (v instalaci `resources\plant-server.cmd`, jako služba `resources\plant-server-task.ps1` spuštěný správcem) |
 | `npm run storage:registry` / `npm run storage:cleanup` | doplnění registru souborů pro starší soubory (vlastník podle odkazů) / úklid osiřelých souborů (`--dry-run`) |
+| `npm run tutorials:generate` | dva ozvučené video-návody do `public/tutorials/` (vlastní produkční server na portu 3210 s `tutorials.db`, Playwright 1920 × 1080, hlas Edge TTS cs-CZ-AntoninNeural, střih ffmpeg); jednou předem `npx playwright install ffmpeg`, volby `-- --only=pudorys`, `--tts=local`, `--server=dev`, `--skip-build`, `--shots` |
 | `npm run db:seed` / `db:reset` / `db:migrate` / `db:studio` | práce s databází (Prisma) |
 
 ### E2E testy

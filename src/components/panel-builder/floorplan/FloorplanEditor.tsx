@@ -170,6 +170,7 @@ import { PlaneSizeControl } from "./PlaneSizeControl";
 import { contentView, growPlane, meters, resizePlane } from "@/lib/panel-builder/floorplan-plane";
 import { assignLightingCircuit, assignSocketCircuit, isSocketElement, lightingSocketRows, moveSocketsToCircuit, nextSocketCircuit, optimizeSocketCircuits, socketCircuitRows, type SocketCircuitRow } from "@/lib/panel-builder/socket-circuits";
 import { BACKGROUND_PX, preloadImage, rasterizeSvg } from "@/lib/panel-builder/background-image";
+import { TutorialVideoButton } from "@/components/tutorials/TutorialVideoButton";
 
 // 2D editor půdorysu elektroinstalace (fáze 49, úprava PDF / značky / úroveň instalace fáze 57, fáze 59: natočení další
 // značky podle předchozí, vícenásobný výběr, víceramečky s přisazením, přiřazení vypínačů ke světlům, zakreslení změn
@@ -1778,7 +1779,7 @@ export function FloorplanEditor({
             if (file) void pickBackground(file);
           }}
         />
-        <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => fileInput.current?.click()} disabled={busy !== null}>
+        <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => fileInput.current?.click()} disabled={busy !== null} data-tour="floorplan-upload">
           {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <FileUp className="size-4" aria-hidden />} Nahrát půdorys (obrázek / PDF / DXF)
         </Button>
         <PdfEditMenu hasBackground={Boolean(draft.background)} cropped={Boolean(draft.background?.crop)} zoomPercent={Math.round(zoom * 100)} calibration={draft.calibration.state} onAction={pdfAction} />
@@ -1788,7 +1789,7 @@ export function FloorplanEditor({
         <ToolButton active={tool.kind === "select"} onClick={() => setTool({ kind: "select" })} icon={<MousePointer2 className="size-4" aria-hidden />} label="Výběr" />
         <ToolButton active={tool.kind === "room"} onClick={() => setTool({ kind: "room" })} icon={<Square className="size-4" aria-hidden />} label="Kreslit místnost (obdélník)" />
         <ToolButton active={tool.kind === "polygon"} onClick={() => (setPolyDraft([]), setTool({ kind: "polygon" }))} icon={<span aria-hidden>📐</span>} label="Kreslit šikmou stěnu / polygonální místnost" />
-        <ToolButton active={tool.kind === "calibrate"} onClick={() => (setCalibration([]), setTool({ kind: "calibrate" }))} icon={<Ruler className="size-4" aria-hidden />} label="📏 Kalibrovat měřítko" />
+        <ToolButton active={tool.kind === "calibrate"} onClick={() => (setCalibration([]), setTool({ kind: "calibrate" }))} icon={<Ruler className="size-4" aria-hidden />} label="📏 Kalibrovat měřítko" tour="floorplan-calibrate" />
         <Button
           type="button"
           variant="ghost"
@@ -1805,6 +1806,8 @@ export function FloorplanEditor({
         </Button>
         {/* Fáze 63: export výkresu do PDF (tiskový list A3 / A4) a do CAD (DXF) */}
         <FloorplanExport draft={deferred} analysis={analysis.ok ? analysis : null} company={company} />
+        {/* Fáze 87: video-návod s kapitolami a Interactive Tour (zvýraznění prvků, o kterých kapitola mluví) */}
+        <TutorialVideoButton tutorialId="pudorys" tour />
         <span className="ml-auto flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           {draft.background ? (
             <span className={cn("rounded-full border px-2 py-0.5", draft.calibration.state === "verified" ? "border-emerald-500/50 text-emerald-300" : "border-amber-400/60 text-amber-200")} data-testid="calibration-state">

@@ -60,3 +60,8 @@ public/*.mp4
 /apps/client/release/
 /.next-manual/
 /e2e-manual.db*
+
+# Fáze 87: generátor video-návodů (npm run tutorials:generate) – vlastní server, databáze a pracovní soubory
+/.next-tutorials/
+/tutorials.db*
+/.tutorials-work/

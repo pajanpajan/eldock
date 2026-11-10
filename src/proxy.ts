@@ -5,7 +5,7 @@ import { APP_HOME, isPlantRoute } from "@/lib/routes";
 
 /**
  * Přihlašovací brána se dvěma oddělenými produkty (fáze 41):
- * - veřejné: úvodní stránka `/`, ukázka elaborátu `/ukazka-elaboratu`, SEO soubory, `/login`, registrace závodu `/register-plant`, přihlášení / registrace
+ * - veřejné: úvodní stránka `/`, ukázka elaborátu `/ukazka-elaboratu`, video-návody `/navody`, SEO soubory, `/login`, registrace závodu `/register-plant`, přihlášení / registrace
  *   AI Panel Builderu `/panel-builder/auth` a dotaz do registru ARES `/api/ares`;
  * - AI Panel Builder (`/panel-builder/*`) jen s přihlášenou firmou (cookie `eldock-pb`), jinak `/panel-builder/auth`;
  * - Správa závodů (`PLANT_ROUTE_PREFIXES`) jen s přihlášením do závodu (cookie `digitry-auth`), jinak `/login`;
@@ -17,8 +17,9 @@ import { APP_HOME, isPlantRoute } from "@/lib/routes";
 // Fáze 48: veřejná ukázka elaborátu a SEO soubory (sitemap.xml, náhled odkazu opengraph-image)
 // Fáze 54: právní stránky (zásady zpracování osobních údajů, obchodní podmínky)
 // Fáze 67: obnova a nastavení hesla (pozvánka zaměstnance) bez přihlášení
-const PUBLIC_PATHS = new Set(["/", "/login", "/register-plant", "/panel-builder/auth", "/api/ares", "/ukazka-elaboratu", "/ochrana-osobnich-udaju", "/obchodni-podminky", "/sitemap.xml", "/robots.txt", "/superadmin/login", "/api/consent", "/newsletter/potvrzeni", "/newsletter/odhlaseni", "/api/newsletter/unsubscribe", "/zapomenute-heslo"]);
-const PUBLIC_PREFIXES = ["/opengraph-image", "/brands/", "/api/brand-logo/", "/nastavit-heslo/"];
+// Fáze 87: video-návody `/navody` a jejich MP4 / náhledy v `public/tutorials` (odkaz pro kolegy elektrikáře)
+const PUBLIC_PATHS = new Set(["/", "/login", "/register-plant", "/panel-builder/auth", "/api/ares", "/ukazka-elaboratu", "/navody", "/ochrana-osobnich-udaju", "/obchodni-podminky", "/sitemap.xml", "/robots.txt", "/superadmin/login", "/api/consent", "/newsletter/potvrzeni", "/newsletter/odhlaseni", "/api/newsletter/unsubscribe", "/zapomenute-heslo"]);
+const PUBLIC_PREFIXES = ["/opengraph-image", "/brands/", "/api/brand-logo/", "/nastavit-heslo/", "/tutorials/"];
 const SUPERADMIN_PREFIX = "/superadmin";
 const PANEL_PREFIX = "/panel-builder";
 

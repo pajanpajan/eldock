@@ -7,6 +7,7 @@ import { PageTransition } from "@/components/layout/PageTransition";
 import { panelBuilderGuard } from "@/components/panel-builder/access";
 import { NewProjectDialog } from "@/components/panel-builder/NewProjectDialog";
 import { ProjectBoard, type BoardProject } from "@/components/panel-builder/ProjectBoard";
+import { TutorialVideoButton } from "@/components/tutorials/TutorialVideoButton";
 import { Button } from "@/components/ui/button";
 import { requirePanelCompany } from "@/server/panel-session";
 import { getPanelProjects } from "@/server/queries/panel-builder";
@@ -41,6 +42,8 @@ export default async function PanelBuilderPage() {
         description={`${company.companyName} · rozváděče z fotky: rozpoznání přístrojů, strom zapojení, výpočet oteplení dle ČSN EN 61439 a dokumentace s CE štítkem. Nový projekt = 1 kredit (zbývá ${company.creditsRemaining}).`}
         actions={
           <>
+            {/* Fáze 87: video-návod AI Panel Builderu s kapitolami */}
+            <TutorialVideoButton tutorialId="panel-builder" size="default" className="touch-target" />
             <Button asChild variant="outline" className="touch-target gap-2">
               <Link href="/panel-builder/catalog">
                 <Library className="size-4" aria-hidden /> Katalog prvků
