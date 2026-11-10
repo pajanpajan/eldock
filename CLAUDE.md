@@ -5,7 +5,7 @@ revize VTZ, změny skutečného provedení mezi údržbou v hale a externími CA
 rozváděčů. Pracovní název byl Digitry, od fáze 20 je to **ELDOCK**. Produkce běží na https://eldock.cz.
 Původní zadání MVP je v `docs/archiv/SPECIFIKACE-MVP.md`, celá historie fází 0–35 v `docs/archiv/PLAN-faze-00-35.md`, celý archiv v jednom souboru `docs/archiv/ARCHIV-KOMPLET.md`.
 
-## 1. Milníky (fáze 0–81 nasazené, 82 k nasazení)
+## 1. Milníky (fáze 0–82 nasazené)
 
 | Fáze | Milník |
 |---|---|
@@ -196,7 +196,7 @@ Když uživatel řekne **„nasaď to na produkci“** nebo **„deploy“**:
 
 **Panely a akční členy chytré domácnosti (fáze 81):** bez migrace. Nové kusy katalogu prvků (TapHome, Loxone Extensions, alternativy KNX, SysAP s adaptérem, Pv a datasheety akčních členů) zapíše přírůstkový seed `db:panel-builder` při startu kontejneru (upsert, nic nemaže). Na serveru nic dalšího. Nasazeno 2026-11-10 (commit `7602c4e`; bez migrace, seed „katalog 621 prvků aktualizován“, kontejner `healthy`).
 
-**Zásuvky na světelném okruhu (fáze 82):** bez migrace (volba je v JSON nákresu a soupisu). RCBO B13 do katalogu prvků zapíše seed `db:panel-builder` při startu kontejneru. Na serveru nic dalšího.
+**Zásuvky na světelném okruhu (fáze 82):** bez migrace (volba je v JSON nákresu a soupisu). RCBO B13 do katalogu prvků zapíše seed `db:panel-builder` při startu kontejneru. Na serveru nic dalšího. Nasazeno 2026-11-10 (commit `bb1870f`; bez migrace, seed „katalog 628 prvků aktualizován“, kontejner `healthy`).
 
 **Testovací firma Správy závodů (2026-11-10):** entrypoint ji při každém startu s `ELDOCK_SEED_DEMO=1` založí, pokud chybí (`npm run db:plant-tester`, výpis v logu kontejneru); existující nemění. Hesla jsou veřejná v repozitáři – před registrací první skutečné firmy ji smažte (velín → Registrované firmy → Testovací závod s.r.o. → Smazat hned) a v `.env` nastavte `ELDOCK_SEED_DEMO=0`, jinak ji další start založí znovu (vypne i doplňování dema a firmy Tester). S nastaveným SMTP by šlo z testovacího účtu rozesílat pozvánky na libovolné adresy.
 
