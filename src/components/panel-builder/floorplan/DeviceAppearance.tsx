@@ -9,11 +9,11 @@ import { seriesLink } from "@/lib/panel-builder/series-links";
 import { deviceToneOf } from "@/lib/panel-builder/smart-datasheet";
 import { PRODUCT_FAMILIES, SMART_MANUFACTURERS, familiesOf, type CatalogProduct } from "@/lib/panel-builder/smart-catalog";
 import { SUPPLY_SYSTEMS, type SupplySystem } from "@/lib/panel-builder/supply";
-import { DESIGN_BRANDS, designBrand, designSeriesOf, seriesColors } from "@/lib/panel-builder/wiring-designs";
+import { DESIGN_BRANDS, colorForSeries, designBrand, designSeriesOf, seriesColors } from "@/lib/panel-builder/wiring-designs";
 import { cn } from "@/lib/utils";
 
 import { ManufacturerLogo } from "../ManufacturerLogo";
-import { DeviceMockup, SeriesGallery, combineLook } from "./SeriesGallery";
+import { DeviceMockup, SeriesGallery, SeriesThumb, combineLook } from "./SeriesGallery";
 import { SmartHomeDeviceCatalog, type SmartCatalogProps } from "../SmartHomeDeviceCatalog";
 
 /**
@@ -188,7 +188,13 @@ export function DeviceAppearance({
                   title={count ? `${count} přístrojů v katalogu` : "Řada zatím není v katalogu – přístroje doplníte v konfigurátoru"}
                   className={cn("flex w-20 shrink-0 flex-col items-center gap-0.5 rounded-md border p-1 text-[10px] leading-tight", active ? "border-primary bg-primary/20 text-foreground" : count ? "border-border text-foreground hover:border-primary/60" : "border-dashed border-border text-muted-foreground")}
                 >
-                  <DeviceMockup seriesKey={key} shape={series.shape ?? "square"} color={(active ? combineLook(series.colors?.find((option) => option.id === color), frameColor ? series.colors?.find((option) => option.id === frameColor) : null) : null) ?? series.colors?.[0] ?? { swatch: active ? swatch : "#f8fafc" }} items={["switch"]} className="size-9 rounded" label={`Náhled řady ${series.name}`} />
+                  {/* Fáze 80: produktový náhled řady v barvě (render z public/catalog-images), u jiné barvy rámečku kreslený */}
+                  <SeriesThumb
+                    seriesKey={key}
+                    colorId={active ? (frameColor && frameColor !== color ? null : colorForSeries(key, color)) : series.colors?.[0]?.id}
+                    className="size-9 rounded"
+                    fallback={<DeviceMockup seriesKey={key} shape={series.shape ?? "square"} color={(active ? combineLook(series.colors?.find((option) => option.id === color), frameColor ? series.colors?.find((option) => option.id === frameColor) : null) : null) ?? series.colors?.[0] ?? { swatch: active ? swatch : "#f8fafc" }} items={["switch"]} className="size-9 rounded" label={`Náhled řady ${series.name}`} />}
+                  />
                   <span className="line-clamp-2 text-center">{series.name}</span>
                 </button>
               );

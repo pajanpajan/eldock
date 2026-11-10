@@ -23,8 +23,9 @@ export interface SeriesPhoto {
 }
 
 /**
- * Schválené fotky. Prázdné, dokud není potvrzené právo fotky výrobců použít – doplnění = položka zde + soubor
- * v `public/series/…` (test hlídá, že soubor existuje a položka má zdroj i licenci).
+ * Ručně schválené fotky (`public/series/…`, položka se zdrojem i licencí). Fáze 80: uživatel 2026-11-10 potvrdil, že
+ * produktové náhledy výrobců smí být ve veřejném repozitáři – nové náhledy patří do `public/catalog-images/` (manifest
+ * `npm run catalog:images`, rendery řad ABB `npm run catalog:renders`); tento seznam zůstává pro výjimky.
  */
 export const SERIES_PHOTOS: readonly SeriesPhoto[] = [];
 

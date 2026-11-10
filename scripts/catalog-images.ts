@@ -85,12 +85,17 @@ export async function scanCatalogImages(): Promise<{ images: CatalogImage[]; ski
   return { images, skipped };
 }
 
-async function main() {
-  if (download) await fetchSources();
+/** Manifest ze souborů ve složce (sdílí ho `catalog:renders`). */
+export async function writeCatalogManifest() {
   const { images, skipped } = await scanCatalogImages();
   await writeFile(CATALOG_IMAGES_OUTPUT, renderCatalogImages(images));
   console.log(`Manifest ${path.relative(process.cwd(), CATALOG_IMAGES_OUTPUT)}: ${images.length} obrázků.`);
   for (const line of skipped) console.log(`  přeskočeno: ${line}`);
+}
+
+async function main() {
+  if (download) await fetchSources();
+  await writeCatalogManifest();
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) void main();

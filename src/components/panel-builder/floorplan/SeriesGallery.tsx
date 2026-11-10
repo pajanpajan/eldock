@@ -6,9 +6,12 @@ import { ExternalLink, Palette } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import type { SeriesColor, SeriesMaterial, SeriesShape } from "@/lib/panel-builder/abb-catalog-2026";
+import { lightness, lookOf, mockStyle, type Look, type MockStyle } from "@/lib/panel-builder/series-look";
 import { seriesLink } from "@/lib/panel-builder/series-links";
 import { seriesPhoto, type SeriesPhotoPart } from "@/lib/panel-builder/series-photos";
 import { DESIGN_BRANDS, designSeriesOf, seriesColors, type DesignSeries } from "@/lib/panel-builder/wiring-designs";
+
+export { lookOf, mockStyle };
 import { cn } from "@/lib/utils";
 
 import { ManufacturerLogo } from "../ManufacturerLogo";
@@ -19,36 +22,7 @@ import { ManufacturerLogo } from "../ManufacturerLogo";
  * sklo, kámen, papír, porcelán, softtouch), jednotlivý spínač, zásuvka i víceramček 3R na světlé stěně.
  */
 
-type Look = { frame: string; insert: string; material: SeriesMaterial };
 export type MockupItem = "switch" | "socket" | "double" | "blank";
-
-const SHAPE: Record<SeriesShape, { radius: number; border: number; insetRadius: number }> = {
-  thin: { radius: 12, border: 9, insetRadius: 6 },
-  rounded: { radius: 28, border: 12, insetRadius: 18 },
-  layered: { radius: 8, border: 14, insetRadius: 4 },
-  metal: { radius: 8, border: 12, insetRadius: 4 },
-  wood: { radius: 9, border: 16, insetRadius: 4 },
-  square: { radius: 5, border: 12, insetRadius: 3 },
-  soft: { radius: 18, border: 13, insetRadius: 10 },
-  classic: { radius: 4, border: 16, insetRadius: 3 },
-  porcelain: { radius: 46, border: 12, insetRadius: 40 },
-  flat: { radius: 3, border: 8, insetRadius: 2 },
-  solo: { radius: 34, border: 11, insetRadius: 24 },
-  thick: { radius: 7, border: 18, insetRadius: 4 },
-  surface: { radius: 16, border: 10, insetRadius: 10 },
-};
-
-export function lookOf(color: Pick<SeriesColor, "swatch" | "frame" | "insert" | "material"> | null | undefined, shape: SeriesShape): Look {
-  const swatch = color?.swatch ?? "#f8fafc";
-  return { frame: color?.frame ?? swatch, insert: color?.insert ?? swatch, material: color?.material ?? (shape === "porcelain" ? "porcelain" : shape === "wood" ? "wood" : shape === "metal" ? "metal" : "gloss") };
-}
-
-/** Světlost barvy (0–1) – tmavé provedení dostane světlejší kresbu otvorů a klapky. */
-function lightness(hex: string) {
-  const value = Number.parseInt(hex.replace("#", "").slice(0, 6), 16);
-  if (!Number.isFinite(value)) return 1;
-  return (((value >> 16) & 255) * 0.299 + ((value >> 8) & 255) * 0.587 + (value & 255) * 0.114) / 255;
-}
 
 function MaterialDefs({ id, look }: { id: string; look: Look }) {
   return (
@@ -103,69 +77,6 @@ function Surface({ id, material, ...shape }: { id: string; material: SeriesMater
       {material === "metal" || material === "wood" || material === "stone" ? <rect {...shape} fill={`url(#${id}-gloss)`} opacity={0.5} pointerEvents="none" /> : null}
     </>
   );
-}
-
-/**
- * Fáze 63: věrný tvar řady pro náhled – zaoblení a šířka rámečku, tvar kolébky a typické prvky řady: Levit (ostrý
- * čtverec na barevné podložce viditelné v horní a spodní spáře, vodorovný proužek indikace), Zoni (plochý matný rámeček
- * s tenkým okrajem, dvoubarevně barevný rámeček a bílá klapka), Tango (vypouklý zaoblený rámeček a kolébka s vodorovným
- * průzorem doutnavky), Time / Time Arbo (rovný rámeček s tenkou kovovou linkou kolem klapky, dřevo a kovová klapka),
- * Decento (kulatý porcelánový rámeček s páčkou a kulatou zásuvkou), Céliane (obdélník s kruhovým výřezem a kruhovou
- * klapkou), Schneider Nová Unica / Sedna / Asfora a další řady podle tvaru.
- */
-export interface MockStyle {
-  radius: number;
-  border: number;
-  insetRadius: number;
-  rocker: "flat" | "rounded" | "lever" | "circle";
-  /** Levit: barevná podložka v horní a spodní spáře + proužek indikace. */
-  base?: boolean;
-  /** Tango: vypouklý rámeček a průzor doutnavky. */
-  convex?: boolean;
-  lamp?: boolean;
-  /** Time: tenká kovová linka kolem klapky. */
-  metalLine?: boolean;
-  /** Decento: kulatý rámeček (1R kruh, víceramček ovál). */
-  round?: boolean;
-  /** Céliane: kruhový výřez s kruhovou klapkou. */
-  circle?: boolean;
-}
-
-const SERIES_STYLE: Record<string, MockStyle> = {
-  "ABB|Levit": { radius: 3, border: 14, insetRadius: 2, rocker: "flat", base: true },
-  "ABB|Levit M": { radius: 3, border: 15, insetRadius: 2, rocker: "flat", base: true },
-  "ABB|Zoni": { radius: 9, border: 9, insetRadius: 6, rocker: "flat" },
-  // Fáze 74: Tango – měkký čtverec (ne „pilulka“ u víceramečku), běžný spínač bez průzoru doutnavky
-  "ABB|Tango": { radius: 17, border: 13, insetRadius: 11, rocker: "rounded", convex: true },
-  "ABB|Time": { radius: 6, border: 15, insetRadius: 3, rocker: "flat", metalLine: true },
-  "ABB|Time Arbo": { radius: 6, border: 17, insetRadius: 3, rocker: "flat", metalLine: true },
-  "ABB|Decento": { radius: 46, border: 15, insetRadius: 30, rocker: "lever", round: true },
-  "ABB|Swing": { radius: 13, border: 13, insetRadius: 8, rocker: "rounded" },
-  "ABB|Swing L": { radius: 13, border: 11, insetRadius: 8, rocker: "rounded" },
-  "ABB|Classic": { radius: 4, border: 16, insetRadius: 3, rocker: "flat" },
-  "ABB|future linear": { radius: 3, border: 8, insetRadius: 2, rocker: "flat" },
-  "ABB|solo": { radius: 22, border: 11, insetRadius: 14, rocker: "rounded" },
-  "ABB|solo carat": { radius: 20, border: 12, insetRadius: 13, rocker: "rounded" },
-  "ABB|Busch-axcent": { radius: 7, border: 19, insetRadius: 4, rocker: "flat" },
-  "Legrand|Céliane": { radius: 10, border: 11, insetRadius: 8, rocker: "circle", circle: true },
-  "Legrand|Valena Life": { radius: 16, border: 12, insetRadius: 10, rocker: "rounded" },
-  "Legrand|Valena Allure": { radius: 7, border: 13, insetRadius: 5, rocker: "flat" },
-  "Legrand|Niloé": { radius: 20, border: 12, insetRadius: 12, rocker: "rounded" },
-  "Legrand|Mosaic": { radius: 3, border: 10, insetRadius: 2, rocker: "flat" },
-  "Schneider|Nová Unica": { radius: 11, border: 13, insetRadius: 7, rocker: "flat" },
-  "Schneider|Sedna Design & Elements": { radius: 15, border: 9, insetRadius: 10, rocker: "rounded" },
-  "Schneider|Asfora": { radius: 6, border: 11, insetRadius: 5, rocker: "flat" },
-  "Hager|lumina": { radius: 12, border: 12, insetRadius: 8, rocker: "flat" },
-  "Hager|berker S.1 / B.3 / Q.1 / Q.3": { radius: 5, border: 13, insetRadius: 4, rocker: "flat" },
-};
-
-/** Styl náhledu řady (podle klíče řady, jinak podle tvaru). */
-export function mockStyle(seriesKey: string | null | undefined, shape: SeriesShape): MockStyle {
-  const found = seriesKey ? designSeriesOf(seriesKey) : null;
-  const key = found ? `${found.brand.manufacturer}|${found.series.name}` : "";
-  if (SERIES_STYLE[key]) return SERIES_STYLE[key];
-  const geometry = SHAPE[shape];
-  return { radius: geometry.radius, border: geometry.border, insetRadius: geometry.insetRadius, rocker: shape === "rounded" || shape === "soft" || shape === "solo" ? "rounded" : "flat", round: shape === "porcelain" };
 }
 
 /** Jeden přístroj v rámečku (100 × 100 jednotek na pozici). */
@@ -297,20 +208,38 @@ export function combineLook(insert: LookColor | null | undefined, frame?: LookCo
   return { swatch: insert.swatch, insert: insert.insert ?? insert.swatch, frame: frame.frame ?? frame.swatch, material: insert.material ?? frame.material };
 }
 
-/** Fáze 74: originální fotka dílu (je-li schválená v `series-photos.ts`) se zdrojem, jinak vektorový náhled. */
-function PhotoOrMockup({ series, color, part, caption, mockup }: { series: string; color: string; part: SeriesPhotoPart; caption: string; mockup: ReactNode }) {
-  const photo = seriesPhoto(series, color, part);
+/**
+ * Fáze 74: originální fotka dílu (je-li schválená v `series-photos.ts`) se zdrojem, jinak vektorový náhled. Fáze 80:
+ * primárně produktový náhled z `public/catalog-images/` (render řady ABB); u rámečku v jiné barvě než klapka kreslený
+ * náhled (rendery jsou jen pro barvu řady).
+ */
+function PhotoOrMockup({ series, color, part, caption, mockup, exact = true }: { series: string; color: string; part: SeriesPhotoPart; caption: string; mockup: ReactNode; exact?: boolean }) {
+  const photo = exact ? seriesPhoto(series, color, part) : null;
   return (
     <figure className="flex flex-col items-center gap-1 text-[11px] text-muted-foreground" data-photo={photo ? "true" : "false"}>
       {photo ? (
-        // eslint-disable-next-line @next/next/no-img-element -- schválené fotky výrobců z public/series (statické soubory)
-        <img src={photo.src} alt={`${caption} – fotografie výrobce`} className="h-28 w-auto max-w-full rounded-lg object-contain" data-testid="gallery-photo" />
+        // eslint-disable-next-line @next/next/no-img-element -- náhledy z public/catalog-images a public/series (statické soubory)
+        <img src={photo.src} alt={`${caption} – náhled řady`} className="h-28 w-auto max-w-full rounded-lg object-contain shadow-sm" data-testid="gallery-photo" />
       ) : (
         mockup
       )}
       {caption}
-      {photo ? <span className="text-[10px]">Foto: {photo.source} · {photo.license}</span> : null}
     </figure>
+  );
+}
+
+/**
+ * Fáze 80: malý náhled řady v barvě (seznam řad, vzorky barev, lišta řad) – render z `public/catalog-images/`, jinak
+ * kreslený náhled. Obrázek je dekorativní (název má tlačítko), okraj studiového pozadí se ořízne.
+ */
+export function SeriesThumb({ seriesKey, colorId, fallback, className }: { seriesKey: string; colorId: string | null | undefined; fallback: ReactNode; className?: string }) {
+  const photo = colorId ? seriesPhoto(seriesKey, colorId, "switch") : null;
+  if (!photo || (photo.color && photo.color !== colorId)) return <>{fallback}</>;
+  return (
+    <span className={cn("block shrink-0 overflow-hidden", className)} data-testid="series-thumb-photo" data-src={photo.src}>
+      {/* eslint-disable-next-line @next/next/no-img-element -- náhled z public/catalog-images (statický soubor) */}
+      <img src={photo.src} alt="" className="size-full scale-[1.45] object-cover" loading="lazy" decoding="async" />
+    </span>
   );
 }
 
@@ -349,7 +278,7 @@ export function SeriesGallery({ seriesKey, color, frameColor = null, available, 
       <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-5xl" data-testid="series-gallery">
         <DialogHeader>
           <DialogTitle>Designové řady a barvy</DialogTitle>
-          <DialogDescription>Náhled rámečku, krytů a víceramečku v barvách řady (ABB podle katalogu 2026) – barvu klapky a rámečku jde zvolit zvlášť. Bez schválené fotky výrobce je náhled kreslený a barvy na obrazovce jsou orientační; přesný vzhled ověřte odkazem na web výrobce.</DialogDescription>
+          <DialogDescription>Náhled rámečku, krytů a víceramečku v barvách řady (ABB podle katalogu 2026) – barvu klapky a rámečku jde zvolit zvlášť. Klíčové řady ABB mají produktový render, ostatní kreslený náhled; barvy na obrazovce jsou orientační – přesný vzhled ověřte odkazem na web výrobce.</DialogDescription>
         </DialogHeader>
         <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Výrobce">
           {DESIGN_BRANDS.map((option) => (
@@ -366,7 +295,7 @@ export function SeriesGallery({ seriesKey, color, frameColor = null, available, 
               return (
                 <li key={option.name}>
                   <button type="button" role="radio" aria-checked={series.name === option.name} onClick={() => setPick({ series: key, color: seriesColors(key)[0].id, frameColor: null })} className={cn("flex w-full items-center gap-2 rounded-lg border p-1.5 text-left text-xs", series.name === option.name ? "border-primary bg-primary/15" : "border-border hover:border-primary/60")} data-testid={`gallery-series-${option.name}`}>
-                    <DeviceMockup seriesKey={key} shape={option.shape ?? "square"} color={first ?? { swatch: "#f8fafc" }} items={["switch"]} className="h-10 w-10 shrink-0 rounded" />
+                    <SeriesThumb seriesKey={key} colorId={first?.id} className="h-10 w-10 rounded" fallback={<DeviceMockup seriesKey={key} shape={option.shape ?? "square"} color={first ?? { swatch: "#f8fafc" }} items={["switch"]} className="h-10 w-10 shrink-0 rounded" />} />
                     <span className="min-w-0">
                       <b className="block">{option.name}</b>
                       <span className="text-muted-foreground">{colorCount(option.colors?.length || seriesColors(key).length)}{option.ip ? ` · ${option.ip}` : ""}</span>
@@ -389,17 +318,26 @@ export function SeriesGallery({ seriesKey, color, frameColor = null, available, 
             </div>
             <div className="grid gap-3 sm:grid-cols-[1fr_1fr_2fr]" data-testid="gallery-preview">
               {/* Fáze 74: schválená fotka výrobce (zdroj a licence pod fotkou), jinak kreslený náhled */}
-              <PhotoOrMockup series={seriesKeyOf} color={pick.color} part="switch" caption="Spínač 1R" mockup={<DeviceMockup seriesKey={seriesKeyOf} shape={shape} color={look} items={["switch"]} className="h-28 w-28 rounded-lg" label={`Spínač ${series.name}`} />} />
-              <PhotoOrMockup series={seriesKeyOf} color={pick.color} part="socket" caption="Zásuvka 1R" mockup={<DeviceMockup seriesKey={seriesKeyOf} shape={shape} color={look} items={["socket"]} className="h-28 w-28 rounded-lg" label={`Zásuvka ${series.name}`} />} />
-              <PhotoOrMockup series={seriesKeyOf} color={pick.color} part="set" caption="Víceramček 3R – vypínač + 2 zásuvky" mockup={<DeviceMockup seriesKey={seriesKeyOf} shape={shape} color={look} items={["switch", "socket", "socket"]} className="h-28 w-full max-w-80 rounded-lg" label={`Víceramček 3R ${series.name}`} />} />
+              <PhotoOrMockup series={seriesKeyOf} color={chosen?.id ?? pick.color} exact={!pick.frameColor} part="switch" caption="Spínač 1R" mockup={<DeviceMockup seriesKey={seriesKeyOf} shape={shape} color={look} items={["switch"]} className="h-28 w-28 rounded-lg" label={`Spínač ${series.name}`} />} />
+              <PhotoOrMockup series={seriesKeyOf} color={chosen?.id ?? pick.color} exact={!pick.frameColor} part="socket" caption="Zásuvka 1R" mockup={<DeviceMockup seriesKey={seriesKeyOf} shape={shape} color={look} items={["socket"]} className="h-28 w-28 rounded-lg" label={`Zásuvka ${series.name}`} />} />
+              <PhotoOrMockup series={seriesKeyOf} color={chosen?.id ?? pick.color} exact={!pick.frameColor} part="set" caption="Víceramček 3R – vypínač + 2 zásuvky" mockup={<DeviceMockup seriesKey={seriesKeyOf} shape={shape} color={look} items={["switch", "socket", "socket"]} className="h-28 w-full max-w-80 rounded-lg" label={`Víceramček 3R ${series.name}`} />} />
             </div>
+            {/* Fáze 80: zdroj a podmínky užití náhledů jednou pod řádkem náhledů */}
+            {(() => {
+              const sources = [...new Set(PREVIEW_PARTS.map((part) => (pick.frameColor ? null : seriesPhoto(seriesKeyOf, chosen?.id ?? pick.color, part))).filter((photo) => photo !== null).map((photo) => `${photo.source} · ${photo.license}`))];
+              return sources.length ? (
+                <p className="-mt-1 text-[10px] text-muted-foreground" data-testid="gallery-photo-source">
+                  Zdroj náhledu: {sources.join(" · ")}
+                </p>
+              ) : null;
+            })()}
             <p className="-mb-1.5 text-xs font-semibold text-muted-foreground">Barva klapky / krytu</p>
             <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Barva řady">
               {colors.map((option) => {
                 const seriesColor = (series.colors ?? []).find((candidate) => candidate.id === option.id) ?? null;
                 return (
                   <button key={option.id} type="button" role="radio" aria-checked={pick.color === option.id} onClick={() => setPick((value) => ({ ...value, color: option.id }))} className={cn("flex w-28 flex-col items-center gap-1 rounded-lg border p-1.5 text-center text-[11px] leading-tight", pick.color === option.id ? "border-primary bg-primary/15" : "border-border hover:border-primary/60")} data-testid="gallery-color">
-                    <DeviceMockup seriesKey={seriesKeyOf} shape={shape} color={seriesColor ?? { swatch: option.swatch }} items={["switch"]} className="h-12 w-12 rounded" />
+                    <SeriesThumb seriesKey={seriesKeyOf} colorId={seriesColor?.id} className="h-12 w-12 rounded" fallback={<DeviceMockup seriesKey={seriesKeyOf} shape={shape} color={seriesColor ?? { swatch: option.swatch }} items={["switch"]} className="h-12 w-12 rounded" />} />
                     {option.label}
                   </button>
                 );
@@ -481,6 +419,8 @@ export function SeriesGallery({ seriesKey, color, frameColor = null, available, 
     </Dialog>
   );
 }
+
+const PREVIEW_PARTS: readonly SeriesPhotoPart[] = ["switch", "socket", "set"];
 
 /** „1 barva“, „3 barvy“, „8 barev“. */
 const colorCount = (count: number) => `${count} ${count === 1 ? "barva" : count >= 2 && count <= 4 ? "barvy" : "barev"}`;

@@ -207,7 +207,8 @@ test("2D půdorys: akordeon palety, předměty X × Y, spotřebiče, úprava tra
   const gallery = page.getByTestId("series-gallery");
   await expect(gallery.getByTestId("gallery-web")).toHaveAttribute("target", "_blank");
   await expect(gallery.getByTestId("gallery-web")).toHaveAttribute("href", /Katalog-ABB_Domovni-elektroinstalacni-material\.pdf#page=\d+/);
-  await expect(gallery.getByTestId("mockup-base").first()).toBeAttached();
+  // Fáze 80: Levit má produktový render z public/catalog-images (podložka v druhé barvě je v renderu)
+  await expect(gallery.getByTestId("gallery-photo").first()).toHaveAttribute("src", /\/catalog-images\/abb\/levit\//);
   await page.keyboard.press("Escape");
 
   // 9) Chytrá domácnost v liště výrobců: TapHome, rodiny ABB a vložení senzoru free@home na sběrnici
