@@ -26,8 +26,9 @@ import { candidateTimes, keyframeTimes, scaledSize, sharpnessScore } from "@/lib
 const el = (id: string, item: string, x: number, y: number, room = "Obývák", patch: Partial<EditorElement> = {}): EditorElement => ({ id, item, x, y, room, mountHeightMm: null, frameUnits: 1, series: null, color: null, rotation: 0, scale: null, controls: [], ...patch });
 
 describe("loga výrobců z public/brands", () => {
-  it("slug souboru podle značky katalogu – 18 oficiálních značek + neznámý výrobce", () => {
-    expect(Object.values(BRAND_SLUGS)).toHaveLength(18);
+  it("slug souboru podle značky katalogu – 19 oficiálních značek (fáze 81 + TapHome) + neznámý výrobce", () => {
+    expect(Object.values(BRAND_SLUGS)).toHaveLength(19);
+    expect(brandSlug("TapHome")).toBe("taphome");
     expect(brandSlug("Schneider Electric")).toBe("schneider");
     expect(brandSlug("ABB")).toBe("abb");
     expect(brandSlug("Phoenix Contact")).toBe("phoenix-contact");

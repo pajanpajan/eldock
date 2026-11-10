@@ -4,11 +4,13 @@ import { cn } from "@/lib/utils";
 
 import type { CatalogProduct } from "@/lib/panel-builder/smart-catalog";
 import { smartSystemOf, type SmartSystemId } from "@/lib/panel-builder/smart-home";
+import { variantOf } from "@/lib/panel-builder/smart-panels";
 
 // Fáze 65: vektorový náhled přístroje chytré domácnosti pro karty katalogu a technický list. Kreslí třídu přístroje
 // (tlačítko v barvě řady s kolébkami a LED, bezrámečkový dotykový ovladač, termostat s displejem, panel 7", akční
 // člen do krabičky se svorkovnicí, stropní senzor, systémový modul, přístroj na DIN lištu se svorkami a LED kanálů).
-// Je to ilustrace třídy přístroje, ne fotografie konkrétního výrobku.
+// Je to ilustrace třídy přístroje, ne fotografie konkrétního výrobku. Fáze 81: panely a displejové ovladače mají věrný
+// náhled podle druhu (`product.panel`) v barvě zvolené varianty.
 
 export interface DeviceTone {
   frame: string;
@@ -175,6 +177,366 @@ function PanelDevice() {
   );
 }
 
+// ---------------------------------------------------------------------------
+//  Fáze 81: věrné náhledy panelů a displejových ovladačů (barva rámu podle varianty)
+// ---------------------------------------------------------------------------
+
+const SCREEN = "#0b1220";
+const TILE = "#1e293b";
+const TEXT = "#f8fafc";
+const MUTED = "#94a3b8";
+
+function Flame({ x, y, s, color = "#f97316" }: { x: number; y: number; s: number; color?: string }) {
+  return <path transform={`translate(${x} ${y}) scale(${s})`} d="M0 7 c-6 -5 -1 -9 -1 -14 c5 3 8 8 4 14 z" fill={color} />;
+}
+
+function Star({ x, y, s, color }: { x: number; y: number; s: number; color: string }) {
+  return <path transform={`translate(${x} ${y}) scale(${s})`} d="M0 -6 L1.8 -1.9 L6 -1.9 L2.6 0.8 L3.8 5 L0 2.5 L-3.8 5 L-2.6 0.8 L-6 -1.9 L-1.8 -1.9 Z" fill={color} />;
+}
+
+function Note({ x, y, s, color }: { x: number; y: number; s: number; color: string }) {
+  return (
+    <g transform={`translate(${x} ${y}) scale(${s})`} fill={color}>
+      <path d="M-1 -6 h6 v2 h-4 v8 a2.6 2.2 0 1 1 -2 -2.1 z" />
+    </g>
+  );
+}
+
+function Thermo({ x, y, s, color }: { x: number; y: number; s: number; color: string }) {
+  return (
+    <g transform={`translate(${x} ${y}) scale(${s})`} fill="none" stroke={color} strokeWidth={1.4}>
+      <path d="M-1.5 3 v-8 a1.5 1.5 0 0 1 3 0 v8" />
+      <circle cx={0} cy={4.6} r={2.4} />
+    </g>
+  );
+}
+
+/** Dlaždice ovládání s ikonou a popiskem (panely SmartTouch, RoomTouch, IP TOUCH). */
+function Tile({ x, y, w, h, children, on }: { x: number; y: number; w: number; h: number; children: ReactNode; on?: boolean }) {
+  return (
+    <g>
+      <rect x={x} y={y} width={w} height={h} rx={2.5} fill={on ? "#334155" : TILE} stroke={on ? "#facc15" : "none"} strokeWidth={0.6} />
+      {children}
+    </g>
+  );
+}
+
+const bodyStroke = (swatch: string) => (dark(swatch) ? "#52525b" : "#a1a1aa");
+
+/** ABB IP TOUCH 7" / 10": videotelefon ABB-Welcome IP (obraz od dveří) s dlaždicemi free@home a lištou hovoru. */
+function IpTouchArt({ swatch, size }: { swatch: string; size?: number }) {
+  return (
+    <svg viewBox="0 0 160 110" data-panel="ip-touch">
+      <rect x={4} y={6} width={152} height={98} rx={7} fill={swatch} stroke={bodyStroke(swatch)} strokeWidth={1.2} />
+      <rect x={11} y={12} width={138} height={80} rx={3} fill={SCREEN} />
+      <rect x={15} y={16} width={66} height={56} rx={2} fill={TILE} />
+      <circle cx={48} cy={36} r={8} fill={MUTED} opacity={0.75} />
+      <path d="M32 70 c0 -14 32 -14 32 0 z" fill={MUTED} opacity={0.75} />
+      <text x={18} y={24} fontSize={6} fill={TEXT} fontFamily="Arial, sans-serif">
+        Vchod
+      </text>
+      <Tile x={86} y={16} w={28} h={26} on>
+        <Bulb x={100} y={27} s={0.85} color="#facc15" />
+      </Tile>
+      <Tile x={117} y={16} w={28} h={26}>
+        <BlindArrows x={131} y={29} s={0.8} color="#e2e8f0" />
+      </Tile>
+      <Tile x={86} y={46} w={28} h={26}>
+        <Star x={100} y={59} s={0.9} color="#a78bfa" />
+      </Tile>
+      <Tile x={117} y={46} w={28} h={26}>
+        <Flame x={131} y={59} s={0.8} />
+      </Tile>
+      <rect x={15} y={76} width={130} height={12} rx={6} fill={TILE} />
+      <circle cx={60} cy={82} r={4} fill="#22c55e" />
+      <path d="M57.8 81 q2.2 3 4.4 0" fill="none" stroke={TEXT} strokeWidth={0.9} />
+      <rect x={96} y={78.5} width={7} height={7} rx={1.5} fill="none" stroke={TEXT} strokeWidth={0.9} />
+      <path d="M99.5 80 v4" stroke={TEXT} strokeWidth={0.9} />
+      {size ? (
+        <text x={145} y={99.5} textAnchor="end" fontSize={5.5} fontWeight={700} fill={dark(swatch) ? "#d4d4d8" : "#52525b"} fontFamily="Arial, sans-serif">
+          {`${size}"`}
+        </text>
+      ) : null}
+    </svg>
+  );
+}
+
+/** ABB SmartTouch 10" / Touch 7": úzký rám, stavová lišta a mřížka dlaždic domu. */
+function SmartTouchArt({ swatch, size }: { swatch: string; size?: number }) {
+  const tiles: { icon: ReactNode; on?: boolean }[] = [
+    { icon: <Bulb x={0} y={0} s={0.8} color="#facc15" />, on: true },
+    { icon: <BlindArrows x={0} y={1} s={0.75} color="#e2e8f0" /> },
+    { icon: <Flame x={0} y={0} s={0.75} /> },
+    { icon: <Star x={0} y={0} s={0.8} color="#a78bfa" /> },
+    { icon: <Note x={0} y={0} s={0.8} color="#38bdf8" /> },
+    { icon: <Thermo x={0} y={-1} s={0.85} color="#e2e8f0" /> },
+  ];
+  return (
+    <svg viewBox="0 0 160 110" data-panel="smart-touch">
+      <rect x={4} y={10} width={152} height={90} rx={5} fill={swatch} stroke={bodyStroke(swatch)} strokeWidth={1.2} />
+      <rect x={9} y={15} width={142} height={80} rx={2} fill={SCREEN} />
+      <text x={14} y={24} fontSize={6.5} fontWeight={700} fill={TEXT} fontFamily="Arial, sans-serif">
+        14:17
+      </text>
+      <text x={146} y={24} textAnchor="end" fontSize={6.5} fill={MUTED} fontFamily="Arial, sans-serif">
+        22,5 °C · Domov
+      </text>
+      {tiles.map((tile, index) => {
+        const col = index % 3;
+        const row = Math.floor(index / 3);
+        const x = 14 + col * 45;
+        const y = 30 + row * 30;
+        return (
+          <Tile key={index} x={x} y={y} w={41} h={26} on={tile.on}>
+            <g transform={`translate(${x + 20.5} ${y + 13})`}>{tile.icon}</g>
+          </Tile>
+        );
+      })}
+      <g fill={MUTED}>
+        <circle cx={75} cy={90} r={1.2} fill={TEXT} />
+        <circle cx={80} cy={90} r={1.2} />
+        <circle cx={85} cy={90} r={1.2} />
+      </g>
+      {size ? (
+        <text x={151} y={106} textAnchor="end" fontSize={5} fontWeight={700} fill={MUTED} fontFamily="Arial, sans-serif">
+          {`${size}"`}
+        </text>
+      ) : null}
+    </svg>
+  );
+}
+
+/** ABB OneTouch 7": zaoblený panel s velkými hodinami a kulatými zkratkami scén. */
+function OneTouchArt({ swatch }: { swatch: string }) {
+  return (
+    <svg viewBox="0 0 160 110" data-panel="one-touch">
+      <rect x={6} y={10} width={148} height={90} rx={11} fill={swatch} stroke={bodyStroke(swatch)} strokeWidth={1.2} />
+      <rect x={13} y={17} width={134} height={76} rx={6} fill={SCREEN} />
+      <text x={22} y={46} fontSize={19} fontWeight={700} fill={TEXT} fontFamily="Arial, sans-serif">
+        14:17
+      </text>
+      <text x={23} y={57} fontSize={6.5} fill={MUTED} fontFamily="Arial, sans-serif">
+        Úterý · 22,5 °C
+      </text>
+      {[
+        { cy: 32, icon: <Bulb x={118} y={32} s={0.8} color="#facc15" /> },
+        { cy: 55, icon: <Star x={118} y={55} s={0.8} color="#a78bfa" /> },
+        { cy: 78, icon: <BlindArrows x={118} y={79} s={0.7} color="#e2e8f0" /> },
+      ].map((button, index) => (
+        <g key={index}>
+          <circle cx={118} cy={button.cy} r={9.5} fill={TILE} stroke="#475569" strokeWidth={0.6} />
+          {button.icon}
+        </g>
+      ))}
+      <g>
+        {[0, 1, 2, 3].map((index) => (
+          <rect key={index} x={22 + index * 19} y={72} width={15} height={13} rx={3} fill={TILE} />
+        ))}
+        <Flame x={29.5} y={78.5} s={0.55} />
+        <Note x={48.5} y={78.5} s={0.6} color="#38bdf8" />
+        <Thermo x={67.5} y={77.5} s={0.6} color="#e2e8f0" />
+        <Bulb x={86.5} y={78} s={0.6} color="#e2e8f0" />
+      </g>
+    </svg>
+  );
+}
+
+/** ABB RoomTouch® 4": čtvercový panel místnosti – název, teplota a dlaždice světla, žaluzie, scény a topení. */
+function RoomTouchArt({ swatch }: { swatch: string }) {
+  return (
+    <svg viewBox="0 0 120 120" data-panel="room-touch">
+      <rect x={8} y={8} width={104} height={104} rx={9} fill={swatch} stroke={bodyStroke(swatch)} strokeWidth={1.2} />
+      <rect x={16} y={16} width={88} height={88} rx={4} fill={SCREEN} />
+      <text x={22} y={29} fontSize={7.5} fontWeight={700} fill={TEXT} fontFamily="Arial, sans-serif">
+        Obývák
+      </text>
+      <text x={98} y={29} textAnchor="end" fontSize={7.5} fill={MUTED} fontFamily="Arial, sans-serif">
+        22,5 °C
+      </text>
+      <Tile x={21} y={35} w={38} h={30} on>
+        <Bulb x={40} y={49} s={1} color="#facc15" />
+      </Tile>
+      <Tile x={62} y={35} w={38} h={30}>
+        <BlindArrows x={81} y={51} s={0.95} color="#e2e8f0" />
+      </Tile>
+      <Tile x={21} y={68} w={38} h={30}>
+        <Star x={40} y={83} s={1.05} color="#a78bfa" />
+      </Tile>
+      <Tile x={62} y={68} w={38} h={30}>
+        <Flame x={81} y={83} s={0.95} />
+      </Tile>
+    </svg>
+  );
+}
+
+/** ABB Trevion® 2,4": displej 55 × 55 mm v rámečku zvolené řady (teplota, symboly, dotykový kroužek). */
+function TrevionArt({ swatch, tone }: { swatch: string; tone: DeviceTone }) {
+  return (
+    <svg viewBox="0 0 120 120" data-panel="trevion">
+      <rect x={8} y={8} width={104} height={104} rx={10} fill={tone.frame} stroke={dark(tone.frame) ? "#3f3f46" : "#a1a1aa"} strokeWidth={1.2} />
+      <rect x={24} y={24} width={72} height={72} rx={5} fill={swatch} stroke={bodyStroke(swatch)} strokeWidth={0.8} />
+      <rect x={34} y={32} width={52} height={46} rx={3} fill={SCREEN} />
+      <text x={60} y={58} textAnchor="middle" fontSize={13} fontWeight={700} fill={TEXT} fontFamily="Arial, sans-serif">
+        21,5°
+      </text>
+      <Bulb x={42} y={70} s={0.55} color="#facc15" />
+      <BlindArrows x={60} y={71} s={0.45} color="#e2e8f0" />
+      <Flame x={78} y={70.5} s={0.5} />
+      <circle cx={60} cy={87} r={3} fill="none" stroke={dark(swatch) ? "#a1a1aa" : "#71717a"} strokeWidth={0.8} />
+    </svg>
+  );
+}
+
+/** Loxone Wall Display 10": Ambientní režim – velký čas, počasí a místnosti; zelená stavová LED. */
+function WallDisplayArt({ swatch }: { swatch: string }) {
+  return (
+    <svg viewBox="0 0 160 110" data-panel="wall-display">
+      <rect x={4} y={8} width={152} height={94} rx={4} fill={swatch} stroke={bodyStroke(swatch)} strokeWidth={1.2} />
+      <rect x={10} y={14} width={140} height={78} rx={2} fill={SCREEN} />
+      <text x={18} y={46} fontSize={22} fontWeight={300} fill={TEXT} fontFamily="Arial, sans-serif">
+        07:13
+      </text>
+      <text x={19} y={57} fontSize={6.5} fill={MUTED} fontFamily="Arial, sans-serif">
+        Středa 11. listopadu · Ambientní režim
+      </text>
+      <g transform="translate(128 32)">
+        <circle r={6} fill="#facc15" />
+        {Array.from({ length: 8 }, (_, index) => {
+          const angle = (index / 8) * Math.PI * 2;
+          return <path key={index} d={`M${Math.cos(angle) * 8.5} ${Math.sin(angle) * 8.5} L${Math.cos(angle) * 11} ${Math.sin(angle) * 11}`} stroke="#facc15" strokeWidth={1.2} strokeLinecap="round" />;
+        })}
+      </g>
+      {["Obývák", "Kuchyně", "Ložnice"].map((room, index) => (
+        <g key={room}>
+          <rect x={18 + index * 43} y={66} width={39} height={20} rx={3} fill={TILE} />
+          <text x={22 + index * 43} y={74} fontSize={5.5} fill={TEXT} fontFamily="Arial, sans-serif">
+            {room}
+          </text>
+          <text x={22 + index * 43} y={82} fontSize={5} fill={MUTED} fontFamily="Arial, sans-serif">
+            {["22,5 °C", "21 °C", "19,5 °C"][index]}
+          </text>
+          <circle cx={51 + index * 43} cy={72} r={2} fill={index === 0 ? "#facc15" : "#475569"} />
+        </g>
+      ))}
+      <circle cx={80} cy={97} r={1.6} fill={LOXONE_GREEN} />
+    </svg>
+  );
+}
+
+/** Loxone Touch Pure Display: displej hodin s horní lištou stavových ikon a dotyková plocha s body Touch Pure. */
+function PureDisplayArt({ swatch }: { swatch: string }) {
+  const ink = dark(swatch) ? "#d4d4d8" : "#71717a";
+  return (
+    <svg viewBox="0 0 120 120" data-panel="pure-display">
+      <rect x={12} y={12} width={96} height={96} rx={14} fill={swatch} stroke={bodyStroke(swatch)} strokeWidth={1.2} />
+      <rect x={22} y={20} width={76} height={42} rx={5} fill={SCREEN} />
+      <g>
+        <Bulb x={34} y={28} s={0.45} color="#facc15" />
+        <Thermo x={50} y={27.5} s={0.5} color="#e2e8f0" />
+        <Note x={67} y={28.5} s={0.5} color="#38bdf8" />
+        <BlindArrows x={84} y={28.5} s={0.4} color="#e2e8f0" />
+      </g>
+      <text x={60} y={53} textAnchor="middle" fontSize={16} fontWeight={700} fill={TEXT} fontFamily="Arial, sans-serif">
+        07:13
+      </text>
+      <g fill={ink}>
+        <circle cx={60} cy={85} r={2.4} />
+        <rect x={57} y={68} width={6} height={1.6} rx={0.8} />
+        <rect x={57} y={100} width={6} height={1.6} rx={0.8} />
+        <rect x={26} y={84.2} width={6} height={1.6} rx={0.8} />
+        <path d="M88 85 h6 M91 82 v6" stroke={ink} strokeWidth={1.6} strokeLinecap="round" />
+      </g>
+      <circle cx={60} cy={85} r={9} fill="none" stroke={ink} strokeWidth={0.5} opacity={0.5} />
+    </svg>
+  );
+}
+
+/** Symbol tlačítka v pruhu ovladače TapHome (kresleno cestou – nezávislé na fontu). */
+function KeyGlyph({ glyph, x, y, color }: { glyph: string; x: number; y: number; color: string }) {
+  const common = { fill: "none", stroke: color, strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+  switch (glyph) {
+    case "∧":
+      return <path d={`M${x - 5} ${y + 2.5} L${x} ${y - 2.5} L${x + 5} ${y + 2.5}`} {...common} />;
+    case "∨":
+      return <path d={`M${x - 5} ${y - 2.5} L${x} ${y + 2.5} L${x + 5} ${y - 2.5}`} {...common} />;
+    case "≡":
+      return <path d={`M${x - 5} ${y - 3.5} H${x + 5} M${x - 5} ${y} H${x + 5} M${x - 5} ${y + 3.5} H${x + 5}`} {...common} />;
+    case "+":
+      return <path d={`M${x - 5} ${y} H${x + 5} M${x} ${y - 5} V${y + 5}`} {...common} />;
+    default:
+      return <path d={`M${x - 5} ${y} H${x + 5}`} {...common} />;
+  }
+}
+
+/**
+ * TapHome Ovladač s displejem: vlevo čtvercový tmavý displej (teplota, vlhkost, čas, aktivní scéna), vpravo svislý pruh
+ * tlačítek v barvě provedení; noční světlo z bočních stran.
+ */
+function TapDisplayArt({ swatch, keys }: { swatch: string; keys: string[] }) {
+  const glow = `tap-glow-${useId().replace(/[^a-zA-Z0-9-]/g, "")}`;
+  const ink = dark(swatch) ? "#e4e4e7" : "#3f3f46";
+  const pitch = 80 / keys.length;
+  return (
+    <svg viewBox="0 0 160 110" data-panel="tap-display" data-keys={keys.join("")}>
+      <defs>
+        <linearGradient id={glow} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#fbbf24" stopOpacity={0} />
+          <stop offset="0.5" stopColor="#fbbf24" stopOpacity={0.55} />
+          <stop offset="1" stopColor="#fbbf24" stopOpacity={0} />
+        </linearGradient>
+      </defs>
+      <rect x={6} y={10} width={3} height={90} rx={1.5} fill={`url(#${glow})`} />
+      <rect x={151} y={10} width={3} height={90} rx={1.5} fill={`url(#${glow})`} />
+      <rect x={10} y={8} width={140} height={94} rx={7} fill={SCREEN} stroke="#3f3f46" strokeWidth={1.2} />
+      <rect x={14} y={12} width={86} height={86} rx={4} fill="#111827" />
+      <text x={20} y={24} fontSize={7} fill={MUTED} fontFamily="Arial, sans-serif">
+        48 %
+      </text>
+      <text x={94} y={24} textAnchor="end" fontSize={7} fill={MUTED} fontFamily="Arial, sans-serif">
+        15:56
+      </text>
+      <text x={57} y={60} textAnchor="middle" fontSize={19} fontWeight={700} fill={TEXT} fontFamily="Arial, sans-serif">
+        23.5 °C
+      </text>
+      <text x={57} y={86} textAnchor="middle" fontSize={7.5} fill="#38bdf8" fontFamily="Arial, sans-serif">
+        Living room
+      </text>
+      <rect x={104} y={12} width={42} height={86} rx={4} fill={swatch} stroke={bodyStroke(swatch)} strokeWidth={0.8} />
+      {keys.map((glyph, index) => (
+        <g key={glyph + index} data-key={glyph}>
+          {index ? <path d={`M108 ${15 + pitch * index} H142`} stroke={ink} strokeWidth={0.4} opacity={0.35} /> : null}
+          <KeyGlyph glyph={glyph} x={125} y={15 + pitch * (index + 0.5)} color={ink} />
+        </g>
+      ))}
+    </svg>
+  );
+}
+
+/** Náhled panelu podle druhu a barvy varianty (fáze 81). */
+function PanelArt({ product, variant, tone }: { product: CatalogProduct; variant?: string | null; tone: DeviceTone }) {
+  const swatch = variantOf(product, variant)?.swatch ?? tone.insert;
+  switch (product.panel) {
+    case "ip-touch":
+      return <IpTouchArt swatch={swatch} size={product.size} />;
+    case "smart-touch":
+      return <SmartTouchArt swatch={swatch} size={product.size} />;
+    case "one-touch":
+      return <OneTouchArt swatch={swatch} />;
+    case "room-touch":
+      return <RoomTouchArt swatch={swatch} />;
+    case "trevion":
+      return <TrevionArt swatch={swatch} tone={tone} />;
+    case "wall-display":
+      return <WallDisplayArt swatch={swatch} />;
+    case "pure-display":
+      return <PureDisplayArt swatch={swatch} />;
+    case "tap-display":
+      return <TapDisplayArt swatch={swatch} keys={product.keys ?? ["∧", "∨"]} />;
+    default:
+      return <PanelDevice />;
+  }
+}
+
 /** Akční člen do krabičky: šedé pouzdro, logo, QR kód, bezdrátový symbol, zelená svorkovnice. */
 function InboxDevice({ terminals, manufacturer, wireless }: { terminals: string[]; manufacturer: string; wireless: boolean }) {
   const qr = [1, 0, 1, 1, 0, 1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 1];
@@ -323,7 +685,7 @@ export function inboxTerminals(product: Pick<CatalogProduct, "wiring" | "channel
   return (product.channels ?? 1) > 1 ? ["N", "↓", "↑1", "↑2", "L"] : ["N", "↓", "C1", "↑1", "L"];
 }
 
-export function SmartHomeDeviceIllustration({ product, system, tone, className }: { product: CatalogProduct; system: SmartSystemId; tone: DeviceTone; className?: string }) {
+export function SmartHomeDeviceIllustration({ product, system, tone, className, variant }: { product: CatalogProduct; system: SmartSystemId; tone: DeviceTone; className?: string; /** Fáze 81: barevná varianta panelu. */ variant?: string | null }) {
   const manufacturer = smartSystemOf(system).manufacturer;
   const dinModule = smartSystemOf(system).modules.find((unit) => unit.id === product.moduleId);
   const art = (() => {
@@ -335,7 +697,7 @@ export function SmartHomeDeviceIllustration({ product, system, tone, className }
       case "thermostat":
         return <ThermostatDevice tone={tone} />;
       case "panel":
-        return <PanelDevice />;
+        return product.panel ? <PanelArt product={product} variant={variant ?? product.selectedVariant} tone={tone} /> : <PanelDevice />;
       case "inbox":
         return <InboxDevice terminals={inboxTerminals(product)} manufacturer={manufacturer} wireless={product.noBus ?? false} />;
       case "presence":
@@ -351,7 +713,7 @@ export function SmartHomeDeviceIllustration({ product, system, tone, className }
     }
   })();
   return (
-    <span className={cn("inline-flex items-center justify-center [&>svg]:size-full", className)} role="img" aria-label={`Náhled: ${product.label}`} data-testid="device-illustration" data-kind={product.kind}>
+    <span className={cn("inline-flex items-center justify-center [&>svg]:size-full", className)} role="img" aria-label={`Náhled: ${product.label}`} data-testid="device-illustration" data-kind={product.kind} data-panel={product.panel}>
       {art}
     </span>
   );

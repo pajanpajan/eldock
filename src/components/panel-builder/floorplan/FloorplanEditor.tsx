@@ -153,6 +153,7 @@ import { cleanPolyline, dragSegment, insertJog, segmentShift } from "@/lib/panel
 import { PRODUCT_FAMILIES, productById, productForItem, productOfModule, type CatalogProduct } from "@/lib/panel-builder/smart-catalog";
 import { deviceToneOf } from "@/lib/panel-builder/smart-datasheet";
 import { SmartHomeDatasheetModal } from "../SmartHomeDatasheetModal";
+import type { ProductChoice } from "../SmartHomeDeviceCatalog";
 import { FloorplanDocumentBar } from "./FloorplanDocumentBar";
 import { FloorplanFileMenu } from "./FloorplanFileMenu";
 import { useDraftHistory } from "./useDraftHistory";
@@ -177,7 +178,7 @@ const SNAP_MM = 50;
 
 type Tool =
   | { kind: "select" }
-  | { kind: "place"; item: string; appliance?: string; product?: string }
+  | { kind: "place"; item: string; appliance?: string; product?: string; /** Fáze 81: barva a krabice panelu. */ variant?: string; box?: "flush" | "surface" }
   /** Fáze 62: sestava ve víceramečku z palety – vloží se celá jedním klikem. */
   | { kind: "place-set"; key: string; members: string[]; label: string }
   | { kind: "room" }
@@ -766,7 +767,7 @@ export function FloorplanEditor({
         scale: null,
         // Fáze 63: vlastní spotřebič z knihovny a výrobek z lišty výrobců
         ...(tool.appliance ? { appliance: tool.appliance } : {}),
-        ...(tool.product ? { product: tool.product } : {}),
+        ...(tool.product ? { product: tool.product, ...(tool.variant ? { productVariant: tool.variant } : {}), ...(tool.box ? { productBox: tool.box } : {}) } : {}),
         ...(code ? { boardCode: code } : {}),
       };
       if (!single) setPlaceRotation(target.rotation);
@@ -981,7 +982,7 @@ export function FloorplanEditor({
   }
 
   /** Fáze 63: výrobek z lišty výrobců do půdorysu (systém chytré domácnosti se nastaví podle rodiny výrobku). */
-  function placeProduct(product: CatalogProduct) {
+  function placeProduct(product: CatalogProduct, choice: ProductChoice = {}) {
     if (!product.item) return;
     const family = PRODUCT_FAMILIES.find((option) => option.id === productById(product.id)?.family);
     if (family?.system && draft.smartSystem !== family.system) {
@@ -989,7 +990,7 @@ export function FloorplanEditor({
       update((current) => ({ ...current, smartSystem: system }));
       toast.info(`Systém chytré domácnosti: ${family.label} – akční členy se přepočítají.`);
     }
-    setTool({ kind: "place", item: product.item, product: product.id });
+    setTool({ kind: "place", item: product.item, product: product.id, ...(choice.variant ? { variant: choice.variant } : {}), ...(choice.box ? { box: choice.box } : {}) });
     setHover(null);
   }
 
@@ -1955,7 +1956,11 @@ export function FloorplanEditor({
         planned={(moduleId) => smartPlan?.modules.filter((unit) => unit.id === moduleId && !unit.manual).length ?? 0}
         extras={draft.smartExtras}
         onExtra={changeSmartExtra}
-        onDatasheet={(product) => setDatasheet(productById(product.id))}
+        onDatasheet={(product) => {
+          // Fáze 81: technický list ve zvolené barvě panelu
+          const base = productById(product.id);
+          setDatasheet(base ? { ...base, ...product, family: base.family } : null);
+        }}
       />
 
       {/* Fáze 59: podlaží domu */}

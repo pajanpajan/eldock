@@ -28,6 +28,8 @@ export const DEVICE_BRANDS: readonly Brand[] = [
   { value: "Hakel", label: "Hakel", color: "#1c63b7", mark: "HK" },
   { value: "Legrand", label: "Legrand", color: "#e2231a", mark: "L" },
   { value: "Loxone", label: "Loxone", color: "#69c350", mark: "LX" },
+  // Fáze 81: TapHome – Core a moduly na DIN lištu (logo public/brands/taphome.svg)
+  { value: "TapHome", label: "TapHome", color: "#1f2937", mark: "TH" },
   { value: "Eastron", label: "Eastron", color: "#1b3e8b", mark: "EA" },
   { value: "Wago", label: "Wago", color: "#6ec800", mark: "W" },
   { value: "Phoenix Contact", label: "Phoenix Contact", color: "#008cd2", mark: "PC" },

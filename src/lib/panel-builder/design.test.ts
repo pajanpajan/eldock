@@ -170,8 +170,9 @@ describe("popisky 1:1", () => {
 });
 
 describe("kaskádové menu: výrobci a příslušenství", () => {
-  it("21 výrobců z databáze (fáze 47 bez 9 odebraných značek), hledání bez diakritiky", () => {
-    expect(DEVICE_BRANDS).toHaveLength(21);
+  it("22 výrobců z databáze (fáze 47 bez 9 odebraných značek, fáze 81 + TapHome), hledání bez diakritiky", () => {
+    expect(DEVICE_BRANDS).toHaveLength(22);
+    expect(filterBrands(DEVICE_BRANDS, "tap").map((brand) => brand.value)).toEqual(["TapHome"]);
     expect(DEVICE_BRANDS.some((brand) => brand.value === "Weidmüller" || brand.value === "Finder")).toBe(false);
     expect(filterBrands(DEVICE_BRANDS, "siem").map((brand) => brand.value)).toEqual(["Siemens"]);
     expect(filterBrands(DEVICE_BRANDS, "schneider electric")[0].value).toBe("Schneider");

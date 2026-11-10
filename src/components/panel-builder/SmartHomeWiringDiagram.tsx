@@ -290,6 +290,19 @@ export function wiringContent(wiring: WiringKind, product: Pick<CatalogProduct, 
       return <WirelessDiagram title={name} hub={system === "loxone" ? "Miniserver / Air Base" : "System Access Point"} />;
     case "intercom":
       return <PortsDiagram title={name} sub="ABB-Welcome – vlastní dvoudrátová sběrnice" ports={[{ label: "a", color: C.busPlus, target: "Dveřní stanice|sběrnice Welcome" }, { label: "b", color: C.busMinus, target: "Systémový řadič|ABB-Welcome" }]} />;
+    case "lan-ip":
+      // Fáze 81: panel na LAN / Wi-Fi (IP TOUCH, OneTouch, Loxone Wall Display) – mimo sběrnicovou linku
+      return (
+        <PortsDiagram
+          title={name}
+          sub="síťový panel – LAN / Wi-Fi, mimo sběrnici"
+          ports={[
+            { label: "LAN", color: C.lan, target: "Síťový switch / router|kabel Cat6" },
+            { label: "+ / −", color: C.v24, target: "Napájení|PoE nebo zdroj (ověřte)" },
+            { label: "Wi-Fi", color: C.radio, target: "Domácí síť|u variant s Wi-Fi" },
+          ]}
+        />
+      );
     case "din-switch":
       return <DinDiagram title={name} bus={bus} channels={channels} load="lamp" />;
     case "din-dim":

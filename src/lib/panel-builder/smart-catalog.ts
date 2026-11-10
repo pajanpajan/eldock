@@ -7,7 +7,11 @@
 // Fáze 65: obrázkový katalog – každý výrobek má záložku (ovladače / do krabičky a bezdrátové / panely a čidla / DIN
 // lišta), druh náhledu (`kind`), počet kolébek / kanálů, popis funkce, druh schématu zapojení (`wiring`) a odkaz na
 // ověřený záznam v katalogu výrobců (`catalog` → `smart-device-specs.generated.ts`) pro technický list.
+//
+// Fáze 81: dotykové panely a displejové ovladače (`smart-panels.ts` – varianty barev, krabice, mezirámečky, věrné
+// náhledy `panel`) a úplná nabídka akčních členů na DIN lištu všech čtyř systémů (TapHome už s moduly).
 
+import { FAH_PANELS, FAH_ROOM_PANELS, LOXONE_PANELS, TAPHOME_PANELS, type PanelStyle, type ProductBox, type ProductVariant, type SeriesAdapter } from "./smart-panels";
 import { SMART_SYSTEMS, type SmartModule, type SmartSystemId } from "./smart-home";
 
 /** Záložky obrázkového katalogu. */
@@ -26,6 +30,8 @@ export type WiringKind =
   | "wireless"
   | "flextronics"
   | "intercom"
+  /** Fáze 81: panel na LAN / Wi-Fi (IP TOUCH, OneTouch, Loxone Wall Display) – mimo sběrnici. */
+  | "lan-ip"
   | "din-switch"
   | "din-dim"
   | "din-dali"
@@ -68,6 +74,19 @@ export interface CatalogProduct {
   catalog?: { manufacturer: string; mpn: string };
   /** Modul výpočtu chytré domácnosti (`smart-home.ts`) – počet v rozváděči a ruční navýšení. */
   moduleId?: string;
+  /** Fáze 81: věrný náhled panelu, úhlopříčka displeje ["], barevné varianty, krabice, mezirámečky a tlačítka pruhu. */
+  panel?: PanelStyle;
+  size?: number;
+  variants?: ProductVariant[];
+  boxes?: ProductBox[];
+  adapters?: SeriesAdapter[];
+  keys?: string[];
+  /** Oblíbený výrobek (štítek na kartě). */
+  favorite?: boolean;
+  /** „series“ = pod rámeček zvolené řady (Trevion); jinak vlastní provedení bez rámečku řady. */
+  frame?: "series";
+  /** Zvolená varianta (karta / technický list – `withVariant`). */
+  selectedVariant?: string;
 }
 
 export interface CatalogGroup {
@@ -146,9 +165,10 @@ function dinGroup(system: SmartSystemId, label: string): CatalogGroup {
       typeCode: unit.typeCode,
       articleNumber: unit.articleNumber,
       verified: unit.verified,
-      note: unit.modules > 0 ? `${unit.modules} M na DIN liště` : "mimo lištu (nástěnná montáž / adaptér)",
+      note: unit.modules > 0 ? `${unit.modules} M na DIN liště${unit.manualOnly ? " · alternativa – jen ručně" : ""}` : "mimo lištu (nástěnná montáž / adaptér)",
       tab: "din" as const,
-      kind: unit.role === "system" && system !== "loxone" ? ("controller" as const) : ("din" as const),
+      // Fáze 81: nástěnný systémový modul = ovladač, kusy na DIN liště (SysAP s adaptérem, TapHome Core) = přístroj DIN
+      kind: unit.role === "system" && unit.modules === 0 ? ("controller" as const) : ("din" as const),
       channels: unit.channels,
       description: moduleDescription(system, unit),
       wiring: moduleWiring(system, unit),
@@ -204,7 +224,24 @@ export const PRODUCT_FAMILIES: ProductFamily[] = [
         id: "fah-central",
         label: "Centrální panely a komunikace",
         products: [
-          { id: "fah-onetouch", label: "Dotykový panel ABB-free@home OneTouch 7\"", item: "bus-display", tab: "panels", kind: "panel", wiring: "bus-fah", catalog: { manufacturer: "ABB", mpn: "2TMA210050B0006" }, description: "Dotykový panel 7\" s displejem: ovládání světel, žaluzií, topení a scén celého domu z jednoho místa." },
+          ...FAH_PANELS,
+          // Fáze 81: dosavadní „OneTouch 7"“ je podle katalogu výrobců panel DP7-S (Touch 7") – id zůstává kvůli uloženým půdorysům
+          {
+            id: "fah-onetouch",
+            label: "Dotykový panel ABB-free@home Touch 7\" (DP7-S)",
+            item: "bus-display",
+            tab: "panels",
+            kind: "panel",
+            panel: "smart-touch",
+            size: 7,
+            wiring: "bus-fah",
+            catalog: { manufacturer: "ABB", mpn: "2TMA210050B0006" },
+            description: "Dotykový panel 7\" s displejem na sběrnici free@home: ovládání světel, žaluzií, topení a scén celého domu z jednoho místa.",
+            variants: [
+              { id: "black", label: "Černá", swatch: "#18181b", mpn: "2TMA210050B0006", typeCode: "DP7-S-625-02" },
+              { id: "white", label: "Bílá", swatch: "#f8fafc", mpn: "2TMA210050W0017", typeCode: "DP7-S-611-02" },
+            ],
+          },
           {
             id: "fah-welcome-midi",
             label: "Videotelefon ABB-Welcome Midi (vlastní 2drátová sběrnice)",
@@ -218,6 +255,7 @@ export const PRODUCT_FAMILIES: ProductFamily[] = [
           },
         ],
       },
+      { id: "fah-room-panels", label: "Dotykové panely pro místnost (RoomTouch®, Trevion®)", products: FAH_ROOM_PANELS },
       dinGroup("abb_freeathome", "Akční členy, zdroj a rozhraní na DIN lištu"),
     ],
   },
@@ -308,6 +346,7 @@ export const PRODUCT_FAMILIES: ProductFamily[] = [
         label: "Čidla",
         products: [{ id: "lox-presence", label: "Loxone stropní senzor přítomnosti (Tree)", item: "bus-presence", tab: "panels", kind: "presence", wiring: "tree", catalog: { manufacturer: "LOXONE", mpn: "100422" }, description: "Stropní senzor přítomnosti na sběrnici Tree – světlo podle obsazenosti, podklad pro regulaci a zabezpečení." }],
       },
+      { id: "lox-panels", label: "Displeje a panely", products: LOXONE_PANELS },
       dinGroup("loxone", "Miniserver / Tree / Air – na DIN lištu"),
     ],
   },
@@ -317,7 +356,7 @@ export const PRODUCT_FAMILIES: ProductFamily[] = [
     label: "TapHome (Core + sběrnice)",
     subtitle: "Core & sběrnicové prvky",
     system: "taphome",
-    description: "Řídicí jednotka Core, tlačítka 2T / 4T / 6T a UI termostat; akční členy doplňte podle nabídky TapHome.",
+    description: "Řídicí jednotka Core, tlačítka 2T / 4T / 6T, ovladače s displejem a moduly na DIN lištu (relé, žaluzie, stmívání, vstupy, zdroj).",
     groups: [
       {
         id: "tap-buttons",
@@ -333,7 +372,8 @@ export const PRODUCT_FAMILIES: ProductFamily[] = [
         label: "Termostat",
         products: [{ id: "tap-thermostat", label: "TapHome UI Termostat", item: "bus-room", tab: "controls", kind: "thermostat", wiring: "bus-taphome", description: "Prostorový termostat TapHome s displejem na sběrnici – regulace topné zóny." }],
       },
-      dinGroup("taphome", "Core jednotka"),
+      { id: "tap-display", label: "Ovladače s displejem", products: TAPHOME_PANELS },
+      dinGroup("taphome", "Core a moduly na DIN lištu"),
     ],
   },
 ];

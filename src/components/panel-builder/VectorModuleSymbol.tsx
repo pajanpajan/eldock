@@ -5,7 +5,8 @@
 
 import type { ReactNode } from "react";
 
-import { leverCount, screwCount, symbolTexts, type VectorDevice } from "@/lib/panel-builder/vector-symbols";
+import type { SmartDinProfile } from "@/lib/panel-builder/smart-din-catalog";
+import { leverCount, screwCount, smartProfileOf, smartTerminalCount, symbolTexts, type VectorDevice } from "@/lib/panel-builder/vector-symbols";
 import type { Rect } from "@/lib/panel-builder/vector-layout";
 
 export type VectorTheme = "dark" | "print";
@@ -208,6 +209,65 @@ function Mechanics({ device, x, y, w, theme }: { device: VectorDevice; x: number
   }
 }
 
+/** Fáze 81: barevný štítek funkce aktoru chytré domácnosti („SPÍNACÍ 8×16A“, „ŽALUZIOVÝ 4×“, „DALI“). */
+function SmartBadge({ x, y, w, profile }: { x: number; y: number; w: number; profile: SmartDinProfile }) {
+  const width = Math.min(w - 6, Math.max(30, profile.label.length * 6.4 + 10));
+  return (
+    <g data-smart-badge={profile.role}>
+      <rect x={x + (w - width) / 2} y={y - 10} width={width} height={14} rx={3} fill={profile.color} />
+      <FitText x={x + w / 2} y={y + 0.5} text={profile.label} size={9} max={width - 6} weight={800} fill="#ffffff" testId="symbol-smart-label" />
+    </g>
+  );
+}
+
+/** Fáze 81: LED kanálů 1–12 s čísly (aktor), u zdroje / systému / rozhraní stavové LED provozu a sběrnice. */
+function SmartLeds({ x, y, w, profile, theme }: { x: number; y: number; w: number; profile: SmartDinProfile; theme: VectorTheme }) {
+  const colors = VECTOR_THEMES[theme];
+  // DALI: počet kanálů = účastníci linky, ne výstupy → stavové LED provozu a linky DALI
+  if (!profile.channels || profile.role === "dali") {
+    return (
+      <g data-mechanics="smart-status">
+        {[
+          { label: "RUN", fill: "#22c55e" },
+          { label: profile.role === "dali" ? "DALI" : "BUS", fill: "#f59e0b" },
+        ].map((led, index) => (
+          <g key={led.label}>
+            <circle cx={x + w / 2 + (index ? 14 : -14)} cy={y + 9} r={3.2} fill={led.fill} stroke={colors.stroke} strokeWidth={0.5} />
+            <text x={x + w / 2 + (index ? 14 : -14)} y={y + 21} fontSize={6} fontFamily={FONT} fill={colors.muted} textAnchor="middle">
+              {led.label}
+            </text>
+          </g>
+        ))}
+      </g>
+    );
+  }
+  const shown = Math.min(12, profile.channels);
+  const pitch = (w - 6) / shown;
+  const r = Math.max(1.6, Math.min(3.2, pitch * 0.28));
+  return (
+    <g data-mechanics="smart-leds" data-channels={profile.channels}>
+      {Array.from({ length: shown }, (_, index) => {
+        const cx = x + 3 + pitch * (index + 0.5);
+        return (
+          <g key={index} data-channel-led={index + 1}>
+            <circle cx={cx} cy={y + 9} r={r} fill={index === 0 ? "#22c55e" : theme === "dark" ? "#334155" : "#ffffff"} stroke={colors.stroke} strokeWidth={0.5} />
+            {pitch >= 7 ? (
+              <text x={cx} y={y + 20} fontSize={Math.min(6.5, pitch * 0.7)} fontFamily={FONT} fill={colors.muted} textAnchor="middle">
+                {index + 1}
+              </text>
+            ) : null}
+          </g>
+        );
+      })}
+      {profile.channels > shown ? (
+        <text x={x + w - 3} y={y + 25} fontSize={6} fontFamily={FONT} fill={colors.muted} textAnchor="end">
+          … {profile.channels}
+        </text>
+      ) : null}
+    </g>
+  );
+}
+
 /**
  * Jeden přístroj na vektorové DIN liště. `outline` zvýrazní výběr / cíl přetažení / stav
  * (nerozpoznáno, nezapojeno); `children` = interaktivní vrstva volajícího (tlačítka nad symbolem).
@@ -235,9 +295,12 @@ export function VectorModuleSymbol({
   const { x, y, w, h } = rect;
   const texts = symbolTexts(device);
   const inner = w - 6;
-  const screws = screwCount(device.modulesWidth);
+  // Fáze 81: aktor chytré domácnosti – svorky kanálů, barevný štítek funkce a LED kanálů
+  const smart = smartProfileOf(device);
+  // DALI: kanály = účastníci linky, svorky podle šířky
+  const screws = smart && smart.role !== "dali" ? smartTerminalCount(device.modulesWidth, smart.channels, w) : screwCount(device.modulesWidth);
   return (
-    <g data-symbol={device.category ?? "UNKNOWN"} data-designation={device.designation} opacity={dimmed ? 0.45 : 1}>
+    <g data-symbol={device.category ?? "UNKNOWN"} data-designation={device.designation} data-smart={smart?.role} opacity={dimmed ? 0.45 : 1}>
       <rect x={x + 1} y={y} width={w - 2} height={h} rx={3} fill={colors.body} stroke={colors.stroke} strokeWidth={1.2} />
       {/* horní a spodní pás šroubových svorek */}
       <rect x={x + 1} y={y} width={w - 2} height={BAND} rx={3} fill={colors.band} stroke={colors.stroke} strokeWidth={0.8} />
@@ -249,10 +312,10 @@ export function VectorModuleSymbol({
       <FitText x={x + 4} y={y + 31} text={device.designation} size={11} max={inner} anchor="start" weight={800} fill={colors.text} testId="symbol-designation" />
       {/* 2) výrobce, výrazná klíčová hodnota a drobný typ */}
       <FitText x={x + w / 2} y={y + 43} text={texts.manufacturer} size={8} max={inner} fill={colors.muted} testId="symbol-manufacturer" />
-      <FitText x={x + w / 2} y={y + 57} text={texts.value} size={12.5} max={inner} weight={800} fill={colors.text} testId="symbol-value" />
+      {smart ? <SmartBadge x={x} y={y + 57} w={w} profile={smart} /> : <FitText x={x + w / 2} y={y + 57} text={texts.value} size={12.5} max={inner} weight={800} fill={colors.text} testId="symbol-value" />}
       <FitText x={x + w / 2} y={y + 68} text={texts.detail} size={7} max={inner} fill={colors.muted} testId="symbol-detail" />
 
-      <Mechanics device={device} x={x + 1} y={y + 75} w={w - 2} theme={theme} />
+      {smart ? <SmartLeds x={x + 1} y={y + 75} w={w - 2} profile={smart} theme={theme} /> : <Mechanics device={device} x={x + 1} y={y + 75} w={w - 2} theme={theme} />}
 
       {/* 3) spodní štítek – funkce obvodu (dvojklik = úprava) */}
       <rect x={x + 3} y={y + 103} width={w - 6} height={16} rx={1.5} fill={colors.strip} stroke={colors.stroke} strokeWidth={0.6} data-label-strip="" />

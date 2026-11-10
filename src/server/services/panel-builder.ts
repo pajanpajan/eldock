@@ -491,12 +491,14 @@ const unionBox = (boxes: (BoundingBox | null)[]): BoundingBox | null => {
  * Konfigurace z dlaždic: najde nejbližší přesný kus katalogu (jinak uloží odhad IEC), přiřadí ho,
  * nastaví šířku a stav VERIFIED. `mergeNeighbors`: širší přístroj pohltí sousední moduly vpravo.
  */
-export async function configureItem(prisma: PrismaClient, itemId: string, config: ItemConfig, options: { mergeNeighbors?: boolean } = {}) {
+export async function configureItem(prisma: PrismaClient, itemId: string, input: ItemConfig, options: { mergeNeighbors?: boolean } = {}) {
   const item = await prisma.panelBoardItem.findUnique({ where: { id: itemId }, include: { catalogComponent: { select: { category: true } } } });
   if (!item) throw new WorkflowError("NOT_FOUND", "Prvek rozváděče neexistuje.");
+  const component = await componentForConfig(prisma, input);
+  // Fáze 81: kus chytré domácnosti má šířku podle katalogu
+  const config = input.category === "SMART_HOME" && component.modulesCount > 0 ? { ...input, modules: component.modulesCount } : input;
   if (options.mergeNeighbors && config.modules > item.modulesWidth) await absorbRight(prisma, item.id, config.modules);
 
-  const component = await componentForConfig(prisma, config);
   await prisma.panelBoardItem.update({
     where: { id: itemId },
     data: { catalogComponentId: component.id, recognitionStatus: "VERIFIED", confidence: 1, modulesWidth: config.modules, configJson: JSON.stringify(config) },

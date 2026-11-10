@@ -3,10 +3,15 @@
 // dvojzásuvka = kompletní přístroj. K tomu instalační krabice KOPOS a kabely CYKY po metrech.
 // Objednací čísla: přímo ze zadání (matice ABB 2026) jsou `verified`; odvozená varianta stejné matice (dělený / žaluziový kryt
 // u řady, kde zadání uvádí jen jednoduchý kryt, dvoubarevný kód) má `verified: false`; bez podkladu je MPN null (doplnit).
+// Fáze 81: panel chytré domácnosti (IP TOUCH, SmartTouch, Trevion …) v barvě varianty s vlastní montážní krabicí místo
+// přístrojové a s mezirámečkem podle řady (Trevion v Zoni); systémový modul mimo DIN lištu (nástěnný SysAP) do kusovníku.
 // Čisté funkce.
 
 import { allElements, effectiveSwitchNo, floorsOf, frameColorOf, isWiredSwitch, paletteItem, type EditorElement, type FloorplanDraft, type FrameGroup } from "./floorplan-editor";
 import { gangsOf } from "./floorplan-frames";
+import { productById } from "./smart-catalog";
+import { smartPlanOf } from "./smart-home-plan";
+import { panelBomRows, variantOf } from "./smart-panels";
 import { appearanceLabel, colorCodeFor, designSeriesOf } from "./wiring-designs";
 
 export type BomCategory = "Přístroje spínačů" | "Kryty spínačů" | "Sběrnicové prvky" | "Chytré moduly" | "Zásuvky" | "Rámečky" | "Ostatní přístroje" | "Instalační krabice" | "Kabely";
@@ -155,6 +160,17 @@ export function compileFloorplanBom(draft: FloorplanDraft, options: BomOptions =
 
     // Fáze 57: sběrnicové prvky; fáze 61 – u ABB-free@home objednací čísla tlačítkových rozhraní z katalogu 2026
     if (item.bus) {
+      // Fáze 81: panel ve zvolené barvě, jeho montážní krabice (místo přístrojové) a mezirámeček podle řady
+      const product = productById(element.product);
+      if (product?.panel) {
+        const variantLabel = variantOf(product, element.productVariant)?.label ?? "–";
+        for (const row of panelBomRows(product, { variant: element.productVariant, box: element.productBox, seriesName: found?.series.name ?? null })) {
+          add({ category: row.part === "box" ? "Instalační krabice" : row.part === "adapter" ? "Rámečky" : "Sběrnicové prvky", mpn: row.mpn, verified: row.verified, name: row.name, appearance: row.part === "adapter" ? appearance : variantLabel, unit: "ks" }, units);
+        }
+        if (product.boxes?.length) boxes -= units;
+        if (product.frame === "series") frame();
+        continue;
+      }
       const known = draft.smartSystem === "abb_freeathome" ? FREEATHOME_BUS[item.id] : undefined;
       if (known) add({ category: "Sběrnicové prvky", mpn: known.mpn, verified: true, name: known.name, appearance, unit: "ks" }, units);
       else add({ category: "Sběrnicové prvky", mpn: null, verified: false, name: `${item.label} – dle zvoleného systému (${draft.smartSystem === "abb_knx" ? "ABB i-bus KNX" : draft.smartSystem === "loxone" ? "Loxone Tree" : "ABB-free@home"})`, appearance: item.bus.role === "presence" ? "–" : appearance, unit: "ks" }, units);
@@ -224,6 +240,15 @@ export function compileFloorplanBom(draft: FloorplanDraft, options: BomOptions =
     add({ category: "Chytré moduly", mpn: null, verified: false, name: "Chytrý modul pod vypínač (Zigbee / Matter, s nulovým vodičem N)", appearance: "–", unit: "ks" }, wiredLights.size);
     add({ category: "Chytré moduly", mpn: null, verified: false, name: "Žaluziový modul pod vypínač (Zigbee / Matter)", appearance: "–", unit: "ks" }, blindModules);
     add({ category: "Chytré moduly", mpn: null, verified: false, name: "Spínací modul do krabice svítidla (Zigbee / Matter) – pro bezdrátové tlačítko", appearance: "–", unit: "ks" }, wirelessLights.size);
+  }
+  // Fáze 81: systémový modul chytré domácnosti mimo DIN lištu (nástěnný SysAP) a příslušenství kusů na liště (adaptér
+  // SysAP na DIN lištu) – do kusovníku domovní instalace
+  const smartModules = smartPlanOf(draft)?.modules ?? [];
+  for (const unit of smartModules.filter((module) => module.modules === 0)) {
+    add({ category: "Chytré moduly", mpn: unit.articleNumber, verified: unit.verified, name: `${unit.label} (${unit.typeCode}) – nástěnná montáž`, appearance: "–", unit: "ks" }, 1);
+  }
+  for (const unit of smartModules) {
+    if (unit.accessory) add({ category: "Chytré moduly", mpn: unit.accessory.articleNumber, verified: true, name: `${unit.accessory.label} (${unit.accessory.typeCode}) – k ${unit.typeCode.split(" + ")[0]}`, appearance: "–", unit: "ks" }, 1);
   }
   const deep = options.installation === "bus_loxone" || options.installation === "smart_retrofit";
   add({ category: "Instalační krabice", mpn: deep ? "KPR 68" : "KU 68-1901", verified: true, name: deep ? "Přístrojová krabice hluboká KOPOS (chytrá / retrofit instalace)" : "Přístrojová krabice KOPOS pod omítku", appearance: "KOPOS", unit: "ks" }, boxes);

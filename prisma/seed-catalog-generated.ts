@@ -36,6 +36,8 @@ export interface SeedComponent {
   datasheetUrl?: string | null;
   /** Ztrátový výkon výrobce neuvádí – odhad dle IEC (dataSource IEC_ESTIMATE). */
   lossEstimated?: boolean;
+  /** Fáze 81: vlastní katalog Eldocku – import katalogu výrobců řádek nepřepíše (externalSource = null). */
+  ownCatalog?: boolean;
 }
 
 const pad = (value: number, length: number) => String(value).padStart(length, "0");

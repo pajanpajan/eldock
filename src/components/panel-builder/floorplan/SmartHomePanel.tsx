@@ -89,7 +89,8 @@ export function SmartHomePanel({ plan, onSystem, onDatasheet }: { plan: SmartPla
                   {module.manual ? <span className="ml-1 rounded border border-sky-400/60 px-1 text-[10px] text-sky-200">ručně</span> : null}
                   <span className="block text-[10px] text-muted-foreground">
                     {module.label}
-                    {module.channels && module.role !== "psu" && module.role !== "interface" ? ` · obsazeno ${module.assigned.length}/${module.channels}` : ""}
+                    {/* Fáze 81: obsazení kanálů jen u aktorů a Miniserveru s relé (ne u SysAP na DIN liště) */}
+                    {module.channels && module.role !== "psu" && module.role !== "interface" && (module.role !== "system" || module.ratedA) ? ` · obsazeno ${module.assigned.length}/${module.channels}` : ""}
                   </span>
                 </td>
                 <td className={cn("font-mono text-[10px]", module.verified ? "" : "text-amber-200")}>{module.articleNumber ? `${module.articleNumber}${module.verified ? "" : " (ověřte)"}` : "doplnit"}</td>

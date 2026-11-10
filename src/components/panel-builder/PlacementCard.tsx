@@ -99,18 +99,20 @@ export function PlacementCard({
     );
   }
 
+  // Fáze 81: kus chytré domácnosti má šířku podle katalogu (Miniserver 9 M, SysAP s adaptérem 7 M) – vrací ji náhled
+  const modules = config.category === "SMART_HOME" && shown ? shown.modules : config.modules;
   const device: VectorDevice = {
-    ...deviceWithConfig({ ...BLANK, modulesWidth: config.modules }, config),
-    modulesWidth: config.modules,
+    ...deviceWithConfig({ ...BLANK, modulesWidth: modules }, config),
+    modulesWidth: modules,
     typeCode: shown?.typeCode ?? null,
     label,
     power: config.category === "ACCESSORY" && isAccessorySubtype(config.moduleSubtype) ? ACCESSORY_SUBTYPES[config.moduleSubtype] : config.power ?? null,
   };
-  const width = config.modules * VECTOR.moduleW;
+  const width = modules * VECTOR.moduleW;
   const freeOn = (rail: number) => rails.find((entry) => entry.index === rail)?.free ?? 0;
   /** Kam se `count` kusů vejde: aktivní lišta, jinak první lišta s místem, jinak nová lišta. */
   const target = (count: number) => {
-    const need = config.modules * count - 1e-9;
+    const need = modules * count - 1e-9;
     if (freeOn(activeRail) >= need) return { rail: activeRail, alternative: false };
     const other = rails.find((entry) => entry.free >= need);
     return other ? { rail: other.index, alternative: true } : null;
@@ -174,7 +176,7 @@ export function PlacementCard({
             ) : null}
           </dd>
           <dt className="text-muted-foreground">Šířka</dt>
-          <dd className="font-mono">{n(config.modules)} M</dd>
+          <dd className="font-mono">{n(modules)} M</dd>
           <dt className="text-muted-foreground">Ztrátový výkon</dt>
           <dd className="font-mono">{shown ? formatWatts(shown.powerLossWatts) : "…"}</dd>
         </dl>

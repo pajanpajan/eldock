@@ -230,12 +230,13 @@ export const CATALOG: SeedComponent[] = (() => {
   // Rešerše výrobců (fáze 47): Siemens SENTRON a ABB z reálného 144M rozváděče; chybějící Pv = odhad IEC
   // Fáze 61: chytrá domácnost z Katalogu ABB 2026 (free@home), KNX stmívač / DALI / IP rozhraní, Loxone Dimmer Extension
   const research: SeedComponent[] = [...ABB_2026_COMPONENTS, ...RESEARCH_COMPONENTS].map((entry) => {
-    const { powerLossWatts, source, ...component } = entry;
+    const { powerLossWatts, source, lossEstimated, ...component } = entry;
     void source; // zdroj rešerše zůstává jen v souboru s daty
     return {
       ...component,
       powerLossWatts: powerLossWatts ?? estimatePowerLoss(component.category, component.poles, component.ratedCurrentA),
-      lossEstimated: powerLossWatts === null,
+      // Fáze 81: orientační Pv (zadání / odvozeno) je v katalogu také „odhad“
+      lossEstimated: powerLossWatts === null || lossEstimated === true,
     };
   });
   return [...EXPLICIT, ...research, ...GENERATED_CATALOG].filter((component) => {
@@ -293,6 +294,8 @@ export async function seedCatalog(prisma: PrismaClient) {
       datasheetUrl: component.datasheetUrl ?? null,
       dataSource: component.lossEstimated ? ("IEC_ESTIMATE" as const) : ("SEED_CATALOG" as const),
       searchText: buildSearchText(component),
+      // Fáze 81: kusy chytré domácnosti z `smart-home.ts` – import katalogu výrobců je nepřepíše
+      ...(component.ownCatalog ? { externalSource: null } : {}),
     };
     return prisma.catalogComponent.upsert({ where: { articleNumber: component.articleNumber }, create: { articleNumber: component.articleNumber, ...data }, update: data });
   });

@@ -6,6 +6,10 @@
 // ABB i-bus KNX – databáze prvků Eldocku (ABB), stmívač UD/S 4.210.2.1 a DALI brána DG/S 1.64.1.1 podle knx.org;
 // Loxone – databáze prvků (Miniserver, Relay / Tree Extension) a produktový list Dimmer Extension (100029).
 // Údaj bez ověřeného objednacího čísla má `verified: false` (kusovník ho vede jako „ověřte“).
+// Fáze 81: úplná nabídka akčních členů na DIN lištu všech čtyř systémů (TapHome už s moduly) s ověřením proti katalogu
+// výrobců (`docs/archiv/ZADANI-faze-81.md`), ztrátový výkon Pv pro oteplení rozváděče (`lossW` – z katalogu výrobců,
+// jinak orientačně ze zadání fáze 81), alternativní typy jen pro ruční volbu (`manualOnly`) a SysAP na DIN liště
+// (`replaces`). Stejná data plní katalog prvků AI Panel Builderu (`smart-din-catalog.ts` → `CatalogComponent`).
 
 import type { LightLoad, LightSpec } from "./floorplan-editor";
 
@@ -19,7 +23,7 @@ export const CHANNEL_ROLES: readonly ChannelRole[] = ["switch", "dim", "dali", "
 /** Fáze 77: řadiče a vstupy mimo databázi prvků (obecné, objednací číslo doplní projektant podle nabídky výrobce). */
 const GENERIC = "obecný modul – ověřte nabídku výrobce a šířku v datasheetu";
 const genericPwm = (prefix: string): SmartModule => ({ id: `${prefix}-pwm`, role: "pwm", label: "Řadič LED 24 V DC PWM, 4 kanály (stmívání / CCT / RGBW)", typeCode: "PWM 4× 24 V DC", articleNumber: null, verified: false, channels: 4, modules: 2, source: GENERIC });
-const genericInputs = (prefix: string): SmartModule => ({ id: `${prefix}-di8`, role: "input", label: "Binární vstupy 8násobné (bezpotenciálové kontakty čidel)", typeCode: "DI 8×", articleNumber: null, verified: false, channels: 8, modules: 2, source: GENERIC });
+// Fáze 81: obecné binární vstupy už nejsou potřeba – každý systém má vlastní modul vstupů (BI-M, BE/S, DI Extension, 12UI)
 
 /**
  * Fáze 77: napájecí zdroje 24 V DC na DIN lištu pro LED pásky (řada MEAN WELL HDR – šířky 52,5 / 70 / 105 mm) – vybírá se
@@ -58,6 +62,18 @@ export interface SmartModule {
   /** Napájecí zdroj: proud sběrnice [mA]. */
   busMa?: number;
   source: string;
+  /** Fáze 81: ztrátový výkon Pv [W] pro oteplení rozváděče; null = výrobce neuvádí (odhad dle IEC). */
+  lossW?: number | null;
+  /** Původ Pv: katalog výrobců, orientačně ze zadání fáze 81, nebo odvozeno ze shodné platformy (sourozenec free@home). */
+  lossFrom?: "katalog" | "zadání" | "odvozeno";
+  /** Fáze 81: alternativní typ jen pro ruční volbu v katalogu – výpočet ho sám nevybere. */
+  manualOnly?: boolean;
+  /** Fáze 81: ručně přidaný kus nahradí výchozí modul s tímto id (SysAP na DIN liště místo nástěnného). */
+  replaces?: string;
+  /** Fáze 81: příslušenství kusu do kusovníku (adaptér SysAP na DIN lištu). */
+  accessory?: { typeCode: string; articleNumber: string; label: string };
+  /** Fáze 81: odkaz na datasheet / produktovou stránku výrobce. */
+  datasheetUrl?: string;
 }
 
 export interface SmartSystem {
@@ -80,6 +96,7 @@ export interface SmartSystem {
 
 const FAH = "Katalog ABB 2026 (Domovní elektroinstalační materiál), ABB-free@home";
 const KNX = "ABB i-bus KNX – databáze prvků Eldocku";
+const TAP = "TapHome – zadání fáze 81 (objednací číslo, šířku a Pv ověřte u výrobce)";
 
 export const SMART_SYSTEMS: SmartSystem[] = [
   {
@@ -93,21 +110,24 @@ export const SMART_SYSTEMS: SmartSystem[] = [
     maxLineM: 1000,
     reserve: 0.2,
     modules: [
-      { id: "fah-sap", role: "system", label: "Systémový modul SysAP 3.0 (sběrnicový + bezdrátový, nástěnný)", typeCode: "SAP.3", articleNumber: "2CKA006200A0871", verified: true, channels: 150, modules: 0, source: `${FAH}, str. 271` },
-      { id: "fah-psu", role: "psu", label: "Zdroj napájecí sběrnicový s tlumivkou 640 mA", typeCode: "PS-M-64.1.1", articleNumber: "2CDG510001R0011", verified: true, channels: 0, modules: 4, busMa: 640, source: `${FAH}, str. 273` },
-      { id: "fah-sa4", role: "switch", label: "Člen akční spínací 4násobný, 16 A", typeCode: "SA-M-4.16.2.2", articleNumber: "2CDG510025R0011", verified: true, channels: 4, modules: 4, ratedA: 16, source: `${FAH}, str. 274` },
-      { id: "fah-sa8", role: "switch", label: "Člen akční spínací 8násobný, 16 A", typeCode: "SA-M-8.16.2.2", articleNumber: "2CDG510026R0011", verified: true, channels: 8, modules: 8, ratedA: 16, source: `${FAH}, str. 274` },
-      { id: "fah-sa12", role: "switch", label: "Člen akční spínací 12násobný, 16 A", typeCode: "SA-M-12.16.2.2", articleNumber: "2CDG510027R0011", verified: true, channels: 12, modules: 12, ratedA: 16, source: `${FAH}, str. 274` },
-      { id: "fah-da4", role: "dim", label: "Člen akční stmívací 4násobný, 4× 210 W (LED na sestupné hraně)", typeCode: "DA/M.4.210.2.1", articleNumber: "2CKA006220A0729", verified: true, channels: 4, modules: 6, maxW: 210, source: `${FAH}, str. 275` },
-      { id: "fah-da6", role: "dim", label: "Člen akční stmívací 6násobný, 6× 210 W (LED na sestupné hraně)", typeCode: "DA/M.6.210.2.1", articleNumber: "2CKA006220A0731", verified: true, channels: 6, modules: 8, maxW: 210, source: `${FAH}, str. 275` },
-      { id: "fah-dali", role: "dali", label: "Rozhraní DALI / free@home, max. 16 účastníků", typeCode: "DG-M-1.16.1", articleNumber: "2CDG510012R0011", verified: true, channels: 16, modules: 4, source: `${FAH}, str. 275` },
-      { id: "fah-ba4", role: "blind", label: "Člen akční žaluziový 4násobný, 6 A", typeCode: "BA-M-4.230.1.1", articleNumber: "2CDG510028R0011", verified: true, channels: 4, modules: 4, source: `${FAH}, str. 276` },
-      { id: "fah-ba8", role: "blind", label: "Člen akční žaluziový 8násobný, 6 A", typeCode: "BA-M-8.230.1.1", articleNumber: "2CDG510029R0011", verified: true, channels: 8, modules: 8, source: `${FAH}, str. 276` },
-      { id: "fah-ha6", role: "heating", label: "Člen akční topení 6násobný (termoelektrické hlavice)", typeCode: "HA-M-0.6.1", articleNumber: "2CDG510008R0011", verified: true, channels: 6, modules: 4, source: `${FAH}, str. 276 (v roce 2026 produktová obměna)` },
-      { id: "fah-ha12", role: "heating", label: "Člen akční topení 12násobný (termoelektrické hlavice)", typeCode: "HA-M-0.12.1", articleNumber: "2CDG510009R0011", verified: true, channels: 12, modules: 8, source: `${FAH}, str. 276 (v roce 2026 produktová obměna)` },
-      // Fáze 77: LED 24 V PWM a binární vstupy čidel – v katalogu free@home na DIN liště nejsou, obecné moduly
+      { id: "fah-sap", role: "system", label: "Systémový modul SysAP 3.0 (sběrnicový + bezdrátový, nástěnný)", typeCode: "SAP.3", articleNumber: "2CKA006200A0871", verified: true, channels: 150, modules: 0, lossW: 3.5, lossFrom: "zadání", source: `${FAH}, str. 271` },
+      // Fáze 81: SysAP s adaptérem SAP-A1.1 na DIN lištu místo nástěnné montáže (119 × 107 mm → 7 M)
+      { id: "fah-sap-din", role: "system", label: "Systémový modul SysAP 3.0 s adaptérem na DIN lištu", typeCode: "SAP.3 + SAP-A1.1", articleNumber: "2CKA006200A0871", verified: true, channels: 150, modules: 7, lossW: 3.5, lossFrom: "zadání", manualOnly: true, replaces: "fah-sap", accessory: { typeCode: "SAP-A1.1", articleNumber: "2CKA006200A0158", label: "Adaptér na DIN lištu pro systémový modul" }, source: "katalog výrobců (SAP.3 119 × 107 × 30 mm, adaptér SAP-A1.1) – šířka 7 M podle rozměru, ověřte" },
+      { id: "fah-psu", role: "psu", label: "Zdroj napájecí sběrnicový s tlumivkou 640 mA", typeCode: "PS-M-64.1.1", articleNumber: "2CDG510001R0011", verified: true, channels: 0, modules: 4, busMa: 640, lossW: 4.5, lossFrom: "zadání", source: `${FAH}, str. 273` },
+      { id: "fah-sa4", role: "switch", label: "Člen akční spínací 4násobný, 16 A", typeCode: "SA-M-4.16.2.2", articleNumber: "2CDG510025R0011", verified: true, channels: 4, modules: 4, ratedA: 16, lossW: 4, lossFrom: "katalog", source: `${FAH}, str. 274; Pv z datasheetu ABB`, datasheetUrl: "https://res.cloudinary.com/sonepar-fr/raw/upload/s---76rZ0LQ--/v1/documents/26/FICHE_STO611130_1.pdf" },
+      { id: "fah-sa8", role: "switch", label: "Člen akční spínací 8násobný, 16 A", typeCode: "SA-M-8.16.2.2", articleNumber: "2CDG510026R0011", verified: true, channels: 8, modules: 8, ratedA: 16, lossW: 7.5, lossFrom: "zadání", source: `${FAH}, str. 274`, datasheetUrl: "https://nizke-napeti.cz.abb.com/clen-akcni-spinaci-radovy-17702/clen-akcni-spinaci-8nasobny-radovy-2cdg510026r0011?mime=pdf" },
+      { id: "fah-sa12", role: "switch", label: "Člen akční spínací 12násobný, 16 A", typeCode: "SA-M-12.16.2.2", articleNumber: "2CDG510027R0011", verified: true, channels: 12, modules: 12, ratedA: 16, lossW: 12, lossFrom: "katalog", source: `${FAH}, str. 274; Pv z datasheetu ABB (zadání uvádí 11 W)`, datasheetUrl: "https://res.cloudinary.com/sonepar-fr/raw/upload/s--80igkr4Q--/v1/documents/26/FICHE_STO611133_1.pdf" },
+      { id: "fah-da4", role: "dim", label: "Člen akční stmívací 4násobný, 4× 210 W (LED na sestupné hraně)", typeCode: "DA/M.4.210.2.1", articleNumber: "2CKA006220A0729", verified: true, channels: 4, modules: 6, maxW: 210, lossW: 6.5, lossFrom: "zadání", source: `${FAH}, str. 275` },
+      { id: "fah-da6", role: "dim", label: "Člen akční stmívací 6násobný, 6× 210 W (LED na sestupné hraně)", typeCode: "DA/M.6.210.2.1", articleNumber: "2CKA006220A0731", verified: true, channels: 6, modules: 8, maxW: 210, lossW: 12, lossFrom: "zadání", source: `${FAH}, str. 275 (zadání fáze 81 ho vede jako 8násobný – katalog: 6násobný)` },
+      { id: "fah-dali", role: "dali", label: "Rozhraní DALI / free@home, max. 16 účastníků", typeCode: "DG-M-1.16.1", articleNumber: "2CDG510012R0011", verified: true, channels: 16, modules: 4, lossW: 2.5, lossFrom: "zadání", source: `${FAH}, str. 275` },
+      { id: "fah-ba4", role: "blind", label: "Člen akční žaluziový 4násobný, 6 A", typeCode: "BA-M-4.230.1.1", articleNumber: "2CDG510028R0011", verified: true, channels: 4, modules: 4, lossW: 1.5, lossFrom: "katalog", source: `${FAH}, str. 276; Pv z datasheetu ABB (zadání uvádí 3,5 W)`, datasheetUrl: "https://res.cloudinary.com/sonepar-fr/raw/upload/s--HHcDtDm9--/v1/documents/26/FICHE_STO611134_1.pdf" },
+      { id: "fah-ba8", role: "blind", label: "Člen akční žaluziový 8násobný, 6 A", typeCode: "BA-M-8.230.1.1", articleNumber: "2CDG510029R0011", verified: true, channels: 8, modules: 8, lossW: 6, lossFrom: "zadání", source: `${FAH}, str. 276` },
+      { id: "fah-ha6", role: "heating", label: "Člen akční topení 6násobný (termoelektrické hlavice)", typeCode: "HA-M-0.6.1", articleNumber: "2CDG510008R0011", verified: true, channels: 6, modules: 4, lossW: 2, lossFrom: "zadání", source: `${FAH}, str. 276 (v roce 2026 produktová obměna)` },
+      { id: "fah-ha12", role: "heating", label: "Člen akční topení 12násobný (termoelektrické hlavice)", typeCode: "HA-M-0.12.1", articleNumber: "2CDG510009R0011", verified: true, channels: 12, modules: 8, lossW: 3.5, lossFrom: "zadání", source: `${FAH}, str. 276 (v roce 2026 produktová obměna)` },
+      // Fáze 81: binární vstupy čidel – modul free@home BI-M-4.20.1.1 (bezpotenciálové kontakty) místo obecného modulu
+      { id: "fah-bi4", role: "input", label: "Modul binárních vstupů 4násobný s testovacím napětím (bezpotenciálové kontakty)", typeCode: "BI-M-4.20.1.1", articleNumber: "2CDG510014R0011", verified: true, channels: 4, modules: 2, lossW: 1.5, lossFrom: "zadání", source: `${FAH}, str. 277` },
+      // Fáze 77: LED 24 V PWM – v katalogu free@home na DIN liště není, obecný modul
       genericPwm("fah"),
-      genericInputs("fah"),
     ],
   },
   {
@@ -122,18 +142,26 @@ export const SMART_SYSTEMS: SmartSystem[] = [
     reserve: 0.2,
     modules: [
       { id: "knx-psu", role: "psu", label: "Napájecí zdroj KNX 640 mA s diagnostikou", typeCode: "SV/S 30.640.5.1", articleNumber: "2CDG110146R0011", verified: true, channels: 0, modules: 4, busMa: 640, source: KNX },
+      // Fáze 81: zdroj KNX 640 mA bez diagnostiky (ruční volba)
+      { id: "knx-psu3", role: "psu", label: "Napájecí zdroj KNX 640 mA", typeCode: "SV/S 30.640.3.1", articleNumber: "2CDG110167R0011", verified: true, channels: 0, modules: 4, busMa: 640, lossW: 5, lossFrom: "zadání", manualOnly: true, source: "katalog výrobců (ABB i-bus KNX)" },
       { id: "knx-ip", role: "interface", label: "IP rozhraní KNX Secure (programování ETS, vizualizace)", typeCode: "IPS/S 3.5.1", articleNumber: "2CDG110204R0011", verified: false, channels: 0, modules: 2, source: "distributor (ověřte v katalogu ABB KNX)" },
-      { id: "knx-sa4", role: "switch", label: "Spínací akční člen 4násobný, 16 A", typeCode: "SA/S 4.16.2.2", articleNumber: "2CDG110262R0011", verified: true, channels: 4, modules: 4, ratedA: 16, source: KNX },
-      { id: "knx-sa8", role: "switch", label: "Spínací akční člen 8násobný, 16 A", typeCode: "SA/S 8.16.2.2", articleNumber: "2CDG110263R0011", verified: true, channels: 8, modules: 8, ratedA: 16, source: KNX },
-      { id: "knx-sa12", role: "switch", label: "Spínací akční člen 12násobný, 16 A", typeCode: "SA/S 12.16.2.2", articleNumber: "2CDG110264R0011", verified: true, channels: 12, modules: 12, ratedA: 16, source: KNX },
-      { id: "knx-ud4", role: "dim", label: "Univerzální stmívací akční člen 4× 210 W (LED)", typeCode: "UD/S 4.210.2.1", articleNumber: "2CKA006197A0047", verified: true, channels: 4, modules: 4, maxW: 210, source: "knx.org (UD/S4.210.2.1 LED Dimmer 4x210W); šířku 4 M ověřte v datasheetu" },
+      { id: "knx-sa4", role: "switch", label: "Spínací akční člen 4násobný, 16 A", typeCode: "SA/S 4.16.2.2", articleNumber: "2CDG110262R0011", verified: true, channels: 4, modules: 4, ratedA: 16, lossW: 4, lossFrom: "katalog", source: `${KNX}; Pv z datasheetu ABB`, datasheetUrl: "https://blob-cdn.bankoflamps.com/ff/ffd152f64af71058a0e6bcbbf7fa336855f8ea80.pdf" },
+      { id: "knx-sa8", role: "switch", label: "Spínací akční člen 8násobný, 16 A", typeCode: "SA/S 8.16.2.2", articleNumber: "2CDG110263R0011", verified: true, channels: 8, modules: 8, ratedA: 16, lossW: 7.5, lossFrom: "odvozeno", source: `${KNX} (Pv orientačně podle shodné platformy SA-M-8.16.2.2)`, datasheetUrl: "https://aleta.hr/en/products/1858749" },
+      { id: "knx-sa12", role: "switch", label: "Spínací akční člen 12násobný, 16 A", typeCode: "SA/S 12.16.2.2", articleNumber: "2CDG110264R0011", verified: true, channels: 12, modules: 12, ratedA: 16, lossW: 12, lossFrom: "odvozeno", source: `${KNX} (Pv orientačně podle shodné platformy SA-M-12.16.2.2)`, datasheetUrl: "https://vypinace.sk.abb.com/sk/product/detail/18830/18907?mime=pdf" },
+      // Fáze 81: šířka 6 M podle zadání a shodné platformy free@home DA/M.4.210.2.1 (katalog výrobců šířku neuvádí)
+      { id: "knx-ud4", role: "dim", label: "Univerzální stmívací akční člen 4× 210 W (LED)", typeCode: "UD/S 4.210.2.1", articleNumber: "2CKA006197A0047", verified: true, channels: 4, modules: 6, maxW: 210, lossW: 6.5, lossFrom: "odvozeno", source: "knx.org (UD/S4.210.2.1 LED Dimmer 4x210W); šířka 6 M podle zadání a shodné platformy DA/M.4.210.2.1 – ověřte v datasheetu" },
       { id: "knx-dali", role: "dali", label: "DALI brána Basic, 1 kanál, max. 64 účastníků", typeCode: "DG/S 1.64.1.1", articleNumber: "2CDG110198R0011", verified: true, channels: 64, modules: 4, source: "knx.org (DG/S1.64.1.1 DALI Gateway)" },
       { id: "knx-jra4", role: "blind", label: "Žaluziový akční člen 4násobný 230 V", typeCode: "JRA/S 4.230.5.1", articleNumber: "2CDG110125R0011", verified: true, channels: 4, modules: 4, source: KNX },
       { id: "knx-jra8", role: "blind", label: "Žaluziový akční člen 8násobný 230 V", typeCode: "JRA/S 8.230.5.1", articleNumber: "2CDG110126R0011", verified: true, channels: 8, modules: 8, source: KNX },
+      // Fáze 81: žaluziové členy JRA/S x.230.2.1 (ruční volba – výpočet bere řadu .5.1)
+      { id: "knx-jra4b", role: "blind", label: "Žaluziový akční člen 4násobný 230 V (řada .2.1)", typeCode: "JRA/S 4.230.2.1", articleNumber: "2CDG110121R0011", verified: true, channels: 4, modules: 4, manualOnly: true, source: "katalog výrobců (ABB i-bus KNX)" },
+      { id: "knx-jra8b", role: "blind", label: "Žaluziový akční člen 8násobný 230 V (řada .2.1)", typeCode: "JRA/S 8.230.2.1", articleNumber: "2CDG110122R0011", verified: true, channels: 8, modules: 8, manualOnly: true, source: "katalog výrobců (ABB i-bus KNX)" },
       { id: "knx-es4", role: "heating", label: "Elektronický spínací akční člen 4násobný (termoelektrické hlavice)", typeCode: "ES/S 4.1.2.1", articleNumber: "2CDG110058R0011", verified: true, channels: 4, modules: 4, source: KNX },
       { id: "knx-es8", role: "heating", label: "Elektronický spínací akční člen 8násobný (termoelektrické hlavice)", typeCode: "ES/S 8.1.2.1", articleNumber: "2CDG110059R0011", verified: true, channels: 8, modules: 8, source: KNX },
-      // Fáze 77: binární vstupy čidel oken a vody, LED 24 V PWM
-      { id: "knx-be8", role: "input", label: "Binární vstup 8násobný, snímání kontaktů", typeCode: "BE/S 8.20.2.1", articleNumber: null, verified: false, channels: 8, modules: 4, source: "ABB i-bus KNX – objednací číslo a šířku ověřte v katalogu" },
+      // Fáze 81: ventilový akční člen 4násobný (ruční volba, 8 M podle katalogu výrobců)
+      { id: "knx-vc4", role: "heating", label: "Ventilový akční člen 4násobný (termoelektrické pohony ventilů)", typeCode: "VC/S 4.1.1", articleNumber: "2CDG110216R0011", verified: true, channels: 4, modules: 8, manualOnly: true, source: "katalog výrobců (ABB i-bus KNX)" },
+      // Fáze 77: binární vstupy čidel oken a vody (fáze 81: objednací číslo a šířka z katalogu výrobců), LED 24 V PWM
+      { id: "knx-be8", role: "input", label: "Binární vstup 8násobný, snímání kontaktů", typeCode: "BE/S 8.20.2.1", articleNumber: "2CDG110092R0011", verified: true, channels: 8, modules: 4, lossW: 1.5, lossFrom: "zadání", source: "katalog výrobců (ABB i-bus KNX)" },
       genericPwm("knx"),
     ],
   },
@@ -148,28 +176,44 @@ export const SMART_SYSTEMS: SmartSystem[] = [
     maxLineM: 500,
     reserve: 0.2,
     modules: [
-      { id: "lox-mini", role: "system", label: "Miniserver (8 reléových výstupů, 8 vstupů)", typeCode: "Miniserver", articleNumber: "100335", verified: true, channels: 8, modules: 9, ratedA: 16, source: "databáze prvků Eldocku (Loxone)" },
-      { id: "lox-relay", role: "switch", label: "Relay Extension (14 reléových výstupů)", typeCode: "Relay Extension", articleNumber: "100038", verified: true, channels: 14, modules: 9, ratedA: 16, source: "databáze prvků Eldocku (Loxone)" },
-      { id: "lox-dim", role: "dim", label: "Dimmer Extension (4 stmívací kanály 230 V)", typeCode: "Dimmer Extension", articleNumber: "100029", verified: true, channels: 4, modules: 9, maxW: null, source: "Loxone – produktový list 100029 (zatížení kanálu ověřte)" },
-      { id: "lox-tree", role: "interface", label: "Tree Extension (2 větve Tree, 50 prvků na větev)", typeCode: "Tree Extension", articleNumber: "100218", verified: true, channels: 100, modules: 2, source: "databáze prvků Eldocku (Loxone)" },
+      { id: "lox-mini", role: "system", label: "Miniserver (8 reléových výstupů, 8 vstupů)", typeCode: "Miniserver", articleNumber: "100335", verified: true, channels: 8, modules: 9, ratedA: 16, lossW: 6.7, lossFrom: "katalog", source: "databáze prvků Eldocku (Loxone)" },
+      // Fáze 81: Miniserver Compact (bez reléových výstupů) – ruční volba
+      { id: "lox-mini-compact", role: "system", label: "Miniserver Compact (Air, Tree a Link, 4 vstupy)", typeCode: "Miniserver Compact", articleNumber: "100512", verified: true, channels: 0, modules: 6, lossW: 8.4, lossFrom: "katalog", manualOnly: true, source: "katalog výrobců (Loxone 100512)" },
+      { id: "lox-relay", role: "switch", label: "Relay Extension (14 reléových výstupů)", typeCode: "Relay Extension", articleNumber: "100038", verified: true, channels: 14, modules: 9, ratedA: 16, lossW: 11, lossFrom: "katalog", source: "databáze prvků Eldocku (Loxone)" },
+      { id: "lox-dim", role: "dim", label: "Dimmer Extension (4 stmívací kanály 230 V)", typeCode: "Dimmer Extension", articleNumber: "100029", verified: true, channels: 4, modules: 9, maxW: null, lossW: 8, lossFrom: "zadání", source: "Loxone – produktový list 100029 (zatížení kanálu ověřte)", datasheetUrl: "https://www.loxone.com/wp-content/uploads/datasheets/Datasheet_DimmerExtension.pdf" },
+      // Fáze 81: DALI Extension (objednací číslo ze zadání – v katalogu výrobců není)
+      { id: "lox-dali", role: "dali", label: "DALI Extension (1 linka DALI, max. 64 předřadníků)", typeCode: "DALI Extension", articleNumber: "100200", verified: false, channels: 64, modules: 2, lossW: 2, lossFrom: "zadání", source: "zadání fáze 81 – objednací číslo a údaje ověřte u výrobce" },
+      { id: "lox-tree", role: "interface", label: "Tree Extension (2 větve Tree, 50 prvků na větev)", typeCode: "Tree Extension", articleNumber: "100218", verified: true, channels: 100, modules: 2, lossW: 0.12, lossFrom: "katalog", source: "databáze prvků Eldocku (Loxone)" },
+      // Fáze 81: Multi Extension Air (brána Air, 12 vstupů) – ruční volba
+      { id: "lox-multi-air", role: "interface", label: "Multi Extension Air (brána Loxone Air, 12 digitálních vstupů)", typeCode: "Multi Extension Air", articleNumber: "100116", verified: true, channels: 0, modules: 9, lossW: 8.7, lossFrom: "katalog", manualOnly: true, source: "katalog výrobců (Loxone 100116)" },
       { id: "lox-psu", role: "psu", label: "Napájecí zdroj 24 V DC pro Miniserver a Tree", typeCode: "24 V DC / 2,5 A", articleNumber: null, verified: false, channels: 0, modules: 3, busMa: 2500, source: "obecný zdroj 24 V DC" },
-      // Fáze 77: LED 24 V PWM a digitální vstupy čidel
-      { id: "lox-rgbw", role: "pwm", label: "RGBW 24V Dimmer Tree (4 kanály PWM)", typeCode: "RGBW 24V Dimmer Tree", articleNumber: null, verified: false, channels: 4, modules: 2, source: "Loxone – objednací číslo a šířku ověřte u výrobce" },
-      { id: "lox-di", role: "input", label: "DI Extension (20 digitálních vstupů)", typeCode: "DI Extension", articleNumber: null, verified: false, channels: 20, modules: 3, source: "Loxone – objednací číslo a šířku ověřte u výrobce" },
+      // Fáze 81: větší zdroj 24 V DC a Power Supply & Backup (ruční volba)
+      { id: "lox-psu42", role: "psu", label: "Napájecí zdroj 24 V DC / 4,2 A pro Miniserver a Tree", typeCode: "24 V DC / 4,2 A", articleNumber: null, verified: false, channels: 0, modules: 4, busMa: 4200, manualOnly: true, source: "obecný zdroj 24 V DC (zadání fáze 81)" },
+      { id: "lox-psb", role: "psu", label: "Power Supply & Backup (napájení 24 V DC se zálohou)", typeCode: "Power Supply & Backup", articleNumber: "100401", verified: true, channels: 0, modules: 18, manualOnly: true, source: "katalog výrobců (Loxone 100401, šířka 18 M)" },
+      // Fáze 77: LED 24 V PWM a digitální vstupy čidel (fáze 81: objednací čísla, šířka a Pv z katalogu výrobců)
+      { id: "lox-rgbw", role: "pwm", label: "RGBW 24V Dimmer Tree (4 kanály PWM)", typeCode: "RGBW 24V Dimmer Tree", articleNumber: "100239", verified: true, channels: 4, modules: 2, lossW: 3, lossFrom: "katalog", source: "katalog výrobců (Loxone 100239)" },
+      { id: "lox-di", role: "input", label: "DI Extension (20 digitálních vstupů)", typeCode: "DI Extension", articleNumber: "100283", verified: true, channels: 20, modules: 2, lossW: 0.5, lossFrom: "katalog", source: "katalog výrobců (Loxone 100283)" },
     ],
   },
   {
-    // Fáze 63: TapHome – v databázi zatím jen řídicí jednotka Core (akční členy doplní projektant podle nabídky TapHome)
+    // Fáze 63: TapHome – řídicí jednotka Core; fáze 81: moduly na DIN lištu podle zadání (objednací čísla ověřte u výrobce)
     id: "taphome",
     label: "TapHome (Core + sběrnice)",
     manufacturer: "TapHome",
-    description: "Řídicí jednotka Core, tlačítka 2T / 4T / 6T a UI termostat na sběrnici; akční členy zatím nejsou v databázi prvků – doplňte je podle nabídky TapHome.",
+    description: "Řídicí jednotka Core, tlačítka 2T / 4T / 6T, ovladače s displejem a UI termostat na sběrnici; moduly na DIN lištu – relé 6DO, výstupy 4DO, stmívač 4CH, vstupy 12UI a zdroj 24 V DC.",
     maxDevices: 999,
     deviceMa: 0,
     devicesPerLine: 999,
     maxLineM: 500,
     reserve: 0.2,
-    modules: [{ id: "tap-core", role: "system", label: "Řídicí jednotka TapHome Core", typeCode: "Core", articleNumber: null, verified: false, channels: 0, modules: 0, source: "TapHome (objednací číslo ověřte u výrobce)" }],
+    modules: [
+      { id: "tap-core", role: "system", label: "Řídicí jednotka TapHome Core (DIN lišta)", typeCode: "Core", articleNumber: null, verified: false, channels: 0, modules: 4, lossW: 3, lossFrom: "zadání", source: TAP },
+      { id: "tap-6do", role: "switch", label: "TapHome 6DO – 6× relé 16 A na DIN lištu", typeCode: "6DO", articleNumber: null, verified: false, channels: 6, modules: 6, ratedA: 16, lossW: 4.5, lossFrom: "zadání", source: TAP },
+      { id: "tap-4do", role: "blind", label: "TapHome 4DO – 4 výstupy (2 motory žaluzií nebo 4 spínané okruhy)", typeCode: "4DO", articleNumber: null, verified: false, channels: 2, modules: 4, lossW: 3.5, lossFrom: "zadání", source: TAP },
+      { id: "tap-dim4", role: "dim", label: "TapHome Dimmer 4CH – 4 stmívací kanály na DIN lištu", typeCode: "Dimmer 4CH", articleNumber: null, verified: false, channels: 4, modules: 6, maxW: null, lossW: 6, lossFrom: "zadání", source: TAP },
+      { id: "tap-12ui", role: "input", label: "TapHome 12UI – 12 univerzálních vstupů na DIN lištu", typeCode: "12UI", articleNumber: null, verified: false, channels: 12, modules: 4, lossW: 1.5, lossFrom: "zadání", source: TAP },
+      { id: "tap-psu", role: "psu", label: "TapHome zdroj 24 V DC / 60 W", typeCode: "PSU 24 V DC / 60 W", articleNumber: null, verified: false, channels: 0, modules: 3, busMa: 2500, lossW: 4, lossFrom: "zadání", source: TAP },
+    ],
   },
 ];
 
@@ -267,14 +311,17 @@ export function planSmartHome(input: { system: SmartSystemId; loads: readonly Sm
     }
     return added;
   };
-  const byRole = (role: SmartRole) => system.modules.filter((unit) => unit.role === role);
+  // Fáze 81: alternativní typy (`manualOnly`) výpočet sám nevybírá – jen ručně přidané kusy
+  const byRole = (role: SmartRole) => system.modules.filter((unit) => unit.role === role && !unit.manualOnly);
   const channels = Object.fromEntries(CHANNEL_ROLES.map((role) => [role, { needed: 0, available: 0 }])) as Record<ChannelRole, { needed: number; available: number }>;
   const sortLoads = (loads: SmartLoad[]) => [...loads].sort((a, b) => a.room.localeCompare(b.room, "cs") || a.label.localeCompare(b.label, "cs") || a.id.localeCompare(b.id));
 
   // Systém: Loxone Miniserver nese 8 reléových výstupů – spínací kanály se nejdřív obsadí na něm
   const systemModule = byRole("system")[0];
   const miniserver = system.id === "loxone" ? systemModule : null;
-  if (systemModule) add(systemModule);
+  // Fáze 81: ručně přidaný SysAP na DIN liště nahradí nástěnný (přidá se mezi ručními kusy)
+  const replaced = systemModule ? system.modules.some((unit) => unit.replaces === systemModule.id && (input.extras?.[unit.id] ?? 0) > 0) : false;
+  if (systemModule && !replaced) add(systemModule);
 
   for (const role of CHANNEL_ROLES) {
     const loads = sortLoads(input.loads.filter((load) => load.role === role));

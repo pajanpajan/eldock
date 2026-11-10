@@ -7,7 +7,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import type { ComponentCategory, RecognitionStatus } from "@/generated/prisma/enums";
-import { defaultConfig, type ConfigCategory, type ItemConfig } from "@/lib/panel-builder/configurator";
+import { defaultConfig, withManufacturer, type ConfigCategory, type ItemConfig } from "@/lib/panel-builder/configurator";
 import { enclosureNeed } from "@/lib/panel-builder/enclosures";
 import { formatRailSummary, freeOnRail, railSummary } from "@/lib/panel-builder/rails";
 import { deviceWithConfig, type VectorDevice } from "@/lib/panel-builder/vector-symbols";
@@ -732,7 +732,7 @@ export function RecognitionWorkspace({
               chosen={palette.chosen}
               config={palette.config}
               brandCounts={brandCounts}
-              onManufacturer={(value) => setPalette((current) => ({ manufacturer: value, chosen: true, config: current.config ? { ...current.config, manufacturer: value } : null }))}
+              onManufacturer={(value) => setPalette((current) => ({ manufacturer: value, chosen: true, config: current.config ? withManufacturer(current.config, value) : null }))}
               onCategory={paletteCategory}
               onOption={(patch) => setPalette((current) => (current.config ? { ...current, config: { ...current.config, ...patch } } : current))}
             />

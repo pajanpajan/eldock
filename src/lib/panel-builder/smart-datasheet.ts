@@ -34,7 +34,13 @@ export interface DatasheetRow {
 export const MODULE_MM = 18;
 
 const BUS_VOLTAGE: Record<SmartSystemId, string | null> = { abb_freeathome: "24 V DC (sběrnice free@home)", abb_knx: "30 V DC (sběrnice KNX TP)", loxone: "24 V DC (Loxone Tree)", taphome: null };
-const BUS_CABLE: Partial<Record<CatalogProduct["wiring"], string>> = { "bus-fah": "J-Y(St)Y 2×2×0,8 (sběrnice free@home)", "bus-knx": "KNX J-Y(St)Y 2×2×0,8", tree: "Loxone Tree kabel (2×2×0,8 – napájení + Tree)" };
+const BUS_CABLE: Partial<Record<CatalogProduct["wiring"], string>> = {
+  "bus-fah": "J-Y(St)Y 2×2×0,8 (sběrnice free@home)",
+  "bus-knx": "KNX J-Y(St)Y 2×2×0,8",
+  tree: "Loxone Tree kabel (2×2×0,8 – napájení + Tree)",
+  // Fáze 81: panely na LAN / Wi-Fi (napájení podle varianty – ověřte v datasheetu)
+  "lan-ip": "LAN – kabel Cat6 (u variant s Wi-Fi i bezdrátově)",
+};
 const MOUNTING_OF: Record<CatalogProduct["kind"], string> = {
   button: "do přístrojové krabice pod rámeček řady",
   touch: "do přístrojové krabice (bezrámečkově)",
@@ -68,7 +74,16 @@ function ratingOf(dinModule: SmartModule | null, spec: DeviceSpec | null): { val
 export function datasheetRows(product: CatalogProduct, system: SmartSystemId): DatasheetRow[] {
   const spec = specOf(product);
   const dinModule = moduleOf(product, system);
-  const voltage = spec?.supply ? { value: spec.supply, source: "katalog" as const } : mains(product) ? { value: "230 V AC", source: "systém" as const } : product.wiring === "wireless" ? { value: "bez napájení (energie ze stisku / z baterie)", source: "systém" as const } : BUS_VOLTAGE[system] ? { value: BUS_VOLTAGE[system]!, source: "systém" as const } : null;
+  const voltage = spec?.supply
+    ? { value: spec.supply, source: "katalog" as const }
+    : mains(product)
+      ? { value: "230 V AC", source: "systém" as const }
+      : product.wiring === "wireless"
+        ? { value: "bez napájení (energie ze stisku / z baterie)", source: "systém" as const }
+        : // Fáze 81: panel na LAN / Wi-Fi nemá napětí sběrnice – bez údaje v katalogu „ověřte“
+          product.wiring !== "lan-ip" && BUS_VOLTAGE[system]
+          ? { value: BUS_VOLTAGE[system]!, source: "systém" as const }
+          : null;
   const rating = ratingOf(dinModule, spec);
   const io = dinModule && dinModule.channels && dinModule.role !== "psu" && dinModule.role !== "system" ? { value: dinModule.role === "dali" ? `až ${dinModule.channels} předřadníků DALI` : dinModule.role === "interface" && system === "loxone" ? "2 větve Tree" : channelText(dinModule.channels), source: "výpočet" as const } : spec?.outputs ? { value: `${spec.outputs} výstupů`, source: "katalog" as const } : product.gangs ? { value: product.gangs === 1 ? "1 ovládací plocha" : product.gangs <= 4 ? `${product.gangs} ovládací plochy` : `${product.gangs} ovládacích ploch`, source: "systém" as const } : null;
   const mounting = spec?.mounting ? { value: spec.mounting, source: "katalog" as const } : { value: MOUNTING_OF[product.kind], source: "systém" as const };
@@ -94,7 +109,8 @@ export function productBadges(product: CatalogProduct, system: SmartSystemId): s
   const spec = specOf(product);
   const dinModule = moduleOf(product, system);
   const badges: string[] = [];
-  if (product.noBus) badges.push(system === "loxone" ? "Bezdrátově · Loxone Air" : product.wiring === "intercom" ? "Vlastní sběrnice Welcome" : "Bezdrátově · free@home wireless");
+  if (product.wiring === "lan-ip") badges.push("LAN / Wi-Fi · mimo sběrnici");
+  else if (product.noBus) badges.push(system === "loxone" ? "Bezdrátově · Loxone Air" : product.wiring === "intercom" ? "Vlastní sběrnice Welcome" : "Bezdrátově · free@home wireless");
   else if (product.wiring === "bus-fah") badges.push("24 V DC sběrnice");
   else if (product.wiring === "bus-knx") badges.push("Sběrnice KNX");
   else if (product.wiring === "tree") badges.push("Loxone Tree");

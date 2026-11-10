@@ -42,6 +42,63 @@ export const SMART_DEVICE_SPECS: Record<string, DeviceSpec> = {
     ],
     "text": null
   },
+  "ABB|2CDG110092R0011": {
+    "typeCode": "BE/S 8.20.2.1",
+    "name": "Automatizační modul BE/S 8.20.2.1",
+    "dimensions": null,
+    "ip": null,
+    "tempC": null,
+    "supply": null,
+    "current": null,
+    "outputs": null,
+    "mountingDepthMm": null,
+    "mounting": "DIN lišta TH35",
+    "modules": 4,
+    "powerLossW": null,
+    "powerW": null,
+    "protocol": [
+      "KNX"
+    ],
+    "text": null
+  },
+  "ABB|2CDG110121R0011": {
+    "typeCode": "JRA/S 4.230.2.1",
+    "name": "Automatizační modul JRA/S 4.230.2.1",
+    "dimensions": null,
+    "ip": "IP20",
+    "tempC": null,
+    "supply": null,
+    "current": null,
+    "outputs": 4,
+    "mountingDepthMm": null,
+    "mounting": "DIN lišta TH35",
+    "modules": 4,
+    "powerLossW": null,
+    "powerW": null,
+    "protocol": [
+      "KNX"
+    ],
+    "text": null
+  },
+  "ABB|2CDG110122R0011": {
+    "typeCode": "JRA/S 8.230.2.1",
+    "name": "Automatizační modul JRA/S 8.230.2.1",
+    "dimensions": null,
+    "ip": "IP20",
+    "tempC": null,
+    "supply": null,
+    "current": null,
+    "outputs": 8,
+    "mountingDepthMm": null,
+    "mounting": "DIN lišta TH35",
+    "modules": 8,
+    "powerLossW": null,
+    "powerW": null,
+    "protocol": [
+      "KNX"
+    ],
+    "text": null
+  },
   "ABB|2CDG110125R0011": {
     "typeCode": "JRA/S 4.230.5.1",
     "name": "Automatizační modul JRA/S 4.230.5.1",
@@ -92,6 +149,44 @@ export const SMART_DEVICE_SPECS: Record<string, DeviceSpec> = {
     "mountingDepthMm": null,
     "mounting": "DIN lišta TH35",
     "modules": 4,
+    "powerLossW": null,
+    "powerW": null,
+    "protocol": [
+      "KNX"
+    ],
+    "text": null
+  },
+  "ABB|2CDG110167R0011": {
+    "typeCode": "SV/S 30.640.3.1",
+    "name": "Automatizační modul SV/S 30.640.3.1",
+    "dimensions": null,
+    "ip": "IP20",
+    "tempC": null,
+    "supply": null,
+    "current": null,
+    "outputs": null,
+    "mountingDepthMm": null,
+    "mounting": "DIN lišta TH35",
+    "modules": 4,
+    "powerLossW": null,
+    "powerW": null,
+    "protocol": [
+      "KNX"
+    ],
+    "text": null
+  },
+  "ABB|2CDG110216R0011": {
+    "typeCode": "VC/S 4.1.1",
+    "name": "Automatizační modul VC/S 4.1.1",
+    "dimensions": null,
+    "ip": null,
+    "tempC": null,
+    "supply": null,
+    "current": null,
+    "outputs": null,
+    "mountingDepthMm": null,
+    "mounting": "DIN lišta TH35",
+    "modules": 8,
     "powerLossW": null,
     "powerW": null,
     "protocol": [
@@ -242,6 +337,32 @@ export const SMART_DEVICE_SPECS: Record<string, DeviceSpec> = {
       "ABB-free@home bus"
     ],
     "text": "24 V DC Počet výstupů: 12 Výstupní napětí: 24 - 230 V AC Druh zátěže: odporová Jmenovitý proud: 160 mA Stupeň krytí: IP 20 Pracovní teplota: –5 °C až +45 °C Rozměry: (v × š × h): 90 × 144 × 64 mm Šířka: 8 M"
+  },
+  "ABB|2CDG510014R0011": {
+    "typeCode": "BI-M-4.20.1.1",
+    "name": "Automatizační modul BI-M-4.20.1.1",
+    "dimensions": {
+      "w": 36,
+      "h": 90,
+      "d": 64
+    },
+    "ip": "IP20",
+    "tempC": {
+      "min": -5,
+      "max": 45
+    },
+    "supply": "24 V DC",
+    "current": null,
+    "outputs": null,
+    "mountingDepthMm": null,
+    "mounting": "DIN lišta TH35",
+    "modules": 2,
+    "powerLossW": null,
+    "powerW": null,
+    "protocol": [
+      "ABB-free@home bus"
+    ],
+    "text": "24 V DC Stupeň krytí: IP 20 Pracovní teplota: –5 °C až +45 °C Rozměry (v × š × h): 90 × 36 × 64 mm Šířka: 2 M"
   },
   "ABB|2CDG510025R0011": {
     "typeCode": "SA-M-4.16.2.2",
@@ -591,6 +712,82 @@ export const SMART_DEVICE_SPECS: Record<string, DeviceSpec> = {
     ],
     "text": null
   },
+  "ABB|2TMA130050B0054": {
+    "typeCode": "H8237-4B",
+    "name": "Panel dotykový 10 IP TOUCH, LAN+Wifi, černý (Welcome IP) (černý/LAN+WiFi)",
+    "dimensions": null,
+    "ip": "IP30",
+    "tempC": null,
+    "supply": null,
+    "current": null,
+    "outputs": null,
+    "mountingDepthMm": null,
+    "mounting": "zapuštěná montáž do přístrojové krabice",
+    "modules": null,
+    "powerLossW": null,
+    "powerW": null,
+    "protocol": [
+      "ABB-free@home bus"
+    ],
+    "text": null
+  },
+  "ABB|2TMA130050B0065": {
+    "typeCode": "H8236-4B",
+    "name": "Panel dotykový 7; IP TOUCH, LAN+WiFi, černý (Welcome IP) (černý/LAN+WiFi)",
+    "dimensions": null,
+    "ip": "IP30",
+    "tempC": null,
+    "supply": null,
+    "current": null,
+    "outputs": null,
+    "mountingDepthMm": null,
+    "mounting": "zapuštěná montáž do přístrojové krabice",
+    "modules": null,
+    "powerLossW": null,
+    "powerW": null,
+    "protocol": [
+      "ABB-free@home bus"
+    ],
+    "text": null
+  },
+  "ABB|2TMA130050W0054": {
+    "typeCode": "H8237-4W",
+    "name": "Panel dotykový 10; IP TOUCH, LAN+Wifi, bílý (Welcome IP) (bílý/LAN+WiFi)",
+    "dimensions": null,
+    "ip": "IP30",
+    "tempC": null,
+    "supply": null,
+    "current": null,
+    "outputs": null,
+    "mountingDepthMm": null,
+    "mounting": "zapuštěná montáž do přístrojové krabice",
+    "modules": null,
+    "powerLossW": null,
+    "powerW": null,
+    "protocol": [
+      "ABB-free@home bus"
+    ],
+    "text": null
+  },
+  "ABB|2TMA130050W0065": {
+    "typeCode": "H8236-4W",
+    "name": "Panel dotykový 7; IP TOUCH, LAN+WiFi, bílý (Welcome IP) (bílý/LAN+WiFi)",
+    "dimensions": null,
+    "ip": "IP30",
+    "tempC": null,
+    "supply": null,
+    "current": null,
+    "outputs": null,
+    "mountingDepthMm": null,
+    "mounting": "zapuštěná montáž do přístrojové krabice",
+    "modules": null,
+    "powerLossW": null,
+    "powerW": null,
+    "protocol": [
+      "ABB-free@home bus"
+    ],
+    "text": null
+  },
   "ABB|2TMA210050B0006": {
     "typeCode": "DP7-S-625-02",
     "name": "Panel dotykový s displejem 7\" (černá)",
@@ -614,6 +811,197 @@ export const SMART_DEVICE_SPECS: Record<string, DeviceSpec> = {
     ],
     "text": "24 V DC Stupeň krytí: IP 30 Rozměry: (v × š × h): 155 × 218 × 29 mm Staré obj. číslo 2CKA008300A0357"
   },
+  "ABB|2TMA210050W0017": {
+    "typeCode": "DP7-S-611-02",
+    "name": "Panel dotykový s displejem 7\" (bílá)",
+    "dimensions": {
+      "w": 218,
+      "h": 155,
+      "d": 29
+    },
+    "ip": "IP30",
+    "tempC": null,
+    "supply": "24 V DC",
+    "current": null,
+    "outputs": null,
+    "mountingDepthMm": null,
+    "mounting": "nástěnná montáž",
+    "modules": null,
+    "powerLossW": null,
+    "powerW": null,
+    "protocol": [
+      "ABB-free@home bus"
+    ],
+    "text": "24 V DC Stupeň krytí: IP 30 Rozměry: (v × š × h): 155 × 218 × 29 mm Staré obj. číslo 2CKA008300A0356"
+  },
+  "ABB|2TMA310011B0001": {
+    "typeCode": "SD/U12.55.1-825",
+    "name": "Panel dotykový ABB Trevion 2,4\", 55x55mm, černý, zapuštěný (černá/55x55mm)",
+    "dimensions": null,
+    "ip": "IP20",
+    "tempC": null,
+    "supply": null,
+    "current": null,
+    "outputs": null,
+    "mountingDepthMm": null,
+    "mounting": "zapuštěná montáž do přístrojové krabice",
+    "modules": null,
+    "powerLossW": null,
+    "powerW": null,
+    "protocol": [
+      "ABB-free@home bus"
+    ],
+    "text": null
+  },
+  "ABB|2TMA310011B0002": {
+    "typeCode": "SD/U12.63.1-825",
+    "name": "Panel dotykový ABB Trevion 2,4\", 63x63mm, černý, zapuštěný (černá/63x63mm)",
+    "dimensions": null,
+    "ip": "IP20",
+    "tempC": null,
+    "supply": null,
+    "current": null,
+    "outputs": null,
+    "mountingDepthMm": null,
+    "mounting": "zapuštěná montáž do přístrojové krabice",
+    "modules": null,
+    "powerLossW": null,
+    "powerW": null,
+    "protocol": [
+      "ABB-free@home bus"
+    ],
+    "text": null
+  },
+  "ABB|2TMA310011B0003": {
+    "typeCode": "RT/U12.86.1-825",
+    "name": "Dotykový panel ABB RoomTouch® 4\", černý, zapuštěný (černá)",
+    "dimensions": null,
+    "ip": "IP20",
+    "tempC": null,
+    "supply": null,
+    "current": null,
+    "outputs": null,
+    "mountingDepthMm": null,
+    "mounting": "zapuštěná montáž do přístrojové krabice",
+    "modules": null,
+    "powerLossW": null,
+    "powerW": null,
+    "protocol": [
+      "ABB-free@home bus"
+    ],
+    "text": null
+  },
+  "ABB|2TMA310011W0001": {
+    "typeCode": "RT/U12.86.1-811",
+    "name": "Dotykový panel ABB RoomTouch® 4\", bílý, zapuštěný (bílá)",
+    "dimensions": null,
+    "ip": "IP20",
+    "tempC": null,
+    "supply": null,
+    "current": null,
+    "outputs": null,
+    "mountingDepthMm": null,
+    "mounting": "zapuštěná montáž do přístrojové krabice",
+    "modules": null,
+    "powerLossW": null,
+    "powerW": null,
+    "protocol": [
+      "ABB-free@home bus"
+    ],
+    "text": null
+  },
+  "ABB|2TMA310051B0001": {
+    "typeCode": "ST/U10.1.1-825",
+    "name": "Dotykový panel SmartTouch 10\", černý (černá)",
+    "dimensions": {
+      "w": 254.6,
+      "h": 180.2,
+      "d": 17.5
+    },
+    "ip": "IP20",
+    "tempC": null,
+    "supply": null,
+    "current": null,
+    "outputs": null,
+    "mountingDepthMm": null,
+    "mounting": "zapuštěná montáž do přístrojové krabice",
+    "modules": null,
+    "powerLossW": null,
+    "powerW": null,
+    "protocol": [
+      "ABB-free@home bus"
+    ],
+    "text": null
+  },
+  "ABB|2TMA310051W0001": {
+    "typeCode": "ST/U10.1.1-811",
+    "name": "Dotykový panel SmartTouch 10\", bílý (bílá)",
+    "dimensions": {
+      "w": 254.6,
+      "h": 180.2,
+      "d": 17.5
+    },
+    "ip": "IP20",
+    "tempC": null,
+    "supply": null,
+    "current": null,
+    "outputs": null,
+    "mountingDepthMm": null,
+    "mounting": "zapuštěná montáž do přístrojové krabice",
+    "modules": null,
+    "powerLossW": null,
+    "powerW": null,
+    "protocol": [
+      "ABB-free@home bus"
+    ],
+    "text": null
+  },
+  "ABB|2TMA320051B0001": {
+    "typeCode": "M2249-2B",
+    "name": "Dotykový panel OneTouch 7\", černý (černá)",
+    "dimensions": {
+      "w": 192,
+      "h": 128,
+      "d": 17.5
+    },
+    "ip": "IP20",
+    "tempC": null,
+    "supply": null,
+    "current": null,
+    "outputs": null,
+    "mountingDepthMm": null,
+    "mounting": "zapuštěná montáž do přístrojové krabice",
+    "modules": null,
+    "powerLossW": null,
+    "powerW": null,
+    "protocol": [
+      "ABB-free@home wireless (Bluetooth/RF)"
+    ],
+    "text": null
+  },
+  "ABB|2TMA320051W0001": {
+    "typeCode": "M2249-2W",
+    "name": "Dotykový panel OneTouch 7\", bílý (bílá)",
+    "dimensions": {
+      "w": 192,
+      "h": 128,
+      "d": 17.5
+    },
+    "ip": "IP20",
+    "tempC": null,
+    "supply": null,
+    "current": null,
+    "outputs": null,
+    "mountingDepthMm": null,
+    "mounting": "zapuštěná montáž do přístrojové krabice",
+    "modules": null,
+    "powerLossW": null,
+    "powerW": null,
+    "protocol": [
+      "ABB-free@home wireless (Bluetooth/RF)"
+    ],
+    "text": null
+  },
   "LOXONE|100038": {
     "typeCode": "Relay Extension",
     "name": "Automatizační modul Relay Extension",
@@ -632,6 +1020,29 @@ export const SMART_DEVICE_SPECS: Record<string, DeviceSpec> = {
     "powerLossW": 11,
     "powerW": 0.7,
     "protocol": [
+      "LOXONE Link"
+    ],
+    "text": "18 … 28 VDC"
+  },
+  "LOXONE|100116": {
+    "typeCode": "Multi Extension Air",
+    "name": "Automatizační modul Multi Extension Air",
+    "dimensions": null,
+    "ip": "IP20",
+    "tempC": {
+      "min": -20,
+      "max": 55
+    },
+    "supply": "18 … 28 V DC",
+    "current": null,
+    "outputs": null,
+    "mountingDepthMm": null,
+    "mounting": "DIN lišta TH35",
+    "modules": 9,
+    "powerLossW": 8.7,
+    "powerW": 0.34,
+    "protocol": [
+      "LOXONE Air",
       "LOXONE Link"
     ],
     "text": "18 … 28 VDC"
@@ -655,6 +1066,50 @@ export const SMART_DEVICE_SPECS: Record<string, DeviceSpec> = {
     "powerW": 0.3,
     "protocol": [
       "LOXONE Tree",
+      "LOXONE Link"
+    ],
+    "text": "9 … 28 V DC"
+  },
+  "LOXONE|100239": {
+    "typeCode": "RGBW 24V Dimmer Tree",
+    "name": "Automatizační modul RGBW 24V Dimmer Tree",
+    "dimensions": null,
+    "ip": "IP20",
+    "tempC": {
+      "min": -40,
+      "max": 55
+    },
+    "supply": "12 … 28 V DC",
+    "current": null,
+    "outputs": null,
+    "mountingDepthMm": null,
+    "mounting": "DIN lišta TH35",
+    "modules": 2,
+    "powerLossW": 3,
+    "powerW": 0.066,
+    "protocol": [
+      "LOXONE Tree"
+    ],
+    "text": "12 … 28 VDC"
+  },
+  "LOXONE|100283": {
+    "typeCode": "DI Extension",
+    "name": "Automatizační modul DI Extension",
+    "dimensions": null,
+    "ip": "IP20",
+    "tempC": {
+      "min": -40,
+      "max": 70
+    },
+    "supply": "9 … 28 V DC",
+    "current": null,
+    "outputs": null,
+    "mountingDepthMm": null,
+    "mounting": "DIN lišta TH35",
+    "modules": 2,
+    "powerLossW": 0.5,
+    "powerW": 0.25,
+    "protocol": [
       "LOXONE Link"
     ],
     "text": "9 … 28 V DC"
@@ -683,6 +1138,25 @@ export const SMART_DEVICE_SPECS: Record<string, DeviceSpec> = {
     ],
     "text": "19.2 … 30 VDC"
   },
+  "LOXONE|100401": {
+    "typeCode": "Power Supply & Backup",
+    "name": "Automatizační modul Power Supply & Backup",
+    "dimensions": null,
+    "ip": "IP20",
+    "tempC": null,
+    "supply": "36 V DC",
+    "current": null,
+    "outputs": null,
+    "mountingDepthMm": null,
+    "mounting": "DIN lišta TH35",
+    "modules": 18,
+    "powerLossW": null,
+    "powerW": null,
+    "protocol": [
+      "LOXONE Tree"
+    ],
+    "text": "36VDC"
+  },
   "LOXONE|100422": {
     "typeCode": "Presence Sensor Tree White",
     "name": "Senzor přítomnosti Tree bílá",
@@ -704,6 +1178,31 @@ export const SMART_DEVICE_SPECS: Record<string, DeviceSpec> = {
       "LOXONE Tree"
     ],
     "text": "6 … 30 VDC"
+  },
+  "LOXONE|100512": {
+    "typeCode": "Miniserver Compact",
+    "name": "Automatizační modul Miniserver Compact",
+    "dimensions": null,
+    "ip": null,
+    "tempC": {
+      "min": 0,
+      "max": 50
+    },
+    "supply": "10 … 30 V DC (Relays work above 19,2V)",
+    "current": null,
+    "outputs": null,
+    "mountingDepthMm": null,
+    "mounting": "DIN lišta TH35",
+    "modules": 6,
+    "powerLossW": 8.4,
+    "powerW": 2.4,
+    "protocol": [
+      "LOXONE Air",
+      "LOXONE Tree",
+      "LOXONE Link",
+      "Ethernet"
+    ],
+    "text": "10 … 30VDC (Relays work above 19.2V)"
   },
   "LOXONE|100608": {
     "typeCode": "Touch Pure Flex IP44 Tree Signal White",
@@ -748,5 +1247,25 @@ export const SMART_DEVICE_SPECS: Record<string, DeviceSpec> = {
       "LOXONE Tree"
     ],
     "text": "6 … 30 VDC"
+  },
+  "LOXONE|100891": {
+    "typeCode": "Wall Display 10\"",
+    "name": "Wall Display 10″",
+    "dimensions": null,
+    "ip": "IP20",
+    "tempC": {
+      "min": -10,
+      "max": 45
+    },
+    "supply": "18 … 27 V DC",
+    "current": null,
+    "outputs": null,
+    "mountingDepthMm": null,
+    "mounting": null,
+    "modules": null,
+    "powerLossW": null,
+    "powerW": 2.85,
+    "protocol": [],
+    "text": "18 … 27 V DC"
   }
 };

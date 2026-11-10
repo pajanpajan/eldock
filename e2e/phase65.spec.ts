@@ -153,19 +153,23 @@ test("🏠 Chytrá domácnost: segmentový přepínač ABB, obrázkový katalog,
   await catalog.getByTestId("smart-tab-inbox").click();
   await expect(catalog.locator('[data-card="fah-wl-act-1"]').getByTestId("device-illustration")).toHaveAttribute("data-kind", "inbox");
 
-  // DIN lišta: automatický počet a ruční navýšení (přičte se do přehledu akčních členů)
+  // DIN lišta: automatický počet a ruční navýšení (přičte se do přehledu akčních členů); fáze 81 – „V rozváděči: X ks
+  // (Y automaticky z půdorysu + Z ručně přidáno)“
   await catalog.getByTestId("smart-tab-din").click();
   const psu = catalog.locator('[data-card="abb_freeathome-fah-psu"]');
-  await expect(psu.getByTestId("din-auto")).toHaveText("1 ks");
+  await expect(psu.getByTestId("din-auto")).toHaveText("1");
+  await expect(psu.getByTestId("din-total")).toHaveText("1 ks");
   const sa8 = catalog.locator('[data-card="abb_freeathome-fah-sa8"]');
-  await expect(sa8.getByTestId("din-auto")).toHaveText("0 ks");
+  await expect(sa8.getByTestId("din-auto")).toHaveText("0");
   await sa8.getByTestId("din-add").click();
-  await expect(sa8.getByTestId("din-count")).toContainText("ručně +1");
+  await expect(sa8.getByTestId("din-manual")).toHaveText("1");
+  await expect(sa8.getByTestId("din-count")).toContainText("V rozváděči: 1 ks (0 automaticky z půdorysu + 1 ručně přidáno)");
   const smart = page.getByTestId("smart-home");
   await expect(smart.getByTestId("smart-modules")).toContainText("SA-M-8.16.2.2");
   await expect(smart.getByTestId("smart-modules")).toContainText("ručně");
   await sa8.getByTestId("din-remove").click();
-  await expect(sa8.getByTestId("din-count")).not.toContainText("ručně");
+  await expect(sa8.getByTestId("din-manual")).toHaveText("0");
+  await expect(sa8.getByTestId("din-total")).toHaveText("0 ks");
 
   // Technický list z karty: parametry, kóty a schéma zapojení
   await sa8.getByTestId("datasheet-open").click();

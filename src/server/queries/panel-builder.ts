@@ -1,4 +1,6 @@
 import "server-only";
+import { smartSystemOfSeries } from "@/lib/panel-builder/smart-din-catalog";
+import type { SmartSystemId } from "@/lib/panel-builder/smart-home";
 
 import { HIDDEN_MANUFACTURER_NAMES, brandOf, isFanOnlyManufacturer, isHiddenManufacturer } from "@/lib/panel-builder/brands";
 import { catalogGroupOf, componentGroup, componentGroupWhere, type CatalogGroupId } from "@/lib/panel-builder/catalog-groups";
@@ -217,6 +219,8 @@ export interface CatalogItemFilter {
   curve?: string;
   sensitivity?: number;
   series?: string;
+  /** Fáze 81: systém chytré domácnosti (abb_freeathome / abb_knx …). */
+  system?: string;
 }
 
 const distinctValues = <T>(values: (T | null | undefined)[]) => [...new Set(values.filter((value): value is T => value !== null && value !== undefined && value !== 0 && value !== ""))];
@@ -248,6 +252,9 @@ export async function getGroupItems(brand: string, group: CatalogGroupId, filter
     return { kind: "fan" as const, rows, matching: rows.length, options: {} };
   }
   const base: Prisma.CatalogComponentWhereInput = { ...visibleComponents, manufacturer: { in: names }, ...componentGroupWhere(group) };
+  // Fáze 81: filtr systému chytré domácnosti (u ABB free@home / KNX) = řady kusů, které k systému patří
+  const facets = await prisma.catalogComponent.findMany({ where: base, select: { poles: true, ratedCurrentA: true, trippingCurve: true, rcdSensitivityMa: true, series: true } });
+  const systemSeries = filter.system ? distinctValues(facets.map((row) => row.series)).filter((series) => smartSystemOfSeries(series) === filter.system) : null;
   const narrow: Prisma.CatalogComponentWhereInput = {
     ...(filter.poles ? { poles: filter.poles } : {}),
     ...(filter.current ? { ratedCurrentA: filter.current } : {}),
@@ -255,11 +262,10 @@ export async function getGroupItems(brand: string, group: CatalogGroupId, filter
     ...(filter.sensitivity ? { rcdSensitivityMa: filter.sensitivity } : {}),
     ...(filter.series ? { series: filter.series } : {}),
   };
-  const where: Prisma.CatalogComponentWhereInput = { AND: [base, narrow] };
-  const [rows, matching, facets] = await Promise.all([
+  const where: Prisma.CatalogComponentWhereInput = { AND: [base, narrow, ...(systemSeries ? [{ series: { in: systemSeries } }] : [])] };
+  const [rows, matching] = await Promise.all([
     prisma.catalogComponent.findMany({ where, orderBy: [{ poles: "asc" }, { trippingCurve: "asc" }, { ratedCurrentA: "asc" }, { typeCode: "asc" }], take: CATALOG_LIMIT }),
     prisma.catalogComponent.count({ where }),
-    prisma.catalogComponent.findMany({ where: base, select: { poles: true, ratedCurrentA: true, trippingCurve: true, rcdSensitivityMa: true, series: true } }),
   ]);
   return {
     kind: "component" as const,
@@ -271,6 +277,7 @@ export async function getGroupItems(brand: string, group: CatalogGroupId, filter
       curve: distinctValues(facets.map((row) => row.trippingCurve)).sort(),
       sensitivity: distinctValues(facets.map((row) => row.rcdSensitivityMa)).sort((a, b) => a - b),
       series: distinctValues(facets.map((row) => row.series)).sort(),
+      system: distinctValues(facets.map((row) => smartSystemOfSeries(row.series))).filter((value): value is SmartSystemId => value !== null),
     },
   };
 }

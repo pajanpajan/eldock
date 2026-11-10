@@ -25,6 +25,10 @@ export interface ResearchComponent {
   modulesCount: number;
   /** null = výrobce neuvádí (dopočte se odhad dle IEC a prvek se označí). */
   powerLossWatts: number | null;
+  /** Fáze 81: Pv je orientační (zadání / odvozeno), ne z podkladů výrobce → v katalogu „odhad“. */
+  lossEstimated?: boolean;
+  /** Fáze 81: vlastní katalog Eldocku má přednost před importem katalogu výrobců (externalSource = null). */
+  ownCatalog?: boolean;
   description: string;
   datasheetUrl: string | null;
   source: string;

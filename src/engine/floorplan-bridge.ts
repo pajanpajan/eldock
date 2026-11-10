@@ -1061,8 +1061,11 @@ export interface PanelDevice {
   /** Fáze 60: stabilní klíč přístroje a klíč nadřazeného přístroje ve stromu zapojení (null = hlavní vstupní prvek). */
   key: string;
   parentKey: string | null;
-  /** Fáze 61: přesný katalogový kus (akční členy chytré domácnosti) – přednost před výběrem podle konfigurace. */
-  article?: { manufacturer: string; series?: string; typeCode: string; articleNumber: string | null; description: string };
+  /**
+   * Fáze 61: přesný katalogový kus (akční členy chytré domácnosti) – přednost před výběrem podle konfigurace. Fáze 81:
+   * klíč v katalogu prvků (`catalogArticle` – „LOXONE:100335“, „TAPHOME:6DO“) a ztrátový výkon Pv modulu.
+   */
+  article?: { manufacturer: string; series?: string; typeCode: string; articleNumber: string | null; description: string; catalogArticle?: string | null; powerLossW?: number | null; lossVerified?: boolean };
 }
 
 /** Fáze 61: modul chytré domácnosti pro generátor rozváděče (z `planSmartHome`). */
@@ -1075,6 +1078,10 @@ export interface SmartBoardModule {
   typeCode: string;
   articleNumber: string | null;
   modules: number;
+  /** Fáze 81: klíč kusu v katalogu prvků a ztrátový výkon Pv (null = odhad dle IEC); `lossVerified` = Pv z podkladů výrobce. */
+  catalogArticle?: string | null;
+  powerLossW?: number | null;
+  lossVerified?: boolean;
 }
 
 export interface RcdGroup {
@@ -1340,6 +1347,17 @@ export function buildSwitchboardFromCircuits(
 
   /** Skupiny přístrojů (na liště se nedělí). */
   const groups: PanelDevice[][] = [];
+  /** Fáze 81: skupiny, které začínají na vlastní (vyhrazené) liště – akční členy chytré domácnosti. */
+  const ownRail = new Set<PanelDevice[]>();
+  /** Fáze 81: přístroj modulu chytré domácnosti s přesným kusem katalogu a jeho Pv (jinak odhad dle IEC). */
+  const smartDevice = (unit: SmartBoardModule, psu: boolean) => {
+    const item = device(psu ? "T" : "A", unit.label, psu ? "PSU" : "PLC", "1P", unit.modules, null, config({ category: "OTHER", poles: "1P", modules: unit.modules, moduleSubtype: psu ? "PSU_DC" : "PLC", manufacturer: unit.manufacturer }));
+    return {
+      ...item,
+      ...(unit.powerLossW !== null && unit.powerLossW !== undefined ? { powerLossW: unit.powerLossW } : {}),
+      article: { manufacturer: unit.manufacturer, series: unit.series, typeCode: unit.typeCode, articleNumber: unit.articleNumber, description: unit.label, catalogArticle: unit.catalogArticle ?? null, powerLossW: unit.powerLossW ?? null, lossVerified: unit.lossVerified ?? false },
+    };
+  };
   const mainA = options.mainSwitchA ?? 40;
   // Hierarchie (fáze 60): hlavní vypínač = kořen stromu, SPD a svorkovnice za ním
   const head = single
@@ -1394,9 +1412,7 @@ export function buildSwitchboardFromCircuits(
         addBom(bom, `${unit.label} – ${unit.manufacturer} ${unit.typeCode}${unit.articleNumber ? ` (${unit.articleNumber})` : ""}`);
         continue;
       }
-      const psu = unit.role === "psu" || unit.role === "psu_led";
-      const item = device(psu ? "T" : "A", unit.label, psu ? "PSU" : "PLC", "1P", unit.modules, null, config({ category: "OTHER", poles: "1P", modules: unit.modules, moduleSubtype: psu ? "PSU_DC" : "PLC", manufacturer: unit.manufacturer }));
-      control.push({ ...item, article: { manufacturer: unit.manufacturer, series: unit.series, typeCode: unit.typeCode, articleNumber: unit.articleNumber, description: unit.label } });
+      control.push(smartDevice(unit, unit.role === "psu" || unit.role === "psu_led"));
     }
   } else if (options.mode === "bus_loxone" && (plan.io.do > 0 || plan.io.treeDevices > 0)) {
     const mini = SMART_MODULES.loxoneMiniserver;
@@ -1415,9 +1431,7 @@ export function buildSwitchboardFromCircuits(
       addBom(bom, `${unit.label}${unit.typeCode ? ` – ${unit.typeCode}` : ""}`);
       continue;
     }
-    const psu = unit.role === "psu_led";
-    const item = device(psu ? "T" : "A", unit.label, psu ? "PSU" : "PLC", "1P", unit.modules, null, config({ category: "OTHER", poles: "1P", modules: unit.modules, moduleSubtype: psu ? "PSU_DC" : "PLC", manufacturer: unit.manufacturer }));
-    control.push({ ...item, article: { manufacturer: unit.manufacturer, series: unit.series, typeCode: unit.typeCode, articleNumber: unit.articleNumber, description: unit.label } });
+    control.push(smartDevice(unit, unit.role === "psu_led"));
   }
   if (options.mode === "smart_relay" && (plan.io.do > 0 || plan.io.di > 0)) {
     const shelly = SMART_MODULES.shellyPro4pm;
@@ -1446,7 +1460,10 @@ export function buildSwitchboardFromCircuits(
     const parented = control.map((item) =>
       item.category === "RELAY" && item.config.relaySubtype === "IMPULSE" ? { ...item, parentKey: lighting ? `circuit:${lighting.id}` : supply ? "control" : "main" } : item.config.moduleSubtype === "METER" ? { ...item, parentKey: "main" } : { ...item, parentKey: supply ? "control" : "main" },
     );
-    groups.push(supply ? [supply, ...parented] : parented);
+    const controlGroup = supply ? [supply, ...parented] : parented;
+    groups.push(controlGroup);
+    // Fáze 81: akční členy chytré domácnosti na vyhrazené liště (začínají na nové řadě rozváděče)
+    if (options.mode === "bus_loxone" && options.smart?.some((unit) => unit.modules > 0)) ownRail.add(controlGroup);
   }
 
   const devices = groups.flat();
@@ -1462,7 +1479,7 @@ export function buildSwitchboardFromCircuits(
     for (const group of groups) {
       const width = group.reduce((sum, item) => sum + item.modules, 0);
       let rail = rails[rails.length - 1];
-      if (rail.used + width > capacity && width <= capacity) {
+      if ((rail.used + width > capacity && width <= capacity) || (ownRail.has(group) && rail.used > 0)) {
         open();
         rail = rails[rails.length - 1];
       }

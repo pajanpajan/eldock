@@ -5,6 +5,8 @@
 import type { ComponentCategory, RecognitionStatus } from "@/generated/prisma/enums";
 
 import { catalogCategory, parseConfig, type ItemConfig } from "./configurator";
+import { ROLE_COLOR, profileLabel, smartDinProfile, type SmartDinProfile } from "./smart-din-catalog";
+import type { SmartRole, SmartSystemId } from "./smart-home";
 
 /** Přístroj na vektorové DIN liště. */
 export interface VectorDevice {
@@ -29,6 +31,19 @@ export interface VectorDevice {
   /** Funkce / popis obvodu (spodní štítek). */
   label: string;
   status: RecognitionStatus;
+  /** Fáze 81: profil kusu chytré domácnosti (funkce, kanály, barevný štítek) – jinak se dopočte z typu (`smartProfileOf`). */
+  smart?: SmartDinProfile | null;
+}
+
+/** Fáze 81: profil aktoru chytré domácnosti na DIN liště (z konfigurace, jinak z výrobce a typu kusu). */
+export function smartProfileOf(device: Pick<VectorDevice, "smart" | "category" | "manufacturer" | "typeCode" | "articleNumber">): SmartDinProfile | null {
+  if (device.smart !== undefined && device.smart !== null) return device.smart;
+  return device.category === "PLC" || device.category === "PSU" ? smartDinProfile(device) : null;
+}
+
+/** Počet svorek v pásu aktoru: aspoň jedna na modul, u vícekanálových aktorů po kanálu (vejde-li se 9 px na svorku). */
+export function smartTerminalCount(modules: number, channels: number, widthPx: number): number {
+  return Math.max(screwCount(modules), Math.min(channels, Math.floor((widthPx - 2) / 9)));
 }
 
 /** Texty uvnitř symbolu. */
@@ -158,5 +173,13 @@ export function deviceWithConfig(device: VectorDevice, config: ItemConfig): Vect
     typeCode: null,
     articleNumber: null,
     status: "VERIFIED",
+    // Fáze 81: aktor chytré domácnosti z konfigurace (funkce a kanály) ještě před uloženým kusem
+    smart: config.category === "SMART_HOME" && config.smartRole ? configProfile(config) : null,
   };
+}
+
+function configProfile(config: ItemConfig): SmartDinProfile {
+  const role = (config.smartRole ?? "switch") as SmartRole;
+  const channels = config.channels ?? 0;
+  return { system: (config.smartSystem ?? "abb_freeathome") as SmartSystemId, role, channels, ratedA: null, label: profileLabel(role, channels, null), color: ROLE_COLOR[role] };
 }

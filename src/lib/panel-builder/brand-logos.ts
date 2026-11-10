@@ -21,6 +21,7 @@ export const BRAND_SLUGS: Record<string, string> = {
   Siemens: "siemens",
   Schrack: "schrack",
   Loxone: "loxone",
+  TapHome: "taphome",
   Rittal: "rittal",
   Hensel: "hensel",
   Saltek: "saltek",

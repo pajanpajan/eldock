@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
 
 import { ManufacturerLogo } from "../ManufacturerLogo";
 import { DeviceMockup, SeriesGallery, SeriesThumb, combineLook } from "./SeriesGallery";
-import { SmartHomeDeviceCatalog, type SmartCatalogProps } from "../SmartHomeDeviceCatalog";
+import { SmartHomeDeviceCatalog, type SmartCatalogProps, type ProductChoice } from "../SmartHomeDeviceCatalog";
 
 /**
  * Fáze 55: horní lišta 2D půdorysu nad rastrem – 1. výrobce s logem → 2. designová řada s náhledem tvaru → 3. barvy dané řady
@@ -68,7 +68,7 @@ export function DeviceAppearance({
   activeProduct?: string | null;
   onSmartSystem?: (system: string) => void;
   onBusLevel?: () => void;
-  onPlaceProduct?: (product: CatalogProduct) => void;
+  onPlaceProduct?: (product: CatalogProduct, choice?: ProductChoice) => void;
   /** Fáze 65: osazené kusy výrobku, kusy modulu podle výpočtu, ručně přidané moduly, technický list. */
   placed?: SmartCatalogProps["placed"];
   planned?: SmartCatalogProps["planned"];
@@ -165,7 +165,7 @@ export function DeviceAppearance({
           extras={extras}
           onSystem={(system) => onSmartSystem?.(system)}
           onBusLevel={() => onBusLevel?.()}
-          onPlace={(product) => onPlaceProduct?.(product)}
+          onPlace={(product, choice) => onPlaceProduct?.(product, choice)}
           onColor={(next) => onChange({ color: next })}
           onExtra={(moduleId, delta) => onExtra?.(moduleId, delta)}
           onDatasheet={(product) => onDatasheet?.(product)}

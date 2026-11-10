@@ -1,13 +1,16 @@
 // Živý konfigurátor prvku rozváděče: parametry podle kategorie (dlaždice), výchozí hodnoty,
 // výběr nejbližšího přesného kusu z katalogu a syntéza odhadu IEC, když katalog kus nemá.
 // Čisté funkce – sdílí klient (dlaždice) i služba (uložení a přiřazení).
+// Fáze 81: kategorie 🏠 Chytrá domácnost / PLC / Aktory – systém (u ABB filtr free@home / KNX), funkce aktoru a počet
+// kanálů; přesný kus podle profilu kusu katalogu (`smartDinProfile`), šířka podle kusu.
 
 import type { ComponentCategory } from "@/generated/prisma/enums";
 
 import { estimatePowerLoss, iecSymbolFor, normalizeSearch } from "./catalog";
 import { sameManufacturer } from "./matching";
+import { SMART_SYSTEM_FILTER_LABEL, smartDinProfile, smartRank, smartSystemsOf } from "./smart-din-catalog";
 
-export type ConfigCategory = "MCB" | "RCD" | "RCBO" | "MAIN_SWITCH" | "SPD" | "CONTACTOR" | "RELAY" | "OTHER" | "ACCESSORY";
+export type ConfigCategory = "MCB" | "RCD" | "RCBO" | "MAIN_SWITCH" | "SPD" | "CONTACTOR" | "RELAY" | "SMART_HOME" | "OTHER" | "ACCESSORY";
 
 export interface ItemConfig {
   category: ConfigCategory;
@@ -27,6 +30,10 @@ export interface ItemConfig {
   moduleSubtype?: string | null;
   /** Výkon zdroje („15W/24V“) – jen zdroj / měření / jiné. */
   power?: string | null;
+  /** Fáze 81: chytrá domácnost – systém (null = všechny systémy výrobce), funkce aktoru a počet kanálů (null = libovolný). */
+  smartSystem?: string | null;
+  smartRole?: string | null;
+  channels?: number | null;
 }
 
 export interface ConfigOption {
@@ -49,6 +56,7 @@ export const CONFIG_CATEGORIES: { value: ConfigCategory; label: string }[] = [
   { value: "SPD", label: "SPD (Přepěťovka)" },
   { value: "CONTACTOR", label: "Stykač" },
   { value: "RELAY", label: "Relé" },
+  { value: "SMART_HOME", label: "🏠 Chytrá domácnost / PLC / Aktory" },
   { value: "OTHER", label: "Zdroj / Měření / Jiné" },
   { value: "ACCESSORY", label: "Svorky / Hřebeny / Příslušenství" },
 ];
@@ -70,6 +78,20 @@ export const MODULE_SUBTYPES = {
   PLC: "PLC / Smart modul",
   MAIN_TERMINAL: "Hlavní svorkovnice (HLAK)",
   FUSE_DISCONNECTOR: "Pojistkový odpínač",
+} as const;
+
+/** Fáze 81: funkce kusu chytré domácnosti na DIN lištu (role modulu výpočtu `smart-home.ts`). */
+export const SMART_ROLES = {
+  switch: "Spínací aktor",
+  blind: "Žaluziový aktor",
+  dim: "Stmívací aktor",
+  heating: "Topení / ventily",
+  dali: "DALI brána / rozhraní",
+  input: "Binární vstupy",
+  pwm: "LED 24 V PWM",
+  psu: "Zdroj sběrnice / 24 V",
+  interface: "Rozhraní / rozšíření",
+  system: "Systémový modul / Miniserver",
 } as const;
 
 /** Svorky, hřebenové lišty a příslušenství přístrojů (fáze 43, externí databáze prvků). */
@@ -189,6 +211,11 @@ export const CONFIG_FIELDS: Record<ConfigCategory, ConfigField[]> = {
       ],
     },
   ],
+  // Fáze 81: řada / systém se doplní podle výrobce (`configFields`), šířka se bere z přiřazeného kusu
+  SMART_HOME: [
+    { key: "smartRole", label: "Funkce", options: Object.entries(SMART_ROLES).map(([value, label]) => ({ value, label, patch: { smartRole: value, channels: null } })) },
+    { key: "channels", label: "Počet kanálů", options: [{ value: "all", label: "Libovolný", patch: { channels: null } }, ...[2, 4, 6, 8, 12, 14, 16, 20].map((count) => ({ value: String(count), label: `${count}×`, patch: { channels: count } }))] },
+  ],
   ACCESSORY: [
     { key: "moduleSubtype", label: "Druh příslušenství", options: Object.entries(ACCESSORY_SUBTYPES).map(([value, label]) => ({ value, label, patch: { moduleSubtype: value } })) },
     { key: "poles", label: "Póly", options: ["1P", "2P", "3P", "4P"].map((poles) => ({ value: poles, label: poles, patch: { poles } })) },
@@ -196,14 +223,44 @@ export const CONFIG_FIELDS: Record<ConfigCategory, ConfigField[]> = {
   ],
 };
 
+/**
+ * Řádky dlaždic konfigurace: u chytré domácnosti navíc filtr řady / systému výrobce, který má víc systémů (ABB:
+ * ABB-free@home® · ABB i-bus® KNX); Loxone a TapHome nabízí všechny své moduly.
+ */
+export function configFields(config: Pick<ItemConfig, "category" | "manufacturer"> | null): ConfigField[] {
+  if (!config) return [];
+  const fields = CONFIG_FIELDS[config.category];
+  if (config.category !== "SMART_HOME") return fields;
+  const systems = smartSystemsOf(config.manufacturer);
+  if (systems.length < 2) return fields;
+  const series: ConfigField = {
+    key: "smartSystem",
+    label: "Řada / systém",
+    options: [{ value: "all", label: "Vše", patch: { smartSystem: null } }, ...systems.map((system) => ({ value: system.id, label: SMART_SYSTEM_FILTER_LABEL[system.id], patch: { smartSystem: system.id } }))],
+  };
+  return [series, ...fields];
+}
+
+/** Fáze 81: systém chytré domácnosti platí jen u výrobce, který ho nabízí (po změně výrobce se zahodí). */
+export const smartSystemFor = (config: Pick<ItemConfig, "manufacturer" | "smartSystem">): string | null =>
+  config.smartSystem && smartSystemsOf(config.manufacturer).some((system) => system.id === config.smartSystem) ? config.smartSystem : null;
+
+/** Konfigurace s jiným výrobcem (systém chytré domácnosti jiného výrobce se zahodí). */
+export function withManufacturer<T extends ItemConfig>(config: T, manufacturer: string | null): T {
+  const next = { ...config, manufacturer };
+  return config.smartSystem ? { ...next, smartSystem: smartSystemFor(next) } : next;
+}
+
 /** Je dlaždice aktivní pro danou konfiguraci? */
 export function isOptionActive(config: ItemConfig, option: ConfigOption): boolean {
   return Object.entries(option.patch).every(([key, value]) => (config[key as keyof ItemConfig] ?? null) === (value ?? null));
 }
 
 /** Kategorie konfigurátoru → kategorie katalogu. */
-export function catalogCategory(config: Pick<ItemConfig, "category" | "moduleSubtype">): ComponentCategory {
+export function catalogCategory(config: Pick<ItemConfig, "category" | "moduleSubtype" | "smartRole">): ComponentCategory {
   if (config.category === "ACCESSORY") return config.moduleSubtype === "TERMINAL_BLOCK" ? "TERMINAL" : "OTHER";
+  // Fáze 81: chytrá domácnost – zdroj sběrnice / 24 V v katalogu jako zdroj, ostatní kusy jako PLC
+  if (config.category === "SMART_HOME") return config.smartRole === "psu" ? "PSU" : "PLC";
   if (config.category !== "OTHER") return config.category;
   switch (config.moduleSubtype) {
     case "PSU_DC":
@@ -222,7 +279,8 @@ export const toConfigCategory = (category: ComponentCategory | null | undefined,
   !category
     ? null
     : ((["MCB", "RCD", "RCBO", "MAIN_SWITCH", "SPD", "CONTACTOR", "RELAY"] as const).find((value) => value === category) ??
-      (category === "ENCLOSURE" ? null : isAccessorySubtype(moduleSubtype) ? "ACCESSORY" : "OTHER"));
+      // Fáze 81: PLC / smart moduly = kategorie Chytrá domácnost
+      (category === "PLC" ? "SMART_HOME" : category === "ENCLOSURE" ? null : isAccessorySubtype(moduleSubtype) ? "ACCESSORY" : "OTHER"));
 
 /** Póly podle šířky (jistič 3M → 3P, chránič 4M → 4P …) – pro sloučení modulů. */
 export function polesForWidth(category: ConfigCategory, modules: number): string {
@@ -251,6 +309,8 @@ export function defaultConfig(category: ConfigCategory, base: { manufacturer: st
       return { ...common, poles: "2P", contactConfig: "2NO", modules: m >= 2 ? 2 : 1, ratedCurrentA: 25, coilVoltage: "230V AC" };
     case "RELAY":
       return { ...common, poles: "1P", relaySubtype: "IMPULSE", modules: Math.min(m, 3), ratedCurrentA: 16 };
+    case "SMART_HOME":
+      return { ...common, poles: "1P", modules: Math.min(Math.max(m, 2), 12), smartRole: "switch", smartSystem: null, channels: null, ratedCurrentA: null };
     case "OTHER":
       return { ...common, poles: "1P", moduleSubtype: "PSU_DC", modules: Math.min(m, 6), power: "15W/24V", ratedCurrentA: null };
     case "ACCESSORY":
@@ -260,6 +320,11 @@ export function defaultConfig(category: ConfigCategory, base: { manufacturer: st
 
 /** Konfigurace z přiřazeného katalogového kusu (prvek bez uložené konfigurace). */
 export function configFromComponent(component: CatalogLike, manufacturerFallback: string | null = null): ItemConfig | null {
+  // Fáze 81: kus chytré domácnosti (i zdroj sběrnice) → kategorie Chytrá domácnost s funkcí, systémem a kanály
+  const smart = component.category === "PLC" || component.category === "PSU" ? smartDinProfile(component) : null;
+  if (smart) {
+    return { category: "SMART_HOME", manufacturer: component.manufacturer || manufacturerFallback, poles: component.poles, modules: component.modulesCount || 1, ratedCurrentA: null, smartRole: smart.role === "psu_led" ? "psu" : smart.role, smartSystem: smart.system, channels: smart.channels || null };
+  }
   const category = toConfigCategory(component.category, component.moduleSubtype);
   if (!category) return null;
   return {
@@ -347,6 +412,12 @@ export function matchConfig<T extends CatalogLike>(catalog: readonly T[], config
         return eq(config.contactConfig, component.contactConfig) && eq(config.ratedCurrentA, component.ratedCurrentA);
       case "RELAY":
         return eq(config.relaySubtype, component.relaySubtype);
+      case "SMART_HOME": {
+        // Fáze 81: kus chytré domácnosti podle profilu (funkce, systém, kanály) – obecné PLC jiných výrobců ne
+        const profile = smartDinProfile(component);
+        const role = profile?.role === "psu_led" ? "psu" : profile?.role;
+        return Boolean(profile && eq(config.smartRole, role) && eq(smartSystemFor(config), profile.system) && eq(config.channels, profile.channels));
+      }
       case "OTHER":
       case "ACCESSORY":
         return eq(config.moduleSubtype, component.moduleSubtype);
@@ -358,7 +429,9 @@ export function matchConfig<T extends CatalogLike>(catalog: readonly T[], config
     Number((config.surgeCurrentKa ?? null) === component.surgeCurrentKa) * 2 +
     Number((config.coilVoltage ?? null) === component.coilVoltage) * 2 +
     Number(config.ratedCurrentA === null || config.ratedCurrentA === component.ratedCurrentA) +
-    Number(component.poles === config.poles) * 3;
+    Number(component.poles === config.poles) * 3 +
+    // Fáze 81: výchozí typ výpočtu před ruční alternativou (JRA/S 4.230.5.1 před 4.230.2.1) a před řádky importu
+    (config.category === "SMART_HOME" ? smartRank(smartDinProfile(component)) : 0);
   return [...candidates].sort((a, b) => score(b) - score(a) || a.typeCode.localeCompare(b.typeCode))[0] ?? null;
 }
 
@@ -370,6 +443,7 @@ const CATEGORY_NOUN: Record<ConfigCategory, string> = {
   SPD: "Svodič přepětí",
   CONTACTOR: "Stykač",
   RELAY: "Relé",
+  SMART_HOME: "Chytrá domácnost",
   OTHER: "Modul",
   ACCESSORY: "Příslušenství",
 };
@@ -392,6 +466,12 @@ export function describeConfig(config: ItemConfig): string {
       return `Stykač ${config.ratedCurrentA ?? ""} A ${config.contactConfig ?? ""}${config.coilVoltage ? `, cívka ${config.coilVoltage}` : ""}`;
     case "RELAY":
       return `${RELAY_SUBTYPES[(config.relaySubtype ?? "AUXILIARY") as keyof typeof RELAY_SUBTYPES]}${config.ratedCurrentA ? ` ${config.ratedCurrentA} A` : ""}`;
+    case "SMART_HOME": {
+      const role = SMART_ROLES[(config.smartRole ?? "switch") as keyof typeof SMART_ROLES] ?? SMART_ROLES.switch;
+      const own = smartSystemFor(config);
+      const system = own ? ` (${SMART_SYSTEM_FILTER_LABEL[own as keyof typeof SMART_SYSTEM_FILTER_LABEL]?.split(" (")[0] ?? own})` : "";
+      return `${role}${config.channels ? ` ${config.channels}×` : ""}${system}`;
+    }
     case "OTHER":
       return `${MODULE_SUBTYPES[(config.moduleSubtype ?? "PSU_DC") as keyof typeof MODULE_SUBTYPES]}${config.power ? ` ${config.power}` : config.ratedCurrentA ? ` ${config.ratedCurrentA} A` : ""}`;
     case "ACCESSORY":
@@ -425,7 +505,7 @@ export function synthesizeComponent(config: ItemConfig) {
     contactConfig: config.contactConfig ?? null,
     coilVoltage: config.coilVoltage ?? null,
     relaySubtype: config.relaySubtype ?? null,
-    moduleSubtype: config.moduleSubtype ?? null,
+    moduleSubtype: config.category === "SMART_HOME" ? (category === "PSU" ? "PSU_DC" : "PLC") : (config.moduleSubtype ?? null),
     modulesCount: config.modules,
     widthMm: config.modules * 17.5,
     powerLossWatts: powerFromSupply ?? estimatePowerLoss(category, config.poles, current),

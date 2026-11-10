@@ -256,6 +256,9 @@ export interface EditorElement {
   appliance?: string;
   /** Fáze 63: konkrétní výrobek z lišty výrobců (ABB-free@home, ABB i-bus KNX, Loxone, TapHome) – popis a sběrnice. */
   product?: string;
+  /** Fáze 81: barevná varianta panelu (objednací číslo v kusovníku) a montážní krabice (zapuštěná / povrchová). */
+  productVariant?: string;
+  productBox?: "flush" | "surface";
   /** Fáze 65: ruční zásuvkový okruh („Z1“ … „Z99“) – zásuvky se stejným okruhem jdou na jeden jistič; bez = automaticky. */
   socketCircuit?: string;
   /** Fáze 74: kód podružného rozváděče („RP1“) – jen u značky podružného rozváděče. */
@@ -844,13 +847,16 @@ function parseSmartExtras(value: unknown): Record<string, number> {
 }
 
 /** Fáze 63: rozměr předmětu, vlastní spotřebič a výrobek prvku z uložených dat; fáze 65 ruční zásuvkový okruh, fáze 74 rozváděč. */
-function parseExtras(element: Partial<EditorElement> & { item: string }, num: Num): Pick<EditorElement, "sizeMm" | "appliance" | "product" | "socketCircuit" | "boardCode" | "board" | "drive" | "headDrive"> {
+function parseExtras(element: Partial<EditorElement> & { item: string }, num: Num): Pick<EditorElement, "sizeMm" | "appliance" | "product" | "productVariant" | "productBox" | "socketCircuit" | "boardCode" | "board" | "drive" | "headDrive"> {
   const fixture = fixtureSpecOf(element.item);
   const size = element.sizeMm && typeof element.sizeMm === "object" ? element.sizeMm : null;
   return {
     ...(fixture && size ? { sizeMm: { w: clampFixture(num(size.w, fixture.w, 1, 1e5)), d: clampFixture(num(size.d, fixture.d, 1, 1e5)) } } : {}),
     ...(element.item === CUSTOM_APPLIANCE_ITEM && typeof element.appliance === "string" && /^[\w-]{1,40}$/.test(element.appliance) ? { appliance: element.appliance } : {}),
     ...(typeof element.product === "string" && productById(element.product) ? { product: element.product } : {}),
+    // Fáze 81: varianta a krabice jen ty, které výrobek nabízí
+    ...(typeof element.productVariant === "string" && productById(element.product)?.variants?.some((variant) => variant.id === element.productVariant) ? { productVariant: element.productVariant } : {}),
+    ...((element.productBox === "flush" || element.productBox === "surface") && productById(element.product)?.boxes?.some((box) => box.id === element.productBox) ? { productBox: element.productBox } : {}),
     ...(typeof element.socketCircuit === "string" && SOCKET_CIRCUIT.test(element.socketCircuit) ? { socketCircuit: element.socketCircuit } : {}),
     ...(element.item === SUBPANEL_ITEM && typeof element.boardCode === "string" && SUBPANEL_CODE.test(element.boardCode) ? { boardCode: element.boardCode } : {}),
     ...(element.item !== SUBPANEL_ITEM && element.item !== "panel" && typeof element.board === "string" && BOARD_CODE.test(element.board) ? { board: element.board } : {}),
@@ -1176,7 +1182,7 @@ export function convertForLevel(draft: FloorplanDraft, level: InstallLevel): Lev
     row.count += 1;
     changes.set(key, row);
     // Fáze 63: výrobek z lišty výrobců patří jen ke sběrnicové úrovni
-    return [{ ...element, item: next.id, controls: controlsLights(next) ? element.controls : [], product: undefined }];
+    return [{ ...element, item: next.id, controls: controlsLights(next) ? element.controls : [], product: undefined, productVariant: undefined, productBox: undefined }];
   };
   const clean = (elements: EditorElement[]) => elements.map((element) => ({ ...element, controls: element.controls.filter((id) => !removedIds.has(id)) }));
   const active = draft.elements.flatMap(convert);

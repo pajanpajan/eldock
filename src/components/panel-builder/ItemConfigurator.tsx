@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CATEGORY_LABELS, formatWatts, isMix } from "@/lib/panel-builder/catalog";
-import { catalogCategory, defaultConfig, toConfigCategory, type ConfigCategory, type ItemConfig } from "@/lib/panel-builder/configurator";
+import { catalogCategory, defaultConfig, toConfigCategory, withManufacturer, type ConfigCategory, type ItemConfig } from "@/lib/panel-builder/configurator";
 import { RECOGNITION } from "@/lib/panel-builder/project";
 import { cn } from "@/lib/utils";
 import { assignComponentAction, configureItemAction, deleteItemAction, lookupComponentAction, mergeItemsAction, searchCatalogAction, splitItemAction, updateItemTextAction } from "@/server/actions/panel-builder";
@@ -142,7 +142,8 @@ export function ItemConfigurator({
   function pickManufacturer(value: string | null) {
     setManufacturer(value);
     setChosen(true);
-    if (config) apply({ ...config, manufacturer: value });
+    // Fáze 81: systém chytré domácnosti jiného výrobce se se změnou výrobce zahodí
+    if (config) apply(withManufacturer(config, value));
   }
 
   function pickCategory(category: ConfigCategory) {
@@ -164,7 +165,8 @@ export function ItemConfigurator({
       const found = await lookupComponentAction({
         itemId: item.id,
         text,
-        hints: { category: config && config.category !== "OTHER" && config.category !== "ACCESSORY" ? config.category : null, poles: config?.poles ?? null, current: config?.ratedCurrentA ?? null, curve: config?.curve ?? null, manufacturer },
+        // Fáze 81: chytrá domácnost hledá v kategorii katalogu PLC / zdroj
+        hints: { category: config && config.category !== "OTHER" && config.category !== "ACCESSORY" ? (config.category === "SMART_HOME" ? catalogCategory(config) : config.category) : null, poles: config?.poles ?? null, current: config?.ratedCurrentA ?? null, curve: config?.curve ?? null, manufacturer },
       });
       if (!found.ok) return void toast.error(found.error);
       if (!found.data.component) return void toast.error("Přístroj se podle textu nepodařilo dohledat. Zkuste delší úsek typového označení.");

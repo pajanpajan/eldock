@@ -27,10 +27,11 @@ const rail = z.number().int().min(1).max(MAX_RAILS);
 const text = (max: number) => z.string().max(max).nullable().optional();
 
 const configSchema = z.object({
-  category: z.enum(["MCB", "RCD", "RCBO", "MAIN_SWITCH", "SPD", "CONTACTOR", "RELAY", "OTHER", "ACCESSORY"]),
+  category: z.enum(["MCB", "RCD", "RCBO", "MAIN_SWITCH", "SPD", "CONTACTOR", "RELAY", "SMART_HOME", "OTHER", "ACCESSORY"]),
   manufacturer: z.string().trim().max(40).nullable(),
   poles: z.string().max(8),
-  modules: z.number().positive().max(12),
+  // Fáze 81: Loxone Power Supply & Backup má 18 M
+  modules: z.number().positive().max(24),
   ratedCurrentA: z.number().positive().max(6300).nullable(),
   curve: text(2),
   breakingCapacityKa: z.number().positive().max(100).nullable().optional(),
@@ -43,6 +44,10 @@ const configSchema = z.object({
   relaySubtype: text(20),
   moduleSubtype: text(24),
   power: text(12),
+  // Fáze 81: chytrá domácnost – systém, funkce aktoru a počet kanálů
+  smartSystem: text(24),
+  smartRole: text(16),
+  channels: z.number().int().positive().max(256).nullable().optional(),
 });
 
 /** Šířka DIN lišty v modulech (preset nebo − / +). */
@@ -178,7 +183,7 @@ const chipSchema = z.object({
         numbered: z.boolean().optional(),
         preset: z
           .object({
-            category: z.enum(["MCB", "RCD", "RCBO", "MAIN_SWITCH", "SPD", "CONTACTOR", "RELAY", "OTHER", "ACCESSORY"]),
+            category: z.enum(["MCB", "RCD", "RCBO", "MAIN_SWITCH", "SPD", "CONTACTOR", "RELAY", "SMART_HOME", "OTHER", "ACCESSORY"]),
             poles: z.string().max(8).optional(),
             curve: z.string().max(2).optional(),
             ratedCurrentA: z.number().positive().max(6300).optional(),

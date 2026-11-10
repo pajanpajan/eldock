@@ -21,7 +21,8 @@ export const CATALOG_GROUPS: readonly CatalogGroup[] = [
   { id: "SWITCH", label: "Odpínače a hlavní vypínače", icon: "🔴", source: "component" },
   { id: "SPD", label: "Přepěťové ochrany (SPD)", icon: "🌩️", source: "component" },
   { id: "CONTACTOR", label: "Stykače a instalační relé (vč. ručních EN25-40N)", icon: "🔁", source: "component" },
-  { id: "SMART", label: "Smart Home / KNX / free@home a řídicí moduly", icon: "🏠", source: "component" },
+  // Fáze 81: akční členy, zdroje a systémové moduly ABB-free@home, ABB i-bus KNX, Loxone a TapHome (filtr systému)
+  { id: "SMART", label: "Chytrá domácnost / PLC / Aktory (free@home, KNX, Loxone, TapHome)", icon: "🏠", source: "component" },
   { id: "ENCLOSURE", label: "Rozvodnice a skříně rozváděčů (12M až 144M+)", icon: "🗄️", source: "enclosure" },
   { id: "WIRING", label: "Domovní vypínače, zásuvky a rámečky (Tango, Levit, Unica, Valena…)", icon: "🔌", source: "wiring" },
   { id: "ACCESSORY", label: "Svorkovnice, hřebeny a příslušenství", icon: "🔩", source: "component" },
@@ -86,14 +87,14 @@ export function componentGroupWhere(group: CatalogGroupId): Prisma.CatalogCompon
 }
 
 /** Rychlé filtry (dlaždice) ve 3. kroku podle skupiny. */
-export const GROUP_FILTERS: Partial<Record<CatalogGroupId, ("poles" | "current" | "curve" | "sensitivity" | "series")[]>> = {
+export const GROUP_FILTERS: Partial<Record<CatalogGroupId, ("poles" | "current" | "curve" | "sensitivity" | "series" | "system")[]>> = {
   MCB: ["poles", "curve", "current"],
   RCD: ["poles", "sensitivity", "current"],
   RCBO: ["curve", "current", "sensitivity"],
   SWITCH: ["poles", "current"],
   SPD: ["poles"],
   CONTACTOR: ["current"],
-  SMART: ["series"],
+  SMART: ["system", "series"],
   ACCESSORY: ["series"],
   WIRING: ["series"],
   ENCLOSURE: ["series"],

@@ -24,7 +24,7 @@ import {
   type PaletteItem,
 } from "@/lib/panel-builder/floorplan-editor";
 import { frameGangs, frameOf, isFrameable } from "@/lib/panel-builder/floorplan-frames";
-import { DESIGN_BRANDS, appearanceLabel, colorForSeries, seriesColors } from "@/lib/panel-builder/wiring-designs";
+import { DESIGN_BRANDS, appearanceLabel, colorForSeries, designSeriesOf, seriesColors } from "@/lib/panel-builder/wiring-designs";
 import { cn } from "@/lib/utils";
 
 import { AddToFrameControl, SaveTemplateControl } from "./FrameAssemblyPalette";
@@ -32,6 +32,8 @@ import { DeviceControls, LightOptions } from "./LightOptions";
 import { FixtureControls } from "./FixtureShape";
 import type { BasinZone } from "@/lib/panel-builder/fixtures";
 import { protectionLabel, type ApplianceSpec } from "@/lib/panel-builder/appliances";
+import { productById } from "@/lib/panel-builder/smart-catalog";
+import { boxOf, panelBomRows, variantOf } from "@/lib/panel-builder/smart-panels";
 
 /** Měřítko značky v detailu prvku (1 = 300 mm v půdorysu). */
 const SCALE_OPTIONS = [0.5, 0.75, 1, 1.5, 2, 3];
@@ -106,6 +108,49 @@ export function ElementToolbar({ x, y, unit, onRotate, onScale, onDelete, onPair
         </g>
       ))}
     </g>
+  );
+}
+
+/** Fáze 81: barva a krabice osazeného panelu (objednací čísla z kusovníku `panelBomRows`). */
+function PanelChoice({ draft, element, onChange }: { draft: FloorplanDraft; element: EditorElement; onChange: (patch: Partial<EditorElement>) => void }) {
+  const product = productById(element.product);
+  if (!product?.panel || (!product.variants?.length && !product.boxes?.length)) return null;
+  const variant = variantOf(product, element.productVariant);
+  const box = boxOf(product, element.productBox);
+  const seriesName = designSeriesOf(element.series ?? draft.series)?.series.name ?? null;
+  const rows = panelBomRows(product, { variant: variant?.id, box: box?.id, seriesName });
+  return (
+    <div className="flex flex-col gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/5 p-2 text-xs" data-testid="panel-choice">
+      {product.variants?.length ? (
+        <div className="flex flex-wrap items-center gap-1" role="radiogroup" aria-label="Barva panelu">
+          <span className="text-muted-foreground">Barva:</span>
+          {product.variants.map((option) => (
+            <button key={option.id} type="button" role="radio" aria-checked={variant?.id === option.id} onClick={() => onChange({ productVariant: option.id })} className={cn("flex items-center gap-1 rounded-full border px-1.5 py-0.5", variant?.id === option.id ? "border-primary bg-primary/15" : "border-border text-muted-foreground")}>
+              <span className="size-3 rounded-full border border-zinc-500" style={{ background: option.swatch }} aria-hidden />
+              {option.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {product.boxes?.length ? (
+        <div className="flex flex-wrap items-center gap-1" role="radiogroup" aria-label="Montážní krabice panelu">
+          <span className="text-muted-foreground">Krabice:</span>
+          {product.boxes.map((option) => (
+            <button key={option.id} type="button" role="radio" aria-checked={box?.id === option.id} onClick={() => onChange({ productBox: option.id })} className={cn("rounded-md border px-1.5 py-0.5", box?.id === option.id ? "border-primary bg-primary/15" : "border-border text-muted-foreground")}>
+              {option.id === "flush" ? "Zapuštěná" : "Povrchová"}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      <ul className="flex flex-col gap-0.5" data-testid="panel-bom">
+        {rows.map((row) => (
+          <li key={row.part + row.name} className="flex justify-between gap-2">
+            <span className="min-w-0 truncate">{row.name}</span>
+            <span className={cn("shrink-0 font-mono", row.verified ? "" : "text-amber-200")}>{row.mpn ?? "ověřte"}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -232,6 +277,8 @@ export function ElementDetail({
               </Button>
             </div>
           ) : null}
+          {/* Fáze 81: provedení panelu chytré domácnosti – barva a montážní krabice (do kusovníku) */}
+          <PanelChoice draft={draft} element={element} onChange={onChange} />
           {/* Fáze 59: víceramček – pořadí, otočení, vyjmutí a rozdělení */}
           {frame ? (
             <div className="flex flex-col gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/5 p-2 text-xs" data-testid="frame-detail">

@@ -76,11 +76,13 @@ export async function placeComponents(prisma: PrismaClient, projectId: string, i
   if (input.rail < 1 || input.rail > project.capacities.length) throw new WorkflowError("VALIDATION", "Neplatná DIN lišta.");
   const requested = Math.min(24, Math.max(1, Math.round(input.count)));
   const free = freeOnRail(project.capacities, project.items, input.rail);
-  const fits = Math.min(requested, Math.floor((free + 1e-9) / input.config.modules));
-  if (fits < 1) {
-    throw new WorkflowError("VALIDATION", `Na lištu ${input.rail} se ${decimal(input.config.modules)}M přístroj už nevejde (volno ${decimal(Math.max(0, free))} M). Rozšiřte lištu nebo přidejte další řadu.`);
-  }
+  // Fáze 81: kus chytré domácnosti má šířku podle katalogu (Miniserver 9 M, SysAP s adaptérem 7 M …)
   const component = await componentForConfig(prisma, input.config);
+  const config = input.config.category === "SMART_HOME" && component.modulesCount > 0 ? { ...input.config, modules: component.modulesCount } : input.config;
+  const fits = Math.min(requested, Math.floor((free + 1e-9) / config.modules));
+  if (fits < 1) {
+    throw new WorkflowError("VALIDATION", `Na lištu ${input.rail} se ${decimal(config.modules)}M přístroj už nevejde (volno ${decimal(Math.max(0, free))} M). Rozšiřte lištu nebo přidejte další řadu.`);
+  }
   const onRail = project.items.filter((item) => item.dinRailIndex === input.rail).sort((a, b) => a.positionOnRail - b.positionOnRail);
   const insertAt = Math.min(Math.max(1, input.position ?? onRail.length + 1), onRail.length + 1);
   const shifted = onRail.filter((item) => item.positionOnRail >= insertAt);
@@ -93,10 +95,10 @@ export async function placeComponents(prisma: PrismaClient, projectId: string, i
           catalogComponentId: component.id,
           dinRailIndex: input.rail,
           positionOnRail: insertAt + index,
-          modulesWidth: input.config.modules,
+          modulesWidth: config.modules,
           recognitionStatus: "VERIFIED",
           confidence: 1,
-          configJson: JSON.stringify(input.config),
+          configJson: JSON.stringify(config),
           circuitLabel: (input.circuitLabel ?? "").trim().slice(0, 80),
           designation: "-X99",
           sortOrder: input.rail * 100 + insertAt + index,
@@ -144,7 +146,8 @@ export async function previewConfig(prisma: PrismaClient, config: ItemConfig): P
     typeCode: component.typeCode,
     articleNumber: component.articleNumber,
     powerLossWatts: component.powerLossWatts,
-    modules: config.modules,
+    // Fáze 81: kus chytré domácnosti má šířku podle katalogu
+    modules: config.category === "SMART_HOME" && component.modulesCount > 0 ? component.modulesCount : config.modules,
     estimated: component.dataSource === "IEC_ESTIMATE",
     accessories: relations.map((relation) => ({ ...relation.child, relationType: relation.relationType, verified: relation.verified })),
     accessoryCount,

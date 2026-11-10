@@ -2,7 +2,13 @@
 // upsert podle objednacího čísla – nic se nemaže). ABB-free@home podle „Katalog: Domovní elektroinstalační materiál
 // 2026“ (ABB s.r.o., únor 2026, str. 271–277), ABB i-bus KNX stmívač a DALI brána podle knx.org, Loxone Dimmer
 // Extension podle produktového listu 100029. Ztrátový výkon výrobce v katalogu neuvádí → odhad dle IEC (označeno).
+//
+// Fáze 81: šířka, kategorie, Pv a datasheet kusů chytré domácnosti na DIN lištu jen ze `smart-home.ts`
+// (`smartDinComponents`) – ruční popisy a zdroje z Katalogu ABB 2026 zůstávají, chybějící kusy (TapHome, Loxone
+// Extensions, alternativy KNX, SysAP s adaptérem) přibudou. Řádky jsou vlastní katalog (import katalogu výrobců je
+// nepřepíše).
 
+import { smartDinComponents } from "../src/lib/panel-builder/smart-din-catalog";
 import type { ResearchComponent } from "./seed-catalog-research";
 
 const KATALOG = "Katalog ABB 2026 – Domovní elektroinstalační materiál (nizke-napeti.cz.abb.com, dokument 20641, únor 2026)";
@@ -24,7 +30,7 @@ const din = (series: string, typeCode: string, articleNumber: string, modulesCou
   ...extra,
 });
 
-export const ABB_2026_COMPONENTS: ResearchComponent[] = [
+const HAND_ROWS: ResearchComponent[] = [
   // ABB-free@home – systémové přístroje a akční členy na DIN lištu (str. 271–277)
   din("free@home", "PS-M-64.1.1", "2CDG510001R0011", 4, "Zdroj napájecí sběrnicový ABB-free@home 640 mA s tlumivkou, 30 V DC, šířka 4 M", `${KATALOG}, str. 273`, { category: "PSU", moduleSubtype: "PSU_DC", ratedCurrentA: 0.64 }),
   din("free@home", "SA-M-4.16.2.2", "2CDG510025R0011", 4, "Člen akční spínací 4násobný řadový, AC-1 16 A / AC-3 8 A, ruční ovládání, šířka 4 M", `${KATALOG}, str. 274`, { ratedCurrentA: 16 }),
@@ -49,3 +55,47 @@ export const ABB_2026_COMPONENTS: ResearchComponent[] = [
   // Loxone – stmívač 230 V na DIN lištu
   { manufacturer: "Loxone", series: "Loxone Extensions", typeCode: "Dimmer Extension", articleNumber: "LOXONE:100029", category: "PLC", poles: "1P", ratedCurrentA: 0, moduleSubtype: "PLC", modulesCount: 9, powerLossWatts: null, description: "Dimmer Extension – 4 stmívací výstupy 230 V a 8 digitálních vstupů, montáž na DIN lištu, 9 TE (zatížení kanálu ověřte v datasheetu)", datasheetUrl: "https://www.loxone.com/wp-content/uploads/datasheets/Datasheet_DimmerExtension.pdf", source: "Loxone – produktový list 100029" },
 ];
+
+/** Fáze 81: kusy na DIN lištu všech čtyř systémů chytré domácnosti (jeden zdroj `smart-home.ts`). */
+export const SMART_DIN_ROWS: ResearchComponent[] = smartDinComponents().map((row) => ({
+  manufacturer: row.manufacturer,
+  series: row.series,
+  typeCode: row.typeCode,
+  articleNumber: row.articleNumber,
+  category: row.category,
+  poles: row.poles,
+  ratedCurrentA: row.ratedCurrentA,
+  moduleSubtype: row.moduleSubtype,
+  modulesCount: row.modulesCount,
+  powerLossWatts: row.powerLossWatts,
+  lossEstimated: row.lossEstimated,
+  description: row.description,
+  datasheetUrl: row.datasheetUrl,
+  source: row.source,
+  ownCatalog: true,
+}));
+
+/** Ruční řádek Katalogu ABB 2026 + data výpočtu se stejným objednacím číslem; kusy bez ručního řádku se připojí. */
+export function mergeSmartRows(hand: readonly ResearchComponent[], smart: readonly ResearchComponent[]): ResearchComponent[] {
+  const byArticle = new Map(smart.map((row) => [row.articleNumber, row]));
+  const merged = hand.map((row) => {
+    const own = byArticle.get(row.articleNumber);
+    if (!own) return row;
+    byArticle.delete(row.articleNumber);
+    return {
+      ...row,
+      series: own.series,
+      category: own.category,
+      moduleSubtype: own.moduleSubtype,
+      modulesCount: own.modulesCount,
+      ratedCurrentA: row.ratedCurrentA || own.ratedCurrentA,
+      powerLossWatts: own.powerLossWatts ?? row.powerLossWatts,
+      lossEstimated: own.lossEstimated,
+      datasheetUrl: own.datasheetUrl ?? row.datasheetUrl,
+      ownCatalog: true,
+    };
+  });
+  return [...merged, ...byArticle.values()];
+}
+
+export const ABB_2026_COMPONENTS: ResearchComponent[] = mergeSmartRows(HAND_ROWS, SMART_DIN_ROWS);

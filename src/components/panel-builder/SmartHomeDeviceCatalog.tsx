@@ -11,6 +11,7 @@ import { familyLink } from "@/lib/panel-builder/series-links";
 import { DEVICE_TABS, productsOfTab, type CatalogProduct, type DeviceTab, type ProductFamily } from "@/lib/panel-builder/smart-catalog";
 import { moduleOf, mpnOf, productBadges } from "@/lib/panel-builder/smart-datasheet";
 import { smartSystemOf, type SmartSystemId } from "@/lib/panel-builder/smart-home";
+import { boxOf, variantOf, withVariant } from "@/lib/panel-builder/smart-panels";
 import { cn } from "@/lib/utils";
 
 import { SmartHomeDeviceIllustration, type DeviceTone } from "./SmartHomeDeviceIllustration";
@@ -18,6 +19,14 @@ import { SmartHomeDeviceIllustration, type DeviceTone } from "./SmartHomeDeviceI
 // Fáze 65: obrázkový katalog chytré domácnosti (místo textového boxu z fáze 63) – záložky podkategorií a mřížka karet:
 // vektorový náhled přístroje, název a popis funkce, štítky parametrů, objednací číslo a akce (🎯 Osadit do půdorysu /
 // Osazeno X ks, u DIN modulů Automaticky v rozváděči X ks s ručním navýšením, 📄 Datasheet).
+// Fáze 81: panely s výběrem barvy (objednací číslo varianty) a montážní krabice; u DIN modulů souhrn „V rozváděči:
+// X ks (Y automaticky z půdorysu + Z ručně přidáno)“ – ruční kusy se ukládají v půdorysu (`smartExtras`).
+
+/** Fáze 81: volba varianty a krabice panelu při vložení do půdorysu. */
+export interface ProductChoice {
+  variant?: string;
+  box?: "flush" | "surface";
+}
 
 export interface SmartCatalogProps {
   family: ProductFamily;
@@ -33,13 +42,19 @@ export interface SmartCatalogProps {
   extras: Readonly<Record<string, number>>;
   onSystem: (system: string) => void;
   onBusLevel: () => void;
-  onPlace: (product: CatalogProduct) => void;
+  onPlace: (product: CatalogProduct, choice?: ProductChoice) => void;
   onColor: (color: string) => void;
   onExtra: (moduleId: string, delta: 1 | -1) => void;
   onDatasheet: (product: CatalogProduct) => void;
 }
 
 function DeviceCard({ product, system, props }: { product: CatalogProduct; system: SmartSystemId; props: SmartCatalogProps }) {
+  const [variantId, setVariantId] = useState<string | null>(null);
+  const [boxId, setBoxId] = useState<"flush" | "surface" | null>(null);
+  const variant = variantOf(product, variantId);
+  const box = boxOf(product, boxId);
+  // Fáze 81: karta a technický list ukazují zvolenou barvu (objednací číslo a typ varianty)
+  const shown = variant ? withVariant(product, variant.id) : product;
   const bus = props.installation === "bus_loxone";
   const dinModule = moduleOf(product, system);
   const placeable = Boolean(product.item) && product.tab !== "din";
@@ -48,7 +63,8 @@ function DeviceCard({ product, system, props }: { product: CatalogProduct; syste
   const chosen = props.smartSystem === system;
   const auto = dinModule ? props.planned(dinModule.id) : 0;
   const extra = dinModule ? (props.extras[dinModule.id] ?? 0) : 0;
-  const mpn = mpnOf(product);
+  const mpn = mpnOf(shown);
+  const total = auto + extra;
   // Fáze 78: oficiální náhled výrobce z public/catalog-images (se zdrojem a licencí), jinak vektorový náhled
   const photo = productImage(product.id, CATALOG_IMAGES);
   return (
@@ -58,10 +74,17 @@ function DeviceCard({ product, system, props }: { product: CatalogProduct; syste
           // eslint-disable-next-line @next/next/no-img-element -- schválené náhledy výrobců z public/catalog-images (statické soubory)
           <img src={photo.src} alt={`${product.label} – náhled výrobce`} title={`Foto: ${photo.source} · ${photo.license}`} className="size-20 shrink-0 rounded-md bg-white object-contain p-1" data-testid="device-photo" />
         ) : (
-          <SmartHomeDeviceIllustration product={product} system={system} tone={props.tone} className="size-20 shrink-0 rounded-md bg-muted/40 p-1" />
+          <SmartHomeDeviceIllustration product={product} variant={variant?.id} system={system} tone={props.tone} className="size-20 shrink-0 rounded-md bg-muted/40 p-1" />
         )}
         <div className="min-w-0">
-          <h4 className="text-sm font-bold leading-tight">{product.label}</h4>
+          <h4 className="text-sm font-bold leading-tight">
+            {product.label}
+            {product.favorite ? (
+              <span className="ml-1.5 inline-block rounded-full border border-amber-400/60 bg-amber-500/10 px-1.5 align-middle text-[10px] font-semibold text-amber-200" data-testid="device-favorite">
+                ⭐ Oblíbený
+              </span>
+            ) : null}
+          </h4>
           <p className="mt-0.5 line-clamp-3 text-[11px] text-muted-foreground">{product.description}</p>
         </div>
       </div>
@@ -72,16 +95,69 @@ function DeviceCard({ product, system, props }: { product: CatalogProduct; syste
           </span>
         ))}
         {mpn ? (
-          <span className={cn("rounded border px-1.5 py-0.5 font-mono text-[10px]", product.verified === false ? "border-amber-400/60 text-amber-200" : "border-border text-muted-foreground")}>
+          <span className={cn("rounded border px-1.5 py-0.5 font-mono text-[10px]", shown.verified === false ? "border-amber-400/60 text-amber-200" : "border-border text-muted-foreground")} data-testid="device-mpn">
             MPN {mpn}
-            {product.verified === false ? " (ověřte)" : ""}
+            {shown.verified === false ? " (ověřte)" : ""}
+          </span>
+        ) : variant ? (
+          <span className="rounded border border-amber-400/60 px-1.5 py-0.5 text-[10px] text-amber-200" data-testid="device-mpn">
+            MPN: ověřte u výrobce
           </span>
         ) : null}
       </div>
+      {product.variants?.length ? (
+        <div className="flex flex-wrap items-center gap-1 text-[10px]" role="radiogroup" aria-label={`Barva provedení – ${product.label}`} data-testid="device-variants">
+          {product.variants.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              role="radio"
+              aria-checked={variant?.id === option.id}
+              onClick={() => setVariantId(option.id)}
+              className={cn("flex items-center gap-1 rounded-full border px-1.5 py-0.5", variant?.id === option.id ? "border-primary bg-primary/15 text-foreground" : "border-border text-muted-foreground")}
+              title={option.mpn ? `${option.typeCode ?? ""} ${option.mpn}`.trim() : "objednací číslo ověřte u výrobce"}
+              data-color={option.id}
+            >
+              <span className="size-3 rounded-full border border-zinc-500" style={{ background: option.swatch }} aria-hidden />
+              {option.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {product.boxes?.length ? (
+        <div className="flex flex-wrap items-center gap-1 text-[10px]" role="radiogroup" aria-label={`Montážní krabice – ${product.label}`} data-testid="device-boxes">
+          {product.boxes.map((option) => {
+            const number = (variant && option.mpn[variant.id]) ?? option.mpn["*"] ?? null;
+            return (
+              <button
+                key={option.id}
+                type="button"
+                role="radio"
+                aria-checked={box?.id === option.id}
+                onClick={() => setBoxId(option.id)}
+                className={cn("rounded-md border px-1.5 py-0.5 text-left", box?.id === option.id ? "border-primary bg-primary/15 text-foreground" : "border-border text-muted-foreground")}
+                data-box={option.id}
+              >
+                {option.id === "flush" ? "Zapuštěná" : "Povrchová"} krabice <span className="font-mono">{number ?? "(ověřte)"}</span>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
       <div className="mt-auto flex flex-wrap items-center gap-1.5">
         {placeable ? (
           <>
-            <Button type="button" size="sm" variant={active ? "default" : "outline"} className="gap-1" aria-pressed={active} disabled={!bus} onClick={() => props.onPlace(product)} data-product={product.id} title={product.noBus ? "bezdrátově – bez sběrnicového kabelu" : "vloží prvek do místnosti v půdorysu"}>
+            <Button
+              type="button"
+              size="sm"
+              variant={active ? "default" : "outline"}
+              className="gap-1"
+              aria-pressed={active}
+              disabled={!bus}
+              onClick={() => props.onPlace(product, { ...(variant ? { variant: variant.id } : {}), ...(box ? { box: box.id } : {}) })}
+              data-product={product.id}
+              title={product.noBus ? "bez sběrnicového kabelu (bezdrátově / LAN)" : "vloží prvek do místnosti v půdorysu"}
+            >
               <Target className="size-3.5" aria-hidden /> Osadit do půdorysu
             </Button>
             {placed ? (
@@ -94,8 +170,11 @@ function DeviceCard({ product, system, props }: { product: CatalogProduct; syste
         {dinModule ? (
           <div className="flex flex-wrap items-center gap-1 text-[11px]" data-testid="din-count" data-module={dinModule.id}>
             <span className="text-muted-foreground">
-              Automaticky v rozváděči: <b className="text-foreground" data-testid="din-auto">{auto} ks</b>
-              {extra ? <b className="text-sky-300"> · ručně +{extra}</b> : null}
+              V rozváděči:{" "}
+              <b className="text-foreground" data-testid="din-total">
+                {total} ks
+              </b>{" "}
+              (<span data-testid="din-auto">{auto}</span> automaticky z půdorysu + <b className={extra ? "text-sky-300" : ""} data-testid="din-manual">{extra}</b> ručně přidáno)
             </span>
             <Button type="button" size="icon-sm" variant="outline" aria-label={`Ubrat ručně přidaný kus ${product.typeCode ?? product.label}`} disabled={!bus || !chosen || extra === 0} onClick={() => props.onExtra(dinModule.id, -1)} data-testid="din-remove">
               <Minus className="size-3.5" aria-hidden />
@@ -106,7 +185,7 @@ function DeviceCard({ product, system, props }: { product: CatalogProduct; syste
           </div>
         ) : null}
         {!placeable && !dinModule && product.note ? <span className="text-[10px] text-muted-foreground">{product.note}</span> : null}
-        <Button type="button" size="sm" variant="ghost" className="ml-auto gap-1" onClick={() => props.onDatasheet(product)} data-testid="datasheet-open" aria-label={`Datasheet: ${product.label}`}>
+        <Button type="button" size="sm" variant="ghost" className="ml-auto gap-1" onClick={() => props.onDatasheet(shown)} data-testid="datasheet-open" aria-label={`Datasheet: ${product.label}`}>
           <FileText className="size-3.5" aria-hidden /> Datasheet
         </Button>
       </div>

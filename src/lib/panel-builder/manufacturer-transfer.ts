@@ -5,6 +5,7 @@
 import { catalogCategory, describeConfig, matchConfig, type CatalogLike, type ItemConfig } from "./configurator";
 import { sameManufacturer } from "./matching";
 import { SMART_SYSTEMS } from "./smart-home";
+import { isCatalogModule, smartCatalogArticle } from "./smart-din-catalog";
 
 /** exact = stejný přístroj výrobce i šířka, width = jiná šířka, estimate = výrobce kus nemá (parametry zůstanou, Pv odhad), keep = systémový prvek / bez konfigurace. */
 export type TransferStatus = "exact" | "width" | "estimate" | "keep";
@@ -45,10 +46,12 @@ export interface TransferRow {
  * jističů na jiného výrobce zůstávají (jinak by vznikl nesmyslný „Eaton Miniserver“).
  */
 const SYSTEM_SUBTYPES = new Set(["PLC", "SMART_ACTUATOR", "BUS_PSU", "SYSTEM_MODULE"]);
-export const isSystemDevice = (config: ItemConfig | null) => Boolean(config && (config.category === "OTHER" || config.category === "ACCESSORY") && config.moduleSubtype && SYSTEM_SUBTYPES.has(config.moduleSubtype));
+export const isSystemDevice = (config: ItemConfig | null) =>
+  Boolean(config && (config.category === "SMART_HOME" || ((config.category === "OTHER" || config.category === "ACCESSORY") && config.moduleSubtype && SYSTEM_SUBTYPES.has(config.moduleSubtype))));
 
 /** Fáze 61: objednací čísla přístrojů systémů chytré domácnosti (i sběrnicové zdroje free@home / KNX s podtypem „zdroj DC“). */
-const SMART_ARTICLES = new Set(SMART_SYSTEMS.flatMap((system) => system.modules.map((unit) => unit.articleNumber).filter((number): number is string => Boolean(number))));
+// Fáze 81: i klíče kusů v katalogu prvků (Loxone „LOXONE:100335“, TapHome „TAPHOME:6DO“) a kategorie Chytrá domácnost
+const SMART_ARTICLES = new Set(SMART_SYSTEMS.flatMap((system) => system.modules.flatMap((unit) => [unit.articleNumber, isCatalogModule(unit) ? smartCatalogArticle(system.id, unit) : null]).filter((number): number is string => Boolean(number))));
 export const isSmartArticle = (articleNumber: string | null | undefined) => Boolean(articleNumber && SMART_ARTICLES.has(articleNumber));
 
 /** Převodní tabulka: pro každý prvek nejbližší kus cílového výrobce se stejnými určujícími parametry. */

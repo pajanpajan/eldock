@@ -20,6 +20,7 @@ import { sameManufacturer } from "@/lib/panel-builder/matching";
 import { isPhaseAssignment, type PhaseAssignment } from "@/lib/panel-builder/tree";
 import { buildSearchText } from "@/lib/panel-builder/catalog";
 import { smartPlanOf } from "@/lib/panel-builder/smart-home-plan";
+import { isCatalogModule, smartCatalogArticle } from "@/lib/panel-builder/smart-din-catalog";
 import { classicDeviceModules, fieldDemand } from "@/lib/panel-builder/field-devices";
 import { supplyById, supplyColumns } from "@/lib/panel-builder/supply";
 
@@ -212,26 +213,32 @@ export interface FloorplanProjectInput extends Omit<CreateProjectInput, "photoUr
   manufacturer?: string | null;
 }
 
-/** Fáze 61: katalogový kus podle objednacího čísla (akční člen chytré domácnosti); bez čísla odhad podle konfigurace. */
+/**
+ * Fáze 61: katalogový kus podle objednacího čísla (akční člen chytré domácnosti); bez čísla odhad podle konfigurace.
+ * Fáze 81: přednost má klíč kusu v katalogu prvků (`catalogArticle` – Loxone „LOXONE:100335“ jako v importu katalogu
+ * výrobců, TapHome „TAPHOME:6DO“), pak objednací číslo; chybějící kus se založí s Pv modulu (jinak odhad).
+ */
 async function componentForArticle(prisma: PrismaClient, article: NonNullable<SwitchboardResult["devices"][number]["article"]>, config: Parameters<typeof componentForConfig>[1]) {
-  if (!article.articleNumber) return componentForConfig(prisma, { ...config, manufacturer: article.manufacturer });
-  const existing = await prisma.catalogComponent.findUnique({ where: { articleNumber: article.articleNumber } });
+  const keys = [article.catalogArticle, article.articleNumber].filter((key): key is string => Boolean(key));
+  if (!keys.length) return componentForConfig(prisma, { ...config, manufacturer: article.manufacturer });
+  const found = await prisma.catalogComponent.findMany({ where: { articleNumber: { in: keys } } });
+  const existing = keys.map((key) => found.find((row) => row.articleNumber === key)).find(Boolean);
   if (existing) return existing;
   const fields = {
     manufacturer: article.manufacturer,
     series: article.series ?? article.manufacturer,
     typeCode: article.typeCode,
-    articleNumber: article.articleNumber,
+    articleNumber: keys[0],
     category: config.moduleSubtype === "PSU_DC" ? ("PSU" as const) : ("PLC" as const),
     poles: "1P",
     ratedCurrentA: 0,
     moduleSubtype: config.moduleSubtype ?? "PLC",
     modulesCount: config.modules,
     widthMm: config.modules * 17.5,
-    powerLossWatts: Math.max(1, config.modules * 0.5),
+    powerLossWatts: article.powerLossW ?? Math.max(1, config.modules * 0.5),
     description: article.description,
   };
-  return prisma.catalogComponent.create({ data: { ...fields, dataSource: "IEC_ESTIMATE", searchText: buildSearchText(fields) } });
+  return prisma.catalogComponent.create({ data: { ...fields, dataSource: article.lossVerified ? "SEED_CATALOG" : "IEC_ESTIMATE", searchText: buildSearchText(fields) } });
 }
 
 /** Fáze přístroje ve stromu (1P+N / 2P → „L1,N“, 4P / 3P+N → „L1,L2,L3,N“). */
@@ -309,7 +316,19 @@ export async function createProjectFromFloorplan(prisma: PrismaClient, input: Fl
   const smartPlan = smartPlanOf(draft);
   // Fáze 77: obecné moduly výpočtu (LED 24 V PWM, binární vstupy) a zdroje LED nejsou od výrobce systému
   const makerOf = (unit: { role: string; source: string }) => (unit.role === "psu_led" ? "MEAN WELL" : unit.source.startsWith("obecný modul") ? "Obecný (doplňte výrobce)" : smartPlan!.system.manufacturer);
-  const smart = smartPlan?.modules.map((unit) => ({ role: unit.role, label: unit.label, manufacturer: makerOf(unit), series: smartPlan.system.label.replace(/\s*\(.*\)$/, ""), typeCode: unit.typeCode, articleNumber: unit.articleNumber, modules: unit.modules }));
+  // Fáze 81: kus katalogu prvků podle klíče (`smartCatalogArticle` – stejně jako seed) a ztrátový výkon Pv modulu
+  const smart = smartPlan?.modules.map((unit) => ({
+    role: unit.role,
+    label: unit.label,
+    manufacturer: makerOf(unit),
+    series: smartPlan.system.label.replace(/\s*\(.*\)$/, ""),
+    typeCode: unit.typeCode,
+    articleNumber: unit.articleNumber,
+    modules: unit.modules,
+    catalogArticle: isCatalogModule(unit) ? smartCatalogArticle(smartPlan.system.id, unit) : null,
+    powerLossW: unit.lossW ?? null,
+    lossVerified: unit.lossFrom === "katalog",
+  }));
   // Fáze 77: klasická instalace – řídicí jednotka DALI, zdroje a řadiče LED 24 V, hlídač zaplavení s uzávěrem vody
   const field = draft.installation === "bus_loxone" ? null : classicDeviceModules(fieldDemand(draft));
   const switchboard = (plan: Parameters<typeof buildSwitchboardFromCircuits>[0], withSmart: boolean) => {

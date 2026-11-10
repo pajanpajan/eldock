@@ -5,7 +5,7 @@ import { Search } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 import { DEVICE_BRANDS, brandOf, filterBrands, type Brand } from "@/lib/panel-builder/brands";
-import { CONFIG_CATEGORIES, CONFIG_FIELDS, isOptionActive, type ConfigCategory, type ConfigField, type ItemConfig } from "@/lib/panel-builder/configurator";
+import { CONFIG_CATEGORIES, configFields, isOptionActive, type ConfigCategory, type ConfigField, type ItemConfig } from "@/lib/panel-builder/configurator";
 import { cn } from "@/lib/utils";
 
 import { ManufacturerLogo } from "./ManufacturerLogo";
@@ -75,7 +75,8 @@ export function CascadePicker({
   const [query, setQuery] = useState("");
   const brand = brandOf(manufacturer);
   const brands = filterBrands(DEVICE_BRANDS, query);
-  const allFields = config ? CONFIG_FIELDS[config.category] : [];
+  // Fáze 81: u chytré domácnosti navíc řada / systém výrobce (ABB-free@home · ABB i-bus KNX)
+  const allFields = configFields(config);
   // Ruční šířka patří do akordeonu Pokročilé – hlavní kaskáda je o třetinu kratší
   const fields = allFields.filter((field) => field.key !== "width");
   const widthField = chosen && !expanded ? allFields.find((field) => field.key === "width") : undefined;

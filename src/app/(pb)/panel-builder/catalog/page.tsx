@@ -13,6 +13,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { brandOf } from "@/lib/panel-builder/brands";
 import { CATALOG_GROUPS, GROUP_FILTERS, catalogGroupOf, isCatalogGroup, type CatalogGroupId } from "@/lib/panel-builder/catalog-groups";
 import { CATEGORY_LABELS, formatWatts } from "@/lib/panel-builder/catalog";
+import { SMART_SYSTEM_FILTER_LABEL, smartDinProfile } from "@/lib/panel-builder/smart-din-catalog";
+import type { SmartSystemId } from "@/lib/panel-builder/smart-home";
 import { WIRING_CATEGORIES, frameLabel } from "@/lib/panel-builder/wiring-devices";
 import { cn } from "@/lib/utils";
 import { DatasheetDialog } from "@/components/panel-builder/DatasheetDialog";
@@ -54,8 +56,9 @@ export default async function CatalogPage({ searchParams }: PageProps<"/panel-bu
     curve: one(params.curve),
     sensitivity: one(params.sensitivity) ? Number(params.sensitivity) : undefined,
     series: one(params.series),
+    system: one(params.system),
   };
-  const current: Record<string, string | undefined> = { brand, group, poles: filter.poles, current: filter.current ? String(filter.current) : undefined, curve: filter.curve, sensitivity: filter.sensitivity ? String(filter.sensitivity) : undefined, series: filter.series };
+  const current: Record<string, string | undefined> = { brand, group, poles: filter.poles, current: filter.current ? String(filter.current) : undefined, curve: filter.curve, sensitivity: filter.sensitivity ? String(filter.sensitivity) : undefined, series: filter.series, system: filter.system };
 
   const header = (
     <PageHeader
@@ -82,10 +85,14 @@ export default async function CatalogPage({ searchParams }: PageProps<"/panel-bu
   if (brand && group) {
     const result = await getGroupItems(brand, group, filter);
     const filters = GROUP_FILTERS[group] ?? [];
-    const tileRow = (key: "poles" | "current" | "curve" | "sensitivity" | "series", label: string, values: (string | number)[], format: (value: string | number) => string) =>
+    const tileRow = (key: "poles" | "current" | "curve" | "sensitivity" | "series" | "system", label: string, values: (string | number)[], format: (value: string | number) => string) =>
       values.length > 1 ? (
-        <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label={label}>
+        <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label={label} data-filter={key}>
           <span className="w-28 text-xs text-muted-foreground">{label}</span>
+          {/* Fáze 81: „Vše“ zruší filtr */}
+          <Link href={href(current, { [key]: undefined })} aria-pressed={!current[key]} className={cn("min-h-8 rounded-md border px-2.5 py-1 text-xs font-semibold", !current[key] ? "border-primary bg-primary text-primary-foreground" : "border-border hover:border-primary/60")}>
+            Vše
+          </Link>
           {values.map((value) => {
             const active = current[key] === String(value);
             return (
@@ -96,7 +103,7 @@ export default async function CatalogPage({ searchParams }: PageProps<"/panel-bu
           })}
         </div>
       ) : null;
-    const options = result.options as Partial<Record<"poles" | "current" | "curve" | "sensitivity" | "series", (string | number)[]>>;
+    const options = result.options as Partial<Record<"poles" | "current" | "curve" | "sensitivity" | "series" | "system", (string | number)[]>>;
     return (
       <PageTransition>
         {header}
@@ -115,6 +122,7 @@ export default async function CatalogPage({ searchParams }: PageProps<"/panel-bu
             {filters.includes("curve") ? tileRow("curve", "Charakteristika", options.curve ?? [], String) : null}
             {filters.includes("current") ? tileRow("current", "Jmenovitý proud", options.current ?? [], (value) => `${value} A`) : null}
             {filters.includes("sensitivity") ? tileRow("sensitivity", "Citlivost", options.sensitivity ?? [], (value) => `${value} mA`) : null}
+            {filters.includes("system") ? tileRow("system", "Systém", options.system ?? [], (value) => SMART_SYSTEM_FILTER_LABEL[value as SmartSystemId] ?? String(value)) : null}
             {filters.includes("series") ? tileRow("series", "Řada", options.series ?? [], String) : null}
           </div>
           <p className="text-sm text-muted-foreground" data-testid="catalog-count">
@@ -141,7 +149,18 @@ export default async function CatalogPage({ searchParams }: PageProps<"/panel-bu
                   {result.rows.map((row) => (
                     <TableRow key={row.id}>
                       <TableCell className="text-xs text-muted-foreground">{row.series}</TableCell>
-                      <TableCell className="font-medium">{row.typeCode}</TableCell>
+                      <TableCell className="font-medium">
+                        {row.typeCode}
+                        {/* Fáze 81: funkce aktoru chytré domácnosti */}
+                        {(() => {
+                          const smart = row.category === "PLC" || row.category === "PSU" ? smartDinProfile(row) : null;
+                          return smart ? (
+                            <span className="ml-1.5 rounded px-1.5 py-0.5 text-[10px] font-bold text-white" style={{ background: smart.color }} data-testid="catalog-smart-role">
+                              {smart.label}
+                            </span>
+                          ) : null;
+                        })()}
+                      </TableCell>
                       <TableCell className="font-mono text-xs">{row.articleNumber}</TableCell>
                       <TableCell className="text-xs">{CATEGORY_LABELS[row.category]}</TableCell>
                       <TableCell>{row.poles}</TableCell>
