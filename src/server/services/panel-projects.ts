@@ -20,6 +20,7 @@ import { sameManufacturer } from "@/lib/panel-builder/matching";
 import { isPhaseAssignment, type PhaseAssignment } from "@/lib/panel-builder/tree";
 import { buildSearchText } from "@/lib/panel-builder/catalog";
 import { smartPlanOf } from "@/lib/panel-builder/smart-home-plan";
+import { classicDeviceModules, fieldDemand } from "@/lib/panel-builder/field-devices";
 import { supplyById, supplyColumns } from "@/lib/panel-builder/supply";
 
 // Správa projektů AI Panel Builderu (fáze 48): smazání (jednotlivě i hromadně) s vrácením kreditu
@@ -173,6 +174,8 @@ async function createPlanProject(
         // Příklad typu v závorce („např. …“) nepatří do funkce obvodu
         circuitLabel: device.label.replace(/\s*\(např\.[^)]*\)/, "").slice(0, 80),
         designation: device.designation,
+        // Fáze 77: modul bez objednacího čísla (zdroj LED, obecný řadič PWM, hlídač zaplavení) drží svůj typ i v dokumentaci
+        ...(device.article && !device.article.articleNumber ? { customTypeCode: device.article.typeCode.slice(0, 60) } : {}),
         sortOrder: rail * 100 + position,
       });
     }
@@ -304,10 +307,15 @@ export async function createProjectFromFloorplan(prisma: PrismaClient, input: Fl
   const own = enclosures.filter((row) => sameManufacturer(row.manufacturer, manufacturer));
   // Fáze 61: chytrá domácnost – akční členy, zdroj a rozhraní zvoleného systému do rozváděče
   const smartPlan = smartPlanOf(draft);
-  const smart = smartPlan?.modules.map((unit) => ({ role: unit.role, label: unit.label, manufacturer: smartPlan.system.manufacturer, series: smartPlan.system.label.replace(/\s*\(.*\)$/, ""), typeCode: unit.typeCode, articleNumber: unit.articleNumber, modules: unit.modules }));
+  // Fáze 77: obecné moduly výpočtu (LED 24 V PWM, binární vstupy) a zdroje LED nejsou od výrobce systému
+  const makerOf = (unit: { role: string; source: string }) => (unit.role === "psu_led" ? "MEAN WELL" : unit.source.startsWith("obecný modul") ? "Obecný (doplňte výrobce)" : smartPlan!.system.manufacturer);
+  const smart = smartPlan?.modules.map((unit) => ({ role: unit.role, label: unit.label, manufacturer: makerOf(unit), series: smartPlan.system.label.replace(/\s*\(.*\)$/, ""), typeCode: unit.typeCode, articleNumber: unit.articleNumber, modules: unit.modules }));
+  // Fáze 77: klasická instalace – řídicí jednotka DALI, zdroje a řadiče LED 24 V, hlídač zaplavení s uzávěrem vody
+  const field = draft.installation === "bus_loxone" ? null : classicDeviceModules(fieldDemand(draft));
   const switchboard = (plan: Parameters<typeof buildSwitchboardFromCircuits>[0], withSmart: boolean) => {
-    const preferred = own.length ? buildSwitchboardFromCircuits(plan, { mode: draft.installation, enclosures: own, supplyPhases: supply.phases, ...(withSmart ? { smart } : {}) }) : null;
-    return preferred?.enclosure ? preferred : buildSwitchboardFromCircuits(plan, { mode: draft.installation, enclosures, supplyPhases: supply.phases, ...(withSmart ? { smart } : {}) });
+    const extra = withSmart ? { smart, ...(field?.modules.length ? { devices: field.modules } : {}) } : {};
+    const preferred = own.length ? buildSwitchboardFromCircuits(plan, { mode: draft.installation, enclosures: own, supplyPhases: supply.phases, ...extra }) : null;
+    return preferred?.enclosure ? preferred : buildSwitchboardFromCircuits(plan, { mode: draft.installation, enclosures, supplyPhases: supply.phases, ...extra });
   };
   const header = { name: input.name, customerName: input.customerName, installationSite: input.installationSite, companyId: input.companyId, manufacturerInfo: input.manufacturerInfo, createdById: input.createdById, supplySystem: supply.id };
   // Fáze 57: prostředí dle ČSN 33 2000-5-51 ed. 3 zvolené v půdorysu = potvrzené prostředí dokumentace
@@ -326,7 +334,7 @@ export async function createProjectFromFloorplan(prisma: PrismaClient, input: Fl
       ...(multiple ? { boardCode: MAIN_BOARD } : {}),
     },
     manufacturer,
-    afterItems: async (items) => [...(smartPlan?.warnings ?? []).map((warning) => `Chytrá domácnost (${smartPlan!.system.label}): ${warning}`), ...(await assignWiringDevices(prisma, items, mainPlan, build, draft, multiple ? elementsOf(MAIN_BOARD) : undefined))],
+    afterItems: async (items) => [...(smartPlan?.warnings ?? []).map((warning) => `Chytrá domácnost (${smartPlan!.system.label}): ${warning}`), ...(field?.warnings ?? []), ...(await assignWiringDevices(prisma, items, mainPlan, build, draft, multiple ? elementsOf(MAIN_BOARD) : undefined))],
   });
   if (!multiple) return { ...main, boards: [] as { code: string; id: string }[] };
   const mainProject = await prisma.panelBoardProject.findUniqueOrThrow({ where: { id: main.id }, select: { code: true } });

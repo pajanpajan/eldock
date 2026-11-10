@@ -272,6 +272,14 @@ export const THERMOSTAT_CABLE = "CYKY-J 3×1,5";
 export const BUS_LEG_CABLE = "CAT7 / KNX J-Y(St)Y 2×2×0,8 (sběrnice 24 V DC)";
 /** Fáze 52 – sběrnicová Smart Home: každý světelný vývod samostatně do rozváděče (hvězda). */
 export const STAR_LIGHT_CABLE = "CYKY-J 3×1,5";
+/** Fáze 77: čidlo na binární vstup (okenní / dveřní kontakt, záplavové čidlo). */
+export const SENSOR_CABLE = "SYKFY 2×2×0,5 (binární vstup)";
+/** Fáze 77: termostatická hlavice / servopohon → akční člen vytápění (sběrnice) nebo termostat místnosti (klasika). */
+export const HEAD_CABLE = "CYSY 2×1 (termopohon hlavice)";
+/** Fáze 77: pohon žaluzie 24 V DC / sběrnicový (Loxone, Somfy, KNX). */
+export const BLIND_DC_CABLE = "SYKFY 3×2×0,5 / CAT7 (pohon 24 V DC / sběrnice)";
+/** Fáze 77: LED 24 V DC ze zdroje / řadiče v rozváděči – žíly = kanály PWM + společný plus. */
+export const ledCableLabel = (cores: number, variant = "") => `CYSY ${cores}×1,5 (LED 24 V DC${variant ? `, ${variant}` : ""})`;
 
 /**
  * Svod k vypínači podle úrovně instalace (fáze 52): klasika CYKY-O (bez N), retrofit vždy CYKY-J
@@ -363,6 +371,11 @@ export interface CablingInput {
    * obvodové řazení bez vracení); bez něj řetěz v nejkratším pořadí.
    */
   treeRouter?: CircuitTreeRouter;
+  /**
+   * Fáze 77: samostatné kabely k prvkům (čidla na binární vstupy, hlavice, motory žaluzií, LED 24 V) – z rozváděče prvku,
+   * nebo od `targetId` (hlavice od termostatu místnosti). Délka po trase + svislé úseky jako u ovládacích vedení.
+   */
+  starRuns?: readonly { id: string; cable: string; targetId?: string | null }[];
 }
 
 /** Hvězdicová topologie: každý prvek samostatným kabelem do rozváděče, trasy sečtené do jedné. */
@@ -522,7 +535,11 @@ export function summarizeCabling(input: CablingInput): CableSummary {
       for (const mode of ["BOTTOM", "TOP"] as const) runs[mode] = Math.round((metric.distance(originOf(node.board), node) + panelVertical(Math.min(profile.ceilingHeightMm, node.heightMm + BLIND_MOTOR_RUN_MM), mode, profile)) * slack + profile.panelAllowanceMm + profile.boxAllowanceMm);
       runs.OPTIMIZED = Math.min(runs.BOTTOM, runs.TOP);
     } else if (run.kind === "blind") {
-      const mm = Math.round((Math.max(0, profile.ceilingHeightMm - node.heightMm) + BLIND_MOTOR_RUN_MM) * slack + profile.boxAllowanceMm * 2);
+      // Fáze 77: zakreslený motor – od spínače vzhůru a ve zdi / v nadpraží k motoru; jinak motor v nadpraží nad spínačem
+      const motor = run.targetId ? byId.get(run.targetId) : null;
+      const mm = motor
+        ? Math.round((metric.distance(node, motor) + Math.abs(motor.heightMm - node.heightMm)) * slack + profile.boxAllowanceMm * 2)
+        : Math.round((Math.max(0, profile.ceilingHeightMm - node.heightMm) + BLIND_MOTOR_RUN_MM) * slack + profile.boxAllowanceMm * 2);
       runs.BOTTOM = runs.TOP = runs.OPTIMIZED = mm;
     } else {
       const target = run.targetId ? byId.get(run.targetId) : null;
@@ -538,6 +555,21 @@ export function summarizeCabling(input: CablingInput): CableSummary {
     }
     for (const mode of ["BOTTOM", "TOP", "OPTIMIZED"] as const) totals[mode] += runs[mode];
     add(run.kind === "blind" ? BLIND_CABLE : THERMOSTAT_CABLE, runs[input.selected]);
+  }
+  // Fáze 77: samostatné kabely k čidlům, hlavicím, motorům a LED 24 V – z rozváděče (svisle jako přívod), od termostatu
+  // místnosti ve zdi (rozdíl výšek)
+  for (const run of input.starRuns ?? []) {
+    const node = byId.get(run.id);
+    if (!node) continue;
+    const target = run.targetId ? byId.get(run.targetId) : null;
+    const runs = { BOTTOM: 0, TOP: 0, OPTIMIZED: 0 } as Record<CableRoutingMode, number>;
+    for (const mode of ["BOTTOM", "TOP"] as const) {
+      const vertical = target ? Math.abs(target.heightMm - node.heightMm) : panelVertical(node.heightMm, mode, profile);
+      runs[mode] = Math.round((metric.distance(target ?? originOf(node.board), node) + vertical) * slack + (target ? profile.boxAllowanceMm : profile.panelAllowanceMm) + profile.boxAllowanceMm);
+    }
+    runs.OPTIMIZED = Math.min(runs.BOTTOM, runs.TOP);
+    for (const mode of ["BOTTOM", "TOP", "OPTIMIZED"] as const) totals[mode] += runs[mode];
+    add(run.cable, runs[input.selected]);
   }
   // Datové zásuvky: samostatný UTP ze svého rozváděče, každá kratší cestou v režimu OPTIMIZED; fáze 74 s trasou na výkres
   const dataRuns: DataRun[] = [];

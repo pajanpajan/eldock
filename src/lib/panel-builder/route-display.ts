@@ -14,12 +14,14 @@ import { WALL_INSET_MM, insetWallRoute, legKey, type InsetWall, type PlanPoint }
 import { elementIdOf } from "./socket-circuits";
 
 /** Fáze 74: druh okruhu pro vrstvy plátna a soupis okruhů. */
-export type CircuitLayer = "sockets" | "lighting" | "appliance" | "data" | "feeder" | "bus";
+export type CircuitLayer = "sockets" | "lighting" | "appliance" | "shading" | "data" | "feeder" | "bus";
 
 export const CIRCUIT_LAYERS: readonly { id: Exclude<CircuitLayer, "bus" | "feeder">; label: string; short: string }[] = [
   { id: "sockets", label: "Zásuvkové okruhy", short: "Zásuvky" },
   { id: "lighting", label: "Světelné okruhy", short: "Světla" },
   { id: "appliance", label: "Samostatné spotřebiče", short: "Spotřebiče" },
+  // Fáze 77: žaluziové okruhy B10
+  { id: "shading", label: "Žaluziové okruhy (stínění)", short: "Žaluzie" },
   { id: "data", label: "Datové rozvody (UTP)", short: "Data" },
 ];
 
@@ -28,6 +30,7 @@ export function layerOf(kind: CircuitKind): CircuitLayer {
   if (kind === "lighting") return "lighting";
   if (kind === "sockets") return "sockets";
   if (kind === "feeder") return "feeder";
+  if (kind === "blinds") return "shading";
   return "appliance";
 }
 

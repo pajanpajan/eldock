@@ -10,7 +10,35 @@
 import type { LightLoad, LightSpec } from "./floorplan-editor";
 
 export type SmartSystemId = "abb_freeathome" | "abb_knx" | "loxone" | "taphome";
-export type SmartRole = "switch" | "dim" | "dali" | "blind" | "heating" | "psu" | "interface" | "system";
+/** Fáze 77: `pwm` = řadič LED 24 V DC (kanály stmívání / CCT / RGBW), `input` = binární vstupy (čidla), `psu_led` = zdroj LED 24 V. */
+export type SmartRole = "switch" | "dim" | "dali" | "blind" | "heating" | "pwm" | "input" | "psu" | "psu_led" | "interface" | "system";
+/** Fáze 77: druhy kanálů akčních členů (zátěže). */
+export type ChannelRole = "switch" | "dim" | "dali" | "blind" | "heating" | "pwm" | "input";
+export const CHANNEL_ROLES: readonly ChannelRole[] = ["switch", "dim", "dali", "blind", "heating", "pwm", "input"];
+
+/** Fáze 77: řadiče a vstupy mimo databázi prvků (obecné, objednací číslo doplní projektant podle nabídky výrobce). */
+const GENERIC = "obecný modul – ověřte nabídku výrobce a šířku v datasheetu";
+const genericPwm = (prefix: string): SmartModule => ({ id: `${prefix}-pwm`, role: "pwm", label: "Řadič LED 24 V DC PWM, 4 kanály (stmívání / CCT / RGBW)", typeCode: "PWM 4× 24 V DC", articleNumber: null, verified: false, channels: 4, modules: 2, source: GENERIC });
+const genericInputs = (prefix: string): SmartModule => ({ id: `${prefix}-di8`, role: "input", label: "Binární vstupy 8násobné (bezpotenciálové kontakty čidel)", typeCode: "DI 8×", articleNumber: null, verified: false, channels: 8, modules: 2, source: GENERIC });
+
+/**
+ * Fáze 77: napájecí zdroje 24 V DC na DIN lištu pro LED pásky (řada MEAN WELL HDR – šířky 52,5 / 70 / 105 mm) – vybírá se
+ * nejmenší, který pokryje příkon pásků + 20 %; nad 150 W víc zdrojů.
+ */
+export const LED_SUPPLIES: readonly SmartModule[] = [
+  { id: "led-psu-60", role: "psu_led", label: "Napájecí zdroj 24 V DC / 60 W na DIN lištu (LED)", typeCode: "HDR-60-24", articleNumber: null, verified: false, channels: 60, modules: 3, source: "MEAN WELL HDR-60-24 (ověřte dostupnost)" },
+  { id: "led-psu-100", role: "psu_led", label: "Napájecí zdroj 24 V DC / 100 W na DIN lištu (LED)", typeCode: "HDR-100-24", articleNumber: null, verified: false, channels: 100, modules: 4, source: "MEAN WELL HDR-100-24 (ověřte dostupnost)" },
+  { id: "led-psu-150", role: "psu_led", label: "Napájecí zdroj 24 V DC / 150 W na DIN lištu (LED)", typeCode: "HDR-150-24", articleNumber: null, verified: false, channels: 150, modules: 6, source: "MEAN WELL HDR-150-24 (ověřte dostupnost)" },
+];
+
+/** Zdroje LED 24 V pro příkon `watts` (s rezervou už započtenou): nejmenší dostačující, jinak víc největších. */
+export function ledSupplies(watts: number): SmartModule[] {
+  if (watts <= 0) return [];
+  const single = LED_SUPPLIES.find((unit) => unit.channels >= watts);
+  if (single) return [single];
+  const largest = LED_SUPPLIES[LED_SUPPLIES.length - 1];
+  return Array.from({ length: Math.ceil(watts / largest.channels) }, () => largest);
+}
 
 export interface SmartModule {
   id: string;
@@ -77,6 +105,9 @@ export const SMART_SYSTEMS: SmartSystem[] = [
       { id: "fah-ba8", role: "blind", label: "Člen akční žaluziový 8násobný, 6 A", typeCode: "BA-M-8.230.1.1", articleNumber: "2CDG510029R0011", verified: true, channels: 8, modules: 8, source: `${FAH}, str. 276` },
       { id: "fah-ha6", role: "heating", label: "Člen akční topení 6násobný (termoelektrické hlavice)", typeCode: "HA-M-0.6.1", articleNumber: "2CDG510008R0011", verified: true, channels: 6, modules: 4, source: `${FAH}, str. 276 (v roce 2026 produktová obměna)` },
       { id: "fah-ha12", role: "heating", label: "Člen akční topení 12násobný (termoelektrické hlavice)", typeCode: "HA-M-0.12.1", articleNumber: "2CDG510009R0011", verified: true, channels: 12, modules: 8, source: `${FAH}, str. 276 (v roce 2026 produktová obměna)` },
+      // Fáze 77: LED 24 V PWM a binární vstupy čidel – v katalogu free@home na DIN liště nejsou, obecné moduly
+      genericPwm("fah"),
+      genericInputs("fah"),
     ],
   },
   {
@@ -101,6 +132,9 @@ export const SMART_SYSTEMS: SmartSystem[] = [
       { id: "knx-jra8", role: "blind", label: "Žaluziový akční člen 8násobný 230 V", typeCode: "JRA/S 8.230.5.1", articleNumber: "2CDG110126R0011", verified: true, channels: 8, modules: 8, source: KNX },
       { id: "knx-es4", role: "heating", label: "Elektronický spínací akční člen 4násobný (termoelektrické hlavice)", typeCode: "ES/S 4.1.2.1", articleNumber: "2CDG110058R0011", verified: true, channels: 4, modules: 4, source: KNX },
       { id: "knx-es8", role: "heating", label: "Elektronický spínací akční člen 8násobný (termoelektrické hlavice)", typeCode: "ES/S 8.1.2.1", articleNumber: "2CDG110059R0011", verified: true, channels: 8, modules: 8, source: KNX },
+      // Fáze 77: binární vstupy čidel oken a vody, LED 24 V PWM
+      { id: "knx-be8", role: "input", label: "Binární vstup 8násobný, snímání kontaktů", typeCode: "BE/S 8.20.2.1", articleNumber: null, verified: false, channels: 8, modules: 4, source: "ABB i-bus KNX – objednací číslo a šířku ověřte v katalogu" },
+      genericPwm("knx"),
     ],
   },
   {
@@ -119,6 +153,9 @@ export const SMART_SYSTEMS: SmartSystem[] = [
       { id: "lox-dim", role: "dim", label: "Dimmer Extension (4 stmívací kanály 230 V)", typeCode: "Dimmer Extension", articleNumber: "100029", verified: true, channels: 4, modules: 9, maxW: null, source: "Loxone – produktový list 100029 (zatížení kanálu ověřte)" },
       { id: "lox-tree", role: "interface", label: "Tree Extension (2 větve Tree, 50 prvků na větev)", typeCode: "Tree Extension", articleNumber: "100218", verified: true, channels: 100, modules: 2, source: "databáze prvků Eldocku (Loxone)" },
       { id: "lox-psu", role: "psu", label: "Napájecí zdroj 24 V DC pro Miniserver a Tree", typeCode: "24 V DC / 2,5 A", articleNumber: null, verified: false, channels: 0, modules: 3, busMa: 2500, source: "obecný zdroj 24 V DC" },
+      // Fáze 77: LED 24 V PWM a digitální vstupy čidel
+      { id: "lox-rgbw", role: "pwm", label: "RGBW 24V Dimmer Tree (4 kanály PWM)", typeCode: "RGBW 24V Dimmer Tree", articleNumber: null, verified: false, channels: 4, modules: 2, source: "Loxone – objednací číslo a šířku ověřte u výrobce" },
+      { id: "lox-di", role: "input", label: "DI Extension (20 digitálních vstupů)", typeCode: "DI Extension", articleNumber: null, verified: false, channels: 20, modules: 3, source: "Loxone – objednací číslo a šířku ověřte u výrobce" },
     ],
   },
   {
@@ -143,10 +180,12 @@ export const smartSystemOf = (id: SmartSystemId | null | undefined) => SMART_SYS
 export interface SmartLoad {
   id: string;
   room: string;
-  role: "switch" | "dim" | "dali" | "blind" | "heating";
+  role: ChannelRole;
   powerW: number;
   load?: LightLoad;
   label: string;
+  /** Fáze 77: kanály PWM řadiče na zátěž (stmívání 1, CCT 2, RGB 3, RGBW 4, RGB + CCT 5); jinak 1 kanál. */
+  channels?: number;
 }
 
 /** Druh kanálu světla podle zátěže: DALI předřadník → DALI, stmívané → stmívací kanál, jinak spínací. */
@@ -165,7 +204,9 @@ export interface SmartPlan {
   system: SmartSystem;
   modules: PlannedModule[];
   /** Kanály podle druhu: potřeba (včetně rezervy) a k dispozici. */
-  channels: Record<"switch" | "dim" | "dali" | "blind" | "heating", { needed: number; available: number }>;
+  channels: Record<ChannelRole, { needed: number; available: number }>;
+  /** Fáze 77: příkon zdrojů LED 24 V DC (pásky + 20 %) [W]. */
+  ledSupplyW: number;
   /** Sběrnicové prvky v místnostech + akční členy (kontrola zdroje a systémového modulu). */
   busDevices: number;
   busMa: number;
@@ -227,7 +268,7 @@ export function planSmartHome(input: { system: SmartSystemId; loads: readonly Sm
     return added;
   };
   const byRole = (role: SmartRole) => system.modules.filter((unit) => unit.role === role);
-  const channels = { switch: { needed: 0, available: 0 }, dim: { needed: 0, available: 0 }, dali: { needed: 0, available: 0 }, blind: { needed: 0, available: 0 }, heating: { needed: 0, available: 0 } };
+  const channels = Object.fromEntries(CHANNEL_ROLES.map((role) => [role, { needed: 0, available: 0 }])) as Record<ChannelRole, { needed: number; available: number }>;
   const sortLoads = (loads: SmartLoad[]) => [...loads].sort((a, b) => a.room.localeCompare(b.room, "cs") || a.label.localeCompare(b.label, "cs") || a.id.localeCompare(b.id));
 
   // Systém: Loxone Miniserver nese 8 reléových výstupů – spínací kanály se nejdřív obsadí na něm
@@ -235,13 +276,14 @@ export function planSmartHome(input: { system: SmartSystemId; loads: readonly Sm
   const miniserver = system.id === "loxone" ? systemModule : null;
   if (systemModule) add(systemModule);
 
-  for (const role of ["switch", "dim", "dali", "blind", "heating"] as const) {
+  for (const role of CHANNEL_ROLES) {
     const loads = sortLoads(input.loads.filter((load) => load.role === role));
     if (!loads.length) continue;
     const options = byRole(role);
-    // Stmívání: zátěž nad výkon kanálu zabere víc paralelně propojených kanálů
+    // Stmívání: zátěž nad výkon kanálu zabere víc paralelně propojených kanálů; fáze 77 – PWM: kanály podle barvy svítidla
     const perChannel = role === "dim" ? (options.find((option) => option.maxW)?.maxW ?? null) : null;
     const slots = loads.flatMap((load) => {
+      if (role === "pwm") return Array.from({ length: Math.max(1, load.channels ?? 1) }, () => load);
       const parallel = perChannel && load.powerW > perChannel ? Math.ceil(load.powerW / perChannel) : 1;
       if (parallel > 1) warnings.push(`${load.label} (${load.room}): ${load.powerW} W překračuje ${perChannel} W na kanál – ${parallel} kanály stmívače paralelně.`);
       return Array.from({ length: parallel }, () => load);
@@ -276,6 +318,11 @@ export function planSmartHome(input: { system: SmartSystemId; loads: readonly Sm
     if (queue.length) warnings.push(`Nepřiřazeno ${queue.length} zátěží (${ROLE_LABEL[role]}).`);
   }
 
+  // Fáze 77: napájecí zdroj LED 24 V DC – příkon pásků + 20 % rezerva
+  const ledW = Math.ceil(input.loads.filter((load) => load.role === "pwm").reduce((sum, load) => sum + load.powerW, 0) * 1.2);
+  for (const unit of ledSupplies(ledW)) add(unit);
+  if (ledW > LED_SUPPLIES[LED_SUPPLIES.length - 1].channels) warnings.push(`LED 24 V: ${ledW} W (vč. rezervy 20 %) – víc zdrojů; rozdělte pásky na zdroje a dbejte na úbytek napětí 24 V (krátké přívody, větší průřez).`);
+
   addExtras((unit) => !central(unit));
   // Zdroj sběrnice a rozhraní
   const actuators = modules.filter((unit) => unit.role !== "system").length;
@@ -298,8 +345,9 @@ export function planSmartHome(input: { system: SmartSystemId; loads: readonly Sm
     busMa,
     psuMa: (psu?.busMa ?? 0) * (psu ? lines + manualPsu : 0),
     widthModules: modules.reduce((sum, unit) => sum + unit.modules, 0),
+    ledSupplyW: ledW,
     warnings,
   };
 }
 
-export const ROLE_LABEL: Record<SmartLoad["role"], string> = { switch: "spínání", dim: "stmívání", dali: "DALI", blind: "žaluzie", heating: "topení" };
+export const ROLE_LABEL: Record<ChannelRole, string> = { switch: "spínání", dim: "stmívání", dali: "DALI", blind: "žaluzie", heating: "topení", pwm: "LED 24 V PWM", input: "binární vstupy" };

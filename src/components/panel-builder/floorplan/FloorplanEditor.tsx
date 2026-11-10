@@ -20,7 +20,6 @@ import {
   applyAppearance,
   clampSymbolScale,
   controllersOf,
-  controlsLights,
   convertForLevel,
   deleteRoom,
   effectiveSwitchNo,
@@ -39,6 +38,11 @@ import {
   removeFloor,
   resizeRect,
   ROUTE_STYLES,
+  isPairController,
+  isPairTarget,
+  lightSpecOf,
+  pairNoun,
+  pairsWith,
   roomAt,
   roomDimensions,
   snapToWall,
@@ -53,6 +57,7 @@ import {
   type EditorElement,
   type EditorRoom,
   type FloorplanDraft,
+  type LightSpec,
   type RoomHandle,
 } from "@/lib/panel-builder/floorplan-editor";
 import {
@@ -121,7 +126,7 @@ import { CablePanel } from "./CablePanel";
 import { CalibrationDialog, type CalibrationResult } from "./CalibrationDialog";
 import { DeviceAppearance } from "./DeviceAppearance";
 import { FloorBar } from "./FloorBar";
-import { FloorSymbol, PanelSymbol } from "./FloorSymbol";
+import { FloorSymbol, LightBadges, PanelSymbol } from "./FloorSymbol";
 import { FrameAssemblyPalette } from "./FrameAssemblyPalette";
 import { ModeBar, type ModeTone } from "../ModeBar";
 import { PdfEditMenu, type PdfEditAction } from "./PdfEditMenu";
@@ -129,6 +134,7 @@ import { PlanChecks, SelectionPanel, type PlanCheck } from "./PlanPanels";
 import { SmartHomePanel } from "./SmartHomePanel";
 import { applyNormFix, floorplanNorms } from "@/lib/panel-builder/floorplan-norms";
 import { smartPlanOf } from "@/lib/panel-builder/smart-home-plan";
+import { lightBadges } from "@/lib/panel-builder/field-devices";
 import { isSmartSystem, type SmartSystemId } from "@/lib/panel-builder/smart-home";
 import { WiringBomDialog } from "./WiringBomDialog";
 import { ApplianceEditor, useApplianceLibrary } from "./ApplianceEditor";
@@ -813,13 +819,16 @@ export function FloorplanEditor({
     if (event.button === 1) return startPan(event);
     if (event.button !== 0) return;
     const item = paletteItem(element.item);
+    // Fáze 77: párování i žaluziový spínač → motory žaluzií a termostat → hlavice
     if (tool.kind === "pair") {
-      if (item?.kind !== "light") return void toast.error("Klikněte na svítidlo, které má vypínač ovládat.");
+      const controller = paletteItem(allElements(draft).find((candidate) => candidate.id === tool.switchId)?.item ?? "");
+      if (!pairsWith(controller, item)) return void toast.error(controller?.control === "blind" ? "Klikněte na vývod motoru žaluzie, který má spínač ovládat." : controller?.control === "thermostat" ? "Klikněte na termostatickou hlavici, kterou má termostat řídit." : "Klikněte na svítidlo, které má vypínač ovládat.");
       update((current) => toggleLink(current, tool.switchId, element.id));
       return;
     }
     if (tool.kind === "pair-light") {
-      if (!controlsLights(item)) return void toast.error("Klikněte na vypínač nebo tlačítko, které má světlo ovládat.");
+      const target = paletteItem(allElements(draft).find((candidate) => candidate.id === tool.lightId)?.item ?? "");
+      if (!pairsWith(item, target)) return void toast.error(target?.kind === "blind_motor" ? "Klikněte na žaluziový spínač nebo tlačítko." : target?.heatingHead ? "Klikněte na termostat místnosti." : "Klikněte na vypínač nebo tlačítko, které má světlo ovládat.");
       update((current) => toggleLink(current, element.id, tool.lightId));
       return;
     }
@@ -1411,7 +1420,7 @@ export function FloorplanEditor({
         extra: (
           <>
             <span className="rounded-full border border-emerald-500/50 px-2 py-0.5 text-xs text-emerald-200" data-testid="pair-count">
-              {tool.kind === "pair" ? `ovládá ${pairCount} ${plural(pairCount, "svítidlo", "svítidla", "svítidel")}` : `${pairCount} ${plural(pairCount, "ovládací místo", "ovládací místa", "ovládacích míst")}`}
+              {tool.kind === "pair" ? `ovládá ${pairNoun(paletteItem(pairWith?.item ?? ""), pairCount)}` : `${pairCount} ${plural(pairCount, "ovládací místo", "ovládací místa", "ovládacích míst")}`}
             </span>
             {/* Přepínač kabeláže i v lepkavé liště – přepínač v rohu plátna po posunu stránky není vidět */}
             <Button type="button" size="sm" variant="outline" className="h-7 gap-1 px-2 text-xs" onClick={toggleCables} title="Kabeláž v půdorysu (K)" data-testid="mode-toggle-cables">
@@ -2110,7 +2119,8 @@ export function FloorplanEditor({
                   );
                 }
                 // Při párování zvýraznit, na co jde kliknout
-                const candidate = (tool.kind === "pair" && item.kind === "light") || (tool.kind === "pair-light" && controlsLights(item));
+                // Fáze 77: i motory žaluzií ke žaluziovému spínači a hlavice k termostatu
+                const candidate = (tool.kind === "pair" && pairsWith(paletteItem(draft.elements.find((other) => other.id === tool.switchId)?.item ?? ""), item)) || (tool.kind === "pair-light" && pairsWith(item, paletteItem(draft.elements.find((other) => other.id === tool.lightId)?.item ?? "")));
                 const linked = tool.kind === "pair" ? draft.elements.find((other) => other.id === tool.switchId)?.controls.includes(element.id) : tool.kind === "pair-light" ? element.controls.includes(tool.lightId) : false;
                 // Fáze 62: ve víceramečku klikací plocha jen na pozici přístroje (sousedé v rozteči 0,78 značky se jinak překrývají)
                 const hitSlot = frameOf(draft, element.id) ? { length: gangsOf(element) * framePitch(draft, element), horizontal: frameAxis(element.rotation).x === 1 } : null;
@@ -2130,6 +2140,8 @@ export function FloorplanEditor({
                         {element.frameUnits}R
                       </text>
                     ) : null}
+                    {/* Fáze 77: štítky svítidla – DIM / CCT / RGB(W) a technologie DALI / 24V u značky */}
+                    {item.kind === "light" ? <LightBadges badges={lightBadges(element, paletteItem(element.item))} size={size} /> : null}
                   </g>
                 );
               })}
@@ -2171,13 +2183,18 @@ export function FloorplanEditor({
                   onScale={(factor) => update((current) => ({ ...current, elements: current.elements.map((element) => (element.id === selected.id ? { ...element, scale: clampSymbolScale((element.scale ?? 1) * factor) } : element)) }))}
                   onDelete={() => removeSelection([selected.id])}
                   onPair={
-                    controlsLights(paletteItem(selected.item))
+                    isPairController(paletteItem(selected.item))
                       ? () => setTool({ kind: "pair", switchId: selected.id })
-                      : paletteItem(selected.item)?.kind === "light"
+                      : isPairTarget(paletteItem(selected.item))
                         ? () => setTool({ kind: "pair-light", lightId: selected.id })
                         : undefined
                   }
                   onAddToFrame={isFrameable(selected) && usedGangs(selected) + gangsOf({ item: selected.item, frameUnits: 1 }) <= MAX_FRAME_GANGS ? () => addIntoFrame(selected.id, selected.item) : undefined}
+                  // Fáze 77: rychlé volby svítidla (🔆 / 🌡️ / 🌈) přímo u světla
+                  light={(() => {
+                    const item = paletteItem(selected.item);
+                    return item?.kind === "light" ? { spec: lightSpecOf(selected), item, onChange: (spec: LightSpec) => update((current) => ({ ...current, elements: current.elements.map((element) => (element.id === selected.id ? { ...element, light: spec } : element)) })) } : undefined;
+                  })()}
                 />
               ) : null}
               {selectedNote && tool.kind === "select" ? (
@@ -2293,7 +2310,8 @@ export function FloorplanEditor({
               onPair={() => {
                 const item = paletteItem(selected.item);
                 if (pairing) return setTool({ kind: "select" });
-                setTool(item?.kind === "light" ? { kind: "pair-light", lightId: selected.id } : { kind: "pair", switchId: selected.id });
+                // Fáze 77: z motoru žaluzie / hlavice se páruje k ovladači stejně jako ze světla
+                setTool(isPairTarget(item) ? { kind: "pair-light", lightId: selected.id } : { kind: "pair", switchId: selected.id });
               }}
               onChange={(patch) => update((current) => ({ ...current, elements: current.elements.map((element) => (element.id === selected.id ? { ...element, ...patch } : element)) }))}
               onRotate={() => rotateSelection([selected.id])}

@@ -117,3 +117,31 @@ export function PanelSymbol({ size, active, onPaper, label }: { size: number; ac
     </g>
   );
 }
+
+/** Fáze 77: barvy štítků svítidla – stmívání, CCT, barva, technologie řízení. */
+const BADGE_FILL: Record<string, string> = { DIM: "#a16207", CCT: "#0369a1", RGB: "#a21caf", RGBW: "#a21caf", DALI: "#15803d", "24V": "#0f766e" };
+
+/** Fáze 77: štítky DIM / CCT / RGB(W) / DALI / 24V pod značkou svítidla (neotáčí se se značkou). */
+export function LightBadges({ badges, size }: { badges: readonly string[]; size: number }): ReactNode {
+  if (!badges.length) return null;
+  const font = size * 0.2;
+  const pad = font * 0.35;
+  const widths = badges.map((badge) => badge.length * font * 0.68 + pad * 2);
+  // Štítky vedle sebe zleva od značky (pozice = součet šířek předchozích)
+  const lefts = widths.map((_, index) => -size * 0.55 + widths.slice(0, index).reduce((sum, width) => sum + width + font * 0.25, 0));
+  return (
+    <g pointerEvents="none" data-testid="light-badges" data-badges={badges.join(" ")}>
+      {badges.map((badge, index) => {
+        const width = widths[index];
+        return (
+          <g key={badge} transform={`translate(${lefts[index]} ${size * 0.52})`}>
+            <rect width={width} height={font * 1.35} rx={font * 0.3} fill={BADGE_FILL[badge] ?? "#3f3f46"} />
+            <text x={width / 2} y={font * 0.7} fontSize={font} fontWeight={800} textAnchor="middle" dominantBaseline="central" fill="#fafafa">
+              {badge}
+            </text>
+          </g>
+        );
+      })}
+    </g>
+  );
+}

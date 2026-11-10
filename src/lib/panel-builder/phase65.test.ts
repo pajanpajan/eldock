@@ -164,7 +164,9 @@ describe("fáze 65 – obrázkový katalog a technické listy chytré domácnost
       expect(product.description.length, product.id).toBeGreaterThan(30);
       expect(product.wiring, product.id).toBeTruthy();
     }
-    for (const system of SMART_SYSTEMS) for (const unit of system.modules) expect(productOfModule(system.id, unit.id)?.tab, `${system.id}/${unit.id}`).toBe("din");
+    // Fáze 77: obecné moduly výpočtu (LED 24 V PWM, binární vstupy) a zdroje LED nejsou výrobky systému – bez karty
+    const generic = (unit: { source: string; role: string }) => unit.source.startsWith("obecný modul") || unit.role === "psu_led";
+    for (const system of SMART_SYSTEMS) for (const unit of system.modules) expect(productOfModule(system.id, unit.id)?.tab, `${system.id}/${unit.id}`).toBe(generic(unit) ? undefined : "din");
     // Záložky free@home: ovladače, do krabičky / bezdrátové, panely, DIN lišta
     const fah = PRODUCT_FAMILIES.find((family) => family.id === "abb-fah")!;
     expect(DEVICE_TABS.map((tab) => productsOfTab(fah, tab.id).length).every((count) => count > 0)).toBe(true);

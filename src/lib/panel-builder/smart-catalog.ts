@@ -116,11 +116,18 @@ function moduleDescription(system: SmartSystemId, unit: SmartModule): string {
       return `Akční člen topení – ${unit.channels} výstupů pro termoelektrické hlavice podlahového topení nebo radiátorů podle prostorových termostatů.`;
     case "interface":
       return system === "loxone" ? "Rozšíření Tree – další větve sběrnice Tree pro tlačítka, čidla a svítidla Loxone (50 prvků na větev)." : "IP rozhraní KNX – programování instalace v ETS a připojení vizualizace / aplikace přes LAN.";
+    // Fáze 77: LED 24 V PWM, binární vstupy čidel a zdroj LED
+    case "pwm":
+      return `Řadič LED 24 V DC – ${unit.channels} kanály PWM (stmívání 1, CCT 2, RGB 3, RGBW 4 kanály na svítidlo / pásek).`;
+    case "input":
+      return `Binární vstupy – ${unit.channels} bezpotenciálových vstupů pro okenní / dveřní kontakty a čidla úniku vody.`;
+    case "psu_led":
+      return "Napájecí zdroj 24 V DC na DIN lištu pro LED pásky – výkon podle součtu pásků + 20 % rezerva.";
   }
 }
 
 function moduleWiring(system: SmartSystemId, unit: SmartModule): WiringKind {
-  const byRole: Record<SmartModule["role"], WiringKind> = { switch: "din-switch", dim: "din-dim", dali: "din-dali", blind: "din-blind", heating: "din-heating", psu: "din-psu", interface: system === "loxone" ? "tree-extension" : "din-interface", system: system === "loxone" ? "miniserver" : "controller" };
+  const byRole: Record<SmartModule["role"], WiringKind> = { switch: "din-switch", dim: "din-dim", dali: "din-dali", blind: "din-blind", heating: "din-heating", pwm: "din-dim", input: "din-switch", psu: "din-psu", psu_led: "din-psu", interface: system === "loxone" ? "tree-extension" : "din-interface", system: system === "loxone" ? "miniserver" : "controller" };
   return byRole[unit.role];
 }
 
@@ -132,7 +139,8 @@ function dinGroup(system: SmartSystemId, label: string): CatalogGroup {
     id: `${system}-din`,
     label,
     din: true,
-    products: (found?.modules ?? []).map((unit) => ({
+    // Fáze 77: obecné moduly výpočtu (LED 24 V PWM, binární vstupy) bez ověřeného schématu zapojení do katalogu výrobků nepatří
+    products: (found?.modules ?? []).filter((unit) => !(unit.source.startsWith("obecný modul") || unit.role === "psu_led")).map((unit) => ({
       id: `${system}-${unit.id}`,
       label: unit.label,
       typeCode: unit.typeCode,

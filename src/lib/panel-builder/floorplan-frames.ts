@@ -37,6 +37,8 @@ export function isFrameable(element: Pick<EditorElement, "item">): boolean {
   if (!item || item.wireless) return false;
   if (item.kind === "single_socket" || item.kind === "double_socket" || item.kind === "data_socket") return true;
   if (item.kind !== "switch") return false;
+  // Fáze 77: čidla oken / vody a hlavice topení nejsou přístroje do rámečku
+  if (item.sensor || item.heatingHead) return false;
   if (item.bus && (item.bus.role === "presence" || item.bus.role === "display")) return false;
   // Čidlo pod stropem (PIR 2,2 m) se s vypínači a zásuvkami do rámečku nekombinuje
   return (item.heightMm ?? 0) < 2000;

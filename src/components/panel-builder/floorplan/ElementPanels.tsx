@@ -15,12 +15,12 @@ import {
   paletteItem,
   roomDimensions,
   switchingFor,
-  DEFAULT_LIGHT,
-  LIGHT_LOADS,
+  applyLightOption,
   lightSpecOf,
   type EditorElement,
   type EditorRoom,
   type FloorplanDraft,
+  type LightSpec,
   type PaletteItem,
 } from "@/lib/panel-builder/floorplan-editor";
 import { frameGangs, frameOf, isFrameable } from "@/lib/panel-builder/floorplan-frames";
@@ -28,6 +28,7 @@ import { DESIGN_BRANDS, appearanceLabel, colorForSeries, seriesColors } from "@/
 import { cn } from "@/lib/utils";
 
 import { AddToFrameControl } from "./FrameAssemblyPalette";
+import { DeviceControls, LightOptions } from "./LightOptions";
 import { FixtureControls } from "./FixtureShape";
 import type { BasinZone } from "@/lib/panel-builder/fixtures";
 import { protectionLabel, type ApplianceSpec } from "@/lib/panel-builder/appliances";
@@ -46,11 +47,33 @@ export function ToolButton({ active, onClick, icon, label }: { active: boolean; 
   );
 }
 
+/** Fáze 77: rychlé volby svítidla v plovoucí liště – stmívání, CCT a cyklus barvy (bez → RGBW → RGB → bez). */
+export interface LightQuickOptions {
+  spec: LightSpec;
+  item: PaletteItem;
+  onChange: (spec: LightSpec) => void;
+}
+
 /** Plovoucí lišta nad vybranou značkou (velikost drží stejnou na obrazovce i při zoomu). */
-export function ElementToolbar({ x, y, unit, onRotate, onScale, onDelete, onPair, onAddToFrame }: { x: number; y: number; unit: number; onRotate: () => void; onScale: (factor: number) => void; onDelete: () => void; onPair?: () => void; onAddToFrame?: () => void }) {
+export function ElementToolbar({ x, y, unit, onRotate, onScale, onDelete, onPair, onAddToFrame, light }: { x: number; y: number; unit: number; onRotate: () => void; onScale: (factor: number) => void; onDelete: () => void; onPair?: () => void; onAddToFrame?: () => void; light?: LightQuickOptions }) {
   const size = unit * 1.15;
-  const buttons: { label: string; text: string; fill: string; onClick: () => void; font?: number }[] = [
+  const set = (patch: Partial<LightSpec>) => light && light.onChange(applyLightOption(light.spec, patch, light.item));
+  const colorful = Boolean(light && (light.spec.cct || light.spec.color));
+  const buttons: { label: string; text: string; fill: string; onClick: () => void; font?: number; pressed?: boolean }[] = [
     ...(onPair ? [{ label: "Přiřadit vypínač ke světlu", text: "🔗", fill: "#166534", onClick: onPair }] : []),
+    ...(light
+      ? [
+          { label: "Stmívatelné svítidlo", text: "🔆", fill: light.spec.dimmable || colorful ? "#a16207" : "#27272a", pressed: light.spec.dimmable || colorful, onClick: () => !colorful && set({ dimmable: !light.spec.dimmable }) },
+          { label: "Změna chromatičnosti CCT", text: "🌡️", fill: light.spec.cct ? "#0369a1" : "#27272a", pressed: Boolean(light.spec.cct), onClick: () => set({ cct: !light.spec.cct }) },
+          {
+            label: `Změna barvy RGB / RGBW${light.spec.color ? ` (${light.spec.color.toUpperCase()})` : ""}`,
+            text: "🌈",
+            fill: light.spec.color ? "#a21caf" : "#27272a",
+            pressed: Boolean(light.spec.color),
+            onClick: () => set({ color: !light.spec.color ? "rgbw" : light.spec.color === "rgbw" ? "rgb" : undefined }),
+          },
+        ]
+      : []),
     // Fáze 62: stejný přístroj vedle do víceramečku (zásuvka → 2R → 3R …)
     ...(onAddToFrame ? [{ label: "Přidat stejný přístroj vedle do rámečku", text: "▦+", fill: "#a16207", onClick: onAddToFrame, font: 0.5 }] : []),
     { label: "Otočit značku o 90°", text: "⟳", fill: "#27272a", onClick: onRotate },
@@ -69,6 +92,8 @@ export function ElementToolbar({ x, y, unit, onRotate, onScale, onDelete, onPair
           className="cursor-pointer"
           role="button"
           aria-label={button.label}
+          aria-pressed={button.pressed}
+          data-testid={button.pressed !== undefined ? `quick-${button.text === "🔆" ? "dim" : button.text === "🌈" ? "color" : "cct"}` : undefined}
           onPointerDown={(event) => {
             event.stopPropagation();
             button.onClick();
@@ -133,7 +158,7 @@ export function ElementDetail({
   const defaultHeight = isPanel ? draft.profile.switchboardHeightMm : (appliance?.heightMm ?? item.heightMm ?? mountHeight({ kind: item.kind as Exclude<typeof item.kind, "panel" | "riser" | "fixture">, variant: item.variant, tag: item.tag }, draft.profile));
   const light = item.kind === "light" ? lightSpecOf(element) : null;
   const frame = frameOf(draft, element.id);
-  const legacyFrameable = !frame && !item.wireless && (item.kind === "single_socket" || item.kind === "double_socket" || item.kind === "data_socket" || item.kind === "switch");
+  const legacyFrameable = !frame && !item.wireless && !item.sensor && !item.heatingHead && (item.kind === "single_socket" || item.kind === "double_socket" || item.kind === "data_socket" || item.kind === "switch");
   const rooms = [...new Set([...draft.rooms.map((room) => room.name), ...draft.elements.map((other) => other.room)])];
   const everything = [...draft.elements, ...draft.otherFloors.flatMap((floor) => floor.elements)];
   const lights = everything.filter((other) => element.controls.includes(other.id));
@@ -248,7 +273,8 @@ export function ElementDetail({
               ) : null}
             </div>
           ) : null}
-          {item.kind !== "appliance" && item.kind !== "light" ? (
+          {/* Fáze 77: vývod motoru žaluzie, čidla a hlavice nemají designovou řadu (skryté za překladem / u okna) */}
+          {item.kind !== "appliance" && item.kind !== "light" && item.kind !== "blind_motor" && !item.sensor && !item.heatingHead ? (
             <div className="grid grid-cols-2 gap-2">
               <label className="flex flex-col gap-1 text-xs text-muted-foreground">
                 Designová řada
@@ -324,30 +350,10 @@ export function ElementDetail({
               ) : null}
             </div>
           ) : null}
-          {/* Fáze 61: svítidlo pro chytrou domácnost – stmívání, příkon a druh zátěže (výběr akčního členu) */}
-          {light && draft.installation === "bus_loxone" ? (
-            <div className="flex flex-col gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/5 p-2 text-xs" data-testid="light-spec">
-              <label className="flex items-center gap-1.5">
-                <input type="checkbox" checked={light.dimmable} onChange={(event) => onChange({ light: { ...light, dimmable: event.target.checked } })} aria-label="Stmívané svítidlo" /> Stmívané (stmívací kanál)
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                <label className="flex flex-col gap-1 text-muted-foreground">
-                  Příkon [W]
-                  <Input type="number" min={1} max={3000} value={light.powerW} onChange={(event) => onChange({ light: { ...light, powerW: Math.min(3000, Math.max(1, Math.round(Number(event.target.value) || DEFAULT_LIGHT.powerW))) } })} aria-label="Příkon svítidla [W]" className="h-8" />
-                </label>
-                <label className="flex flex-col gap-1 text-muted-foreground">
-                  Zátěž
-                  <select value={light.load} onChange={(event) => onChange({ light: { ...light, load: event.target.value as typeof light.load, ...(event.target.value === "dali" ? { dimmable: true } : {}) } })} className="h-8 rounded-md border border-input bg-transparent px-1.5 text-foreground dark:bg-input/30" aria-label="Druh zátěže svítidla">
-                    {LIGHT_LOADS.map((load) => (
-                      <option key={load.id} value={load.id}>
-                        {load.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-            </div>
-          ) : null}
+          {/* Fáze 77: blind / termostat ↔ motory žaluzií / hlavice – pohon a párování */}
+          <DeviceControls element={element} item={item} everything={everything} pairing={pairing} onPair={onPair} onChange={onChange} />
+          {/* Fáze 61 + 77: svítidlo – stmívání, CCT, barva, technologie řízení, příkon a zátěž (všechny úrovně instalace) */}
+          {light ? <LightOptions element={element} item={item} onChange={(next) => onChange({ light: next })} /> : null}
           {item.kind === "light" ? (
             <div className="flex flex-col gap-1.5">
               <p className="text-xs text-muted-foreground" data-testid="light-switching">

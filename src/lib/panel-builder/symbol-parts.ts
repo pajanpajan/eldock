@@ -57,6 +57,26 @@ export function symbolParts(item: PaletteItem, size: number, options: { switchNo
   }
 
   // --- Svítidla ---
+  if (item.kind === "light" && item.lightForm === "strip") {
+    // Fáze 77: LED pásek – podélná čára s koncovými čárkami (jako lineární svítidlo 11-15-07) a body LED
+    parts.kind = "light";
+    const half = size * 0.55;
+    const tick = size * 0.12;
+    parts.paths.push(`M${f(-half)} 0 H${f(half)}`, `M${f(-half)} ${f(-tick)} V${f(tick)}`, `M${f(half)} ${f(-tick)} V${f(tick)}`);
+    for (const share of [-0.6, -0.2, 0.2, 0.6]) parts.circles.push({ cx: share * half, cy: 0, r: size * 0.035, fill: true });
+    parts.label = "LED_P";
+    return parts;
+  }
+  if (item.kind === "light" && item.lightForm === "spot") {
+    // Fáze 77: bodové podhledové svítidlo – menší ⊗ s plným středem
+    parts.kind = "light";
+    const r = size * 0.17;
+    const d = r * 0.7071;
+    parts.circles.push({ cx: 0, cy: 0, r }, { cx: 0, cy: 0, r: r * 0.28, fill: true });
+    parts.paths.push(`M${f(-d)} ${f(-d)} L${f(d)} ${f(d)} M${f(d)} ${f(-d)} L${f(-d)} ${f(d)}`);
+    parts.label = "BOD";
+    return parts;
+  }
   if (item.kind === "light") {
     parts.kind = "light";
     const r = size * 0.26;
@@ -80,6 +100,35 @@ export function symbolParts(item: PaletteItem, size: number, options: { switchNo
     };
     const radio = () => parts.paths.push(`M${f(c * 1.6)} ${f(-c * 1.6)} a${f(c * 1.2)} ${f(c * 1.2)} 0 0 1 ${f(c * 0.9)} ${f(c * 0.9)}`, `M${f(c * 1.9)} ${f(-c * 2.4)} a${f(c * 2)} ${f(c * 2)} 0 0 1 ${f(c * 1.6)} ${f(c * 1.6)}`);
 
+    // Fáze 77: čidla na binární vstup a termostatická hlavice (bez řazení a bez párování se světly)
+    if (item.sensor === "window") {
+      // Magnetický kontakt: jazýčkový kontakt a magnet (dva obdélníčky proti sobě) se štítkem MAG
+      parts.kind = "sensor";
+      const a = c * 1.5;
+      const b = c * 0.7;
+      parts.paths.push(`M${f(-a - c * 0.15)} ${f(-b)} h${f(a)} v${f(b * 2)} h${f(-a)} Z`, `M${f(c * 0.15)} ${f(-b)} h${f(a)} v${f(b * 2)} h${f(-a)} Z`);
+      parts.fills.push(`M${f(c * 0.15)} ${f(-b)} h${f(a)} v${f(b * 2)} h${f(-a)} Z`);
+      parts.label = "MAG";
+      return parts;
+    }
+    if (item.sensor === "water") {
+      // Čidlo zaplavení: kapka nad hladinou (vlnovka) – snímací elektrody u podlahy
+      parts.kind = "sensor";
+      const h = c * 1.5;
+      parts.paths.push(`M0 ${f(-h)} C${f(c * 0.25)} ${f(-h * 0.55)} ${f(c * 0.95)} ${f(-c * 0.15)} ${f(c * 0.95)} ${f(c * 0.35)} A${f(c * 0.95)} ${f(c * 0.95)} 0 0 1 ${f(-c * 0.95)} ${f(c * 0.35)} C${f(-c * 0.95)} ${f(-c * 0.15)} ${f(-c * 0.25)} ${f(-h * 0.55)} 0 ${f(-h)} Z`);
+      parts.paths.push(`M${f(-c * 1.8)} ${f(c * 1.75)} q${f(c * 0.45)} ${f(-c * 0.4)} ${f(c * 0.9)} 0 t${f(c * 0.9)} 0 t${f(c * 0.9)} 0 t${f(c * 0.9)} 0`);
+      parts.label = "VOD";
+      return parts;
+    }
+    if (item.heatingHead) {
+      // Termostatická hlavice / servopohon: ventil (dva trojúhelníky proti sobě) s pohonem nahoře
+      parts.kind = "valve";
+      const v = c * 1.2;
+      parts.paths.push(`M${f(-v)} ${f(-v * 0.6)} L${f(v)} ${f(v * 0.6)} V${f(-v * 0.6)} L${f(-v)} ${f(v * 0.6)} Z`, `M0 0 V${f(-v * 1.2)}`, `M${f(-v * 0.55)} ${f(-v * 1.2)} h${f(v * 1.1)} v${f(-v * 0.75)} h${f(-v * 1.1)} Z`);
+      parts.label = "HLV";
+      return parts;
+    }
+
     if (item.bus) {
       // Sběrnicový prvek: rámeček „sběrnice“ + vnitřní značka podle role
       parts.kind = "bus";
@@ -94,7 +143,7 @@ export function symbolParts(item: PaletteItem, size: number, options: { switchNo
         parts.label = "BUS DP";
       } else {
         parts.texts.push({ x: 0, y: 0, size: size * 0.2, value: item.bus.role === "room_unit" ? "t°" : item.bus.role === "sensor" ? "θ %" : "▭" });
-        parts.label = item.bus.role === "room_unit" ? "BUS PJ" : item.bus.role === "sensor" ? "BUS ČT" : "BUS DTP";
+        parts.label = item.bus.role === "room_unit" ? (item.symbol === "TER_S" ? "BUS TER_S" : "BUS PJ") : item.bus.role === "sensor" ? "BUS ČT" : "BUS DTP";
       }
       return parts;
     }
@@ -113,7 +162,8 @@ export function symbolParts(item: PaletteItem, size: number, options: { switchNo
     if (item.control === "thermostat") {
       parts.circles.push({ cx: 0, cy: 0, r: c * 1.3 });
       parts.texts.push({ x: 0, y: 0, size: size * 0.2, value: "t°" });
-      parts.label = "TER";
+      // Fáze 77: chytrý prostorový termostat (teplota, vlhkost / CO₂) – štítek TER_S
+      parts.label = item.symbol === "TER_S" ? "TER_S" : "TER";
     } else if (item.wiringCategory === "WD_SENSOR") {
       // Pohybové čidlo: kryt s detekčním polem
       parts.paths.push(`M${f(-c * 1.3)} ${f(c * 0.6)} A${f(c * 1.3)} ${f(c * 1.3)} 0 0 1 ${f(c * 1.3)} ${f(c * 0.6)} Z`, `M${f(-c * 1.9)} ${f(-c * 0.6)} a${f(c * 2)} ${f(c * 2)} 0 0 1 ${f(c * 3.8)} 0`);
@@ -176,6 +226,19 @@ export function symbolParts(item: PaletteItem, size: number, options: { switchNo
     parts.circles.push({ cx: 0, cy: 0, r });
     parts.paths.push(`M0 ${f(r * 0.7)} V${f(-r * 0.7)}`, `M${f(-r * 0.35)} ${f(-r * 0.35)} L0 ${f(-r * 0.7)} L${f(r * 0.35)} ${f(-r * 0.35)}`, `M${f(-r * 0.35)} ${f(r * 0.35)} L0 ${f(r * 0.7)} L${f(r * 0.35)} ${f(r * 0.35)}`);
     parts.label = "stoupačka";
+    return parts;
+  }
+
+  // --- Fáze 77: vývod pro motor žaluzie / rolety u okna – nožička ke stěně, motor Ⓜ (ČSN EN 60617-6) a šipky ↕ ---
+  if (item.kind === "blind_motor") {
+    parts.kind = "blind_motor";
+    const r = size * 0.24;
+    parts.paths.push(`M0 0 V${f(L)}`);
+    parts.circles.push({ cx: 0, cy: L + r, r });
+    parts.texts.push({ x: 0, y: L + r, size: size * 0.24, value: "M" });
+    const x = r * 1.7;
+    parts.paths.push(`M${f(x)} ${f(L + r * 0.1)} V${f(L + r * 1.9)}`, `M${f(x - r * 0.35)} ${f(L + r * 0.45)} L${f(x)} ${f(L + r * 0.1)} L${f(x + r * 0.35)} ${f(L + r * 0.45)}`, `M${f(x - r * 0.35)} ${f(L + r * 1.55)} L${f(x)} ${f(L + r * 1.9)} L${f(x + r * 0.35)} ${f(L + r * 1.55)}`);
+    parts.label = "ZAL_M";
     return parts;
   }
 

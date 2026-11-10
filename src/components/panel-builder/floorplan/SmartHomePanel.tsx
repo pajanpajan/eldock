@@ -2,24 +2,26 @@
 
 import { AlertTriangle, Cpu, FileText } from "lucide-react";
 
-import { ROLE_LABEL, SMART_SYSTEMS, type SmartPlan, type SmartSystemId } from "@/lib/panel-builder/smart-home";
+import { CHANNEL_ROLES, ROLE_LABEL, SMART_SYSTEMS, type SmartPlan, type SmartSystemId } from "@/lib/panel-builder/smart-home";
+import { productOfModule } from "@/lib/panel-builder/smart-catalog";
 import { cn } from "@/lib/utils";
 
 import { ManufacturerLogo } from "../ManufacturerLogo";
 import { PanelSection } from "./RightPanels";
 
-const ROLE_ICON: Record<string, string> = { switch: "💡", dim: "🔆", dali: "🎛️", blind: "🪟", heating: "🌡️" };
+const ROLE_ICON: Record<string, string> = { switch: "💡", dim: "🔆", dali: "🎛️", blind: "🪟", heating: "🌡️", pwm: "🌈", input: "🧲" };
 
 /** „1 kanál“, „3 kanály“, „5 kanálů“. */
 const channelWord = (count: number) => (count === 1 ? "kanál" : count >= 2 && count <= 4 ? "kanály" : "kanálů");
 
 /**
  * Fáze 61: chytrá domácnost na sběrnicové úrovni instalace – volba systému a výrobce, potřebné kanály podle zátěží
- * v půdorysu (spínání, stmívání, DALI, žaluzie, topení), vybrané akční členy s objednacími čísly a šířkou na DIN
+ * v půdorysu (spínání, stmívání, DALI, žaluzie, topení; fáze 77 i 24 V PWM a binární vstupy), vybrané akční členy s objednacími čísly a šířkou na DIN
  * liště, kontrola sběrnice a přiřazení kanálů. Moduly se při generování vloží do rozváděče.
  */
 export function SmartHomePanel({ plan, onSystem, onDatasheet }: { plan: SmartPlan; onSystem: (system: SmartSystemId) => void; /** Fáze 65: technický list modulu. */ onDatasheet?: (moduleId: string) => void }) {
-  const roles = (["switch", "dim", "dali", "blind", "heating"] as const).filter((role) => plan.channels[role].needed > 0);
+  // Fáze 77: i kanály 24 V PWM (LED pásky, CCT, RGBW) a binární vstupy (okenní kontakty, čidla vody)
+  const roles = CHANNEL_ROLES.filter((role) => plan.channels[role].needed > 0);
   const actuators = plan.modules.filter((module) => module.modules > 0);
   const offRail = plan.modules.filter((module) => module.modules === 0);
   const busOk = !plan.psuMa || plan.busMa <= plan.psuMa * 0.8;
@@ -57,8 +59,13 @@ export function SmartHomePanel({ plan, onSystem, onDatasheet }: { plan: SmartPla
           ))}
         </ul>
       ) : (
-        <p className="text-xs text-muted-foreground">Vložte svítidla, žaluziová tlačítka nebo prostorové jednotky – kanály akčních členů se spočítají samy.</p>
+        <p className="text-xs text-muted-foreground">Vložte svítidla, motory žaluzií, čidla nebo hlavice – kanály akčních členů se spočítají samy.</p>
       )}
+      {plan.ledSupplyW > 0 ? (
+        <p className="text-xs text-muted-foreground" data-testid="smart-led-supply">
+          🔌 Zdroj 24 V DC pro LED: příkon pásků a svítidel PWM s rezervou 20 % = <b>{plan.ledSupplyW} W</b>
+        </p>
+      ) : null}
       {actuators.length ? (
         <table className="w-full text-xs" data-testid="smart-modules">
           <thead className="text-muted-foreground">
@@ -72,7 +79,8 @@ export function SmartHomePanel({ plan, onSystem, onDatasheet }: { plan: SmartPla
             {actuators.map((module) => (
               <tr key={`${module.id}-${module.index}`} className="border-t border-border" data-module={module.typeCode}>
                 <td className="py-0.5 pr-1">
-                  {onDatasheet ? (
+                  {/* Fáze 77: obecný modul (PWM, vstupy) a zdroj LED nemají technický list výrobce systému */}
+                  {onDatasheet && productOfModule(plan.system.id, module.id) ? (
                     <button type="button" onClick={() => onDatasheet(module.id)} className="mr-1 inline-flex align-middle text-muted-foreground hover:text-foreground" aria-label={`Datasheet: ${module.typeCode}`} title="Technický list" data-testid="module-datasheet">
                       <FileText className="size-3.5" aria-hidden />
                     </button>

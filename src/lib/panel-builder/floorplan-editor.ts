@@ -2,7 +2,7 @@
 // na vstup mostu „půdorys → rozváděč“ (`src/engine/floorplan-bridge.ts`) a 3D výpočtu kabeláže.
 // Čisté funkce – bezpečné pro klient i server.
 
-import { DOUBLE_TWO_WAY_CABLE, MANHATTAN, floorMetric, summarizeCabling, type FloorLink, type RouteMetric, type RouteNode, type RoutePoint } from "@/engine/cable-routing";
+import { BLIND_CABLE, BLIND_DC_CABLE, DOUBLE_TWO_WAY_CABLE, HEAD_CABLE, MANHATTAN, SENSOR_CABLE, floorMetric, ledCableLabel, summarizeCabling, type FloorLink, type RouteMetric, type RouteNode, type RoutePoint } from "@/engine/cable-routing";
 import { buildWallGraph, wallMetric, wallSegments } from "@/engine/wall-routing";
 import { isSocketGrouping, type SocketGrouping } from "@/engine/socket-zones";
 import {
@@ -43,7 +43,7 @@ import { DEFAULT_SUPPLY, supplyById, type SupplySystem } from "./supply";
 import { isEnvironmentId, type EnvironmentId } from "./environments";
 import { CALIBRATION_TOLERANCE_PCT, emptyCalibration, isRotation, planExtent, rotatedSize, type CalibrationRecord, type FloorplanBackground, type Rotation } from "./floorplan-pdf";
 
-export type PaletteGroup = "panel" | "sockets" | "lights" | "controls" | "appliances" | "fixtures";
+export type PaletteGroup = "panel" | "sockets" | "lights" | "controls" | "shading" | "appliances" | "fixtures";
 
 /** Fáze 57: role sběrnicového prvku (KNX / Loxone Tree / free@home) – kreslí se v rámečku „sběrnice“. */
 export type BusRole = "button" | "presence" | "room_unit" | "sensor" | "display" | "blind";
@@ -80,6 +80,12 @@ export interface PaletteItem {
   heightMm?: number;
   /** Fáze 63: položka mimo seznam palety (vlastní spotřebič – v paletě jako jednotlivé spotřebiče knihovny). */
   hidden?: boolean;
+  /** Fáze 77: čidlo na binární vstup – okenní / dveřní magnetický kontakt, čidlo úniku vody (bez silového okruhu). */
+  sensor?: "window" | "water";
+  /** Fáze 77: termostatická hlavice / servopohon topného okruhu (páruje se s termostatem místnosti). */
+  heatingHead?: boolean;
+  /** Fáze 77: tvar svítidla – LED pásek (nepřímé osvětlení, výchozí 24 V PWM) a bodové podhledové svítidlo. */
+  lightForm?: "strip" | "spot";
 }
 
 /** Fáze 74: kategorie palety – ikona, krátký název a podtitul (norma, rozsah) pro přehledný levý panel. */
@@ -88,6 +94,8 @@ export const PALETTE_GROUPS: { id: PaletteGroup; icon: string; label: string; hi
   { id: "sockets", icon: "🔌", label: "Zásuvky", hint: "jednozásuvky, dvojzásuvky, IP44, RJ45" },
   { id: "lights", icon: "💡", label: "Světla", hint: "stropní a nástěnná svítidla" },
   { id: "controls", icon: "🎛️", label: "Ovládání", hint: "vypínače a ovladače" },
+  // Fáze 77: stínící technika, čidla oken a vody, termostaty a hlavice (moduly do rozváděče podle počtu)
+  { id: "shading", icon: "🪟", label: "Stínící technika, čidla a vytápění", hint: "žaluzie, okna, voda, termostaty, hlavice" },
   { id: "appliances", icon: "🔥", label: "Spotřebiče", hint: "vlastní jisticí okruh" },
   { id: "fixtures", icon: "🛁", label: "Zařizovací předměty", hint: "zóny ČSN 33 2000-7-701, umývací prostor" },
 ];
@@ -116,6 +124,9 @@ export const PALETTE: PaletteItem[] = [
   { id: "data-socket", group: "sockets", label: "Datová zásuvka RJ45", symbol: "RJ", kind: "data_socket" },
   { id: "ceiling-light", group: "lights", label: "Stropní svítidlo", symbol: "⊗", kind: "light" },
   { id: "wall-light", group: "lights", label: "Nástěnné svítidlo", symbol: "◐", kind: "light", variant: "wall" },
+  // Fáze 77: LED pásek (výchozí 24 V DC PWM ze zdroje v rozváděči) a bodové podhledové svítidlo
+  { id: "led-strip", group: "lights", label: "LED pásek / nepřímé osvětlení", symbol: "LED_P", kind: "light", lightForm: "strip" },
+  { id: "spot-light", group: "lights", label: "Bodové podhledové svítidlo", symbol: "BOD", kind: "light", lightForm: "spot" },
   { id: "switch-1", group: "controls", levels: CLASSIC, label: "Vypínač č. 1 (jednopólový)", symbol: "S1", kind: "switch", switchNo: "1" },
   { id: "switch-5", group: "controls", levels: CLASSIC, label: "Sériový přepínač č. 5 (lustrový – 2 klapky)", symbol: "S5", kind: "switch", switchNo: "5", fixedSwitchNo: "5" },
   { id: "switch-6", group: "controls", levels: CLASSIC, label: "Střídavý přepínač č. 6 (schodový)", symbol: "S6", kind: "switch", switchNo: "6" },
@@ -147,6 +158,13 @@ export const PALETTE: PaletteItem[] = [
   { id: "bus-room", group: "controls", levels: BUS, label: "Prostorová jednotka s termostatem (sběrnice)", symbol: "PJ", kind: "switch", control: "thermostat", bus: { channels: 1, role: "room_unit" }, heightMm: 1500 },
   { id: "bus-sensor", group: "controls", levels: BUS, label: "Čidlo teploty a vlhkosti (sběrnice)", symbol: "ČT", kind: "switch", control: "none", bus: { channels: 1, role: "sensor" }, heightMm: 1500 },
   { id: "bus-display", group: "controls", levels: BUS, label: "Dotykový panel / vizualizace (sběrnice)", symbol: "DTP", kind: "switch", control: "none", bus: { channels: 1, role: "display" }, heightMm: 1500 },
+  // Fáze 77: stínící technika, čidla a vytápění – vývod motoru žaluzie u okna, čidla na binární vstupy, termostaty, hlavice
+  { id: "blind-motor", group: "shading", label: "Vývod pro motor žaluzie / rolety (u okna)", symbol: "ZAL_M", kind: "blind_motor", heightMm: 2450 },
+  { id: "window-contact", group: "shading", label: "Okenní / dveřní magnetický kontakt", symbol: "MAG", kind: "switch", control: "none", sensor: "window", heightMm: 2100 },
+  { id: "water-sensor", group: "shading", label: "Čidlo úniku vody (záplavový senzor)", symbol: "VOD", kind: "switch", control: "none", sensor: "water", heightMm: 50 },
+  { id: "smart-thermostat", group: "shading", levels: CLASSIC, label: "Chytrý prostorový termostat (teplota, vlhkost / CO₂), 230 V", symbol: "TER_S", kind: "switch", control: "thermostat", wiringCategory: "WD_THERMOSTAT", heightMm: 1400 },
+  { id: "bus-smart-thermostat", group: "shading", levels: BUS, label: "Chytrý prostorový termostat (teplota, vlhkost / CO₂), sběrnice 24 V DC", symbol: "TER_S", kind: "switch", control: "thermostat", bus: { channels: 1, role: "room_unit" }, heightMm: 1400 },
+  { id: "heating-head", group: "shading", label: "Termostatická hlavice / servopohon topného okruhu", symbol: "HLV", kind: "switch", control: "none", heatingHead: true, heightMm: 300 },
   // Fáze 57: hybridní retrofit – klasická kabeláž s modulem pod vypínač (výše) a bezdrátová tlačítka bez kabelu
   { id: "wireless-1", group: "controls", levels: RETROFIT, label: "Bezdrátové tlačítko 1násobné (baterie, bez kabelu)", symbol: "BT1", kind: "switch", variant: "button", wireless: true },
   { id: "wireless-2", group: "controls", levels: RETROFIT, label: "Bezdrátové tlačítko 2násobné (baterie, bez kabelu)", symbol: "BT2", kind: "switch", variant: "button", wireless: true },
@@ -179,6 +197,30 @@ export const availableIn = (item: PaletteItem, level: InstallLevel) => !item.lev
 
 /** Ovladač, který se páruje se světly (ne žaluzie ani termostat). */
 export const controlsLights = (item: PaletteItem | null | undefined) => item?.kind === "switch" && (item.control ?? "light") === "light";
+
+/**
+ * Fáze 77: párování ovladače s prvkem – vypínač se světly, žaluziový spínač s motory žaluzií, termostat s hlavicemi
+ * (čidla a hlavice samy nic neovládají).
+ */
+export function pairsWith(controller: PaletteItem | null | undefined, target: PaletteItem | null | undefined): boolean {
+  if (!controller || !target || controller.kind !== "switch" || controller.sensor || controller.heatingHead) return false;
+  const control = controller.control ?? "light";
+  if (control === "light") return target.kind === "light";
+  if (control === "blind") return target.kind === "blind_motor";
+  if (control === "thermostat") return Boolean(target.heatingHead);
+  return false;
+}
+/** Fáze 77: ovladač, který jde párovat (světla, žaluzie, topení). */
+export const isPairController = (item: PaletteItem | null | undefined) => Boolean(item && item.kind === "switch" && !item.sensor && !item.heatingHead && (item.control ?? "light") !== "none");
+/** Fáze 77: prvek, ke kterému se páruje ovladač (svítidlo, motor žaluzie, hlavice). */
+export const isPairTarget = (item: PaletteItem | null | undefined) => Boolean(item && (item.kind === "light" || item.kind === "blind_motor" || item.heatingHead));
+/** Fáze 77: co spárovaný ovladač ovládá (pro popis kroku párování). */
+export function pairNoun(item: PaletteItem | null | undefined, count: number): string {
+  const word = (one: string, few: string, many: string) => (count === 1 ? one : count >= 2 && count <= 4 ? few : many);
+  if (item?.control === "blind") return `${count} ${word("motor žaluzie", "motory žaluzií", "motorů žaluzií")}`;
+  if (item?.control === "thermostat") return `${count} ${word("hlavici", "hlavice", "hlavic")}`;
+  return `${count} ${word("svítidlo", "svítidla", "svítidel")}`;
+}
 
 /** Osazený prvek – souřadnice v mm půdorysu (počátek vlevo nahoře). */
 export interface EditorElement {
@@ -219,6 +261,10 @@ export interface EditorElement {
   boardCode?: string;
   /** Fáze 74: ruční přiřazení prvku k rozváděči („RH“ / „RP1“ …); bez = automaticky (`boardOfElement`). */
   board?: string;
+  /** Fáze 77: pohon vývodu žaluzie / rolety (bez údaje 230 V AC). */
+  drive?: BlindDrive;
+  /** Fáze 77: pohon termostatické hlavice (bez údaje 24 V DC). */
+  headDrive?: HeadDrive;
 }
 
 /** Fáze 61: zátěž svítidla pro chytrou domácnost. */
@@ -228,7 +274,39 @@ export interface LightSpec {
   /** Příkon svítidla [W]. */
   powerW: number;
   load: LightLoad;
+  /** Fáze 77: změna chromatičnosti (Tunable White – teplá / studená bílá CCT). */
+  cct?: boolean;
+  /** Fáze 77: změna barvy – RGB nebo RGBW. */
+  color?: LightColor;
+  /** Fáze 77: technologie řízení – fázové stmívání 230 V, DALI / DALI-2, 24 V DC PWM (LED pásky, CCT, RGBW). */
+  control?: LightControl;
 }
+
+/** Fáze 77: barevné provedení svítidla a technologie řízení stmívání / barvy. */
+export type LightColor = "rgb" | "rgbw";
+export type LightControl = "phase" | "dali" | "pwm";
+export const LIGHT_CONTROLS: readonly { id: LightControl; label: string }[] = [
+  { id: "phase", label: "Fázové stmívání 230 V (RLC / LED)" },
+  { id: "dali", label: "DALI / DALI-2 sběrnice (kabel 5×1,5)" },
+  { id: "pwm", label: "24 V DC PWM (LED pásky, CCT a RGBW)" },
+];
+
+/** Fáze 77: pohon žaluzie / rolety – 230 V AC (spínačem nebo relé aktorem), 24 V DC nebo sběrnicový (Loxone / Somfy / KNX). */
+export type BlindDrive = "ac230" | "dc24" | "bus";
+export const BLIND_DRIVES: readonly { id: BlindDrive; label: string }[] = [
+  { id: "ac230", label: "230 V AC pohon (klasický / přes relé aktor)" },
+  { id: "dc24", label: "24 V DC pohon" },
+  { id: "bus", label: "Sběrnicový pohon (Loxone / Somfy / KNX)" },
+];
+/** Fáze 77: pohon termostatické hlavice / servopohonu topného okruhu. */
+export type HeadDrive = "dc24" | "ac230" | "wireless";
+export const HEAD_DRIVES: readonly { id: HeadDrive; label: string }[] = [
+  { id: "dc24", label: "24 V DC" },
+  { id: "ac230", label: "230 V AC" },
+  { id: "wireless", label: "Bezdrátová (Tree Air / free@home WL)" },
+];
+export const isBlindDrive = (value: unknown): value is BlindDrive => BLIND_DRIVES.some((drive) => drive.id === value);
+export const isHeadDrive = (value: unknown): value is HeadDrive => HEAD_DRIVES.some((drive) => drive.id === value);
 export const DEFAULT_LIGHT: LightSpec = { dimmable: false, powerW: 20, load: "led" };
 export const LIGHT_LOADS: readonly { id: LightLoad; label: string }[] = [
   { id: "led", label: "LED (retrofit / stmívatelné LED)" },
@@ -238,9 +316,56 @@ export const LIGHT_LOADS: readonly { id: LightLoad; label: string }[] = [
 ];
 export const lightSpecOf = (element: Pick<EditorElement, "light">): LightSpec => element.light ?? DEFAULT_LIGHT;
 
+/** Fáze 77: technologie řízení svítidla – zadaná, DALI předřadník, LED pásek = 24 V PWM, jinak fázové / spínané 230 V. */
+export function lightControlOf(element: Pick<EditorElement, "light">, item: Pick<PaletteItem, "lightForm"> | null): LightControl {
+  const spec = lightSpecOf(element);
+  if (spec.control) return spec.control;
+  if (spec.load === "dali") return "dali";
+  return item?.lightForm === "strip" ? "pwm" : "phase";
+}
+
+/** Fáze 77: kanály PWM řadiče na svítidlo / pásek – stmívání 1, CCT 2, RGB 3, RGBW 4, RGB + CCT 5. */
+export function pwmChannels(spec: Pick<LightSpec, "cct" | "color">): number {
+  if (spec.color === "rgbw") return 4;
+  if (spec.color === "rgb") return spec.cct ? 5 : 3;
+  return spec.cct ? 2 : 1;
+}
+
+/**
+ * Fáze 77: změna voleb svítidla (detail i plovoucí lišta) – DALI zátěž = řízení DALI; CCT a barva fázovým stmíváním
+ * nejdou, technologie se přepne na DALI DT8 (LED pásek na 24 V PWM); barevné svítidlo je vždy stmívatelné.
+ */
+export function applyLightOption(spec: LightSpec, patch: Partial<LightSpec>, item: Pick<PaletteItem, "lightForm"> | null): LightSpec {
+  const next: LightSpec = { ...spec, ...patch };
+  if (!next.color) delete next.color;
+  if (!next.cct) delete next.cct;
+  if (patch.control === "dali" || patch.load === "dali") {
+    next.control = "dali";
+    next.load = "dali";
+  } else if (patch.control && next.load === "dali") next.load = "led";
+  else if (patch.load && next.control === "dali") delete next.control;
+  if (next.control === "dali") next.dimmable = true;
+  if (next.cct || next.color) {
+    next.dimmable = true;
+    if (lightControlOf({ light: next }, item) === "phase") {
+      next.control = item?.lightForm === "strip" ? "pwm" : "dali";
+      if (next.control === "dali") next.load = "dali";
+    }
+  }
+  return next;
+}
+
 function parseLightSpec(value: unknown, num: (input: unknown, fallback: number, min: number, max: number) => number): LightSpec {
   const raw = (value && typeof value === "object" ? value : {}) as Partial<LightSpec>;
-  return { dimmable: raw.dimmable === true, powerW: Math.round(num(raw.powerW, DEFAULT_LIGHT.powerW, 1, 3000)), load: LIGHT_LOADS.some((load) => load.id === raw.load) ? raw.load! : DEFAULT_LIGHT.load };
+  return {
+    dimmable: raw.dimmable === true,
+    powerW: Math.round(num(raw.powerW, DEFAULT_LIGHT.powerW, 1, 3000)),
+    load: LIGHT_LOADS.some((load) => load.id === raw.load) ? raw.load! : DEFAULT_LIGHT.load,
+    // Fáze 77: CCT, barva a technologie řízení
+    ...(raw.cct === true ? { cct: true } : {}),
+    ...(raw.color === "rgb" || raw.color === "rgbw" ? { color: raw.color } : {}),
+    ...(LIGHT_CONTROLS.some((control) => control.id === raw.control) ? { control: raw.control } : {}),
+  };
 }
 
 /** Základní velikost značky v půdorysu [mm] (≈ 6 mm na výkresu 1 : 50); násobí ji měřítko značek. */
@@ -711,7 +836,7 @@ function parseSmartExtras(value: unknown): Record<string, number> {
 }
 
 /** Fáze 63: rozměr předmětu, vlastní spotřebič a výrobek prvku z uložených dat; fáze 65 ruční zásuvkový okruh, fáze 74 rozváděč. */
-function parseExtras(element: Partial<EditorElement> & { item: string }, num: Num): Pick<EditorElement, "sizeMm" | "appliance" | "product" | "socketCircuit" | "boardCode" | "board"> {
+function parseExtras(element: Partial<EditorElement> & { item: string }, num: Num): Pick<EditorElement, "sizeMm" | "appliance" | "product" | "socketCircuit" | "boardCode" | "board" | "drive" | "headDrive"> {
   const fixture = fixtureSpecOf(element.item);
   const size = element.sizeMm && typeof element.sizeMm === "object" ? element.sizeMm : null;
   return {
@@ -721,6 +846,9 @@ function parseExtras(element: Partial<EditorElement> & { item: string }, num: Nu
     ...(typeof element.socketCircuit === "string" && SOCKET_CIRCUIT.test(element.socketCircuit) ? { socketCircuit: element.socketCircuit } : {}),
     ...(element.item === SUBPANEL_ITEM && typeof element.boardCode === "string" && SUBPANEL_CODE.test(element.boardCode) ? { boardCode: element.boardCode } : {}),
     ...(element.item !== SUBPANEL_ITEM && element.item !== "panel" && typeof element.board === "string" && BOARD_CODE.test(element.board) ? { board: element.board } : {}),
+    // Fáze 77: pohon žaluzie a termostatické hlavice
+    ...(paletteItem(element.item)?.kind === "blind_motor" && isBlindDrive(element.drive) ? { drive: element.drive } : {}),
+    ...(paletteItem(element.item)?.heatingHead && isHeadDrive(element.headDrive) ? { headDrive: element.headDrive } : {}),
   };
 }
 
@@ -937,7 +1065,7 @@ export function effectiveSwitchNo(draft: FloorsLike, element: Pick<EditorElement
 export const isWiredSwitch = (item: PaletteItem | null | undefined) => item?.kind === "switch" && !item.bus && !item.wireless;
 
 /** Značka, která se natáčí „nožičkou“ ke stěně: zásuvky, datové zásuvky a nástěnná svítidla. */
-export const isWallMounted = (item: PaletteItem | null | undefined) => item?.kind === "single_socket" || item?.kind === "double_socket" || item?.kind === "data_socket" || (item?.kind === "light" && item.variant === "wall");
+export const isWallMounted = (item: PaletteItem | null | undefined) => item?.kind === "single_socket" || item?.kind === "double_socket" || item?.kind === "data_socket" || item?.kind === "blind_motor" || (item?.kind === "light" && item.variant === "wall");
 
 /** Otočení ke nejbližší stěně místnosti (0 = stěna nahoře, 90 = vpravo, 180 = dole, 270 = vlevo; fáze 63: šikmá stěna pod svým úhlem). */
 export function wallRotation(room: Pick<EditorRoom, "x" | "y" | "w" | "h" | "points"> | null, x: number, y: number): number {
@@ -1094,6 +1222,16 @@ export interface PlanBuild {
   boardOf: Map<string, string>;
   /** Fáze 76: nakreslené místnosti s prvky (obrys) pro obvodový router; prázdné u stylu „direct“. */
   perimeterRooms: PerimeterRoom[];
+  /** Fáze 77: samostatné kabely k čidlům, hlavicím, motorům žaluzií a LED 24 V (z rozváděče, nebo od `targetId`). */
+  starRuns: { id: string; cable: string; targetId: string | null }[];
+}
+
+/** Fáze 77: uzel svítidla – technologie řízení (jen DALI / PWM) a příkon LED 24 V (zdroj v rozváděči). */
+function lightNodeExtras(element: EditorElement, item: PaletteItem): Pick<FloorNode, "lightControl" | "powerW"> {
+  if (item.kind !== "light") return {};
+  const control = lightControlOf(element, item);
+  if (control === "pwm") return { lightControl: "pwm", powerW: lightSpecOf(element).powerW };
+  return control === "dali" ? { lightControl: "dali" } : {};
 }
 
 /** Fáze 74: uzel trasy podružného rozváděče (cíl přívodu z hlavního rozváděče). */
@@ -1216,6 +1354,9 @@ export function buildPlan(draft: FloorplanDraft): PlanBuild {
           ...(override ? { appliance: override } : {}),
           // Fáze 65: ruční zásuvkový okruh (jen zásuvky)
           ...(element.socketCircuit && (item.kind === "single_socket" || item.kind === "double_socket") ? { socketCircuit: element.socketCircuit } : {}),
+          // Fáze 77: technologie svítidla (DALI = kabel 5×1,5, PWM = LED 24 V ze zdroje v rozváděči) a pohon žaluzie
+          ...lightNodeExtras(element, item),
+          ...(item.kind === "blind_motor" ? { blindDrive: element.drive ?? "ac230" } : {}),
         };
         const heightMm = mountHeight(node, profile);
         // Fáze 74: délka přívodu prvku z jeho rozváděče
@@ -1244,11 +1385,41 @@ export function buildPlan(draft: FloorplanDraft): PlanBuild {
     const tag = paletteItem(elementOf.get(node.id)?.item ?? "")?.tag;
     return tag === "heat_pump" || tag === "boiler";
   });
+  // Fáze 77: zakreslené motory žaluzií – žaluziový spínač vede ovládání ke spárovaným motorům (bez nich nic navíc);
+  // bez motorů v nákresu jako dřív k pohonu v nadpraží nad spínačem
+  const motorIds = new Set(everything.filter((element) => paletteItem(element.item)?.kind === "blind_motor").map((element) => element.id));
   const controlRuns = routeNodes.flatMap((node) => {
-    const control = paletteItem(elementOf.get(node.id)?.item ?? "")?.control;
+    const element = elementOf.get(node.id);
+    const control = paletteItem(element?.item ?? "")?.control;
     if (control !== "blind" && control !== "thermostat") return [];
+    // Sběrnice: tlačítko je na sběrnicové lince, motor napájí aktor z rozváděče (samostatný kabel níže)
+    if (control === "blind" && motorIds.size) return draft.installation === "bus_loxone" ? [] : (element?.controls ?? []).filter((id) => motorIds.has(id)).map((targetId) => ({ id: node.id, kind: control, targetId }));
     const target = control === "thermostat" ? ([...heating].sort((a, b) => metric.distance(a, node) - metric.distance(b, node))[0] ?? null) : null;
     return [{ id: node.id, kind: control, targetId: target?.id ?? null }];
+  });
+  // Fáze 77: samostatné kabely k prvkům – čidla na binární vstupy, hlavice (od termostatu u klasiky, jinak z rozváděče),
+  // motory 24 V / sběrnicové a u sběrnice i 230 V z žaluziového aktoru, LED 24 V PWM ze zdroje v rozváděči
+  const bus = draft.installation === "bus_loxone";
+  const starRuns = routeNodes.flatMap((node): PlanBuild["starRuns"] => {
+    const element = elementOf.get(node.id);
+    const item = element ? paletteItem(element.item) : null;
+    if (!element || !item) return [];
+    if (item.sensor) return [{ id: node.id, cable: SENSOR_CABLE, targetId: null }];
+    if (item.heatingHead) {
+      if (element.headDrive === "wireless") return [];
+      const thermostat = bus ? undefined : everything.find((candidate) => paletteItem(candidate.item)?.control === "thermostat" && candidate.controls.includes(element.id));
+      return [{ id: node.id, cable: HEAD_CABLE, targetId: thermostat?.id ?? null }];
+    }
+    if (item.kind === "blind_motor") {
+      const drive = element.drive ?? "ac230";
+      if (drive !== "ac230") return [{ id: node.id, cable: BLIND_DC_CABLE, targetId: null }];
+      return bus ? [{ id: node.id, cable: BLIND_CABLE, targetId: null }] : [];
+    }
+    if (item.kind === "light" && lightControlOf(element, item) === "pwm") {
+      const spec = lightSpecOf(element);
+      return [{ id: node.id, cable: ledCableLabel(pwmChannels(spec) + 1, spec.color ? spec.color.toUpperCase() : spec.cct ? "CCT" : ""), targetId: null }];
+    }
+    return [];
   });
   const rooms = [...roomIds.values()].map((room) => {
     const floor = floors.find((candidate) => candidate.id === room.floor)!;
@@ -1264,7 +1435,7 @@ export function buildPlan(draft: FloorplanDraft): PlanBuild {
         return drawn ? [{ id: room.id, floor: room.floor, outline: roomPolygon(drawn) }] : [];
       })
     : [];
-  return { plan: { rooms, nodes, mode: draft.installation }, calibration, panel, routeNodes, switchLinks, controlRuns, dataNodeIds, busNodeIds, elementOf, floors: links, metric, wallFloors: [...bases.keys()], boards, boardOf, perimeterRooms };
+  return { plan: { rooms, nodes, mode: draft.installation }, calibration, panel, routeNodes, switchLinks, controlRuns, dataNodeIds, busNodeIds, elementOf, floors: links, metric, wallFloors: [...bases.keys()], boards, boardOf, perimeterRooms, starRuns };
 }
 
 /** Kalibrace na 2 kliky: úsečka v mm současného měřítka a skutečná délka → nové měřítko a přepočet prvků. */
@@ -1387,7 +1558,7 @@ export function analyzeDraft(draft: FloorplanDraft) {
   const panels = Object.fromEntries(build.boards.map((board) => [board.code, board.point]));
   // Fáze 76: obvodový router po stěnách (výchozí styl), u „Nejkratší v podlaze“ řetěz přímými trasami
   const treeRouter = draft.routeStyle !== "direct" ? createPerimeterRouter({ rooms: build.perimeterRooms, metric: build.metric }) : undefined;
-  const summary = summarizeCabling({ circuits: circuits.circuits, nodes: build.routeNodes, panel: build.panel, panels, profile: draft.profile, selected: draft.mode, switchLinks: build.switchLinks, controlRuns: build.controlRuns, dataNodeIds: build.dataNodeIds, busNodeIds: build.busNodeIds, installation: draft.installation, metric: build.metric, routeEdits: draft.routeEdits, treeRouter });
+  const summary = summarizeCabling({ circuits: circuits.circuits, nodes: build.routeNodes, panel: build.panel, panels, profile: draft.profile, selected: draft.mode, switchLinks: build.switchLinks, controlRuns: build.controlRuns, dataNodeIds: build.dataNodeIds, busNodeIds: build.busNodeIds, installation: draft.installation, metric: build.metric, routeEdits: draft.routeEdits, treeRouter, starRuns: build.starRuns });
   return { build, circuits, summary };
 }
 

@@ -37,7 +37,8 @@ export const INSTALLATION_ZONES = {
   panelEntryHeightMm: 1700,
 } as const;
 
-export type NodeKind = "single_socket" | "double_socket" | "light" | "switch" | "appliance" | "data_socket";
+/** Fáze 77: `blind_motor` = vývod pro motor žaluzie / rolety u okna (230 V AC na žaluziovém okruhu B10). */
+export type NodeKind = "single_socket" | "double_socket" | "light" | "switch" | "appliance" | "data_socket" | "blind_motor";
 
 /** Upřesnění prvku (fáze 49): zásuvka nad linkou, IP44, nástěnné svítidlo, tlačítko. */
 export type NodeVariant = "worktop" | "ip44" | "wall" | "button";
@@ -65,6 +66,13 @@ export interface FloorNode {
   appliance?: ApplianceOverride;
   /** Fáze 65: ruční zásuvkový okruh („Z1“, „Z2“ …) – zásuvky se stejným klíčem tvoří jeden okruh; bez = automaticky. */
   socketCircuit?: string | null;
+  /**
+   * Fáze 77: svítidlo – technologie řízení. `dali` = světelný okruh kabelem 5×1,5 (L, N, PE, DA+, DA−), `pwm` = LED 24 V DC
+   * ze zdroje v rozváděči (není na okruhu 230 V – zdroj má vlastní jistič). Bez údaje fázové / spínané 230 V.
+   */
+  lightControl?: "phase" | "dali" | "pwm";
+  /** Fáze 77: pohon žaluzie – 230 V AC na žaluziovém okruhu, 24 V DC / sběrnicový ze zdroje a řadiče v rozváděči. */
+  blindDrive?: "ac230" | "dc24" | "bus";
 }
 
 /** Fáze 63: zadání samostatného spotřebiče z knihovny spotřebičů (`lib/panel-builder/appliances.ts`). */
@@ -185,6 +193,9 @@ export const elevationProfile = (partial: Partial<ElevationProfile> = {}): Eleva
 export type CableRoutingMode = "BOTTOM" | "TOP" | "OPTIMIZED";
 export const ROUTING_MODES: readonly CableRoutingMode[] = ["BOTTOM", "TOP", "OPTIMIZED"];
 
+/** Fáze 77: výška vývodu motoru žaluzie / rolety – horní kastlík okna [mm]. */
+export const BLIND_MOTOR_HEIGHT_MM = 2450;
+
 /** Pevné výšky spotřebičů (vývod / přípojka) – ostatní spotřebiče jako běžná zásuvka. */
 const APPLIANCE_HEIGHT_MM: Partial<Record<ApplianceTag, number>> = { boiler: 1800, ev_charger: 1200, microwave_builtin: 1150 };
 
@@ -198,6 +209,9 @@ export function mountHeight(node: Pick<FloorNode, "kind"> & Partial<Pick<FloorNo
       return profile.defaultSwitchHeightMm;
     case "appliance":
       return (node.tag && APPLIANCE_HEIGHT_MM[node.tag]) ?? profile.defaultSocketHeightMm;
+    case "blind_motor":
+      // Fáze 77: horní kastlík okna
+      return Math.min(BLIND_MOTOR_HEIGHT_MM, profile.ceilingHeightMm);
     default:
       return node.variant === "worktop" || node.variant === "ip44" ? profile.worktopSocketHeightMm : profile.defaultSocketHeightMm;
   }
@@ -458,13 +472,19 @@ const DEDICATED_MIN_W = 2000;
 export const MAX_OUTLETS_PER_CIRCUIT = 10;
 /** Max. světelných bodů na světelný okruh. */
 export const MAX_LIGHTS_PER_CIRCUIT = 10;
+/** Fáze 77: nejvýš motorů žaluzií na jeden žaluziový okruh B10 a výpočtový příkon motoru [W]. */
+export const MAX_BLINDS_PER_CIRCUIT = 8;
+export const BLIND_MOTOR_W = 150;
+/** Fáze 77: rezerva napájecího zdroje 24 V DC pro LED pásky (příkon pásků + 20 %). */
+export const LED_PSU_RESERVE = 1.2;
 const LIGHT_POWER_W = 60;
 const OUTLET_POWER_W = 200;
 const SOCKET_SIMULTANEITY = 0.3;
 const LIGHT_SIMULTANEITY = 0.8;
 
 /** Fáze 74: `feeder` = přívod hlavní → podružný rozváděč (bez chrániče 30 mA – chrániče má podružný rozváděč). */
-export type CircuitKind = "lighting" | "sockets" | "dedicated" | "cooktop" | "fridge" | "three_phase_rcd_b" | "feeder";
+/** Fáze 77: `blinds` = žaluziový okruh B10 (motory 230 V u oken, u sběrnice napájení žaluziových aktorů v rozváděči). */
+export type CircuitKind = "lighting" | "sockets" | "dedicated" | "cooktop" | "fridge" | "three_phase_rcd_b" | "feeder" | "blinds";
 
 /** Fáze 74: hlavní rozváděč – výchozí rozváděč okruhu bez `board`. */
 export const MAIN_BOARD = "RH";
@@ -637,16 +657,21 @@ export function generateCircuitsFromFloorplan(plan: Floorplan, calibration: Cali
 
   // Fáze 74: okruh podružného rozváděče má k dispozici limit úbytku mínus úbytek na jeho přívodu
   const upstream = Math.max(0, options.upstreamDropPct ?? 0);
-  function push(base: Omit<Circuit, "id" | "cable" | "crossSectionMm2" | "voltageDropPct" | "lengthMm" | "izA" | "loop">, nodes: readonly FloorNode[], startMm2: number) {
+  /** `cores` = vlastní počet žil kabelu (fáze 77: DALI 5 žil L, N, PE, DA+, DA−). */
+  function push(base: Omit<Circuit, "id" | "cable" | "crossSectionMm2" | "voltageDropPct" | "lengthMm" | "izA" | "loop">, nodes: readonly FloorNode[], startMm2: number, cores?: number) {
     const lengthMm = Math.max(0, ...nodes.map(length));
     const limit = Math.max(0.5, (base.kind === "lighting" ? VOLTAGE_DROP_LIMIT.lighting : VOLTAGE_DROP_LIMIT.other) - upstream);
     const designA = base.phases === 3 ? base.designW / (Math.sqrt(3) * 400) : base.designW / NOMINAL_U0;
     const { mm2, drop, izA, loop } = sized(base.protection, base.phases, Math.min(designA, base.protection.ratedA), startMm2, lengthMm, limit, base.label);
-    circuits.push({ ...base, id: nextId(base.kind), cable: cableFor(base.phases, mm2), crossSectionMm2: mm2, lengthMm, voltageDropPct: drop, izA, loop });
+    const cable = cores ? `CYKY-J ${cores}x${String(mm2).replace(".", ",")}` : cableFor(base.phases, mm2);
+    circuits.push({ ...base, id: nextId(base.kind), cable, crossSectionMm2: mm2, lengthMm, voltageDropPct: drop, izA, loop });
   }
 
   const sockets: FloorNode[] = [];
   const lights: FloorNode[] = [];
+  // Fáze 77: LED 24 V DC (PWM) ze zdroje v rozváděči a vývody motorů žaluzií
+  const pwmLights: FloorNode[] = [];
+  const blindMotors: FloorNode[] = [];
   for (const node of plan.nodes) {
     const tag = node.tag;
     const appliance = tag ? APPLIANCES[tag] : null;
@@ -654,9 +679,15 @@ export function generateCircuitsFromFloorplan(plan: Floorplan, calibration: Cali
     const room = roomName.get(node.room) ?? node.room;
     if (node.kind === "single_socket") addBom(bom, "Zásuvka jednonásobná 230 V / 16 A");
     if (node.kind === "double_socket") addBom(bom, "Zásuvka dvojnásobná (dvojzásuvka) 230 V / 16 A");
-    if (node.kind === "light") addBom(bom, "Svítidlový vývod (stropní)");
+    if (node.kind === "light") addBom(bom, node.lightControl === "pwm" ? "Vývod LED 24 V DC (pásek / svítidlo ze zdroje v rozváděči)" : "Svítidlový vývod (stropní)");
     if (node.kind === "light") {
-      lights.push(node);
+      if (node.lightControl === "pwm") pwmLights.push(node);
+      else lights.push(node);
+      continue;
+    }
+    if (node.kind === "blind_motor") {
+      addBom(bom, "Vývod pro motor žaluzie / rolety (kastlík okna)");
+      blindMotors.push(node);
       continue;
     }
     if (node.kind === "switch") continue; // spínače vyplývají z ovládání místností (bod 2)
@@ -822,9 +853,11 @@ export function generateCircuitsFromFloorplan(plan: Floorplan, calibration: Cali
   for (const group of lightGroups.filter((nodes) => nodes.length)) {
     const rooms = [...new Set(group.map((node) => node.room))];
     const installedW = group.reduce((sum, node) => sum + (node.powerW ?? LIGHT_POWER_W), 0);
+    // Fáze 77: okruh se svítidly DALI vede kabelem 5×1,5 (L, N, PE, DA+, DA−)
+    const dali = group.some((node) => node.lightControl === "dali");
     push(
       {
-        label: `Světla – ${rooms.map((room) => roomName.get(room) ?? room).join(", ")}`,
+        label: `Světla – ${rooms.map((room) => roomName.get(room) ?? room).join(", ")}${dali ? " (DALI)" : ""}`,
         kind: "lighting",
         phases: 1,
         protection: lightingProtection === "rcbo" ? { device: "RCBO", poles: "1P+N", curve: "B", ratedA: 10, rcd: { type: "A", sensitivityMa: 30 } } : { device: "MCB", poles: "1P", curve: "B", ratedA: 10 },
@@ -837,9 +870,64 @@ export function generateCircuitsFromFloorplan(plan: Floorplan, calibration: Cali
       },
       group,
       1.5,
+      dali ? 5 : undefined,
     );
   }
   if (lights.length && minLighting >= 2 && circuits.filter((circuit) => circuit.kind === "lighting").length < 2) warnings.push("Jen jeden světelný bod – druhý nezávislý světelný okruh nelze vytvořit.");
+
+  // Fáze 77: LED 24 V DC (PWM) – napájecí zdroj na DIN liště má vlastní světelný okruh B10 (pásky vedou ze zdroje / řadiče)
+  if (pwmLights.length) {
+    const rooms = [...new Set(pwmLights.map((node) => node.room))];
+    const ledW = pwmLights.reduce((sum, node) => sum + (node.powerW ?? LIGHT_POWER_W), 0);
+    push(
+      {
+        label: `Zdroj 24 V DC – LED osvětlení (${rooms.map((room) => roomName.get(room) ?? room).join(", ")})`,
+        kind: "lighting",
+        phases: 1,
+        protection: lightingProtection === "rcbo" ? { device: "RCBO", poles: "1P+N", curve: "B", ratedA: 10, rcd: { type: "A", sensitivityMa: 30 } } : { device: "MCB", poles: "1P", curve: "B", ratedA: 10 },
+        rooms,
+        nodeIds: [],
+        outlets: 0,
+        installedW: Math.round(ledW * LED_PSU_RESERVE),
+        designW: Math.round(ledW * LED_PSU_RESERVE),
+        rcd: lightingProtection === "rcbo" ? "own" : "A30L",
+      },
+      [],
+      1.5,
+    );
+  }
+
+  // Fáze 77: žaluziové okruhy B10 – motory 230 V AC po podlažích (max. 8 na okruh); u sběrnicové instalace jeden okruh
+  // napájí žaluziové akční členy v rozváděči (motory hvězdou z aktorů). Pohony 24 V DC / sběrnicové napájí zdroj systému.
+  const acMotors = blindMotors.filter((node) => (node.blindDrive ?? "ac230") === "ac230");
+  if (blindMotors.length > acMotors.length) warnings.push(`${blindMotors.length - acMotors.length}× pohon žaluzie 24 V DC / sběrnicový – napájí ho zdroj 24 V řídicího systému v rozváděči (ověřte rozběhový proud pohonů).`);
+  const blindCircuit = (group: readonly FloorNode[], label: string, inBoard: boolean) =>
+    push(
+      {
+        label,
+        kind: "blinds",
+        phases: 1,
+        protection: { device: "MCB", poles: "1P", curve: "B", ratedA: 10 },
+        rooms: [...new Set(group.map((node) => node.room))],
+        nodeIds: inBoard ? [] : group.map((node) => node.id),
+        outlets: 0,
+        installedW: group.length * BLIND_MOTOR_W,
+        designW: group.length * BLIND_MOTOR_W,
+        rcd: "A30",
+      },
+      inBoard ? [] : group,
+      1.5,
+    );
+  if (acMotors.length && plan.mode === "bus_loxone") blindCircuit(acMotors, `Žaluzie – napájení žaluziových akčních členů (${acMotors.length} motorů)`, true);
+  else if (acMotors.length) {
+    for (const floor of [...new Set(acMotors.map((node) => node.floor ?? ""))]) {
+      const floorMotors = byRoom(acMotors.filter((node) => (node.floor ?? "") === floor)).flatMap(([, nodes]) => nodes);
+      for (let start = 0; start < floorMotors.length; start += MAX_BLINDS_PER_CIRCUIT) {
+        const group = floorMotors.slice(start, start + MAX_BLINDS_PER_CIRCUIT);
+        blindCircuit(group, `Žaluzie – ${[...new Set(group.map((node) => roomName.get(node.room) ?? node.room))].join(", ")}`, false);
+      }
+    }
+  }
 
   // Ovládání světel po místnostech (bod 2)
   const switching = plan.rooms.filter((room) => room.lighting).map((room) => ({ room: room.id, wiring: resolveSwitchWiring({ ...room.lighting!, mode: plan.mode }) }));
@@ -1163,7 +1251,7 @@ export function circuitDesignations(circuits: readonly Circuit[]): Record<string
 
 /** Rozdělení okruhů jednoho druhu chráničů: max. 6 na chránič, světla rozprostřít, bez konfliktu místností. */
 function groupPool(shared: readonly Circuit[]): Circuit[][] {
-  const order: Record<CircuitKind, number> = { lighting: 0, sockets: 1, dedicated: 2, cooktop: 3, fridge: 9, three_phase_rcd_b: 9, feeder: 9 };
+  const order: Record<CircuitKind, number> = { lighting: 0, sockets: 1, blinds: 2, dedicated: 2, cooktop: 3, fridge: 9, three_phase_rcd_b: 9, feeder: 9 };
   const sorted = [...shared].sort((a, b) => order[a.kind] - order[b.kind] || a.id.localeCompare(b.id));
   const minimum = Math.max(shared.some((c) => c.kind === "lighting") && shared.some((c) => c.kind !== "lighting") ? 2 : 1, Math.ceil(shared.length / MAX_CIRCUITS_PER_RCD));
   const groups: { circuits: Circuit[] }[] = Array.from({ length: shared.length ? minimum : 0 }, () => ({ circuits: [] }));
@@ -1199,6 +1287,11 @@ export function buildSwitchboardFromCircuits(
      * bez nich výchozí sestava Loxone podle počtu výstupů.
      */
     smart?: readonly SmartBoardModule[];
+    /**
+     * Fáze 77: moduly k prvkům půdorysu i bez sběrnice (řídicí jednotka DALI, zdroje a řadiče LED 24 V, hlídač zaplavení);
+     * modul bez šířky (ventil) jde do kusovníku.
+     */
+    devices?: readonly SmartBoardModule[];
   },
 ): Switchboard {
   const warnings: string[] = [];
@@ -1301,7 +1394,7 @@ export function buildSwitchboardFromCircuits(
         addBom(bom, `${unit.label} – ${unit.manufacturer} ${unit.typeCode}${unit.articleNumber ? ` (${unit.articleNumber})` : ""}`);
         continue;
       }
-      const psu = unit.role === "psu";
+      const psu = unit.role === "psu" || unit.role === "psu_led";
       const item = device(psu ? "T" : "A", unit.label, psu ? "PSU" : "PLC", "1P", unit.modules, null, config({ category: "OTHER", poles: "1P", modules: unit.modules, moduleSubtype: psu ? "PSU_DC" : "PLC", manufacturer: unit.manufacturer }));
       control.push({ ...item, article: { manufacturer: unit.manufacturer, series: unit.series, typeCode: unit.typeCode, articleNumber: unit.articleNumber, description: unit.label } });
     }
@@ -1315,6 +1408,16 @@ export function buildSwitchboardFromCircuits(
       control.push(device("A", SMART_MODULES.loxoneTreeExtension.label, "PLC", "1P", SMART_MODULES.loxoneTreeExtension.modules, null, config({ category: "OTHER", poles: "1P", modules: 2, moduleSubtype: "PLC" })));
     }
     control.push(device("T", SMART_MODULES.psu24.label, "PSU", "1P", SMART_MODULES.psu24.modules, null, config({ category: "OTHER", poles: "1P", modules: SMART_MODULES.psu24.modules, moduleSubtype: "PSU_DC", power: "60W/24V" })));
+  }
+  // Fáze 77: moduly k prvkům půdorysu (klasická instalace) – na lištu s přesným katalogovým zápisem, bez šířky do kusovníku
+  for (const unit of options.devices ?? []) {
+    if (unit.modules <= 0) {
+      addBom(bom, `${unit.label}${unit.typeCode ? ` – ${unit.typeCode}` : ""}`);
+      continue;
+    }
+    const psu = unit.role === "psu_led";
+    const item = device(psu ? "T" : "A", unit.label, psu ? "PSU" : "PLC", "1P", unit.modules, null, config({ category: "OTHER", poles: "1P", modules: unit.modules, moduleSubtype: psu ? "PSU_DC" : "PLC", manufacturer: unit.manufacturer }));
+    control.push({ ...item, article: { manufacturer: unit.manufacturer, series: unit.series, typeCode: unit.typeCode, articleNumber: unit.articleNumber, description: unit.label } });
   }
   if (options.mode === "smart_relay" && (plan.io.do > 0 || plan.io.di > 0)) {
     const shelly = SMART_MODULES.shellyPro4pm;
