@@ -166,6 +166,8 @@ import { CAD_GEOMETRY_MAX_BYTES, buildSnapIndex, geometryOf, parseCadGeometry, p
 import { addTemplate, favoritesFirst, removeTemplate, toggleFavorite } from "@/lib/panel-builder/floorplan-library";
 import { Dimensions, ElementDetail, ElementToolbar, RoomDetail, ToolButton } from "./ElementPanels";
 import { SocketCircuitPicker, SocketCircuitPopover, SocketCircuitsPanel, type SocketMoveTarget } from "./SocketCircuitsPanel";
+import { PlaneSizeControl } from "./PlaneSizeControl";
+import { contentView, growPlane, meters, resizePlane } from "@/lib/panel-builder/floorplan-plane";
 import { assignLightingCircuit, assignSocketCircuit, isSocketElement, lightingSocketRows, moveSocketsToCircuit, nextSocketCircuit, optimizeSocketCircuits, socketCircuitRows, type SocketCircuitRow } from "@/lib/panel-builder/socket-circuits";
 import { BACKGROUND_PX, preloadImage, rasterizeSvg } from "@/lib/panel-builder/background-image";
 
@@ -252,6 +254,7 @@ interface ViewFraction {
   w: number;
 }
 const FIT: ViewFraction = { x: 0, y: 0, w: 1 };
+type DraftChange = (current: FloorplanDraft) => FloorplanDraft;
 
 export function FloorplanEditor({
   series,
@@ -360,8 +363,10 @@ export function FloorplanEditor({
     });
   }, [boot, stored]);
 
+  /** Fáze 83: nákres při stisku ukazatele – plocha se po puštění rozšíří jen tam, kam se nákres během gesta posunul. */
+  const gestureStart = useRef<FloorplanDraft | null>(null);
   // Úprava nákresu; změna, která nic nezměnila, nevytvoří krok Zpět ani uložení
-  const update = (change: (current: FloorplanDraft) => FloorplanDraft) =>
+  const update = (change: DraftChange) =>
     setDraft((current) => {
       const next = change(current);
       return next === current ? current : { ...next, updatedAt: Date.now() };
@@ -471,6 +476,8 @@ export function FloorplanEditor({
   const viewHeight = (viewMm.w * draft.heightMm) / draft.widthMm;
   /** Jednotka popisků, úchytů a lišt – při zoomu drží stejnou velikost na obrazovce. */
   const ui = Math.max(viewMm.w, viewHeight) / 55;
+  /** Fáze 83: krok jemné mřížky – 0,5 m, ve výřezu do 8 m šířky 0,25 m (kreslí se ve výřezu do 20 m). */
+  const fineGrid = viewMm.w <= 8_000 ? 250 : 500;
   const stroke = ui / 16;
   // Fáze 79: geometrie podkladu CAD (načtená ze souboru) a přichytávání k viditelným nezamčeným hladinám
   const cadReady = draft.cad && cadGeometry?.url === draft.cad.url ? cadGeometry.geometry : null;
@@ -1098,23 +1105,63 @@ export function FloorplanEditor({
     }
   }
 
+  /**
+   * Fáze 83: po puštění ukazatele (nakreslení či přesun místnosti, prvku, poznámky) se plocha rozšíří o 5 m, když nákres
+   * došel k pravému nebo dolnímu okraji – ve stejném kroku Zpět jako úprava (gesto historie ještě běží).
+   */
   function onUp() {
+    const before = gestureStart.current;
+    gestureStart.current = null;
+    const changes: DraftChange[] = [];
+    finishPointer((change) => {
+      changes.push(change);
+      update(change);
+    });
+    if (!before) return;
+    const after = changes.reduce((current, change) => change(current), draft);
+    const grown = growPlane(after, before);
+    if (grown === after) return;
+    update((current) => growPlane(current, before));
+    keepViewOn(grown);
+    toast.info(`📐 Plocha rozšířena na ${meters(grown.widthMm)} × ${meters(grown.heightMm)} m – nákres došel k okraji (rozměr změníte v liště Plocha, Ctrl+Z vrátí).`);
+  }
+
+  /** Fáze 83: plocha z lišty (5–100 m) – nikdy menší než nákres; souřadnice místností a prvků v mm zůstávají. */
+  function resizePlaneTo(widthMm: number, heightMm: number) {
+    const result = resizePlane(draft, widthMm, heightMm);
+    const size = `${meters(result.draft.widthMm)} × ${meters(result.draft.heightMm)} m`;
+    if (result.draft !== draft) {
+      update((current) => resizePlane(current, widthMm, heightMm).draft);
+      keepViewOn(result.draft);
+    }
+    if (result.clamped) toast.info(`Plocha ${size} – rozměr jde nastavit od 5 do 100 m a nikdy menší, než je nakreslený půdorys.`);
+    else if (result.draft !== draft) toast.success(`Plocha půdorysu ${size}${draft.otherFloors.some((floor) => !floor.background) ? " (i ostatní podlaží bez podkladu)" : ""} – Ctrl+Z vrátí.`);
+    return { widthMm: result.draft.widthMm, heightMm: result.draft.heightMm };
+  }
+
+  /** Fáze 83: po změně plochy zůstane přiblížený výřez na místě; celkový pohled ukáže celou novou plochu. */
+  function keepViewOn(next: Pick<FloorplanDraft, "widthMm" | "heightMm">) {
+    if (zoomed) setView({ x: viewMm.x / next.widthMm, y: viewMm.y / next.heightMm, w: viewMm.w / next.widthMm });
+  }
+
+  /** Konec gesta – úpravy nákresu jdou přes `apply` (z nich `onUp` pozná, zda nákres došel k okraji plochy). */
+  function finishPointer(apply: (change: DraftChange) => void) {
     if (pan) return void setPan(null);
     if (fixtureDrag) {
-      update((current) => current);
+      apply((current) => current);
       setFixtureDrag(null);
       return;
     }
     if (routeDrag) {
       const { key, points, moved } = routeDrag;
       setRouteDrag(null);
-      if (moved) update((current) => ({ ...current, routeEdits: { ...current.routeEdits, [key]: cleanPolyline(points) } }));
+      if (moved) apply((current) => ({ ...current, routeEdits: { ...current.routeEdits, [key]: cleanPolyline(points) } }));
       return;
     }
     if (vertexDrag) {
       const { roomId } = vertexDrag;
       setVertexDrag(null);
-      update((current) => {
+      apply((current) => {
         const room = current.rooms.find((candidate) => candidate.id === roomId);
         return room ? { ...current, elements: current.elements.map((element) => (pointInRoom(room, element.x, element.y) ? { ...element, room: room.name } : element)) } : current;
       });
@@ -1122,7 +1169,7 @@ export function FloorplanEditor({
     }
     if (roomDrag) {
       // Po změně rozměru patří do místnosti prvky, které v ní nově leží
-      update((current) => {
+      apply((current) => {
         const room = current.rooms.find((candidate) => candidate.id === roomDrag.id);
         if (!room || roomDrag.handle === "move") return current;
         return { ...current, elements: current.elements.map((element) => (pointInRoom(room, element.x, element.y) ? { ...element, room: room.name } : element)) };
@@ -1132,7 +1179,7 @@ export function FloorplanEditor({
     }
     if (drag) {
       const ids = drag.ids;
-      update((current) => {
+      apply((current) => {
         const frame = frameOf(current, ids[0]);
         // Celý rámeček: kotva se přicvakne ke stěně a natočí, ostatní přístroje se k ní znovu přisadí
         if (frame && ids.length === frame.members.length && frame.members.every((id) => ids.includes(id))) {
@@ -1178,7 +1225,7 @@ export function FloorplanEditor({
       const big = noteDraft.mode === "zone" ? Math.abs(to.x - from.x) >= 200 && Math.abs(to.y - from.y) >= 200 : Math.hypot(to.x - from.x, to.y - from.y) >= 200;
       if (big) {
         const note = { ...newAnnotation(noteDraft.mode, from, to), ...noteStyles[noteDraft.mode] };
-        update((current) => ({ ...current, annotations: [...current.annotations, note] }));
+        apply((current) => ({ ...current, annotations: [...current.annotations, note] }));
         setSelectedNoteId(note.id);
         setSelection([]);
       }
@@ -1196,7 +1243,7 @@ export function FloorplanEditor({
       setSelectedRoomId(id);
       setSelection([]);
       setTool({ kind: "select" });
-      update((current) => ({
+      apply((current) => ({
         ...current,
         rooms: [...current.rooms, { id, name: name.slice(0, 40), ...rect }],
         // prvky uvnitř nové místnosti do ní patří
@@ -1764,9 +1811,8 @@ export function FloorplanEditor({
               {draft.calibration.state === "verified" ? "✓ Měřítko ověřeno" : draft.calibration.state === "set" ? "Měřítko neověřeno" : "Měřítko nekalibrováno"}
             </span>
           ) : null}
-          <span data-testid="floorplan-scale">
-            Plocha {(draft.widthMm / 1000).toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} × {(draft.heightMm / 1000).toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} m
-          </span>
+          {/* Fáze 83: nastavitelná plocha (5–100 m, předvolby) a pohled na celý nákres */}
+          <PlaneSizeControl widthMm={draft.widthMm} heightMm={draft.heightMm} fromBackground={Boolean(draft.background)} onResize={resizePlaneTo} onFit={() => setViewMm(contentView(draft))} />
         </span>
       </div>
       <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-2">
@@ -2039,6 +2085,9 @@ export function FloorplanEditor({
               data-testid="floorplan-canvas"
               data-zoom={Math.round(zoom * 100)}
               data-floor={draft.floorName}
+              onPointerDownCapture={() => {
+                gestureStart.current = draft;
+              }}
               onPointerDown={onCanvasDown}
               onPointerMove={onMove}
               onPointerUp={onUp}
@@ -2053,11 +2102,16 @@ export function FloorplanEditor({
               }}
             >
               <defs>
+                {/* Fáze 83: mřížka po 1 m a jemná 0,5 / 0,25 m – tloušťka čar podle výřezu (stejná na obrazovce i u haly 100 m) */}
+                <pattern id="fp-grid-fine" width={fineGrid} height={fineGrid} patternUnits="userSpaceOnUse">
+                  <path d={`M ${fineGrid} 0 L 0 0 0 ${fineGrid}`} fill="none" stroke="#1d1d21" strokeWidth={viewMm.w / 2400} />
+                </pattern>
                 <pattern id="fp-grid" width={1000} height={1000} patternUnits="userSpaceOnUse">
-                  <path d="M 1000 0 L 0 0 0 1000" fill="none" stroke="#27272a" strokeWidth={Math.max(stroke, draft.widthMm / 2000)} />
+                  <path d="M 1000 0 L 0 0 0 1000" fill="none" stroke="#27272a" strokeWidth={Math.max(stroke, viewMm.w / 1400)} />
                 </pattern>
                 <HatchPatterns notes={draft.annotations} extra={tool.kind === "annotate" ? [noteStyles[tool.mode]] : []} />
               </defs>
+              {!draft.background && viewMm.w <= 20_000 ? <rect width={draft.widthMm} height={draft.heightMm} fill="url(#fp-grid-fine)" data-testid="grid-fine" data-step={fineGrid} /> : null}
               <rect width={draft.widthMm} height={draft.heightMm} fill={draft.background ? "#fff" : "url(#fp-grid)"} />
               {draft.background ? (
                 <g transform={backgroundTransform(draft.background, draft.mmPerPx)} pointerEvents="none">

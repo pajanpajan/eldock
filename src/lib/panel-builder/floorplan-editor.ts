@@ -545,8 +545,9 @@ export const emptyDraft = (): FloorplanDraft => ({
   symbolScale: 1,
   environment: null,
   mmPerPx: 10,
-  widthMm: 14_000,
-  heightMm: 10_000,
+  // Fáze 83: výchozí čistý rastr 20 × 16 m (`DEFAULT_PLANE` ve `floorplan-plane.ts`) – dům 15 × 14 m se vejde s rezervou
+  widthMm: 20_000,
+  heightMm: 16_000,
   rooms: [],
   elements: [],
   frames: [],

@@ -30,7 +30,7 @@ function editor(page: Page) {
   const palette = page.getByRole("complementary", { name: "Paleta elektroinstalačních značek" });
   const status = page.getByTestId("floorplan-save-status");
   const clickAt = async (x: number, y: number) => {
-    await canvas.scrollIntoViewIfNeeded();
+    await canvas.evaluate((svg) => svg.scrollIntoView({ block: "center", behavior: "instant" }));
     const at = await screen(canvas, x, y);
     await page.mouse.click(at.x, at.y);
   };
@@ -42,7 +42,7 @@ function editor(page: Page) {
     /** Místnost tažením obdélníku. */
     room: async (x1: number, y1: number, x2: number, y2: number) => {
       await page.getByRole("button", { name: "Kreslit místnost (obdélník)" }).click();
-      await canvas.scrollIntoViewIfNeeded();
+      await canvas.evaluate((svg) => svg.scrollIntoView({ block: "center", behavior: "instant" }));
       const from = await screen(canvas, x1, y1);
       const to = await screen(canvas, x2, y2);
       await page.mouse.move(from.x, from.y);
@@ -51,10 +51,14 @@ function editor(page: Page) {
       await page.mouse.up();
       await page.keyboard.press("Escape");
     },
-    /** Značka z palety; Esc ukončí vkládání (bez náhledu u kurzoru). */
+    /**
+     * Značka z palety; Esc ukončí vkládání (bez náhledu u kurzoru), druhé Esc zruší výběr – plovoucí lišta vybraného
+     * prvku (smazat, otočit …) by jinak u plochy 20 × 16 m (fáze 83) překryla místo dalšího kliknutí.
+     */
     place: async (label: string, x: number, y: number) => {
       await palette.getByRole("button", { name: label }).first().click();
       await clickAt(x, y);
+      await page.keyboard.press("Escape");
       await page.keyboard.press("Escape");
     },
     /** Po změně: stav „Neuložené změny“ → „☁️ Uloženo v cloudu (HH:MM:SS)“ (fáze 78). */

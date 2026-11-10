@@ -16,7 +16,8 @@ describe("2D editor půdorysu – model nákresu", () => {
     const calibrated = recalibrate(draft, 3000, 4500);
     expect(calibrated.mmPerPx).toBe(15);
     expect(calibrated.elements[0]).toMatchObject({ x: 1500, y: 3000 });
-    expect(calibrated.widthMm).toBe(21_000);
+    // Fáze 83: výchozí čistý rastr 20 m → po kalibraci 1,5× = 30 m
+    expect(calibrated.widthMm).toBe(30_000);
   });
 
   it("načtení nákresu odfiltruje neplatné prvky a cizí URL podkladu", () => {

@@ -27,7 +27,7 @@ function editor(page: Page) {
   const canvas = page.getByTestId("floorplan-canvas");
   const palette = page.getByRole("complementary", { name: "Paleta elektroinstalačních značek" });
   const clickAt = async (x: number, y: number, shift = false) => {
-    await canvas.scrollIntoViewIfNeeded();
+    await canvas.evaluate((svg) => svg.scrollIntoView({ block: "center", behavior: "instant" }));
     const at = await screen(canvas, x, y);
     if (shift) await page.keyboard.down("Shift");
     await page.mouse.click(at.x, at.y);
@@ -39,7 +39,7 @@ function editor(page: Page) {
     clickAt,
     room: async (x1: number, y1: number, x2: number, y2: number) => {
       await page.getByRole("button", { name: "Kreslit místnost (obdélník)" }).click();
-      await canvas.scrollIntoViewIfNeeded();
+      await canvas.evaluate((svg) => svg.scrollIntoView({ block: "center", behavior: "instant" }));
       const from = await screen(canvas, x1, y1);
       const to = await screen(canvas, x2, y2);
       await page.mouse.move(from.x, from.y);

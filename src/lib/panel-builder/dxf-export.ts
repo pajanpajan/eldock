@@ -8,6 +8,7 @@ import { coresOf, labelPlacement, longestStretch, stretchSlot, tickMarks } from 
 import { applianceSpecFor } from "./appliances";
 import { basinBand, fixtureGeometry, toWorld, zone2Path } from "./fixtures";
 import { SYMBOL_MM, paletteItem, symbolSizeOf, type EditorElement, type FloorplanDraft, type PaletteItem, type analyzeDraft } from "./floorplan-editor";
+import { meters } from "./floorplan-plane";
 import { polygonArea, roomPolygon } from "./room-geometry";
 import { displayRoutes } from "./route-display";
 import { productById } from "./smart-catalog";
@@ -445,6 +446,6 @@ export function floorplanDxf(draft: FloorplanDraft, analysis: Analysis | null, o
     }
   }
   const date = (options.date ?? new Date()).toLocaleDateString("cs-CZ");
-  writer.text("POPISY_A_KOTY", { x: 0, y: draft.heightMm + unit * 2 }, unit * 0.6, `${options.title ?? "Půdorys elektroinstalace"} · ${draft.floorName} · ${date} · jednotky mm, měřítko 1 : 1 · ELDOCK`);
+  writer.text("POPISY_A_KOTY", { x: 0, y: draft.heightMm + unit * 2 }, unit * 0.6, `${options.title ?? "Půdorys elektroinstalace"} · ${draft.floorName} · ${date} · plocha ${meters(draft.widthMm)} × ${meters(draft.heightMm)} m · jednotky mm, měřítko 1 : 1 · ELDOCK`);
   return writer.toString();
 }

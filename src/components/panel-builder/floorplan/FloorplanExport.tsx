@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { applianceSpecFor } from "@/lib/panel-builder/appliances";
 import { floorplanDxf } from "@/lib/panel-builder/dxf-export";
 import { paletteItem, symbolSizeOf, type FloorplanDraft, type PaletteItem, type analyzeDraft } from "@/lib/panel-builder/floorplan-editor";
+import { meters } from "@/lib/panel-builder/floorplan-plane";
 import { contentBox, scaleForBox } from "@/lib/panel-builder/plan-sheet";
 import { polygonArea, roomPolygon } from "@/lib/panel-builder/room-geometry";
 import { displayRoutes } from "@/lib/panel-builder/route-display";
@@ -210,7 +211,8 @@ function PlanSheet({ draft, analysis, paper, fields }: { draft: FloorplanDraft; 
               ["Místo stavby", fields.site],
               ["Vypracoval", fields.author],
               ["Výkres", `Půdorys elektroinstalace – ${draft.floorName}`],
-              ["Měřítko · formát", `1 : ${scale} · ${paper}`],
+              // Fáze 83: plocha půdorysu v rohovém razítku
+              ["Měřítko · formát", `1 : ${scale} · ${paper} · plocha ${meters(draft.widthMm)} × ${meters(draft.heightMm)} m`],
               ["Datum · č. výkresu", `${today} · ${fields.number}`],
             ].map(([label, value]) => (
               <tr key={label} style={{ borderBottom: "0.2mm solid #111827" }}>

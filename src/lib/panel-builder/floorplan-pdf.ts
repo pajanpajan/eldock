@@ -200,13 +200,15 @@ export interface PlanView {
 export const ZOOM_MIN = 1;
 export const ZOOM_MAX = 16;
 export const ZOOM_STEP = 1.25;
+/** Fáze 83: nejmenší výřez u velké plochy [mm] – jinak 1/`ZOOM_MAX` plochy (platí do šířky 24 m). */
+export const MIN_VIEW_MM = 1_500;
 
 export const fitView = (draft: Pick<FloorplanDraft, "widthMm">): PlanView => ({ x: 0, y: 0, w: draft.widthMm });
 export const zoomOf = (view: PlanView, draft: Pick<FloorplanDraft, "widthMm">) => draft.widthMm / view.w;
 
 /** Výřez se drží uvnitř výkresu (poměr stran = poměr výkresu, takže plátno nemění výšku). */
 export function clampView(view: PlanView, draft: Pick<FloorplanDraft, "widthMm" | "heightMm">): PlanView {
-  const w = Math.min(draft.widthMm, Math.max(draft.widthMm / ZOOM_MAX, view.w));
+  const w = Math.min(draft.widthMm, Math.max(Math.min(draft.widthMm / ZOOM_MAX, MIN_VIEW_MM), view.w));
   const h = (w * draft.heightMm) / draft.widthMm;
   return { w, x: Math.min(Math.max(0, view.x), draft.widthMm - w), y: Math.min(Math.max(0, view.y), draft.heightMm - h) };
 }
