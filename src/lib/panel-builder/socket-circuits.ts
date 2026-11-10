@@ -1,6 +1,7 @@
 // Fáze 65: ruční změna zásuvkových okruhů v nákresu – přesun zásuvky do jiného okruhu (i do automatického – ten se tím
 // zafixuje jako ruční), spojení výběru do jednoho okruhu, návrat na automatické rozdělení a „Optimalizovat zásuvkové
 // okruhy“ (kompaktní zóny, bez ručních okruhů a bez ručně upravených tras zásuvek). Čisté funkce nad `FloorplanDraft`.
+// Fáze 82: zásuvka na světelném okruhu své místnosti (`onLighting`, jištění 10 / 13 A) – přesun na světelný okruh a zpět.
 
 import { circuitDesignations, type Circuit } from "@/engine/floorplan-bridge";
 import type { SocketGrouping } from "@/engine/socket-zones";
@@ -34,23 +35,45 @@ export function nextSocketCircuit(draft: FloorplanDraft): string | null {
   return null;
 }
 
-/** Nastavení / zrušení ručního okruhu u zásuvek (`key` null = automaticky). Ostatní prvky beze změny. */
+/**
+ * Nastavení / zrušení ručního okruhu u zásuvek (`key` null = automaticky). Ostatní prvky beze změny. Fáze 82: zásuvka
+ * ze světelného okruhu se tím vrátí na zásuvkový okruh.
+ */
 export function assignSocketCircuit(draft: FloorplanDraft, elementIds: readonly string[], key: string | null): FloorplanDraft {
   if (key !== null && !SOCKET_CIRCUIT.test(key)) return draft;
   const ids = new Set(elementIds);
   let changed = false;
   const next = mapAllElements(draft, (element) => {
-    if (!ids.has(element.id) || !isSocketElement(element) || (element.socketCircuit ?? null) === key) return element;
+    if (!ids.has(element.id) || !isSocketElement(element) || ((element.socketCircuit ?? null) === key && !element.onLighting)) return element;
     changed = true;
+    const rest = { ...element };
+    delete rest.onLighting;
     if (key === null) {
-      const rest = { ...element };
       delete rest.socketCircuit;
       return rest;
     }
-    return { ...element, socketCircuit: key };
+    return { ...rest, socketCircuit: key };
   });
   return changed ? next : draft;
 }
+
+/** Fáze 82: zásuvky na světelný okruh své místnosti (`on` false = zpět na automatický zásuvkový okruh). */
+export function assignLightingCircuit(draft: FloorplanDraft, elementIds: readonly string[], on = true): FloorplanDraft {
+  if (!on) return assignSocketCircuit(draft, elementIds, null);
+  const ids = new Set(elementIds);
+  let changed = false;
+  const next = mapAllElements(draft, (element) => {
+    if (!ids.has(element.id) || !isSocketElement(element) || element.onLighting) return element;
+    changed = true;
+    const rest = { ...element, onLighting: true };
+    delete rest.socketCircuit;
+    return rest;
+  });
+  return changed ? next : draft;
+}
+
+/** Fáze 82: zásuvky na světelných okruzích (všechna podlaží). */
+export const lightingSocketIds = (draft: FloorplanDraft) => allElements(draft).filter((element) => element.onLighting && isSocketElement(element)).map((element) => element.id);
 
 /**
  * Přesun zásuvek do okruhu `circuit` (okruh z výpočtu): ruční okruh převezme jeho klíč, automatický okruh se zafixuje
@@ -93,6 +116,26 @@ export interface SocketCircuitRow {
   lengthM: number;
   manual: string | null;
   elementIds: string[];
+}
+
+/**
+ * Fáze 82: světelné okruhy se zásuvkami (označení jističe jako v rozváděči, jistič 10 / 13 A, zásuvky na plátně) – detail
+ * zásuvky, plovoucí nabídka a přehled zásuvkových okruhů.
+ */
+export interface LightingSocketRow {
+  id: string;
+  designation: string;
+  label: string;
+  outlets: number;
+  ratedA: number;
+  elementIds: string[];
+}
+
+export function lightingSocketRows(circuits: readonly Circuit[]): LightingSocketRow[] {
+  const designations = circuitDesignations(circuits);
+  return circuits
+    .filter((circuit) => circuit.kind === "lighting" && circuit.outlets > 0)
+    .map((circuit) => ({ id: circuit.id, designation: designations[circuit.id] ?? "", label: circuit.label, outlets: circuit.outlets, ratedA: circuit.protection.ratedA, elementIds: [...new Set(circuit.nodeIds.map(elementIdOf))] }));
 }
 
 /**

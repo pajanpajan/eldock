@@ -31,6 +31,8 @@ import {
   type Floorplan,
   type NodeKind,
   type NodeVariant,
+  isLightingSocketA,
+  type LightingSocketA,
 } from "@/engine/floorplan-bridge";
 
 import { DEFAULT_COLOR, appearanceLabel, designColor } from "./wiring-designs";
@@ -261,6 +263,8 @@ export interface EditorElement {
   productBox?: "flush" | "surface";
   /** Fáze 65: ruční zásuvkový okruh („Z1“ … „Z99“) – zásuvky se stejným okruhem jdou na jeden jistič; bez = automaticky. */
   socketCircuit?: string;
+  /** Fáze 82: zásuvka na světelném okruhu své místnosti (jištění 10 / 13 A – `FloorplanDraft.lightingSocketA`). */
+  onLighting?: boolean;
   /** Fáze 74: kód podružného rozváděče („RP1“) – jen u značky podružného rozváděče. */
   boardCode?: string;
   /** Fáze 74: ruční přiřazení prvku k rozváděči („RH“ / „RP1“ …); bez = automaticky (`boardOfElement`). */
@@ -520,6 +524,8 @@ export interface FloorplanDraft {
   basinZone: BasinZone;
   /** Fáze 76: styl tras – po stěnách obvodově (výchozí, obvodový router), nebo nejkratší přímé L-trasy v podlaze. */
   routeStyle: RouteStyle;
+  /** Fáze 82: jištění světelných okruhů, na kterých jsou i zásuvky – 10 A (výchozí) nebo 13 A. */
+  lightingSocketA: LightingSocketA;
   updatedAt: number;
 }
 
@@ -567,6 +573,7 @@ export const emptyDraft = (): FloorplanDraft => ({
   smartExtras: {},
   basinZone: "norm",
   routeStyle: "walls",
+  lightingSocketA: 10,
   updatedAt: 0,
 });
 
@@ -624,6 +631,8 @@ export function parseDraft(value: unknown): FloorplanDraft | null {
     basinZone: isBasinZone(draft.basinZone) ? draft.basinZone : "norm",
     // Fáze 76: výchozí obvodově po stěnách (i u starších nákresů)
     routeStyle: isRouteStyle(draft.routeStyle) ? draft.routeStyle : "walls",
+    // Fáze 82: jištění světelného okruhu se zásuvkami (bez údaje 10 A)
+    lightingSocketA: isLightingSocketA(draft.lightingSocketA) ? draft.lightingSocketA : 10,
     updatedAt: num(draft.updatedAt, 0, 0, 1e15),
   });
 }
@@ -847,7 +856,7 @@ function parseSmartExtras(value: unknown): Record<string, number> {
 }
 
 /** Fáze 63: rozměr předmětu, vlastní spotřebič a výrobek prvku z uložených dat; fáze 65 ruční zásuvkový okruh, fáze 74 rozváděč. */
-function parseExtras(element: Partial<EditorElement> & { item: string }, num: Num): Pick<EditorElement, "sizeMm" | "appliance" | "product" | "productVariant" | "productBox" | "socketCircuit" | "boardCode" | "board" | "drive" | "headDrive"> {
+function parseExtras(element: Partial<EditorElement> & { item: string }, num: Num): Pick<EditorElement, "sizeMm" | "appliance" | "product" | "productVariant" | "productBox" | "socketCircuit" | "onLighting" | "boardCode" | "board" | "drive" | "headDrive"> {
   const fixture = fixtureSpecOf(element.item);
   const size = element.sizeMm && typeof element.sizeMm === "object" ? element.sizeMm : null;
   return {
@@ -857,7 +866,9 @@ function parseExtras(element: Partial<EditorElement> & { item: string }, num: Nu
     // Fáze 81: varianta a krabice jen ty, které výrobek nabízí
     ...(typeof element.productVariant === "string" && productById(element.product)?.variants?.some((variant) => variant.id === element.productVariant) ? { productVariant: element.productVariant } : {}),
     ...((element.productBox === "flush" || element.productBox === "surface") && productById(element.product)?.boxes?.some((box) => box.id === element.productBox) ? { productBox: element.productBox } : {}),
-    ...(typeof element.socketCircuit === "string" && SOCKET_CIRCUIT.test(element.socketCircuit) ? { socketCircuit: element.socketCircuit } : {}),
+    ...(typeof element.socketCircuit === "string" && SOCKET_CIRCUIT.test(element.socketCircuit) && element.onLighting !== true ? { socketCircuit: element.socketCircuit } : {}),
+    // Fáze 82: zásuvka na světelném okruhu (jen jedno- a dvojzásuvky)
+    ...(element.onLighting === true && ["single_socket", "double_socket"].includes(paletteItem(element.item)?.kind ?? "") ? { onLighting: true } : {}),
     ...(element.item === SUBPANEL_ITEM && typeof element.boardCode === "string" && SUBPANEL_CODE.test(element.boardCode) ? { boardCode: element.boardCode } : {}),
     ...(element.item !== SUBPANEL_ITEM && element.item !== "panel" && typeof element.board === "string" && BOARD_CODE.test(element.board) ? { board: element.board } : {}),
     // Fáze 77: pohon žaluzie a termostatické hlavice
@@ -1368,8 +1379,8 @@ export function buildPlan(draft: FloorplanDraft): PlanBuild {
           ...(frame ? { frame } : {}),
           ...(multi ? { floor: floor.id } : {}),
           ...(override ? { appliance: override } : {}),
-          // Fáze 65: ruční zásuvkový okruh (jen zásuvky)
-          ...(element.socketCircuit && (item.kind === "single_socket" || item.kind === "double_socket") ? { socketCircuit: element.socketCircuit } : {}),
+          // Fáze 65: ruční zásuvkový okruh (jen zásuvky); fáze 82 – zásuvka na světelném okruhu má přednost
+          ...(element.onLighting && (item.kind === "single_socket" || item.kind === "double_socket") ? { onLighting: true } : element.socketCircuit && (item.kind === "single_socket" || item.kind === "double_socket") ? { socketCircuit: element.socketCircuit } : {}),
           // Fáze 77: technologie svítidla (DALI = kabel 5×1,5, PWM = LED 24 V ze zdroje v rozváděči) a pohon žaluzie
           ...lightNodeExtras(element, item),
           ...(item.kind === "blind_motor" ? { blindDrive: element.drive ?? "ac230" } : {}),
@@ -1510,12 +1521,14 @@ export function parseCableReport(json: string | null | undefined): CableReport |
 }
 
 /** Volby návrhu dle ČSN 33 2130 ed. 4 z nákresu (fáze 52; fáze 65 rozdělení zásuvek). */
-export const designOptionsOf = (draft: Pick<FloorplanDraft, "installMethod" | "groupedCables" | "countDoubleAsTwo"> & Partial<Pick<FloorplanDraft, "environment" | "socketGrouping">>): DesignOptions => ({
+export const designOptionsOf = (draft: Pick<FloorplanDraft, "installMethod" | "groupedCables" | "countDoubleAsTwo"> & Partial<Pick<FloorplanDraft, "environment" | "socketGrouping" | "lightingSocketA">>): DesignOptions => ({
   installMethod: draft.installMethod,
   groupedCables: draft.groupedCables,
   countDoubleAsTwo: draft.countDoubleAsTwo,
   environment: draft.environment ?? null,
   ...(draft.socketGrouping ? { socketGrouping: draft.socketGrouping } : {}),
+  // Fáze 82: jištění světelného okruhu se zásuvkami
+  ...(draft.lightingSocketA ? { lightingSocketA: draft.lightingSocketA } : {}),
 });
 
 /**

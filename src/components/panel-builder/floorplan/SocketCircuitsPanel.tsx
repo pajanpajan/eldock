@@ -3,19 +3,42 @@
 import { Plug, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { LIGHTING_SOCKET_RATINGS, type LightingSocketA } from "@/engine/floorplan-bridge";
 import { SOCKET_GROUPINGS, type SocketGrouping } from "@/engine/socket-zones";
-import { SOCKET_GROUPING_LABEL, type SocketCircuitRow } from "@/lib/panel-builder/socket-circuits";
+import { SOCKET_GROUPING_LABEL, type LightingSocketRow, type SocketCircuitRow } from "@/lib/panel-builder/socket-circuits";
 import { cn } from "@/lib/utils";
 
 import { PanelSection } from "./RightPanels";
 
 const m = (value: number) => `${value.toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} m`;
 
-export type SocketMoveTarget = { kind: "auto" } | { kind: "new" } | { kind: "row"; row: SocketCircuitRow };
+export type SocketMoveTarget = { kind: "auto" } | { kind: "new" } | { kind: "row"; row: SocketCircuitRow } | { kind: "lighting" };
 
-/** Fáze 65: okruh vybrané zásuvky v jejím detailu – automaticky, přesun do jiného okruhu, nový ruční okruh. */
-export function SocketCircuitPicker({ manual, current, rows, onMove }: { manual: string | null; current: SocketCircuitRow | null; rows: SocketCircuitRow[]; onMove: (target: SocketMoveTarget) => void }) {
-  const value = manual && current ? current.id : "auto";
+/** Fáze 82: zásuvka na světelném okruhu – stav zásuvky, okruh z výpočtu a jištění 10 / 13 A (pro celý půdorys). */
+export interface LightingSocketState {
+  on: boolean;
+  current: LightingSocketRow | null;
+  ratedA: LightingSocketA;
+  onRatedA: (value: LightingSocketA) => void;
+}
+
+/** Fáze 82: jištění světelných okruhů se zásuvkami 10 A / 13 A (nikdy 16 A). */
+export function LightingSocketRating({ ratedA, onRatedA }: Pick<LightingSocketState, "ratedA" | "onRatedA">) {
+  return (
+    <div className="flex flex-wrap items-center gap-1" role="radiogroup" aria-label="Jištění světelného okruhu se zásuvkami" data-testid="lighting-socket-rating">
+      <span className="text-muted-foreground">Jištění okruhu (celý půdorys):</span>
+      {LIGHTING_SOCKET_RATINGS.map((value) => (
+        <button key={value} type="button" role="radio" aria-checked={ratedA === value} onClick={() => onRatedA(value)} className={cn("rounded-md border px-1.5 py-0.5 font-mono font-bold", ratedA === value ? "border-amber-300 bg-amber-500/20 text-foreground" : "border-border text-muted-foreground")}>
+          B{value}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Fáze 65: okruh vybrané zásuvky v jejím detailu – automaticky, přesun do jiného okruhu, nový ruční okruh; fáze 82 i na světelný okruh. */
+export function SocketCircuitPicker({ manual, current, rows, onMove, lighting }: { manual: string | null; current: SocketCircuitRow | null; rows: SocketCircuitRow[]; onMove: (target: SocketMoveTarget) => void; lighting?: LightingSocketState }) {
+  const value = lighting?.on ? "lighting" : manual && current ? current.id : "auto";
   return (
     <div className="flex flex-col gap-1 rounded-lg border border-sky-500/40 bg-sky-500/5 p-2 text-xs" data-testid="socket-circuit-picker">
       <label className="flex flex-col gap-1">
@@ -25,7 +48,7 @@ export function SocketCircuitPicker({ manual, current, rows, onMove }: { manual:
           onChange={(event) => {
             const next = event.target.value;
             const row = rows.find((candidate) => candidate.id === next);
-            onMove(next === "auto" ? { kind: "auto" } : next === "new" ? { kind: "new" } : row ? { kind: "row", row } : { kind: "auto" });
+            onMove(next === "auto" ? { kind: "auto" } : next === "new" ? { kind: "new" } : next === "lighting" ? { kind: "lighting" } : row ? { kind: "row", row } : { kind: "auto" });
           }}
           className="h-8 rounded-md border border-input bg-transparent px-1.5 text-xs text-foreground dark:bg-input/30"
           aria-label="Okruh zásuvky"
@@ -37,12 +60,22 @@ export function SocketCircuitPicker({ manual, current, rows, onMove }: { manual:
               {row.designation} – {row.label.replace(/^Zásuvky – /, "")} ({outlets(row.outlets)}){row.manual ? ` · ruční ${row.manual}` : ""}
             </option>
           ))}
+          {lighting ? <option value="lighting">💡 Na světelný okruh místnosti (jištění 10 / 13 A)</option> : null}
           <option value="new">+ Nový ruční okruh</option>
         </select>
       </label>
-      <span className="text-muted-foreground" data-testid="socket-circuit-current">
-        {current ? `Teď: ${current.designation} · ${outlets(current.outlets)} · ${m(current.lengthM)} · ${manual ? `ruční okruh ${manual}` : "automaticky"}` : "Okruh se dopočítá po vložení rozváděče."}
-      </span>
+      {lighting?.on ? (
+        <>
+          <span className="text-muted-foreground" data-testid="socket-circuit-current">
+            {lighting.current ? `Teď: ${lighting.current.designation} · ${lighting.current.label} · jistič B${lighting.current.ratedA}` : "Světelný okruh se dopočítá po vložení rozváděče a světla na podlaží."}
+          </span>
+          <LightingSocketRating ratedA={lighting.ratedA} onRatedA={lighting.onRatedA} />
+        </>
+      ) : (
+        <span className="text-muted-foreground" data-testid="socket-circuit-current">
+          {current ? `Teď: ${current.designation} · ${outlets(current.outlets)} · ${m(current.lengthM)} · ${manual ? `ruční okruh ${manual}` : "automaticky"}` : "Okruh se dopočítá po vložení rozváděče."}
+        </span>
+      )}
     </div>
   );
 }
@@ -62,6 +95,7 @@ export function SocketCircuitPopover({
   colorOf,
   onMove,
   onClose,
+  lightingOn = false,
 }: {
   left: number;
   top: number;
@@ -71,6 +105,8 @@ export function SocketCircuitPopover({
   colorOf: (id: string) => string;
   onMove: (target: SocketMoveTarget) => void;
   onClose: () => void;
+  /** Fáze 82: zásuvka je na světelném okruhu. */
+  lightingOn?: boolean;
 }) {
   const below = top < 28;
   return (
@@ -84,7 +120,7 @@ export function SocketCircuitPopover({
     >
       <div className="mb-1 flex items-center gap-1">
         <b className="text-foreground">🔌 Okruh zásuvky</b>
-        <span className="truncate text-muted-foreground">{current ? `teď ${current.designation}${manual ? ` · ruční ${manual}` : " · automaticky"}` : "bez okruhu"}</span>
+        <span className="truncate text-muted-foreground">{lightingOn ? "teď na světelném okruhu" : current ? `teď ${current.designation}${manual ? ` · ruční ${manual}` : " · automaticky"}` : "bez okruhu"}</span>
         <button type="button" onClick={onClose} className="ml-auto rounded px-1 text-muted-foreground hover:text-foreground" aria-label="Zavřít nabídku okruhu">
           ✕
         </button>
@@ -112,7 +148,18 @@ export function SocketCircuitPopover({
         <button type="button" onClick={() => onMove({ kind: "new" })} className="rounded-full border border-dashed border-sky-400/70 px-1.5 py-0.5 font-semibold text-sky-200 hover:bg-sky-500/10" data-testid="socket-chip-new">
           + Nový okruh
         </button>
-        {manual ? (
+        {/* Fáze 82: zásuvka na světelný okruh místnosti (jištění 10 / 13 A) */}
+        <button
+          type="button"
+          onClick={() => (lightingOn ? undefined : onMove({ kind: "lighting" }))}
+          aria-pressed={lightingOn}
+          className={cn("rounded-full border px-1.5 py-0.5 font-semibold", lightingOn ? "border-amber-300 bg-amber-500/20 text-foreground" : "border-amber-400/60 text-amber-200 hover:bg-amber-500/10")}
+          title="Zásuvka na světelném okruhu své místnosti – jistič 10 / 13 A"
+          data-testid="socket-chip-lighting"
+        >
+          💡 Světelný okruh
+        </button>
+        {manual || lightingOn ? (
           <button type="button" onClick={() => onMove({ kind: "auto" })} className="rounded-full border border-border px-1.5 py-0.5 text-muted-foreground hover:text-foreground" data-testid="socket-chip-auto">
             Automaticky
           </button>
@@ -134,6 +181,7 @@ export function SocketCircuitsPanel({
   onGrouping,
   onOptimize,
   onSelect,
+  lighting,
 }: {
   grouping: SocketGrouping;
   rows: SocketCircuitRow[];
@@ -142,6 +190,8 @@ export function SocketCircuitsPanel({
   onGrouping: (grouping: SocketGrouping) => void;
   onOptimize: () => void;
   onSelect: (row: SocketCircuitRow) => void;
+  /** Fáze 82: světelné okruhy se zásuvkami a jištění 10 / 13 A. */
+  lighting?: { rows: LightingSocketRow[]; ratedA: LightingSocketA; onRatedA: (value: LightingSocketA) => void; onSelect: (row: LightingSocketRow) => void };
 }) {
   const manual = rows.filter((row) => row.manual).length;
   const longest = rows.reduce((best, row) => Math.max(best, row.lengthM), 0);
@@ -208,6 +258,25 @@ export function SocketCircuitsPanel({
       ) : (
         <p className="text-xs text-muted-foreground">Vložte zásuvky – okruhy po max. 10 zásuvkách (ČSN 33 2130 ed. 4) se rozdělí samy.</p>
       )}
+      {lighting?.rows.length ? (
+        <div className="flex flex-col gap-1 rounded-lg border border-amber-400/40 bg-amber-500/5 p-2 text-xs" data-testid="lighting-socket-circuits">
+          <b className="text-amber-100">💡 Zásuvky na světelných okruzích</b>
+          <ul className="flex flex-col gap-0.5">
+            {lighting.rows.map((row) => (
+              <li key={row.id}>
+                <button type="button" onClick={() => lighting.onSelect(row)} className="flex w-full items-center gap-2 rounded-md border border-transparent px-1 py-0.5 text-left hover:border-border" data-testid="lighting-socket-row" data-designation={row.designation} title="Vybrat světla a zásuvky okruhu na plátně">
+                  <span className="w-10 shrink-0 font-mono font-bold">{row.designation}</span>
+                  <span className="min-w-0 flex-1 truncate">{row.label.replace(/^Světla \+ zásuvky – /, "")}</span>
+                  <span className="shrink-0 text-muted-foreground">{outlets(row.outlets)}</span>
+                  <span className="shrink-0 rounded border border-amber-300/60 px-1 font-mono text-[10px] text-amber-100">B{row.ratedA}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+          <LightingSocketRating ratedA={lighting.ratedA} onRatedA={lighting.onRatedA} />
+          <span className="text-[11px] text-muted-foreground">Zásuvka na světelném okruhu jen výjimečně (stojací lampa, digestoř, ventilátor) – jistič světelného okruhu 10 A nebo 13 A, nikdy 16 A; kabel podle Iz a tab. 9 ČSN 33 2130 ed. 4.</span>
+        </div>
+      ) : null}
     </PanelSection>
   );
 }

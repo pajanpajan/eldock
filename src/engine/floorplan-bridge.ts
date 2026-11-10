@@ -67,6 +67,11 @@ export interface FloorNode {
   /** Fáze 65: ruční zásuvkový okruh („Z1“, „Z2“ …) – zásuvky se stejným klíčem tvoří jeden okruh; bez = automaticky. */
   socketCircuit?: string | null;
   /**
+   * Fáze 82: zásuvka na světelném okruhu své místnosti (výjimečně – stojací lampa, digestoř, ventilátor); okruh se jistí
+   * 10 A nebo 13 A (`DesignOptions.lightingSocketA`), nikdy 16 A. Podlaží bez světel ji vrátí na zásuvkový okruh.
+   */
+  onLighting?: boolean;
+  /**
    * Fáze 77: svítidlo – technologie řízení. `dali` = světelný okruh kabelem 5×1,5 (L, N, PE, DA+, DA−), `pwm` = LED 24 V DC
    * ze zdroje v rozváděči (není na okruhu 230 V – zdroj má vlastní jistič). Bez údaje fázové / spínané 230 V.
    */
@@ -553,7 +558,14 @@ export interface DesignOptions {
   minLightingCircuits?: number;
   /** Fáze 74: úbytek napětí na přívodu podružného rozváděče [%] – koncovým okruhům zbude limit mínus tato hodnota. */
   upstreamDropPct?: number;
+  /** Fáze 82: jištění světelného okruhu se zásuvkami – 10 A (výchozí) nebo 13 A. */
+  lightingSocketA?: LightingSocketA;
 }
+
+/** Fáze 82: jistič světelného okruhu, na kterém jsou i zásuvky (10 A, nebo 13 A – nikdy 16 A). */
+export type LightingSocketA = 10 | 13;
+export const LIGHTING_SOCKET_RATINGS: readonly LightingSocketA[] = [10, 13];
+export const isLightingSocketA = (value: unknown): value is LightingSocketA => value === 10 || value === 13;
 
 export interface BomItem {
   item: string;
@@ -669,6 +681,8 @@ export function generateCircuitsFromFloorplan(plan: Floorplan, calibration: Cali
 
   const sockets: FloorNode[] = [];
   const lights: FloorNode[] = [];
+  // Fáze 82: zásuvky, které mají být na světelném okruhu své místnosti
+  const lightingSockets: FloorNode[] = [];
   // Fáze 77: LED 24 V DC (PWM) ze zdroje v rozváděči a vývody motorů žaluzií
   const pwmLights: FloorNode[] = [];
   const blindMotors: FloorNode[] = [];
@@ -778,9 +792,22 @@ export function generateCircuitsFromFloorplan(plan: Floorplan, calibration: Cali
       );
       continue;
     }
+    // Fáze 82: zásuvka na světelném okruhu (přiřadí se po sestavení světelných okruhů)
+    if ((node.kind === "single_socket" || node.kind === "double_socket") && node.onLighting) {
+      lightingSockets.push(node);
+      continue;
+    }
     // Běžná zásuvka (i spotřebič se štítkem pod 2 000 W)
     if (node.kind === "single_socket" || node.kind === "double_socket" || node.kind === "appliance") sockets.push(node);
   }
+  // Fáze 82: podlaží bez světel (230 V) nemá světelný okruh – zásuvka zůstane na zásuvkovém okruhu
+  const litFloors = new Set(lights.map((node) => node.floor ?? ""));
+  const stranded = lightingSockets.filter((node) => !litFloors.has(node.floor ?? ""));
+  if (stranded.length) {
+    warnings.push(`${stranded.length}× zásuvka na světelném okruhu, ale na podlaží není světlo – zůstává na zásuvkovém okruhu.`);
+    sockets.push(...stranded);
+  }
+  const socketsOnLighting = lightingSockets.filter((node) => litFloors.has(node.floor ?? ""));
 
   // Místnosti od rozváděče nejbližší, uvnitř místnosti podle vzdálenosti (světla)
   const byRoom = (nodes: readonly FloorNode[]) => {
@@ -850,25 +877,42 @@ export function generateCircuitsFromFloorplan(plan: Floorplan, calibration: Cali
       }
     lightGroups.push(...groups);
   }
+  // Fáze 82: zásuvka na světelném okruhu – okruh se světlem její místnosti, jinak nejméně obsazený okruh podlaží
+  const socketsOf = new Map<FloorNode[], FloorNode[]>();
+  const points = (group: FloorNode[]) => group.length + weight(socketsOf.get(group) ?? []);
+  for (const socket of [...socketsOnLighting].sort((a, b) => length(a) - length(b))) {
+    const floorGroups = lightGroups.filter((group) => group.length && (group[0].floor ?? "") === (socket.floor ?? ""));
+    const target = floorGroups.find((group) => group.some((node) => node.room === socket.room)) ?? floorGroups.reduce((best, group) => (points(group) < points(best) ? group : best), floorGroups[0]);
+    socketsOf.set(target, [...(socketsOf.get(target) ?? []), socket]);
+  }
+  const socketA: LightingSocketA = isLightingSocketA(options.lightingSocketA) ? options.lightingSocketA : 10;
   for (const group of lightGroups.filter((nodes) => nodes.length)) {
-    const rooms = [...new Set(group.map((node) => node.room))];
-    const installedW = group.reduce((sum, node) => sum + (node.powerW ?? LIGHT_POWER_W), 0);
+    const outletsOnLight = socketsOf.get(group) ?? [];
+    const nodes = [...group, ...outletsOnLight];
+    const rooms = [...new Set(nodes.map((node) => node.room))];
+    const lightW = group.reduce((sum, node) => sum + (node.powerW ?? LIGHT_POWER_W), 0);
+    const socketW = outletsOnLight.reduce((sum, node) => sum + (node.powerW ?? OUTLET_POWER_W), 0);
     // Fáze 77: okruh se svítidly DALI vede kabelem 5×1,5 (L, N, PE, DA+, DA−)
     const dali = group.some((node) => node.lightControl === "dali");
+    // Fáze 82: se zásuvkami jistič 10 / 13 A (nikdy 16 A); soudobý příkon světel + zásuvek nejvýš In · 230 V
+    const ratedA = outletsOnLight.length ? socketA : 10;
+    const label = `${outletsOnLight.length ? "Světla + zásuvky" : "Světla"} – ${rooms.map((room) => roomName.get(room) ?? room).join(", ")}${dali ? " (DALI)" : ""}`;
+    const outletPoints = group.length + weight(outletsOnLight);
+    if (outletsOnLight.length && outletPoints > MAX_LIGHTS_PER_CIRCUIT) warnings.push(`${label}: ${outletPoints} vývodů (světla a zásuvky) – nad ${MAX_LIGHTS_PER_CIRCUIT} na světelný okruh; přesuňte část zásuvek na zásuvkový okruh.`);
     push(
       {
-        label: `Světla – ${rooms.map((room) => roomName.get(room) ?? room).join(", ")}${dali ? " (DALI)" : ""}`,
+        label,
         kind: "lighting",
         phases: 1,
-        protection: lightingProtection === "rcbo" ? { device: "RCBO", poles: "1P+N", curve: "B", ratedA: 10, rcd: { type: "A", sensitivityMa: 30 } } : { device: "MCB", poles: "1P", curve: "B", ratedA: 10 },
+        protection: lightingProtection === "rcbo" ? { device: "RCBO", poles: "1P+N", curve: "B", ratedA, rcd: { type: "A", sensitivityMa: 30 } } : { device: "MCB", poles: "1P", curve: "B", ratedA },
         rooms,
-        nodeIds: group.map((node) => node.id),
-        outlets: 0,
-        installedW,
-        designW: installedW * LIGHT_SIMULTANEITY,
+        nodeIds: nodes.map((node) => node.id),
+        outlets: weight(outletsOnLight),
+        installedW: lightW + socketW,
+        designW: Math.min(lightW * LIGHT_SIMULTANEITY + (outletsOnLight.length ? socketW * SOCKET_SIMULTANEITY + OUTLET_POWER_W : 0), ratedA * NOMINAL_U0),
         rcd: lightingProtection === "rcbo" ? "own" : "A30L",
       },
-      group,
+      nodes,
       1.5,
       dali ? 5 : undefined,
     );

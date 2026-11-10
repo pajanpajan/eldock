@@ -15,6 +15,8 @@ export interface ScheduleRoom {
   /** Ovládací místa světel (1 = vypínač, 2 = schodišťové, 3+ = křížový / impulzní relé). */
   switchPlaces: number;
   appliances: ApplianceTag[];
+  /** Fáze 82: jednozásuvky na světelném okruhu místnosti (jištění 10 / 13 A); bez údaje 0. */
+  lightingSockets?: number;
 }
 
 /** Spotřebiče nabízené v soupisu (vyhrazené okruhy, 3f vývody, lednice na RCBO). */
@@ -45,6 +47,8 @@ export function sanitizeSchedule(rooms: readonly ScheduleRoom[]): ScheduleRoom[]
       lights: clampInt(room.lights, 30),
       switchPlaces: clampInt(room.switchPlaces, 6),
       appliances: [...new Set(room.appliances.filter((tag) => SCHEDULE_APPLIANCES.includes(tag)))],
+      // Fáze 82: zásuvky na světelném okruhu jen u místnosti se světlem (bez nich pole chybí – tvar dosavadních dat)
+      ...(room.lights > 0 && clampInt(room.lightingSockets ?? 0, 4) > 0 ? { lightingSockets: clampInt(room.lightingSockets ?? 0, 4) } : {}),
     }))
     .filter((room) => room.name);
 }
@@ -66,6 +70,7 @@ export function floorplanFromSchedule(rooms: readonly ScheduleRoom[], mode: Inst
     for (let i = 0; i < room.singleSockets; i++) add("single_socket");
     for (let i = 0; i < room.doubleSockets; i++) add("double_socket");
     for (let i = 0; i < room.lights; i++) add("light");
+    for (let i = 0; i < (room.lightingSockets ?? 0); i++) add("single_socket", { onLighting: true });
     for (const tag of room.appliances) add("appliance", { tag });
   });
   const plan: Floorplan = {

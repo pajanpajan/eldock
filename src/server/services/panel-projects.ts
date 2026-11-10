@@ -1,5 +1,5 @@
 import type { CableSummary } from "@/engine/cable-routing";
-import { MAIN_BOARD, buildSwitchboardFromCircuits, circuitDesignations, generateCircuitsFromFloorplan, type InstallLevel, type InstallMethod } from "@/engine/floorplan-bridge";
+import { MAIN_BOARD, buildSwitchboardFromCircuits, circuitDesignations, generateCircuitsFromFloorplan, type InstallLevel, type InstallMethod, type LightingSocketA } from "@/engine/floorplan-bridge";
 import { floorplanFromSchedule, sanitizeSchedule, type ScheduleRoom } from "@/engine/room-schedule";
 import type { PrismaClient } from "@/generated/prisma/client";
 import { isHiddenManufacturer } from "@/lib/panel-builder/brands";
@@ -105,6 +105,8 @@ export interface ScheduleProjectInput extends Omit<CreateProjectInput, "photoUrl
   /** Fáze 52: způsob uložení kabelů a počítání dvojzásuvky jako 2 zásuvek (ČSN 33 2130 ed. 4). */
   installMethod?: InstallMethod;
   countDoubleAsTwo?: boolean;
+  /** Fáze 82: jištění světelného okruhu se zásuvkami (10 / 13 A). */
+  lightingSocketA?: LightingSocketA;
 }
 
 /**
@@ -115,7 +117,7 @@ export async function createProjectFromSchedule(prisma: PrismaClient, input: Sch
   const rooms = sanitizeSchedule(input.rooms);
   if (!rooms.length) throw new WorkflowError("VALIDATION", "Zadejte alespoň jednu místnost.");
   const { plan, calibration } = floorplanFromSchedule(rooms, input.mode);
-  const circuits = generateCircuitsFromFloorplan(plan, calibration, { installMethod: input.installMethod, countDoubleAsTwo: input.countDoubleAsTwo });
+  const circuits = generateCircuitsFromFloorplan(plan, calibration, { installMethod: input.installMethod, countDoubleAsTwo: input.countDoubleAsTwo, ...(input.lightingSocketA ? { lightingSocketA: input.lightingSocketA } : {}) });
   if (!circuits.circuits.length) throw new WorkflowError("VALIDATION", "Soupis neobsahuje žádný vývod (zásuvky, světla nebo spotřebiče).");
   const enclosures = (await prisma.panelEnclosure.findMany({ orderBy: { totalModules: "asc" } })).filter((row) => !isHiddenManufacturer(row.manufacturer));
   const board = buildSwitchboardFromCircuits(circuits, { mode: input.mode, enclosures, supplyPhases: supplyById(input.supplySystem).phases });

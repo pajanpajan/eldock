@@ -75,6 +75,8 @@ export function NewProjectDialog({ credits = null }: { credits?: number | null }
   const [installMode, setInstallMode] = useState<InstallLevel>("classic");
   const [installMethod, setInstallMethod] = useState<InstallMethod>("C");
   const [countDoubleAsTwo, setCountDoubleAsTwo] = useState(true);
+  // Fáze 82: jištění světelného okruhu se zásuvkami (sloupec 💡 zás. v soupisu)
+  const [lightingSocketA, setLightingSocketA] = useState<10 | 13>(10);
   const design = mode === "DESIGN";
   const schedule = mode === "SCHEDULE";
   const main = shots.find((shot) => shot.id === mainId) ?? null;
@@ -169,7 +171,7 @@ export function NewProjectDialog({ credits = null }: { credits?: number | null }
     const header = { name: String(form.get("name") ?? ""), customerName: String(form.get("customer") ?? "") || null, installationSite: String(form.get("site") ?? "") || null, supplySystem: supply };
     if (schedule) {
       startTransition(async () => {
-        const result = await createScheduleProjectAction({ ...header, mode: installMode, installMethod, countDoubleAsTwo, rooms });
+        const result = await createScheduleProjectAction({ ...header, mode: installMode, installMethod, countDoubleAsTwo, lightingSocketA, rooms });
         if (!result.ok) return void toast.error(result.error);
         toast.success(`Rozváděč vygenerován: ${result.data.circuits} okruhů, ${result.data.devices} přístrojů${result.data.enclosure ? `, skříň ${result.data.enclosure}` : ""}.`);
         for (const warning of result.data.warnings.slice(0, 3)) toast.warning(warning);
@@ -299,6 +301,11 @@ export function NewProjectDialog({ credits = null }: { credits?: number | null }
                   <input type="checkbox" checked={countDoubleAsTwo} onChange={(event) => setCountDoubleAsTwo(event.target.checked)} />
                   Počítat dvojzásuvku jako 2 zásuvky dle ČSN 33 2130 ed. 4
                 </label>
+                <Label htmlFor="pb-lighting-socket">💡 Zásuvky na světle – jistič</Label>
+                <select id="pb-lighting-socket" className={selectClass} value={lightingSocketA} onChange={(event) => setLightingSocketA(event.target.value === "13" ? 13 : 10)} title="Jištění světelného okruhu, na kterém jsou i zásuvky (sloupec 💡 zás.) – nikdy 16 A">
+                  <option value={10}>B10</option>
+                  <option value={13}>B13</option>
+                </select>
               </div>
               <p className="text-xs text-muted-foreground">{INSTALL_LEVELS.find((level) => level.id === installMode)?.description}</p>
               <ScheduleEditor rooms={rooms} onChange={setRooms} />

@@ -31,6 +31,8 @@ export const DEFAULT_CHIPS: readonly CircuitChip[] = [
   { id: "main", label: "Hlavní vypínač", preset: { category: "MAIN_SWITCH", poles: "3P", ratedCurrentA: 40 } },
   { id: "rcd", label: "Chránič", numbered: true, preset: { category: "RCD", poles: "4P", ratedCurrentA: 40 } },
   { id: "lights", label: "Světla", numbered: true, preset: { category: "MCB", poles: "1P", curve: "B", ratedCurrentA: 10 } },
+  // Fáze 82: světelný okruh se zásuvkami – jistič 10 A (13 A ručně v kaskádě), nikdy 16 A
+  { id: "lights-sockets", label: "Světla + zásuvky", numbered: true, preset: { category: "MCB", poles: "1P", curve: "B", ratedCurrentA: 10 } },
   { id: "sockets", label: "Zásuvky", preset: { category: "MCB", poles: "1P", curve: "B", ratedCurrentA: 16 } },
   { id: "kitchen", label: "Kuchyně", preset: { category: "MCB", poles: "1P", curve: "B", ratedCurrentA: 16 } },
   { id: "bath", label: "Koupelna", preset: { category: "MCB", poles: "1P", curve: "B", ratedCurrentA: 16 } },

@@ -60,6 +60,8 @@ const scheduleSchema = z.object({
   mode: z.enum(["classic", "bus_loxone", "smart_retrofit"]),
   installMethod: z.enum(["C", "B2", "A2", "A1"]).default("C"),
   countDoubleAsTwo: z.boolean().default(true),
+  // Fáze 82: jištění světelného okruhu se zásuvkami
+  lightingSocketA: z.union([z.literal(10), z.literal(13)]).default(10),
   supplySystem: supplySchema,
   rooms: z
     .array(
@@ -71,6 +73,7 @@ const scheduleSchema = z.object({
         lights: count,
         switchPlaces: z.number().int().min(0).max(6),
         appliances: z.array(z.enum(SCHEDULE_APPLIANCES as [string, ...string[]])).max(12),
+        lightingSockets: z.number().int().min(0).max(4).optional(),
       }),
     )
     .min(1)

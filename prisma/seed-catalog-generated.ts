@@ -196,7 +196,8 @@ function rcbo(manufacturer: string, series: string, typeCode: string, curve: str
     description: `Jističochránič 1P+N, ${current} A, char. ${curve}, 30 mA, typ ${type}`,
   });
 }
-const RCBO_RATINGS: [string, number][] = [["B", 10], ["B", 16], ["C", 16], ["B", 20], ["C", 20]];
+// Fáze 82: B13 – světelný okruh se zásuvkami jištěný 13 A (výchozí RCBO na každém světelném okruhu)
+const RCBO_RATINGS: [string, number][] = [["B", 10], ["B", 13], ["B", 16], ["C", 16], ["B", 20], ["C", 20]];
 for (const [curve, current] of RCBO_RATINGS) {
   rcbo("ABB", "DS201", `DS201 ${curve}${current} A30`, curve, current, "A");
   rcbo("ABB", "DS201", `DS201 ${curve}${current} AC30`, curve, current, "AC");

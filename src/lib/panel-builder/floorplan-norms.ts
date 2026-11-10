@@ -4,6 +4,8 @@
 // v ložnicích a dětských pokojích dle ČSN 33 2000-4-42 (čl. 421.7). Čisté funkce.
 // Fáze 63: zóny podle skutečného rozměru a natočení předmětu (`fixtures.ts`), umyvadla – zásuvky a spínače mimo svislý
 // pás nad a pod umyvadlem (ČSN 33 2130 ed. 4), vzdálenost od hrany vany / sprchy / umyvadla v textu zjištění.
+// Fáze 82: zásuvky na světelném okruhu – jištění okruhu 10 / 13 A (nikdy 16 A); zásuvka u kuchyňské linky na světelném
+// okruhu = varování s opravou jedním klikem (zpět na zásuvkový okruh).
 
 import { mountHeight } from "@/engine/floorplan-bridge";
 
@@ -16,14 +18,14 @@ export type NormLevel = "error" | "warning" | "info";
 
 export interface NormIssue {
   id: string;
-  rule: "bath-zone" | "basin-area" | "basin-band" | "basin-strict" | "wet-room-ip" | "outdoor-ip" | "afdd" | "fixture-missing";
+  rule: "bath-zone" | "basin-area" | "basin-band" | "basin-strict" | "wet-room-ip" | "outdoor-ip" | "afdd" | "fixture-missing" | "lighting-socket" | "lighting-socket-worktop";
   level: NormLevel;
   text: string;
   source: string;
   /** Prvky, kterých se zjištění týká (i z jiných podlaží). */
   elementIds: string[];
-  /** Oprava jedním klikem: záměna prvku za jiný z palety (zásuvka → IP44). */
-  fix?: { label: string; replace: { from: string; to: string }[] };
+  /** Oprava jedním klikem: záměna prvku za jiný z palety (zásuvka → IP44); fáze 82 – zásuvky zpět na zásuvkový okruh. */
+  fix?: { label: string; replace: { from: string; to: string }[]; offLighting?: string[] };
 }
 
 const cm = (mm: number) => `${Math.round(mm / 10)} cm`;
@@ -143,6 +145,30 @@ export function floorplanNorms(draft: FloorplanDraft): NormIssue[] {
         ...ipFix(outdoor),
       });
     }
+    // Fáze 82: zásuvky na světelném okruhu – jištění 10 / 13 A; zásuvka u kuchyňské linky tam nepatří (konvice, robot)
+    const onLighting = floor.elements.filter((element) => isSocket(element) && element.onLighting);
+    if (onLighting.length) {
+      issues.push({
+        id: `lighting-socket:${floor.id}`,
+        rule: "lighting-socket",
+        level: "info",
+        text: `${floor.name}: ${onLighting.length}× zásuvka na světelném okruhu – okruh jistí jistič ${draft.lightingSocketA} A (nikdy 16 A); jen výjimečně, běžné spotřebiče patří na zásuvkové okruhy B16.`,
+        source: "ČSN 33 2000-4-43 čl. 433.1 (IB ≤ In ≤ Iz) a ČSN 33 2130 ed. 4 tab. 9 – světelný okruh 1,5 mm² jistič 10 A, 13 A jen při vyhovující Iz (jinak 2,5 mm²)",
+        elementIds: onLighting.map((element) => element.id),
+      });
+      const worktop = onLighting.filter((element) => paletteItem(element.item)?.variant === "worktop");
+      if (worktop.length) {
+        issues.push({
+          id: `lighting-socket-worktop:${floor.id}`,
+          rule: "lighting-socket-worktop",
+          level: "warning",
+          text: `${floor.name}: ${worktop.length}× zásuvka u kuchyňské linky na světelném okruhu – rychlovarná konvice nebo robot vybaví jistič ${draft.lightingSocketA} A a zhasne světla; patří na zásuvkový okruh linky (B16).`,
+          source: "Projekční zásada Eldocku – spotřebiče s velkým příkonem na zásuvkový okruh",
+          elementIds: worktop.map((element) => element.id),
+          fix: { label: `Vrátit ${worktop.length}× zásuvku linky na zásuvkový okruh`, replace: [], offLighting: worktop.map((element) => element.id) },
+        });
+      }
+    }
     // Ložnice a dětské pokoje: doporučení AFDD
     const sleeping = [...new Set(floor.elements.filter((element) => isSocket(element) && SLEEP.test(element.room)).map((element) => element.room))];
     if (sleeping.length) {
@@ -163,6 +189,14 @@ export function floorplanNorms(draft: FloorplanDraft): NormIssue[] {
 export function applyNormFix(draft: FloorplanDraft, issue: NormIssue): FloorplanDraft {
   if (!issue.fix) return draft;
   const replace = new Map(issue.fix.replace.map((row) => [row.from, row.to]));
-  const map = (element: EditorElement) => (replace.has(element.id) ? { ...element, item: replace.get(element.id)! } : element);
+  // Fáze 82: zásuvky ze světelného okruhu zpět na automatický zásuvkový okruh
+  const offLighting = new Set(issue.fix.offLighting ?? []);
+  const map = (element: EditorElement) => {
+    const next = replace.has(element.id) ? { ...element, item: replace.get(element.id)! } : element;
+    if (!offLighting.has(element.id) || !next.onLighting) return next;
+    const rest = { ...next };
+    delete rest.onLighting;
+    return rest;
+  };
   return { ...draft, elements: draft.elements.map(map), otherFloors: draft.otherFloors.map((floor) => ({ ...floor, elements: floor.elements.map(map) })) };
 }

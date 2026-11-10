@@ -7,7 +7,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { INSTALL_LEVELS, INSTALL_METHODS, ROUTING_MODES, mountHeight, type CableRoutingMode, type ElevationProfile, type InstallLevel, type InstallMethod } from "@/engine/floorplan-bridge";
+import { INSTALL_LEVELS, INSTALL_METHODS, ROUTING_MODES, mountHeight, type CableRoutingMode, type ElevationProfile, type InstallLevel, type InstallMethod, type LightingSocketA } from "@/engine/floorplan-bridge";
 import {
   ANNOTATION_DEFAULTS,
   CONTROLS_LABEL,
@@ -166,7 +166,7 @@ import { CAD_GEOMETRY_MAX_BYTES, buildSnapIndex, geometryOf, parseCadGeometry, p
 import { addTemplate, favoritesFirst, removeTemplate, toggleFavorite } from "@/lib/panel-builder/floorplan-library";
 import { Dimensions, ElementDetail, ElementToolbar, RoomDetail, ToolButton } from "./ElementPanels";
 import { SocketCircuitPicker, SocketCircuitPopover, SocketCircuitsPanel, type SocketMoveTarget } from "./SocketCircuitsPanel";
-import { assignSocketCircuit, isSocketElement, moveSocketsToCircuit, nextSocketCircuit, optimizeSocketCircuits, socketCircuitRows, type SocketCircuitRow } from "@/lib/panel-builder/socket-circuits";
+import { assignLightingCircuit, assignSocketCircuit, isSocketElement, lightingSocketRows, moveSocketsToCircuit, nextSocketCircuit, optimizeSocketCircuits, socketCircuitRows, type SocketCircuitRow } from "@/lib/panel-builder/socket-circuits";
 import { BACKGROUND_PX, preloadImage, rasterizeSvg } from "@/lib/panel-builder/background-image";
 
 // 2D editor půdorysu elektroinstalace (fáze 49, úprava PDF / značky / úroveň instalace fáze 57, fáze 59: natočení další
@@ -390,8 +390,19 @@ export function FloorplanEditor({
       update((current) => assignSocketCircuit(current, ids, key));
       return void toast.success(`${ids.length > 1 ? `${ids.length} zásuvek` : "Zásuvka"} v novém ručním okruhu ${key}.`);
     }
+    // Fáze 82: zásuvka na světelný okruh své místnosti (jištění 10 / 13 A)
+    if (target.kind === "lighting") {
+      update((current) => assignLightingCircuit(current, ids));
+      return void toast.success(`${ids.length > 1 ? `${ids.length} zásuvek` : "Zásuvka"} na světelném okruhu své místnosti – jištění okruhu ${draft.lightingSocketA} A (Ctrl+Z vrátí).`);
+    }
     update((current) => moveSocketsToCircuit(current, ids, { nodeIds: target.row.elementIds }));
     toast.success(`Přesunuto do okruhu ${target.row.designation} – okruh je teď ruční (Ctrl+Z vrátí).`);
+  }
+
+  /** Fáze 82: jištění světelných okruhů se zásuvkami (10 / 13 A) pro celý půdorys. */
+  function changeLightingSocketA(value: LightingSocketA) {
+    update((current) => (current.lightingSocketA === value ? current : { ...current, lightingSocketA: value }));
+    toast.success(`Světelné okruhy se zásuvkami jistí jistič ${value} A.`);
   }
 
   /** Fáze 65: ručně přidané moduly chytré domácnosti na DIN lištu (nad výpočet). */
@@ -503,6 +514,9 @@ export function FloorplanEditor({
   // Fáze 65: zásuvkové okruhy (označení jističů, délky z tras, ruční okruhy) pro panel, detail zásuvky a výběr
   const socketRows = useMemo(() => (analysis.ok ? socketCircuitRows(analysis.circuits.circuits, (id) => routes?.circuits.find((circuit) => circuit.id === id)?.lengthM) : []), [analysis, routes]);
   const socketRowOf = (elementId: string) => socketRows.find((row) => row.elementIds.includes(elementId)) ?? null;
+  // Fáze 82: světelné okruhy se zásuvkami
+  const lightingRows = useMemo(() => (analysis.ok ? lightingSocketRows(analysis.circuits.circuits) : []), [analysis]);
+  const lightingRowOf = (elementId: string) => lightingRows.find((row) => row.elementIds.includes(elementId)) ?? null;
   const selectedSockets = draft.elements.filter((element) => selection.includes(element.id) && isSocketElement(element)).map((element) => element.id);
   // Fáze 74: soupis okruhů celého domu (barva = barva trasy na plátně), vrstvy, vybraný a zvýrazněný okruh, rozváděče
   const entries: CircuitEntry[] = useMemo(() => {
@@ -2385,7 +2399,7 @@ export function FloorplanEditor({
               </button>
             </div>
             {/* Fáze 74: okruh vybrané zásuvky – plovoucí nabídka u zásuvky (barevné čipy okruhů jako trasy) */}
-            {selected && tool.kind === "select" && !drag && isSocketElement(selected) && popoverClosed !== selected.id && socketRows.length ? (
+            {selected && tool.kind === "select" && !drag && isSocketElement(selected) && popoverClosed !== selected.id && (socketRows.length || lightingRows.length) ? (
               <SocketCircuitPopover
                 left={((selected.x - viewMm.x) / viewMm.w) * 100}
                 top={((selected.y - viewMm.y) / viewHeight) * 100}
@@ -2395,6 +2409,7 @@ export function FloorplanEditor({
                 colorOf={(id) => colorOf(id)}
                 onMove={(target) => moveSockets([selected.id], target)}
                 onClose={() => setPopoverClosed(selected.id)}
+                lightingOn={Boolean(selected.onLighting)}
               />
             ) : null}
             <span className="pointer-events-none absolute top-2 left-2 rounded-md border border-border bg-card/90 px-2 py-0.5 text-xs font-semibold" data-testid="active-floor">
@@ -2472,7 +2487,17 @@ export function FloorplanEditor({
               onEditAppliances={() => setApplianceOpen(true)}
               onBasinZone={(basinZone) => update((current) => (current.basinZone === basinZone ? current : { ...current, basinZone }))}
               onSaveTemplate={saveTemplate}
-              socketCircuit={isSocketElement(selected) ? <SocketCircuitPicker manual={selected.socketCircuit ?? null} current={socketRowOf(selected.id)} rows={socketRows} onMove={(target) => moveSockets([selected.id], target)} /> : undefined}
+              socketCircuit={
+                isSocketElement(selected) ? (
+                  <SocketCircuitPicker
+                    manual={selected.socketCircuit ?? null}
+                    current={socketRowOf(selected.id)}
+                    rows={socketRows}
+                    onMove={(target) => moveSockets([selected.id], target)}
+                    lighting={{ on: Boolean(selected.onLighting), current: lightingRowOf(selected.id), ratedA: draft.lightingSocketA, onRatedA: changeLightingSocketA }}
+                  />
+                ) : undefined
+              }
               board={
                 hasBoard(selected) && boardInfos.length > 1 ? (
                   <div className="rounded-lg border border-violet-500/40 bg-violet-500/5 p-2" data-testid="element-board">
@@ -2546,6 +2571,7 @@ export function FloorplanEditor({
               onGrouping={(socketGrouping) => update((current) => (current.socketGrouping === socketGrouping ? current : { ...current, socketGrouping }))}
               onOptimize={optimizeSockets}
               onSelect={selectSocketCircuit}
+              lighting={{ rows: lightingRows, ratedA: draft.lightingSocketA, onRatedA: changeLightingSocketA, onSelect: (row) => selectSocketCircuit({ ...row, lengthM: 0, manual: null }) }}
             />
           ) : null}
           {/* Fáze 63: ručně upravené trasy – návrat na automat */}

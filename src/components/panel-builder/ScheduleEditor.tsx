@@ -7,10 +7,12 @@ import { cn } from "@/lib/utils";
 
 // Soupis místností pro návrh rozváděče (fáze 48, most „půdorys → rozváděč“ z fáze 44).
 
-const COUNTS: { key: "singleSockets" | "doubleSockets" | "lights" | "switchPlaces"; label: string; short: string; max: number }[] = [
+const COUNTS: { key: "singleSockets" | "doubleSockets" | "lights" | "lightingSockets" | "switchPlaces"; label: string; short: string; max: number }[] = [
   { key: "singleSockets", label: "Jednozásuvky", short: "1× zás.", max: 30 },
   { key: "doubleSockets", label: "Dvojzásuvky", short: "2× zás.", max: 30 },
   { key: "lights", label: "Světla", short: "Světla", max: 30 },
+  // Fáze 82: zásuvky na světelném okruhu místnosti (jen výjimečně – jištění 10 / 13 A)
+  { key: "lightingSockets", label: "Zásuvky na světelném okruhu (jištění 10 / 13 A)", short: "💡 zás.", max: 4 },
   { key: "switchPlaces", label: "Ovládací místa světel", short: "Ovl. míst", max: 6 },
 ];
 
@@ -61,7 +63,7 @@ export function ScheduleEditor({ rooms, onChange }: { rooms: ScheduleRoom[]; onC
                 </td>
                 {COUNTS.map((count) => (
                   <td key={count.key} className="w-14 px-1 py-1">
-                    <input type="number" min={0} max={count.max} value={room[count.key]} onChange={(event) => update(index, { [count.key]: Number(event.target.value) })} className={numberClass} aria-label={`${count.label} – ${room.name}`} />
+                    <input type="number" min={0} max={count.max} value={room[count.key] ?? 0} onChange={(event) => update(index, { [count.key]: Number(event.target.value) })} className={numberClass} aria-label={`${count.label} – ${room.name}`} />
                   </td>
                 ))}
                 <td className="px-1 py-1">
