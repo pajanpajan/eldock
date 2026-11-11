@@ -1,7 +1,11 @@
-# Fáze 73: kontrolní sestavení aplikace Eldock pro iOS (simulátor, bez podpisu) – spouští se jen ručně
-# (Actions → „iOS – sestavení pro simulátor“ → Run workflow). Repozitář je veřejný, minuty macOS jsou zdarma.
-# Capacitor 8 potřebuje Xcode 26 nebo novější: macos-26 ho má jako výchozí, macos-15-intel (záloha, když GitHubu
-# chybí runnery Apple Silicon) má výchozí Xcode 16, proto krok níže vybere nejnovější nainstalované Xcode 26.
+# Fáze 73: kontrolní sestavení aplikace Eldock pro iOS (simulátor, bez podpisu) a její spuštění v simulátoru iPhonu
+# a iPadu – spouští se jen ručně (Actions → „iOS – sestavení pro simulátor“ → Run workflow). Repozitář je veřejný,
+# minuty macOS jsou zdarma. Capacitor 8 potřebuje Xcode 26 nebo novější: macos-26 ho má jako výchozí, macos-15-intel
+# (záloha, když GitHubu chybí runnery Apple Silicon) má výchozí Xcode 16, proto krok níže vybere nejnovější
+# nainstalované Xcode 26. Spuštění (apps/client/scripts/ios-simulator.mjs) vyfotí úvodní obrazovku bez spárování –
+# nic se nepáruje ani neposílá na eldock.cz – a selže, když aplikace spadne, Capacitor nahlásí chybu JavaScriptu /
+# WebView nebo obrazovka zůstane prázdná či bílá. Snímky: artefakty eldock-iphone.png a eldock-ipad.png (bez zipu),
+# vše včetně záznamů: artefakt eldock-ios-simulator.
 # Podepsané sestavení pro iPhone a TestFlight až s účtem Apple Eldock s.r.o.
 name: iOS – sestavení pro simulátor
 
@@ -22,7 +26,7 @@ permissions:
 jobs:
   ios-simulator:
     runs-on: ${{ inputs.runner || 'macos-26' }}
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -50,6 +54,35 @@ jobs:
       - name: Rozhraní do projektu iOS
         working-directory: apps/client
         run: npx vite build && npx cap sync ios
+      # -derivedDataPath: App.app pro další krok v ios/App/build/Build/Products/Debug-iphonesimulator (v .gitignore)
       - name: Xcode – simulátor bez podpisu
         working-directory: apps/client/ios/App
-        run: xcodebuild -project App.xcodeproj -scheme App -configuration Debug -sdk iphonesimulator -destination "generic/platform=iOS Simulator" CODE_SIGNING_ALLOWED=NO -quiet build
+        run: xcodebuild -project App.xcodeproj -scheme App -configuration Debug -sdk iphonesimulator -destination "generic/platform=iOS Simulator" -derivedDataPath build CODE_SIGNING_ALLOWED=NO -quiet build
+      - name: Spuštění v simulátoru iPhonu a iPadu
+        working-directory: apps/client
+        run: node scripts/ios-simulator.mjs ios/App/build/Build/Products/Debug-iphonesimulator/App.app "$RUNNER_TEMP/eldock-ios-simulator"
+      # Snímky i samostatně bez zipu (archive: false – název artefaktu = název souboru), jdou otevřít rovnou
+      - name: Snímek iPhonu
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          path: ${{ runner.temp }}/eldock-ios-simulator/eldock-iphone.png
+          archive: false
+          if-no-files-found: ignore
+          retention-days: 30
+      - name: Snímek iPadu
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          path: ${{ runner.temp }}/eldock-ios-simulator/eldock-ipad.png
+          archive: false
+          if-no-files-found: ignore
+          retention-days: 30
+      - name: Snímky a záznamy ze simulátoru
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: eldock-ios-simulator
+          path: ${{ runner.temp }}/eldock-ios-simulator
+          if-no-files-found: ignore
+          retention-days: 30
