@@ -5,7 +5,7 @@ revize VTZ, změny skutečného provedení mezi údržbou v hale a externími CA
 rozváděčů. Pracovní název byl Digitry, od fáze 20 je to **ELDOCK**. Produkce běží na https://eldock.cz.
 Původní zadání MVP je v `docs/archiv/SPECIFIKACE-MVP.md`, celá historie fází 0–35 v `docs/archiv/PLAN-faze-00-35.md`, celý archiv v jednom souboru `docs/archiv/ARCHIV-KOMPLET.md`.
 
-## 1. Milníky (fáze 0–89 nasazené; 90 čeká na nasazení)
+## 1. Milníky (fáze 0–90 nasazené)
 
 | Fáze | Milník |
 |---|---|
@@ -219,7 +219,7 @@ Když uživatel řekne **„nasaď to na produkci“** nebo **„deploy“**:
 
 **Průvodce a kompaktní lišta 2D půdorysu (fáze 89):** bez migrace (režim lišty je v JSON knihovny půdorysu firmy `floorplanLibraryJson`). Na serveru nic dalšího. Nasazeno 2026-11-10 (commit `c5ce70e` spolu s fázemi 86 a 87; bez migrace, kontejner `healthy`).
 
-**Okna, dveře, nábytek a koupelnové zóny (fáze 90):** bez migrace (okna / dveře / nábytek, zrcadlení a rozměry v JSON nákresu, krok průvodce v relaci prohlížeče). Na serveru nic dalšího.
+**Okna, dveře, nábytek a koupelnové zóny (fáze 90):** bez migrace (okna / dveře / nábytek, zrcadlení a rozměry v JSON nákresu, krok průvodce v relaci prohlížeče). Na serveru nic dalšího. Nasazeno 2026-11-11 (commit `32ca097`; bez migrace, kontejner `healthy`).
 
 **Katalog ABB pro ČR (fáze 88):** bez migrace. Rozvodnice Mistral / ComfortLine CU, přístroje a příslušenství ABB i vazby příslušenství zapíše přírůstkový seed `db:panel-builder` při startu kontejneru (upsert, orientační řádek téhož typu dostane objednací číslo, nic se nemaže); ověřené rozvodnice převezmou řádky exportu se stejným objednacím číslem (MISTRAL65, CU24R / CU25R). Na serveru nic dalšího. Nasazeno 2026-11-10 (commit `1aacfdb`; seed „katalog 838 prvků aktualizován“, 163 ověřených skříní, kontejner `healthy`).
 
