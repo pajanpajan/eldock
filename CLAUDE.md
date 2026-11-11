@@ -5,7 +5,7 @@ revize VTZ, změny skutečného provedení mezi údržbou v hale a externími CA
 rozváděčů. Pracovní název byl Digitry, od fáze 20 je to **ELDOCK**. Produkce běží na https://eldock.cz.
 Původní zadání MVP je v `docs/archiv/SPECIFIKACE-MVP.md`, celá historie fází 0–35 v `docs/archiv/PLAN-faze-00-35.md`, celý archiv v jednom souboru `docs/archiv/ARCHIV-KOMPLET.md`.
 
-## 1. Milníky (fáze 0–92 nasazené; 93 čeká na nasazení)
+## 1. Milníky (fáze 0–93 nasazené)
 
 | Fáze | Milník |
 |---|---|
@@ -231,7 +231,7 @@ Když uživatel řekne **„nasaď to na produkci“** nebo **„deploy“**:
 
 **Onboarding, trenažéry a fotky řad (fáze 92):** migrace `phase92_trainer` (sloupec `PanelBoardProject.trainerPreset`, jen nový sloupec) → před nasazením záloha databáze podle postupu výše; migraci provede start kontejneru. Nahrané fotky řad jdou do `./data/storage/catalog-images` (svazek `storage`, přežije nasazení). Na serveru nic dalšího. Nasazeno 2026-11-11 (commit `db4dc60`; záloha před migrací v pořádku, migrace bez chyb, kontejner `healthy`; nahrání fotky přes sharp v kontejneru zatím neověřené – ověří první nahrání ve velínu).
 
-**Obchodní centra, zdravotnictví a zálohování napájení (fáze 93):** migrace `phase93_occupancy_backup` (sloupce `PanelBoardProject.occupancy`, `Equipment.powerBackupTier` / `backupCapacityKva` / `tenantUnit` / `inspectionVariant`; nové hodnoty výčtů `EquipmentType` a `InspectionType` SQLite nemění) → před nasazením záloha databáze podle postupu výše; migraci provede start kontejneru. Na serveru nic dalšího.
+**Obchodní centra, zdravotnictví a zálohování napájení (fáze 93):** migrace `phase93_occupancy_backup` (sloupce `PanelBoardProject.occupancy`, `Equipment.powerBackupTier` / `backupCapacityKva` / `tenantUnit` / `inspectionVariant`; nové hodnoty výčtů `EquipmentType` a `InspectionType` SQLite nemění) → před nasazením záloha databáze podle postupu výše; migraci provede start kontejneru. Na serveru nic dalšího. Nasazeno 2026-11-11 (commit `898c81d`; záloha před migrací v pořádku, migrace bez chyb, kontejner `healthy`).
 
 **Katalog ABB pro ČR (fáze 88):** bez migrace. Rozvodnice Mistral / ComfortLine CU, přístroje a příslušenství ABB i vazby příslušenství zapíše přírůstkový seed `db:panel-builder` při startu kontejneru (upsert, orientační řádek téhož typu dostane objednací číslo, nic se nemaže); ověřené rozvodnice převezmou řádky exportu se stejným objednacím číslem (MISTRAL65, CU24R / CU25R). Na serveru nic dalšího. Nasazeno 2026-11-10 (commit `1aacfdb`; seed „katalog 838 prvků aktualizován“, 163 ověřených skříní, kontejner `healthy`).
 
