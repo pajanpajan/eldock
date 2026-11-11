@@ -81,7 +81,8 @@ test("2D půdorys: akordeon palety, předměty X × Y, spotřebiče, úprava tra
   await choose("Vana (1700 × 750 mm)");
   await clickAt(6500, 1600);
   await page.keyboard.press("Escape");
-  await expect(page.getByTestId("plan-checks")).toContainText("blíž než 20 cm od umývacího prostoru");
+  // Fáze 90: hláška jmenuje přístroj a výšku, pás 0,2 m hlídá jen přístroje bez krytí IP44
+  await expect(page.getByTestId("plan-checks")).toContainText("Jednozásuvka (výška 300 mm) – níž než 1,2 m blíž než 20 cm od hrany umyvadlového prostoru");
   await clickAt(6500, 1600);
   const placedBath = canvas.locator('[data-element="bath"]');
   const bath = placedBath.getByTestId("fixture");

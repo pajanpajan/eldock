@@ -5,7 +5,7 @@ import { ArrowLeftRight, Plus } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { ROOM_PRESETS, formatRoomSize, parseRoomSize, type SizeUnit } from "@/lib/panel-builder/room-builder";
+import { ROOM_PRESETS, formatRoomSize, nextRoomPreset, parseRoomSize, type SizeUnit } from "@/lib/panel-builder/room-builder";
 import { cn } from "@/lib/utils";
 
 const field = "h-8 rounded-md border border-input bg-transparent px-2 text-sm text-foreground dark:bg-input/30";
@@ -14,13 +14,16 @@ const field = "h-8 rounded-md border border-input bg-transparent px-2 text-sm te
  * Fáze 89: generátor místnosti podle rozměrů X × Y – název z předvoleb (nebo vlastní text), Šířka X a Hloubka Y
  * v metrech či milimetrech (tečka i čárka), [ + Vytvořit místnost ] nebo Enter a [ ↻ Prohodit X ↔ Y ]. Místnost se
  * vloží na volné místo plochy, hned je vybraná a jde chytit myší a přisunout k ostatním (magnetické stěny a rohy).
+ * Fáze 90: po vytvoření se rovnou předvyplní další typ místnosti (po obývacím pokoji kuchyň, ložnice, koupelna …),
+ * průvodce zůstává v kroku 1 – dům se skládá místnost po místnosti na jedno kliknutí.
  */
-export function RoomBySizeForm({ onCreate, className }: { onCreate: (room: { name: string; w: number; h: number }) => void; className?: string }) {
+export function RoomBySizeForm({ onCreate, rooms = [], className }: { onCreate: (room: { name: string; w: number; h: number }) => void; rooms?: readonly string[]; className?: string }) {
   const listId = useId();
-  const [name, setName] = useState<string>(ROOM_PRESETS[0].name);
+  const [first] = useState(() => nextRoomPreset(rooms));
+  const [name, setName] = useState<string>(first.name);
   const [unit, setUnit] = useState<SizeUnit>("m");
-  const [x, setX] = useState(formatRoomSize(ROOM_PRESETS[0].w));
-  const [y, setY] = useState(formatRoomSize(ROOM_PRESETS[0].h));
+  const [x, setX] = useState(formatRoomSize(first.w));
+  const [y, setY] = useState(formatRoomSize(first.h));
 
   function changeName(value: string) {
     setName(value);
@@ -47,7 +50,13 @@ export function RoomBySizeForm({ onCreate, className }: { onCreate: (room: { nam
     const w = parseRoomSize(x, unit);
     const h = parseRoomSize(y, unit);
     if (!w || !h) return void toast.error(unit === "m" ? "Zadejte šířku X a hloubku Y od 0,5 do 100 m (desetinná tečka i čárka)." : "Zadejte šířku X a hloubku Y od 500 do 100 000 mm.");
-    onCreate({ name: name.trim() || "Místnost", w, h });
+    const created = name.trim() || "Místnost";
+    onCreate({ name: created, w, h });
+    // Fáze 90: další typ místnosti s typickým rozměrem (jde přepsat)
+    const next = nextRoomPreset([...rooms, created], created);
+    setName(next.name);
+    setX(formatRoomSize(next.w, unit));
+    setY(formatRoomSize(next.h, unit));
   }
 
   return (

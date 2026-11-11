@@ -46,7 +46,7 @@ import { DEFAULT_SUPPLY, supplyById, type SupplySystem } from "./supply";
 import { isEnvironmentId, type EnvironmentId } from "./environments";
 import { CALIBRATION_TOLERANCE_PCT, emptyCalibration, isRotation, planExtent, rotatedSize, type CalibrationRecord, type FloorplanBackground, type Rotation } from "./floorplan-pdf";
 
-export type PaletteGroup = "panel" | "sockets" | "lights" | "controls" | "shading" | "appliances" | "fixtures";
+export type PaletteGroup = "panel" | "sockets" | "lights" | "controls" | "shading" | "appliances" | "fixtures" | "architecture";
 
 /** Fáze 57: role sběrnicového prvku (KNX / Loxone Tree / free@home) – kreslí se v rámečku „sběrnice“. */
 export type BusRole = "button" | "presence" | "room_unit" | "sensor" | "display" | "blind";
@@ -89,6 +89,8 @@ export interface PaletteItem {
   heatingHead?: boolean;
   /** Fáze 77: tvar svítidla – LED pásek (nepřímé osvětlení, výchozí 24 V PWM) a bodové podhledové svítidlo. */
   lightForm?: "strip" | "spot";
+  /** Fáze 90: položka je v paletě i v dalších kategoriích (WC v nábytku i v zařizovacích předmětech). */
+  alsoIn?: PaletteGroup[];
 }
 
 /** Fáze 74: kategorie palety – ikona, krátký název a podtitul (norma, rozsah) pro přehledný levý panel. */
@@ -101,6 +103,8 @@ export const PALETTE_GROUPS: { id: PaletteGroup; icon: string; label: string; hi
   { id: "shading", icon: "🪟", label: "Stínící technika, čidla a vytápění", hint: "žaluzie, okna, voda, termostaty, hlavice" },
   { id: "appliances", icon: "🔥", label: "Spotřebiče", hint: "vlastní jisticí okruh" },
   { id: "fixtures", icon: "🛁", label: "Zařizovací předměty", hint: "zóny ČSN 33 2000-7-701, umývací prostor" },
+  // Fáze 90: orientační architektonické prvky – nevytváří okruhy, kreslí se na plátně, v PDF i v DXF (ARCHITEKTURA_NABYTEK)
+  { id: "architecture", icon: "🛋️", label: "Okna, dveře a nábytek", hint: "orientační – rozměr X × Y, bez okruhů" },
 ];
 
 /** Nadpis a podtitul skupiny ovládání podle úrovně instalace (fáze 57, fáze 74 krátce). */
@@ -190,6 +194,24 @@ export const PALETTE: PaletteItem[] = [
   // Fáze 63: umyvadla – pás nad a pod umyvadlem (ČSN 33 2130 ed. 4); rozměr X × Y a natočení jdou měnit
   { id: "basin", group: "fixtures", label: "Umyvadlo (600 × 450 mm)", symbol: "UMY", kind: "fixture" },
   { id: "double-basin", group: "fixtures", label: "Dvojumyvadlo (1200 × 450 mm)", symbol: "DUM", kind: "fixture" },
+  // Fáze 90: okna a dveře (přichytí se ke stěně místnosti) a nábytek – rozměr X × Y žlutým rohem, natočení, otevírání
+  { id: "arch-window-1", group: "architecture", label: "Okno jednokřídlé (1,00 × 0,25 m)", symbol: "OKN_1", kind: "fixture" },
+  { id: "arch-window-2", group: "architecture", label: "Okno dvoukřídlé (1,60 × 0,25 m)", symbol: "OKN_2", kind: "fixture" },
+  { id: "arch-window-hs", group: "architecture", label: "Francouzské okno / HS portál (2,60 × 0,30 m)", symbol: "OKN_HS", kind: "fixture" },
+  { id: "arch-door-1", group: "architecture", label: "Dveře jednokřídlé (0,80 × 0,80 m)", symbol: "DVE_1", kind: "fixture" },
+  { id: "arch-door-2", group: "architecture", label: "Dveře dvoukřídlé (1,45 × 0,80 m)", symbol: "DVE_2", kind: "fixture" },
+  { id: "arch-door-sliding", group: "architecture", label: "Dveře posuvné (0,90 × 0,20 m)", symbol: "DVE_POS", kind: "fixture" },
+  { id: "arch-bed-double", group: "architecture", label: "Manželská postel – dvoulůžko (1,80 × 2,00 m)", symbol: "POST_2", kind: "fixture" },
+  { id: "arch-bed-single", group: "architecture", label: "Jednolůžko / dětská postel (0,90 × 2,00 m)", symbol: "POST_1", kind: "fixture" },
+  { id: "arch-sofa-l", group: "architecture", label: "Rohová sedací souprava – L-gauč (2,60 × 1,80 m)", symbol: "GAUC_L", kind: "fixture" },
+  { id: "arch-sofa", group: "architecture", label: "Pohovka / gauč rovný (2,20 × 0,95 m)", symbol: "GAUC_R", kind: "fixture" },
+  { id: "arch-table-dining", group: "architecture", label: "Jídelní stůl se 6 židlemi (1,80 × 0,90 m)", symbol: "STUL_J", kind: "fixture" },
+  { id: "arch-desk", group: "architecture", label: "Pracovní stůl se židlí (1,40 × 0,70 m)", symbol: "STUL_PC", kind: "fixture" },
+  { id: "arch-kitchen", group: "architecture", label: "Kuchyňská linka s dřezem a varnou zónou (2,60 × 0,60 m)", symbol: "LINKA", kind: "fixture" },
+  { id: "arch-island", group: "architecture", label: "Kuchyňský ostrůvek (1,80 × 0,90 m)", symbol: "OSTR", kind: "fixture" },
+  { id: "arch-wardrobe", group: "architecture", label: "Šatní / vestavěná skříň (2,00 × 0,60 m)", symbol: "SKRIN", kind: "fixture" },
+  { id: "arch-tv", group: "architecture", label: "TV stolek / obývací stěna (1,80 × 0,45 m)", symbol: "TV_ST", kind: "fixture" },
+  { id: "arch-wc", group: "architecture", alsoIn: ["fixtures"], label: "WC mísa / závěsné WC (0,40 × 0,65 m)", symbol: "WC_M", kind: "fixture" },
 ];
 
 export const paletteItem = (id: string) => PALETTE.find((item) => item.id === id) ?? null;
@@ -254,6 +276,8 @@ export interface EditorElement {
   light?: LightSpec;
   /** Fáze 63: zařizovací předmět – skutečná šířka X a hloubka Y [mm] (bez údaje výchozí rozměr předmětu). */
   sizeMm?: { w: number; d: number };
+  /** Fáze 90: dveře s pravým otevíráním (posuvné: posuv vlevo), zrcadlený nábytek (L-gauč, linka). */
+  flip?: boolean;
   /** Fáze 63: vlastní spotřebič – id v knihovně spotřebičů nákresu (`appliances`). */
   appliance?: string;
   /** Fáze 63: konkrétní výrobek z lišty výrobců (ABB-free@home, ABB i-bus KNX, Loxone, TapHome) – popis a sběrnice. */
@@ -857,11 +881,13 @@ function parseSmartExtras(value: unknown): Record<string, number> {
 }
 
 /** Fáze 63: rozměr předmětu, vlastní spotřebič a výrobek prvku z uložených dat; fáze 65 ruční zásuvkový okruh, fáze 74 rozváděč. */
-function parseExtras(element: Partial<EditorElement> & { item: string }, num: Num): Pick<EditorElement, "sizeMm" | "appliance" | "product" | "productVariant" | "productBox" | "socketCircuit" | "onLighting" | "boardCode" | "board" | "drive" | "headDrive"> {
+function parseExtras(element: Partial<EditorElement> & { item: string }, num: Num): Pick<EditorElement, "sizeMm" | "flip" | "appliance" | "product" | "productVariant" | "productBox" | "socketCircuit" | "onLighting" | "boardCode" | "board" | "drive" | "headDrive"> {
   const fixture = fixtureSpecOf(element.item);
   const size = element.sizeMm && typeof element.sizeMm === "object" ? element.sizeMm : null;
   return {
-    ...(fixture && size ? { sizeMm: { w: clampFixture(num(size.w, fixture.w, 1, 1e5)), d: clampFixture(num(size.d, fixture.d, 1, 1e5)) } } : {}),
+    ...(fixture && size ? { sizeMm: { w: clampFixture(num(size.w, fixture.w, 1, 1e5), fixture), d: clampFixture(num(size.d, fixture.d, 1, 1e5), fixture) } } : {}),
+    // Fáze 90: levé / pravé otevírání dveří a zrcadlení nábytku (jen u prvků, které ho mají)
+    ...(fixture?.flip && element.flip === true ? { flip: true } : {}),
     ...(element.item === CUSTOM_APPLIANCE_ITEM && typeof element.appliance === "string" && /^[\w-]{1,40}$/.test(element.appliance) ? { appliance: element.appliance } : {}),
     ...(typeof element.product === "string" && productById(element.product) ? { product: element.product } : {}),
     // Fáze 81: varianta a krabice jen ty, které výrobek nabízí

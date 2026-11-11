@@ -12,7 +12,7 @@ import { gangsOf } from "./floorplan-frames";
 import { productById } from "./smart-catalog";
 import { smartPlanOf } from "./smart-home-plan";
 import { panelBomRows, variantOf } from "./smart-panels";
-import { appearanceLabel, colorCodeFor, designSeriesOf } from "./wiring-designs";
+import { appearanceLabel, colorCodeFor, designSeriesOf, hasFrameChoice, isMonoblockSeries } from "./wiring-designs";
 
 export type BomCategory = "Přístroje spínačů" | "Kryty spínačů" | "Sběrnicové prvky" | "Chytré moduly" | "Zásuvky" | "Rámečky" | "Ostatní přístroje" | "Instalační krabice" | "Kabely";
 export const BOM_CATEGORIES: readonly BomCategory[] = ["Přístroje spínačů", "Kryty spínačů", "Sběrnicové prvky", "Chytré moduly", "Zásuvky", "Rámečky", "Ostatní přístroje", "Instalační krabice", "Kabely"];
@@ -138,23 +138,25 @@ export function compileFloorplanBom(draft: FloorplanDraft, options: BomOptions =
   const look = (element: Pick<EditorElement, "series" | "color" | "frameColor">) => {
     const seriesKey = element.series ?? draft.series;
     const colorId = element.color ?? draft.color;
-    const frameId = frameColorOf(draft, element);
+    // Fáze 90: monobloky a Decento – barva rámečku = barva provedení
+    const frameId = hasFrameChoice(seriesKey) ? frameColorOf(draft, element) : colorId;
     const found = designSeriesOf(seriesKey);
     const isAbb = found?.brand.manufacturer === "ABB";
     const seriesColor = found?.series.colors?.find((color) => color.id === colorId);
     const frameColor = found?.series.colors?.find((color) => color.id === frameId) ?? seriesColor;
-    return { seriesKey, colorId, found, isAbb, matrix: isAbb ? ABB_MATRIX[found!.series.name] : undefined, code: seriesColor?.code ?? null, frameCode: frameColor?.code ?? null, frameMpn: frameColor?.frameMpn, appearance: appearanceLabel(seriesKey, colorId, frameId) };
+    return { seriesKey, colorId, found, isAbb, matrix: isAbb ? ABB_MATRIX[found!.series.name] : undefined, code: seriesColor?.code ?? null, frameCode: frameColor?.code ?? null, frameMpn: frameColor?.frameMpn, appearance: appearanceLabel(seriesKey, colorId, frameId), monoblock: isMonoblockSeries(seriesKey), ip: found?.series.ip ?? "IP44" };
   };
   const everything = allElements(draft);
   for (const element of everything) {
     const item = paletteItem(element.item);
     if (!item || item.kind === "panel" || item.kind === "riser" || item.kind === "fixture" || item.kind === "light" || item.kind === "appliance") continue;
-    const { found, isAbb, matrix, code, appearance } = look(element);
+    const { found, isAbb, matrix, code, appearance, monoblock, ip } = look(element);
     const units = Math.max(1, element.frameUnits);
     const inFrame = frameOf.has(element.id);
-    boxes += inFrame ? gangsOf(element) : units;
+    // Fáze 90: nástěnný monoblok (Garant, Praktik, Variant+) – kompletní přístroj na povrch, bez rámečku a krabice pod omítku
+    boxes += monoblock ? 0 : inFrame ? gangsOf(element) : units;
     const frame = () => {
-      if (inFrame) return;
+      if (inFrame || monoblock) return;
       add({ category: "Rámečky", ...frameNumber(look(element), units), name: `Rámeček ${units}násobný (${units}R)`, appearance, unit: "ks" }, 1);
     };
 
@@ -191,12 +193,20 @@ export function compileFloorplanBom(draft: FloorplanDraft, options: BomOptions =
       }
       const blind = item.control === "blind";
       const switchNo = blind ? "blind" : effectiveSwitchNo(draft, element).replace(/S+o?$/, "");
+      if (monoblock) {
+        add({ category: "Přístroje spínačů", mpn: null, verified: false, name: blind ? `Žaluziový spínač nástěnný ${ip} – kompletní přístroj` : `Spínač řazení ${switchNo} nástěnný ${ip} – kompletní přístroj (bez rámečku)`, appearance, unit: "ks" }, units);
+        continue;
+      }
       const mechanism = isAbb && !item.led && !item.ip44 ? (ABB_MECHANISMS[switchNo] ?? null) : null;
       add({ category: "Přístroje spínačů", mpn: mechanism, verified: Boolean(mechanism), name: blind ? "Žaluziový spínač – přístroj" : `Spínač řazení ${switchNo} – přístroj pod omítku`, appearance: found ? found.brand.label : "–", unit: "ks" }, units);
       const kind: CoverKind = blind ? "blind" : DIVIDED.has(switchNo) ? "divided" : "single";
       const cover = matrix?.cover(kind) ?? null;
       add({ category: "Kryty spínačů", ...withColor(cover?.base ?? null, code, cover?.verified ?? false), name: blind ? "Kryt žaluziového spínače" : kind === "divided" ? "Kryt spínače dělený" : "Kryt spínače jednoduchý", appearance, unit: "ks" }, units);
       frame();
+      continue;
+    }
+    if (monoblock && (item.kind === "single_socket" || item.kind === "double_socket")) {
+      add({ category: "Zásuvky", mpn: null, verified: false, name: `${item.kind === "double_socket" ? "Dvojzásuvka 2N" : "Zásuvka 1N"} nástěnná ${ip} s odklápěcím víčkem – kompletní přístroj`, appearance, unit: "ks" }, units);
       continue;
     }
     if (item.kind === "single_socket") {
@@ -222,6 +232,7 @@ export function compileFloorplanBom(draft: FloorplanDraft, options: BomOptions =
     if (members.length < 2) continue;
     const gangs = Math.min(5, members.reduce((sum, element) => sum + gangsOf(element), 0));
     const style = look(members[0]);
+    if (style.monoblock) continue;
     add({ category: "Rámečky", ...frameNumber(style, gangs), name: `Rámeček ${gangs}násobný (${gangs}R) – víceramček`, appearance: style.appearance, unit: "ks" }, 1);
   }
   // Retrofit: modul pod vypínač na každou spínanou větev (světlo s kabelovým ovladačem) a žaluzii, spínací modul

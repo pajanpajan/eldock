@@ -6,10 +6,13 @@
 // pás nad a pod umyvadlem (ČSN 33 2130 ed. 4), vzdálenost od hrany vany / sprchy / umyvadla v textu zjištění.
 // Fáze 82: zásuvky na světelném okruhu – jištění okruhu 10 / 13 A (nikdy 16 A); zásuvka u kuchyňské linky na světelném
 // okruhu = varování s opravou jedním klikem (zpět na zásuvkový okruh).
+// Fáze 90: zóny 1 a 2 sahají do výšky 2,25 m (čl. 701.32) – prvek výš (vývod motoru žaluzie v překladu 2,45 m) leží nad
+// zónami; čidla na binární vstup (okenní kontakt MAG, čidlo vody) a hlavice nejsou spínače 230 V; hláška jmenuje prvek,
+// jeho výšku a vzdálenost od vany / sprchy. U umyvadla hlídá pás 0,2 m pod 1,2 m jen přístroje bez krytí IP44.
 
 import { mountHeight } from "@/engine/floorplan-bridge";
 
-import { BASIN_MARGIN_MM, BASIN_STRICT_MM, WASH_AREA_TOP_MM, WASH_HIGH_MM, ZONE2_MM, basinPlacement, distanceToFixture, fixtureGeometry, type FixtureGeometry } from "./fixtures";
+import { BASIN_MARGIN_MM, BASIN_RECOMMENDED_MM, BASIN_STRICT_MM, WASH_AREA_TOP_MM, WASH_HIGH_MM, ZONE2_MM, basinPlacement, distanceToFixture, fixtureGeometry, type FixtureGeometry } from "./fixtures";
 import { floorsOf, paletteItem, type EditorElement, type FloorplanDraft } from "./floorplan-editor";
 
 export { ZONE2_MM };
@@ -30,6 +33,9 @@ export interface NormIssue {
 
 const cm = (mm: number) => `${Math.round(mm / 10)} cm`;
 
+/** Fáze 90: horní hranice zón 1 a 2 koupelny nad podlahou (ČSN 33 2000-7-701 ed. 2, čl. 701.32). */
+export const BATH_ZONE_TOP_MM = 2250;
+
 const WET = /koupel|sprch|wellness|sauna/i;
 const OUTDOOR = /terasa|venk|zahrad|balkon|lodžie|lodzie|garáž venku|dvůr/i;
 const SLEEP = /ložnic|loznic|dětsk|detsk|pokoj pro hosty|spaní/i;
@@ -38,7 +44,20 @@ const isSocket = (element: EditorElement) => {
   const kind = paletteItem(element.item)?.kind;
   return kind === "single_socket" || kind === "double_socket";
 };
-const isSwitch = (element: EditorElement) => paletteItem(element.item)?.kind === "switch" && !paletteItem(element.item)?.wireless;
+/**
+ * Spínač 230 V pro zóny koupelny a umyvadlo – bez bezdrátových tlačítek, čidel na binární vstup (okenní / dveřní
+ * kontakt MAG, čidlo úniku vody – SELV) a termostatických hlavic (fáze 90).
+ */
+const isSwitch = (element: EditorElement) => {
+  const item = paletteItem(element.item);
+  return item?.kind === "switch" && !item.wireless && !item.sensor && !item.heatingHead;
+};
+/** Fáze 90: přístroj v provedení IP44 (zásuvka IP44, vypínač IP44). */
+const isIp44 = (element: EditorElement) => {
+  const item = paletteItem(element.item);
+  return item?.variant === "ip44" || item?.ip44 === true;
+};
+const FIXTURE_NAME = { bath: { of: "vany", over: "nad vanou" }, shower: { of: "sprchy", over: "nad sprchovým koutem" } } as const;
 
 /** Oprava krytí: jednozásuvky → zásuvka IP44 (dvojzásuvku IP44 paleta nemá – zůstane k ruční záměně). */
 const ipFix = (elements: EditorElement[]): Pick<NormIssue, "fix"> => {
@@ -54,43 +73,68 @@ export function floorplanNorms(draft: FloorplanDraft): NormIssue[] {
       .map((element) => ({ element, geometry: fixtureGeometry(element) }))
       .filter((entry): entry is { element: EditorElement; geometry: FixtureGeometry } => entry.geometry !== null);
     const devices = floor.elements.filter((element) => isSocket(element) || isSwitch(element));
-    // Zóny 0–2: zásuvka ani spínač blíž než 0,6 m od hrany vany / sprchy (ve stejné místnosti)
-    const nearest = (element: EditorElement, zone: "bath" | "basin") =>
-      Math.min(...fixtures.filter((fixture) => fixture.geometry.zone === zone && fixture.element.room === element.room).map((fixture) => distanceToFixture(fixture.geometry, element.x, element.y)));
-    const inZone = devices.filter((element) => nearest(element, "bath") < ZONE2_MM);
-    if (inZone.length) {
-      const closest = Math.min(...inZone.map((element) => nearest(element, "bath")));
-      issues.push({
-        id: `bath-zone:${floor.id}`,
-        rule: "bath-zone",
-        level: "error",
-        text: `${floor.name}: ${inZone.length}× zásuvka / spínač v zóně 0–2 koupelny (nejblíž ${cm(closest)} od hrany vany / sprchy, potřeba aspoň 60 cm) – přesuňte je dál.`,
-        source: "ČSN 33 2000-7-701 ed. 2 – zásuvky a spínače jen mimo zóny 0, 1 a 2",
-        elementIds: inZone.map((element) => element.id),
-      });
-    }
-    // Fáze 74: umyvadlo – umývací prostor (svislý průmět ke stěně do 2,25 m) bez zásuvek a spínačů; níž než 1,2 m navíc
-    // 0,2 m od hranice; volitelně přísněji 0,6 m kolem umyvadla (jako zóna 2). Rozhoduje výška krabice.
+    // Fáze 74: výška krabice rozhoduje u umyvadla, fáze 90 i u zón koupelny (zóny 1 a 2 jen do 2,25 m)
     const heightOf = (element: EditorElement) => {
       const item = paletteItem(element.item);
       if (!item || item.kind === "panel" || item.kind === "riser" || item.kind === "fixture") return 0;
       return element.mountHeightMm ?? item.heightMm ?? mountHeight({ kind: item.kind, variant: item.variant, tag: item.tag }, draft.profile);
     };
+    /** Přesný název prvku s výškou do hlášky („Jednozásuvka (výška 300 mm)“). */
+    const describe = (element: EditorElement) => `${paletteItem(element.item)?.label ?? element.item} (výška ${Math.round(heightOf(element))} mm)`;
+    // Zóny 0–2: zásuvka ani spínač blíž než 0,6 m od hrany vany / sprchy (ve stejné místnosti) a níž než 2,25 m
+    const nearestBath = (element: EditorElement) => {
+      let best: { distance: number; geometry: FixtureGeometry } | null = null;
+      for (const fixture of fixtures) {
+        if (fixture.geometry.zone !== "bath" || fixture.element.room !== element.room) continue;
+        const distance = distanceToFixture(fixture.geometry, element.x, element.y);
+        if (!best || distance < best.distance) best = { distance, geometry: fixture.geometry };
+      }
+      return best;
+    };
+    type ZoneHit = { element: EditorElement; hit: { distance: number; geometry: FixtureGeometry } };
+    const inZone = devices
+      .map((element) => ({ element, hit: nearestBath(element) }))
+      .filter((entry): entry is ZoneHit => entry.hit !== null && entry.hit.distance < ZONE2_MM && heightOf(entry.element) <= BATH_ZONE_TOP_MM);
+    if (inZone.length) {
+      const name = (geometry: FixtureGeometry) => FIXTURE_NAME[geometry.type === "shower" ? "shower" : "bath"];
+      const where = (entry: ZoneHit) => (entry.hit.distance > 0 ? `${cm(entry.hit.distance)} od ${name(entry.hit.geometry).of}` : name(entry.hit.geometry).over);
+      const text =
+        inZone.length === 1
+          ? `${floor.name}: ${describe(inZone[0].element)} zasahuje do zóny ${inZone[0].hit.distance > 0 ? 2 : 1} koupelny (${where(inZone[0])}, min. 60 cm) – v zóně 0–2 nesmí být zásuvky ani spínače 230 V, přesuňte ji dál.`
+          : `${floor.name}: ${inZone.length}× zásuvka / spínač v zóně 0–2 koupelny – ${inZone
+              .slice(0, 4)
+              .map((entry) => `${paletteItem(entry.element.item)?.label ?? entry.element.item} (výška ${Math.round(heightOf(entry.element))} mm, ${where(entry)})`)
+              .join("; ")}${inZone.length > 4 ? " …" : ""} – min. 60 cm od hrany vany / sprchy do výšky 2,25 m, přesuňte je dál.`;
+      issues.push({
+        id: `bath-zone:${floor.id}`,
+        rule: "bath-zone",
+        level: "error",
+        text,
+        source: "ČSN 33 2000-7-701 ed. 2 – zásuvky a spínače jen mimo zóny 0, 1 a 2 (zóny 1 a 2 do výšky 2,25 m nad podlahou, čl. 701.32; výš, např. vývod motoru žaluzie v překladu, leží nad zónami)",
+        elementIds: inZone.map((entry) => entry.element.id),
+      });
+    }
+    // Fáze 74: umyvadlo – umývací prostor (svislý průmět ke stěně do 2,25 m) bez zásuvek a spínačů; níž než 1,2 m navíc
+    // 0,2 m od hranice (fáze 90: jen přístroje bez krytí IP44); volitelně přísněji 0,6 m kolem umyvadla (jako zóna 2).
     const basinOf = (element: EditorElement) => {
       const placements = fixtures.filter((fixture) => fixture.geometry.zone === "basin" && fixture.element.room === element.room).map((fixture) => basinPlacement(fixture.geometry, element.x, element.y, heightOf(element), draft.basinZone ?? "norm"));
       return placements.includes("area") ? "area" : placements.includes("band") ? "band" : placements.includes("strict") ? "strict" : null;
     };
     const atBasin = devices.map((element) => ({ element, placement: basinOf(element) }));
     const inArea = atBasin.filter((entry) => entry.placement === "area").map((entry) => entry.element);
-    const inBand = atBasin.filter((entry) => entry.placement === "band").map((entry) => entry.element);
+    const inBand = atBasin.filter((entry) => entry.placement === "band" && !isIp44(entry.element)).map((entry) => entry.element);
     const strict = atBasin.filter((entry) => entry.placement === "strict").map((entry) => entry.element);
-    const basinSource = `ČSN 33 2130 – umývací prostor: svislý průmět umyvadla do ${(WASH_AREA_TOP_MM / 1000).toLocaleString("cs-CZ")} m, zásuvky a spínače jen vně, níž než ${(WASH_HIGH_MM / 1000).toLocaleString("cs-CZ")} m nejméně ${cm(BASIN_MARGIN_MM)} od hranice (převzato z ed. 3 čl. 7.8 – v ed. 4 ověřte v plném znění); zóny 0–2 ČSN 33 2000-7-701 platí jen pro vanu a sprchu`;
+    const basinSource = `ČSN 33 2130 ed. 4 – umyvadlový prostor: svislý průmět umyvadla do ${(WASH_AREA_TOP_MM / 1000).toLocaleString("cs-CZ")} m, zásuvky a spínače 230 V jen vně, níž než ${(WASH_HIGH_MM / 1000).toLocaleString("cs-CZ")} m bez krytí IP44 nejméně ${cm(BASIN_MARGIN_MM)} od hranice, doporučeno ${cm(BASIN_RECOMMENDED_MM)} (pás převzat z ed. 3 čl. 7.8 – v ed. 4 ověřte v plném znění); zóny 0–2 ČSN 33 2000-7-701 platí jen pro vanu a sprchu`;
+    const list = (elements: EditorElement[]) => `${elements.slice(0, 4).map(describe).join("; ")}${elements.length > 4 ? " …" : ""}`;
     if (inArea.length) {
       issues.push({
         id: `basin-area:${floor.id}`,
         rule: "basin-area",
         level: "error",
-        text: `${floor.name}: ${inArea.length}× zásuvka / spínač v umývacím prostoru umyvadla (nad nebo pod umyvadlem) – posuňte je mimo průmět umyvadla.`,
+        text:
+          inArea.length === 1
+            ? `${floor.name}: ${describe(inArea[0])} leží v umyvadlovém prostoru (nad nebo pod umyvadlem) – posuňte ji mimo průmět umyvadla.`
+            : `${floor.name}: ${inArea.length}× zásuvka / spínač v umyvadlovém prostoru (nad nebo pod umyvadlem) – ${list(inArea)}; posuňte je mimo průmět umyvadla.`,
         source: basinSource,
         elementIds: inArea.map((element) => element.id),
       });
@@ -100,7 +144,7 @@ export function floorplanNorms(draft: FloorplanDraft): NormIssue[] {
         id: `basin-band:${floor.id}`,
         rule: "basin-band",
         level: "error",
-        text: `${floor.name}: ${inBand.length}× zásuvka / spínač níž než ${(WASH_HIGH_MM / 1000).toLocaleString("cs-CZ")} m blíž než ${cm(BASIN_MARGIN_MM)} od umývacího prostoru – posuňte je dál od umyvadla, nebo výš (od 1,2 m smí být těsně u hranice).`,
+        text: `${floor.name}: ${inBand.length === 1 ? describe(inBand[0]) : `${inBand.length}× zásuvka / spínač bez krytí IP44 (${list(inBand)})`} – níž než ${(WASH_HIGH_MM / 1000).toLocaleString("cs-CZ")} m blíž než ${cm(BASIN_MARGIN_MM)} od hrany umyvadlového prostoru; posuňte dál od umyvadla (doporučeno ${cm(BASIN_RECOMMENDED_MM)}), výš (od 1,2 m smí být těsně u hranice), nebo použijte provedení IP44.`,
         source: basinSource,
         elementIds: inBand.map((element) => element.id),
       });
@@ -117,7 +161,7 @@ export function floorplanNorms(draft: FloorplanDraft): NormIssue[] {
     }
     // Koupelna bez vany / sprchy v nákresu: zóny nejdou ověřit
     const wetRooms = [...new Set(floor.elements.filter((element) => WET.test(element.room) && (isSocket(element) || isSwitch(element))).map((element) => element.room))];
-    for (const room of wetRooms.filter((name) => !fixtures.some((fixture) => fixture.element.room === name))) {
+    for (const room of wetRooms.filter((name) => !fixtures.some((fixture) => fixture.element.room === name && fixture.geometry.zone !== "none"))) {
       issues.push({ id: `fixture-missing:${floor.id}:${room}`, rule: "fixture-missing", level: "info", text: `${room}: vložte vanu, sprchový kout nebo umyvadlo (paleta Zařizovací předměty) – pak se ověří zóny 0–2 a pás u umyvadla.`, source: "ČSN 33 2000-7-701 ed. 2", elementIds: [] });
     }
     // Krytí: zásuvky v koupelně a venku IP44

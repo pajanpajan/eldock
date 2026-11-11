@@ -6,7 +6,8 @@
 
 import { coresOf, labelPlacement, longestStretch, stretchSlot, tickMarks } from "./cad-notation";
 import { applianceSpecFor } from "./appliances";
-import { basinBand, fixtureGeometry, toWorld, zone2Path } from "./fixtures";
+import { ARCH_LAYER, archDrawing, clipToPolygon } from "./architecture";
+import { basinBand, fixtureGeometry, fixtureSpecOf, toWorld, zone2Path, type ArchType } from "./fixtures";
 import { SYMBOL_MM, paletteItem, symbolSizeOf, type EditorElement, type FloorplanDraft, type PaletteItem, type analyzeDraft } from "./floorplan-editor";
 import { meters } from "./floorplan-plane";
 import { polygonArea, roomPolygon } from "./room-geometry";
@@ -17,6 +18,8 @@ import { symbolParts } from "./symbol-parts";
 export const DXF_LAYERS = [
   { name: "STAVBA_MISTNOSTI", color: 8, label: "Místnosti, stěny a zakreslené změny" },
   { name: "ZARIZOVACI_PREDMETY", color: 4, label: "Vany, sprchy, umyvadla a jejich zóny" },
+  // Fáze 90: orientační okna, dveře a nábytek (bez okruhů)
+  { name: ARCH_LAYER, color: 9, label: "Okna, dveře a nábytek (orientační)" },
   { name: "ZASUVKY_230V_400V", color: 1, label: "Zásuvky, spotřebiče a rozváděč" },
   { name: "SVETLA_VYPINACE", color: 2, label: "Svítidla a vypínače 230 V" },
   { name: "SBERNICE_SMART_HOME", color: 3, label: "Sběrnicové a bezdrátové prvky" },
@@ -321,7 +324,7 @@ const rotate = (point: P, degrees: number): P => {
 export function layerOf(item: PaletteItem, element: Pick<EditorElement, "product">): DxfLayer {
   if (item.bus || item.wireless || element.product) return "SBERNICE_SMART_HOME";
   if (item.kind === "light" || item.kind === "switch") return "SVETLA_VYPINACE";
-  if (item.kind === "fixture") return "ZARIZOVACI_PREDMETY";
+  if (item.kind === "fixture") return fixtureSpecOf(item.id)?.arch ? ARCH_LAYER : "ZARIZOVACI_PREDMETY";
   return "ZASUVKY_230V_400V";
 }
 
@@ -349,12 +352,24 @@ function writeSymbol(writer: DxfWriter, draft: FloorplanDraft, element: EditorEl
   if (parts.label) writer.text("POPISY_A_KOTY", { x: at.x + size * 0.62, y: at.y - size * 0.5 }, size * 0.3, parts.label);
 }
 
-/** Zařizovací předmět: obrys, vnitřní kresba, zóna 2 / pás u umyvadla čárkovaně. */
-function writeFixture(writer: DxfWriter, element: EditorElement) {
+/**
+ * Zařizovací předmět: obrys, vnitřní kresba, zóna 2 / pás u umyvadla čárkovaně (fáze 90: ořezané obrysem místnosti).
+ * Fáze 90: okno, dveře a nábytek – CAD kresba na hladině ARCHITEKTURA_NABYTEK s kódem a rozměrem.
+ */
+function writeFixture(writer: DxfWriter, element: EditorElement, room: readonly P[] | null) {
   const geometry = fixtureGeometry(element);
   if (!geometry) return;
-  const layer: DxfLayer = "ZARIZOVACI_PREDMETY";
   const local = (u: number, v: number) => toWorld(geometry, u, v);
+  const spec = fixtureSpecOf(element.item);
+  if (spec?.arch) {
+    for (const primitive of archDrawing(geometry.type as ArchType, geometry.w, geometry.d, geometry.flip)) writer.polyline(ARCH_LAYER, primitive.points.map((point) => local(point.x, point.y)), primitive.closed, primitive.dashed);
+    writer.text("POPISY_A_KOTY", { x: geometry.cx, y: geometry.cy + 60 }, 100, `${spec.code} ${geometry.w} × ${geometry.d}`, 0, "center");
+    return;
+  }
+  const layer: DxfLayer = "ZARIZOVACI_PREDMETY";
+  const zone = (points: P[], closed: boolean) => {
+    for (const piece of clipToPolygon(closed ? [...points, points[0]] : points, room)) writer.polyline(layer, piece, false, true);
+  };
   const w = geometry.w / 2;
   const d = geometry.d / 2;
   writer.polyline(layer, geometry.corners, true);
@@ -369,12 +384,12 @@ function writeFixture(writer: DxfWriter, element: EditorElement) {
     const ry = d * 0.62;
     for (const cx of bowls) writer.polyline(layer, Array.from({ length: 24 }, (_, index) => local(cx + rx * Math.cos((index / 24) * 2 * Math.PI), d * 0.1 + ry * Math.sin((index / 24) * 2 * Math.PI))), true);
     const band = basinBand(geometry);
-    writer.polyline(layer, [local(band.u1, band.v1), local(band.u2, band.v1), local(band.u2, band.v2), local(band.u1, band.v2)], true, true);
+    zone([local(band.u1, band.v1), local(band.u2, band.v1), local(band.u2, band.v2), local(band.u1, band.v2)], true);
   } else {
-    for (const line of pathToPolylines(zone2Path(geometry.w, geometry.d))) writer.polyline(layer, line.map((point) => local(point.x, point.y)), false, true);
+    for (const line of pathToPolylines(zone2Path(geometry.w, geometry.d))) zone(line.map((point) => local(point.x, point.y)), false);
   }
   const centre = { x: geometry.cx, y: geometry.cy + 60 };
-  writer.text("POPISY_A_KOTY", centre, 120, `${{ bath: "vana", shower: "sprcha", basin: "umyvadlo", double_basin: "dvojumyvadlo" }[geometry.type]} ${geometry.w} × ${geometry.d}`, 0, "center");
+  writer.text("POPISY_A_KOTY", centre, 120, `${({ bath: "vana", shower: "sprcha", basin: "umyvadlo", double_basin: "dvojumyvadlo" } as Record<string, string>)[geometry.type]} ${geometry.w} × ${geometry.d}`, 0, "center");
 }
 
 export interface DxfOptions {
@@ -417,7 +432,8 @@ export function floorplanDxf(draft: FloorplanDraft, analysis: Analysis | null, o
     const base = paletteItem(element.item);
     if (!base) continue;
     if (base.kind === "fixture") {
-      writeFixture(writer, element);
+      const room = draft.rooms.find((candidate) => candidate.name === element.room);
+      writeFixture(writer, element, room ? roomPolygon(room) : null);
       continue;
     }
     const spec = base.kind === "appliance" ? applianceSpecFor(draft.appliances, element) : null;

@@ -211,6 +211,11 @@ export function symbolParts(item: PaletteItem, size: number, options: { switchNo
     const w = size.w / 2;
     const h = size.h / 2;
     parts.paths.push(`M${f(-w)} ${f(-h)} H${f(w)} V${f(h)} H${f(-w)} Z`);
+    // Fáze 90: okno, dveře, nábytek a WC – jen obrys s kódem (kresbu dělá `architecture.ts`)
+    if (spec?.zone === "none") {
+      parts.label = spec.code ?? spec.label;
+      return parts;
+    }
     const r = h - 80;
     if (item.id === "bath") parts.paths.push(`M${f(-w + 80)} ${f(-r)} H${f(w - 80 - r)} A${f(r)} ${f(r)} 0 0 1 ${f(w - 80 - r)} ${f(r)} H${f(-w + 80)} Z`);
     else parts.paths.push(`M${f(-w)} ${f(-h)} L${f(w)} ${f(h)} M${f(w)} ${f(-h)} L${f(-w)} ${f(h)}`);

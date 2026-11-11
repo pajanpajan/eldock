@@ -130,15 +130,18 @@ describe("fáze 74 – podružný rozváděč, okruhy po rozváděčích a datov
         el("rh", "panel", 2900, 2400, { room: "Koupelna" }),
         el("u", "basin", 1000, 225, { room: "Koupelna" }),
         el("nad", "ip44-socket", 1100, 0, { room: "Koupelna" }),
-        el("vedle", "ip44-socket", 1400, 0, { room: "Koupelna" }),
+        // Fáze 90: pás 0,2 m pod 1,2 m hlídá jen přístroje bez krytí IP44 – vedle klasická zásuvka, vedle44 v IP44
+        el("vedle", "socket", 1400, 0, { room: "Koupelna" }),
+        el("vedle44", "ip44-socket", 1400, 0, { room: "Koupelna" }),
         el("vys", "ip44-socket", 1400, 0, { room: "Koupelna", mountHeightMm: 1250 }),
         el("dal", "ip44-socket", 1700, 0, { room: "Koupelna" }),
       ],
     };
     const issues = floorplanNorms(base);
     expect(issues.find((issue) => issue.rule === "basin-area")?.elementIds).toEqual(["nad"]);
-    // 10 cm od průmětu ve výšce zásuvky (pod 1,2 m) = chyba, ve výšce 1,25 m smí být těsně u hranice
+    // 10 cm od průmětu ve výšce zásuvky (pod 1,2 m) = chyba bez krytí IP44, ve výšce 1,25 m smí být těsně u hranice
     expect(issues.find((issue) => issue.rule === "basin-band")?.elementIds).toEqual(["vedle"]);
+    expect(issues.find((issue) => issue.rule === "basin-band")?.text).toContain("Jednozásuvka (výška 300 mm)");
     expect(issues.some((issue) => issue.rule === "basin-strict")).toBe(false);
     // Přísnější zásada 0,6 m: zásuvka 40 cm od hrany umyvadla = upozornění (ne chyba)
     const strict = floorplanNorms({ ...base, basinZone: "strict" });

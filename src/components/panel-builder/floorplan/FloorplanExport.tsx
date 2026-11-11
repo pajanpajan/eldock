@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { applianceSpecFor } from "@/lib/panel-builder/appliances";
 import { floorplanDxf } from "@/lib/panel-builder/dxf-export";
+import { isArchitecture } from "@/lib/panel-builder/fixtures";
 import { paletteItem, symbolSizeOf, type FloorplanDraft, type PaletteItem, type analyzeDraft } from "@/lib/panel-builder/floorplan-editor";
 import { meters } from "@/lib/panel-builder/floorplan-plane";
 import { contentBox, scaleForBox } from "@/lib/panel-builder/plan-sheet";
@@ -109,7 +110,11 @@ export function FloorplanPlanSvg({
       {draft.elements
         .filter((element) => paletteItem(element.item)?.kind === "fixture")
         .map((element) => (
-          <FixtureShape key={element.id} element={element} active={false} onPaper unit={unit} interactive={false} basinZone={draft.basinZone} />
+          // Fáze 90: zóny ořízne obrys místnosti, okna / dveře / nábytek jako CAD kresba (vrstva architektury)
+          <FixtureShape key={element.id} element={element} active={false} onPaper unit={unit} interactive={false} basinZone={draft.basinZone} clip={(() => {
+            const room = draft.rooms.find((candidate) => candidate.name === element.room);
+            return room ? roomPolygon(room) : null;
+          })()} />
         ))}
       <RouteLayer circuits={routes.circuits} bus={routes.bus} view="cad" onPaper unit={unit} stroke={stroke} links={links} />
       {draft.elements.flatMap((element) =>
@@ -141,7 +146,8 @@ function PlanSheet({ draft, analysis, paper, fields }: { draft: FloorplanDraft; 
   const routes = analysis ? displayRoutes(draft, analysis) : { circuits: [], bus: null };
   const legend = [...new Map(draft.elements.map((element) => [element.item === "appliance" ? `${element.item}:${element.appliance}` : element.item, element] as const)).values()]
     .map((element) => ({ element, item: itemOf(draft, element) }))
-    .filter((entry): entry is { element: FloorplanDraft["elements"][number]; item: PaletteItem } => entry.item !== null);
+    // Fáze 90: okna, dveře a nábytek nejsou elektrické značky – v legendě značek nejsou
+    .filter((entry): entry is { element: FloorplanDraft["elements"][number]; item: PaletteItem } => entry.item !== null && !isArchitecture(entry.item.id));
   const today = new Date().toLocaleDateString("cs-CZ");
   return (
     <div className="fp-sheet" style={{ width: `${size.w - MARGIN * 2}mm`, height: `${size.h - MARGIN * 2}mm`, display: "flex", gap: "3mm", fontFamily: "Arial, Helvetica, sans-serif", color: "#111827", background: "#fff" }} data-testid="print-sheet" data-paper={paper} data-scale={scale}>

@@ -2,6 +2,8 @@
 // hloubka Y, natočení po 45°). Zóny koupelny dle ČSN 33 2000-7-701 ed. 2: zóna 0 = vnitřek vany / vaničky, zóna 1 =
 // svislý průmět předmětu, zóna 2 = 0,6 m od hrany zóny 1. U umyvadla svislý pás nad a pod umyvadlem (ČSN 33 2130 ed. 4)
 // – v šíři umyvadla s přesahem 0,2 m na každou stranu, od zadní hrany ke stěně. Změna rozměru tažením za strany a roh.
+// Fáze 90: stejný mechanismus (rozměr X × Y, žlutý roh, posuvné hrany, natočení) mají okna, dveře a nábytek – orientační
+// architektonické prvky bez okruhů (zóna „none“), kresba v `architecture.ts`, vrstva DXF ARCHITEKTURA_NABYTEK.
 // Čisté funkce.
 
 export interface FixturePoint {
@@ -9,7 +11,30 @@ export interface FixturePoint {
   y: number;
 }
 
-export type FixtureType = "bath" | "shower" | "basin" | "double_basin";
+/** Fáze 90: okna, dveře a nábytek (orientační architektonické prvky – kresba `archDrawing` v `architecture.ts`). */
+export type ArchType =
+  | "window_1"
+  | "window_2"
+  | "window_hs"
+  | "door_1"
+  | "door_2"
+  | "door_sliding"
+  | "bed_double"
+  | "bed_single"
+  | "sofa_l"
+  | "sofa"
+  | "table_dining"
+  | "desk"
+  | "kitchen"
+  | "island"
+  | "wardrobe"
+  | "tv"
+  | "wc";
+
+export type FixtureType = "bath" | "shower" | "basin" | "double_basin" | ArchType;
+
+/** „bath“ = zóny 0–2 koupelny, „basin“ = pás nad a pod umyvadlem, „none“ = bez zón (okna, dveře, nábytek, WC). */
+export type FixtureZone = "bath" | "basin" | "none";
 
 export interface FixtureSpec {
   type: FixtureType;
@@ -17,17 +42,55 @@ export interface FixtureSpec {
   w: number;
   d: number;
   label: string;
-  /** „bath“ = zóny 0–2 koupelny, „basin“ = pás nad a pod umyvadlem. */
-  zone: "bath" | "basin";
+  zone: FixtureZone;
+  /** Fáze 90: kód prvku v paletě a DXF (OKN_1, DVE_1, POST_2 …). */
+  code?: string;
+  /** Fáze 90: stavební otvor (přichytí se ke stěně místnosti) nebo nábytek / vybavení. */
+  arch?: "opening" | "furniture";
+  /** Fáze 90: otvor sedí na stěně středem (okno, posuvné dveře) nebo zadní hranou s křídlem do místnosti (dveře). */
+  wall?: "center" | "inside";
+  /** Fáze 90: „swing“ = levé / pravé otevírání dveří (posuvné: směr posuvu), „mirror“ = zrcadlení nábytku. */
+  flip?: "swing" | "mirror";
+  /** Fáze 90: meze rozměru [mm] (bez nich 0,3–4 m jako u vany a umyvadla). */
+  min?: number;
+  max?: number;
 }
 
-/** Zařizovací předměty podle id položky palety. */
+/** Fáze 90: meze rozměru oken, dveří a nábytku [mm] (okno 0,1 m hluboké, linka až 8 m). */
+const ARCH_MIN_MM = 100;
+const ARCH_MAX_MM = 8000;
+const opening = (type: ArchType, code: string, label: string, w: number, d: number, wall: "center" | "inside", flip?: "swing" | "mirror"): FixtureSpec => ({ type, code, label, w, d, zone: "none", arch: "opening", wall, ...(flip ? { flip } : {}), min: ARCH_MIN_MM, max: ARCH_MAX_MM });
+const furniture = (type: ArchType, code: string, label: string, w: number, d: number, flip?: "mirror"): FixtureSpec => ({ type, code, label, w, d, zone: "none", arch: "furniture", ...(flip ? { flip } : {}), min: ARCH_MIN_MM, max: ARCH_MAX_MM });
+
+/** Zařizovací předměty podle id položky palety (fáze 90 i okna, dveře a nábytek). */
 export const FIXTURES: Record<string, FixtureSpec> = {
   bath: { type: "bath", w: 1700, d: 750, label: "Vana", zone: "bath" },
   shower: { type: "shower", w: 900, d: 900, label: "Sprchový kout", zone: "bath" },
   basin: { type: "basin", w: 600, d: 450, label: "Umyvadlo", zone: "basin" },
   "double-basin": { type: "double_basin", w: 1200, d: 450, label: "Dvojumyvadlo", zone: "basin" },
+  // Fáze 90: stavební otvory – okna sedí středem na stěně, dveře zadní hranou s křídlem do místnosti
+  "arch-window-1": opening("window_1", "OKN_1", "Okno jednokřídlé", 1000, 250, "center"),
+  "arch-window-2": opening("window_2", "OKN_2", "Okno dvoukřídlé", 1600, 250, "center"),
+  "arch-window-hs": opening("window_hs", "OKN_HS", "Francouzské okno / HS portál", 2600, 300, "center", "mirror"),
+  "arch-door-1": opening("door_1", "DVE_1", "Dveře jednokřídlé", 800, 800, "inside", "swing"),
+  "arch-door-2": opening("door_2", "DVE_2", "Dveře dvoukřídlé", 1450, 800, "inside"),
+  "arch-door-sliding": opening("door_sliding", "DVE_POS", "Dveře posuvné", 900, 200, "center", "swing"),
+  // Fáze 90: nábytek a vybavení interiéru (orientace při osazování zásuvek, vypínačů a světel)
+  "arch-bed-double": furniture("bed_double", "POST_2", "Manželská postel (dvoulůžko)", 1800, 2000),
+  "arch-bed-single": furniture("bed_single", "POST_1", "Jednolůžko / dětská postel", 900, 2000),
+  "arch-sofa-l": furniture("sofa_l", "GAUC_L", "Rohová sedací souprava (L-gauč)", 2600, 1800, "mirror"),
+  "arch-sofa": furniture("sofa", "GAUC_R", "Pohovka / gauč rovný", 2200, 950),
+  "arch-table-dining": furniture("table_dining", "STUL_J", "Jídelní stůl se židlemi", 1800, 900),
+  "arch-desk": furniture("desk", "STUL_PC", "Pracovní stůl se židlí", 1400, 700),
+  "arch-kitchen": furniture("kitchen", "LINKA", "Kuchyňská linka (dřez a varná zóna)", 2600, 600, "mirror"),
+  "arch-island": furniture("island", "OSTR", "Kuchyňský ostrůvek", 1800, 900),
+  "arch-wardrobe": furniture("wardrobe", "SKRIN", "Šatní / vestavěná skříň", 2000, 600),
+  "arch-tv": furniture("tv", "TV_ST", "TV stolek / obývací stěna", 1800, 450),
+  "arch-wc": furniture("wc", "WC_M", "WC mísa / závěsné WC", 400, 650),
 };
+
+/** Fáze 90: okno, dveře nebo nábytek (orientační prvek bez zón a okruhů). */
+export const isArchitecture = (item: string) => Boolean(FIXTURES[item]?.arch);
 
 /** Zóna 2 koupelny sahá 0,6 m od hrany vany / sprchového koutu (ČSN 33 2000-7-701 ed. 2). */
 export const ZONE2_MM = 600;
@@ -44,6 +107,8 @@ export type BasinZone = "norm" | "strict";
 export const isBasinZone = (value: unknown): value is BasinZone => value === "norm" || value === "strict";
 /** Přesah pásu u umývacího prostoru na každou stranu [mm] (prvek níž než 1,2 m). */
 export const BASIN_MARGIN_MM = 200;
+/** Fáze 90: doporučený boční lem umyvadlového prostoru pro spínače a zásuvky níž než 1,2 m [mm] (kreslí se tečkovaně). */
+export const BASIN_RECOMMENDED_MM = 400;
 /** Pás u umyvadla sahá za zadní hranu až ke stěně (zásuvka / spínač na stěně za umyvadlem) [mm]. */
 export const BASIN_WALL_MM = 250;
 /** Nejmenší a největší rozměr předmětu [mm]. */
@@ -52,8 +117,8 @@ export const FIXTURE_MAX_MM = 4000;
 
 export const fixtureSpecOf = (item: string) => FIXTURES[item] ?? null;
 
-/** Zaokrouhlení rozměru na 10 mm v mezích. */
-export const clampFixture = (value: number) => Math.min(FIXTURE_MAX_MM, Math.max(FIXTURE_MIN_MM, Math.round(value / 10) * 10));
+/** Zaokrouhlení rozměru na 10 mm v mezích (fáze 90: meze podle předmětu – okna, dveře a nábytek 0,1–8 m). */
+export const clampFixture = (value: number, spec?: Pick<FixtureSpec, "min" | "max"> | null) => Math.min(spec?.max ?? FIXTURE_MAX_MM, Math.max(spec?.min ?? FIXTURE_MIN_MM, Math.round(value / 10) * 10));
 
 interface FixtureElement {
   item: string;
@@ -61,6 +126,8 @@ interface FixtureElement {
   y: number;
   rotation: number;
   sizeMm?: { w: number; d: number } | null;
+  /** Fáze 90: levé / pravé otevírání dveří, zrcadlení nábytku. */
+  flip?: boolean;
 }
 
 /** Skutečný rozměr předmětu (vlastní nebo výchozí). */
@@ -72,7 +139,7 @@ export function fixtureSize(element: Pick<FixtureElement, "item" | "sizeMm">): {
 
 export interface FixtureGeometry {
   type: FixtureType;
-  zone: "bath" | "basin";
+  zone: FixtureZone;
   cx: number;
   cy: number;
   w: number;
@@ -80,6 +147,8 @@ export interface FixtureGeometry {
   rotation: number;
   /** Obrys předmětu (zóna 1) v mm půdorysu – 4 rohy. */
   corners: FixturePoint[];
+  /** Fáze 90: zrcadlená kresba (pravé otevírání dveří, zrcadlený nábytek). */
+  flip: boolean;
 }
 
 const rad = (degrees: number) => (degrees * Math.PI) / 180;
@@ -112,7 +181,7 @@ export function fixtureGeometry(element: FixtureElement): FixtureGeometry | null
     toWorld(base, size.w / 2, size.d / 2),
     toWorld(base, -size.w / 2, size.d / 2),
   ];
-  return { type: spec.type, zone: spec.zone, ...base, w: size.w, d: size.d, corners };
+  return { type: spec.type, zone: spec.zone, ...base, w: size.w, d: size.d, corners, flip: Boolean(spec.flip && element.flip) };
 }
 
 /** Vodorovná vzdálenost bodu od hrany předmětu (0 = nad předmětem / uvnitř zóny 1). */
@@ -179,26 +248,28 @@ export type FixtureHandle = "e" | "w" | "n" | "s" | "se";
  */
 export function resizeFixture(element: FixtureElement, handle: FixtureHandle, point: FixturePoint): { x: number; y: number; sizeMm: { w: number; d: number } } | null {
   const geometry = fixtureGeometry(element);
+  const spec = fixtureSpecOf(element.item);
   if (!geometry) return null;
+  const clamp = (value: number) => clampFixture(value, spec);
   const local = toLocal(geometry, point.x, point.y);
   let w = geometry.w;
   let d = geometry.d;
   let du = 0;
   let dv = 0;
   if (handle === "e" || handle === "se") {
-    w = clampFixture(local.u + geometry.w / 2);
+    w = clamp(local.u + geometry.w / 2);
     du = (w - geometry.w) / 2;
   }
   if (handle === "w") {
-    w = clampFixture(geometry.w / 2 - local.u);
+    w = clamp(geometry.w / 2 - local.u);
     du = -(w - geometry.w) / 2;
   }
   if (handle === "s" || handle === "se") {
-    d = clampFixture(local.v + geometry.d / 2);
+    d = clamp(local.v + geometry.d / 2);
     dv = (d - geometry.d) / 2;
   }
   if (handle === "n") {
-    d = clampFixture(geometry.d / 2 - local.v);
+    d = clamp(geometry.d / 2 - local.v);
     dv = -(d - geometry.d) / 2;
   }
   const centre = toWorld(geometry, du, dv);
@@ -213,3 +284,6 @@ export const fixtureDims = (w: number, d: number) => {
 
 /** Natočení o krok (90° nebo 45°) v rozsahu 0–360. */
 export const turnBy = (rotation: number, step: number) => (((Math.round((rotation + step) * 10) / 10) % 360) + 360) % 360;
+
+/** Fáze 90: pevná natočení v detailu předmětu (okna, dveře, nábytek i vana). */
+export const FIXTURE_ROTATIONS = [0, 45, 90, 180, 270] as const;

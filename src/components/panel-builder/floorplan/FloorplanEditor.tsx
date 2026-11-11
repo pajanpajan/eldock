@@ -112,7 +112,7 @@ import {
   type PlanView,
   type Rotation,
 } from "@/lib/panel-builder/floorplan-pdf";
-import { appearanceLabel, colorForSeries, designColor } from "@/lib/panel-builder/wiring-designs";
+import { appearanceLabel, colorForSeries, designColor, hasFrameChoice } from "@/lib/panel-builder/wiring-designs";
 import { renderPdfFile } from "@/lib/pdf-client";
 import { resizeImage, uploadPanelFile } from "@/lib/upload-client";
 import { cn } from "@/lib/utils";
@@ -146,7 +146,7 @@ import { ROUTE_COLORS, RouteLayer } from "./RouteLayer";
 import { BoardSelect, CircuitListPanel, LayerChips, SubpanelInfo, type CircuitEntry } from "./CircuitListPanel";
 import { PanelSection, RightPanels } from "./RightPanels";
 import { CUSTOM_APPLIANCE_ITEM, applianceCatalog, applianceSpecFor, protectionLabel, storedSpecs, type ApplianceSpec } from "@/lib/panel-builder/appliances";
-import { resizeFixture, turnBy, type FixtureHandle } from "@/lib/panel-builder/fixtures";
+import { fixtureSpecOf, resizeFixture, turnBy, type FixtureHandle } from "@/lib/panel-builder/fixtures";
 import { isPolygonRoom, polygonArea, polygonBounds, pointInRoom, roomPolygon, snapAngle, validPolygon, wallLabel } from "@/lib/panel-builder/room-geometry";
 import { circuitEntries, displayRoutes, editedKeysOf, layerVisible, type CircuitLayer, type DisplayCircuit, type DisplayLeg } from "@/lib/panel-builder/route-display";
 import { MAIN_BOARD, SUBPANEL_ITEM, assignBoard, autoBoard, boardLabel, boardsOf, hasBoard, nextBoardCode, releaseBoard } from "@/lib/panel-builder/boards";
@@ -170,8 +170,10 @@ import { SocketCircuitPicker, SocketCircuitPopover, SocketCircuitsPanel, type So
 import { PlaneSizeControl } from "./PlaneSizeControl";
 import { CompactCadBar, FloorplanWizardBar, HelpTip, ToolbarPopover, UiModeToggle } from "./FloorplanWizardBar";
 import { RoomBySizeForm } from "./RoomBySizeForm";
+import { useWizardStep } from "./useWizardStep";
 import { useFloorplanUiMode } from "./useFloorplanUiMode";
-import { initialStep, stepForTutorialChapter, TUTORIAL_CHAPTER_EVENT, type WizardStep } from "@/lib/panel-builder/floorplan-wizard";
+import { stepForTutorialChapter, TUTORIAL_CHAPTER_EVENT, wizardStatus } from "@/lib/panel-builder/floorplan-wizard";
+import { snapOpening } from "@/lib/panel-builder/architecture";
 import { addRoomBySize, snapRoomRect, type SnapGuide } from "@/lib/panel-builder/room-builder";
 import { contentView, growPlane, meters, resizePlane } from "@/lib/panel-builder/floorplan-plane";
 import { assignLightingCircuit, assignSocketCircuit, isSocketElement, lightingSocketRows, moveSocketsToCircuit, nextSocketCircuit, optimizeSocketCircuits, socketCircuitRows, type SocketCircuitRow } from "@/lib/panel-builder/socket-circuits";
@@ -296,7 +298,8 @@ export function FloorplanEditor({
   const [floorLibrary, saveFloorLibrary] = useFloorplanLibrary(libraryJson);
   // Fáze 89: průvodce v 5 krocích / kompaktní CAD lišta (prohlížeč i profil firmy), aktivní krok a vodicí čáry přichytávání
   const [uiMode, setUiMode] = useFloorplanUiMode(floorLibrary, saveFloorLibrary);
-  const [wizard, setWizard] = useState<WizardStep>(() => initialStep(boot.initial));
+  // Fáze 90: krok mění jen uživatel – pamatuje se v relaci prohlížeče (nový půdorys po prvním uložení editor přemontuje)
+  const [wizard, setWizard] = useWizardStep(stored?.id ?? null, sync.floorplanId, boot.initial);
   const [snapGuides, setSnapGuides] = useState<SnapGuide[]>([]);
   // Fáze 89: Interactive Tour video-návodu přepíná kroky průvodce podle kapitol (5 kapitol = 5 kroků)
   useEffect(() => {
@@ -306,7 +309,7 @@ export function FloorplanEditor({
     };
     window.addEventListener(TUTORIAL_CHAPTER_EVENT, onChapter);
     return () => window.removeEventListener(TUTORIAL_CHAPTER_EVENT, onChapter);
-  }, []);
+  }, [setWizard]);
   const favoriteKeys = useMemo(() => new Set(floorLibrary.favorites), [floorLibrary.favorites]);
   // Fáze 79: geometrie podkladu CAD aktivního podlaží (soubor v úložišti firmy) a mřížka pro přichytávání
   const [cadGeometry, setCadGeometry] = useState<{ url: string; geometry: CadGeometry } | null>(null);
@@ -603,6 +606,12 @@ export function FloorplanEditor({
   const checklist = generationChecklist(draft);
 
   const floors = floorsOf(draft);
+  // Fáze 90: zařizovací předměty, okna, dveře a nábytek se kreslí pod značkami (klik na zásuvku u postele vybere
+  // zásuvku), zóny koupelny ořízne obrys místnosti předmětu; názvy místností pro předvolbu další místnosti v kroku 1
+  const isFixtureElement = (element: EditorElement) => paletteItem(element.item)?.kind === "fixture";
+  const layeredElements = [...draft.elements.filter(isFixtureElement), ...draft.elements.filter((element) => !isFixtureElement(element))];
+  const roomPolygons = new Map(draft.rooms.map((room) => [room.name, roomPolygon(room)] as const));
+  const roomNames = draft.rooms.map((room) => room.name);
   const panelFloorId = floors.find((floor) => floor.elements.some((element) => element.item === "panel"))?.id ?? null;
   const selected = draft.elements.find((element) => element.id === selectedId) ?? null;
   const selectedRoom = draft.rooms.find((room) => room.id === selectedRoomId) ?? null;
@@ -694,7 +703,12 @@ export function FloorplanEditor({
     // Fáze 79: zásuvky, vypínače, čidla a žaluzie se přichytí k čarám a vrcholům podkladu CAD
     const cadHit = isWallMounted(item) || item.kind === "switch" || item.kind === "blind_motor" ? cadSnap(point) : null;
     const base = cadHit ? { x: Math.round(cadHit.x), y: Math.round(cadHit.y) } : { x: snap(point.x), y: snap(point.y) };
-    if (item.kind === "fixture") return { position: base, rotation: placeRotation, room };
+    if (item.kind === "fixture") {
+      // Fáze 90: okno a dveře se přichytí ke stěně místnosti a natočí podle ní (dveře křídlem do místnosti)
+      const spec = fixtureSpecOf(item.id);
+      const wall = spec?.arch === "opening" ? snapOpening(draft.rooms, point, spec, spec.d) : null;
+      return wall ? { position: { x: wall.x, y: wall.y }, rotation: wall.rotation, room: roomAt(draft.rooms, wall.x, wall.y) ?? room, onWall: true } : { position: base, rotation: placeRotation, room };
+    }
     if (cadHit) return { position: base, rotation: isWallMounted(item) && room ? wallRotation(room, point.x, point.y) : placeRotation, room };
     if (isWallMounted(item) && room) {
       const position = snapToWall(room, base.x, base.y);
@@ -814,7 +828,8 @@ export function FloorplanEditor({
         ...(tool.product ? { product: tool.product, ...(tool.variant ? { productVariant: tool.variant } : {}), ...(tool.box ? { productBox: tool.box } : {}) } : {}),
         ...(code ? { boardCode: code } : {}),
       };
-      if (!single) setPlaceRotation(target.rotation);
+      // Fáze 90: natočení okna / dveří podle stěny si další vkládaný prvek (postel, linka) nepamatuje
+      if (!single && !("onWall" in target)) setPlaceRotation(target.rotation);
       if (code) toast.success(`Podružný rozváděč ${code} – prvky na podlaží bez hlavního rozváděče k němu patří samy, jinak ho přiřaďte v soupisu okruhů nebo v detailu prvku.`);
       update((current) => {
         if (sub) return { ...current, elements: [...current.elements, element] };
@@ -1106,7 +1121,14 @@ export function FloorplanEditor({
     if (drag) {
       const dx = snap(point.x - drag.start.x);
       const dy = snap(point.y - drag.start.y);
-      setDraft((current) => ({ ...current, elements: current.elements.map((element) => (drag.origin[element.id] ? { ...element, x: drag.origin[element.id].x + dx, y: drag.origin[element.id].y + dy } : element)) }));
+      // Fáze 90: přesouvané okno / dveře klouže po stěně místnosti (Alt = volně)
+      const single = drag.ids.length === 1 ? draft.elements.find((element) => element.id === drag.ids[0]) : undefined;
+      const spec = single ? fixtureSpecOf(single.item) : null;
+      const wall = single && spec?.arch === "opening" && !event.altKey && drag.origin[single.id] ? snapOpening(draft.rooms, { x: drag.origin[single.id].x + dx, y: drag.origin[single.id].y + dy }, spec, single.sizeMm?.d ?? spec.d) : null;
+      setDraft((current) => ({
+        ...current,
+        elements: current.elements.map((element) => (!drag.origin[element.id] ? element : wall && element.id === single?.id ? { ...element, ...wall } : { ...element, x: drag.origin[element.id].x + dx, y: drag.origin[element.id].y + dy })),
+      }));
     }
     if (roomDraft) {
       const crop = tool.kind === "crop";
@@ -1734,7 +1756,7 @@ export function FloorplanEditor({
       hint: group.id === "controls" ? CONTROLS_LABEL[draft.installation].hint : group.hint,
       count: groupCounts.get(group.id) ?? 0,
       entries: palette
-        .filter((item) => item.group === group.id)
+        .filter((item) => item.group === group.id || item.alsoIn?.includes(group.id))
         .map((item) => {
           const active = tool.kind === "place" && tool.item === item.id && !tool.product;
           // Fáze 61: zařizovací předmět nemá výšku montáže – v titulku jen rozměr
@@ -2073,7 +2095,8 @@ export function FloorplanEditor({
             const nextSeries = patch.series ?? current.series;
             // Fáze 74: barva rámečku zvlášť – po změně řady jen barva, kterou nová řada má (jinak stejná jako klapka)
             const frame = patch.frameColor !== undefined ? patch.frameColor : current.frameColor;
-            return { ...current, series: nextSeries, color: colorForSeries(nextSeries, patch.color ?? current.color), frameColor: frame ? colorForSeries(nextSeries, frame) : null };
+            // Fáze 90: monobloky a Decento nemají barvu rámečku zvlášť
+            return { ...current, series: nextSeries, color: colorForSeries(nextSeries, patch.color ?? current.color), frameColor: frame && hasFrameChoice(nextSeries) ? colorForSeries(nextSeries, frame) : null };
           })
         }
         onApplyAll={() => {
@@ -2251,6 +2274,22 @@ export function FloorplanEditor({
         <FloorplanWizardBar
           step={wizard}
           onStep={setWizard}
+          status={wizardStatus(
+            {
+              rooms: draft.rooms.length,
+              scale: draft.background && !draft.cad && draft.calibration.state === "none" ? "missing" : "ok",
+              design: appearanceLabel(draft.series, draft.color, draft.frameColor),
+              elements: draft.elements.filter((element) => {
+                const kind = paletteItem(element.item)?.kind;
+                return Boolean(kind) && kind !== "fixture" && kind !== "riser";
+              }).length,
+              panel: allElements(draft).some((element) => element.item === "panel"),
+              circuits: analysis.ok ? analysis.circuits.circuits.length : 0,
+              cableM: analysis.ok ? analysis.summary.totals[draft.mode] : 0,
+              project: Boolean(stored?.project),
+            },
+            wizard,
+          )}
           summary={
             <>
               {floorSwitch}
@@ -2275,7 +2314,7 @@ export function FloorplanEditor({
               </span>
               <span className="flex flex-wrap items-center gap-1.5 rounded-lg border border-border/70 px-2 py-1" role="group" aria-label="Kreslím místnosti od nuly">
                 <span className="text-[11px] font-semibold text-muted-foreground">b) Kreslím od nuly:</span>
-                <RoomBySizeForm onCreate={createRoomBySize} />
+                <RoomBySizeForm onCreate={createRoomBySize} rooms={roomNames} />
                 {roomTool}
                 {polygonTool}
               </span>
@@ -2309,7 +2348,7 @@ export function FloorplanEditor({
             <>
               {selectTool}
               <ToolbarPopover label="+ Místnost (X×Y / Myší / Šikmá)" testId="compact-room">
-                <RoomBySizeForm onCreate={createRoomBySize} />
+                <RoomBySizeForm onCreate={createRoomBySize} rooms={roomNames} />
                 <div className="flex flex-wrap items-center gap-1.5">
                   {roomTool}
                   {polygonTool}
@@ -2660,7 +2699,7 @@ export function FloorplanEditor({
                 );
               })}
 
-              {draft.elements.map((element) => {
+              {layeredElements.map((element) => {
                 const item = displayItem(element);
                 if (!item) return null;
                 const size = symbolSizeOf(draft, element);
@@ -2669,7 +2708,7 @@ export function FloorplanEditor({
                 if (item.kind === "fixture") {
                   return (
                     <g key={element.id} data-element={item.id} data-selected={active ? "true" : undefined} aria-label={`${item.label} – ${element.room}`} role="button">
-                      <FixtureShape element={element} active={active} onPaper={Boolean(draft.background)} unit={ui} interactive={tool.kind === "select" || tool.kind === "place"} onBodyDown={(event) => onElementDown(event, element)} onHandleDown={(event, handle) => onFixtureHandle(event, element, handle)} basinZone={draft.basinZone} />
+                      <FixtureShape element={element} active={active} onPaper={Boolean(draft.background)} unit={ui} interactive={tool.kind === "select" || tool.kind === "place"} onBodyDown={(event) => onElementDown(event, element)} onHandleDown={(event, handle) => onFixtureHandle(event, element, handle)} basinZone={draft.basinZone} clip={roomPolygons.get(element.room) ?? null} />
                     </g>
                   );
                 }

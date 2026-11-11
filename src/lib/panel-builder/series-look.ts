@@ -58,6 +58,8 @@ export interface MockStyle {
   round?: boolean;
   /** Céliane: kruhový výřez s kruhovou klapkou. */
   circle?: boolean;
+  /** Fáze 90: nástěnný monoblok – zaoblený (Garant), hranatý (Praktik), robustní průmyslový (Variant+). */
+  monoblock?: "rounded" | "square" | "industrial";
 }
 
 const SERIES_STYLE: Record<string, MockStyle> = {
@@ -69,6 +71,10 @@ const SERIES_STYLE: Record<string, MockStyle> = {
   "ABB|Time": { radius: 6, border: 15, insetRadius: 3, rocker: "flat", metalLine: true },
   "ABB|Time Arbo": { radius: 6, border: 17, insetRadius: 3, rocker: "flat", metalLine: true },
   "ABB|Decento": { radius: 46, border: 15, insetRadius: 30, rocker: "lever", round: true },
+  // Fáze 90: nástěnné monobloky s horní kabelovou vývodkou a odklápěcím víčkem zásuvky
+  "ABB|Garant (IP44)": { radius: 24, border: 10, insetRadius: 16, rocker: "rounded", monoblock: "rounded" },
+  "ABB|Praktik (IP44)": { radius: 5, border: 10, insetRadius: 4, rocker: "flat", monoblock: "square" },
+  "ABB|Variant+ (IP54)": { radius: 11, border: 13, insetRadius: 6, rocker: "flat", monoblock: "industrial" },
   "ABB|Swing": { radius: 13, border: 13, insetRadius: 8, rocker: "rounded" },
   "ABB|Swing L": { radius: 13, border: 11, insetRadius: 8, rocker: "rounded" },
   "ABB|Classic": { radius: 4, border: 16, insetRadius: 3, rocker: "flat" },
@@ -87,6 +93,35 @@ const SERIES_STYLE: Record<string, MockStyle> = {
   "Hager|lumina": { radius: 12, border: 12, insetRadius: 8, rocker: "flat" },
   "Hager|berker S.1 / B.3 / Q.1 / Q.3": { radius: 5, border: 13, insetRadius: 4, rocker: "flat" },
 };
+
+/**
+ * Fáze 90: obrys víceramečku Decento – spojené kruhy s vykrojeným pasem (tvar piškotu / osmičky), ne obdélník se
+ * zaoblenými rohy. `count` kruhů o poloměru `r` po `pitch` se středy na ose y = `cy` (první v x = pitch / 2); kruh se
+ * napojí na pas pod úhlem `theta` [°], pas je vysoký `waist` × poloměr. Jeden kruh = celý kruh.
+ */
+export function decentoFramePath(count: number, r = 44, pitch = 100, cy = 50, theta = 50, waist = 0.55): string {
+  const f = (value: number) => Math.round(value * 10) / 10;
+  const cx = (index: number) => pitch / 2 + index * pitch;
+  if (count <= 1) return `M${f(cx(0) - r)} ${f(cy)} A${r} ${r} 0 1 1 ${f(cx(0) + r)} ${f(cy)} A${r} ${r} 0 1 1 ${f(cx(0) - r)} ${f(cy)} Z`;
+  const rad = (theta * Math.PI) / 180;
+  const dx = r * Math.cos(rad);
+  const dy = r * Math.sin(rad);
+  const h = r * waist;
+  // Řídicí bod kvadratické křivky pasu: vrchol křivky leží ve výšce h od osy
+  const top = cy - 2 * h + dy;
+  const bottom = cy + 2 * h - dy;
+  const arcTo = (large: 0 | 1, x: number, y: number) => `A${r} ${r} 0 ${large} 1 ${f(x)} ${f(y)}`;
+  const parts = [`M${f(cx(0) - r)} ${f(cy)}`, arcTo(0, cx(0) + dx, cy - dy)];
+  for (let index = 1; index < count; index++) {
+    parts.push(`Q${f(cx(index) - pitch / 2)} ${f(top)} ${f(cx(index) - dx)} ${f(cy - dy)}`);
+    parts.push(index < count - 1 ? arcTo(0, cx(index) + dx, cy - dy) : arcTo(1, cx(index) - dx, cy + dy));
+  }
+  for (let index = count - 2; index >= 0; index--) {
+    parts.push(`Q${f(cx(index) + pitch / 2)} ${f(bottom)} ${f(cx(index) + dx)} ${f(cy + dy)}`);
+    parts.push(index > 0 ? arcTo(0, cx(index) - dx, cy + dy) : arcTo(0, cx(0) - r, cy));
+  }
+  return `${parts.join(" ")} Z`;
+}
 
 /** Styl náhledu řady (podle klíče řady, jinak podle tvaru). */
 export function mockStyle(seriesKey: string | null | undefined, shape: SeriesShape): MockStyle {

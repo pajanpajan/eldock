@@ -24,7 +24,7 @@ import {
   type PaletteItem,
 } from "@/lib/panel-builder/floorplan-editor";
 import { frameGangs, frameOf, isFrameable } from "@/lib/panel-builder/floorplan-frames";
-import { DESIGN_BRANDS, appearanceLabel, colorForSeries, designSeriesOf, seriesColors } from "@/lib/panel-builder/wiring-designs";
+import { DESIGN_BRANDS, appearanceLabel, colorForSeries, designSeriesOf, hasFrameChoice, seriesColors } from "@/lib/panel-builder/wiring-designs";
 import { cn } from "@/lib/utils";
 
 import { AddToFrameControl, SaveTemplateControl } from "./FrameAssemblyPalette";
@@ -356,8 +356,8 @@ export function ElementDetail({
                   ))}
                 </select>
               </label>
-              {/* Fáze 74: barva rámečku zvlášť (výchozí podle nákresu / stejná jako klapka) */}
-              <label className="col-span-2 flex flex-col gap-1 text-xs text-muted-foreground">
+              {/* Fáze 74: barva rámečku zvlášť (výchozí podle nákresu / stejná jako klapka); fáze 90: ne u monobloků a Decenta */}
+              <label className={cn("col-span-2 flex flex-col gap-1 text-xs text-muted-foreground", !hasFrameChoice(element.series ?? draft.series) && "hidden")}>
                 Barva rámečku
                 <select
                   value={element.frameColor ?? ""}

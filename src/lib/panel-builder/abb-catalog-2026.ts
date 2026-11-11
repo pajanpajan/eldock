@@ -5,6 +5,10 @@
 // tvar a materiál pro 2D náhled a skutečné barvy s kódem barvy (přípona objednacího čísla krytu / rámečku, např.
 // „3559T-A00651 500“); u řad Busch-Jaeger (future linear, solo, Busch-axcent) má každá barva vlastní objednací číslo
 // rámečku. Odstíny `swatch` / `frame` / `insert` jsou jen orientační barvy náhledu v aplikaci, ne katalogový údaj.
+// Fáze 90 (zadání uživatele podle katalogu 2026): Garant IP44 (str. 498, zaoblený) jen bílá a šedá / antracitová,
+// Praktik IP44 (str. 502, hranatý) bílá a šedá, Variant+ IP54 (str. 506, průmyslový) šedá / tmavě šedá a bílá / šedá –
+// nástěnné monobloky bez samostatného rámečku (`monoblock`); Decento (str. 142) kulaté porcelánové přístroje, každá
+// barva je pevná dvojice porcelánového středu a porcelánového / dřevěného rámečku (`fixedPairs`), i bílá / černý dub.
 
 export type SeriesShape = "thin" | "rounded" | "layered" | "metal" | "wood" | "square" | "soft" | "classic" | "porcelain" | "flat" | "solo" | "thick" | "surface";
 
@@ -40,12 +44,17 @@ export interface AbbSeries {
   /** Fáze 61: krátký popis řady z katalogu 2026 (podtitul kapitoly) a strana katalogu. */
   tagline?: string;
   page?: number;
+  /** Fáze 90: nástěnný (krabicový) monoblokový přístroj – bez samostatného podomítkového rámečku a víceramečku. */
+  monoblock?: boolean;
+  /** Fáze 90: barvy jsou pevné dvojice středu a rámečku (Decento) – barva rámečku se nevolí zvlášť. */
+  fixedPairs?: boolean;
 }
 
 const slug = (text: string) => text.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
-const color = (series: string, label: string, code: string | null, swatch: string, family: string, look: Pick<SeriesColor, "frame" | "insert" | "material" | "frameMpn"> = {}): SeriesColor => ({
-  id: `abb-${series}-${slug(code ?? label)}`,
+/** `idSlug` = stálé id barvy po přejmenování (uložené nákresy si barvu ponechají). */
+const color = (series: string, label: string, code: string | null, swatch: string, family: string, { idSlug, ...look }: Pick<SeriesColor, "frame" | "insert" | "material" | "frameMpn"> & { idSlug?: string } = {}): SeriesColor => ({
+  id: `abb-${series}-${idSlug ?? slug(code ?? label)}`,
   label: code ? `${label} (${code})` : label,
   code,
   swatch,
@@ -128,10 +137,12 @@ export const ABB_SERIES_2026: AbbSeries[] = [
     colors: [color("classic", "Jasně bílá", "B1", W, "white"), color("classic", "Béžová", "D2", "#d6c3a1", "beige"), color("classic", "Hnědá", "H3", "#7c4a2d", "brown")],
   },
   {
-    name: "Decento", letter: "K", shape: "porcelain", mount: "flush", dbSeries: ["Decento"], tagline: "Porcelánový originál", page: 142,
+    name: "Decento", letter: "K", shape: "porcelain", mount: "flush", dbSeries: ["Decento"], tagline: "Porcelánový originál", page: 142, fixedPairs: true,
     colors: [
       color("decento", "Bílá (porcelán)", null, W, "white", { material: "porcelain" }), color("decento", "Bílá / přírodní buk", "50", "#d4a373", "wood", { frame: "#d4a373", insert: W, material: "wood" }),
       color("decento", "Bílá / třešeň", "52", "#a0522d", "wood", { frame: "#a0522d", insert: W, material: "wood" }), color("decento", "Černá (porcelán)", "N", BLACK, "black", { material: "porcelain" }),
+      // Fáze 90: dřevěný kulatý rámeček černý dub s bílým porcelánovým středem (kód barvy zadání neuvádí)
+      color("decento", "Bílá / černý dub", null, "#3b3128", "wood", { frame: "#3b3128", insert: W, material: "wood" }),
     ],
   },
   {
@@ -170,20 +181,23 @@ export const ABB_SERIES_2026: AbbSeries[] = [
       color("axcent", "Mechová černá / matná černá", null, "#18181b", "black", { frame: "#18181b", insert: MOSS_B, material: "matte", frameMpn: ["2CKA001754A4703", "2CKA001754A4704", "2CKA001754A4705", null, null] }),
     ],
   },
-  ...(["Garant (IP44)", "Variant+ (IP54)", "Praktik (IP44)"] as const).map((name): AbbSeries => {
-    const key = name.split(" ")[0].toLowerCase().replace("+", "-plus");
-    return {
-      name,
-      letter: null,
-      shape: "surface",
-      mount: "surface",
-      ip: name.includes("IP54") ? "IP54" : "IP44",
-      dbSeries: [name.split(" ")[0]],
-      tagline: name.startsWith("Variant") ? "Variabilní, odolný, moderní" : name.startsWith("Praktik") ? "Velmi rozšířená řada pro vrchní montáž" : "Do vlhka a venku",
-      page: 498,
-      colors: [color(key, "Bílá", null, W, "white"), color(key, "Šedá", null, GREY, "grey"), color(key, "Béžová", null, "#d6c3a1", "beige"), color(key, "Hnědá", null, "#7c4a2d", "brown")],
-    };
-  }),
+  // Fáze 90: nástěnné monoblokové přístroje do vlhka a průmyslu – kompletní přístroj v jedné barvě nebo dvoubarevné
+  // kombinaci, bez samostatného rámečku, zásuvka s odklápěcím víčkem; Garant zaoblený, Praktik hranatý, Variant+ robustní
+  {
+    name: "Garant (IP44)", letter: null, shape: "surface", mount: "surface", ip: "IP44", dbSeries: ["Garant"], tagline: "Do vlhka a venku", page: 498, monoblock: true,
+    colors: [color("garant", "Bílá", null, W, "white"), color("garant", "Šedá / antracitová", null, "#6b7280", "grey", { frame: "#9ca3af", insert: ANTHRACITE, idSlug: "seda" })],
+  },
+  {
+    name: "Variant+ (IP54)", letter: null, shape: "surface", mount: "surface", ip: "IP54", dbSeries: ["Variant+"], tagline: "Variabilní, odolný, moderní", page: 506, monoblock: true,
+    colors: [
+      color("variant-plus", "Šedá / tmavě šedá (2-barevná IP54)", null, "#6b7280", "grey", { frame: "#9ca3af", insert: "#4b5563", idSlug: "seda" }),
+      color("variant-plus", "Bílá / šedá (IP54)", null, W, "white", { frame: W, insert: GREY, idSlug: "bila" }),
+    ],
+  },
+  {
+    name: "Praktik (IP44)", letter: null, shape: "surface", mount: "surface", ip: "IP44", dbSeries: ["Praktik"], tagline: "Velmi rozšířená řada pro vrchní montáž", page: 502, monoblock: true,
+    colors: [color("praktik", "Bílá", null, W, "white"), color("praktik", "Šedá", null, GREY, "grey")],
+  },
 ];
 
 /** Starší klíče řad (nákresy uložené před aktualizací na katalog 2026). */

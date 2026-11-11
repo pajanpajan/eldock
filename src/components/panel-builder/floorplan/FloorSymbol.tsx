@@ -69,7 +69,8 @@ export function FloorSymbol({
       {/* Neviditelná plocha pro snadné kliknutí; u vany / sprchy celý obdélník a zóna 2 (0,6 m) čárkovaně */}
       {fixture ? (
         <g transform={rotation ? `rotate(${rotation})` : undefined}>
-          <rect x={-fixture.w / 2 - ZONE2_MM} y={-fixture.h / 2 - ZONE2_MM} width={fixture.w + ZONE2_MM * 2} height={fixture.h + ZONE2_MM * 2} rx={ZONE2_MM} fill="rgba(56,189,248,0.06)" stroke="#38bdf8" strokeOpacity={0.6} strokeWidth={w * 0.8} strokeDasharray={`${w * 4} ${w * 3}`} pointerEvents="none" />
+          {/* Fáze 90: zóna 2 jen u vany a sprchy (okna, dveře a nábytek zóny nemají) */}
+          {spec?.zone === "bath" ? <rect x={-fixture.w / 2 - ZONE2_MM} y={-fixture.h / 2 - ZONE2_MM} width={fixture.w + ZONE2_MM * 2} height={fixture.h + ZONE2_MM * 2} rx={ZONE2_MM} fill="rgba(56,189,248,0.06)" stroke="#38bdf8" strokeOpacity={0.6} strokeWidth={w * 0.8} strokeDasharray={`${w * 4} ${w * 3}`} pointerEvents="none" /> : null}
           <rect x={-fixture.w / 2} y={-fixture.h / 2} width={fixture.w} height={fixture.h} fill="rgba(56,189,248,0.12)" />
         </g>
       ) : hitSlot ? (

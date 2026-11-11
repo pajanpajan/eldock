@@ -23,6 +23,31 @@ export const ROOM_PRESETS = [
   { name: "Garáž", w: 6_000, h: 3_500 },
 ] as const;
 
+/**
+ * Fáze 90: pořadí předvoleb při skládání domu v kroku 1 – po vytvoření místnosti formulář rovnou nabídne další typ
+ * (po obývacím pokoji kuchyň, ložnici, koupelnu, chodbu, technickou místnost …), dům se skládá na jedno kliknutí.
+ */
+export const ROOM_SEQUENCE = ["Obývací pokoj", "Kuchyň", "Ložnice", "Koupelna", "Chodba / Zádveří", "Technická místnost", "WC", "Dětský pokoj", "Pracovna", "Šatna", "Spíž", "Garáž"] as const;
+
+const baseRoomName = (name: string) => name.replace(/\s+\d+$/, "").trim();
+
+/**
+ * Fáze 90: další předvolba místnosti – v pořadí `ROOM_SEQUENCE` za právě vytvořenou (jinak od začátku) první typ, který
+ * na podlaží ještě není („Ložnice 2“ = ložnice, „Obývák + KK“ zastoupí obývací pokoj i kuchyň); jsou-li všechny, typ
+ * za vytvořenou (další ložnice dostane číslo).
+ */
+export function nextRoomPreset(existing: readonly string[], last?: string | null): (typeof ROOM_PRESETS)[number] {
+  const used = new Set(existing.map(baseRoomName));
+  if (used.has("Obývák + KK")) {
+    used.add("Obývací pokoj");
+    used.add("Kuchyň");
+  }
+  const index = last ? ROOM_SEQUENCE.findIndex((name) => name === baseRoomName(last)) : -1;
+  const start = index + 1;
+  const name = ROOM_SEQUENCE.map((_, offset) => ROOM_SEQUENCE[(start + offset) % ROOM_SEQUENCE.length]).find((candidate) => !used.has(candidate)) ?? ROOM_SEQUENCE[start % ROOM_SEQUENCE.length];
+  return ROOM_PRESETS.find((preset) => preset.name === name) ?? ROOM_PRESETS[0];
+}
+
 export const ROOM_MIN_MM = 500;
 export const ROOM_MAX_MM = PLANE_MAX_MM;
 /** Tolerance magnetického přichytávání stěn a rohů [mm]. */
