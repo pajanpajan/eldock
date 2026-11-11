@@ -10,6 +10,7 @@ import { formatWatts } from "@/lib/panel-builder/catalog";
 import { ACCESSORY_SUBTYPES, describeConfig, isAccessorySubtype, type ItemConfig } from "@/lib/panel-builder/configurator";
 import { VECTOR } from "@/lib/panel-builder/vector-layout";
 import { deviceWithConfig, type VectorDevice } from "@/lib/panel-builder/vector-symbols";
+import { cn } from "@/lib/utils";
 import { previewConfigAction } from "@/server/actions/panel-design";
 import type { ConfigPreview } from "@/server/services/panel-design";
 
@@ -53,7 +54,13 @@ const RELATION_LABELS: Record<string, string> = {
  * KROK D – „PŘIŘAZENÝ PŘÍSTROJ K OSAZENÍ“: živý 2D vektorový náhled v přesném počtu modulů, typ a MPN
  * z databáze, Pv a popis obvodu. Kartu jde opakovaně přetáhnout na libovolnou DIN lištu nebo vložit
  * tlačítky 1× / +3× / +6× na aktivní lištu.
+ *
+ * Lepivá (sticky) je jen na dost vysokém okně (≥ 1000 px): karta je vysoká a stojí v konfigurátoru nad dalšími volbami
+ * (proud, charakteristika, štítky…). Na nižším okně (notebook 1440 × 900) by spolu se spodní lištou kroků zakryla
+ * většinu konfigurátoru a volby pod ní by nešly kliknout – tam se proto posouvá s obsahem.
  */
+const STICKY_ON_TALL = "[@media(min-height:1000px)]:sticky top-2 z-20";
+
 export function PlacementCard({
   config,
   label,
@@ -92,7 +99,7 @@ export function PlacementCard({
 
   if (!config) {
     return (
-      <section aria-label="Přiřazený přístroj k osazení" className="sticky top-2 z-20 rounded-xl border border-dashed border-border bg-card p-4 text-sm text-muted-foreground" data-testid="placement-card">
+      <section aria-label="Přiřazený přístroj k osazení" className={cn(STICKY_ON_TALL, "rounded-xl border border-dashed border-border bg-card p-4 text-sm text-muted-foreground")} data-testid="placement-card">
         <h3 className="mb-1 text-xs font-bold tracking-wide uppercase">D. Přiřazený přístroj k osazení</h3>
         Vyberte výrobce a kategorii – karta s přístrojem se objeví tady a půjde přetáhnout na DIN lištu.
       </section>
@@ -126,7 +133,7 @@ export function PlacementCard({
   const n = (value: number) => String(value).replace(".", ",");
 
   return (
-    <section aria-label="Přiřazený přístroj k osazení" className="sticky top-2 z-20 flex flex-col gap-3 rounded-xl border-2 border-sky-500/50 bg-card p-3 shadow-lg shadow-black/40" data-testid="placement-card">
+    <section aria-label="Přiřazený přístroj k osazení" className={cn(STICKY_ON_TALL, "flex flex-col gap-3 rounded-xl border-2 border-sky-500/50 bg-card p-3 shadow-lg shadow-black/40")} data-testid="placement-card">
       <h3 className="text-xs font-bold tracking-wide text-sky-200 uppercase">{assigned !== undefined && assigned !== null ? "Přiřazený přístroj" : "Přiřazený přístroj k osazení"}</h3>
       {assigned ? (
         <p className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md bg-muted/40 px-2 py-1.5 text-sm" data-testid="assigned-device">
