@@ -112,9 +112,9 @@ const pudorys = {
       await d.idle(4000);
       const firstCanvas = await editor(page).canvas.elementHandle();
       await drawRoom(d, ROOMS[0], { name: false });
-      // první změna založí půdorys na serveru (/novy → /<id>) a editor se přemontuje (klíč = id) – průvodce pak
-      // stojí na kroku 2 a úpravy z doby před přemontováním se ztratí; počkat na nový editor, vrátit se na krok 1
-      // a teprve pak první místnost pojmenovat
+      // první změna založí půdorys na serveru (/novy → /<id>) a editor se přemontuje (klíč = id) – úpravy z doby před
+      // přemontováním se ztratí; počkat na nový editor a teprve pak první místnost pojmenovat. Průvodce od fáze 90
+      // zůstává na kroku 1 (krok v sessionStorage podle id půdorysu), wizardStep(d, 1) je jen pojistka.
       await page.waitForURL(/\/panel-builder\/floorplan\/(?!novy)[^/?#]+$/, { timeout: 30_000 }).catch(() => {});
       for (let round = 0; round < 40 && (await firstCanvas?.evaluate((element) => element.isConnected).catch(() => false)); round++) await d.sleep(100);
       await editor(page).canvas.waitFor({ timeout: 30_000 });

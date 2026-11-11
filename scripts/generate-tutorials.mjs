@@ -178,6 +178,22 @@ async function setBanner(page, banner) {
   }
 }
 
+/**
+ * Zápis do public/tutorials: ve Windows soubor občas na chvíli zamkne jiný proces (antivir, náhledy Průzkumníka) a
+ * ffmpeg ho neotevře („Could not open file … I/O error“) – zápis se zkusí znovu, aby se kvůli tomu nezahodilo celé natáčení.
+ */
+async function retryWrite(label, action, attempts = 5) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return action();
+    } catch (error) {
+      if (attempt >= attempts) throw error;
+      log(`  ${label}: pokus ${attempt} selhal (${error instanceof Error ? error.message.split("\n")[0] : error}) – znovu za 3 s`);
+      await sleep(3000);
+    }
+  }
+}
+
 async function record(tool, browser, url, tutorial, voices) {
   const rawDir = path.join(WORK, "raw", tutorial.id);
   rmSync(rawDir, { recursive: true, force: true });
@@ -243,8 +259,8 @@ async function record(tool, browser, url, tutorial, voices) {
   log(`  střih ${tutorial.file} (${total.toFixed(1)} s)…`);
   // začátky kapitol na desetiny sekundy nahoru – stejný čas má přehrávač i klíčový snímek
   const chapterStarts = marks.map((mark) => Math.max(0, Math.ceil(((mark.start - created) / 1000 - trim) * 10) / 10));
-  muxMp4(tool, { video: raw, audio: wav, out, startSec: trim, durationSec: total, title: `ELDOCK – ${tutorial.title}`, crf, keyframes: chapterStarts });
-  extractPoster(tool, out, Math.min(total - 0.5, (chapterStarts[3] ?? chapterStarts[0]) + 1.5), out.replace(/\.mp4$/, ".jpg"));
+  await retryWrite("střih MP4", () => muxMp4(tool, { video: raw, audio: wav, out, startSec: trim, durationSec: total, title: `ELDOCK – ${tutorial.title}`, crf, keyframes: chapterStarts }));
+  await retryWrite("plakátek", () => extractPoster(tool, out, Math.min(total - 0.5, (chapterStarts[3] ?? chapterStarts[0]) + 1.5), out.replace(/\.mp4$/, ".jpg")));
   const info = probeStreams(tool, out);
   const videoStream = info?.streams?.find((stream) => stream.codec_type === "video");
   const audioStream = info?.streams?.find((stream) => stream.codec_type === "audio");
