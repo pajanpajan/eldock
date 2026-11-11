@@ -5,7 +5,7 @@ revize VTZ, změny skutečného provedení mezi údržbou v hale a externími CA
 rozváděčů. Pracovní název byl Digitry, od fáze 20 je to **ELDOCK**. Produkce běží na https://eldock.cz.
 Původní zadání MVP je v `docs/archiv/SPECIFIKACE-MVP.md`, celá historie fází 0–35 v `docs/archiv/PLAN-faze-00-35.md`, celý archiv v jednom souboru `docs/archiv/ARCHIV-KOMPLET.md`.
 
-## 1. Milníky (fáze 0–95 nasazené; 96 čeká na nasazení)
+## 1. Milníky (fáze 0–96 nasazené)
 
 | Fáze | Milník |
 |---|---|
@@ -243,7 +243,7 @@ Když uživatel řekne **„nasaď to na produkci“** nebo **„deploy“**:
 
 **Import BIM (fáze 95):** migrace `phase95_bim` (sloupce `Equipment.bimGuid` a `ratedPowerKw`) → před nasazením záloha databáze podle postupu výše; migraci provede start kontejneru. Na serveru nic dalšího. Nasazeno 2026-11-11 (commit `eb10ae3`; migrace po záloze databáze, kontejner `healthy`).
 
-**SEO a IndexNow (fáze 96):** bez migrace; po nasazení spusťte lokálně `npm run seo:ping` (oznámí sitemapu Seznamu a api.indexnow.org, vypíše HTTP 200 / 202). Ověřovací meta Google / Seznam jen s proměnnými `GOOGLE_SITE_VERIFICATION` / `SEZNAM_WMT_VERIFICATION` v `.env` serveru – ten upravuje jen provozovatel.
+**SEO a IndexNow (fáze 96):** bez migrace; po nasazení spusťte lokálně `npm run seo:ping` (oznámí sitemapu Seznamu a api.indexnow.org, vypíše HTTP 200 / 202). Ověřovací meta Google / Seznam jen s proměnnými `GOOGLE_SITE_VERIFICATION` / `SEZNAM_WMT_VERIFICATION` v `.env` serveru – ten upravuje jen provozovatel. Nasazeno 2026-11-11 (commit `fde2c95`; bez migrace, kontejner `healthy`, `npm run seo:ping`: Seznam 200, IndexNow 202).
 
 **Katalog ABB pro ČR (fáze 88):** bez migrace. Rozvodnice Mistral / ComfortLine CU, přístroje a příslušenství ABB i vazby příslušenství zapíše přírůstkový seed `db:panel-builder` při startu kontejneru (upsert, orientační řádek téhož typu dostane objednací číslo, nic se nemaže); ověřené rozvodnice převezmou řádky exportu se stejným objednacím číslem (MISTRAL65, CU24R / CU25R). Na serveru nic dalšího. Nasazeno 2026-11-10 (commit `1aacfdb`; seed „katalog 838 prvků aktualizován“, 163 ověřených skříní, kontejner `healthy`).
 
