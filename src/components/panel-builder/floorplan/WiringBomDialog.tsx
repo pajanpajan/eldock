@@ -43,7 +43,7 @@ export function WiringBomDialog({ rows }: { rows: readonly WiringBomRow[] }) {
           <DialogHeader>
             <DialogTitle>Kusovník domovní instalace</DialogTitle>
             <DialogDescription>
-              Přístroj + kryt + rámeček podle sestavování přístrojů Katalogu ABB 2026 (víceramček, který řada nevyrábí, rozdělený na skutečné rámečky), kabely z výkazu kabeláže a na konci instalační krabice podle výrobce, konstrukce stěn a hloubky přístroje. „ověřit“ = číslo odvozené z matice katalogu, „doplnit“ = objednací číslo v podkladech chybí.
+              Přístroj + kryt + rámeček podle sestavování přístrojů Katalogu ABB 2026 (víceramček, který řada nevyrábí, rozdělený na skutečné rámečky), kabely z výkazu kabeláže a na konci instalační krabice podle výrobce, konstrukce stěn a hloubky přístroje. EAN = objednací číslo je v oficiálních datech výrobce ABB ETIM 9.0, „ověřit“ = číslo odvozené z matice katalogu, které data výrobce neuvádějí, „doplnit“ = objednací číslo v podkladech chybí.
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-wrap gap-2 print:hidden">
@@ -74,6 +74,12 @@ export function WiringBomDialog({ rows }: { rows: readonly WiringBomRow[] }) {
                   <td className={cn("py-1 pr-2 font-mono", !row.mpn && "text-amber-300")}>
                     {row.mpn ?? "doplnit"}
                     {row.mpn && !row.verified ? <span className="ml-1 rounded bg-amber-500/20 px-1 font-sans text-[10px] text-amber-200">ověřit</span> : null}
+                    {/* Fáze 94: EAN z oficiálních dat výrobce ABB ETIM 9.0 */}
+                    {row.ean ? (
+                      <span className="block font-sans text-[10px] text-muted-foreground" data-testid="wiring-bom-ean" title="EAN (GTIN) z oficiálních dat výrobce ABB ETIM 9.0">
+                        EAN {row.ean}
+                      </span>
+                    ) : null}
                   </td>
                   <td className="py-1 pr-2">{row.name}</td>
                   <td className="py-1 pr-2 text-muted-foreground">{row.appearance}</td>

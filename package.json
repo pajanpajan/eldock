@@ -42,7 +42,8 @@
     "plant-server": "tsx scripts/plant-server.ts",
     "catalog:images": "tsx scripts/catalog-images.ts",
     "catalog:renders": "tsx scripts/catalog-renders.ts",
-    "catalog:photos": "tsx scripts/harvest-switch-photos.mjs"
+    "catalog:photos": "tsx scripts/harvest-switch-photos.mjs",
+    "catalog:etim": "tsx scripts/import-abb-etim9.mjs"
   },
   "dependencies": {
     "@prisma/adapter-better-sqlite3": "^7.10.1",

@@ -9,7 +9,9 @@
 // Decento = kompletní přístroje s kulatým rámečkem (str. 145–147, bez rámečků a krytů), kryty řad Busch-Jaeger ze společné
 // kapitoly (str. 170); instalační krabice podle výrobce, konstrukce stěny a hloubky přístroje (`mounting-boxes-catalog.ts`)
 // v samostatné tabulce. Čisté funkce.
+// Fáze 94: objednací číslo, které je v oficiálních datech výrobce ABB ETIM 9.0, má EAN (GTIN) a platí za ověřené.
 
+import { ETIM_GTIN } from "./abb-etim.generated";
 import { allElements, effectiveSwitchNo, floorsOf, frameColorOf, isWiredSwitch, paletteItem, type EditorElement, type FloorplanDraft, type FrameGroup } from "./floorplan-editor";
 import { gangsOf } from "./floorplan-frames";
 import { productById } from "./smart-catalog";
@@ -38,7 +40,12 @@ export interface WiringBomRow {
   unit: "ks" | "m";
   /** Fáze 91: instalační krabice – řádek tabulky doporučených krabic (výrobce, typ, hloubka, určení). */
   box?: BomBoxInfo;
+  /** Fáze 94: EAN (GTIN) z oficiálních dat výrobce ABB ETIM 9.0 – objednací číslo výrobce zná. */
+  ean?: string;
 }
+
+/** Fáze 94: EAN objednacího čísla z dat ABB ETIM 9.0 (null = číslo v datech výrobce není nebo nemá EAN). */
+export const eanOf = (mpn: string | null | undefined): string | null => (mpn ? (ETIM_GTIN[mpn] ?? null) : null);
 
 export interface BomBoxInfo {
   maker: string;
@@ -176,7 +183,11 @@ export function compileFloorplanBom(draft: FloorplanDraft, options: BomOptions =
     const key = `${row.category}|${row.mpn ?? row.name}|${row.appearance}`;
     const current = rows.get(key);
     if (current) current.quantity = Math.round((current.quantity + quantity) * 10) / 10;
-    else rows.set(key, { ...row, quantity });
+    else {
+      // Fáze 94: číslo v datech výrobce (ETIM 9.0) = ověřené, s EAN pro objednávku u velkoobchodu
+      const ean = row.box ? null : eanOf(row.mpn);
+      rows.set(key, { ...row, ...(ean ? { ean, verified: true } : {}), quantity });
+    }
   };
   // Fáze 59: víceramečky všech podlaží – člen rámečku nemá vlastní rámeček, za skupinu jeden rámeček NR
   const frameOf = new Map<string, FrameGroup>();
@@ -412,7 +423,7 @@ export function boxTable(rows: readonly WiringBomRow[]): (string | number)[][] {
 
 /** Řádky tabulky pro CSV / XLSX (hlavička + data); fáze 91 – krabice v samostatné tabulce na konci. */
 export function bomTable(rows: readonly WiringBomRow[]): (string | number)[][] {
-  const main = [["Kategorie", "Objednací číslo (MPN)", "Název a specifikace", "Řada a barva", "Počet", "Jednotka", "Ověření"], ...bomMainRows(rows).map((row) => [row.category, row.mpn ?? "doplnit", row.name, row.appearance, row.quantity, row.unit, row.mpn ? (row.verified ? "katalog" : "ověřit") : "chybí"])];
+  const main = [["Kategorie", "Objednací číslo (MPN)", "EAN (GTIN)", "Název a specifikace", "Řada a barva", "Počet", "Jednotka", "Ověření"], ...bomMainRows(rows).map((row) => [row.category, row.mpn ?? "doplnit", row.ean ?? "", row.name, row.appearance, row.quantity, row.unit, row.mpn ? (row.ean ? "data výrobce ETIM 9.0" : row.verified ? "katalog" : "ověřit") : "chybí"])];
   const boxes = boxTable(rows);
   return boxes.length > 1 ? [...main, [], [BOX_TABLE_TITLE], ...boxes] : main;
 }

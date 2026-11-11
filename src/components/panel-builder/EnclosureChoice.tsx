@@ -10,6 +10,8 @@ import { ENCLOSURE_CHOICE_BRANDS, enclosureRails, enclosureSeries, enclosureSumm
 import type { EnclosureLike } from "@/lib/panel-builder/enclosures";
 import { listEnclosuresAction } from "@/server/actions/panel-design";
 
+import { EnclosurePhoto } from "./EnclosurePhoto";
+
 const selectClass = "h-10 w-full min-w-0 rounded-md border border-input bg-transparent px-2 text-sm disabled:opacity-50 dark:bg-input/30";
 
 /**
@@ -124,6 +126,8 @@ export function EnclosureChoice({ value, onChange }: { value: EnclosureLike | nu
       ) : null}
       {summary ? (
         <div className="flex flex-col gap-1 rounded-md border border-primary/40 bg-primary/10 p-2 text-xs" data-testid="enclosure-choice-summary">
+          {/* Fáze 94: oficiální fotka rozvodnice (data ABB ETIM 9.0) */}
+          <EnclosurePhoto articleNumber={value?.articleNumber} label={summary.title} className="self-start" />
           <p>
             ✅ <b className="text-foreground">{summary.title}</b> · {summary.layout} · {summary.dimensions} · {summary.execution}
           </p>

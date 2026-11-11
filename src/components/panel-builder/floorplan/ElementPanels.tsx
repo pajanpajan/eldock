@@ -26,7 +26,7 @@ import {
 } from "@/lib/panel-builder/floorplan-editor";
 import { frameGangs, frameLimitOf, frameOf, isFrameable } from "@/lib/panel-builder/floorplan-frames";
 import { BOX_CHOICES, WALL_TYPES, type BoxChoice, type WallType } from "@/lib/panel-builder/box-options";
-import type { ResolvedBox } from "@/lib/panel-builder/mounting-boxes-catalog";
+import { DEVICE_DEPTH_SOURCE, formatMm, type ResolvedBox } from "@/lib/panel-builder/mounting-boxes-catalog";
 import { DESIGN_BRANDS, appearanceLabel, colorForSeries, designSeriesOf, hasFrameChoice, seriesColors, seriesFrameColors } from "@/lib/panel-builder/wiring-designs";
 import { cn } from "@/lib/utils";
 
@@ -267,6 +267,17 @@ export function ElementDetail({
             <p className="text-muted-foreground" data-testid="element-box-min">
               Minimální požadovaná hloubka: <b className="text-foreground">{box.resolved.need.minDepthMm} mm</b>
               {box.resolved.need.reasons.length ? ` – ${box.resolved.need.reasons.join(", ")}` : ""}
+            </p>
+          ) : null}
+          {/* Fáze 94: vestavná hloubka přístroje z oficiálních dat výrobce a volné místo za ním v krabici */}
+          {box.resolved.need.device ? (
+            <p className="text-muted-foreground" data-testid="element-box-device" data-depth={box.resolved.need.device.depthMm}>
+              Vestavná hloubka přístroje podle výrobce: <b className="text-foreground">{formatMm(box.resolved.need.device.depthMm)} mm</b> ({DEVICE_DEPTH_SOURCE}, údaj u {box.resolved.need.device.mpn})
+              {box.resolved.freeDepthMm !== undefined
+                ? box.resolved.freeDepthMm < 0
+                  ? ` – do krabice ${box.resolved.box?.depthMm} mm se nevejde`
+                  : ` – v krabici ${box.resolved.box?.depthMm} mm za ním zbývá ${formatMm(box.resolved.freeDepthMm)} mm na vodiče`
+                : ""}
             </p>
           ) : null}
           {box.resolved.tooShallow ? (

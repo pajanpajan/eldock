@@ -34,6 +34,9 @@ export interface ManifestPhoto {
   sourceUrl?: string;
   /** Datum stažení / nahrání (ISO). */
   retrievedAt?: string;
+  /** Fáze 94: objednací číslo výrobce a GTIN / EAN vyfoceného dílu (import ETIM 9.0). */
+  mpn?: string;
+  gtin?: string;
 }
 
 export interface PhotoManifest {
@@ -41,7 +44,7 @@ export interface PhotoManifest {
   photos: ManifestPhoto[];
 }
 
-const FILE_PATTERN = /^[a-z0-9-]+\/[a-z0-9-]+\/[a-z0-9-]+-(switch|socket|set)\.(webp|png|jpg|jpeg|avif)$/;
+const FILE_PATTERN = /^[a-z0-9-]+\/[a-z0-9-]+\/[a-z0-9-]+-(switch|socket|set|frame)\.(webp|png|jpg|jpeg|avif)$/;
 
 /** Načtení manifestu fotek – neplatné položky se zahodí (cizí cesta, neznámá řada, díl nebo barva). */
 export function parsePhotoManifest(value: unknown): ManifestPhoto[] {
@@ -49,7 +52,7 @@ export function parsePhotoManifest(value: unknown): ManifestPhoto[] {
   const photos: ManifestPhoto[] = [];
   for (const raw of list) {
     if (!raw || typeof raw !== "object") continue;
-    const { series, color, part, file, source, license, sourceUrl, retrievedAt } = raw as Partial<ManifestPhoto>;
+    const { series, color, part, file, source, license, sourceUrl, retrievedAt, mpn, gtin } = raw as Partial<ManifestPhoto>;
     if (typeof series !== "string" || !isPhotoPart(part) || typeof file !== "string" || !FILE_PATTERN.test(file) || typeof source !== "string" || typeof license !== "string") continue;
     const target = photoTarget(series, color ?? null, part);
     if (!target || !file.startsWith(`${target.maker}/${target.folder}/`)) continue;
@@ -62,6 +65,8 @@ export function parsePhotoManifest(value: unknown): ManifestPhoto[] {
       license: license.slice(0, 160),
       ...(typeof sourceUrl === "string" && /^https:\/\//.test(sourceUrl) ? { sourceUrl: sourceUrl.slice(0, 400) } : {}),
       ...(typeof retrievedAt === "string" ? { retrievedAt: retrievedAt.slice(0, 32) } : {}),
+      ...(typeof mpn === "string" && mpn.trim() ? { mpn: mpn.trim().slice(0, 40) } : {}),
+      ...(typeof gtin === "string" && /^\d{8,14}$/.test(gtin) ? { gtin } : {}),
     });
   }
   return photos;

@@ -3,7 +3,10 @@
 // (ruční volba mělčí krabice, než přístroj a svorkování potřebují) a souhrn krabic do kusovníku.
 // Typová označení, objednací kódy a hloubky jen z oficiálních stránek výrobců (ověřeno 2026-11-11, odkaz `source`);
 // typ, který výrobce nevede, se nevymýšlí – kusovník pak ukáže „doplnit“. Čisté funkce.
+// Fáze 94: vestavná hloubka přístroje z oficiálních dat výrobce (ABB ETIM 9.0, EF012278 / EF000218) – přístroj hlubší, než
+// zaručuje mělká krabice (40 mm), chce hlubokou; u zvolené krabice se počítá volné místo za přístrojem.
 
+import { ETIM_DEVICE_DEPTHS } from "./abb-etim.generated";
 import { BOX_MAKERS, DEFAULT_BOX_MAKER, DEFAULT_WALL_TYPE, WALL_TYPES, type BoxChoice, type BoxDepthClass, type BoxMaker, type WallType } from "./box-options";
 import { allElements, floorsOf, paletteItem, type EditorElement, type EditorRoom, type FloorplanDraft } from "./floorplan-editor";
 import { gangsOf } from "./floorplan-frames";
@@ -104,6 +107,25 @@ export const MOUNTING_BOXES: readonly MountingBox[] = [
 ];
 
 export const boxMakerLabel = (maker: BoxMaker) => BOX_MAKERS.find((entry) => entry.id === maker)?.label ?? maker;
+
+/** Fáze 94: vestavná hloubka přístroje podle oficiálních dat výrobce. */
+export interface DeviceDepth {
+  /** Vestavná hloubka nejhlubšího dílu přístroje [mm]. */
+  depthMm: number;
+  /** Objednací číslo dílu (strojek, zásuvka), jehož hloubku data výrobce uvádějí. */
+  mpn: string;
+}
+
+/** Zdroj vestavných hloubek přístrojů (detail prvku, hlášení kontroly). */
+export const DEVICE_DEPTH_SOURCE = "ABB ETIM 9.0";
+
+/** Fáze 94: vestavná hloubka přístroje řady („ABB|Tango“ + „socket“) z dat ETIM; null = výrobce ji v datech neuvádí. */
+export function deviceDepthOf(series: string | null | undefined, item: string): DeviceDepth | null {
+  return series ? (ETIM_DEVICE_DEPTHS[`${series}|${item}`] ?? null) : null;
+}
+
+/** Milimetry s desetinnou čárkou („24,6“). */
+export const formatMm = (value: number) => String(Math.round(value * 10) / 10).replace(".", ",");
 export const wallTypeOf = (wall: WallType) => WALL_TYPES.find((entry) => entry.id === wall)!;
 
 /** Fáze 93: volby výběru krabice – v BD4 (obchodní centrum) jen bezhalogenové krabice HF. */
@@ -146,6 +168,8 @@ export interface BoxNeed {
   minDepthMm: number;
   /** Proč (stmívač, WAGO svorky …); prázdné u běžné mělké krabice. */
   reasons: string[];
+  /** Fáze 94: vestavná hloubka přístroje z dat výrobce (ABB ETIM 9.0), když ji výrobce uvádí. */
+  device?: DeviceDepth;
 }
 
 export interface BoxContext {
@@ -181,12 +205,17 @@ export function boxNeed(draft: FloorplanDraft, element: EditorElement, context: 
   const series = element.series ?? draft.series;
   if (isSurfaceMountedSeries(series)) return { kind: "surface", minDepthMm: 0, reasons: ["nástěnný přístroj řady (bez podomítkové krabice)"] };
   if (wall === "surface") return { kind: "surface", minDepthMm: 0, reasons: ["nástěnná montáž IP44 / IP54 v místnosti"] };
+  // Fáze 94: oficiální vestavná hloubka přístroje (ABB ETIM 9.0)
+  const device = deviceDepthOf(series, element.item);
+  const withDevice = (need: BoxNeed): BoxNeed => (device ? { ...need, minDepthMm: Math.max(need.minDepthMm, Math.ceil(device.depthMm)), device } : need);
   // Elektronika v krabici: akční člen / flexTronics pod rámečkem, modul pod vypínač (retrofit)
   const reasons: string[] = [];
   if (product?.kind === "inbox") reasons.push(`${product.label.replace(/ \(.*\)$/, "")} v krabici`);
   if (product?.wiring === "flextronics") reasons.push("elektronická vložka ABB-flexTronics® pod rámečkem");
   if (draft.installation === "smart_retrofit" && item.kind === "switch" && !item.bus && (element.controls.length > 0 || item.control === "blind")) reasons.push(item.control === "blind" ? "žaluziový modul pod vypínač" : "chytrý modul pod vypínač (retrofit)");
-  if (reasons.length) return { kind: "electronics", minDepthMm: MIN_DEPTH_MM.electronics, reasons };
+  // Přístroj hlubší, než zaručuje i hluboká krabice (66 mm) → nejhlubší třída (KOPOS KPR 68-70)
+  if (device && device.depthMm > MIN_DEPTH_MM.deep) reasons.push(`vestavná hloubka přístroje ${formatMm(device.depthMm)} mm (${DEVICE_DEPTH_SOURCE})`);
+  if (reasons.length) return withDevice({ kind: "electronics", minDepthMm: MIN_DEPTH_MM.electronics, reasons });
   // Hluboký strojek a svorkování
   if (item.wiringCategory === "WD_DIMMER") reasons.push("stmívač 230 V (hluboký strojek)");
   if (item.control === "thermostat") reasons.push("prostorový termostat (hluboký strojek)");
@@ -195,8 +224,10 @@ export function boxNeed(draft: FloorplanDraft, element: EditorElement, context: 
   if (item.variant === "surge") reasons.push("zásuvka s přepěťovou ochranou T3 (hluboký strojek)");
   if (draft.installation === "classic" && item.kind === "switch" && !item.bus && !item.sensor) reasons.push("WAGO svorky pro rozbočení ke svítidlům za strojkem");
   if ((item.kind === "single_socket" || item.kind === "double_socket") && (context.cableEnds ?? 0) > 2) reasons.push(`rozbočení – v krabici končí ${context.cableEnds} kabely`);
-  if (reasons.length) return { kind: "deep", minDepthMm: MIN_DEPTH_MM.deep, reasons };
-  return { kind: "shallow", minDepthMm: MIN_DEPTH_MM.shallow, reasons: [] };
+  // Fáze 94: přístroj hlubší než 40 mm (nejmenší hloubka mělké krabice) se do mělké krabice nevejde
+  if (device && device.depthMm > MIN_DEPTH_MM.shallow) reasons.push(`vestavná hloubka přístroje ${formatMm(device.depthMm)} mm (${DEVICE_DEPTH_SOURCE}) – víc než ${MIN_DEPTH_MM.shallow} mm mělké krabice`);
+  if (reasons.length) return withDevice({ kind: "deep", minDepthMm: MIN_DEPTH_MM.deep, reasons });
+  return withDevice({ kind: "shallow", minDepthMm: MIN_DEPTH_MM.shallow, reasons: [] });
 }
 
 export interface ResolvedBox {
@@ -206,8 +237,10 @@ export interface ResolvedBox {
   kind: BoxNeed["kind"];
   wall: WallType;
   box: MountingBox | null;
-  /** Ruční volba je mělčí, než přístroj potřebuje. */
+  /** Ruční volba je mělčí, než přístroj potřebuje (nebo se přístroj podle dat výrobce do krabice nevejde). */
   tooShallow: boolean;
+  /** Fáze 94: volné místo za přístrojem ve zvolené krabici [mm] (hloubka krabice − vestavná hloubka přístroje z ETIM). */
+  freeDepthMm?: number;
   /** Fáze 93: obchodní centrum (BD4) – jen bezhalogenové krabice HF. */
   halogenFree?: boolean;
 }
@@ -221,10 +254,14 @@ export function resolveBox(draft: FloorplanDraft, element: EditorElement, contex
   const device = need.kind === "shallow" || need.kind === "deep" || need.kind === "electronics";
   // Ruční volba platí jen u přístrojů do krabice (nástěnná montáž i u nich)
   const kind: BoxNeed["kind"] = device && choice !== "auto" ? choice : need.kind;
-  const tooShallow = device && (kind === "shallow" || kind === "deep" || kind === "electronics") && kind !== need.kind && CLASS_ORDER[kind] < CLASS_ORDER[need.kind as BoxDepthClass];
+  const shallower = device && (kind === "shallow" || kind === "deep" || kind === "electronics") && kind !== need.kind && CLASS_ORDER[kind] < CLASS_ORDER[need.kind as BoxDepthClass];
   const options = boxPickOptionsOf(draft);
   const chosenBox = wall === "etics" && device ? pickEticsBox(maker, "etics-box", 1, options) : kind === "etics-plate" ? pickEticsBox(maker, "etics-plate", 1, options) : kind === "shallow" || kind === "deep" || kind === "electronics" ? pickBox(maker, wall, kind, 1, options) : null;
-  return { need, choice, kind, wall, box: chosenBox, tooShallow, ...(options.halogenFree ? { halogenFree: true } : {}) };
+  // Fáze 94: volné místo za přístrojem podle vestavné hloubky z dat výrobce (jen u přístrojových krabic se známou hloubkou)
+  const boxDepth = chosenBox && (chosenBox.role === "shallow" || chosenBox.role === "deep" || chosenBox.role === "electronics") ? chosenBox.depthMm : null;
+  const freeDepthMm = need.device && boxDepth ? Math.round((boxDepth - need.device.depthMm) * 10) / 10 : undefined;
+  const tooShallow = Boolean(shallower) || (freeDepthMm !== undefined && freeDepthMm < 0);
+  return { need, choice, kind, wall, box: chosenBox, tooShallow, ...(freeDepthMm !== undefined ? { freeDepthMm } : {}), ...(options.halogenFree ? { halogenFree: true } : {}) };
 }
 
 /** Popis krabice do detailu prvku: „Hluboká 66 mm – KOPOS KPR 68 (stmívač 230 V)“. */

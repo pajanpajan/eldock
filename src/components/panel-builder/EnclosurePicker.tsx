@@ -11,6 +11,7 @@ import { ENCLOSURE_MANUFACTURERS, INSTALLATION_LABELS, MOUNTING_FILTERS, fitEncl
 import { cn } from "@/lib/utils";
 import { listEnclosuresAction, selectEnclosureAction } from "@/server/actions/panel-design";
 
+import { EnclosurePhoto } from "./EnclosurePhoto";
 import { ManufacturerLogo } from "./ManufacturerLogo";
 
 
@@ -131,6 +132,9 @@ export function EnclosurePicker({
                     onClick={() => choose(enclosure)}
                     className={cn("grid w-full gap-x-4 gap-y-0.5 rounded-lg border px-3 py-2 text-left text-sm sm:grid-cols-[1.6fr_1fr_1fr]", active ? "border-emerald-500 bg-emerald-500/10" : "border-border hover:border-primary")}
                   >
+                    <span className="flex items-center gap-2">
+                    {/* Fáze 94: oficiální fotka rozvodnice (data ABB ETIM 9.0) */}
+                    <EnclosurePhoto articleNumber={enclosure.articleNumber} label={enclosure.model} size="sm" />
                     <span className="flex flex-col">
                       <b className="flex items-center gap-1.5">
                         {active ? <Check className="size-4 text-emerald-400" aria-hidden /> : null}
@@ -140,6 +144,7 @@ export function EnclosurePicker({
                         {enclosure.rows} × {enclosure.modulesPerRow} M = {enclosure.totalModules} M · {INSTALLATION_LABELS[enclosure.installation as EnclosureInstallation] ?? enclosure.installation}
                         {enclosure.dataSource === "STANDARD_MATRIX" ? " · orientační" : ""}
                       </span>
+                    </span>
                     </span>
                     <span className="font-mono text-xs">
                       V×Š×H {enclosure.heightMm} × {enclosure.widthMm} × {enclosure.depthMm} mm

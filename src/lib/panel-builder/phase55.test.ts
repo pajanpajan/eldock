@@ -132,7 +132,8 @@ describe("kusovník domovní instalace", () => {
 
   it("Tango: dělený kryt je odvozený (ověřit), řada bez matice a dvoubarevný kód bez vymyšleného čísla", () => {
     const tango = compileFloorplanBom({ ...emptyDraft(), series: "ABB|Tango", color: seriesColors("ABB|Tango")[0].id, elements: [el("s", "switch-6-6")] });
-    expect(tango.find((row) => row.category === "Kryty spínačů")).toMatchObject({ mpn: "3558A-A652 B", verified: false });
+    // Fáze 94: odvozený dělený kryt potvrzují oficiální data výrobce ABB ETIM 9.0 → ověřený, s EAN
+    expect(tango.find((row) => row.category === "Kryty spínačů")).toMatchObject({ mpn: "3558A-A652 B", verified: true, ean: "8595017208188" });
     // Řada bez matice objednacích čísel (Classic) – číslo se nevymýšlí; fáze 91 – Decento má kompletní přístroje z katalogu
     const classic = compileFloorplanBom({ ...emptyDraft(), series: "ABB|Classic", color: seriesColors("ABB|Classic")[0].id, elements: [el("z", "socket")] });
     expect(classic.find((row) => row.category === "Zásuvky")?.mpn).toBeNull();
@@ -142,6 +143,8 @@ describe("kusovník domovní instalace", () => {
     // Fáze 74: dvoubarevný kód „241/141“ = rámeček 241 / kryt 141 – zásuvka (kryt) dostane 141, rámeček 241 (obojí ověřit)
     expect(twoTone.find((row) => row.category === "Zásuvky")).toMatchObject({ mpn: "6619T-A06657 141", verified: false });
     expect(twoTone.find((row) => row.category === "Rámečky")).toMatchObject({ mpn: "3901T-A00010 241", verified: false });
+    // Fáze 94: dvoubarevná čísla Zoni data ETIM 9.0 výrobce neuvádějí – zůstanou „ověřit“ a bez EAN
+    expect(twoTone.find((row) => row.category === "Rámečky")?.ean).toBeUndefined();
     // Fáze 91: retrofit – zásuvka do mělké krabice, vypínač s modulem pod vypínač do krabice 70 mm s prostorem pro elektroniku
     expect(compileFloorplanBom({ ...emptyDraft(), installation: "smart_retrofit", elements: [el("z", "socket")] }, { installation: "smart_retrofit" }).find((row) => row.category === "Instalační krabice")?.mpn).toBe("KU 68-45_KA");
     const retrofit = compileFloorplanBom({ ...emptyDraft(), installation: "smart_retrofit", elements: [el("l", "ceiling-light"), el("s", "switch-1", { controls: ["l"] })] }, { installation: "smart_retrofit" });

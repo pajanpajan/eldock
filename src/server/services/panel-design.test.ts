@@ -5,6 +5,7 @@ import { defaultConfig } from "@/lib/panel-builder/configurator";
 import type { ExternalProduct } from "@/lib/panel-builder/external-catalog";
 import { railCapacities } from "@/lib/panel-builder/rails";
 import { VERIFIED_ENCLOSURES } from "@/lib/panel-builder/verified-enclosures";
+import { etimEnclosures } from "@/lib/panel-builder/etim-enclosures";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 
 import { seedPanelBuilder } from "../../../prisma/seed-panel-builder";
@@ -100,7 +101,8 @@ describe("návrh rozváděče od nuly (fáze 43)", () => {
     await selectEnclosure(prisma, id, target.id);
     expect(await project(id)).toMatchObject({ enclosureId: target.id, enclosureModel: `ABB ${target.model}`, enclosureType: "FLUSH_MOUNTED", ipRating: "IP 30", widthMm: target.widthMm, heightMm: target.heightMm, enclosurePmaxW: target.pMaxW });
     // Standardní matice = všechny skříně kromě ověřených rozvodnic výrobců (fáze 86, vč. ABB CA35R 144M z fáze 47)
-    expect(await seedStandardEnclosures(prisma)).toBe((await prisma.panelEnclosure.count()) - VERIFIED_ENCLOSURES.length);
+    // a rozvodnic ABB z dat ETIM 9.0 (fáze 94)
+    expect(await seedStandardEnclosures(prisma)).toBe((await prisma.panelEnclosure.count()) - VERIFIED_ENCLOSURES.length - etimEnclosures().length);
   });
 
   it("logo a razítko firmy", async () => {

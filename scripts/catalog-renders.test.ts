@@ -28,7 +28,9 @@ describe("fáze 80 – produktové náhledy řad ABB (public/catalog-images)", (
         for (const part of ["switch", "socket", "set"] as const) expect(seriesPhoto(key, color.id, part)?.src, `${key} ${color.id} ${part}`).toMatch(/^\/catalog-images\/abb\//);
       }
     }
-    expect(CATALOG_IMAGES.every((image) => image.source.startsWith("Eldock") || image.series === "smart" || !image.src.includes("/abb/"))).toBe(true);
+    // Fáze 94: vedle vlastních renderů Eldocku i fotky výrobce z dat ABB ETIM 9.0 (manifest a fotky rozvodnic)
+    expect(CATALOG_IMAGES.every((image) => image.source.startsWith("Eldock") || image.photo || image.series === "smart" || image.series === "enclosure" || !image.src.includes("/abb/"))).toBe(true);
+    expect(CATALOG_IMAGES.filter((image) => image.src.includes("/abb/") && !image.source.startsWith("Eldock")).every((image) => image.source.startsWith("ABB – oficiální data ETIM 9.0"))).toBe(true);
   });
 
   it("render nese typické prvky řady: Levit podložka, Tango vypouklý rámeček, Time kovové lišty, Zoni prolis; zásuvka s ochranným kolíkem, bez skriptů", () => {

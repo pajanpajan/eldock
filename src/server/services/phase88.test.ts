@@ -27,7 +27,10 @@ describe("fáze 88 – katalog ABB pro ČR v databázi", () => {
       typeCode: "F204 A-40/0,03",
       series: "System pro M compact F200",
       category: "RCD",
-      dataSource: "IEC_ESTIMATE",
+      // Fáze 94: ztrátový výkon z oficiálních dat výrobce ABB ETIM 9.0 (EF005387) – už ne odhad podle IEC
+      dataSource: "SEED_CATALOG",
+      powerLossWatts: 9.6,
+      ean: "8012542783503",
       externalSource: null,
       datasheetUrl: expect.stringMatching(/^https:\/\/nizke-napeti\.cz\.abb\.com\/f200-typ-a-10ka-sirka-4-moduly-17008\/.+\?mime=pdf$/),
     });

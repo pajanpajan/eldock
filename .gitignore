@@ -65,3 +65,7 @@ public/*.mp4
 /.next-tutorials/
 /tutorials.db*
 /.tutorials-work/
+
+# Fáze 94: zdrojová data výrobců ETIM (stovky MB XML) – do gitu jen vyextrahované WebP fotky a JSON katalog
+**/ELSB_ETIM*.zip
+data/etim/raw/**

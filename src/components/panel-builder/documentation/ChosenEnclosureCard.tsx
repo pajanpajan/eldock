@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import type { EnclosureSummary } from "@/lib/panel-builder/enclosure-choice";
 import { cn } from "@/lib/utils";
 
+import { EnclosurePhoto } from "../EnclosurePhoto";
+
 /**
  * Fáze 85: „🗄️ Zvolená rozvodnice a skříň“ v posledním kroku – náhled čela s dvířky i bez nich (DIN lišty
  * a přístroje), technický popis, typové označení, objednací číslo (MPN, u orientační skříně „ověřte“), zkopírování
@@ -79,6 +81,8 @@ export function ChosenEnclosureCard({
             {/* Vlastní vektorový výkres čela (bez vstupů uživatele) */}
             <div className="rounded-lg bg-white p-2 [&_svg]:h-auto [&_svg]:w-full" data-testid="chosen-enclosure-render" data-door={door ? summary.door : "none"} dangerouslySetInnerHTML={{ __html: svg }} />
             <p className="text-[11px] text-muted-foreground">Náhled čela s DIN lištami a přístroji návrhu; dvířka jsou orientační ({summary.door === "transparent" ? "kouřová průhledná" : "plná"}).</p>
+            {/* Fáze 94: oficiální fotka rozvodnice (data ABB ETIM 9.0) */}
+            <EnclosurePhoto articleNumber={summary.mpn} label={summary.typeDesignation} />
           </div>
           <div className="flex min-w-0 flex-col gap-3">
             <p className="text-sm" data-testid="chosen-enclosure-description">

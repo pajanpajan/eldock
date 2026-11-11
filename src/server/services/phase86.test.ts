@@ -5,6 +5,7 @@ import { enclosureSeries } from "@/lib/panel-builder/enclosure-choice";
 import type { ExternalProduct } from "@/lib/panel-builder/external-catalog";
 import { railCapacities } from "@/lib/panel-builder/rails";
 import { VERIFIED_ENCLOSURES, VERIFIED_ENCLOSURE_SOURCE } from "@/lib/panel-builder/verified-enclosures";
+import { etimEnclosures } from "@/lib/panel-builder/etim-enclosures";
 
 import { seedPanelBuilder } from "../../../prisma/seed-panel-builder";
 import { importExternalCatalog, seedStandardEnclosures, seedVerifiedEnclosures } from "./catalog-sync";
@@ -23,6 +24,8 @@ beforeEach(async () => {
 afterEach(() => db.cleanup());
 
 const verifiedCount = () => prisma.panelEnclosure.count({ where: { dataSource: VERIFIED_ENCLOSURE_SOURCE } });
+// Fáze 94: ověřený seznam + rozvodnice ABB z dat ETIM 9.0, které seznam nemá (stejný zdroj „katalog výrobce“)
+const VERIFIED_TOTAL = VERIFIED_ENCLOSURES.length + etimEnclosures().length;
 const labels = async (manufacturer: string) => enclosureSeries(await listEnclosures(prisma, manufacturer)).map((series) => series.label);
 
 /** Záznam exportu databáze prvků se stejným objednacím číslem jako ověřená rozvodnice Hager (jiné údaje). */
@@ -43,9 +46,9 @@ const conflicting: ExternalProduct = {
 
 describe("fáze 86 – ověřené rozvodnice výrobců v katalogu skříní", () => {
   it("seed: všechny ověřené rozvodnice, přírůstkově a opakovatelně; ABB CA35R z fáze 47 je v řadě ComfortLine CA", async () => {
-    expect(await verifiedCount()).toBe(VERIFIED_ENCLOSURES.length);
+    expect(await verifiedCount()).toBe(VERIFIED_TOTAL);
     const before = await prisma.panelEnclosure.count();
-    expect(await seedVerifiedEnclosures(prisma)).toBe(VERIFIED_ENCLOSURES.length);
+    expect(await seedVerifiedEnclosures(prisma)).toBe(VERIFIED_TOTAL);
     expect(await prisma.panelEnclosure.count()).toBe(before);
     expect(await prisma.panelEnclosure.findUniqueOrThrow({ where: { articleNumber: "2CPX052241R9999" } })).toMatchObject({
       manufacturer: "ABB",
@@ -73,11 +76,12 @@ describe("fáze 86 – ověřené rozvodnice výrobců v katalogu skříní", ()
     expect(kept.description).toContain("Zdroj: https://hager.com/cz/katalog/produkt/ve112sn");
     // Ostatní skříně exportu se dál importují
     expect(await prisma.panelEnclosure.findUniqueOrThrow({ where: { articleNumber: "VE118PN" } })).toMatchObject({ dataSource: "EXTERNAL", modulesPerRow: 18 });
-    expect(await verifiedCount()).toBe(VERIFIED_ENCLOSURES.length);
+    expect(await verifiedCount()).toBe(VERIFIED_TOTAL);
   });
 
   it("kaskáda dialogu nového projektu: nové řady s MPN, orientační typy zůstávají", async () => {
-    expect(await labels("ABB")).toEqual(["ComfortLine CA (rozteč 125 mm)", "ComfortLine CA (rozteč 150 mm)", "ComfortLine CU (rozteč 125 mm)", "ComfortLine CU (rozteč 150 mm)", "Mistral41F", "Mistral41W", "Mistral65", "Mistral65H", "Mistral41W (orientační)", "UK600 (orientační)"]);
+    // Fáze 94: + řada ComfortLine Compact CA z dat ABB ETIM 9.0 (Mistral z ETIM doplní stávající řady)
+    expect(await labels("ABB")).toEqual(["ComfortLine CA (rozteč 125 mm)", "ComfortLine CA (rozteč 150 mm)", "ComfortLine Compact CA", "ComfortLine CU (rozteč 125 mm)", "ComfortLine CU (rozteč 150 mm)", "Mistral41F", "Mistral41W", "Mistral65", "Mistral65H", "Mistral41W (orientační)", "UK600 (orientační)"]);
     expect(await labels("Hager")).toEqual(["Univers FWU", "Vector II", "Golf (orientační)", "Volta (orientační)"]);
     expect(await labels("Schrack")).toEqual(["TOPO nástěnná", "TOPO zapuštěná", "Amparo (orientační)", "Amparo UP (orientační)"]);
     expect(await labels("Rittal")).toEqual(["AX (orientační)"]);

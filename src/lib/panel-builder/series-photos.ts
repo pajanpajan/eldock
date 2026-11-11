@@ -7,7 +7,8 @@
 import type { CatalogImage } from "./catalog-images";
 import { CATALOG_IMAGES } from "./catalog-images.generated";
 
-export type SeriesPhotoPart = "switch" | "socket" | "set";
+/** Fáze 94: „frame“ = rámeček 1R v barvě (dlaždice barvy rámečku). */
+export type SeriesPhotoPart = "switch" | "socket" | "set" | "frame";
 
 export interface SeriesPhoto {
   /** Klíč řady „ABB|Tango“. */
@@ -22,6 +23,8 @@ export interface SeriesPhoto {
   license: string;
   /** Fáze 92: reálná fotka (stažená harvesterem nebo nahraná ve velínu), jinak render / kresba. */
   photo?: boolean;
+  /** Fáze 94: objednací číslo vyfoceného výrobku (fotka z dat ABB ETIM 9.0). */
+  mpn?: string;
 }
 
 /**
@@ -39,7 +42,7 @@ export const ALL_SERIES_PHOTOS: readonly SeriesPhoto[] = [
   ...SERIES_PHOTOS,
   // Fáze 92: reálné fotky (`manifest.json`) před rendery stejného dílu a barvy
   ...CATALOG_IMAGES.filter((image): image is CatalogImage & { part: SeriesPhotoPart } => image.part !== "product")
-    .map((image) => ({ series: image.series, ...(image.color ? { color: image.color } : {}), part: image.part, src: image.src, source: image.source, license: image.license, ...(image.photo ? { photo: true } : {}) }))
+    .map((image) => ({ series: image.series, ...(image.color ? { color: image.color } : {}), part: image.part, src: image.src, source: image.source, license: image.license, ...(image.photo ? { photo: true } : {}), ...(image.mpn ? { mpn: image.mpn } : {}) }))
     .sort((a, b) => Number(Boolean(b.photo)) - Number(Boolean(a.photo))),
 ];
 

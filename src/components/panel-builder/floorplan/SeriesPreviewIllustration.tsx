@@ -76,6 +76,12 @@ export function SeriesPreviewIllustration({
 }) {
   const input = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
+  // Fáze 94: objednací číslo vyfoceného výrobku (fotka z dat ABB ETIM 9.0)
+  const mpn = photo?.mpn ? (
+    <span className="font-mono text-[10px] text-muted-foreground/80" data-testid="gallery-photo-mpn">
+      č. {photo.mpn}
+    </span>
+  ) : null;
   const body = photo ? (
     // eslint-disable-next-line @next/next/no-img-element -- fotky z public/catalog-images a z úložiště katalogu (/api/catalog-images)
     <img src={photo.src} alt={`${caption} – ${photo.photo ? "fotka" : "náhled"} řady`} className="h-28 w-auto max-w-full rounded-lg object-contain shadow-sm" data-testid="gallery-photo" data-real={photo.photo ? "true" : "false"} />
@@ -87,6 +93,7 @@ export function SeriesPreviewIllustration({
       <figure className="flex flex-col items-center gap-1 text-[11px] text-muted-foreground" data-photo={photo ? "true" : "false"} data-real={photo?.photo ? "true" : "false"} data-slot={slot.part}>
         {body}
         {caption}
+        {mpn}
       </figure>
     );
   }
@@ -118,6 +125,7 @@ export function SeriesPreviewIllustration({
     >
       {body}
       {caption}
+      {mpn}
       <span className="flex items-center gap-1 text-[10px] text-yellow-200">
         {upload.busy && upload.selected ? <Loader2 className="size-3 animate-spin" aria-hidden /> : null}
         {upload.selected ? "Vybráno – Ctrl+V vloží fotku" : "Klikněte a vložte Ctrl+V"}

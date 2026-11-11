@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import type { SeriesMaterial, SeriesShape } from "@/lib/panel-builder/abb-catalog-2026";
+import { ETIM_FRAMES } from "@/lib/panel-builder/abb-etim.generated";
 import { lookOf, mockStyle, type LookColor } from "@/lib/panel-builder/series-look";
 import { renderDeviceSvg, type RenderGang } from "@/lib/panel-builder/series-render";
 import { seriesLink } from "@/lib/panel-builder/series-links";
@@ -104,6 +105,9 @@ export function SeriesGallery({ seriesKey, color, frameColor = null, available, 
   const link = seriesLink(seriesKeyOf);
   const colorId = chosen?.id ?? pick.color;
   const sourceText = photoSource.trim() || `${brand.label} – web / katalog výrobce`;
+  // Fáze 94: rámečky 1R–5R barvy (rámečku) podle oficiálních dat ABB ETIM 9.0 – objednací číslo, EAN, v datech výrobce
+  const etimFrames = ETIM_FRAMES[`${seriesKeyOf}|${pick.frameColor ?? colorId}`] ?? null;
+  const setPhoto = !pick.frameColor ? seriesPhoto(seriesKeyOf, colorId, "set", photos) : null;
 
   /** Fáze 92: fotka do slotu (velín) – hned v galerii a pro všechny uživatele. */
   async function sendPhoto(target: PhotoSlot, file: Blob) {
@@ -224,7 +228,8 @@ export function SeriesGallery({ seriesKey, color, frameColor = null, available, 
                 // Fáze 90: monobloky nemají víceramček – nástěnná dvojzásuvka pod odklápěcími víčky
                 <SeriesPreviewIllustration photo={seriesPhoto(seriesKeyOf, colorId, "set", photos)} slot={{ part: "set", color: colorId }} upload={uploadFor("set")} caption={`Dvojzásuvka ${series.ip ?? "IP44"} s odklápěcím víčkem (nástěnná)`} mockup={<DeviceMockup seriesKey={seriesKeyOf} shape={shape} color={look} items={["socket", "socket"]} className="h-28 w-full max-w-60 rounded-lg" label={`Dvojzásuvka ${series.name} s víčkem`} />} />
               ) : (
-                <SeriesPreviewIllustration photo={!pick.frameColor ? seriesPhoto(seriesKeyOf, colorId, "set", photos) : null} slot={{ part: "set", color: colorId }} upload={uploadFor("set")} caption={series.fixedPairs ? "3 samostatné přístroje · rozteč 91 mm" : "Víceramček 3R – vypínač + 2 zásuvky"} mockup={<DeviceMockup seriesKey={seriesKeyOf} shape={shape} color={look} items={["switch", "socket", "socket"]} className="h-28 w-full max-w-80 rounded-lg" label={`Víceramček 3R ${series.name}`} />} />
+                // Fáze 94: fotka z dat ETIM = prázdný rámeček 2R (víceramček), render = sestava 3R
+                <SeriesPreviewIllustration photo={setPhoto} slot={{ part: "set", color: colorId }} upload={uploadFor("set")} caption={series.fixedPairs ? "3 samostatné přístroje · rozteč 91 mm" : setPhoto?.mpn ? "Víceramček – rámeček 2R" : "Víceramček 3R – vypínač + 2 zásuvky"} mockup={<DeviceMockup seriesKey={seriesKeyOf} shape={shape} color={look} items={["switch", "socket", "socket"]} className="h-28 w-full max-w-80 rounded-lg" label={`Víceramček 3R ${series.name}`} />} />
               )}
             </div>
             {/* Fáze 80: zdroj a podmínky užití náhledů jednou pod řádkem náhledů */}
@@ -284,9 +289,17 @@ export function SeriesGallery({ seriesKey, color, frameColor = null, available, 
               </button>
               {frameColors.map((option) => {
                 const seriesColor = [...(series.frames ?? []), ...(series.colors ?? [])].find((candidate) => candidate.id === option.id) ?? null;
+                // Fáze 94: skutečná fotka rámečku 1R v barvě (data ABB ETIM 9.0), jinak barevný čtvereček
+                const framePhoto = seriesPhoto(seriesKeyOf, option.id, "frame", photos);
+                const ownPhoto = framePhoto && framePhoto.color === option.id ? framePhoto : null;
                 return (
-                  <button key={option.id} type="button" role="radio" aria-checked={pick.frameColor === option.id} onClick={() => setPick((value) => ({ ...value, frameColor: option.id === value.color ? null : option.id }))} className={cn("flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px]", pick.frameColor === option.id ? "border-primary bg-primary/15 text-foreground" : "border-border text-muted-foreground hover:text-foreground")} data-testid="gallery-frame-color">
-                    <span className="size-3.5 rounded-[3px] border-[3px]" style={{ borderColor: seriesColor?.frame ?? option.swatch }} aria-hidden />
+                  <button key={option.id} type="button" role="radio" aria-checked={pick.frameColor === option.id} onClick={() => setPick((value) => ({ ...value, frameColor: option.id === value.color ? null : option.id }))} className={cn("flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px]", ownPhoto && "py-0.5 pl-1", pick.frameColor === option.id ? "border-primary bg-primary/15 text-foreground" : "border-border text-muted-foreground hover:text-foreground")} data-testid="gallery-frame-color" data-photo={ownPhoto ? "true" : "false"}>
+                    {ownPhoto ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- fotka rámečku z public/catalog-images
+                      <img src={ownPhoto.src} alt="" className="size-7 rounded-full bg-white object-contain" loading="lazy" decoding="async" data-testid="gallery-frame-photo" />
+                    ) : (
+                      <span className="size-3.5 rounded-[3px] border-[3px]" style={{ borderColor: seriesColor?.frame ?? option.swatch }} aria-hidden />
+                    )}
                     {option.label}
                   </button>
                 );
@@ -316,7 +329,26 @@ export function SeriesGallery({ seriesKey, color, frameColor = null, available, 
                     <dd className="font-mono">{details.code} (přípona objednacího čísla krytu{frameChosen ? "" : " / rámečku"})</dd>
                   </>
                 ) : null}
-                {(frameChosen ?? details).frameMpn?.some(Boolean) ? (
+                {etimFrames?.length ? (
+                  // Fáze 94: rámečky z kusovníku ověřené v oficiálních datech ABB ETIM 9.0 (objednací číslo + EAN)
+                  <>
+                    <dt className="text-muted-foreground">Rámečky 1R–5R</dt>
+                    <dd className="flex flex-col gap-0.5" data-testid="gallery-etim-frames">
+                      <span className="flex flex-wrap gap-x-2 gap-y-0.5 font-mono">
+                        {etimFrames.map((frame) => (
+                          <span key={frame.gangs} className={cn(!frame.inEtim && "text-amber-300")} title={frame.inEtim ? `v datech ABB ETIM 9.0${frame.gtin ? ` · EAN ${frame.gtin}` : ""}` : "objednací číslo v datech ABB ETIM 9.0 není – ověřte u výrobce"} data-testid="gallery-etim-frame" data-in-etim={frame.inEtim ? "true" : "false"}>
+                            {frame.gangs}R {frame.mpn} {frame.inEtim ? "✓" : "⚠"}
+                          </span>
+                        ))}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground">
+                        {etimFrames.every((frame) => frame.inEtim)
+                          ? "✓ všechna čísla jsou v oficiálních datech výrobce ABB ETIM 9.0 (EAN v kusovníku)"
+                          : `⚠ ${etimFrames.filter((frame) => !frame.inEtim).length} z ${etimFrames.length} čísel data ABB ETIM 9.0 neuvádějí – ověřte u výrobce`}
+                      </span>
+                    </dd>
+                  </>
+                ) : (frameChosen ?? details).frameMpn?.some(Boolean) ? (
                   <>
                     <dt className="text-muted-foreground">Rámečky 1R–5R</dt>
                     <dd className="font-mono">{(frameChosen ?? details).frameMpn!.map((mpn, index) => `${index + 1}R ${mpn ?? "–"}`).join(" · ")}</dd>

@@ -3,6 +3,8 @@ import { createHash } from "node:crypto";
 import type { PrismaClient } from "@/generated/prisma/client";
 import { standardEnclosureMatrix } from "@/lib/panel-builder/enclosures";
 import { EXTERNAL_SOURCE, deriveRelations, mapExternalProduct, type ExternalProduct, type MappedComponent, type MappedEnclosure } from "@/lib/panel-builder/external-catalog";
+import { ABB_ETIM_COMPONENTS, type EtimComponentData } from "@/lib/panel-builder/abb-etim-components.generated";
+import { etimEnclosures } from "@/lib/panel-builder/etim-enclosures";
 import { VERIFIED_ENCLOSURES, VERIFIED_ENCLOSURE_SOURCE, verifiedEnclosureData } from "@/lib/panel-builder/verified-enclosures";
 import { mapWiringDevice, type ExternalWiringDevice } from "@/lib/panel-builder/wiring-devices";
 
@@ -122,8 +124,32 @@ export async function seedStandardEnclosures(prisma: PrismaClient) {
  * databáze řádky s `MANUFACTURER_CATALOG` přeskočí – data výrobce tak nic nepřebije.
  */
 export async function seedVerifiedEnclosures(prisma: PrismaClient) {
-  const rows = VERIFIED_ENCLOSURES.map(verifiedEnclosureData);
+  // Fáze 94: + rozvodnice ABB z oficiálních dat ETIM 9.0, které ověřený seznam ještě nemá
+  const rows = [...VERIFIED_ENCLOSURES, ...etimEnclosures()].map(verifiedEnclosureData);
   await inBatches(rows, (batch) => prisma.$transaction(batch.map((data) => prisma.panelEnclosure.upsert({ where: { articleNumber: data.articleNumber }, create: data, update: data }))));
+  return rows.length;
+}
+
+/**
+ * Fáze 94: oficiální data ABB ETIM 9.0 ke kusům katalogu podle objednacího čísla – EAN, ztrátový výkon Pv [W] (už ne odhad
+ * IEC), vestavná hloubka [mm] a technický list (jen kde kus žádný nemá). Běží až po importu externí databáze, aby ho
+ * nepřepsal. Vrací počet upravených kusů.
+ */
+export async function applyEtimComponents(prisma: PrismaClient, data: Readonly<Record<string, EtimComponentData>> = ABB_ETIM_COMPONENTS) {
+  const rows = await prisma.catalogComponent.findMany({ where: { articleNumber: { in: Object.keys(data) } }, select: { id: true, articleNumber: true, datasheetUrl: true } });
+  const updates = rows.map((row) => {
+    const etim = data[row.articleNumber];
+    return prisma.catalogComponent.update({
+      where: { id: row.id },
+      data: {
+        ...(etim.ean ? { ean: etim.ean } : {}),
+        ...(etim.powerLossWatts ? { powerLossWatts: etim.powerLossWatts, dataSource: "SEED_CATALOG" as const } : {}),
+        ...(etim.depthMm ? { depthMm: etim.depthMm } : {}),
+        ...(etim.datasheetUrl && !row.datasheetUrl ? { datasheetUrl: etim.datasheetUrl } : {}),
+      },
+    });
+  });
+  await inBatches(updates, (batch) => prisma.$transaction([...batch]));
   return rows.length;
 }
 

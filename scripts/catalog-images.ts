@@ -79,7 +79,7 @@ export async function scanCatalogImages(): Promise<{ images: CatalogImage[]; ski
             skipped.push(`${relative} (větší než ${CATALOG_IMAGE_MAX_BYTES / 1024 / 1024} MB)`);
             continue;
           }
-          const entry = catalogImageEntry(maker.name, series.name, file, { source: photo.source, license: photo.license }, { photo: true });
+          const entry = catalogImageEntry(maker.name, series.name, file, { source: photo.source, license: photo.license }, { photo: true, ...(photo.mpn ? { mpn: photo.mpn } : {}) });
           if (entry) images.push(entry);
           else skipped.push(`${relative} (neznámý výrobce / řada / díl)`);
           continue;

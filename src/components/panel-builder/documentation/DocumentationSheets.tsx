@@ -479,7 +479,11 @@ export function DocumentationSheets({ data }: { data: DocumentationData }) {
                 {data.homeBom.filter((row) => !row.box).map((row) => (
                   <tr key={`${row.category}-${row.mpn ?? row.name}-${row.appearance}`}>
                     <td className={cell}>{row.category}</td>
-                    <td className={`${cell} font-mono`}>{row.mpn ? `${row.mpn}${row.verified ? "" : " (ověřit)"}` : "doplnit"}</td>
+                    <td className={`${cell} font-mono`}>
+                      {row.mpn ? `${row.mpn}${row.verified ? "" : " (ověřit)"}` : "doplnit"}
+                      {/* Fáze 94: EAN z oficiálních dat výrobce ABB ETIM 9.0 */}
+                      {row.ean ? <span className="block text-[6.5pt] text-zinc-500">EAN {row.ean}</span> : null}
+                    </td>
                     <td className={cell}>{row.name}</td>
                     <td className={cell}>{row.appearance}</td>
                     <td className={`${cell} text-right font-mono`}>

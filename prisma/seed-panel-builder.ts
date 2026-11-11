@@ -22,7 +22,7 @@ import { demoDetections } from "../src/lib/panel-builder/matching";
 import { REFERENCE_DEVICES, REFERENCE_DIMS, withPositions } from "../src/lib/panel-builder/reference";
 import { applyDetections, applyProposedTree } from "../src/server/services/panel-builder";
 import { ROUTINE_TEST_POINTS } from "../src/lib/legislation-2027";
-import { importExternalCatalog, importWiringDevices, seedStandardEnclosures, seedVerifiedEnclosures } from "../src/server/services/catalog-sync";
+import { applyEtimComponents, importExternalCatalog, importWiringDevices, seedStandardEnclosures, seedVerifiedEnclosures } from "../src/server/services/catalog-sync";
 import { readSnapshot, readWiringSnapshot } from "./external-catalog-source";
 import { TESTER_COMPANY } from "../src/lib/registered-company";
 import { hashPassword } from "../src/server/password";
@@ -505,7 +505,9 @@ export async function seedPanelBuilder(prisma: PrismaClient, options: { external
   const external = snapshot ? await step("externí databáze prvků", () => importExternalCatalog(prisma, snapshot), null) : null;
   const wiringRows = options.external === false ? null : readWiringSnapshot();
   if (wiringRows) await step("domovní přístroje", () => importWiringDevices(prisma, wiringRows), null);
-  return { components, project, tester, enclosures, verifiedEnclosures, external, fans, failures };
+  // Fáze 94: oficiální data ABB ETIM 9.0 (EAN, Pv, vestavná hloubka, technický list) až po importu externí databáze
+  const etim = await step("data ABB ETIM 9.0", () => applyEtimComponents(prisma), 0);
+  return { components, project, tester, enclosures, verifiedEnclosures, external, fans, etim, failures };
 }
 
 /** Filtrační ventilátory rozváděčů – upsert podle objednacího čísla. Vrací počet ventilátorů. */
