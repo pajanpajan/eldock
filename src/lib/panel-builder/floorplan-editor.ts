@@ -35,7 +35,8 @@ import {
   type LightingSocketA,
 } from "@/engine/floorplan-bridge";
 
-import { DEFAULT_COLOR, appearanceLabel, designColor } from "./wiring-designs";
+import { DEFAULT_BOX_MAKER, DEFAULT_WALL_TYPE, isBoxChoice, isBoxMaker, isWallType, type BoxChoice, type BoxMaker, type WallType } from "./box-options";
+import { DEFAULT_COLOR, appearanceLabel, designColor, migrateSeriesColor } from "./wiring-designs";
 import { CUSTOM_APPLIANCE_ITEM, applianceOverride, applianceSpecFor, parseApplianceList, type ApplianceSpec } from "./appliances";
 import { clampFixture, fixtureSpecOf, isBasinZone, type BasinZone } from "./fixtures";
 import { isPolygonRoom, nearestWall, pointInRoom, polygonBounds, roomArea, roomPolygon, translatePolygon } from "./room-geometry";
@@ -129,6 +130,9 @@ export const PALETTE: PaletteItem[] = [
   { id: "worktop-socket", group: "sockets", label: "Zásuvka nad linkou", symbol: "ZL", kind: "double_socket", variant: "worktop" },
   { id: "ip44-socket", group: "sockets", label: "Zásuvka IP44 koupelna / venek", symbol: "Z44", kind: "single_socket", variant: "ip44" },
   { id: "data-socket", group: "sockets", label: "Datová zásuvka RJ45", symbol: "RJ", kind: "data_socket" },
+  // Fáze 91: zásuvky s hlubokým strojkem (hluboká instalační krabice 66 mm)
+  { id: "usb-socket", group: "sockets", label: "Zásuvka s USB-A / USB-C nabíječkou", symbol: "ZUSB", kind: "single_socket", variant: "usb" },
+  { id: "surge-socket", group: "sockets", label: "Zásuvka s přepěťovou ochranou T3", symbol: "ZT3", kind: "single_socket", variant: "surge" },
   { id: "ceiling-light", group: "lights", label: "Stropní svítidlo", symbol: "⊗", kind: "light" },
   { id: "wall-light", group: "lights", label: "Nástěnné svítidlo", symbol: "◐", kind: "light", variant: "wall" },
   // Fáze 77: LED pásek (výchozí 24 V DC PWM ze zdroje v rozváděči) a bodové podhledové svítidlo
@@ -297,6 +301,8 @@ export interface EditorElement {
   drive?: BlindDrive;
   /** Fáze 77: pohon termostatické hlavice (bez údaje 24 V DC). */
   headDrive?: HeadDrive;
+  /** Fáze 91: ruční volba instalační krabice (bez údaje automaticky podle přístroje). */
+  box?: BoxChoice;
 }
 
 /** Fáze 61: zátěž svítidla pro chytrou domácnost. */
@@ -418,6 +424,8 @@ export interface EditorRoom {
   h: number;
   /** Fáze 63: polygonální místnost se šikmými stěnami – rohy po obvodu (3–40); bez nich obdélník. */
   points?: { x: number; y: number }[];
+  /** Fáze 91: konstrukce stěn místnosti (koupelna, dřevostavba, fasáda …); bez údaje podle nákresu. */
+  wallType?: WallType;
 }
 
 /**
@@ -550,6 +558,9 @@ export interface FloorplanDraft {
   routeStyle: RouteStyle;
   /** Fáze 82: jištění světelných okruhů, na kterých jsou i zásuvky – 10 A (výchozí) nebo 13 A. */
   lightingSocketA: LightingSocketA;
+  /** Fáze 91: výrobce instalačních krabic a výchozí konstrukce stěn (místnost ji může přepsat). */
+  boxMaker: BoxMaker;
+  wallType: WallType;
   updatedAt: number;
 }
 
@@ -599,6 +610,8 @@ export const emptyDraft = (): FloorplanDraft => ({
   basinZone: "norm",
   routeStyle: "walls",
   lightingSocketA: 10,
+  boxMaker: DEFAULT_BOX_MAKER,
+  wallType: DEFAULT_WALL_TYPE,
   updatedAt: 0,
 });
 
@@ -617,6 +630,7 @@ export function parseDraft(value: unknown): FloorplanDraft | null {
     .slice(0, MAX_FLOORS - 1)
     .map((floor, index) => parseSheet(floor, num, { id: `f${index + 2}`, name: `${index + 2}. NP`, levelMm: (index + 1) * DEFAULT_STOREY_MM }))
     .filter((floor) => !seen.has(floor.id) && seen.add(floor.id));
+  const legacy = migrateLook(draft.color, draft.frameColor);
   // Fáze 74: podružné rozváděče s jedinečným kódem RPn
   return ensureBoardCodes({
     ...base,
@@ -639,8 +653,9 @@ export function parseDraft(value: unknown): FloorplanDraft | null {
     profile: elevationProfile(draft.profile ?? {}),
     mode: draft.mode === "BOTTOM" || draft.mode === "TOP" || draft.mode === "OPTIMIZED" ? draft.mode : "OPTIMIZED",
     series: typeof draft.series === "string" ? draft.series.slice(0, 80) : null,
-    color: typeof draft.color === "string" && designColor(draft.color) ? draft.color : DEFAULT_COLOR,
-    frameColor: typeof draft.frameColor === "string" && designColor(draft.frameColor) ? draft.frameColor : null,
+    // Fáze 91: barvy z doby před auditem katalogu (Busch-axcent / solo carat dvojice, Decento černý dub) → kryt + rámeček
+    color: legacy.color,
+    frameColor: legacy.frameColor,
     installation: isInstallLevel(draft.installation) ? draft.installation : base.installation,
     installMethod: isInstallMethod(draft.installMethod) ? draft.installMethod : base.installMethod,
     groupedCables: Math.round(num(draft.groupedCables, 1, 1, 20)),
@@ -658,6 +673,9 @@ export function parseDraft(value: unknown): FloorplanDraft | null {
     routeStyle: isRouteStyle(draft.routeStyle) ? draft.routeStyle : "walls",
     // Fáze 82: jištění světelného okruhu se zásuvkami (bez údaje 10 A)
     lightingSocketA: isLightingSocketA(draft.lightingSocketA) ? draft.lightingSocketA : 10,
+    // Fáze 91: instalační krabice (starší nákresy KOPOS do zdiva)
+    boxMaker: isBoxMaker(draft.boxMaker) ? draft.boxMaker : DEFAULT_BOX_MAKER,
+    wallType: isWallType(draft.wallType) ? draft.wallType : DEFAULT_WALL_TYPE,
     updatedAt: num(draft.updatedAt, 0, 0, 1e15),
   });
 }
@@ -709,9 +727,8 @@ function parseSheet(raw: Partial<FloorSheet> & Partial<Pick<FloorplanDraft, "flo
       mountHeightMm: typeof element.mountHeightMm === "number" && Number.isFinite(element.mountHeightMm) ? Math.min(6000, Math.max(0, element.mountHeightMm)) : null,
       frameUnits: Math.round(num(element.frameUnits, 1, 1, 5)),
       series: typeof element.series === "string" ? element.series.slice(0, 80) : null,
-      color: typeof element.color === "string" && designColor(element.color) ? element.color : null,
-      // Fáze 74: barva rámečku zvlášť
-      ...(typeof element.frameColor === "string" && designColor(element.frameColor) ? { frameColor: element.frameColor } : {}),
+      // Fáze 74: barva rámečku zvlášť; fáze 91 – převod barev z doby před auditem katalogu
+      ...elementLook(element.color, element.frameColor),
       controls: Array.isArray(element.controls) ? element.controls.filter((id): id is string => typeof id === "string").slice(0, 20) : [],
       rotation: normalizeRotation(element.rotation),
       scale: typeof element.scale === "number" && Number.isFinite(element.scale) ? clampSymbolScale(element.scale) : null,
@@ -761,7 +778,7 @@ function parseSheet(raw: Partial<FloorSheet> & Partial<Pick<FloorplanDraft, "flo
       .filter((room) => room && typeof room.id === "string" && typeof room.name === "string")
       .slice(0, 60)
       .map((room): EditorRoom => {
-        const base = { id: room.id.slice(0, 40), name: room.name.slice(0, 40), x: num(room.x, 0, -1e6, 1e6), y: num(room.y, 0, -1e6, 1e6), w: num(room.w, 1000, 100, 1e6), h: num(room.h, 1000, 100, 1e6) };
+        const base = { id: room.id.slice(0, 40), name: room.name.slice(0, 40), x: num(room.x, 0, -1e6, 1e6), y: num(room.y, 0, -1e6, 1e6), w: num(room.w, 1000, 100, 1e6), h: num(room.h, 1000, 100, 1e6), ...(isWallType(room.wallType) ? { wallType: room.wallType } : {}) };
         // Fáze 63: polygonální místnost – obálka se dopočítá z rohů
         const points = Array.isArray(room.points)
           ? room.points.filter((point) => point && typeof point.x === "number" && typeof point.y === "number").slice(0, 40).map((point) => ({ x: Math.round(num(point.x, 0, -1e6, 1e6)), y: Math.round(num(point.y, 0, -1e6, 1e6)) }))
@@ -881,7 +898,7 @@ function parseSmartExtras(value: unknown): Record<string, number> {
 }
 
 /** Fáze 63: rozměr předmětu, vlastní spotřebič a výrobek prvku z uložených dat; fáze 65 ruční zásuvkový okruh, fáze 74 rozváděč. */
-function parseExtras(element: Partial<EditorElement> & { item: string }, num: Num): Pick<EditorElement, "sizeMm" | "flip" | "appliance" | "product" | "productVariant" | "productBox" | "socketCircuit" | "onLighting" | "boardCode" | "board" | "drive" | "headDrive"> {
+function parseExtras(element: Partial<EditorElement> & { item: string }, num: Num): Pick<EditorElement, "sizeMm" | "flip" | "appliance" | "product" | "productVariant" | "productBox" | "socketCircuit" | "onLighting" | "boardCode" | "board" | "drive" | "headDrive" | "box"> {
   const fixture = fixtureSpecOf(element.item);
   const size = element.sizeMm && typeof element.sizeMm === "object" ? element.sizeMm : null;
   return {
@@ -901,7 +918,27 @@ function parseExtras(element: Partial<EditorElement> & { item: string }, num: Nu
     // Fáze 77: pohon žaluzie a termostatické hlavice
     ...(paletteItem(element.item)?.kind === "blind_motor" && isBlindDrive(element.drive) ? { drive: element.drive } : {}),
     ...(paletteItem(element.item)?.heatingHead && isHeadDrive(element.headDrive) ? { headDrive: element.headDrive } : {}),
+    // Fáze 91: ruční volba instalační krabice (automaticky = bez údaje)
+    ...(isBoxChoice(element.box) && element.box !== "auto" ? { box: element.box } : {}),
   };
+}
+
+/** Fáze 91: barva a rámečku nákresu po převodu starších id (kryt + rámeček ze samostatných palet). */
+function migrateLook(color: unknown, frameColor: unknown): { color: string; frameColor: string | null } {
+  const moved = migrateSeriesColor(typeof color === "string" ? color : null);
+  const own = typeof frameColor === "string" ? (migrateSeriesColor(frameColor)?.frame ?? frameColor) : null;
+  return {
+    color: moved ? moved.color : typeof color === "string" && designColor(color) ? color : DEFAULT_COLOR,
+    frameColor: own && designColor(own) ? own : (moved?.frame ?? null),
+  };
+}
+
+/** Fáze 91: barva klapky a rámečku prvku po převodu starších id. */
+function elementLook(color: unknown, frameColor: unknown): Pick<EditorElement, "color" | "frameColor"> {
+  const moved = migrateSeriesColor(typeof color === "string" ? color : null);
+  const own = typeof frameColor === "string" ? (migrateSeriesColor(frameColor)?.frame ?? frameColor) : null;
+  const frame = own && designColor(own) ? own : moved?.frame;
+  return { color: moved ? moved.color : typeof color === "string" && designColor(color) ? color : null, ...(frame ? { frameColor: frame } : {}) };
 }
 
 /** Výchozí vzhled zakreslených změn (nová příčka červeně šrafovaná, bouraná konstrukce žlutě křížem). */
@@ -1659,11 +1696,13 @@ export function resizeRect(rect: Pick<EditorRoom, "x" | "y" | "w" | "h">, handle
 }
 
 /** Úprava místnosti (název, rozměr); přejmenování se propíše do prvků místnosti. */
-export function updateRoom(draft: FloorplanDraft, roomId: string, patch: Partial<Pick<EditorRoom, "name" | "x" | "y" | "w" | "h">>): FloorplanDraft {
+export function updateRoom(draft: FloorplanDraft, roomId: string, patch: Partial<Pick<EditorRoom, "name" | "x" | "y" | "w" | "h" | "wallType">>): FloorplanDraft {
   const room = draft.rooms.find((candidate) => candidate.id === roomId);
   if (!room) return draft;
   const name = patch.name !== undefined ? patch.name.trim().slice(0, 40) || room.name : room.name;
   let next: EditorRoom = { ...room, ...patch, name, w: Math.max(MIN_ROOM_MM, patch.w ?? room.w), h: Math.max(MIN_ROOM_MM, patch.h ?? room.h) };
+  // Fáze 91: konstrukce stěn „podle nákresu“ = bez vlastní hodnoty
+  if ("wallType" in patch && !patch.wallType) delete next.wallType;
   // Fáze 63: polygonální místnost – nový rozměr obálky přepočítá rohy (posun obálky je posune)
   if (room.points?.length) {
     const kx = next.w / room.w;

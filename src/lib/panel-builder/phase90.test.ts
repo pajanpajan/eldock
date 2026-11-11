@@ -13,7 +13,7 @@ import { PALETTE, PALETTE_GROUPS, emptyDraft, parseDraft, type EditorElement, ty
 import { BATH_ZONE_TOP_MM, floorplanNorms } from "./floorplan-norms";
 import { initialStep, resumeStep, wizardStatus, type WizardProgress } from "./floorplan-wizard";
 import { addRoomBySize, nextRoomPreset, ROOM_SEQUENCE } from "./room-builder";
-import { decentoFramePath } from "./series-look";
+import { decentoCircles } from "./series-look";
 import { compileFloorplanBom } from "./wiring-bom";
 import { appearanceLabel, hasFrameChoice, isMonoblockSeries, seriesColors } from "./wiring-designs";
 
@@ -217,28 +217,30 @@ describe("fáze 90 – ABB Garant, Variant+, Praktik a Decento podle katalogu 20
     expect(isMonoblockSeries("ABB|Decento")).toBe(false);
   });
 
-  it("Decento: pevné dvojice porcelánu a rámečku včetně bílá / černý dub; rámeček se do popisu nepromítne", () => {
+  it("Decento: pevné dvojice porcelánu a rámečku podle katalogu (fáze 91 – bez černého dubu); rámeček se do popisu nepromítne", () => {
     expect(series("Decento").fixedPairs).toBe(true);
-    expect(series("Decento").colors.map((color) => color.label)).toEqual(["Bílá (porcelán)", "Bílá / přírodní buk (50)", "Bílá / třešeň (52)", "Černá (porcelán) (N)", "Bílá / černý dub"]);
+    expect(series("Decento").colors.map((color) => color.label)).toEqual(["Bílá (porcelán)", "Bílá / přírodní buk (50)", "Bílá / třešeň (52)", "Černá (porcelán) (N)"]);
     expect(appearanceLabel("ABB|Decento", "abb-decento-bila-porcelan", "abb-decento-52")).toBe("ABB Decento · Bílá (porcelán)");
   });
 
-  it("náhledy: monoblok s horní vývodkou a víčkem s krytím, Decento jako spojené kruhy s porcelánovým středem a šroubky", () => {
+  it("náhledy: monoblok s horní vývodkou a víčkem s krytím, Decento jako samostatné kulaté přístroje s porcelánovým středem", () => {
     const garant = renderToStaticMarkup(createElement(DeviceMockup, { seriesKey: "ABB|Garant (IP44)", shape: "surface", color: series("Garant (IP44)").colors[0], items: ["socket", "socket"] }));
     expect(garant).toContain('data-testid="mockup-gland"');
     expect(garant.match(/data-testid="mockup-lid"/g)).toHaveLength(2);
     expect(garant).toContain("IP44");
     expect(renderToStaticMarkup(createElement(DeviceMockup, { seriesKey: "ABB|Variant+ (IP54)", shape: "surface", color: series("Variant+ (IP54)").colors[0], items: ["switch"] }))).toContain('data-monoblock="industrial"');
-    const decento = renderToStaticMarkup(createElement(DeviceMockup, { seriesKey: "ABB|Decento", shape: "porcelain", color: series("Decento").colors[4], items: ["switch", "socket", "socket"] }));
+    const decento = renderToStaticMarkup(createElement(DeviceMockup, { seriesKey: "ABB|Decento", shape: "porcelain", color: series("Decento").colors[1], items: ["switch", "socket", "socket"] }));
     expect(decento).toContain('data-outline="decento"');
-    expect(decento.match(/data-testid="mockup-screw"/g)).toHaveLength(4);
+    // Fáze 91: jeden středový upevňovací šroubek v dutině každé zásuvky (žádné tečky po obvodu rámečku)
+    expect(decento.match(/data-testid="mockup-screw"/g)).toHaveLength(2);
+    expect(decento.match(/data-testid="mockup-pin"/g)).toHaveLength(2);
     expect(decento).toContain('data-testid="mockup-lever"');
     expect(decento).toContain('data-testid="mockup-glaze"');
-    // Obrys víceramečku: kruhy spojené pasem (2 pasy nahoře a 2 dole), žádný obdélník
-    const outline = decentoFramePath(3);
-    expect(outline.startsWith("M6 50")).toBe(true);
-    expect(outline.match(/Q/g)).toHaveLength(4);
-    expect(decentoFramePath(1)).not.toContain("Q");
+    // Fáze 91: Decento nejde do víceramečku (Katalog ABB 2026, str. 548) – samostatné kruhy Ø 87 mm po 91 mm (mezera 4 mm)
+    const circles = decentoCircles(3);
+    expect(circles.map((entry) => entry.cx)).toEqual([50, 150, 250]);
+    expect(circles[0].r).toBeCloseTo(47.8, 1);
+    expect(circles[1].cx - circles[0].cx - circles[0].r * 2).toBeGreaterThan(4);
   });
 
   it("kusovník monobloku: kompletní nástěnný přístroj bez rámečku a bez krabice pod omítku", () => {

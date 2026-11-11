@@ -9,11 +9,18 @@
 // Fáze 90: zóny 1 a 2 sahají do výšky 2,25 m (čl. 701.32) – prvek výš (vývod motoru žaluzie v překladu 2,45 m) leží nad
 // zónami; čidla na binární vstup (okenní kontakt MAG, čidlo vody) a hlavice nejsou spínače 230 V; hláška jmenuje prvek,
 // jeho výšku a vzdálenost od vany / sprchy. U umyvadla hlídá pás 0,2 m pod 1,2 m jen přístroje bez krytí IP44.
+// Fáze 91: víceramček, který zvolená řada nevyrábí (Decento, nástěnné řady, Time Arbo / solo carat nad 4R …) – varování
+// s rozdělením jedním klikem; ručně zvolená instalační krabice mělčí, než přístroj a svorkování potřebují – varování
+// s opravou na doporučenou (hlubokou / s prostorem pro elektroniku) krabici.
 
 import { mountHeight } from "@/engine/floorplan-bridge";
 
 import { BASIN_MARGIN_MM, BASIN_RECOMMENDED_MM, BASIN_STRICT_MM, WASH_AREA_TOP_MM, WASH_HIGH_MM, ZONE2_MM, basinPlacement, distanceToFixture, fixtureGeometry, type FixtureGeometry } from "./fixtures";
+import type { BoxChoice } from "./box-options";
 import { floorsOf, paletteItem, type EditorElement, type FloorplanDraft } from "./floorplan-editor";
+import { frameLimitOf, gangsOf } from "./floorplan-frames";
+import { boxMakerLabel, pickBox, resolveBox, wallTypeOf, type BoxDepthClass } from "./mounting-boxes-catalog";
+import { frameRulesOf, splitFrameGangs, splitLabel } from "./residential-series-catalog";
 
 export { ZONE2_MM };
 
@@ -21,14 +28,17 @@ export type NormLevel = "error" | "warning" | "info";
 
 export interface NormIssue {
   id: string;
-  rule: "bath-zone" | "basin-area" | "basin-band" | "basin-strict" | "wet-room-ip" | "outdoor-ip" | "afdd" | "fixture-missing" | "lighting-socket" | "lighting-socket-worktop";
+  rule: "bath-zone" | "basin-area" | "basin-band" | "basin-strict" | "wet-room-ip" | "outdoor-ip" | "afdd" | "fixture-missing" | "lighting-socket" | "lighting-socket-worktop" | "frame-limit" | "box-depth";
   level: NormLevel;
   text: string;
   source: string;
   /** Prvky, kterých se zjištění týká (i z jiných podlaží). */
   elementIds: string[];
-  /** Oprava jedním klikem: záměna prvku za jiný z palety (zásuvka → IP44); fáze 82 – zásuvky zpět na zásuvkový okruh. */
-  fix?: { label: string; replace: { from: string; to: string }[]; offLighting?: string[] };
+  /**
+   * Oprava jedním klikem: záměna prvku za jiný z palety (zásuvka → IP44); fáze 82 – zásuvky zpět na zásuvkový okruh;
+   * fáze 91 – krabice prvků (`boxes`, „auto“ = doporučená) a rozdělení víceramečků po nejvýš `max` pozicích.
+   */
+  fix?: { label: string; replace: { from: string; to: string }[]; offLighting?: string[]; boxes?: { id: string; box: BoxChoice }[]; splitFrames?: { id: string; max: number }[] };
 }
 
 const cm = (mm: number) => `${Math.round(mm / 10)} cm`;
@@ -65,8 +75,8 @@ const ipFix = (elements: EditorElement[]): Pick<NormIssue, "fix"> => {
   return singles.length ? { fix: { label: `Změnit ${singles.length}× na zásuvku IP44`, replace: singles.map((element) => ({ from: element.id, to: "ip44-socket" })) } } : {};
 };
 
-/** Zjištění normového hlídače pro celý dům (všechna podlaží). */
-export function floorplanNorms(draft: FloorplanDraft): NormIssue[] {
+/** Zjištění normového hlídače pro celý dům (všechna podlaží); fáze 91 – `cableEnds` = kabely v krabici prvku (trasy). */
+export function floorplanNorms(draft: FloorplanDraft, context: { cableEnds?: Readonly<Record<string, number>> } = {}): NormIssue[] {
   const issues: NormIssue[] = [];
   for (const floor of floorsOf(draft)) {
     const fixtures = floor.elements
@@ -226,6 +236,88 @@ export function floorplanNorms(draft: FloorplanDraft): NormIssue[] {
       });
     }
   }
+  issues.push(...frameLimitIssues(draft), ...boxDepthIssues(draft, context.cableEnds ?? {}));
+  return issues;
+}
+
+const labelOf = (element: EditorElement) => (paletteItem(element.item)?.label ?? element.item).replace(/\s*\(.*\)$/, "");
+
+/**
+ * Fáze 91: víceramček (nebo N kusů v jednom rámečku) nad limit řady podle katalogu výrobce – kusovník ho rozdělí na
+ * skutečně vyráběné rámečky; oprava rozdělí víceramček i v nákresu.
+ */
+export function frameLimitIssues(draft: FloorplanDraft): NormIssue[] {
+  const issues: NormIssue[] = [];
+  for (const floor of floorsOf(draft)) {
+    for (const frame of floor.frames) {
+      const members = frame.members.map((id) => floor.elements.find((element) => element.id === id)).filter((element): element is EditorElement => Boolean(element));
+      if (members.length < 2) continue;
+      const gangs = members.reduce((sum, element) => sum + gangsOf(element), 0);
+      const limit = frameLimitOf(draft, members[0]);
+      if (gangs <= limit.max) continue;
+      const rules = frameRulesOf(members[0].series ?? draft.series);
+      const parts = splitFrameGangs(gangs, limit.max);
+      const alone = rules.separateDevices || limit.max === 1;
+      issues.push({
+        id: `frame-limit:${frame.id}`,
+        rule: "frame-limit",
+        level: "warning",
+        text: `${floor.name}: víceramček ${gangs}R v místnosti ${members[0].room} (${[...new Set(members.map(labelOf))].join(", ")}) – ${limit.text ?? `rámeček nejvýš ${limit.max}R`} V kusovníku ${alone ? `jako ${gangs} samostatných přístrojů` : `rozdělený na ${splitLabel(parts)}`}.`,
+        source: rules.source,
+        elementIds: members.map((element) => element.id),
+        fix: { label: alone ? "Rozdělit na samostatné přístroje" : `Rozdělit na ${splitLabel(parts)}`, replace: [], splitFrames: [{ id: frame.id, max: limit.max }] },
+      });
+    }
+    const framed = new Set(floor.frames.flatMap((frame) => frame.members));
+    for (const element of floor.elements) {
+      if (framed.has(element.id) || element.frameUnits < 2) continue;
+      const limit = frameLimitOf(draft, element);
+      if (element.frameUnits <= limit.max) continue;
+      issues.push({
+        id: `frame-limit:${element.id}`,
+        rule: "frame-limit",
+        level: "warning",
+        text: `${floor.name}: ${labelOf(element)} v místnosti ${element.room} – ${element.frameUnits} kusů v jednom rámečku, ${limit.text ?? `rámeček nejvýš ${limit.max}R`} V kusovníku rozdělené na ${splitLabel(splitFrameGangs(element.frameUnits, limit.max))}.`,
+        source: frameRulesOf(element.series ?? draft.series).source,
+        elementIds: [element.id],
+      });
+    }
+  }
+  return issues;
+}
+
+const CLASS_LABEL: Record<BoxDepthClass, string> = { shallow: "mělkou krabici", deep: "hlubokou krabici", electronics: "krabici s prostorem pro elektroniku" };
+
+/**
+ * Fáze 91: ručně zvolená instalační krabice mělčí, než přístroj potřebuje (stmívač, termostat, datová zásuvka Cat7,
+ * WAGO svorky pod vypínačem, aktor v krabici …) – varování s doporučenou krabicí výrobce a opravou jedním klikem.
+ */
+export function boxDepthIssues(draft: FloorplanDraft, cableEnds: Readonly<Record<string, number>> = {}): NormIssue[] {
+  const issues: NormIssue[] = [];
+  const maker = draft.boxMaker;
+  for (const floor of floorsOf(draft)) {
+    for (const element of floor.elements) {
+      if (!element.box) continue;
+      const resolved = resolveBox(draft, element, { cableEnds: cableEnds[element.id] });
+      if (!resolved.tooShallow) continue;
+      const need = resolved.need.kind as BoxDepthClass;
+      const chosen = resolved.box;
+      const recommended = pickBox(maker, resolved.wall, need);
+      const other = resolved.wall === "masonry" ? pickBox(maker, "drywall", need) : resolved.wall === "drywall" ? pickBox(maker, "masonry", need) : null;
+      const tip = recommended
+        ? `Doporučujeme ${CLASS_LABEL[need]} ${boxMakerLabel(maker)} ${recommended.type} (${wallTypeOf(resolved.wall).short})${other ? ` nebo ${other.type} (${wallTypeOf(other.walls[0]).short})` : ""}.`
+        : `${boxMakerLabel(maker)} vhodnou krabici ${wallTypeOf(resolved.wall).short} nevede – zvolte jiného výrobce krabic.`;
+      issues.push({
+        id: `box-depth:${element.id}`,
+        rule: "box-depth",
+        level: "warning",
+        text: `⚠️ Nedostatečná hloubka krabičky u ${labelOf(element)} v místnosti ${element.room}: zvolena krabice ${chosen?.depthMm ?? "?"} mm (${chosen ? `${boxMakerLabel(chosen.maker)} ${chosen.type}` : "mělká"}), ale ${resolved.need.reasons.join(", ")} vyžaduje min. ${resolved.need.minDepthMm} mm! ${tip}`,
+        source: "vestavná hloubka přístroje a svorkování (katalogy výrobců přístrojů a krabic)",
+        elementIds: [element.id],
+        fix: { label: need === "electronics" ? "Opravit na krabici s prostorem pro elektroniku (1 klik)" : "Opravit na hlubokou krabici (1 klik)", replace: [], boxes: [{ id: element.id, box: "auto" }] },
+      });
+    }
+  }
   return issues;
 }
 
@@ -235,12 +327,51 @@ export function applyNormFix(draft: FloorplanDraft, issue: NormIssue): Floorplan
   const replace = new Map(issue.fix.replace.map((row) => [row.from, row.to]));
   // Fáze 82: zásuvky ze světelného okruhu zpět na automatický zásuvkový okruh
   const offLighting = new Set(issue.fix.offLighting ?? []);
+  // Fáze 91: krabice prvku („auto“ = doporučená podle přístroje) a rozdělení víceramečků
+  const boxes = new Map((issue.fix.boxes ?? []).map((row) => [row.id, row.box]));
   const map = (element: EditorElement) => {
-    const next = replace.has(element.id) ? { ...element, item: replace.get(element.id)! } : element;
+    let next = replace.has(element.id) ? { ...element, item: replace.get(element.id)! } : element;
+    if (boxes.has(element.id)) {
+      const box = boxes.get(element.id)!;
+      next = { ...next };
+      if (box === "auto") delete next.box;
+      else next.box = box;
+    }
     if (!offLighting.has(element.id) || !next.onLighting) return next;
     const rest = { ...next };
     delete rest.onLighting;
     return rest;
   };
-  return { ...draft, elements: draft.elements.map(map), otherFloors: draft.otherFloors.map((floor) => ({ ...floor, elements: floor.elements.map(map) })) };
+  const splits = new Map((issue.fix.splitFrames ?? []).map((row) => [row.id, row.max]));
+  const frames = <F extends { frames: FloorplanDraft["frames"]; elements: EditorElement[] }>(sheet: F): F["frames"] => (splits.size ? splitFrames(sheet, splits) : sheet.frames);
+  return {
+    ...draft,
+    elements: draft.elements.map(map),
+    frames: frames(draft),
+    otherFloors: draft.otherFloors.map((floor) => ({ ...floor, elements: floor.elements.map(map), frames: frames(floor) })),
+  };
+}
+
+/** Fáze 91: víceramček po skupinách nejvýš `max` pozic (zbylý jednotlivý přístroj zůstane samostatně). */
+function splitFrames(sheet: { frames: FloorplanDraft["frames"]; elements: EditorElement[] }, splits: ReadonlyMap<string, number>): FloorplanDraft["frames"] {
+  return sheet.frames.flatMap((frame) => {
+    const max = splits.get(frame.id);
+    if (max === undefined) return [frame];
+    const groups: string[][] = [];
+    let current: string[] = [];
+    let used = 0;
+    for (const id of frame.members) {
+      const element = sheet.elements.find((candidate) => candidate.id === id);
+      const gangs = element ? gangsOf(element) : 1;
+      if (current.length && used + gangs > max) {
+        groups.push(current);
+        current = [];
+        used = 0;
+      }
+      current.push(id);
+      used += gangs;
+    }
+    if (current.length) groups.push(current);
+    return groups.filter((members) => members.length >= 2).map((members, index) => ({ id: index ? `${frame.id}-${index + 1}` : frame.id, members }));
+  });
 }

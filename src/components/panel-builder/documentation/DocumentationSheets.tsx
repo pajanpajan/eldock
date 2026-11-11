@@ -10,7 +10,7 @@ import { ROUTING_LABEL, type CableReport } from "@/lib/panel-builder/floorplan-e
 import type { ManufacturerInfo } from "@/lib/panel-builder/project";
 import type { ThermalResult } from "@/lib/thermalCalculation";
 import { ROUTINE_TEST_POINTS, minInsulationMOhm, routineTestVerdict, type RoutineTest, type StandardEdition } from "@/lib/legislation-2027";
-import type { WiringBomRow } from "@/lib/panel-builder/wiring-bom";
+import { type WiringBomRow, BOX_TABLE_TITLE } from "@/lib/panel-builder/wiring-bom";
 import type { HotspotSink } from "@/lib/panel-builder/drawings";
 import type { FloorplanDraft } from "@/lib/panel-builder/floorplan-editor";
 import type { DisplayCircuit } from "@/lib/panel-builder/route-display";
@@ -476,7 +476,7 @@ export function DocumentationSheets({ data }: { data: DocumentationData }) {
                 </tr>
               </thead>
               <tbody>
-                {data.homeBom.map((row) => (
+                {data.homeBom.filter((row) => !row.box).map((row) => (
                   <tr key={`${row.category}-${row.mpn ?? row.name}-${row.appearance}`}>
                     <td className={cell}>{row.category}</td>
                     <td className={`${cell} font-mono`}>{row.mpn ? `${row.mpn}${row.verified ? "" : " (ověřit)"}` : "doplnit"}</td>
@@ -489,6 +489,36 @@ export function DocumentationSheets({ data }: { data: DocumentationData }) {
                 ))}
               </tbody>
             </table>
+            {/* Fáze 91: doporučené instalační krabice podle prostředí a hloubky */}
+            {data.homeBom.some((row) => row.box) ? (
+              <>
+                <h3 className="mt-2 font-bold">{BOX_TABLE_TITLE.replace(/^📦\s*/, "")}</h3>
+                <table className="w-full border-collapse text-[8pt]" data-testid="doc-home-boxes">
+                  <thead>
+                    <tr>
+                      <th className={cell}>Výrobce</th>
+                      <th className={cell}>Typové označení</th>
+                      <th className={cell}>Objednací kód</th>
+                      <th className={`${cell} text-right`}>Hloubka (mm)</th>
+                      <th className={cell}>Určení / prostředí</th>
+                      <th className={`${cell} text-right`}>Počet ks</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.homeBom.filter((row) => row.box).map((row) => (
+                      <tr key={`${row.mpn ?? row.name}-${row.box!.maker}`}>
+                        <td className={cell}>{row.box!.maker}</td>
+                        <td className={cell}>{row.box!.type}</td>
+                        <td className={`${cell} font-mono`}>{row.mpn ?? "doplnit"}</td>
+                        <td className={`${cell} text-right font-mono`}>{row.box!.depthMm ?? "–"}</td>
+                        <td className={cell}>{row.box!.purpose}</td>
+                        <td className={`${cell} text-right font-mono`}>{row.quantity}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            ) : null}
           </>
         ) : null}
         {data.cableReport ? <CableReportTable report={data.cableReport} designationOf={(label) => data.functions.find((row) => row.label === label)?.designation ?? null} /> : null}

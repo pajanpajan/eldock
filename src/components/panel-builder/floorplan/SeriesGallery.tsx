@@ -5,11 +5,12 @@ import { ExternalLink, Palette } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import type { SeriesColor, SeriesMaterial, SeriesShape } from "@/lib/panel-builder/abb-catalog-2026";
-import { decentoFramePath, lightness, lookOf, mockStyle, type Look, type MockStyle } from "@/lib/panel-builder/series-look";
+import type { SeriesMaterial, SeriesShape } from "@/lib/panel-builder/abb-catalog-2026";
+import { lookOf, mockStyle, type LookColor } from "@/lib/panel-builder/series-look";
+import { renderDeviceSvg, type RenderGang } from "@/lib/panel-builder/series-render";
 import { seriesLink } from "@/lib/panel-builder/series-links";
 import { seriesPhoto, type SeriesPhotoPart } from "@/lib/panel-builder/series-photos";
-import { DESIGN_BRANDS, designSeriesOf, hasFrameChoice, isMonoblockSeries, seriesColors, type DesignSeries } from "@/lib/panel-builder/wiring-designs";
+import { DESIGN_BRANDS, designSeriesOf, hasFrameChoice, isMonoblockSeries, resolveFrameColor, seriesColors, seriesFrameColors, type DesignSeries } from "@/lib/panel-builder/wiring-designs";
 
 export { lookOf, mockStyle };
 import { cn } from "@/lib/utils";
@@ -23,286 +24,23 @@ import { ManufacturerLogo } from "../ManufacturerLogo";
  * Fáze 90: nástěnné monobloky (Garant, Praktik, Variant+) jako krabicové tělo s horní kabelovou vývodkou a zásuvkou pod
  * odklápěcím víčkem s krytím; Decento jako kulatý porcelán s odleskem glazury, úzkou retro páčkou, zásuvkou se zemnicím
  * kolíkem a dvěma šroubky a víceramečkem ve tvaru spojených kruhů (piškot), u dřevěných variant dřevěný rámeček.
+ * Fáze 91: náhled kreslí studiový engine `series-render.ts` (stejný jako produktové rendery) – Decento jako samostatné
+ * kulaté přístroje (víceramček řada nemá), Busch-axcent s nosným rámečkem a texturou materiálu, Variant+ se zkosenými hranami.
  */
 
-export type MockupItem = "switch" | "socket" | "double" | "blank";
-
-function MaterialDefs({ id, look }: { id: string; look: Look }) {
-  return (
-    <defs>
-      <linearGradient id={`${id}-gloss`} x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0" stopColor="#fff" stopOpacity="0.55" />
-        <stop offset="0.45" stopColor="#fff" stopOpacity="0.06" />
-        <stop offset="1" stopColor="#000" stopOpacity="0.12" />
-      </linearGradient>
-      <linearGradient id={`${id}-metal`} x1="0" y1="0" x2="1" y2="0">
-        {[0, 0.18, 0.36, 0.55, 0.72, 0.9, 1].map((offset, index) => (
-          <stop key={offset} offset={offset} stopColor={index % 2 ? "#fff" : "#000"} stopOpacity={index % 2 ? 0.35 : 0.16} />
-        ))}
-      </linearGradient>
-      <pattern id={`${id}-wood`} width="40" height="14" patternUnits="userSpaceOnUse">
-        <path d="M0 4 C10 1 20 7 40 3 M0 10 C12 7 26 13 40 9" fill="none" stroke="#000" strokeOpacity="0.22" strokeWidth="1.2" />
-      </pattern>
-      <pattern id={`${id}-stone`} width="12" height="12" patternUnits="userSpaceOnUse">
-        <circle cx="2" cy="3" r="0.9" fill="#000" fillOpacity="0.2" />
-        <circle cx="8" cy="7" r="0.7" fill="#fff" fillOpacity="0.35" />
-        <circle cx="5" cy="10" r="0.6" fill="#000" fillOpacity="0.15" />
-      </pattern>
-      <pattern id={`${id}-paper`} width="6" height="6" patternUnits="userSpaceOnUse">
-        <path d="M0 2 L6 3 M1 5 L5 6" stroke="#000" strokeOpacity="0.12" strokeWidth="0.5" />
-      </pattern>
-      <linearGradient id={`${id}-glass`} x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0" stopColor="#fff" stopOpacity="0.5" />
-        <stop offset="0.35" stopColor="#fff" stopOpacity="0.08" />
-        <stop offset="0.36" stopColor="#fff" stopOpacity="0.28" />
-        <stop offset="0.5" stopColor="#fff" stopOpacity="0.04" />
-        <stop offset="1" stopColor="#000" stopOpacity="0.2" />
-      </linearGradient>
-      <radialGradient id={`${id}-porcelain`} cx="0.35" cy="0.3" r="0.8">
-        <stop offset="0" stopColor="#fff" stopOpacity="0.7" />
-        <stop offset="0.6" stopColor="#fff" stopOpacity="0.05" />
-        <stop offset="1" stopColor="#000" stopOpacity="0.15" />
-      </radialGradient>
-      <filter id={`${id}-shadow`} x="-20%" y="-20%" width="140%" height="150%">
-        <feDropShadow dx="0" dy="3" stdDeviation="3" floodColor="#000" floodOpacity={lightness(look.frame) > 0.6 ? 0.25 : 0.45} />
-      </filter>
-    </defs>
-  );
-}
-
-/** Překryv povrchu přes tvar (lesk, kov, dřevo, sklo, kámen, papír, porcelán). */
-function Surface({ id, material, ...shape }: { id: string; material: SeriesMaterial; x: number; y: number; width: number; height: number; rx: number }) {
-  const fill = { gloss: "gloss", metal: "metal", wood: "wood", glass: "glass", stone: "stone", paper: "paper", porcelain: "porcelain", matte: null, softtouch: null }[material];
-  if (!fill) return null;
-  return (
-    <>
-      <rect {...shape} fill={`url(#${id}-${fill})`} pointerEvents="none" />
-      {material === "metal" || material === "wood" || material === "stone" ? <rect {...shape} fill={`url(#${id}-gloss)`} opacity={0.5} pointerEvents="none" /> : null}
-    </>
-  );
-}
-
-/** Jeden přístroj v rámečku (100 × 100 jednotek na pozici). */
-function Gang({ id, kind, x, look, style }: { id: string; kind: MockupItem; x: number; look: Look; style: MockStyle }) {
-  if (kind === "blank") return null;
-  // Fáze 74: klapka podle šířky rámečku řady (tenký rámeček = velká klapka, Busch-axcent = široký rámeček)
-  const inset = Math.min(27, Math.max(14, 7 + style.border));
-  const dark = lightness(look.insert) < 0.45;
-  const ink = dark ? "#d4d4d8" : "#52525b";
-  const hole = dark ? "#0a0a0a" : "#3f3f46";
-  const cover = { x: x + inset, y: inset, width: 100 - inset * 2, height: 100 - inset * 2, rx: style.rocker === "rounded" ? 14 : style.insetRadius };
-  const cx = x + 50;
-  const socket = (dy: number, r: number) => (
-    <g key={dy} transform={`translate(${cx} ${50 + dy})`}>
-      <circle r={r} fill="none" stroke={ink} strokeOpacity={0.45} strokeWidth={1.2} />
-      <circle cx={-r * 0.39} cy={0} r={r * 0.13} fill={hole} />
-      <circle cx={r * 0.39} cy={0} r={r * 0.13} fill={hole} />
-      <rect x={-1.4} y={-r} width={2.8} height={r * 0.33} rx={1} fill={ink} opacity={0.7} />
-    </g>
-  );
-  const sockets = kind === "double" ? [socket(-14, 12), socket(14, 12)] : [socket(0, 18)];
-  // Céliane: kruhový výřez v rámečku, uvnitř kruhová klapka / zásuvka
-  if (style.circle) {
-    return (
-      <g data-gang="circle">
-        <circle cx={cx} cy={50} r={29} fill="#000" opacity={0.18} />
-        <circle cx={cx} cy={50} r={27} fill={look.insert} stroke="#000" strokeOpacity={0.15} strokeWidth={0.8} />
-        {kind === "switch" ? (
-          <>
-            <circle cx={cx} cy={50} r={22} fill="none" stroke={ink} strokeOpacity={0.3} strokeWidth={0.8} />
-            <rect x={cx - 5} y={31} width={10} height={2.2} rx={1.1} fill="#f59e0b" opacity={0.85} />
-          </>
-        ) : (
-          sockets
-        )}
-      </g>
-    );
-  }
-  // Decento (fáze 90): kulatý porcelánový střed s odleskem glazury – spínač s úzkou retro páčkou, zásuvka s kruhovou
-  // dutinou, zemnicím kolíkem a dvěma montážními šroubky
-  if (style.round) {
-    return (
-      <g data-gang="round">
-        <circle cx={cx} cy={50} r={30} fill={look.insert} stroke="#000" strokeOpacity={0.18} strokeWidth={0.8} />
-        <circle cx={cx} cy={50} r={30} fill={`url(#${id}-porcelain)`} pointerEvents="none" />
-        <ellipse cx={cx - 11} cy={37} rx={10} ry={5} fill="#fff" opacity={0.6} transform={`rotate(-32 ${cx - 11} 37)`} pointerEvents="none" data-testid="mockup-glaze" />
-        {kind === "switch" ? (
-          <>
-            <circle cx={cx} cy={50} r={8.5} fill={look.insert} stroke={ink} strokeOpacity={0.45} strokeWidth={1} />
-            <rect x={cx - 2.3} y={29} width={4.6} height={22} rx={2.3} fill={dark ? "#e4e4e7" : "#57534e"} opacity={0.9} data-testid="mockup-lever" />
-            <circle cx={cx} cy={50} r={2.6} fill={ink} opacity={0.65} />
-          </>
-        ) : (
-          <g data-testid="mockup-porcelain-socket">
-            <circle cx={cx} cy={50} r={17} fill={dark ? "#0b0b0c" : "#e7e5e4"} stroke={ink} strokeOpacity={0.55} strokeWidth={1.1} />
-            <rect x={cx - 1.4} y={33.5} width={2.8} height={6.5} rx={1} fill={ink} opacity={0.85} />
-            <circle cx={cx - 6.5} cy={52} r={2.3} fill={hole} />
-            <circle cx={cx + 6.5} cy={52} r={2.3} fill={hole} />
-            {[-1, 1].map((side) => (
-              <g key={side} data-testid="mockup-screw">
-                <circle cx={cx + side * 24} cy={50} r={2.9} fill="#d4d4d8" stroke={ink} strokeOpacity={0.55} strokeWidth={0.6} />
-                <line x1={cx + side * 24 - 1.9} y1={48.8} x2={cx + side * 24 + 1.9} y2={51.2} stroke="#52525b" strokeWidth={0.8} />
-              </g>
-            ))}
-          </g>
-        )}
-      </g>
-    );
-  }
-  return (
-    <g data-gang={style.rocker}>
-      {style.metalLine ? <rect x={cover.x - 3} y={cover.y - 3} width={cover.width + 6} height={cover.height + 6} rx={cover.rx + 1} fill="none" stroke={`url(#${id}-metal)`} strokeWidth={2.6} data-testid="mockup-metal-line" /> : null}
-      {style.metalLine ? <rect x={cover.x - 3} y={cover.y - 3} width={cover.width + 6} height={cover.height + 6} rx={cover.rx + 1} fill="none" stroke="#a1a1aa" strokeOpacity={0.8} strokeWidth={1} /> : null}
-      <rect {...cover} fill={look.insert} stroke="#000" strokeOpacity={0.12} strokeWidth={0.8} />
-      <Surface id={id} material={look.material === "wood" || look.material === "stone" || look.material === "paper" ? "gloss" : look.material} {...cover} />
-      {kind === "switch" ? (
-        <>
-          {style.rocker === "rounded" ? <rect x={cover.x + 4} y={cover.y + 4} width={cover.width - 8} height={cover.height - 8} rx={cover.rx - 2} fill="#fff" opacity={0.12} /> : null}
-          {style.lamp ? (
-            // Tango: vodorovný průzor doutnavky (modrý / oranžový)
-            <rect x={cx - 9} y={cover.y + 8} width={18} height={3.2} rx={1.6} fill={dark ? "#f59e0b" : "#3b82f6"} opacity={0.9} data-testid="mockup-lamp" />
-          ) : style.base ? (
-            // Levit: vodorovný proužek indikace
-            <rect x={cover.x + 10} y={cover.y + cover.height - 9} width={cover.width - 20} height={2} rx={1} fill={ink} opacity={0.55} data-testid="mockup-strip" />
-          ) : (
-            // Fáze 74: běžný spínač – hladká klapka s jemnou spárou dole (bez kontrolky, ta je jen u řazení s doutnavkou)
-            <rect x={cover.x + 6} y={cover.y + cover.height - 5} width={cover.width - 12} height={1.2} rx={0.6} fill={ink} opacity={0.22} />
-          )}
-        </>
-      ) : (
-        sockets
-      )}
-    </g>
-  );
-}
-
-/** Rámeček s přístroji (víceramček vodorovně) na světlé stěně ve tvaru řady. */
-export function DeviceMockup({ shape, color, items, className, label, seriesKey }: { shape: SeriesShape; color: Pick<SeriesColor, "swatch" | "frame" | "insert" | "material"> | null; items: readonly MockupItem[]; className?: string; label?: string; seriesKey?: string | null }) {
-  const id = `m${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
-  const look = lookOf(color, shape);
-  const style = mockStyle(seriesKey, shape);
-  const width = items.length * 100;
-  const single = items.length === 1;
-  // Fáze 90: nástěnný monoblok – krabicové tělo s vývodkou, bez rámečku
-  if (style.monoblock) {
-    return (
-      <svg viewBox={`-10 -18 ${width + 20} 128`} className={className} role="img" aria-label={label ?? "Náhled designové řady"} data-shape={shape} data-material={look.material} data-series={seriesKey ?? undefined} data-monoblock={style.monoblock}>
-        <MaterialDefs id={id} look={look} />
-        <rect x={-10} y={-18} width={width + 20} height={128} fill="#e7e5e4" />
-        <Monoblock id={id} look={look} kind={style.monoblock} items={items} width={width} ip={designSeriesOf(seriesKey)?.series.ip ?? "IP44"} />
-      </svg>
-    );
-  }
-  // Fáze 90: Decento – víceramček ze spojených kruhů (piškot), materiál rámečku (dřevo / porcelán) přes obrys
-  const outline = style.round && !single ? decentoFramePath(items.length) : null;
-  const materialFill = look.material === "wood" ? `url(#${id}-wood)` : look.material === "porcelain" ? `url(#${id}-porcelain)` : look.material === "gloss" ? `url(#${id}-gloss)` : null;
-  const frame = { x: 6, y: 6, width: width - 12, height: 88, rx: style.round ? 44 : style.radius };
-  // Levit: podložka v druhé barvě vyčnívá v horní a spodní spáře
-  const base = style.base ? { x: frame.x + 3, y: frame.y - 3.5, width: frame.width - 6, height: frame.height + 7, rx: 2 } : null;
-  return (
-    <svg viewBox={`-10 -10 ${width + 20} 120`} className={className} role="img" aria-label={label ?? "Náhled designové řady"} data-shape={shape} data-material={look.material} data-series={seriesKey ?? undefined}>
-      <MaterialDefs id={id} look={look} />
-      <defs>
-        <radialGradient id={`${id}-convex`} cx="0.5" cy="0.35" r="0.75">
-          <stop offset="0" stopColor="#fff" stopOpacity="0.45" />
-          <stop offset="0.7" stopColor="#fff" stopOpacity="0" />
-          <stop offset="1" stopColor="#000" stopOpacity="0.22" />
-        </radialGradient>
-      </defs>
-      <rect x={-10} y={-10} width={width + 20} height={120} fill="#e7e5e4" />
-      <g filter={`url(#${id}-shadow)`}>
-        {shape === "surface" ? <rect x={frame.x - 2} y={frame.y + 6} width={frame.width + 4} height={frame.height} rx={frame.rx} fill="#000" opacity={0.08} /> : null}
-        {base ? <rect {...base} fill={look.insert} data-testid="mockup-base" /> : null}
-        {style.round && single ? (
-          <>
-            <circle cx={50} cy={50} r={44} fill={look.frame} stroke="#000" strokeOpacity={0.18} strokeWidth={1} data-testid="mockup-frame" />
-            {materialFill ? <circle cx={50} cy={50} r={44} fill={materialFill} pointerEvents="none" /> : null}
-          </>
-        ) : outline ? (
-          <>
-            <path d={outline} fill={look.frame} stroke="#000" strokeOpacity={0.18} strokeWidth={1} data-testid="mockup-frame" data-outline="decento" />
-            {materialFill ? <path d={outline} fill={materialFill} pointerEvents="none" /> : null}
-          </>
-        ) : (
-          <>
-            <rect {...frame} fill={look.frame} stroke="#000" strokeOpacity={0.18} strokeWidth={1} />
-            <Surface id={id} material={look.material} {...frame} />
-          </>
-        )}
-        {style.convex ? <rect {...frame} fill={`url(#${id}-convex)`} pointerEvents="none" /> : null}
-        {style.circle ? null : !style.base && (shape === "layered" || shape === "thick") ? <rect x={frame.x + style.border * 0.45} y={frame.y + style.border * 0.45} width={frame.width - style.border * 0.9} height={frame.height - style.border * 0.9} rx={Math.max(2, frame.rx - 3)} fill="none" stroke={look.insert} strokeOpacity={0.6} strokeWidth={2} /> : null}
-      </g>
-      {items.map((kind, index) => (
-        <Gang key={index} id={id} kind={kind} x={index * 100} look={style.base ? { ...look, insert: look.insert === look.frame ? look.frame : look.insert } : look} style={style} />
-      ))}
-    </svg>
-  );
-}
+export type MockupItem = RenderGang;
 
 /**
- * Fáze 90: nástěnný monoblokový přístroj IP44 / IP54 – krabicové tělo (zaoblené Garant, hranaté Praktik, robustní
- * Variant+ se šrouby v rozích) s horní kabelovou vývodkou; spínač s velkou kolébkou, zásuvka pod odklápěcím ochranným
- * víčkem s prolisem a označením krytí (ne otevřená interiérová zásuvka).
+ * Fáze 91: náhled přístroje / rámečku řady – stejný studiový engine jako produktové rendery v `public/catalog-images/`
+ * (`renderDeviceSvg`), id s předponou náhledu (víc náhledů na stránce), libovolná kombinace krytu a rámečku.
  */
-function Monoblock({ id, look, kind, items, width, ip }: { id: string; look: Look; kind: NonNullable<MockStyle["monoblock"]>; items: readonly MockupItem[]; width: number; ip: string }) {
-  const radius = kind === "rounded" ? 24 : kind === "square" ? 5 : 11;
-  const dark = lightness(look.insert) < 0.45;
-  const ink = dark ? "#d4d4d8" : "#3f3f46";
-  const body = { x: 4, y: 8, width: width - 8, height: 88 };
-  const centre = width / 2;
-  return (
-    <g data-testid="mockup-monoblock">
-      <rect x={body.x - 2} y={body.y + 5} width={body.width + 4} height={body.height} rx={radius} fill="#000" opacity={0.12} />
-      {/* Horní kabelová vývodka (matice a kabel) */}
-      <g data-testid="mockup-gland">
-        <rect x={centre - 5} y={-16} width={10} height={14} fill="#3f3f46" />
-        <rect x={centre - 11} y={-2} width={22} height={11} rx={2.5} fill={kind === "industrial" ? "#52525b" : look.frame} stroke="#000" strokeOpacity={0.35} strokeWidth={0.8} />
-        <line x1={centre - 11} y1={3.5} x2={centre + 11} y2={3.5} stroke="#000" strokeOpacity={0.25} strokeWidth={0.8} />
-      </g>
-      <rect {...body} rx={radius} fill={look.frame} stroke="#000" strokeOpacity={kind === "industrial" ? 0.4 : 0.25} strokeWidth={kind === "industrial" ? 2.2 : 1.2} />
-      <rect {...body} rx={radius} fill={`url(#${id}-gloss)`} opacity={0.55} pointerEvents="none" />
-      {kind === "industrial"
-        ? [
-            [body.x + 9, body.y + 9],
-            [body.x + body.width - 9, body.y + 9],
-            [body.x + 9, body.y + body.height - 9],
-            [body.x + body.width - 9, body.y + body.height - 9],
-          ].map(([x, y]) => <circle key={`${x}-${y}`} cx={x} cy={y} r={2.6} fill="#a1a1aa" stroke="#27272a" strokeWidth={0.6} />)
-        : null}
-      {items.map((item, index) => {
-        const x0 = index * 100;
-        if (item === "blank") return null;
-        if (item === "switch") {
-          return (
-            <g key={index} data-gang="monoblock-switch">
-              <rect x={x0 + 22} y={22} width={56} height={58} rx={kind === "rounded" ? 14 : 4} fill={look.insert} stroke="#000" strokeOpacity={0.25} strokeWidth={1} />
-              <rect x={x0 + 22} y={22} width={56} height={58} rx={kind === "rounded" ? 14 : 4} fill={`url(#${id}-gloss)`} opacity={0.7} pointerEvents="none" />
-              <rect x={x0 + 34} y={72} width={32} height={1.4} rx={0.7} fill={ink} opacity={0.35} />
-              <text x={x0 + 50} y={91} fontSize={7.5} fontWeight={700} textAnchor="middle" fill={ink} opacity={0.6} data-testid="mockup-ip">
-                {ip}
-              </text>
-            </g>
-          );
-        }
-        return (
-          <g key={index} data-gang="monoblock-socket" data-testid="mockup-lid">
-            {/* Odklápěcí víčko s pantem nahoře, prolisem, označením krytí a západkou */}
-            <rect x={x0 + 20} y={15} width={60} height={8} rx={3} fill={look.insert} stroke="#000" strokeOpacity={0.35} strokeWidth={0.8} />
-            <rect x={x0 + 16} y={21} width={68} height={64} rx={kind === "rounded" ? 16 : 5} fill={look.insert} stroke="#000" strokeOpacity={0.3} strokeWidth={1} />
-            <rect x={x0 + 16} y={21} width={68} height={64} rx={kind === "rounded" ? 16 : 5} fill={`url(#${id}-gloss)`} opacity={0.75} pointerEvents="none" />
-            <rect x={x0 + 25} y={31} width={50} height={40} rx={kind === "rounded" ? 12 : 3} fill="none" stroke="#000" strokeOpacity={0.22} strokeWidth={1.2} />
-            <text x={x0 + 50} y={55} fontSize={11} fontWeight={800} textAnchor="middle" fill={ink} opacity={0.55} data-testid="mockup-ip">
-              {ip}
-            </text>
-            <rect x={x0 + 42} y={84} width={16} height={6} rx={2} fill={look.insert} stroke="#000" strokeOpacity={0.35} strokeWidth={0.8} />
-          </g>
-        );
-      })}
-    </g>
-  );
+export function DeviceMockup({ shape, color, items, className, label, seriesKey }: { shape: SeriesShape; color: LookColor | null; items: readonly MockupItem[]; className?: string; label?: string; seriesKey?: string | null }) {
+  const id = `m${useId().replace(/[^a-zA-Z0-9]/g, "")}-`;
+  const svg = renderDeviceSvg({ seriesKey: seriesKey ?? null, shape, look: lookOf(color, shape), items, id, label, fluid: true });
+  // Vlastní SVG z čisté funkce (bez vstupu uživatele kromě barev a popisku, popisek je escapovaný)
+  return <span className={cn("block", className)} data-testid="device-mockup" dangerouslySetInnerHTML={{ __html: svg }} />;
 }
 
-type LookColor = Pick<SeriesColor, "swatch" | "frame" | "insert" | "material">;
 
 /**
  * Fáze 74: vzhled z barvy klapky / krytu a (jiné) barvy rámečku – dvoubarevná barva řady dává rámečku svou barvu
@@ -311,7 +49,8 @@ type LookColor = Pick<SeriesColor, "swatch" | "frame" | "insert" | "material">;
 export function combineLook(insert: LookColor | null | undefined, frame?: LookColor | null): LookColor | null {
   if (!insert) return frame ?? null;
   if (!frame) return insert;
-  return { swatch: insert.swatch, insert: insert.insert ?? insert.swatch, frame: frame.frame ?? frame.swatch, material: insert.material ?? frame.material };
+  // Fáze 91: rámeček nese vlastní povrch a texturu (Busch-axcent beton, břidlice, sklo …)
+  return { swatch: insert.swatch, insert: insert.insert ?? insert.swatch, frame: frame.frame ?? frame.swatch, material: insert.material ?? frame.material, ...(frame.material ? { frameMaterial: frame.material } : {}), ...(frame.texture ? { texture: frame.texture } : {}) };
 }
 
 /**
@@ -363,8 +102,11 @@ export function SeriesGallery({ seriesKey, color, frameColor = null, available, 
   const seriesKeyOfPick = `${brand.manufacturer}|${series.name}`;
   const frameChoice = hasFrameChoice(seriesKeyOfPick);
   const monoblock = isMonoblockSeries(seriesKeyOfPick);
-  const frameChosen = pick.frameColor && frameChoice ? ((series.colors ?? []).find((option) => option.id === pick.frameColor) ?? null) : null;
-  const frameGeneric = pick.frameColor && frameChoice ? (colors.find((option) => option.id === pick.frameColor) ?? null) : null;
+  // Fáze 91: Busch-axcent / solo carat – rámeček ze samostatné palety, bez volby výchozí rámeček ke krytu
+  const separateFrames = Boolean(series.frames?.length);
+  const frameColors = seriesFrameColors(seriesKeyOfPick);
+  const frameChosen = separateFrames ? resolveFrameColor(seriesKeyOfPick, pick.frameColor, pick.color) : pick.frameColor && frameChoice ? ((series.colors ?? []).find((option) => option.id === pick.frameColor) ?? null) : null;
+  const frameGeneric = pick.frameColor && frameChoice ? (frameColors.find((option) => option.id === pick.frameColor) ?? null) : null;
   const look = combineLook(chosen ?? { swatch: generic.swatch }, frameChosen ?? (frameGeneric ? { swatch: frameGeneric.swatch } : null))!;
   const shape = series.shape ?? "square";
   const count = series.dbSeries.reduce((sum, name) => sum + (available.get(`${brand.manufacturer}|${name}`) ?? 0), 0);
@@ -433,7 +175,7 @@ export function SeriesGallery({ seriesKey, color, frameColor = null, available, 
                 // Fáze 90: monobloky nemají víceramček – nástěnná dvojzásuvka pod odklápěcími víčky
                 <PhotoOrMockup series={seriesKeyOf} color={chosen?.id ?? pick.color} exact part="set" caption={`Dvojzásuvka ${series.ip ?? "IP44"} s odklápěcím víčkem (nástěnná)`} mockup={<DeviceMockup seriesKey={seriesKeyOf} shape={shape} color={look} items={["socket", "socket"]} className="h-28 w-full max-w-60 rounded-lg" label={`Dvojzásuvka ${series.name} s víčkem`} />} />
               ) : (
-                <PhotoOrMockup series={seriesKeyOf} color={chosen?.id ?? pick.color} exact={!pick.frameColor} part="set" caption={series.fixedPairs ? "Víceramček 3R – spojené kruhy" : "Víceramček 3R – vypínač + 2 zásuvky"} mockup={<DeviceMockup seriesKey={seriesKeyOf} shape={shape} color={look} items={["switch", "socket", "socket"]} className="h-28 w-full max-w-80 rounded-lg" label={`Víceramček 3R ${series.name}`} />} />
+                <PhotoOrMockup series={seriesKeyOf} color={chosen?.id ?? pick.color} exact={!pick.frameColor} part="set" caption={series.fixedPairs ? "3 samostatné přístroje · rozteč 91 mm" : "Víceramček 3R – vypínač + 2 zásuvky"} mockup={<DeviceMockup seriesKey={seriesKeyOf} shape={shape} color={look} items={["switch", "socket", "socket"]} className="h-28 w-full max-w-80 rounded-lg" label={`Víceramček 3R ${series.name}`} />} />
               )}
             </div>
             {/* Fáze 80: zdroj a podmínky užití náhledů jednou pod řádkem náhledů */}
@@ -445,7 +187,7 @@ export function SeriesGallery({ seriesKey, color, frameColor = null, available, 
                 </p>
               ) : null;
             })()}
-            <p className="-mb-1.5 text-xs font-semibold text-muted-foreground">{monoblock ? "Barva přístroje" : series.fixedPairs ? "Provedení (porcelánový střed / rámeček)" : "Barva klapky / krytu"}</p>
+            <p className="-mb-1.5 text-xs font-semibold text-muted-foreground">{monoblock ? "Barva přístroje" : series.fixedPairs ? "Provedení (porcelánový střed / rámeček)" : separateFrames ? "Barva krytu – klapka a zásuvka (společná kapitola katalogu, str. 170)" : "Barva klapky / krytu"}</p>
             <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Barva řady">
               {colors.map((option) => {
                 const seriesColor = (series.colors ?? []).find((candidate) => candidate.id === option.id) ?? null;
@@ -465,13 +207,13 @@ export function SeriesGallery({ seriesKey, color, frameColor = null, available, 
                   : "Každé provedení řady je pevná dvojice porcelánového středu a porcelánového / dřevěného rámečku – barva rámečku se nevolí zvlášť."}
               </p>
             ) : null}
-            {frameChoice ? <p className="-mb-1.5 text-xs font-semibold text-muted-foreground">Barva rámečku</p> : null}
+            {frameChoice ? <p className="-mb-1.5 text-xs font-semibold text-muted-foreground">{separateFrames ? "Rámeček – skutečný materiál (kryt zůstává stejný)" : "Barva rámečku"}</p> : null}
             <div className={cn("flex flex-wrap gap-1", !frameChoice && "hidden")} role="radiogroup" aria-label="Barva rámečku" data-testid="gallery-frame-colors">
               <button type="button" role="radio" aria-checked={!pick.frameColor} onClick={() => setPick((value) => ({ ...value, frameColor: null }))} className={cn("rounded-full border px-2.5 py-1 text-[11px]", !pick.frameColor ? "border-primary bg-primary/15 text-foreground" : "border-border text-muted-foreground hover:text-foreground")} data-testid="gallery-frame-same">
-                stejná jako klapka
+                {separateFrames ? "doporučený ke krytu" : "stejná jako klapka"}
               </button>
-              {colors.map((option) => {
-                const seriesColor = (series.colors ?? []).find((candidate) => candidate.id === option.id) ?? null;
+              {frameColors.map((option) => {
+                const seriesColor = [...(series.frames ?? []), ...(series.colors ?? [])].find((candidate) => candidate.id === option.id) ?? null;
                 return (
                   <button key={option.id} type="button" role="radio" aria-checked={pick.frameColor === option.id} onClick={() => setPick((value) => ({ ...value, frameColor: option.id === value.color ? null : option.id }))} className={cn("flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px]", pick.frameColor === option.id ? "border-primary bg-primary/15 text-foreground" : "border-border text-muted-foreground hover:text-foreground")} data-testid="gallery-frame-color">
                     <span className="size-3.5 rounded-[3px] border-[3px]" style={{ borderColor: seriesColor?.frame ?? option.swatch }} aria-hidden />

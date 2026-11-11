@@ -64,6 +64,7 @@ import {
 import {
   ANNOTATION_LABEL,
   MAX_FRAME_GANGS,
+  frameLimitOf,
   addToFrame,
   annotationBounds,
   assemblyGangs,
@@ -112,10 +113,11 @@ import {
   type PlanView,
   type Rotation,
 } from "@/lib/panel-builder/floorplan-pdf";
-import { appearanceLabel, colorForSeries, designColor, hasFrameChoice } from "@/lib/panel-builder/wiring-designs";
+import { appearanceLabel, colorForSeries, designColor, frameColorForSeries, hasFrameChoice } from "@/lib/panel-builder/wiring-designs";
 import { renderPdfFile } from "@/lib/pdf-client";
 import { resizeImage, uploadPanelFile } from "@/lib/upload-client";
 import { cn } from "@/lib/utils";
+import { boxSummary, resolveBox } from "@/lib/panel-builder/mounting-boxes-catalog";
 import { compileFloorplanBom } from "@/lib/panel-builder/wiring-bom";
 import { createFloorplanProjectAction } from "@/server/actions/panel-projects";
 import { stashFloorplanDraftAction, updateFloorplanMetaAction } from "@/server/actions/floorplans";
@@ -129,6 +131,7 @@ import { DeviceAppearance } from "./DeviceAppearance";
 import { FloorBar } from "./FloorBar";
 import { FloorSymbol, LightBadges, PanelSymbol } from "./FloorSymbol";
 import { FrameAssemblyPalette } from "./FrameAssemblyPalette";
+import { MountingBoxSettings } from "./MountingBoxSettings";
 import { ModeBar, type ModeTone } from "../ModeBar";
 import { PdfEditMenu, type PdfEditAction } from "./PdfEditMenu";
 import { PlanChecks, SelectionPanel, type PlanCheck } from "./PlanPanels";
@@ -538,12 +541,25 @@ export function FloorplanEditor({
       return { ok: false as const, error: error instanceof Error ? error.message : "Neplatný půdorys." };
     }
   }, [deferred]);
-  const bom = useMemo(() => compileFloorplanBom(deferred, { installation: deferred.installation, cables: analysis.ok ? analysis.summary.byCable : [] }), [deferred, analysis]);
-  // Fáze 61: chytrá domácnost (sběrnicová úroveň) a normový hlídač
-  const smartPlan = useMemo(() => smartPlanOf(deferred), [deferred]);
-  const norms = useMemo(() => floorplanNorms(deferred), [deferred]);
   // Fáze 63: trasy k vykreslení (odsazení podél stěn, ruční úpravy, štítky okruhů) a knihovna spotřebičů palety
   const routes = useMemo(() => (analysis.ok ? displayRoutes(deferred, analysis) : null), [analysis, deferred]);
+  // Fáze 91: kabely, které končí v krabici prvku (úseky tras) – rozbočovací zásuvka dostane hlubokou krabici
+  const cableEnds = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const circuit of routes?.circuits ?? []) {
+      if (circuit.lowVoltage) continue;
+      for (const leg of circuit.legs) {
+        counts[leg.from] = (counts[leg.from] ?? 0) + 1;
+        counts[leg.to] = (counts[leg.to] ?? 0) + 1;
+      }
+    }
+    return counts;
+  }, [routes]);
+  const bom = useMemo(() => compileFloorplanBom(deferred, { installation: deferred.installation, cables: analysis.ok ? analysis.summary.byCable : [], cableEnds }), [deferred, analysis, cableEnds]);
+  // Fáze 61: chytrá domácnost (sběrnicová úroveň) a normový hlídač; fáze 91 – limit víceramečku a hloubka krabic
+  const smartPlan = useMemo(() => smartPlanOf(deferred), [deferred]);
+  const norms = useMemo(() => floorplanNorms(deferred, { cableEnds }), [deferred, cableEnds]);
+  const frameLimitWarnings = norms.filter((issue) => issue.rule === "frame-limit");
   // Fáze 65: zásuvkové okruhy (označení jističů, délky z tras, ruční okruhy) pro panel, detail zásuvky a výběr
   const socketRows = useMemo(() => (analysis.ok ? socketCircuitRows(analysis.circuits.circuits, (id) => routes?.circuits.find((circuit) => circuit.id === id)?.lengthM) : []), [analysis, routes]);
   const socketRowOf = (elementId: string) => socketRows.find((row) => row.elementIds.includes(elementId)) ?? null;
@@ -2096,7 +2112,7 @@ export function FloorplanEditor({
             // Fáze 74: barva rámečku zvlášť – po změně řady jen barva, kterou nová řada má (jinak stejná jako klapka)
             const frame = patch.frameColor !== undefined ? patch.frameColor : current.frameColor;
             // Fáze 90: monobloky a Decento nemají barvu rámečku zvlášť
-            return { ...current, series: nextSeries, color: colorForSeries(nextSeries, patch.color ?? current.color), frameColor: frame && hasFrameChoice(nextSeries) ? colorForSeries(nextSeries, frame) : null };
+            return { ...current, series: nextSeries, color: colorForSeries(nextSeries, patch.color ?? current.color), frameColor: frame && hasFrameChoice(nextSeries) ? frameColorForSeries(nextSeries, frame) : null };
           })
         }
         onApplyAll={() => {
@@ -2196,6 +2212,25 @@ export function FloorplanEditor({
       </div>
     </>
   );
+  // Fáze 91: výrobce instalačních krabic a konstrukce stěn (krok 2, krok 5 a kompaktní lišta)
+  const boxSettings = <MountingBoxSettings maker={draft.boxMaker} wall={draft.wallType} onChange={(patch) => update((current) => ({ ...current, ...patch }))} />;
+  // Fáze 91: víceramček, který zvolená řada nevyrábí – upozornění v horní liště (vybere přístroje rámečku)
+  const frameLimitChip = frameLimitWarnings.length ? (
+    <button
+      type="button"
+      onClick={() => {
+        const here = frameLimitWarnings[0].elementIds.filter((id) => draft.elements.some((element) => element.id === id));
+        if (here.length) setSelection(here);
+        toast.warning(frameLimitWarnings[0].text);
+      }}
+      title={frameLimitWarnings.map((issue) => issue.text).join("\n")}
+      className="rounded-full border border-amber-400/70 bg-amber-500/15 px-2 py-0.5 text-xs font-semibold text-amber-100 hover:bg-amber-500/25"
+      data-testid="frame-limit-chip"
+    >
+      ⚠️ Víceramček mimo katalog řady ({frameLimitWarnings.length})
+    </button>
+  ) : null;
+
   const outputActions = (
     <>
       <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => clickTestId("wiring-bom-open")} disabled={!bom.length} data-testid="wizard-bom">
@@ -2208,6 +2243,7 @@ export function FloorplanEditor({
       <Button type="button" size="sm" className="gap-1.5 bg-yellow-400 font-bold text-zinc-950 hover:bg-yellow-300" onClick={generateFromBar} disabled={pending} data-testid="wizard-generate">
         ⚡ Vygenerovat rozváděč z tohoto půdorysu
       </Button>
+      <div className="w-full">{boxSettings}</div>
     </>
   );
 
@@ -2294,6 +2330,7 @@ export function FloorplanEditor({
             <>
               {floorSwitch}
               {designBadge}
+              {frameLimitChip}
             </>
           }
           aside={
@@ -2328,6 +2365,7 @@ export function FloorplanEditor({
             <>
               {methodology}
               <div className="w-full">{appearance}</div>
+              <div className="w-full">{boxSettings}</div>
             </>
           ) : wizard === 3 ? (
             <>
@@ -2365,6 +2403,7 @@ export function FloorplanEditor({
               <ToolbarPopover label={`🎨 Design: ${appearanceLabel(draft.series, draft.color, draft.frameColor)}`} testId="compact-design" wide>
                 {methodology}
                 {appearance}
+                {boxSettings}
               </ToolbarPopover>
               <ToolbarPopover label="🔌 Trasy & Výšky" testId="compact-routes" wide>
                 <div className="flex flex-wrap items-center gap-2">
@@ -2404,6 +2443,7 @@ export function FloorplanEditor({
           }
           aside={
             <>
+              {frameLimitChip}
               {videoButton}
               {modeToggle}
             </>
@@ -2416,6 +2456,8 @@ export function FloorplanEditor({
           {/* Fáze 62: sestavy zásuvek a vypínačů ve víceramečku – samostatný panel nad paletou, vloží se celé jedním klikem */}
           <FrameAssemblyPalette
             level={draft.installation}
+            // Fáze 91: jen sestavy, které zvolená řada vyrábí (Decento a nástěnné řady bez víceramečku, Time Arbo do 4R …)
+            limit={frameLimitOf(draft)}
             active={tool.kind === "place-set" ? tool.key : null}
             onPick={(pick) => {
               setTool(tool.kind === "place-set" && tool.key === pick.key && pick.key !== "custom" ? { kind: "select" } : { kind: "place-set", ...pick });
@@ -2784,7 +2826,7 @@ export function FloorplanEditor({
                         ? () => setTool({ kind: "pair-light", lightId: selected.id })
                         : undefined
                   }
-                  onAddToFrame={isFrameable(selected) && usedGangs(selected) + gangsOf({ item: selected.item, frameUnits: 1 }) <= MAX_FRAME_GANGS ? () => addIntoFrame(selected.id, selected.item) : undefined}
+                  onAddToFrame={isFrameable(selected) && usedGangs(selected) + gangsOf({ item: selected.item, frameUnits: 1 }) <= Math.min(MAX_FRAME_GANGS, frameLimitOf(draft, selected).max) ? () => addIntoFrame(selected.id, selected.item) : undefined}
                   // Fáze 77: rychlé volby svítidla (🔆 / 🌡️ / 🌈) přímo u světla
                   light={(() => {
                     const item = paletteItem(selected.item);
@@ -2886,6 +2928,7 @@ export function FloorplanEditor({
               room={selectedRoom}
               onChange={(patch) => update((current) => updateRoom(current, selectedRoom.id, patch))}
               onDelete={() => removeRoom(selectedRoom.id)}
+              defaultWall={draft.wallType}
             />
           ) : null}
           {selectedNote ? (
@@ -2929,6 +2972,11 @@ export function FloorplanEditor({
               onRotate={() => rotateSelection([selected.id])}
               onDelete={() => removeSelection([selected.id])}
               onAutoPair={autoPair}
+              // Fáze 91: instalační krabička prvku (doporučená podle přístroje a stěny, ruční volba)
+              box={(() => {
+                const resolved = resolveBox(draft, selected, { cableEnds: cableEnds[selected.id] });
+                return { resolved, summary: boxSummary(resolved, draft.boxMaker) };
+              })()}
               usedGangs={usedGangs(selected)}
               onAddToFrame={(item) => addIntoFrame(selected.id, item)}
               display={displayItem(selected) ?? paletteItem(selected.item)!}

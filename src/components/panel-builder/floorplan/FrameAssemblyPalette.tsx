@@ -6,7 +6,7 @@ import { useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { InstallLevel } from "@/engine/floorplan-bridge";
-import { MAX_FRAME_GANGS, assembliesFor, assemblyError, assemblyGangs, assemblyLabel, frameableItems, gangsOf } from "@/lib/panel-builder/floorplan-frames";
+import { MAX_FRAME_GANGS, assembliesFor, assemblyError, assemblyGangs, assemblyLabel, frameableItems, gangsOf, type FrameLimit } from "@/lib/panel-builder/floorplan-frames";
 import { TEMPLATE_LABEL_MAX, favoritesFirst, templatesFor, type AssemblyTemplate } from "@/lib/panel-builder/floorplan-library";
 import { cn } from "@/lib/utils";
 
@@ -49,11 +49,11 @@ export function FavoriteStar({ on, label, onToggle, className }: { on: boolean; 
 }
 
 /** Fáze 78: pojmenování a uložení sestavy jako šablony firmy (vlastní sestava i osazený víceramček). */
-export function SaveTemplateControl({ members, onSave, compact = false }: { members: readonly string[]; onSave: (members: string[], label: string) => string | null; compact?: boolean }) {
+export function SaveTemplateControl({ members, onSave, compact = false, limit }: { members: readonly string[]; onSave: (members: string[], label: string) => string | null; compact?: boolean; limit?: FrameLimit }) {
   const [open, setOpen] = useState(false);
   const [label, setLabel] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const invalid = assemblyError([...members]) ?? (members.length < 2 ? "Šablona potřebuje aspoň 2 přístroje v rámečku." : null);
+  const invalid = assemblyError([...members], limit) ?? (members.length < 2 ? "Šablona potřebuje aspoň 2 přístroje v rámečku." : null);
   if (!open)
     return (
       <Button type="button" size="sm" variant="outline" className={cn("h-7 gap-1 text-xs", compact && "px-2")} disabled={Boolean(invalid)} title={invalid ?? undefined} onClick={() => (setLabel(assemblyLabel([...members])), setError(null), setOpen(true))} data-testid="template-save-open">
@@ -89,9 +89,11 @@ export function SaveTemplateControl({ members, onSave, compact = false }: { memb
  * s jednotlivou značkou). Hotové sestavy (zásuvky, vypínače, kombinace) a vlastní složení po pozicích (nejvýš 5 pozic,
  * dvojzásuvka = 2). Vybraná sestava se vloží jedním klikem do půdorysu, přisazená a vyrovnaná v jednom rámečku.
  * Fáze 78: šablony firmy („💾 Uložit tuto sestavu jako šablonu“) a ⭐ oblíbené nahoře (po odebrání zpět na své místo).
+ * Fáze 91: jen sestavy, které zvolená řada vyrábí (`limit` – Decento a nástěnné řady bez víceramečku, Time Arbo do 4R …).
  */
 export function FrameAssemblyPalette({
   level,
+  limit = { max: MAX_FRAME_GANGS, text: null },
   active,
   onPick,
   templates,
@@ -108,11 +110,14 @@ export function FrameAssemblyPalette({
   onFavorite: (key: string) => void;
   onSaveTemplate: (members: string[], label: string) => string | null;
   onRemoveTemplate: (template: AssemblyTemplate) => void;
+  limit?: FrameLimit;
 }) {
   const options = frameableItems(level);
   const allowed = new Set(options.map((item) => item.id));
-  const presets = favoritesFirst(assembliesFor(level), (preset) => `assembly:${preset.id}`, favorites);
-  const own = favoritesFirst(templatesFor(templates, allowed), (template) => `template:${template.id}`, favorites);
+  const max = Math.min(MAX_FRAME_GANGS, limit.max);
+  const fits = (members: readonly string[]) => assemblyGangs([...members]) <= max;
+  const presets = favoritesFirst(assembliesFor(level).filter((preset) => fits(preset.members)), (preset) => `assembly:${preset.id}`, favorites);
+  const own = favoritesFirst(templatesFor(templates, allowed).filter((template) => fits(template.members)), (template) => `template:${template.id}`, favorites);
   const starred = new Set(favorites);
   const [expanded, setExpanded] = useState(readOpen);
   const [custom, setCustom] = useState<string[]>(["socket", "socket"]);
@@ -120,7 +125,7 @@ export function FrameAssemblyPalette({
   // Po změně úrovně instalace zůstanou ve vlastní sestavě jen přístroje dostupné na nové úrovni
   const members = custom.filter((id) => allowed.has(id));
   const gangs = assemblyGangs(members);
-  const error = assemblyError(members);
+  const error = assemblyError(members, limit);
 
   const toggle = () => {
     const next = !expanded;
@@ -135,7 +140,7 @@ export function FrameAssemblyPalette({
   /** Změna vlastní sestavy; když se zrovna vkládá, vkládá se rovnou nová podoba. */
   const change = (next: string[]) => {
     setCustom(next);
-    if (active === "custom" && !assemblyError(next)) onPick({ key: "custom", members: next, label: assemblyLabel(next) });
+    if (active === "custom" && !assemblyError(next, limit)) onPick({ key: "custom", members: next, label: assemblyLabel(next) });
   };
 
   /** Sestava k vložení: `pick` = klíč vkládání (id sestavy / „template:…“), `favorite` = klíč hvězdičky. */
@@ -170,7 +175,13 @@ export function FrameAssemblyPalette({
       {expanded ? (
         <>
           <p className="text-[11px] text-muted-foreground">Vypínače a zásuvky v jednom rámečku – vloží se celé jedním klikem, u stěny přisazené a natočené ke stěně.</p>
-          {own.length ? (
+          {/* Fáze 91: limit víceramečku zvolené řady podle katalogu výrobce */}
+          {limit.text ? (
+            <p className="rounded-md border border-amber-500/50 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-100" data-testid="assembly-limit" data-max={max}>
+              ℹ️ {limit.text}
+            </p>
+          ) : null}
+          {max >= 2 && own.length ? (
             <div className="flex flex-col gap-1" data-testid="assembly-templates">
               <p className="text-[11px] font-semibold text-amber-100">💾 Šablony firmy</p>
               <div className="flex flex-wrap gap-1">
@@ -188,13 +199,17 @@ export function FrameAssemblyPalette({
               </div>
             </div>
           ) : null}
-          <div className="flex flex-wrap gap-1" data-testid="assembly-presets">
-            {presets.map((preset) => chip(preset.id, `assembly:${preset.id}`, preset.label, preset.members))}
-          </div>
-          <button type="button" onClick={() => setCustomOpen((value) => !value)} aria-expanded={customOpen} className="self-start text-xs font-semibold text-primary hover:underline" data-testid="assembly-custom-toggle">
-            {customOpen ? "▾" : "▸"} Vlastní sestava (2–{MAX_FRAME_GANGS} pozic)
-          </button>
-          {customOpen ? (
+          {max >= 2 ? (
+            <div className="flex flex-wrap gap-1" data-testid="assembly-presets">
+              {presets.map((preset) => chip(preset.id, `assembly:${preset.id}`, preset.label, preset.members))}
+            </div>
+          ) : null}
+          {max >= 2 ? (
+            <button type="button" onClick={() => setCustomOpen((value) => !value)} aria-expanded={customOpen} className="self-start text-xs font-semibold text-primary hover:underline" data-testid="assembly-custom-toggle">
+              {customOpen ? "▾" : "▸"} Vlastní sestava (2–{max} pozic)
+            </button>
+          ) : null}
+          {customOpen && max >= 2 ? (
             <div className="flex flex-col gap-1 rounded-lg border border-amber-500/40 bg-amber-500/5 p-1.5" data-testid="assembly-custom">
               {members.map((id, index) => (
                 <div key={index} className="flex items-center gap-1">
@@ -223,7 +238,7 @@ export function FrameAssemblyPalette({
                 </div>
               ))}
               <div className="flex items-center gap-1">
-                <Button type="button" size="sm" variant="outline" className="h-7 gap-1 px-2 text-xs" onClick={() => change([...members, "socket"])} disabled={gangs >= MAX_FRAME_GANGS} data-testid="assembly-add">
+                <Button type="button" size="sm" variant="outline" className="h-7 gap-1 px-2 text-xs" onClick={() => change([...members, "socket"])} disabled={gangs >= max} data-testid="assembly-add">
                   <Plus className="size-3.5" aria-hidden /> Pozice
                 </Button>
                 <span className={cn("ml-auto font-mono text-[11px]", error ? "text-amber-200" : "text-muted-foreground")} data-testid="assembly-gangs">
@@ -243,7 +258,7 @@ export function FrameAssemblyPalette({
                 <LayoutGrid className="size-3.5" aria-hidden /> Vložit sestavu {gangs}R
               </Button>
               {/* Fáze 78: vlastní sestava jako šablona firmy (vloží se jedním klikem v dalších projektech) */}
-              <SaveTemplateControl members={members} onSave={onSaveTemplate} />
+              <SaveTemplateControl members={members} onSave={onSaveTemplate} limit={limit} />
             </div>
           ) : null}
         </>
@@ -256,11 +271,12 @@ export function FrameAssemblyPalette({
  * Fáze 62: „▦ Přidat do rámečku“ v detailu přístroje – vedle vybraného přístroje se přidá další (stejný nebo jiný)
  * a oba skončí v jednom víceramečku; v rámečku se přidá na jeho konec.
  */
-export function AddToFrameControl({ level, defaultItem, gangs, onAdd }: { level: InstallLevel; defaultItem: string; gangs: number; onAdd: (item: string) => void }) {
+export function AddToFrameControl({ level, defaultItem, gangs, onAdd, limit = { max: MAX_FRAME_GANGS, text: null } }: { level: InstallLevel; defaultItem: string; gangs: number; onAdd: (item: string) => void; limit?: FrameLimit }) {
   const options = frameableItems(level);
   const [item, setItem] = useState(options.some((option) => option.id === defaultItem) ? defaultItem : (options[0]?.id ?? "socket"));
   const next = gangs + gangsOf({ item, frameUnits: 1 });
-  const full = next > MAX_FRAME_GANGS;
+  const max = Math.min(MAX_FRAME_GANGS, limit.max);
+  const full = next > max;
   return (
     <div className="flex flex-col gap-1" data-testid="add-to-frame">
       <div className="flex items-center gap-1 text-xs">
@@ -277,7 +293,7 @@ export function AddToFrameControl({ level, defaultItem, gangs, onAdd }: { level:
         </Button>
       </div>
       <p className={cn("text-[11px]", full ? "text-amber-200" : "text-muted-foreground")}>
-        {full ? `Rámeček by měl ${next} pozic – víceramček pojme nejvýš ${MAX_FRAME_GANGS}.` : `Přidá se vedle, přisazený a vyrovnaný (${gangs}R → ${next}R).`}
+        {full ? (max < MAX_FRAME_GANGS && limit.text ? limit.text : `Rámeček by měl ${next} pozic – víceramček pojme nejvýš ${max}.`) : `Přidá se vedle, přisazený a vyrovnaný (${gangs}R → ${next}R).`}
       </p>
     </div>
   );

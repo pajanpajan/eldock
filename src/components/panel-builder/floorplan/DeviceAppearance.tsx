@@ -9,7 +9,7 @@ import { seriesLink } from "@/lib/panel-builder/series-links";
 import { deviceToneOf } from "@/lib/panel-builder/smart-datasheet";
 import { PRODUCT_FAMILIES, SMART_MANUFACTURERS, familiesOf, type CatalogProduct } from "@/lib/panel-builder/smart-catalog";
 import { SUPPLY_SYSTEMS, type SupplySystem } from "@/lib/panel-builder/supply";
-import { DESIGN_BRANDS, colorForSeries, designBrand, designSeriesOf, hasFrameChoice, isMonoblockSeries, seriesColors } from "@/lib/panel-builder/wiring-designs";
+import { DESIGN_BRANDS, colorForSeries, designBrand, designSeriesOf, hasFrameChoice, hasSeparateFrames, isMonoblockSeries, seriesColors, seriesFrameColors } from "@/lib/panel-builder/wiring-designs";
 import { cn } from "@/lib/utils";
 
 import { ManufacturerLogo } from "../ManufacturerLogo";
@@ -229,12 +229,13 @@ export function DeviceAppearance({
             ) : null}
             {hasFrameChoice(seriesKey) ? (
             <button type="button" role="radio" aria-checked={!frameColor} onClick={() => onChange({ frameColor: null })} className={cn("rounded-full border px-2 py-0.5 text-[11px]", !frameColor ? "border-primary bg-primary/15 text-foreground" : "border-border text-muted-foreground hover:text-foreground")} data-testid="frame-color-same">
-              stejná jako klapka
+              {/* Fáze 91: Busch-axcent / solo carat – výchozí rámeček ke krytu podle kombinací v katalogu */}
+              {hasSeparateFrames(seriesKey) ? "doporučený ke krytu" : "stejná jako klapka"}
             </button>
             ) : null}
-            {(hasFrameChoice(seriesKey) ? colors : []).map((option) => (
+            {(hasFrameChoice(seriesKey) ? seriesFrameColors(seriesKey) : []).map((option) => (
               <button key={option.id} type="button" role="radio" aria-checked={frameColor === option.id} onClick={() => onChange({ frameColor: option.id === color ? null : option.id })} title={`Rámeček ${option.label}`} className={cn("flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px]", frameColor === option.id ? "border-primary bg-primary/15 text-foreground" : "border-border text-muted-foreground hover:text-foreground")} data-testid="frame-color">
-                <span className="size-3.5 shrink-0 rounded-[3px] border-2" style={{ borderColor: current?.series.colors?.find((candidate) => candidate.id === option.id)?.frame ?? option.swatch, background: "transparent" }} aria-hidden />
+                <span className="size-3.5 shrink-0 rounded-[3px] border-2" style={{ borderColor: [...(current?.series.frames ?? []), ...(current?.series.colors ?? [])].find((candidate) => candidate.id === option.id)?.frame ?? option.swatch, background: "transparent" }} aria-hidden />
                 {option.label}
               </button>
             ))}

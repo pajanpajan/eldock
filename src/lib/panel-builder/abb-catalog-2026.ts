@@ -8,12 +8,21 @@
 // Fáze 90 (zadání uživatele podle katalogu 2026): Garant IP44 (str. 498, zaoblený) jen bílá a šedá / antracitová,
 // Praktik IP44 (str. 502, hranatý) bílá a šedá, Variant+ IP54 (str. 506, průmyslový) šedá / tmavě šedá a bílá / šedá –
 // nástěnné monobloky bez samostatného rámečku (`monoblock`); Decento (str. 142) kulaté porcelánové přístroje, každá
-// barva je pevná dvojice porcelánového středu a porcelánového / dřevěného rámečku (`fixedPairs`), i bílá / černý dub.
+// barva je pevná dvojice porcelánového středu a porcelánového / dřevěného rámečku (`fixedPairs`).
+// Fáze 91 (audit proti katalogu 2026): kryty řad future linear, solo, solo carat a Busch-axcent jsou ze společné kapitoly
+// (str. 170 – studio bílá 84, mechová bílá 884, antracitová 81, mechová černá 885, hliníková stříbrná 83, ušlechtilá ocel
+// 866); Busch-axcent a solo carat mají rámeček zvlášť (`frames`): Busch-axcent 8 materiálů 1R–5R (str. 166), solo carat
+// bílé sklo / ušlechtilá ocel / černé sklo jen 1R–4R (str. 161). future linear mechová černá i 5R (str. 152). Decento má jen
+// bílou, bílou / přírodní buk (50), bílou / třešeň (52) a černou (N) – kompletní přístroje s kulatým rámečkem bez
+// vícenásobných rámečků (str. 145–147, 548; „černý dub“ z fáze 90 katalog nevede).
 
 export type SeriesShape = "thin" | "rounded" | "layered" | "metal" | "wood" | "square" | "soft" | "classic" | "porcelain" | "flat" | "solo" | "thick" | "surface";
 
 /** Povrch pro náhled (lesk, kov, dřevo, sklo, kámen, porcelán, papír, softtouch). */
 export type SeriesMaterial = "matte" | "gloss" | "metal" | "wood" | "glass" | "stone" | "porcelain" | "paper" | "softtouch";
+
+/** Fáze 91: textura náhledu skutečného materiálu rámečku (beton, břidlice, lisovaný papír). */
+export type SeriesTexture = "concrete" | "slate" | "paper";
 
 export interface SeriesColor {
   /** Jednoznačné id barvy v půdorysu („abb-zoni-500“). */
@@ -28,8 +37,10 @@ export interface SeriesColor {
   frame?: string;
   insert?: string;
   material?: SeriesMaterial;
-  /** Objednací čísla rámečků 1R–5R (řady Busch-Jaeger mají číslo pro každou barvu). */
+  /** Objednací čísla rámečků 1R–5R (řady Busch-Jaeger mají číslo pro každou barvu); null = rámeček v té barvě neexistuje. */
   frameMpn?: (string | null)[];
+  /** Fáze 91: textura materiálu rámečku pro náhled. */
+  texture?: SeriesTexture;
 }
 
 export interface AbbSeries {
@@ -48,6 +59,12 @@ export interface AbbSeries {
   monoblock?: boolean;
   /** Fáze 90: barvy jsou pevné dvojice středu a rámečku (Decento) – barva rámečku se nevolí zvlášť. */
   fixedPairs?: boolean;
+  /**
+   * Fáze 91: samostatná paleta rámečků (Busch-axcent, solo carat) – `colors` jsou pak jen kryty (klapka, zásuvka) a rámeček
+   * se volí z `frames`; `framePairs` = výchozí rámeček ke krytu (kombinace vyfocené v katalogu).
+   */
+  frames?: SeriesColor[];
+  framePairs?: Record<string, string>;
 }
 
 const slug = (text: string) => text.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -73,6 +90,32 @@ const MOSS_B = "#2a2a2c";
 const ANTHRACITE = "#3f3f46";
 /** Objednací čísla rámečků 1R–5R jdoucí po sobě (2CKA001754A4235 … A4239). */
 const range = (from: number) => [0, 1, 2, 3, 4].map((offset) => `2CKA001754A${from + offset}`);
+
+/**
+ * Fáze 91: kryty společné kapitoly future linear / solo / solo carat / Busch-axcent (Katalog ABB 2026, str. 170) – kód barvy
+ * je přípona objednacího čísla krytu (kryt jednoduchý 3559B-A00651 + 84 = studio bílá).
+ */
+const bjCovers = (series: string): SeriesColor[] => [
+  color(series, "Studio bílá", "84", STUDIO, "white"),
+  color(series, "Mechová bílá", "884", MOSS_W, "white", { material: "softtouch" }),
+  color(series, "Antracitová", "81", ANTHRACITE, "anthracite"),
+  color(series, "Mechová černá", "885", MOSS_B, "black", { material: "softtouch" }),
+  color(series, "Hliníková stříbrná", "83", "#cbd5e1", "aluminium", { material: "metal" }),
+  color(series, "Ušlechtilá ocel", "866", "#c7cbd1", "steel", { material: "metal" }),
+];
+
+/** Fáze 91: rámeček ze samostatné palety (Busch-Jaeger) – objednací čísla 1R–NR jdou po sobě, výš rámeček neexistuje. */
+const bjFrame = (series: string, label: string, swatch: string, family: string, material: SeriesMaterial, from: number, gangs = 5, texture?: SeriesTexture): SeriesColor => ({
+  id: `abb-${series}-ramecek-${slug(label)}`,
+  label,
+  code: null,
+  swatch,
+  family,
+  frame: swatch,
+  material,
+  frameMpn: [0, 1, 2, 3, 4].map((offset) => (offset < gangs ? `2CKA001754A${from + offset}` : null)),
+  ...(texture ? { texture } : {}),
+});
 
 export const ABB_SERIES_2026: AbbSeries[] = [
   {
@@ -141,45 +184,59 @@ export const ABB_SERIES_2026: AbbSeries[] = [
     colors: [
       color("decento", "Bílá (porcelán)", null, W, "white", { material: "porcelain" }), color("decento", "Bílá / přírodní buk", "50", "#d4a373", "wood", { frame: "#d4a373", insert: W, material: "wood" }),
       color("decento", "Bílá / třešeň", "52", "#a0522d", "wood", { frame: "#a0522d", insert: W, material: "wood" }), color("decento", "Černá (porcelán)", "N", BLACK, "black", { material: "porcelain" }),
-      // Fáze 90: dřevěný kulatý rámeček černý dub s bílým porcelánovým středem (kód barvy zadání neuvádí)
-      color("decento", "Bílá / černý dub", null, "#3b3128", "wood", { frame: "#3b3128", insert: W, material: "wood" }),
     ],
   },
   {
     name: "future linear", letter: null, shape: "flat", mount: "flush", dbSeries: ["Future Linear", "future linear"], tagline: "Nadčasovost je budoucnost", page: 150,
     colors: [
-      color("future", "Studio bílá", null, STUDIO, "white", { frameMpn: range(4235) }), color("future", "Hliníková stříbrná", null, "#cbd5e1", "aluminium", { material: "metal", frameMpn: [4301, 4302, 4308, 4309, 4310].map((n) => `2CKA001754A${n}`) }),
-      color("future", "Antracitová", null, ANTHRACITE, "anthracite", { frameMpn: range(4240) }), color("future", "Ušlechtilá ocel", null, "#c7cbd1", "steel", { material: "metal", frameMpn: range(4317) }),
-      color("future", "Mechová bílá", null, MOSS_W, "white", { material: "softtouch", frameMpn: range(4414) }), color("future", "Mechová černá", null, MOSS_B, "black", { material: "softtouch", frameMpn: [4419, 4420, 4421, 4422, null].map((n) => (n ? `2CKA001754A${n}` : null)) }),
+      color("future", "Studio bílá", "84", STUDIO, "white", { frameMpn: range(4235), idSlug: "studio-bila" }), color("future", "Hliníková stříbrná", "83", "#cbd5e1", "aluminium", { idSlug: "hlinikova-stribrna", material: "metal", frameMpn: [4301, 4302, 4308, 4309, 4310].map((n) => `2CKA001754A${n}`) }),
+      color("future", "Antracitová", "81", ANTHRACITE, "anthracite", { frameMpn: range(4240), idSlug: "antracitova" }), color("future", "Ušlechtilá ocel", "866", "#c7cbd1", "steel", { material: "metal", frameMpn: range(4317), idSlug: "uslechtila-ocel" }),
+      color("future", "Mechová bílá", "884", MOSS_W, "white", { material: "softtouch", frameMpn: range(4414), idSlug: "mechova-bila" }), color("future", "Mechová černá", "885", MOSS_B, "black", { material: "softtouch", frameMpn: range(4419), idSlug: "mechova-cerna" }),
     ],
   },
   {
     name: "solo", letter: null, shape: "solo", mount: "flush", dbSeries: ["Solo", "solo"], tagline: "Dokonalá harmonie a styl", page: 156,
     colors: [
-      color("solo", "Studio bílá / chromová", null, STUDIO, "white", { frame: "#e2e8f0", insert: STUDIO, material: "metal", frameMpn: range(4104) }), color("solo", "Antracitová / chromová", null, ANTHRACITE, "anthracite", { frame: "#e2e8f0", insert: ANTHRACITE, material: "metal", frameMpn: range(4104) }),
-      color("solo", "Studio bílá / studio bílá", null, STUDIO, "white", { frameMpn: range(4109) }), color("solo", "Antracitová / chromová lesklá", null, "#52525b", "anthracite", { frame: "#f1f5f9", insert: ANTHRACITE, material: "gloss", frameMpn: range(4326) }),
+      color("solo", "Studio bílá / chromová", "84", STUDIO, "white", { idSlug: "studio-bila-chromova", frame: "#e2e8f0", insert: STUDIO, material: "metal", frameMpn: range(4104) }), color("solo", "Antracitová / chromová", "81", ANTHRACITE, "anthracite", { idSlug: "antracitova-chromova", frame: "#e2e8f0", insert: ANTHRACITE, material: "metal", frameMpn: range(4104) }),
+      color("solo", "Studio bílá / studio bílá", "84", STUDIO, "white", { idSlug: "studio-bila-studio-bila", frameMpn: range(4109) }), color("solo", "Antracitová / chromová lesklá", "81", "#52525b", "anthracite", { idSlug: "antracitova-chromova-leskla", frame: "#f1f5f9", insert: ANTHRACITE, material: "gloss", frameMpn: range(4326) }),
     ],
   },
   {
     name: "solo carat", letter: null, shape: "solo", mount: "flush", dbSeries: ["solo carat"], tagline: "Ušlechtilý charakter", page: 158,
-    colors: [
-      color("solo-carat", "Bílé sklo", null, "#f8fafc", "white", { material: "glass", frameMpn: [4442, 4443, 4444, 4445, null].map((n) => (n ? `2CKA001754A${n}` : null)) }),
-      color("solo-carat", "Ušlechtilá ocel", null, "#c7cbd1", "steel", { material: "metal", frameMpn: [4254, 4255, 4256, 4257, null].map((n) => (n ? `2CKA001754A${n}` : null)) }),
-      color("solo-carat", "Černé sklo", null, "#111114", "black", { material: "glass", frameMpn: [4322, 4323, 4324, 4325, null].map((n) => (n ? `2CKA001754A${n}` : null)) }),
+    // Fáze 91: kryty společné kapitoly (str. 170), rámeček zvlášť – bílé sklo, ušlechtilá ocel, černé sklo jen 1R–4R (str. 161)
+    colors: bjCovers("solo-carat"),
+    frames: [
+      bjFrame("solo-carat", "Bílé sklo", "#f8fafc", "white", "glass", 4442, 4),
+      bjFrame("solo-carat", "Ušlechtilá ocel", "#c7cbd1", "steel", "metal", 4254, 4),
+      bjFrame("solo-carat", "Černé sklo", "#111114", "black", "glass", 4322, 4),
     ],
+    framePairs: {
+      "abb-solo-carat-84": "abb-solo-carat-ramecek-bile-sklo", "abb-solo-carat-884": "abb-solo-carat-ramecek-bile-sklo",
+      "abb-solo-carat-81": "abb-solo-carat-ramecek-cerne-sklo", "abb-solo-carat-885": "abb-solo-carat-ramecek-cerne-sklo",
+      "abb-solo-carat-83": "abb-solo-carat-ramecek-uslechtila-ocel", "abb-solo-carat-866": "abb-solo-carat-ramecek-uslechtila-ocel",
+    },
   },
   {
     name: "Busch-axcent", letter: null, shape: "thick", mount: "flush", dbSeries: ["Busch-axcent"], tagline: "Důraz na jedinečnost", page: 164,
-    colors: [
-      color("axcent", "Studio bílá / bílé sklo", null, STUDIO, "white", { frame: "#f8fafc", insert: STUDIO, material: "glass", frameMpn: ["2CKA001754A4437", "2CKA001754A4438", null, null, null] }),
-      color("axcent", "Mechová bílá / černé sklo", null, "#111114", "black", { frame: "#111114", insert: MOSS_W, material: "glass", frameMpn: ["2CKA001754A4800", "2CKA001754A4801", null, null, null] }),
-      color("axcent", "Mechová bílá / titanová", null, "#71717a", "titanium", { frame: "#71717a", insert: MOSS_W, material: "metal", frameMpn: ["2CKA001754A4693", "2CKA001754A4694", null, null, null] }),
-      color("axcent", "Antracitová / platinová", null, "#d4d4d8", "silver", { frame: "#d4d4d8", insert: ANTHRACITE, material: "metal", frameMpn: ["2CKA001754A4683", "2CKA001754A4684", "2CKA001754A4685", null, null] }),
-      color("axcent", "Mechová černá / beton", null, "#a8a29e", "grey", { frame: "#a8a29e", insert: MOSS_B, material: "stone", frameMpn: ["2CKA001754A4795", "2CKA001754A4796", "2CKA001754A4797", null, null] }),
-      color("axcent", "Mechová černá / hnědý papír", null, "#8b6b4a", "brown", { frame: "#8b6b4a", insert: MOSS_B, material: "paper", frameMpn: ["2CKA001754A4790", "2CKA001754A4791", "2CKA001754A4792", null, null] }),
-      color("axcent", "Mechová černá / břidlice", null, "#475569", "anthracite", { frame: "#475569", insert: MOSS_B, material: "stone", frameMpn: ["2CKA001754A4805", "2CKA001754A4806", "2CKA001754A4807", null, null] }),
-      color("axcent", "Mechová černá / matná černá", null, "#18181b", "black", { frame: "#18181b", insert: MOSS_B, material: "matte", frameMpn: ["2CKA001754A4703", "2CKA001754A4704", "2CKA001754A4705", null, null] }),
+    // Fáze 91: kryt (klapka, zásuvka) ze společné kapitoly (str. 170) zůstává při změně rámečku stejný; rámeček zvlášť z 8
+    // skutečných materiálů, každý 1R–5R pro vodorovnou i svislou montáž (str. 166)
+    colors: bjCovers("axcent"),
+    frames: [
+      bjFrame("axcent", "Bílé sklo", "#f8fafc", "white", "glass", 4437),
+      bjFrame("axcent", "Černé sklo", "#111114", "black", "glass", 4800),
+      bjFrame("axcent", "Titanová", "#71717a", "titanium", "metal", 4693),
+      bjFrame("axcent", "Platinová", "#d4d4d8", "silver", "metal", 4683),
+      bjFrame("axcent", "Matná černá", "#18181b", "black", "matte", 4703),
+      bjFrame("axcent", "Beton", "#a8a29e", "grey", "stone", 4795, 5, "concrete"),
+      bjFrame("axcent", "Hnědý papír", "#8b6b4a", "brown", "paper", 4790, 5, "paper"),
+      bjFrame("axcent", "Břidlice", "#475569", "anthracite", "stone", 4805, 5, "slate"),
     ],
+    // Kombinace vyfocené v katalogu (str. 165) – výchozí rámeček ke krytu
+    framePairs: {
+      "abb-axcent-84": "abb-axcent-ramecek-bile-sklo", "abb-axcent-884": "abb-axcent-ramecek-cerne-sklo",
+      "abb-axcent-81": "abb-axcent-ramecek-platinova", "abb-axcent-885": "abb-axcent-ramecek-matna-cerna",
+      "abb-axcent-83": "abb-axcent-ramecek-titanova", "abb-axcent-866": "abb-axcent-ramecek-platinova",
+    },
   },
   // Fáze 90: nástěnné monoblokové přístroje do vlhka a průmyslu – kompletní přístroj v jedné barvě nebo dvoubarevné
   // kombinaci, bez samostatného rámečku, zásuvka s odklápěcím víčkem; Garant zaoblený, Praktik hranatý, Variant+ robustní
@@ -207,4 +264,23 @@ export const SERIES_ALIASES: Record<string, string[]> = {
   Swing: ["Swing / Swing L"],
   // Řada Element ve vydání 2026 skončila – uložené nákresy přejdou na nejbližší kovovou řadu Time (stejné písmeno E/F)
   Time: ["Element"],
+};
+
+/**
+ * Fáze 91: barvy Busch-axcent a solo carat uložené před fází 91 (dvojice kryt / rámeček v jednom id) → kryt a rámeček
+ * ze samostatných palet; Decento „bílá / černý dub“ → nejbližší dřevěný rámeček z katalogu (přírodní buk).
+ */
+export const LEGACY_SERIES_COLORS: Record<string, { color: string; frame?: string }> = {
+  "abb-axcent-studio-bila-bile-sklo": { color: "abb-axcent-84", frame: "abb-axcent-ramecek-bile-sklo" },
+  "abb-axcent-mechova-bila-cerne-sklo": { color: "abb-axcent-884", frame: "abb-axcent-ramecek-cerne-sklo" },
+  "abb-axcent-mechova-bila-titanova": { color: "abb-axcent-884", frame: "abb-axcent-ramecek-titanova" },
+  "abb-axcent-antracitova-platinova": { color: "abb-axcent-81", frame: "abb-axcent-ramecek-platinova" },
+  "abb-axcent-mechova-cerna-beton": { color: "abb-axcent-885", frame: "abb-axcent-ramecek-beton" },
+  "abb-axcent-mechova-cerna-hnedy-papir": { color: "abb-axcent-885", frame: "abb-axcent-ramecek-hnedy-papir" },
+  "abb-axcent-mechova-cerna-bridlice": { color: "abb-axcent-885", frame: "abb-axcent-ramecek-bridlice" },
+  "abb-axcent-mechova-cerna-matna-cerna": { color: "abb-axcent-885", frame: "abb-axcent-ramecek-matna-cerna" },
+  "abb-solo-carat-bile-sklo": { color: "abb-solo-carat-84", frame: "abb-solo-carat-ramecek-bile-sklo" },
+  "abb-solo-carat-uslechtila-ocel": { color: "abb-solo-carat-866", frame: "abb-solo-carat-ramecek-uslechtila-ocel" },
+  "abb-solo-carat-cerne-sklo": { color: "abb-solo-carat-81", frame: "abb-solo-carat-ramecek-cerne-sklo" },
+  "abb-decento-bila-cerny-dub": { color: "abb-decento-50" },
 };

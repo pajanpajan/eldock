@@ -179,7 +179,11 @@ describe("fáze 57 – úroveň instalace mění ovládání, kabeláž i kusovn
     expect(row(/^Chytrý modul pod vypínač/)).toBe(2);
     expect(row(/^Spínací modul do krabice svítidla/)).toBe(1);
     expect(row(/^Bezdrátové tlačítko 1násobné/)).toBe(1);
-    // krabice: 2 vypínače + termostat (bezdrátové tlačítko krabici nemá)
-    expect(retrofit.find((candidate) => candidate.category === "Instalační krabice")?.quantity).toBe(3);
+    // krabice: 2 vypínače + termostat (bezdrátové tlačítko krabici nemá); fáze 91 – vypínače s modulem pod vypínač do krabice
+    // s prostorem pro elektroniku, termostat do hluboké
+    const boxes = retrofit.filter((candidate) => candidate.category === "Instalační krabice");
+    expect(boxes.reduce((sum, candidate) => sum + candidate.quantity, 0)).toBe(3);
+    expect(boxes.find((candidate) => candidate.mpn === "KPR 68-70_KA")?.quantity).toBe(2);
+    expect(boxes.find((candidate) => candidate.mpn === "KPR 68_KA")?.quantity).toBe(1);
   });
 });

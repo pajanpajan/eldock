@@ -20,6 +20,7 @@ import {
   type FloorplanDraft,
   type FrameGroup,
 } from "./floorplan-editor";
+import { frameLimitText, maxFrameGang } from "./residential-series-catalog";
 
 let sequence = 0;
 const uid = (prefix: string) => `${prefix}${Date.now().toString(36)}${(sequence++).toString(36)}`;
@@ -28,8 +29,26 @@ const uid = (prefix: string) => `${prefix}${Date.now().toString(36)}${(sequence+
 //  Víceramečky
 // ---------------------------------------------------------------------------
 
-/** Víceramček pojme nejvýš 5 pozic (rámečky 1R–5R v řadách ABB i ostatních výrobců). */
+/** Víceramček pojme nejvýš 5 pozic (rámečky 1R–5R); fáze 91 – skutečný limit řady `frameLimitOf`. */
 export const MAX_FRAME_GANGS = 5;
+
+/** Fáze 91: limit víceramečku řady a barvy rámečku (Decento a nástěnné řady 1, Time Arbo a solo carat 4 …). */
+export interface FrameLimit {
+  max: number;
+  /** Vysvětlení limitu (strana katalogu); null = řada pojme víceramček až do 5R. */
+  text: string | null;
+}
+
+/** Fáze 91: limit víceramečku pro přístroj – řada a barva prvku, jinak nákresu. */
+export function frameLimitOf(draft: Pick<FloorplanDraft, "series" | "color" | "frameColor">, anchor?: Partial<Pick<EditorElement, "series" | "color" | "frameColor">> | null): FrameLimit {
+  const series = anchor?.series ?? draft.series;
+  const look = { color: anchor?.color ?? draft.color, frameColor: anchor?.frameColor ?? draft.frameColor ?? null };
+  return { max: maxFrameGang(series, look), text: frameLimitText(series, look) };
+}
+
+/** Hláška překročeného limitu (vybráno / sestava má N pozic). */
+const overLimit = (limit: FrameLimit, gangs: number, what: string) =>
+  limit.max < MAX_FRAME_GANGS && limit.text ? `${limit.text} ${what} ${gangs} pozic.` : `Víceramček pojme nejvýš ${limit.max} pozic – ${what} ${gangs} (dvojzásuvka = 2 pozice).`;
 
 /** Přístroj do víceramečku: zásuvky (dvojzásuvka = 2 pozice), datová zásuvka, vypínače a tlačítka na stěně. */
 export function isFrameable(element: Pick<EditorElement, "item">): boolean {
@@ -112,6 +131,9 @@ export function createFrame(draft: FloorplanDraft, ids: readonly string[]): Fram
   const axis = frameAxis(rotation);
   const ordered = [...picked].sort((a, b) => a.x * axis.x + a.y * axis.y - (b.x * axis.x + b.y * axis.y) || a.id.localeCompare(b.id));
   const anchor = ordered[0];
+  // Fáze 91: rámeček v řadě a barvě kotvy – víc pozic, než řada vyrábí (Decento, nástěnné řady, Time Arbo 4R …), nejde
+  const limit = frameLimitOf(draft, anchor);
+  if (gangs > limit.max) return { ok: false, error: overLimit(limit, gangs, "vybráno") };
   const height = Math.max(...ordered.map((element) => effectiveHeight(draft, element)));
   const frameId = uid("r");
   const memberIds = new Set(ordered.map((element) => element.id));
@@ -252,13 +274,16 @@ export function assemblyLabel(members: readonly string[]): string {
   return [...counts.entries()].map(([id, count]) => `${count > 1 ? `${count}× ` : ""}${(paletteItem(id)?.label ?? id).replace(/\s*\(.*\)$/, "")}`).join(" + ");
 }
 
-/** Chyba sestavy (méně než 2 přístroje, nevhodný přístroj, víc než 5 pozic), jinak null. */
-export function assemblyError(members: readonly string[]): string | null {
+/**
+ * Chyba sestavy (méně než 2 přístroje, nevhodný přístroj, víc pozic, než pojme rámeček řady – fáze 91), jinak null.
+ * Bez limitu řady platí obecných 5 pozic.
+ */
+export function assemblyError(members: readonly string[], limit: FrameLimit = { max: MAX_FRAME_GANGS, text: null }): string | null {
   if (members.length < 2) return "Sestava potřebuje alespoň 2 přístroje.";
   const rejected = members.filter((id) => !isFrameable({ item: id }));
   if (rejected.length) return `Do rámečku nejdou: ${[...new Set(rejected.map((id) => paletteItem(id)?.label ?? id))].join(", ")}.`;
   const gangs = assemblyGangs(members);
-  return gangs > MAX_FRAME_GANGS ? `Víceramček pojme nejvýš ${MAX_FRAME_GANGS} pozic – sestava má ${gangs} (dvojzásuvka = 2 pozice).` : null;
+  return gangs > Math.min(MAX_FRAME_GANGS, limit.max) ? overLimit(limit, gangs, "sestava má") : null;
 }
 
 /** Polohy členů sestavy podél osy rámečku se středem sestavy v bodě vložení (rozteč jako přisazení). */
@@ -292,7 +317,7 @@ export interface AssemblyAnchor {
  * přidělená id členů (stejný výsledek i při opakovaném volání).
  */
 export function placeAssembly(draft: FloorplanDraft, members: readonly string[], at: AssemblyAnchor, ids: readonly string[] = members.map(() => uid("e"))): AssemblyResult {
-  const error = assemblyError(members);
+  const error = assemblyError(members, frameLimitOf(draft, { series: at.series, color: at.color }));
   if (error) return { ok: false, error };
   const elements: EditorElement[] = assemblyLayout(draft, members, at).map((slot, index) => ({ id: ids[index], item: slot.item, x: slot.x, y: slot.y, room: at.room, mountHeightMm: null, frameUnits: 1, series: at.series, color: at.color, controls: [], rotation: at.rotation, scale: null }));
   const result = createFrame({ ...draft, elements: [...draft.elements, ...elements] }, elements.map((element) => element.id));

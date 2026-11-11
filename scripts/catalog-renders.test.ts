@@ -31,12 +31,14 @@ describe("fáze 80 – produktové náhledy řad ABB (public/catalog-images)", (
     expect(CATALOG_IMAGES.every((image) => image.source.startsWith("Eldock") || image.series === "smart" || !image.src.includes("/abb/"))).toBe(true);
   });
 
-  it("render nese typické prvky řady: Levit podložka, Tango vypouklý rámeček, Time kovová linka; zásuvka s ochranným kolíkem, bez skriptů", () => {
+  it("render nese typické prvky řady: Levit podložka, Tango vypouklý rámeček, Time kovové lišty, Zoni prolis; zásuvka s ochranným kolíkem, bez skriptů", () => {
     const color = (key: string, index = 0) => designSeriesOf(key)!.series.colors![index];
     const levit = renderSeriesSvg("ABB|Levit", color("ABB|Levit"), "switch");
     expect(levit).toContain('data-part="base"');
     expect(renderSeriesSvg("ABB|Tango", color("ABB|Tango"), "switch")).toContain('fill="url(#convex)"');
-    expect(renderSeriesSvg("ABB|Time", color("ABB|Time"), "switch")).toContain('stroke="url(#chrome)"');
+    // Fáze 91: Time – kovové vodorovné lišty nad a pod klapkou, Zoni – plochý prolis kolem klapky
+    expect(renderSeriesSvg("ABB|Time", color("ABB|Time"), "switch").match(/data-part="strip"/g)).toHaveLength(2);
+    expect(renderSeriesSvg("ABB|Zoni", color("ABB|Zoni"), "switch")).toContain('data-part="recess"');
     const set = renderSeriesSvg("ABB|Zoni", color("ABB|Zoni"), "set");
     expect(set.match(/data-part="socket"/g)).toHaveLength(2);
     expect(set.match(/data-part="switch"/g)).toHaveLength(1);

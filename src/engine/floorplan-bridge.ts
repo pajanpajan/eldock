@@ -41,7 +41,8 @@ export const INSTALLATION_ZONES = {
 export type NodeKind = "single_socket" | "double_socket" | "light" | "switch" | "appliance" | "data_socket" | "blind_motor";
 
 /** Upřesnění prvku (fáze 49): zásuvka nad linkou, IP44, nástěnné svítidlo, tlačítko. */
-export type NodeVariant = "worktop" | "ip44" | "wall" | "button";
+/** Fáze 91: „usb“ = zásuvka s USB nabíječkou, „surge“ = zásuvka s přepěťovou ochranou T3 (výška běžné zásuvky). */
+export type NodeVariant = "worktop" | "ip44" | "wall" | "button" | "usb" | "surge";
 
 /** Bod půdorysu (zásuvka, svítidlo, spínač nebo pevně připojený spotřebič). */
 export interface FloorNode {

@@ -2,10 +2,15 @@
 // rámečku a krytu a povrch. Sdílí ho kreslený náhled v galerii (`DeviceMockup`) i generátor renderů do
 // `public/catalog-images/` (fáze 80, `series-render.ts`). Čisté funkce.
 
-import type { SeriesColor, SeriesMaterial, SeriesShape } from "./abb-catalog-2026";
+import type { SeriesColor, SeriesMaterial, SeriesShape, SeriesTexture } from "./abb-catalog-2026";
 import { designSeriesOf } from "./wiring-designs";
 
-export type Look = { frame: string; insert: string; material: SeriesMaterial };
+/**
+ * Vzhled náhledu: barva rámečku a krytu / klapky a povrch krytu; fáze 91 – rámeček může mít vlastní povrch a texturu
+ * (Busch-axcent: beton, břidlice, papír, sklo, kov; kryt zůstává matný / lesklý).
+ */
+export type Look = { frame: string; insert: string; material: SeriesMaterial; frameMaterial?: SeriesMaterial; texture?: SeriesTexture };
+export type LookColor = Pick<SeriesColor, "swatch" | "frame" | "insert" | "material" | "texture"> & { frameMaterial?: SeriesMaterial };
 export const SHAPE: Record<SeriesShape, { radius: number; border: number; insetRadius: number }> = {
   thin: { radius: 12, border: 9, insetRadius: 6 },
   rounded: { radius: 28, border: 12, insetRadius: 18 },
@@ -22,9 +27,10 @@ export const SHAPE: Record<SeriesShape, { radius: number; border: number; insetR
   surface: { radius: 16, border: 10, insetRadius: 10 },
 };
 
-export function lookOf(color: Pick<SeriesColor, "swatch" | "frame" | "insert" | "material"> | null | undefined, shape: SeriesShape): Look {
+export function lookOf(color: LookColor | null | undefined, shape: SeriesShape): Look {
   const swatch = color?.swatch ?? "#f8fafc";
-  return { frame: color?.frame ?? swatch, insert: color?.insert ?? swatch, material: color?.material ?? (shape === "porcelain" ? "porcelain" : shape === "wood" ? "wood" : shape === "metal" ? "metal" : "gloss") };
+  const material = color?.material ?? (shape === "porcelain" ? "porcelain" : shape === "wood" ? "wood" : shape === "metal" ? "metal" : "gloss");
+  return { frame: color?.frame ?? swatch, insert: color?.insert ?? swatch, material, ...(color?.frameMaterial ? { frameMaterial: color.frameMaterial } : {}), ...(color?.texture ? { texture: color.texture } : {}) };
 }
 
 /** Světlost barvy (0–1) – tmavé provedení dostane světlejší kresbu otvorů a klapky. */
@@ -52,24 +58,30 @@ export interface MockStyle {
   /** Tango: vypouklý rámeček a průzor doutnavky. */
   convex?: boolean;
   lamp?: boolean;
-  /** Time: tenká kovová linka kolem klapky. */
-  metalLine?: boolean;
   /** Decento: kulatý rámeček (1R kruh, víceramček ovál). */
   round?: boolean;
   /** Céliane: kruhový výřez s kruhovou klapkou. */
   circle?: boolean;
   /** Fáze 90: nástěnný monoblok – zaoblený (Garant), hranatý (Praktik), robustní průmyslový (Variant+). */
   monoblock?: "rounded" | "square" | "industrial";
+  /** Fáze 91: Zoni – plochý sametový prolis kolem klapky. */
+  recess?: boolean;
+  /** Fáze 91: Time – kovové vodorovné lišty nad a pod klapkou. */
+  strips?: boolean;
+  /** Fáze 91: Busch-axcent – tenký vnitřní nosný rámeček (studio bílý / černý) kolem čtvercové klapky. */
+  carrier?: boolean;
+  /** Fáze 91: solo – kovové / barevné lišty rámečku nahoře a dole, široká klapka. */
+  bars?: boolean;
 }
 
 const SERIES_STYLE: Record<string, MockStyle> = {
   "ABB|Levit": { radius: 3, border: 14, insetRadius: 2, rocker: "flat", base: true },
   "ABB|Levit M": { radius: 3, border: 15, insetRadius: 2, rocker: "flat", base: true },
-  "ABB|Zoni": { radius: 9, border: 9, insetRadius: 6, rocker: "flat" },
+  "ABB|Zoni": { radius: 9, border: 9, insetRadius: 6, rocker: "flat", recess: true },
   // Fáze 74: Tango – měkký čtverec (ne „pilulka“ u víceramečku), běžný spínač bez průzoru doutnavky
   "ABB|Tango": { radius: 17, border: 13, insetRadius: 11, rocker: "rounded", convex: true },
-  "ABB|Time": { radius: 6, border: 15, insetRadius: 3, rocker: "flat", metalLine: true },
-  "ABB|Time Arbo": { radius: 6, border: 17, insetRadius: 3, rocker: "flat", metalLine: true },
+  "ABB|Time": { radius: 6, border: 15, insetRadius: 3, rocker: "flat", strips: true },
+  "ABB|Time Arbo": { radius: 6, border: 17, insetRadius: 3, rocker: "flat", strips: true },
   "ABB|Decento": { radius: 46, border: 15, insetRadius: 30, rocker: "lever", round: true },
   // Fáze 90: nástěnné monobloky s horní kabelovou vývodkou a odklápěcím víčkem zásuvky
   "ABB|Garant (IP44)": { radius: 24, border: 10, insetRadius: 16, rocker: "rounded", monoblock: "rounded" },
@@ -79,9 +91,9 @@ const SERIES_STYLE: Record<string, MockStyle> = {
   "ABB|Swing L": { radius: 13, border: 11, insetRadius: 8, rocker: "rounded" },
   "ABB|Classic": { radius: 4, border: 16, insetRadius: 3, rocker: "flat" },
   "ABB|future linear": { radius: 3, border: 8, insetRadius: 2, rocker: "flat" },
-  "ABB|solo": { radius: 22, border: 11, insetRadius: 14, rocker: "rounded" },
-  "ABB|solo carat": { radius: 20, border: 12, insetRadius: 13, rocker: "rounded" },
-  "ABB|Busch-axcent": { radius: 7, border: 19, insetRadius: 4, rocker: "flat" },
+  "ABB|solo": { radius: 10, border: 9, insetRadius: 10, rocker: "rounded", bars: true },
+  "ABB|solo carat": { radius: 8, border: 12, insetRadius: 10, rocker: "rounded" },
+  "ABB|Busch-axcent": { radius: 2, border: 19, insetRadius: 2, rocker: "flat", carrier: true },
   "Legrand|Céliane": { radius: 10, border: 11, insetRadius: 8, rocker: "circle", circle: true },
   "Legrand|Valena Life": { radius: 16, border: 12, insetRadius: 10, rocker: "rounded" },
   "Legrand|Valena Allure": { radius: 7, border: 13, insetRadius: 5, rocker: "flat" },
@@ -95,32 +107,15 @@ const SERIES_STYLE: Record<string, MockStyle> = {
 };
 
 /**
- * Fáze 90: obrys víceramečku Decento – spojené kruhy s vykrojeným pasem (tvar piškotu / osmičky), ne obdélník se
- * zaoblenými rohy. `count` kruhů o poloměru `r` po `pitch` se středy na ose y = `cy` (první v x = pitch / 2); kruh se
- * napojí na pas pod úhlem `theta` [°], pas je vysoký `waist` × poloměr. Jeden kruh = celý kruh.
+ * Fáze 91: Decento nejde do vícenásobných rámečků (Katalog ABB 2026, str. 144 a 548) – víc přístrojů = samostatné kulaté
+ * přístroje Ø 87 mm vedle sebe s roztečí středů krabic 91 mm (mezera 4 mm). Kruhy na pozicích 100 jednotek: poloměr
+ * 87 / 91 × 50 ≈ 47,8 a středy v x = 50, 150, 250 …
  */
-export function decentoFramePath(count: number, r = 44, pitch = 100, cy = 50, theta = 50, waist = 0.55): string {
-  const f = (value: number) => Math.round(value * 10) / 10;
-  const cx = (index: number) => pitch / 2 + index * pitch;
-  if (count <= 1) return `M${f(cx(0) - r)} ${f(cy)} A${r} ${r} 0 1 1 ${f(cx(0) + r)} ${f(cy)} A${r} ${r} 0 1 1 ${f(cx(0) - r)} ${f(cy)} Z`;
-  const rad = (theta * Math.PI) / 180;
-  const dx = r * Math.cos(rad);
-  const dy = r * Math.sin(rad);
-  const h = r * waist;
-  // Řídicí bod kvadratické křivky pasu: vrchol křivky leží ve výšce h od osy
-  const top = cy - 2 * h + dy;
-  const bottom = cy + 2 * h - dy;
-  const arcTo = (large: 0 | 1, x: number, y: number) => `A${r} ${r} 0 ${large} 1 ${f(x)} ${f(y)}`;
-  const parts = [`M${f(cx(0) - r)} ${f(cy)}`, arcTo(0, cx(0) + dx, cy - dy)];
-  for (let index = 1; index < count; index++) {
-    parts.push(`Q${f(cx(index) - pitch / 2)} ${f(top)} ${f(cx(index) - dx)} ${f(cy - dy)}`);
-    parts.push(index < count - 1 ? arcTo(0, cx(index) + dx, cy - dy) : arcTo(1, cx(index) - dx, cy + dy));
-  }
-  for (let index = count - 2; index >= 0; index--) {
-    parts.push(`Q${f(cx(index) + pitch / 2)} ${f(bottom)} ${f(cx(index) + dx)} ${f(cy + dy)}`);
-    parts.push(index > 0 ? arcTo(0, cx(index) - dx, cy + dy) : arcTo(0, cx(0) - r, cy));
-  }
-  return `${parts.join(" ")} Z`;
+export const DECENTO_PITCH_MM = 91;
+export const DECENTO_DIAMETER_MM = 87;
+export function decentoCircles(count: number, unit = 100): { cx: number; r: number }[] {
+  const r = (DECENTO_DIAMETER_MM / DECENTO_PITCH_MM) * (unit / 2);
+  return Array.from({ length: Math.max(1, count) }, (_, index) => ({ cx: unit / 2 + index * unit, r: Math.round(r * 10) / 10 }));
 }
 
 /** Styl náhledu řady (podle klíče řady, jinak podle tvaru). */

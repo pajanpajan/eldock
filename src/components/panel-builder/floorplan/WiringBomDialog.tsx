@@ -5,7 +5,7 @@ import { FileSpreadsheet, FileText, ListChecks, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toCsv } from "@/lib/csv";
-import { bomTable, type WiringBomRow } from "@/lib/panel-builder/wiring-bom";
+import { BOX_TABLE_TITLE, bomBoxRows, bomMainRows, bomTable, type WiringBomRow } from "@/lib/panel-builder/wiring-bom";
 import { buildXlsx } from "@/lib/xlsx";
 import { cn } from "@/lib/utils";
 
@@ -24,6 +24,9 @@ export function WiringBomDialog({ rows }: { rows: readonly WiringBomRow[] }) {
   const missing = rows.filter((row) => !row.mpn && row.unit === "ks").length;
   const unverified = rows.filter((row) => row.mpn && !row.verified).length;
   const table = bomTable(rows);
+  // Fáze 91: krabice v samostatné tabulce na konci kusovníku
+  const main = bomMainRows(rows);
+  const boxes = bomBoxRows(rows);
   return (
     <section className="flex flex-col gap-2 rounded-xl border border-border bg-card p-3" aria-label="Kusovník domovní instalace" data-testid="wiring-bom">
       <h2 className="text-sm font-semibold">Kusovník domovní instalace</h2>
@@ -40,7 +43,7 @@ export function WiringBomDialog({ rows }: { rows: readonly WiringBomRow[] }) {
           <DialogHeader>
             <DialogTitle>Kusovník domovní instalace</DialogTitle>
             <DialogDescription>
-              Přístroj + kryt + rámeček podle sestavování přístrojů Katalogu ABB 2026, krabice KOPOS a kabely z výkazu kabeláže. „ověřit“ = číslo odvozené z matice katalogu, „doplnit“ = objednací číslo v podkladech chybí.
+              Přístroj + kryt + rámeček podle sestavování přístrojů Katalogu ABB 2026 (víceramček, který řada nevyrábí, rozdělený na skutečné rámečky), kabely z výkazu kabeláže a na konci instalační krabice podle výrobce, konstrukce stěn a hloubky přístroje. „ověřit“ = číslo odvozené z matice katalogu, „doplnit“ = objednací číslo v podkladech chybí.
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-wrap gap-2 print:hidden">
@@ -65,7 +68,7 @@ export function WiringBomDialog({ rows }: { rows: readonly WiringBomRow[] }) {
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
+              {main.map((row) => (
                 <tr key={`${row.category}-${row.mpn ?? row.name}-${row.appearance}`} className="border-b border-border/60">
                   <td className="py-1 pr-2 text-muted-foreground">{row.category}</td>
                   <td className={cn("py-1 pr-2 font-mono", !row.mpn && "text-amber-300")}>
@@ -81,6 +84,35 @@ export function WiringBomDialog({ rows }: { rows: readonly WiringBomRow[] }) {
               ))}
             </tbody>
           </table>
+          {boxes.length ? (
+            <section className="flex flex-col gap-1.5" aria-label="Doporučené instalační krabičky" data-testid="wiring-bom-boxes">
+              <h3 className="text-sm font-semibold">{BOX_TABLE_TITLE}</h3>
+              <table className="w-full border-collapse text-xs" data-testid="wiring-bom-boxes-table">
+                <thead>
+                  <tr className="border-b border-border text-left text-muted-foreground">
+                    <th className="py-1.5 pr-2">Výrobce</th>
+                    <th className="py-1.5 pr-2">Typové označení</th>
+                    <th className="py-1.5 pr-2">Objednací kód / katalogové číslo</th>
+                    <th className="py-1.5 pr-2 text-right">Hloubka (mm)</th>
+                    <th className="py-1.5 pr-2">Určení / prostředí</th>
+                    <th className="py-1.5 text-right">Počet ks</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {boxes.map((row) => (
+                    <tr key={`${row.mpn ?? row.name}-${row.box.maker}`} className="border-b border-border/60" data-testid="wiring-bom-box" data-code={row.mpn ?? ""}>
+                      <td className="py-1 pr-2">{row.box.maker}</td>
+                      <td className="py-1 pr-2 font-semibold">{row.box.type}</td>
+                      <td className={cn("py-1 pr-2 font-mono", !row.mpn && "text-amber-300")}>{row.mpn ?? "doplnit"}</td>
+                      <td className="py-1 pr-2 text-right font-mono">{row.box.depthMm ?? "–"}</td>
+                      <td className="py-1 pr-2 text-muted-foreground">{row.box.purpose}</td>
+                      <td className="py-1 text-right font-mono">{row.quantity.toLocaleString("cs-CZ")}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          ) : null}
         </DialogContent>
       </Dialog>
     </section>

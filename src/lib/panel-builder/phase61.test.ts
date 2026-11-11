@@ -72,9 +72,12 @@ describe("fáze 61 – designové řady podle katalogu ABB 2026", () => {
     expect(flush).toEqual(expect.arrayContaining(["solo", "solo carat", "Busch-axcent", "future linear", "Decento"]));
     expect(designSeriesOf("ABB|solo / solo carat")?.series.name).toBe("solo");
     expect(designSeriesOf("ABB|Element")?.series.name).toBe("Time");
-    expect(seriesColors("ABB|future linear").map((color) => color.label)).toEqual(["Studio bílá", "Hliníková stříbrná", "Antracitová", "Ušlechtilá ocel", "Mechová bílá", "Mechová černá"]);
-    const axcent = designSeriesOf("ABB|Busch-axcent")!.series.colors!;
-    expect(axcent[0]).toMatchObject({ label: "Studio bílá / bílé sklo", material: "glass", frameMpn: expect.arrayContaining(["2CKA001754A4437"]) });
+    // Fáze 91: kód barvy krytu ze společné kapitoly (str. 170)
+    expect(seriesColors("ABB|future linear").map((color) => color.label)).toEqual(["Studio bílá (84)", "Hliníková stříbrná (83)", "Antracitová (81)", "Ušlechtilá ocel (866)", "Mechová bílá (884)", "Mechová černá (885)"]);
+    // Fáze 91: Busch-axcent – kryt ze společné kapitoly, rámeček bílé sklo zvlášť (1R–5R, str. 166)
+    const axcent = designSeriesOf("ABB|Busch-axcent")!.series;
+    expect(axcent.colors![0]).toMatchObject({ label: "Studio bílá (84)" });
+    expect(axcent.frames![0]).toMatchObject({ label: "Bílé sklo", material: "glass", frameMpn: ["2CKA001754A4437", "2CKA001754A4438", "2CKA001754A4439", "2CKA001754A4440", "2CKA001754A4441"] });
   });
 
   it("rámečky řad Time, Swing a Swing L a Levit M mají objednací čísla z katalogu 2026", () => {

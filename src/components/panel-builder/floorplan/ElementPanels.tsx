@@ -23,8 +23,10 @@ import {
   type LightSpec,
   type PaletteItem,
 } from "@/lib/panel-builder/floorplan-editor";
-import { frameGangs, frameOf, isFrameable } from "@/lib/panel-builder/floorplan-frames";
-import { DESIGN_BRANDS, appearanceLabel, colorForSeries, designSeriesOf, hasFrameChoice, seriesColors } from "@/lib/panel-builder/wiring-designs";
+import { frameGangs, frameLimitOf, frameOf, isFrameable } from "@/lib/panel-builder/floorplan-frames";
+import { BOX_CHOICES, WALL_TYPES, type BoxChoice, type WallType } from "@/lib/panel-builder/box-options";
+import type { ResolvedBox } from "@/lib/panel-builder/mounting-boxes-catalog";
+import { DESIGN_BRANDS, appearanceLabel, colorForSeries, designSeriesOf, hasFrameChoice, seriesColors, seriesFrameColors } from "@/lib/panel-builder/wiring-designs";
 import { cn } from "@/lib/utils";
 
 import { AddToFrameControl, SaveTemplateControl } from "./FrameAssemblyPalette";
@@ -175,6 +177,7 @@ export function ElementDetail({
   board,
   onBasinZone,
   onSaveTemplate,
+  box,
 }: {
   draft: FloorplanDraft;
   element: EditorElement;
@@ -201,12 +204,16 @@ export function ElementDetail({
   onBasinZone?: (zone: BasinZone) => void;
   /** Fáze 78: víceramček jako šablona firmy (chyba jako text, jinak null). */
   onSaveTemplate?: (members: string[], label: string) => string | null;
+  /** Fáze 91: instalační krabice prvku (doporučená / ručně zvolená) a popis. */
+  box?: { resolved: ResolvedBox; summary: string } | null;
 }) {
   const item = paletteItem(element.item)!;
   const isPanel = item.kind === "panel" || item.kind === "riser" || item.kind === "fixture";
   const defaultHeight = isPanel ? draft.profile.switchboardHeightMm : (appliance?.heightMm ?? item.heightMm ?? mountHeight({ kind: item.kind as Exclude<typeof item.kind, "panel" | "riser" | "fixture">, variant: item.variant, tag: item.tag }, draft.profile));
   const light = item.kind === "light" ? lightSpecOf(element) : null;
   const frame = frameOf(draft, element.id);
+  // Fáze 91: limit víceramečku řady prvku (rámeček v řadě a barvě kotvy rámečku)
+  const frameLimit = frameLimitOf(draft, frame ? (draft.elements.find((other) => other.id === frame.members[0]) ?? element) : element);
   const legacyFrameable = !frame && !item.wireless && !item.sensor && !item.heatingHead && (item.kind === "single_socket" || item.kind === "double_socket" || item.kind === "data_socket" || item.kind === "switch");
   const rooms = [...new Set([...draft.rooms.map((room) => room.name), ...draft.elements.map((other) => other.room)])];
   const everything = [...draft.elements, ...draft.otherFloors.flatMap((floor) => floor.elements)];
@@ -231,6 +238,43 @@ export function ElementDetail({
       </div>
       {socketCircuit}
       {board}
+      {/* Fáze 91: instalační krabička – doporučená podle přístroje a stěny, ruční volba a hlídač hloubky */}
+      {box && box.resolved.kind !== "none" ? (
+        <div className={cn("flex flex-col gap-1 rounded-lg border p-2 text-xs", box.resolved.tooShallow ? "border-amber-400/70 bg-amber-500/10" : "border-border/70")} data-testid="element-box" data-kind={box.resolved.kind}>
+          <p>
+            <span className="font-semibold">📦 Instalační krabička:</span> <span data-testid="element-box-summary">{box.summary}</span>
+          </p>
+          {box.resolved.need.kind === "shallow" || box.resolved.need.kind === "deep" || box.resolved.need.kind === "electronics" ? (
+            <label className="flex items-center gap-1.5 text-muted-foreground">
+              Volba krabice
+              <select
+                value={element.box ?? "auto"}
+                onChange={(event) => onChange({ box: event.target.value === "auto" ? undefined : (event.target.value as BoxChoice) })}
+                className="h-7 min-w-0 flex-1 rounded-md border border-input bg-transparent px-1 text-xs text-foreground dark:bg-input/30"
+                aria-label="Volba instalační krabice"
+                data-testid="element-box-choice"
+              >
+                {BOX_CHOICES.map((choice) => (
+                  <option key={choice.id} value={choice.id}>
+                    {choice.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          {box.resolved.need.minDepthMm ? (
+            <p className="text-muted-foreground" data-testid="element-box-min">
+              Minimální požadovaná hloubka: <b className="text-foreground">{box.resolved.need.minDepthMm} mm</b>
+              {box.resolved.need.reasons.length ? ` – ${box.resolved.need.reasons.join(", ")}` : ""}
+            </p>
+          ) : null}
+          {box.resolved.tooShallow ? (
+            <p className="font-semibold text-amber-200" data-testid="element-box-warning">
+              ⚠️ Zvolená krabice je mělčí, než přístroj a svorkování potřebují – viz Kontrola půdorysu a norem.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
       {/* Fáze 57: měřítko značky (násobek velikosti značek nákresu) */}
       <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground" role="radiogroup" aria-label="Měřítko značky">
         Měřítko značky:
@@ -304,23 +348,23 @@ export function ElementDetail({
                   Rozdělit rámeček
                 </Button>
               </div>
-              <AddToFrameControl level={draft.installation} defaultItem={element.item} gangs={usedGangs} onAdd={onAddToFrame} />
+              <AddToFrameControl level={draft.installation} defaultItem={element.item} gangs={usedGangs} onAdd={onAddToFrame} limit={frameLimit} />
               {/* Fáze 78: osazený víceramček jako šablona firmy (pořadí pozic zleva) */}
-              {onSaveTemplate ? <SaveTemplateControl members={frame.members.map((id) => draft.elements.find((other) => other.id === id)?.item).filter((id): id is string => Boolean(id))} onSave={onSaveTemplate} /> : null}
+              {onSaveTemplate ? <SaveTemplateControl members={frame.members.map((id) => draft.elements.find((other) => other.id === id)?.item).filter((id): id is string => Boolean(id))} onSave={onSaveTemplate} limit={frameLimit} /> : null}
             </div>
           ) : legacyFrameable ? (
             <div className="flex flex-col gap-1">
               <div className="flex items-center gap-1 text-xs text-muted-foreground" role="radiogroup" aria-label="Počet kusů v rámečku">
                 Stejné kusy v rámečku:
                 {[1, 2, 3, 4, 5].map((units) => (
-                  <button key={units} type="button" role="radio" aria-checked={element.frameUnits === units} onClick={() => onChange({ frameUnits: units })} className={cn("rounded border px-2 py-0.5", element.frameUnits === units ? "border-primary bg-primary/20 text-foreground" : "border-border")}>
+                  <button key={units} type="button" role="radio" aria-checked={element.frameUnits === units} disabled={units > frameLimit.max && element.frameUnits !== units} title={units > frameLimit.max ? (frameLimit.text ?? undefined) : undefined} onClick={() => onChange({ frameUnits: units })} className={cn("rounded border px-2 py-0.5 disabled:opacity-35", element.frameUnits === units ? "border-primary bg-primary/20 text-foreground" : "border-border")}>
                     {units}R
                   </button>
                 ))}
               </div>
               {isFrameable(element) ? (
                 <>
-                  <AddToFrameControl level={draft.installation} defaultItem={element.item} gangs={usedGangs} onAdd={onAddToFrame} />
+                  <AddToFrameControl level={draft.installation} defaultItem={element.item} gangs={usedGangs} onAdd={onAddToFrame} limit={frameLimit} />
                   <p className="text-[11px] text-muted-foreground">Celou sestavu vložíte i z palety (▦ Sestavy ve víceramečku), již osazené přístroje spojíte Shift + klikem a „Vložit do víceramečku“.</p>
                 </>
               ) : null}
@@ -367,7 +411,8 @@ export function ElementDetail({
                   data-testid="element-frame-color"
                 >
                   <option value="">podle nákresu ({draft.frameColor ? "vlastní barva rámečku" : "stejná jako klapka"})</option>
-                  {seriesColors(element.series ?? draft.series).map((option) => (
+                  {/* Fáze 91: Busch-axcent / solo carat – rámečky ze samostatné palety */}
+                  {seriesFrameColors(element.series ?? draft.series).map((option) => (
                     <option key={option.id} value={option.id}>
                       {option.label}
                     </option>
@@ -463,7 +508,7 @@ export function Dimensions({ x, y, w, h, symbol }: { x: number; y: number; w: nu
 }
 
 /** Detail vybrané místnosti: název s rychlými štítky, rozměr X × Y v metrech a smazání. */
-export function RoomDetail({ room, onChange, onDelete }: { room: EditorRoom; onChange: (patch: Partial<Pick<EditorRoom, "name" | "w" | "h">>) => void; onDelete: () => void }) {
+export function RoomDetail({ room, onChange, onDelete, defaultWall }: { room: EditorRoom; onChange: (patch: Partial<Pick<EditorRoom, "name" | "w" | "h" | "wallType">>) => void; onDelete: () => void; defaultWall?: WallType }) {
   const toM = (mm: number) => Math.round(mm) / 1000;
   return (
     <section className="flex flex-col gap-2 rounded-xl border-2 border-yellow-400/60 bg-card p-3 text-sm" aria-label="Detail vybrané místnosti" data-testid="room-detail">
@@ -492,6 +537,24 @@ export function RoomDetail({ room, onChange, onDelete }: { room: EditorRoom; onC
       <p className="text-xs text-muted-foreground" data-testid="room-area">
         {roomDimensions(room.w, room.h).label}
       </p>
+      {/* Fáze 91: konstrukce stěn místnosti (instalační krabice v kusovníku a hlídač hloubky) */}
+      <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+        📦 Konstrukce stěn / prostředí místnosti
+        <select
+          value={room.wallType ?? ""}
+          onChange={(event) => onChange({ wallType: (event.target.value || undefined) as WallType | undefined })}
+          className="h-8 rounded-md border border-input bg-transparent px-1 text-xs text-foreground dark:bg-input/30"
+          aria-label="Konstrukce stěn místnosti"
+          data-testid="room-wall"
+        >
+          <option value="">podle nákresu ({WALL_TYPES.find((wall) => wall.id === (defaultWall ?? "masonry"))?.label})</option>
+          {WALL_TYPES.map((wall) => (
+            <option key={wall.id} value={wall.id}>
+              {wall.label}
+            </option>
+          ))}
+        </select>
+      </label>
       <Button type="button" variant="destructive" size="sm" className="gap-1.5" onClick={onDelete}>
         <Trash2 className="size-4" aria-hidden /> 🗑️ Smazat místnost
       </Button>

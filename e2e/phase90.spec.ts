@@ -252,7 +252,7 @@ test("🛁 Koupelna: ZAL_M a MAG u vany bez falešné chyby zóny, zásuvka s p�
   await page.screenshot({ path: "test-results/phase90-bathroom.png" });
 });
 
-test("🎨 Řady ABB: Garant / Variant+ / Praktik bez rámečku se zásuvkou pod víčkem, Decento ve tvaru spojených kruhů", async ({ page }) => {
+test("🎨 Řady ABB: Garant / Variant+ / Praktik bez rámečku se zásuvkou pod víčkem, Decento jako samostatné kulaté přístroje", async ({ page }) => {
   test.setTimeout(240_000);
   await openNew(page);
   await page.getByTestId("wizard-step-2").click();
@@ -280,15 +280,15 @@ test("🎨 Řady ABB: Garant / Variant+ / Praktik bez rámečku se zásuvkou pod
   await expect(gallery.getByTestId("gallery-color")).toHaveCount(2);
   await expect(gallery).toContainText("str. 502");
 
-  // Decento: 5 pevných provedení (i bílá / černý dub), víceramček jako spojené kruhy, zásuvka se šroubky
+  // Decento (fáze 91 podle katalogu): 4 pevná provedení, víc přístrojů jen samostatně vedle sebe, zásuvka se středovým šroubkem
   await gallery.getByTestId("gallery-series-Decento").click();
-  await expect(gallery.getByTestId("gallery-color")).toHaveCount(5);
+  await expect(gallery.getByTestId("gallery-color")).toHaveCount(4);
   await expect(gallery.getByTestId("gallery-frame-none")).toContainText("pevná dvojice porcelánového středu");
   await expect(preview.locator('[data-outline="decento"]')).toHaveCount(1);
-  await expect(preview.getByTestId("mockup-screw")).toHaveCount(6);
-  await gallery.getByTestId("gallery-color").filter({ hasText: "Bílá / černý dub" }).click();
+  await expect(preview.getByTestId("mockup-screw")).toHaveCount(3);
+  await gallery.getByTestId("gallery-color").filter({ hasText: "Bílá / třešeň" }).click();
   await page.screenshot({ path: "test-results/phase90-decento.png" });
   await gallery.getByTestId("gallery-apply").click();
-  await expect(page.getByTestId("design-badge")).toContainText("ABB Decento · Bílá / černý dub");
+  await expect(page.getByTestId("design-badge")).toContainText("ABB Decento · Bílá / třešeň (52)");
   await expect(page.getByTestId("frame-color-none")).toContainText("pevná dvojice");
 });

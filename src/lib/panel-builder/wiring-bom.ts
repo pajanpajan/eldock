@@ -5,14 +5,19 @@
 // u řady, kde zadání uvádí jen jednoduchý kryt, dvoubarevný kód) má `verified: false`; bez podkladu je MPN null (doplnit).
 // Fáze 81: panel chytré domácnosti (IP TOUCH, SmartTouch, Trevion …) v barvě varianty s vlastní montážní krabicí místo
 // přístrojové a s mezirámečkem podle řady (Trevion v Zoni); systémový modul mimo DIN lištu (nástěnný SysAP) do kusovníku.
-// Čisté funkce.
+// Fáze 91: víceramček, který řada nevyrábí, se rozdělí na skutečné rámečky (Time Arbo 5R → 4R + 1R, Classic po 1R);
+// Decento = kompletní přístroje s kulatým rámečkem (str. 145–147, bez rámečků a krytů), kryty řad Busch-Jaeger ze společné
+// kapitoly (str. 170); instalační krabice podle výrobce, konstrukce stěny a hloubky přístroje (`mounting-boxes-catalog.ts`)
+// v samostatné tabulce. Čisté funkce.
 
 import { allElements, effectiveSwitchNo, floorsOf, frameColorOf, isWiredSwitch, paletteItem, type EditorElement, type FloorplanDraft, type FrameGroup } from "./floorplan-editor";
 import { gangsOf } from "./floorplan-frames";
 import { productById } from "./smart-catalog";
 import { smartPlanOf } from "./smart-home-plan";
 import { panelBomRows, variantOf } from "./smart-panels";
-import { appearanceLabel, colorCodeFor, designSeriesOf, hasFrameChoice, isMonoblockSeries } from "./wiring-designs";
+import { boxMakerLabel, compileBoxUsage, wallTypeOf } from "./mounting-boxes-catalog";
+import { frameRulesOf, maxFrameGang, splitFrameGangs, splitLabel } from "./residential-series-catalog";
+import { appearanceLabel, colorCodeFor, designSeriesOf, hasFrameChoice, isMonoblockSeries, resolveFrameColor } from "./wiring-designs";
 
 export type BomCategory = "Přístroje spínačů" | "Kryty spínačů" | "Sběrnicové prvky" | "Chytré moduly" | "Zásuvky" | "Rámečky" | "Ostatní přístroje" | "Instalační krabice" | "Kabely";
 export const BOM_CATEGORIES: readonly BomCategory[] = ["Přístroje spínačů", "Kryty spínačů", "Sběrnicové prvky", "Chytré moduly", "Zásuvky", "Rámečky", "Ostatní přístroje", "Instalační krabice", "Kabely"];
@@ -27,6 +32,15 @@ export interface WiringBomRow {
   appearance: string;
   quantity: number;
   unit: "ks" | "m";
+  /** Fáze 91: instalační krabice – řádek tabulky doporučených krabic (výrobce, typ, hloubka, určení). */
+  box?: BomBoxInfo;
+}
+
+export interface BomBoxInfo {
+  maker: string;
+  type: string;
+  depthMm: number | null;
+  purpose: string;
 }
 
 /** Strojky spínačů pod omítku ABB (nezávislé na řadě). */
@@ -46,6 +60,8 @@ interface SeriesMatrix {
   socket1: string | null;
   socket2: string | null;
   frame: (units: number) => string | null;
+  /** Fáze 91: kód barvy za základ bez mezery (Busch-Jaeger: 3559B-A00651 + 84 = 3559B-A0065184). */
+  join?: string;
 }
 
 /** Matice objednacích čísel řad ABB ze zadání (Katalog ABB 2026); kód barvy se připojuje za mezeru. */
@@ -81,6 +97,32 @@ const ABB_MATRIX: Record<string, SeriesMatrix> = {
 };
 // Levit M sdílí přístroje i rámečky s řadou Levit (kódy barev 63 / 68 / 69 / 70)
 ABB_MATRIX["Levit M"] = ABB_MATRIX.Levit;
+// Fáze 91: kryty společné kapitoly future linear / solo / solo carat / Busch-axcent (str. 170) – rámečky z `frameMpn`
+const BUSCH_JAEGER: SeriesMatrix = {
+  cover: (kind) => (kind === "blind" ? null : { base: kind === "divided" ? "3559B-A00652" : "3559B-A00651", verified: true }),
+  socket1: null,
+  socket2: null,
+  frame: () => null,
+  join: "",
+};
+for (const name of ["future linear", "solo", "solo carat", "Busch-axcent"]) ABB_MATRIX[name] = BUSCH_JAEGER;
+
+/**
+ * Fáze 91: Decento – kompletní přístroje s kulatým rámečkem (Katalog ABB 2026, str. 145–147); přípona barvy: bílá bez
+ * přípony, 50 bílá / přírodní buk, 52 bílá / třešeň, N černá. Řazení 1 = přepínač střídavý „6 (1)“, 1/0 = ovládač „6/0 (1/0)“.
+ */
+const DECENTO_SWITCH: Record<string, string> = { "1": "3559K-C06345", "6": "3559K-C06345", "5": "3559K-C05345", "7": "3559K-C07345", "6+6": "3559K-C52345", "1/0": "3559K-C86345", blind: "3559K-C88345" };
+const DECENTO_SOCKET = "6619K-C06347";
+const DECENTO_DATA = "5014K-C01018";
+/** Nabíjecí přístroj USB-A / USB-C Decento jen bílý a černý. */
+const DECENTO_USB = "5014K-C00399";
+
+function decentoMpn(base: string | null, code: string | null | undefined, only?: readonly string[]): { mpn: string | null; verified: boolean } {
+  if (!base) return { mpn: null, verified: false };
+  const suffix = code ?? "";
+  if (only && !only.includes(suffix)) return { mpn: null, verified: false };
+  return { mpn: suffix ? `${base} ${suffix}` : base, verified: true };
+}
 
 /**
  * Fáze 61: sběrnicové prvky ABB-free@home podle katalogu 2026 (str. 252): tlačítková rozhraní pod designový kryt
@@ -99,11 +141,11 @@ const DIVIDED = new Set(["5", "6+6", "1/0+1/0", "1+1", "6+6/0"]);
  * Objednací číslo s kódem barvy dílu; barva bez kódu → chybí. Fáze 74: dvoubarevný kód („241/141“) se rozdělí na
  * rámeček / kryt (klapku) – objednací číslo z rozděleného kódu je neověřené.
  */
-function withColor(base: string | null, code: string | null | undefined, verified: boolean, part: "frame" | "insert" = "insert"): { mpn: string | null; verified: boolean } {
+function withColor(base: string | null, code: string | null | undefined, verified: boolean, part: "frame" | "insert" = "insert", join = " "): { mpn: string | null; verified: boolean } {
   if (!base) return { mpn: null, verified: false };
   const own = colorCodeFor(code, part);
   if (!own.code) return { mpn: null, verified: false };
-  return { mpn: `${base} ${own.code}`, verified: verified && !own.split };
+  return { mpn: `${base}${join}${own.code}`, verified: verified && !own.split };
 }
 
 export interface BomOptions {
@@ -111,6 +153,8 @@ export interface BomOptions {
   installation?: string;
   /** Rozpis kabelů z výkazu kabeláže (typ → metry). */
   cables?: readonly { cable: string; meters: number }[];
+  /** Fáze 91: počet kabelů v krabici prvku (úseky tras) – rozbočovací zásuvka dostane hlubokou krabici. */
+  cableEnds?: Readonly<Record<string, number>>;
 }
 
 /** Objednací číslo rámečku NR: řady Busch-Jaeger mají číslo pro každou barvu (`frameMpn`), ostatní matice + kód barvy rámečku. */
@@ -130,7 +174,6 @@ export function compileFloorplanBom(draft: FloorplanDraft, options: BomOptions =
     if (current) current.quantity = Math.round((current.quantity + quantity) * 10) / 10;
     else rows.set(key, { ...row, quantity });
   };
-  let boxes = 0;
   // Fáze 59: víceramečky všech podlaží – člen rámečku nemá vlastní rámeček, za skupinu jeden rámeček NR
   const frameOf = new Map<string, FrameGroup>();
   for (const floor of floorsOf(draft)) for (const group of floor.frames) for (const id of group.members) frameOf.set(id, group);
@@ -143,21 +186,40 @@ export function compileFloorplanBom(draft: FloorplanDraft, options: BomOptions =
     const found = designSeriesOf(seriesKey);
     const isAbb = found?.brand.manufacturer === "ABB";
     const seriesColor = found?.series.colors?.find((color) => color.id === colorId);
-    const frameColor = found?.series.colors?.find((color) => color.id === frameId) ?? seriesColor;
-    return { seriesKey, colorId, found, isAbb, matrix: isAbb ? ABB_MATRIX[found!.series.name] : undefined, code: seriesColor?.code ?? null, frameCode: frameColor?.code ?? null, frameMpn: frameColor?.frameMpn, appearance: appearanceLabel(seriesKey, colorId, frameId), monoblock: isMonoblockSeries(seriesKey), ip: found?.series.ip ?? "IP44" };
+    // Fáze 91: Busch-axcent / solo carat – rámeček ze samostatné palety (jinak barvy řady)
+    const frameColor = resolveFrameColor(seriesKey, frameId, colorId) ?? seriesColor;
+    const rules = frameRulesOf(seriesKey);
+    return {
+      seriesKey,
+      colorId,
+      found,
+      isAbb,
+      matrix: isAbb ? ABB_MATRIX[found!.series.name] : undefined,
+      code: seriesColor?.code ?? null,
+      frameCode: frameColor?.code ?? null,
+      frameMpn: frameColor?.frameMpn,
+      appearance: appearanceLabel(seriesKey, colorId, frameId),
+      monoblock: isMonoblockSeries(seriesKey),
+      ip: found?.series.ip ?? "IP44",
+      maxGang: maxFrameGang(seriesKey, { color: colorId, frameColor: frameColor?.id ?? frameId }),
+      separate: Boolean(rules.separateDevices),
+      decento: isAbb && found!.series.name === "Decento",
+    };
   };
   const everything = allElements(draft);
   for (const element of everything) {
     const item = paletteItem(element.item);
     if (!item || item.kind === "panel" || item.kind === "riser" || item.kind === "fixture" || item.kind === "light" || item.kind === "appliance") continue;
-    const { found, isAbb, matrix, code, appearance, monoblock, ip } = look(element);
+    const style = look(element);
+    const { found, isAbb, matrix, code, appearance, monoblock, ip, decento } = style;
     const units = Math.max(1, element.frameUnits);
     const inFrame = frameOf.has(element.id);
-    // Fáze 90: nástěnný monoblok (Garant, Praktik, Variant+) – kompletní přístroj na povrch, bez rámečku a krabice pod omítku
-    boxes += monoblock ? 0 : inFrame ? gangsOf(element) : units;
+    // Fáze 90: nástěnný monoblok (Garant, Praktik, Variant+) – kompletní přístroj na povrch, bez rámečku; fáze 91 – Decento
+    // má kulatý rámeček v přístroji, N kusů v rámečku víc, než řada vyrábí, se rozdělí na skutečné rámečky
     const frame = () => {
-      if (inFrame || monoblock) return;
-      add({ category: "Rámečky", ...frameNumber(look(element), units), name: `Rámeček ${units}násobný (${units}R)`, appearance, unit: "ks" }, 1);
+      if (inFrame || monoblock || style.separate) return;
+      const parts = splitFrameGangs(units, style.maxGang);
+      for (const part of parts) add({ category: "Rámečky", ...frameNumber(style, part), name: parts.length > 1 ? `Rámeček ${part}násobný (${part}R) – ${units}R rozdělený podle řady (${splitLabel(parts)})` : `Rámeček ${part}násobný (${part}R)`, appearance, unit: "ks" }, 1);
     };
 
     // Fáze 57: sběrnicové prvky; fáze 61 – u ABB-free@home objednací čísla tlačítkových rozhraní z katalogu 2026
@@ -167,9 +229,20 @@ export function compileFloorplanBom(draft: FloorplanDraft, options: BomOptions =
       if (product?.panel) {
         const variantLabel = variantOf(product, element.productVariant)?.label ?? "–";
         for (const row of panelBomRows(product, { variant: element.productVariant, box: element.productBox, seriesName: found?.series.name ?? null })) {
-          add({ category: row.part === "box" ? "Instalační krabice" : row.part === "adapter" ? "Rámečky" : "Sběrnicové prvky", mpn: row.mpn, verified: row.verified, name: row.name, appearance: row.part === "adapter" ? appearance : variantLabel, unit: "ks" }, units);
+          add(
+            {
+              category: row.part === "box" ? "Instalační krabice" : row.part === "adapter" ? "Rámečky" : "Sběrnicové prvky",
+              mpn: row.mpn,
+              verified: row.verified,
+              name: row.name,
+              appearance: row.part === "adapter" ? appearance : variantLabel,
+              unit: "ks",
+              // Fáze 91: originální montážní krabice panelu do tabulky krabic
+              ...(row.part === "box" ? { box: { maker: product.catalog?.manufacturer ?? "výrobce panelu", type: row.name, depthMm: null, purpose: "originální montážní krabice panelu chytré domácnosti" } } : {}),
+            },
+            units,
+          );
         }
-        if (product.boxes?.length) boxes -= units;
         if (product.frame === "series") frame();
         continue;
       }
@@ -181,7 +254,6 @@ export function compileFloorplanBom(draft: FloorplanDraft, options: BomOptions =
     }
     // Bezdrátové tlačítko / čidlo: na baterii, bez krabice a bez kabelu
     if (item.wireless) {
-      boxes -= units;
       add({ category: "Chytré moduly", mpn: null, verified: false, name: `${item.label.replace(/ \(.*\)$/, "")} (Zigbee / Matter, baterie)`, appearance, unit: "ks" }, units);
       continue;
     }
@@ -197,11 +269,15 @@ export function compileFloorplanBom(draft: FloorplanDraft, options: BomOptions =
         add({ category: "Přístroje spínačů", mpn: null, verified: false, name: blind ? `Žaluziový spínač nástěnný ${ip} – kompletní přístroj` : `Spínač řazení ${switchNo} nástěnný ${ip} – kompletní přístroj (bez rámečku)`, appearance, unit: "ks" }, units);
         continue;
       }
+      if (decento) {
+        add({ category: "Přístroje spínačů", ...decentoMpn(DECENTO_SWITCH[switchNo] ?? null, code), name: blind ? "Ovládač žaluziový Decento – kompletní přístroj s kulatým rámečkem" : `Spínač řazení ${switchNo} Decento – kompletní přístroj s kulatým rámečkem`, appearance, unit: "ks" }, units);
+        continue;
+      }
       const mechanism = isAbb && !item.led && !item.ip44 ? (ABB_MECHANISMS[switchNo] ?? null) : null;
       add({ category: "Přístroje spínačů", mpn: mechanism, verified: Boolean(mechanism), name: blind ? "Žaluziový spínač – přístroj" : `Spínač řazení ${switchNo} – přístroj pod omítku`, appearance: found ? found.brand.label : "–", unit: "ks" }, units);
       const kind: CoverKind = blind ? "blind" : DIVIDED.has(switchNo) ? "divided" : "single";
       const cover = matrix?.cover(kind) ?? null;
-      add({ category: "Kryty spínačů", ...withColor(cover?.base ?? null, code, cover?.verified ?? false), name: blind ? "Kryt žaluziového spínače" : kind === "divided" ? "Kryt spínače dělený" : "Kryt spínače jednoduchý", appearance, unit: "ks" }, units);
+      add({ category: "Kryty spínačů", ...withColor(cover?.base ?? null, code, cover?.verified ?? false, "insert", matrix?.join), name: blind ? "Kryt žaluziového spínače" : kind === "divided" ? "Kryt spínače dělený" : "Kryt spínače jednoduchý", appearance, unit: "ks" }, units);
       frame();
       continue;
     }
@@ -209,9 +285,18 @@ export function compileFloorplanBom(draft: FloorplanDraft, options: BomOptions =
       add({ category: "Zásuvky", mpn: null, verified: false, name: `${item.kind === "double_socket" ? "Dvojzásuvka 2N" : "Zásuvka 1N"} nástěnná ${ip} s odklápěcím víčkem – kompletní přístroj`, appearance, unit: "ks" }, units);
       continue;
     }
+    // Fáze 91: Decento – zásuvka jednonásobná, dvojzásuvka jako 2 samostatné přístroje (dvojzásuvku řada nemá)
+    if (decento && (item.kind === "single_socket" || item.kind === "double_socket")) {
+      const usb = item.variant === "usb";
+      const name = usb ? "Přístroj nabíjecí USB-A, USB-C Decento – kompletní přístroj" : item.variant === "surge" ? "Zásuvka 1N s přepěťovou ochranou T3 – Decento ji v katalogu nevede" : item.kind === "double_socket" ? "Zásuvka 1N Decento – dvojzásuvka jako 2 samostatné přístroje (rozteč krabic min. 90 mm)" : "Zásuvka 1N Decento – kompletní přístroj s kulatým rámečkem";
+      const mpn = usb ? decentoMpn(DECENTO_USB, code, ["", "N"]) : item.variant === "surge" || item.variant === "ip44" ? { mpn: null, verified: false } : decentoMpn(DECENTO_SOCKET, code);
+      add({ category: "Zásuvky", ...mpn, name, appearance, unit: "ks" }, units * (item.kind === "double_socket" ? 2 : 1));
+      continue;
+    }
     if (item.kind === "single_socket") {
-      const socket = item.variant === "ip44" ? null : (matrix?.socket1 ?? null);
-      add({ category: "Zásuvky", ...withColor(socket, code, true), name: item.variant === "ip44" ? "Zásuvka 1N IP44" : "Zásuvka 1N s krytem (přístroj + kryt)", appearance, unit: "ks" }, units);
+      const socket = item.variant === "ip44" || item.variant === "usb" || item.variant === "surge" ? null : (matrix?.socket1 ?? null);
+      const name = item.variant === "ip44" ? "Zásuvka 1N IP44" : item.variant === "usb" ? "Zásuvka 1N s USB-A / USB-C nabíječkou (přístroj + kryt)" : item.variant === "surge" ? "Zásuvka 1N s přepěťovou ochranou T3 (přístroj + kryt)" : "Zásuvka 1N s krytem (přístroj + kryt)";
+      add({ category: "Zásuvky", ...withColor(socket, code, true), name, appearance, unit: "ks" }, units);
       frame();
       continue;
     }
@@ -222,7 +307,7 @@ export function compileFloorplanBom(draft: FloorplanDraft, options: BomOptions =
       continue;
     }
     if (item.kind === "data_socket") {
-      add({ category: "Ostatní přístroje", mpn: null, verified: false, name: "Datová zásuvka RJ45 (Cat6)", appearance, unit: "ks" }, units);
+      add({ category: "Ostatní přístroje", ...(decento ? decentoMpn(DECENTO_DATA, code) : { mpn: null, verified: false }), name: decento ? "Zásuvka komunikační Decento (pro 2× keystone RJ45) – kompletní přístroj" : "Datová zásuvka RJ45 (Cat6)", appearance, unit: "ks" }, units);
       frame();
     }
   }
@@ -232,8 +317,12 @@ export function compileFloorplanBom(draft: FloorplanDraft, options: BomOptions =
     if (members.length < 2) continue;
     const gangs = Math.min(5, members.reduce((sum, element) => sum + gangsOf(element), 0));
     const style = look(members[0]);
-    if (style.monoblock) continue;
-    add({ category: "Rámečky", ...frameNumber(style, gangs), name: `Rámeček ${gangs}násobný (${gangs}R) – víceramček`, appearance: style.appearance, unit: "ks" }, 1);
+    // Fáze 91: nástěnné řady a Decento bez víceramečku; víceramček nad limit řady = skutečně vyráběné rámečky
+    if (style.monoblock || style.separate) continue;
+    const parts = splitFrameGangs(gangs, style.maxGang);
+    for (const part of parts) {
+      add({ category: "Rámečky", ...frameNumber(style, part), name: parts.length > 1 ? `Rámeček ${part}násobný (${part}R) – víceramček ${gangs}R rozdělený podle řady (${splitLabel(parts)})` : `Rámeček ${gangs}násobný (${gangs}R) – víceramček`, appearance: style.appearance, unit: "ks" }, 1);
+    }
   }
   // Retrofit: modul pod vypínač na každou spínanou větev (světlo s kabelovým ovladačem) a žaluzii, spínací modul
   // do krabice svítidla, které ovládá jen bezdrátové tlačítko
@@ -261,14 +350,43 @@ export function compileFloorplanBom(draft: FloorplanDraft, options: BomOptions =
   for (const unit of smartModules) {
     if (unit.accessory) add({ category: "Chytré moduly", mpn: unit.accessory.articleNumber, verified: true, name: `${unit.accessory.label} (${unit.accessory.typeCode}) – k ${unit.typeCode.split(" + ")[0]}`, appearance: "–", unit: "ks" }, 1);
   }
-  const deep = options.installation === "bus_loxone" || options.installation === "smart_retrofit";
-  add({ category: "Instalační krabice", mpn: deep ? "KPR 68" : "KU 68-1901", verified: true, name: deep ? "Přístrojová krabice hluboká KOPOS (chytrá / retrofit instalace)" : "Přístrojová krabice KOPOS pod omítku", appearance: "KOPOS", unit: "ks" }, boxes);
+  // Fáze 91: instalační krabice podle výrobce, konstrukce stěny a hloubky přístroje (tabulka doporučených krabic)
+  for (const line of compileBoxUsage(draft, options.cableEnds)) {
+    const maker = boxMakerLabel(line.maker);
+    const wall = wallTypeOf(line.wall).short;
+    add(
+      {
+        category: "Instalační krabice",
+        mpn: line.box?.code ?? null,
+        verified: Boolean(line.box?.code),
+        name: line.box ? `${line.box.type} – ${line.box.purpose}` : `${line.missing ?? "Instalační krabice"} – ${maker} tento typ nevede, doplňte ručně`,
+        appearance: line.box ? boxMakerLabel(line.box.maker) : maker,
+        unit: "ks",
+        box: { maker: line.box ? boxMakerLabel(line.box.maker) : maker, type: line.box?.type ?? "–", depthMm: line.box?.depthMm ?? null, purpose: line.box ? line.box.purpose : `${line.missing ?? "Instalační krabice"} (${wall})` },
+      },
+      line.quantity,
+    );
+  }
   for (const cable of options.cables ?? []) add({ category: "Kabely", mpn: null, verified: true, name: cable.cable, appearance: "–", unit: "m" }, Math.ceil(cable.meters));
   const order = (row: WiringBomRow) => BOM_CATEGORIES.indexOf(row.category);
   return [...rows.values()].sort((a, b) => order(a) - order(b) || a.appearance.localeCompare(b.appearance, "cs") || (a.mpn ?? a.name).localeCompare(b.mpn ?? b.name, "cs"));
 }
 
-/** Řádky tabulky pro CSV / XLSX (hlavička + data). */
+/** Fáze 91: nadpis samostatné tabulky krabic (kusovník, PDF, CSV / XLSX). */
+export const BOX_TABLE_TITLE = "📦 Doporučené instalační krabičky a montážní příslušenství (dle prostředí a hloubky)";
+
+/** Fáze 91: řádky kusovníku bez instalačních krabic (ty jsou v samostatné tabulce). */
+export const bomMainRows = (rows: readonly WiringBomRow[]) => rows.filter((row) => !row.box);
+export const bomBoxRows = (rows: readonly WiringBomRow[]) => rows.filter((row): row is WiringBomRow & { box: BomBoxInfo } => Boolean(row.box));
+
+/** Fáze 91: tabulka doporučených krabic (hlavička + data). */
+export function boxTable(rows: readonly WiringBomRow[]): (string | number)[][] {
+  return [["Výrobce", "Typové označení", "Objednací kód / katalogové číslo", "Hloubka (mm)", "Určení / prostředí", "Počet ks"], ...bomBoxRows(rows).map((row) => [row.box.maker, row.box.type, row.mpn ?? "doplnit", row.box.depthMm ?? "–", row.box.purpose, row.quantity])];
+}
+
+/** Řádky tabulky pro CSV / XLSX (hlavička + data); fáze 91 – krabice v samostatné tabulce na konci. */
 export function bomTable(rows: readonly WiringBomRow[]): (string | number)[][] {
-  return [["Kategorie", "Objednací číslo (MPN)", "Název a specifikace", "Řada a barva", "Počet", "Jednotka", "Ověření"], ...rows.map((row) => [row.category, row.mpn ?? "doplnit", row.name, row.appearance, row.quantity, row.unit, row.mpn ? (row.verified ? "katalog" : "ověřit") : "chybí"])];
+  const main = [["Kategorie", "Objednací číslo (MPN)", "Název a specifikace", "Řada a barva", "Počet", "Jednotka", "Ověření"], ...bomMainRows(rows).map((row) => [row.category, row.mpn ?? "doplnit", row.name, row.appearance, row.quantity, row.unit, row.mpn ? (row.verified ? "katalog" : "ověřit") : "chybí"])];
+  const boxes = boxTable(rows);
+  return boxes.length > 1 ? [...main, [], [BOX_TABLE_TITLE], ...boxes] : main;
 }

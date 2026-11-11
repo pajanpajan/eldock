@@ -2,7 +2,7 @@
 // Řady jsou pojmenované podle katalogů výrobců; `dbSeries` = názvy řad v databázi `WiringDevice`
 // (externí katalog), barvy = skupiny `wd_color_family`. Čisté funkce.
 
-import { ABB_SERIES_2026, SERIES_ALIASES, type SeriesColor, type SeriesShape } from "./abb-catalog-2026";
+import { ABB_SERIES_2026, LEGACY_SERIES_COLORS, SERIES_ALIASES, type SeriesColor, type SeriesShape } from "./abb-catalog-2026";
 
 export interface DesignSeries {
   /** Název v kaskádě (a v klíči „výrobce|řada“). */
@@ -25,6 +25,9 @@ export interface DesignSeries {
   /** Fáze 90: nástěnný monoblok (bez rámečku) / pevné dvojice středu a rámečku (Decento). */
   monoblock?: boolean;
   fixedPairs?: boolean;
+  /** Fáze 91: samostatná paleta rámečků (Busch-axcent, solo carat) a výchozí rámeček ke krytu. */
+  frames?: SeriesColor[];
+  framePairs?: Record<string, string>;
 }
 
 export interface DesignBrand {
@@ -50,6 +53,8 @@ export const DESIGN_BRANDS: DesignBrand[] = [
       page: series.page,
       monoblock: series.monoblock,
       fixedPairs: series.fixedPairs,
+      frames: series.frames,
+      framePairs: series.framePairs,
       aliases: SERIES_ALIASES[series.name],
     })),
   },
@@ -109,10 +114,19 @@ export const designBrand = (manufacturer: string | null | undefined) => DESIGN_B
 
 /** Fáze 55: barva řady jako obecná barva (výběr přístrojů z katalogu podle `wd_color_family`). */
 const asDesignColor = (color: SeriesColor): DesignColor => ({ id: color.id, label: color.label, swatch: color.swatch, families: [color.family] });
-const SERIES_COLORS = DESIGN_BRANDS.flatMap((brand) => brand.series.flatMap((series) => (series.colors ?? []).map(asDesignColor)));
+const SERIES_COLORS = DESIGN_BRANDS.flatMap((brand) => brand.series.flatMap((series) => [...(series.colors ?? []), ...(series.frames ?? [])].map(asDesignColor)));
 
 /** Obecná barva (white, ivory …) nebo barva konkrétní řady (abb-zoni-500 …). */
 export const designColor = (id: string | null | undefined) => DESIGN_COLORS.find((color) => color.id === id) ?? SERIES_COLORS.find((color) => color.id === id) ?? null;
+
+/**
+ * Fáze 91: barva uložená před auditem katalogu (Busch-axcent / solo carat jako dvojice kryt + rámeček, Decento černý dub)
+ * → kryt a rámeček z nových palet; jinak beze změny.
+ */
+export function migrateSeriesColor(id: string | null | undefined): { color: string; frame?: string } | null {
+  if (typeof id !== "string") return null;
+  return LEGACY_SERIES_COLORS[id] ?? null;
+}
 
 /** Barvy nabízené pro řadu: skutečné barvy řady (ABB 2026), jinak obecné skupiny. */
 export function seriesColors(seriesKey: string | null | undefined): DesignColor[] {
@@ -129,6 +143,42 @@ export function colorForSeries(seriesKey: string | null | undefined, colorId: st
   if (colors.some((color) => color.id === colorId)) return colorId!;
   const family = designColor(colorId)?.families[0];
   return (family ? colors.find((color) => color.families.includes(family)) : undefined)?.id ?? colors[0].id;
+}
+
+/**
+ * Fáze 91: barvy rámečku řady – samostatná paleta (Busch-axcent, solo carat), jinak stejné barvy jako kryt / klapka.
+ */
+export function seriesFrameColors(seriesKey: string | null | undefined): DesignColor[] {
+  const found = designSeriesOf(seriesKey);
+  return found?.series.frames?.length ? found.series.frames.map(asDesignColor) : seriesColors(seriesKey);
+}
+
+/**
+ * Fáze 91: barva rámečku po změně řady – zůstane, jen pokud ji řada má mezi rámečky; u řady se samostatnou paletou
+ * (Busch-axcent, solo carat) neznámý rámeček = bez volby (výchozí rámeček ke krytu), jinak nejbližší barva řady.
+ */
+export function frameColorForSeries(seriesKey: string | null | undefined, frameId: string | null | undefined): string | null {
+  if (!frameId) return null;
+  if (seriesFrameColors(seriesKey).some((color) => color.id === frameId)) return frameId;
+  return hasSeparateFrames(seriesKey) ? null : colorForSeries(seriesKey, frameId);
+}
+
+/** Fáze 91: řada má rámeček ze samostatné palety (kryt a rámeček jsou různé díly s vlastními barvami). */
+export const hasSeparateFrames = (seriesKey: string | null | undefined) => Boolean(designSeriesOf(seriesKey)?.series.frames?.length);
+
+/**
+ * Fáze 91: skutečný rámeček řady – zvolený rámeček z palety řady, jinak výchozí rámeček ke krytu (kombinace z katalogu),
+ * jinak první rámeček palety. U řad bez samostatné palety barva rámečku z barev řady (nebo barva krytu).
+ */
+export function resolveFrameColor(seriesKey: string | null | undefined, frameId: string | null | undefined, coverId: string | null | undefined): SeriesColor | null {
+  const found = designSeriesOf(seriesKey);
+  if (!found) return null;
+  const { frames, framePairs, colors = [] } = found.series;
+  if (frames?.length) {
+    const pick = (id: string | null | undefined) => (id ? frames.find((frame) => frame.id === id) : undefined);
+    return pick(frameId) ?? pick(framePairs?.[coverId ?? ""]) ?? pick(framePairs?.[frameId ?? ""]) ?? frames[0];
+  }
+  return colors.find((color) => color.id === frameId) ?? colors.find((color) => color.id === coverId) ?? null;
 }
 
 /** Řada podle klíče „výrobce|řada“ – i starší klíče z databáze („ABB|Swing L“ → „Swing / Swing L“). */
@@ -168,6 +218,11 @@ export function appearanceLabel(seriesKey: string | null | undefined, colorId: s
   const found = designSeriesOf(seriesKey);
   if (!found) return "bez domovních přístrojů";
   const color = designColor(colorId) ?? designColor(DEFAULT_COLOR)!;
+  // Fáze 91: Busch-axcent / solo carat – rámeček je vždy samostatný díl (bez volby výchozí rámeček ke krytu)
+  if (found.series.frames?.length) {
+    const own = resolveFrameColor(seriesKey, frameColorId, colorId);
+    return `${found.brand.label} ${found.series.name} · rámeček ${own?.label ?? "–"} · kryt ${color.label}`;
+  }
   const frame = frameColorId && frameColorId !== color.id && hasFrameChoice(seriesKey) ? designColor(frameColorId) : null;
   return frame ? `${found.brand.label} ${found.series.name} · rámeček ${frame.label} · klapka ${color.label}` : `${found.brand.label} ${found.series.name} · ${color.label}`;
 }

@@ -53,6 +53,9 @@ test("🎨 2D půdorys: horní lišta s řadami ABB 2026, barvy podle řady, sou
   await expect(table).toContainText("3559-A01345");
   await expect(table).toContainText("3559T-A00651 500");
   await expect(table).toContainText("3901T-A00010 500");
-  await expect(table).toContainText("KU 68-1901");
+  // Fáze 91: instalační krabice v samostatné tabulce – zásuvka KU 68-45 (náhrada KU 68-1901), vypínač hluboká KPR 68 (WAGO)
+  const boxes = page.getByTestId("wiring-bom-boxes-table");
+  await expect(boxes).toContainText("KU 68-45_KA");
+  await expect(boxes).toContainText("KPR 68_KA");
   await page.screenshot({ path: "test-results/phase55-floorplan.png", fullPage: true });
 });

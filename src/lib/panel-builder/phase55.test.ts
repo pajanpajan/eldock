@@ -121,19 +121,30 @@ describe("kusovník domovní instalace", () => {
     expect(find("5513T-C02157 500")?.quantity).toBe(1);
     expect(find("3901T-A00010 500")?.quantity).toBe(5);
     expect(find("3901T-A00020 500")?.quantity).toBe(1);
-    expect(find("KU 68-1901")?.quantity).toBe(8);
+    // Fáze 91: vypínače klasické instalace do hluboké krabice (WAGO svorky), zásuvky do mělké KU 68-45 (náhrada KU 68-1901),
+    // 2 zásuvky v jednom rámečku do dvojnásobné KP 64/2
+    expect(find("KPR 68_KA")?.quantity).toBe(5);
+    expect(find("KU 68-45_KA")?.quantity).toBe(1);
+    expect(find("KP 64/2_KA")?.quantity).toBe(1);
+    expect(find("KU 68-1901")).toBeUndefined();
     expect(rows.find((row) => row.category === "Kabely")).toMatchObject({ name: "CYKY-J 3x1,5", quantity: 42, unit: "m" });
   });
 
   it("Tango: dělený kryt je odvozený (ověřit), řada bez matice a dvoubarevný kód bez vymyšleného čísla", () => {
     const tango = compileFloorplanBom({ ...emptyDraft(), series: "ABB|Tango", color: seriesColors("ABB|Tango")[0].id, elements: [el("s", "switch-6-6")] });
     expect(tango.find((row) => row.category === "Kryty spínačů")).toMatchObject({ mpn: "3558A-A652 B", verified: false });
+    // Řada bez matice objednacích čísel (Classic) – číslo se nevymýšlí; fáze 91 – Decento má kompletní přístroje z katalogu
+    const classic = compileFloorplanBom({ ...emptyDraft(), series: "ABB|Classic", color: seriesColors("ABB|Classic")[0].id, elements: [el("z", "socket")] });
+    expect(classic.find((row) => row.category === "Zásuvky")?.mpn).toBeNull();
     const decento = compileFloorplanBom({ ...emptyDraft(), series: "ABB|Decento", color: seriesColors("ABB|Decento")[0].id, elements: [el("z", "socket")] });
-    expect(decento.find((row) => row.category === "Zásuvky")?.mpn).toBeNull();
+    expect(decento.find((row) => row.category === "Zásuvky")).toMatchObject({ mpn: "6619K-C06347", verified: true });
     const twoTone = compileFloorplanBom({ ...emptyDraft(), series: "ABB|Zoni", color: "abb-zoni-241-141", elements: [el("z", "socket")] });
     // Fáze 74: dvoubarevný kód „241/141“ = rámeček 241 / kryt 141 – zásuvka (kryt) dostane 141, rámeček 241 (obojí ověřit)
     expect(twoTone.find((row) => row.category === "Zásuvky")).toMatchObject({ mpn: "6619T-A06657 141", verified: false });
     expect(twoTone.find((row) => row.category === "Rámečky")).toMatchObject({ mpn: "3901T-A00010 241", verified: false });
-    expect(compileFloorplanBom({ ...emptyDraft(), elements: [el("z", "socket")] }, { installation: "smart_retrofit" }).find((row) => row.category === "Instalační krabice")?.mpn).toBe("KPR 68");
+    // Fáze 91: retrofit – zásuvka do mělké krabice, vypínač s modulem pod vypínač do krabice 70 mm s prostorem pro elektroniku
+    expect(compileFloorplanBom({ ...emptyDraft(), installation: "smart_retrofit", elements: [el("z", "socket")] }, { installation: "smart_retrofit" }).find((row) => row.category === "Instalační krabice")?.mpn).toBe("KU 68-45_KA");
+    const retrofit = compileFloorplanBom({ ...emptyDraft(), installation: "smart_retrofit", elements: [el("l", "ceiling-light"), el("s", "switch-1", { controls: ["l"] })] }, { installation: "smart_retrofit" });
+    expect(retrofit.find((row) => row.category === "Instalační krabice")?.mpn).toBe("KPR 68-70_KA");
   });
 });

@@ -46,7 +46,7 @@ export function symbolParts(item: PaletteItem, size: number, options: { switchNo
       parts.paths.push(`M${f(R * 0.35)} ${f(L + R * 0.9)} L${f(R * 1.05)} ${f(L + R * 0.2)}`);
       parts.texts.push({ x: R * 1.45, y: L + R * 0.2, size: size * 0.26, value: "2" });
     }
-    parts.label = item.variant === "ip44" ? "IP44" : item.variant === "worktop" ? "+1150" : null;
+    parts.label = item.variant === "ip44" ? "IP44" : item.variant === "worktop" ? "+1150" : item.variant === "usb" ? "USB" : item.variant === "surge" ? "T3" : null;
     return parts;
   }
   if (item.kind === "data_socket") {
