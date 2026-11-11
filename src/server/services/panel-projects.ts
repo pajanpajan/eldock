@@ -24,6 +24,7 @@ import { smartPlanOf } from "@/lib/panel-builder/smart-home-plan";
 import { isCatalogModule, smartCatalogArticle } from "@/lib/panel-builder/smart-din-catalog";
 import { classicDeviceModules, fieldDemand } from "@/lib/panel-builder/field-devices";
 import { supplyById, supplyColumns } from "@/lib/panel-builder/supply";
+import { bimBoardPlan } from "@/lib/bim/bim-board";
 
 // Správa projektů AI Panel Builderu (fáze 48): smazání (jednotlivě i hromadně) s vrácením kreditu
 // a úklidem fotek, úprava hlavičky projektu přímo z přehledu.
@@ -211,6 +212,49 @@ async function createPlanProject(
     await prisma.panelBoardProject.delete({ where: { id: project.id } });
     throw error;
   }
+}
+
+// ---------------------------------------------------------------------------
+//  Fáze 95: rozváděč z BIMu (Správa závodů) → návrh rozváděče
+// ---------------------------------------------------------------------------
+
+export interface BimBoardProjectInput extends Omit<CreateProjectInput, "photoUrl" | "designMode" | "dims" | "name" | "customerName" | "installationSite"> {
+  equipmentId: string;
+}
+
+/**
+ * „⚡ Otevřít tento BIM rozváděč v AI Panel Builderu“: vývody k zařízením, která rozváděč v závodě napájí (příkon, Ib,
+ * kabel a délka z BIMu), hlavní vypínač podle In rozváděče, skříň a strom zapojení – stejný generátor jako u půdorysu.
+ */
+export async function createProjectFromBimBoard(prisma: PrismaClient, input: BimBoardProjectInput) {
+  const board = await prisma.equipment.findUnique({
+    where: { id: input.equipmentId },
+    select: {
+      tag: true,
+      name: true,
+      type: true,
+      ratedCurrent: true,
+      ratedPowerKw: true,
+      floor: { select: { name: true, building: { select: { name: true, plant: { select: { name: true, customerName: true } } } } } },
+      feeds: { orderBy: { tag: "asc" }, select: { id: true, tag: true, name: true, type: true, fedFromCircuit: true, assignedZone: true, ratedPowerKw: true, nominalCurrentA: true, ratedCurrent: true, ratedVoltage: true, feederCableType: true, feederLengthM: true } },
+    },
+  });
+  if (!board || board.type !== "SWITCHBOARD") throw new WorkflowError("NOT_FOUND", "Rozváděč nebyl nalezen.");
+  if (!board.feeds.length) throw new WorkflowError("VALIDATION", `${board.tag}: rozváděč v závodě nenapájí žádné zařízení – doplňte vývody (Studio nebo import BIM).`);
+  const plan = bimBoardPlan({
+    tag: board.tag,
+    name: board.name,
+    ratedCurrent: board.ratedCurrent,
+    ratedPowerKw: board.ratedPowerKw,
+    feeds: board.feeds.map((feed) => ({ id: feed.id, tag: feed.tag, name: feed.name, type: feed.type, circuit: feed.fedFromCircuit, zone: feed.assignedZone, ratedPowerKw: feed.ratedPowerKw, nominalCurrentA: feed.nominalCurrentA, ratedCurrent: feed.ratedCurrent, ratedVoltage: feed.ratedVoltage, feederCableType: feed.feederCableType, feederLengthM: feed.feederLengthM })),
+  });
+  const circuits: CircuitPlanResult = { circuits: plan.circuits, bom: [], switching: [], io: { di: 0, do: 0, impulseRelays: 0, treeDevices: 0 }, warnings: plan.warnings };
+  const enclosures = (await prisma.panelEnclosure.findMany({ orderBy: { totalModules: "asc" } })).filter((row) => !isHiddenManufacturer(row.manufacturer));
+  const switchboard = buildSwitchboardFromCircuits(circuits, { mode: "classic", enclosures, mainSwitchA: plan.mainSwitchA, supplyPhases: 3 });
+  const plant = board.floor.building.plant;
+  const title = board.name.toUpperCase().startsWith(`${board.tag.toUpperCase()} - `) ? board.name : `${board.tag} - ${board.name}`;
+  // Přístroje jednoho výrobce (ABB, jako u půdorysu); chybějící kus = odhad stejného výrobce
+  return createPlanProject(prisma, { ...input, name: title.slice(0, 80), customerName: plant.customerName, installationSite: `${plant.name} · ${board.floor.building.name} · ${board.floor.name}` }, circuits, switchboard, { manufacturer: "ABB" });
 }
 
 // ---------------------------------------------------------------------------

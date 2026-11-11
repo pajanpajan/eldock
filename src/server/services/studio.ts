@@ -55,19 +55,20 @@ export function saveStudioBuilding(prisma: PrismaClient, draft: StudioDraft) {
  */
 export async function saveStudioConcept(prisma: PrismaClient, concept: StudioConceptDraft) {
   if (!concept.buildings.length) fail("Koncept neobsahuje žádnou budovu.");
-  return prisma.$transaction(
-    async (tx) => {
-      const results = [];
-      let plantId = concept.plantId;
-      for (const [index, building] of concept.buildings.entries()) {
-        const result = await saveBuildingInTx(tx, { ...building, plantId, newPlant: index === 0 ? concept.newPlant : null, campus: concept.campus });
-        plantId = result.plantId;
-        results.push(result);
-      }
-      return results;
-    },
-    { timeout: 120_000 },
-  );
+  return prisma.$transaction((tx) => saveStudioConceptInTx(tx, concept), { timeout: 120_000 });
+}
+
+/** Fáze 95: koncept uvnitř cizí transakce – import BIM doplní údaje zařízení ve stejné transakci. */
+export async function saveStudioConceptInTx(tx: Tx, concept: StudioConceptDraft) {
+  if (!concept.buildings.length) fail("Koncept neobsahuje žádnou budovu.");
+  const results = [];
+  let plantId = concept.plantId;
+  for (const [index, building] of concept.buildings.entries()) {
+    const result = await saveBuildingInTx(tx, { ...building, plantId, newPlant: index === 0 ? concept.newPlant : null, campus: concept.campus });
+    plantId = result.plantId;
+    results.push(result);
+  }
+  return results;
 }
 
 async function saveBuildingInTx(prisma: Tx, draft: StudioDraft) {
@@ -411,6 +412,9 @@ async function saveBuildingInTx(prisma: Tx, draft: StudioDraft) {
       editedEquipment: edits.length,
       deletedEquipment: deletes.length,
       equipment: equipmentIds.size,
+      // Fáze 95: id nových pater a zařízení podle klíče konceptu (import BIM doplní údaje zařízení)
+      floorIds: Object.fromEntries(floorIds),
+      equipmentIds: Object.fromEntries(equipmentIds),
     };
   }
 }

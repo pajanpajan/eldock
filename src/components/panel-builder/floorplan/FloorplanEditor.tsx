@@ -172,6 +172,8 @@ import { useFloorplanLibrary } from "./useFloorplanLibrary";
 import { CadLayersPanel } from "./CadLayersPanel";
 import { CadUnderlayLayer } from "./CadUnderlayLayer";
 import { DWG_MESSAGE, DxfError, parseDxf } from "@/lib/panel-builder/dxf-import";
+import { bimToFloorplan } from "@/lib/bim/bim-floorplan";
+import { IfcError, parseIfc } from "@/lib/bim/ifc-parser";
 import { CAD_GEOMETRY_MAX_BYTES, buildSnapIndex, geometryOf, parseCadGeometry, planSizeFor, snapToCad, underlayOf, type CadGeometry } from "@/lib/panel-builder/cad-underlay";
 import { addTemplate, favoritesFirst, removeTemplate, toggleFavorite } from "@/lib/panel-builder/floorplan-library";
 import { Dimensions, ElementDetail, ElementToolbar, RoomDetail, ToolButton } from "./ElementPanels";
@@ -1437,6 +1439,8 @@ export function FloorplanEditor({
     // Fáze 79: výkres CAD – DXF se převezme s hladinami v měřítku 1 : 1, DWG dostane návod na uložení jako DXF
     if (/\.dwg$/i.test(file.name)) return void toast.error(DWG_MESSAGE, { duration: 12_000 });
     if (/\.dxf$/i.test(file.name)) return void importDxf(file);
+    // Fáze 95: BIM model IFC – podlaží, místnosti, okna, dveře a elektro prvky v měřítku 1 : 1
+    if (/\.ifc$/i.test(file.name)) return void importIfc(file);
     try {
       let blob: Blob;
       let widthPx: number;
@@ -1474,6 +1478,33 @@ export function FloorplanEditor({
       toast.info(`${pages > 1 ? `PDF má ${pages} stran – použita 1. strana. ` : ""}Podklad podlaží ${draft.floorName} nahrán. Teď klikněte na začátek a konec známé stěny nebo kóty (📏 kalibrace).`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Podklad se nepodařilo nahrát.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /**
+   * Fáze 95: BIM model IFC (IFC2x3 / IFC4) → všechna podlaží, plátno podle rozměru stavby v měřítku 1 : 1 bez kalibrace,
+   * místnosti s názvy z BIMu, okna a dveře, rozváděče, zásuvky, svítidla, ovladače a stroje na souřadnicích X, Y a výšce Z.
+   */
+  async function importIfc(file: File) {
+    const occupied = draft.rooms.length + draft.elements.length + draft.otherFloors.reduce((sum, floor) => sum + floor.rooms.length + floor.elements.length, 0);
+    if (occupied && !window.confirm(`Nahradit nákres modelem z BIMu ${file.name}? Stávající místnosti a prvky všech podlaží (${occupied}) se nahradí.`)) return;
+    try {
+      setBusy("Načítám BIM model IFC…");
+      const text = await file.text();
+      // Parser běží v prohlížeči – nejdřív se vykreslí stav načítání
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const result = bimToFloorplan(parseIfc(text), draft);
+      update(() => result.draft);
+      clearSelection();
+      setView(FIT);
+      setCalibration([]);
+      setTool({ kind: "select" });
+      const note = result.warnings.length ? ` Upozornění: ${result.warnings.slice(0, 2).join(" ")}${result.warnings.length > 2 ? ` (+${result.warnings.length - 2})` : ""}` : "";
+      toast.success(`BIM ${file.name}: ${result.floors} ${result.floors === 1 ? "podlaží" : "podlaží"}, ${result.rooms} místností, ${result.elements} prvků → měřítko 1 : 1 bez kalibrace. Rozváděč vygenerujete tlačítkem ⚡.${note}`, { duration: 12_000 });
+    } catch (error) {
+      toast.error(error instanceof IfcError ? `Soubor IFC se nepodařilo načíst: ${error.message}` : "Soubor IFC se nepodařilo načíst.");
     } finally {
       setBusy(null);
     }
@@ -1911,7 +1942,7 @@ export function FloorplanEditor({
         <input
           ref={fileInput}
           type="file"
-          accept="image/png,image/jpeg,image/webp,image/svg+xml,application/pdf,.dxf,.dwg,application/dxf,image/vnd.dxf,image/vnd.dwg"
+          accept="image/png,image/jpeg,image/webp,image/svg+xml,application/pdf,.dxf,.dwg,.ifc,application/dxf,image/vnd.dxf,image/vnd.dwg"
           className="sr-only"
           aria-label="Podklad půdorysu"
           data-testid="floorplan-file-input"
@@ -1926,7 +1957,7 @@ export function FloorplanEditor({
   const uploadButton = (
     <>
         <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => fileInput.current?.click()} disabled={busy !== null} data-tour="floorplan-upload">
-          {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <FileUp className="size-4" aria-hidden />} Nahrát půdorys (obrázek / PDF / DXF)
+          {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <FileUp className="size-4" aria-hidden />} Nahrát půdorys (PDF / DXF / BIM .ifc / Obrázek)
         </Button>
     </>
   );

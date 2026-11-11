@@ -47,6 +47,7 @@ import { getEquipmentHealth } from "@/server/queries/health";
 import { ComponentLifespan } from "@/components/equipment/ComponentLifespan";
 import { FeederCableCard } from "@/components/equipment/FeederCableCard";
 import { PowerBackupCard } from "@/components/equipment/PowerBackupCard";
+import { BimBoardButton } from "@/components/bim/BimBoardButton";
 import { hasBackupTier, isPowerBackupTier, tierOf } from "@/lib/power-backup";
 import { CABLE_STATUS } from "@/lib/cable-sizing";
 import { LIFESPAN_STATUS, assessComponent } from "@/lib/component-lifespan";
@@ -283,6 +284,19 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
           tiered
           canEdit={canEditCard || account.can("studio")}
         />
+      ) : null}
+      {/* Fáze 95: rozváděč z BIMu → návrh vnitřního osazení v AI Panel Builderu (vývody k napájeným zařízením) */}
+      {equipment.type === "SWITCHBOARD" && equipment.bimGuid && account.can("panelBuilder") && modules.on("enterprise.ai_panel_builder") ? (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-primary/40 bg-primary/5 p-4 lg:col-span-2" data-testid="bim-board-card">
+          <div className="min-w-0 flex-1">
+            <p className="font-medium">Rozváděč z BIM modelu</p>
+            <p className="text-xs text-muted-foreground">
+              Napájí {equipment.feeds.length} zařízení{equipment.ratedCurrent ? ` · In ${equipment.ratedCurrent}` : ""}
+              {equipment.ratedPowerKw ? ` · P ${equipment.ratedPowerKw.toLocaleString("cs-CZ")} kW` : ""} – AI Panel Builder z nich složí DIN lišty s jističi, hlavním vypínačem a skříní (1 kredit).
+            </p>
+          </div>
+          <BimBoardButton equipmentId={equipment.id} feeds={equipment.feeds.length} />
+        </div>
       ) : null}
       {/* Pasport z AI Panel Builderu (propuštěná dokumentace rozváděče) */}
       {passports.map((passport) => (

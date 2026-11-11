@@ -462,6 +462,10 @@ model Equipment {
   tenantUnit        String? // „Nájemní jednotka A12 – Lékárna“, „Interní oddělení – 2. NP“
   inspectionVariant String? // zdravotnický přístroj STANDARD_24 / CRITICAL_12, zdravotnický prostor GROUP_1 / GROUP_2 / IMD_IT
 
+  // Fáze 95: import BIM (IFC) – GlobalId prvku v modelu (aktualizace podle kódu / GUID) a jmenovitý příkon z BIMu
+  bimGuid      String? // IfcRoot.GlobalId (22 znaků)
+  ratedPowerKw Float? // jmenovitý příkon / výkon [kW] (Pset RatedPower, TotalConnectedLoad)
+
   // Vizuální karta a QR štítek
   photoUrl            String? // fotografie zařízení (/api/files/photos/…)
   qrToken             String? @unique // kód fyzického QR štítku – přegenerováním přestane starý štítek platit

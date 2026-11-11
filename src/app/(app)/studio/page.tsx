@@ -5,6 +5,7 @@ import { ModuleDisabled } from "@/components/common/ModuleDisabled";
 import { NoAccess } from "@/components/common/NoAccess";
 import { PageHeader } from "@/components/common/PageHeader";
 import { StudioWizard } from "@/components/studio/StudioWizard";
+import { BimImportButtons } from "@/components/bim/BimImportModal";
 import { getPlants } from "@/server/queries/plant";
 import { getStudioData } from "@/server/queries/studio";
 import { getFeatures } from "@/server/modules";
@@ -25,12 +26,19 @@ export default async function StudioPage({ searchParams }: PageProps<"/studio">)
   const startNewPlant = params.new === "plant";
   const data = await getStudioData(plant.id);
   if (!data) notFound();
+  const features = await getFeatures();
 
   return (
     <>
       <PageHeader
         title="Studio výstavby závodu"
         description={`${data.plant.name} · mapa závodu → budova → místnosti a zařízení s hierarchií napájení přímo v konstrukčním rastru.`}
+        // Fáze 95: budova se zařízeními rovnou z BIM modelu (IFC)
+        actions={
+          <div className="flex flex-wrap gap-2">
+            <BimImportButtons plantId={data.plant.id} canPanelBuilder={account.can("panelBuilder") && features.on("enterprise.ai_panel_builder")} compact />
+          </div>
+        }
       />
       <StudioWizard key={`${data.plant.id}:${startNewPlant}`} data={data} startNewPlant={startNewPlant} />
     </>

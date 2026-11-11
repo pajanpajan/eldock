@@ -14,6 +14,7 @@ import { PredictiveWatch } from "@/components/inspections/PredictiveWatch";
 import { getPredictiveSummary } from "@/server/queries/health";
 import { CampusExplorer } from "@/components/map/campus/CampusExplorer";
 import { PlantOnboardingLoader } from "@/components/plant/PlantOnboardingLoader";
+import { BimImportButtons } from "@/components/bim/BimImportModal";
 import { Button } from "@/components/ui/button";
 import { EQUIPMENT_STATUS } from "@/lib/status";
 import { getInspectionWatch } from "@/server/queries/inspections";
@@ -46,6 +47,8 @@ export default async function PlantPage({ params, searchParams }: PageProps<"/pl
         actions={
           account.can("studio") && modules.on("enterprise.studio") ? (
             <div className="flex flex-wrap gap-2">
+              {/* Fáze 95: import BIM (IFC) – budova, místnosti, zdroje, rozváděče, trasy a stroje z modelu */}
+              <BimImportButtons plantId={plant.id} canPanelBuilder={account.can("panelBuilder") && modules.on("enterprise.ai_panel_builder")} />
               <Button asChild size="lg" variant="outline" className="touch-target gap-2">
                 <Link href={`/studio?plant=${plant.id}&new=plant`}>
                   <Factory className="size-4" aria-hidden />+ Nový závod od nuly

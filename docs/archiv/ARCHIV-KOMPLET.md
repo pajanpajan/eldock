@@ -51,22 +51,24 @@
 45. ZADANI-faze-92.md
 46. ZADANI-faze-93.md
 47. ZADANI-faze-94.md
-48. DENIK-faze-49-54.md
-49. DENIK-faze-55-59.md
-50. DENIK-faze-60-61.md
-51. DENIK-faze-62-65.md
-52. DENIK-faze-66-67.md
-53. DENIK-faze-68-70.md
-54. DENIK-faze-71-73.md
-55. DENIK-faze-74-77.md
-56. DENIK-faze-78-80.md
-57. DENIK-faze-81-82.md
-58. DENIK-faze-83-85.md
-59. DENIK-faze-86-88.md
-60. DENIK-faze-89-90.md
-61. DENIK-faze-91.md
-62. DENIK-faze-92.md
-63. docs/PLAN.md (aktuální plán a deník posledních fází)
+48. ZADANI-faze-95.md
+49. DENIK-faze-49-54.md
+50. DENIK-faze-55-59.md
+51. DENIK-faze-60-61.md
+52. DENIK-faze-62-65.md
+53. DENIK-faze-66-67.md
+54. DENIK-faze-68-70.md
+55. DENIK-faze-71-73.md
+56. DENIK-faze-74-77.md
+57. DENIK-faze-78-80.md
+58. DENIK-faze-81-82.md
+59. DENIK-faze-83-85.md
+60. DENIK-faze-86-88.md
+61. DENIK-faze-89-90.md
+62. DENIK-faze-91.md
+63. DENIK-faze-92.md
+64. DENIK-faze-93.md
+65. docs/PLAN.md (aktuální plán a deník posledních fází)
 
 ---
 
@@ -4365,6 +4367,162 @@ Zapiš tuto úlohu jako novou fázi do `docs/PLAN.md` a kompletně ji realizuj v
 
 ---
 
+# 📄 ZADANI-faze-95.md
+
+# Zadání fáze 95 – nativní import BIM (IFC2x3 / IFC4, ISO 16739) do Správy závodů a 2D půdorysu
+
+Vloženo z chatu 2026-11-11 (během fáze 93). Celé zadání beze změn je níže, za ním rozhodnutí při implementaci.
+
+## Zadání (z chatu)
+
+Přidáváme do ELDOCKu špičkovou B2B funkci: **Nativní import BIM dat (soubory `.ifc` – IFC2x3 a IFC4 dle ISO 16739)** pro automatické vygenerování rozměrů budov/hal/místností i kompletní elektrotechnické části (rozváděče, trafostanice, kabelové trasy/žlaby, stroje, spotřebiče, zásuvky a světla).
+
+TVŮJ POSTUP:
+1. Zapiš tuto etapu jako novou fázi do `docs/PLAN.md`.
+2. Naimplementuj kompletní IFC/BIM engine (`src/lib/bim/ifc-parser.ts`) a napoj ho do **Průmyslové správy závodů (`/studio` a `/`)** i do **2D Půdorysu (`/panel-builder/floorplan`)**.
+3. Napiš unit testy nad reálným vzorovým `.ifc` souborem, spusť `npm run verify`, aktualizuj `docs/PLAN.md` a `CLAUDE.md`, udělej commit a rovnou vše pushni a nasaď na produkční server `https://eldock.cz`.
+
+================================================================================
+ČÁST 1: PARSER BIM / IFC SOUBORŮ (`src/lib/bim/ifc-parser.ts`) – STAVEBNÍ + ELEKTRO ČÁST
+================================================================================
+
+Vytvoř rychlý, čistý TypeScript parser standardu **IFC STEP Physical File (ISO 10303-21, `.ifc` – podpora `IFC2X3` i `IFC4` / `IFC4X3`)**, který nevyžaduje žádné těžké nativní/WASM binárky a dokáže přímo v prohlížeči i na serveru rozparsovat nahraný `.ifc` soubor:
+
+1. JEDNOTKY A SOUŘADNICOVÝ SYSTÉM (`IFCUNITASSIGNMENT`, `IFCSIUNIT`, `IFCCARTESIANPOINT`, `IFCAXIS2PLACEMENT3D`, `IFCLOCALPLACEMENT`):
+   - Automaticky detekuj délkové jednotky v `.ifc` souboru (`MILLIMETRE` vs. `METRE` z `IFCSIUNIT(.LENGTHUNIT., .MILLI., .METRE.)`) a všechny souřadnice `(X, Y, Z)` i rozměry převáděj přesně na **metry (`m`)** a **milimetry (`mm`)**.
+   - Rekurzivně vyhodnoť hierarchii lokálních souřadnic (`IFCLOCALPLACEMENT` -> `PlacementRelTo` + `RelativePlacement`), aby každý rozváděč, stroj, místnost a kabelový žlab získal svou **skutečnou globální pozici `(X, Y, Z)` v budově**!
+
+2. EXTRAKCE STAVEBNÍ ČÁSTI A PŘESNÝCH ROZMĚRŮ (`buildings`, `storeys`, `spaces`, `walls`, `openings`):
+   - `IFCPROJECT`, `IFCSITE`, `IFCBUILDING` -> Název projektu/areálu a seznam budov/výrobních hal.
+   - `IFCBUILDINGSTOREY` -> Jednotlivá podlaží s názvem (např. `1. NP`, `2. NP`) a výškovou kótou `Elevation` (`Z`).
+   - `IFCSPACE` (a `IFCRELAGGREGATES` / `IFCRELCONTAINEDINSPATIALSTRUCTURE`) -> Místnosti / výrobní sekce:
+     * Vytáhni kód/číslo místnosti (`Name`), čitelný název (`LongName`, s dekódováním STEP Unicode sekvencí `\X2\...\X0\` pro bezchybnou českou diakritiku!), podlaží a geometrii půdorysu (`IFCRECTANGLEPROFILEDEF` -> `XDim`, `YDim`, nebo `IFCARBITRARYCLOSEDPROFILEDEF` -> `IFCPOLYLINE` vrcholy polygonu, příp. `IFCEXTRUDEDAREASOLID` a `IfcQuantityArea` / `BaseQuantities`).
+   - `IFCWALL` / `IFCWALLSTANDARDCASE`, `IFCWINDOW`, `IFCDOOR` -> Obvodové stěny, příčky, okna a dveře s jejich pozicí a šířkou.
+
+3. EXTRAKCE ELEKTROTECHNICKÉ ČÁSTI (`IfcElectricalDomain` & `IfcSharedBldgServiceElements`):
+   Vytáhni z `.ifc` souboru všechny elektrotechnické prvky včetně jejich příslušnosti k podlaží/místnosti a napájení:
+   - **Zdroje, trafostanice, DA a UPS:**
+     * `IFCTRANSFORMER`, `IFCELECTRICGENERATOR`, `IFCELECTRICFLOWSTORAGEDEVICE` -> Trafostanice, dieselagregáty (DA) a centrální UPS.
+   - **Rozváděče:**
+     * `IFCELECTRICDISTRIBUTIONBOARD`, `IFCELECTRICDISTRIBUTIONPOINT`, a také `IFCDISTRIBUTIONCONTROLELEMENT` / `IFCFLOWCONTROLLER` / `IFCBUILDINGELEMENTPROXY`, pokud jejich `Name`, `ObjectType` nebo `PredefinedType` obsahuje `SWITCHBOARD`, `PANELBOARD`, `DISTRIBUTIONBOARD`, `ROZVADEC`, `RM`, `RH`, `HR`, `RP`.
+   - **Kabelové trasy, žlaby, lávky a kabely:**
+     * `IFCCABLECARRIERSEGMENT`, `IFCCABLECARRIERFITTING` (kabelové žlaby, lávky, trubky) a `IFCCABLESEGMENT` (kabely) -> vytáhni 3D lomové body trasy, skutečnou délku úseku v metrech (včetně svislého stoupání v ose `Z`!), šířku/výšku žlabu a typ kabelu.
+   - **Výrobní stroje, motory, VZT a spotřebiče:**
+     * `IFCELECTRICAPPLIANCE`, `IFCMOTORCONNECTION`, `IFCELECTRICMOTOR`, `IFCUNITARYEQUIPMENT`, `IFCPUMP`, `IFCFAN`, `IFCCHILLER`, `IFCBOILER`.
+   - **Domovní a komerční elektroinstalace (pro 2D Půdorys):**
+     * `IFCLIGHTFIXTURE` (svítidla včetně nouzových `EXITLIGHT` / `SAFETYLIGHT`), `IFCOUTLET` (zásuvky silové a datové), `IFCSWITCHINGDEVICE` (vypínače, nouzová tlačítka CENTRAL STOP), `IFCSENSOR` (čidla), `IFCACTUATOR` (pohony žaluzií/topení).
+
+4. EXTRAKCE ELEKTROTECHNICKÝCH PARAMETRŮ (`IFCPROPERTYSET`, `IFCPROPERTYSINGLEVALUE`, `IFCSYSTEM`):
+   Pro každý prvek projdi navázané `IFCRELDEFINESBYPROPERTIES` -> `IFCPROPERTYSET` (zejména `Pset_DistributionBoardCommon`, `Pset_ElectricalDeviceCommon`, `Pset_CableSegmentOccurrence`, `Pset_LightFixtureTypeCommon`, `Pset_OutletTypeCommon` i české/revitové parametry jako `Příkon`, `Apparent_Load`, `Nominal_Current`, `Voltage`, `Number_of_Poles`, `IP_Code`, `Circuit_Number`, `Panel_Name`):
+   - Automaticky načti:
+     * **Označení rozváděče / prvku** (`Tag` / `Reference` / `Mark`, např. `RH1`, `R-102`, `-F1`),
+     * **Jmenovitý proud $I_n$ [A]** (`NominalCurrent` / `RatedCurrent`),
+     * **Jmenovitý příkon $P$ [kW / W]** (`RatedPower` / `ApparentPower` / `TotalConnectedLoad`),
+     * **Napětí $U$ [V] a počet fází** (`NominalVoltage` -> `230 V 1f` vs. `400 V 3f`),
+     * **Stupeň krytí IP** (`IP_Code`, např. `IP44`, `IP54`, `IP65`),
+     * **Kategorii zálohování** (`BackupTier`: pokud název/systém obsahuje `UPS` / `ZIS` -> `CRITICAL_UPS_ZIS`; pokud `DA` / `GEN` / `DIESEL` -> `BACKUP_GENERATOR_DA`; jinak `GRID_STANDARD`),
+     * **Topologii zapojení (`IFCSYSTEM`, `IFCRELASSIGNSTOGROUP`, `IFCRELCONNECTSPORTS`):** Který stroj, okruh nebo podružný rozváděč je napájen ze kterého nadřazeného rozváděče!
+
+================================================================================
+ČÁST 2: IMPORT BIM (`.ifc`) DO PRŮMYSLOVÉ SPRÁVY ZÁVODŮ (`/studio` a `/`)
+================================================================================
+
+V průmyslové části aplikace (`/` a `/studio` – 2D Studio pro správu závodu) přidej tlačítko **`[ 🏢 Importovat BIM model závodu (.ifc) ]`** + tlačítko **`[ ✨ Vyzkoušet na vzorovém BIM souboru haly (.ifc) ]`**:
+
+1. PŘEHLEDNÉ OKNO KONTROLY PŘED IMPORTEM (`BimImportModal.tsx`):
+   Po nahrání `.ifc` souboru zobraz přehledný souhrn, co ELDOCK v BIM modelu našel:
+   - **Stavební struktura:** Počet budov/hal, podlaží, místností (`IfcSpace`), celková plocha v $\text{m}^2$ a vnější rozměry areálu v metrech (např. `84,0 × 42,5 m`).
+   - **Elektrotechnická výzbroj:**
+     * `⚡ Zdroje, trafostanice, DA a UPS:` seznam nalezených zdrojů s výkonem.
+     * `🗄️ Rozváděče (IfcElectricDistributionBoard):` tabulka nalezených rozváděčů (kód, název, podlaží/místnost, $I_n$ [A], příkon [kW], krytí IP, větev Síť/DA/UPS).
+     * `⚙️ Stroje a technologické spotřebiče:` počet a seznam strojů/VZT s příkony v kW.
+     * `🔌 Kabelové trasy a žlaby (IfcCableCarrierSegment):` počet tras a celková metráž v metrech.
+   - Volba režimu importu:
+     * `[ Vytvořit z BIMu kompletní mapu závodu, rozváděče, trasy i stroje ]` *(Výchozí)*
+     * `[ Aktualizovat existující rozváděče podle kódů z BIMu (zachovat stávající PDF schémata a Červenky) ]`
+
+2. AUTOMATICKÉ SESTAVENÍ 2D MAPY ZÁVODU A STROMU NAPÁJENÍ:
+   Po potvrzení importu:
+   - Vytvoř v databázi/stavu závodu budovy a místnosti s přesnými rozměry z BIMu.
+   - Rozmísti na 2D mapu v přesných souřadnicích `(X, Y)` všechny trafostanice, hlavní a podružné rozváděče i výrobní stroje.
+   - Propoj rozváděče a stroje kabelovými trasami s reálnou délkou a průřezem/žlabem z BIMu, nastav jejich jmenovité proudy, příkony a úrovně zálohování (`GRID_STANDARD` / `BACKUP_GENERATOR_DA` / `CRITICAL_UPS_ZIS`) a vygeneruj k nim QR kódy!
+   - U každého rozváděče přidej tlačítko **`[ ⚡ Otevřít tento BIM rozváděč v AI Panel Builderu a vygenerovat vnitřní osazení ]`**, které vezme okruhy a příkon z BIMu a automaticky poskládá DIN lišty s jističi a chrániči!
+
+================================================================================
+ČÁST 3: IMPORT BIM (`.ifc`) DO 2D PŮDORYSU (`/panel-builder/floorplan`)
+================================================================================
+
+Stejný parser napoj také do **2D Půdorysu (`/panel-builder/floorplan`)** v Kroku 1 u tlačítka **`Nahrát půdorys (PDF / DXF / BIM .ifc / Obrázek)`**:
+- Když uživatel nahraje `.ifc` soubor (např. rodinný dům, patro nemocnice nebo obchodní jednotku v OC):
+  1) Automaticky vytvoř všechna podlaží (`IFCBUILDINGSTOREY` -> `1. NP`, `2. NP`...).
+  2) Automaticky nastav velikost plátna podle rozměrů budovy z BIMu (např. `24 × 18 m`) a nastav měřítko **1:1 bez nutnosti ruční kalibrace**!
+  3) Ze všech `IFCSPACE` (a `IFCWALL`) automaticky vytvoř na plátně **místnosti s přesnými rozměry `X × Y` v metrech a českými názvy** (Obývací pokoj, Koupelna, Technická místnost, Ordinace...), včetně oken (`IFCWINDOW`) a dveří (`IFCDOOR`)!
+  4) Pokud `.ifc` soubor obsahuje i elektro prvky (`IFCELECTRICDISTRIBUTIONBOARD`, `IFCOUTLET`, `IFCLIGHTFIXTURE`, `IFCSWITCHINGDEVICE`, `IFCELECTRICAPPLIANCE`), rovnou je osaď na jejich přesné souřadnice `(X, Y)` a výšky `Z` v milimetrech, natrasuj k nim obvodové kabely a umožni z nich jedním klikem vygenerovat rozváděč!
+
+================================================================================
+ČÁST 4: VZOROVÝ BIM SOUBOR PRO OKAMŽITÉ VYZKOUŠENÍ + TESTY A DEPLOY
+================================================================================
+
+1. Vytvoř v `public/samples/eldock-sample-plant.ifc` (a v generátoru vzorového IFC v kódu) reálný, platný vzorový `.ifc` soubor (`ISO-10303-21` / `IFC4`), který obsahuje:
+   - Výrobní a technologickou halu s místnostmi (`IfcSpace`: *Rozvodna VN/NN*, *Výrobní hala M1*, *Kompresorovna*, *Velín údržby*),
+   - Trafostanici `TR1 (630 kVA)` + Dieselagregát `DA1 (250 kVA)` + UPS `UPS1 (60 kVA)`,
+   - Rozváděče `HR1 (Hlavní rozváděč 1000 A)`, `RM1 (Podružný rozváděč lisovny 250 A)`, `R-UPS (Kritický rozváděč velínu 63 A)` s `Pset_DistributionBoardCommon`,
+   - Kabelové žlaby `IfcCableCarrierSegment` a výrobní stroje `IfcElectricAppliance` (*CNC Frézka 45 kW*, *Hydraulický lis 75 kW*, *Šroubový kompresor 37 kW*),
+   aby si uživatel mohl import BIMu vyzkoušet jedním kliknutím na **`[ ✨ Vyzkoušet import na vzorovém BIM (.ifc) modelu ]`** i bez vlastního souboru z Revitu!
+2. Napiš unit testy v `src/lib/bim/__tests__/ifc-parser.test.ts`, které ověří:
+   - Přesný převod jednotek (`MILLIMETRE` i `METRE`) a dekódování české diakritiky ze STEP `\X2\...\X0\`.
+   - Vytěžení místností (`IFCSPACE`) s rozměry `X × Y`, rozváděčů (`IFCELECTRICDISTRIBUTIONBOARD`) s proudem a příkonem z `IFCPROPERTYSET`, kabelových žlabů (`IFCCABLECARRIERSEGMENT`) a strojů.
+   - Převod načteného BIM modelu jak do průmyslového závodu, tak do místností a prvků 2D půdorysu.
+3. Spusť `npm run verify`, aktualizuj `docs/PLAN.md` a `CLAUDE.md`, udělej commit a rovnou vše pushni a nasaď na produkční server `https://eldock.cz`.
+
+## Rozhodnutí při implementaci
+
+- **Parser** (`src/lib/bim/`) je čistý TypeScript bez WASM: `step.ts` rozdělí sekci DATA jedním průchodem na entity
+  (řetězce s „;“ a „)“ se respektují) a argumenty parsuje až při čtení entity – velké exporty z Revitu tak nedrží celý
+  strom hodnot v paměti. Dekóduje `\X2\…\X0\`, `\X4\`, `\X\HH`, `\S\` a zdvojený apostrof. Jednotky z
+  `IfcUnitAssignment` (předpony MILLI / CENTI …, IfcConversionBasedUnit FOOT / INCH, výkon / proud / napětí), globální
+  poloha složením IfcLocalPlacement (osa Z a RefDirection), tvar z IfcExtrudedAreaSolid (obdélník, mnohoúhelník
+  IfcPolyline / IfcIndexedPolyCurve / IfcCompositeCurve, kruh), IfcMappedItem, jinak obálka bodů B-rep / tesselace.
+  IfcGridPlacement a zakřivené úseky se nevyhodnocují (varování).
+- **Elektro prvky:** IFC4 třídy (IfcTransformer, IfcElectricGenerator, IfcElectricFlowStorageDevice,
+  IfcElectricDistributionBoard, IfcCableCarrierSegment / Fitting, IfcCableSegment, IfcElectricAppliance, motory, VZT,
+  čerpadla, IfcLightFixture, IfcOutlet, IfcSwitchingDevice, IfcSensor, IfcActuator) i IFC2X3 obecné třídy (IfcFlowController,
+  IfcElectricDistributionPoint, IfcBuildingElementProxy …) podle typu objektu (IfcRelDefinesByType) nebo názvu
+  (SWITCHBOARD, ROZVÁDĚČ, RM / RH / HR / RP …). Vlastnosti z property setů instance i typu a z IfcElementQuantity –
+  anglické Pset_ názvy i české a revitové parametry (Příkon, Apparent_Load, Nominal_Current, Panel, Circuit_Number);
+  výkon z IfcPowerMeasure v jednotce projektu, jinak podle jednotky v názvu / hodnotě. Úroveň zálohování z vlastnosti
+  BackupTier, názvu a systémů a po větvi napájení (prvek z UPS / DA ji dědí).
+- **Topologie napájení:** 1) IfcRelConnectsPorts (port SOURCE → SINK, kabel jako RealizingElement nebo mezičlánek),
+  2) IfcRelAssignsToGroup / IfcSystem / IfcDistributionCircuit (jediný rozváděč skupiny napájí ostatní, jinak rozváděč
+  podle označení v názvu okruhu), 3) Revit „Panel“ / „Napájeno z“ podle označení.
+- **Správa závodů:** soubor se čte v prohlížeči, na server jde zmenšený model (podlaží, obálky místností, zdroje,
+  rozváděče, stroje a kabely přívodů) – Server Action přijme do 1 MB, velký model se má importovat po budovách. Import
+  skládá koncept Studia výstavby (stejná pravidla hierarchie napájení, rastr 1 m, tagy, QR kódy) a ve stejné transakci
+  zapíše údaje z BIMu (In, U, IP, nový sloupec `ratedPowerKw`, Ib, typ a délka přívodního kabelu – z IfcCableSegment,
+  jinak odhad po trase, kapacita DA / UPS, `bimGuid`). Osa Y se otočí (sever nahoru). Místnosti jsou ve Studiu obdélníky
+  (obálka IfcSpace), druh místnosti podle názvu. Správa závodů nemá typ DA / UPS: zdroj se uloží jako kořenový zdroj
+  (typ trafostanice) se zálohováním a kapacitou, napájení UPS z DA zůstane v popisu. Stroj bez napájecího rozváděče
+  dostane hlavní rozváděč budovy (poznámka v okně). Kabelové žlaby nemají v mapě vlastní vrstvu – v okně jejich počet
+  a metráž, u zařízení délka přívodu. Režim „Aktualizovat existující rozváděče podle kódů“ páruje podle GlobalId, jinak
+  jednoznačného označení, a mění jen parametry (popis, revize, PDF schémata a Červenky zůstanou).
+- **⚡ Rozváděč z BIMu do AI Panel Builderu:** vývody k zařízením, která rozváděč v závodě napájí (jištění C ≥ Ib,
+  kabel a délka z BIMu, úbytek napětí a kontrola impedance smyčky), hlavní vypínač podle In rozváděče, skříň a strom
+  zapojení stejným generátorem jako u půdorysu; přístroje nad 125 A jsou orientační kusy s varováním. Potřebuje přihlášení
+  do závodu (právo AI Panel Builder) i firmu AI Panel Builderu a stojí 1 kredit (nepovedený návrh ho vrátí). Tlačítko je
+  ve výsledku importu a na kartě rozváděče s `bimGuid`.
+- **2D půdorys:** nahrání `.ifc` vytvoří všechna podlaží (výchozí = kóta nejblíž ±0), plátno = obálka stavby + 1 m okraj
+  v mm bez kalibrace, místnosti s názvy (mnohoúhelník jako body místnosti), okna a dveře podle šířky, hlavní rozváděč RH
+  (napájený ze zdroje) a podružné RP s kódem z BIMu, zásuvky (datová, IP44, dvojitá), svítidla (nouzové NO_SV),
+  vypínač, PIR, pohon žaluzie a stroje jako vlastní spotřebiče s příkonem a 3f jištěním (do 32 A, nad to varování).
+  Tlačítko CENTRAL STOP se do půdorysu neosazuje (spoušť doplní rozváděč v režimu BD4). Nákres s prvky se nahradí až po
+  potvrzení.
+- **Vzorový model** `public/samples/eldock-sample-plant.ifc` (IFC4, mm) je výstup generátoru `samplePlantIfc()`
+  (`npm run bim:sample`, test hlídá shodu) – hala H1 84,0 × 42,5 m posunutá v areálu, 2 podlaží, 5 místností (hala jako
+  mnohoúhelník), TR1 / DA1 / UPS1, HR1 / RM1 / R-UPS s Pset_DistributionBoardCommon, stroje 45 / 75 / 37 kW a VZT 18 kW,
+  6 kabelů a 4 žlaby / lávka, napájení všemi třemi cestami (porty, okruhy, Revit „Panel“) a domovní přístroje ve velínu.
+
+---
+
 # 📄 DENIK-faze-49-54.md
 
 # Deník fází 49–54 (přesunuto z docs/PLAN.md 2026-11-06)
@@ -4569,6 +4727,16 @@ Fáze 83–85 nasazeny 2026-11-10 (commit `af4e1f2`; commity `242449c`, `329e631
 
 ---
 
+# 📄 DENIK-faze-93.md
+
+# Deník fáze 93 (přesunuto z `docs/PLAN.md`, sekce C)
+
+| Fáze | Datum | Poznámky |
+|---|---|---|
+| 93 | 2026-11-11 | Zadání z chatu → `docs/archiv/ZADANI-faze-93.md` (i rozhodnutí a odchylky). **Logika:** `occupancy.ts` (režimy, `halogenFreeCable`, `halogenFreeBomItem`, `shuntTripConfig`, `midMeterConfig`, okruhy A / B, `occupancyProtocol`, `legalFrameworkFor`), `analyzeDraft` → `halogenFreePlan` / `halogenFreeSummary`, most `generateCircuitsFromFloorplan` (`occupancy`: zásuvky lékařských místností a rampy LUZ do okruhů A / B, světla na 2 okruhy) a `buildSwitchboardFromCircuits` (BD4 spoušť + MID), `buildPlan` (rampa = uzly `#A`, `#B`, `#D`), krabice `boxPickOptionsOf` (jen `halogenFree`), `floorplan-norms.ts` (`occupancyIssues`, `ekvHeightAt`, oprava `add` / `boxMaker`), `linter.ts` (`bd4-central-stop`, `bd4-mid-meter`, `medical-sockets`, `medical-rcd-sensitivity`, oprava `add-devices`), `power-backup.ts` (`effectiveTiers`, `backupSummary`, `matchesTenant`), `inspection-rules.ts` (`MEDICAL_DEVICE`, `MEDICAL_ROOM`, `FIRE`, varianty, `checkMonths`), `inspection-presets.ts`. **Server:** `placeLintDevices`, `services/power-backup.ts` + akce, `getPlantPower`, Studio (`powerBackupTier` konceptu a úprav), nastavení lhůty s variantou, typ `FUNCTION_TEST`. **UI:** výběr typu objektu (editor, `OccupancySelect`), `PowerBackupFilter` + `CampusMap` (zvýraznění a páteř), `PowerBackupCard`, předvolby v přehledu revizí a v auditním reportu (`?predvolba=`), měsíční zkouška v Knize revizí. **Testy:** `src/engine/__tests__/commercial-medical-modes.test.ts` (17 testů); E2E `e2e/phase93.spec.ts` (4 testy). |
+
+---
+
 # 📄 docs/PLAN.md
 
 # ELDOCK – rotující plán
@@ -4652,6 +4820,7 @@ a postup nasazení jsou v `CLAUDE.md`. Soubor drž pod 150 řádky.
 | 62 | 2D půdorys: kabeláž jde skrýt (přepínač „Kabeláž“ u plátna i v liště kroku, klávesa K), při párování vypínačů se světly je ve výchozím stavu skrytá; lišta probíhajícího kroku nad projektem (`ModeBar`, lepkavá pod hlavičkou) s názvem kroku, nápovědou a „Hotovo“ pro párování, vkládání, kreslení, zakreslení změn, ořez / kalibraci („Zrušit“) i úpravu vybraného prvku – v bočním panelu „Hotovo“ není, v kroku 1 Panel Builderu ukončuje úpravu přístroje lišta nad rozváděčem; sestavy ve víceramečku v panelu nad paletou (hotové: 2–4× jednozásuvka, 2–3× vypínač č. 1, vypínač + přepínač, vypínač + zásuvky, zásuvka + RJ45, sběrnicové tlačítko + zásuvky; vlastní sestava po pozicích do 5R) s náhledem u kurzoru a vložením jedním klikem přisazeným ke stěně, ▦+ a „Přidat do rámečku“ u vybraného přístroje; rámeček s dvojzásuvkou na začátku se při otáčení a posunu v rámečku už neposouvá, přístroj v rámečku jde přesně vybrat (klikací plocha jen na jeho pozici) | ✅ |
 | 63 | 2D půdorys: paleta jako akordeon (počty osazených prvků, sbalit / rozbalit vše, režim jedné kategorie); zařizovací předměty ve skutečném rozměru – vana, sprchový kout, umyvadlo UMY 600 × 450 a dvojumyvadlo DUM 1200 × 450 s architektonickou značkou, žlutým rohem a posuvnými stranami (živé kóty X × Y), otočením 90° / 45° a přesným rozměrem v detailu, zóny 0–2 a pás nad a pod umyvadlem se přepočítají, hlídač vzdálenosti zásuvek a spínačů od vany, sprchy a umyvadla; knihovna samostatných spotřebičů (název, zkratka, příkon, jistič 1P / 3P B / C, chránič A / F / B / RCBO, kabel, výška, vlastní spotřebiče ze šablon, prohlížeč + profil firmy, okruhy podle zadání); lišta výrobců s rodinami ABB (domovní přístroje / ABB-free@home / ABB i-bus KNX & ABB-flexTronics), Loxone a TapHome s výrobky k vložení a akčními členy na DIN lištu jako informací; věrné náhledy řad (Levit, Zoni, Tango, Time, Time Arbo, Decento, Céliane, Nová Unica, Sedna, Asfora …) a „🌐 Prohlédnout řadu na webu výrobce ↗“; ruční posun úseků tras (vodorovný jen v ose Y, svislý jen v ose X, šikmý kolmo ke stěně), odskok dvojklikem, reset pravým tlačítkem / v panelu, délky kabelů z upravené trasy; polygonální místnosti se šikmými stěnami (přichytávání 0° / 45° / 90°, Shift = volný úhel), trasy podél stěn v odsazení 200 mm s kolmou odbočkou; normové CAD značení kabelů (rysky žil, čárkovaně ovládání a sběrnice, štítek okruhu) a export výkresu do PDF (A3 / A4, razítko, legenda, tabulka okruhů) a DXF (8 hladin, mm 1 : 1) | ✅ |
 | 64 | 2D půdorys jako uložený projekt na serveru: modely `Floorplan` + `FloorplanVersion` (migrace `floorplans`), seznam půdorysů firmy `/panel-builder/floorplan` (zákazník, místo, podlaží / místnosti / prvky, poslední úprava, vygenerovaný rozváděč; údaje, kopie, koš s obnovením a trvalým smazáním), nový půdorys `/novy` vznikne na serveru při první změně, editor `/[id]`; průběžné ukládání s kontrolou verze a zálohou neuložených změn v prohlížeči, souběh dvou oken s volbou „Načíst aktuální verzi“ / „Ponechat mou verzi“ (odmítnutý i přepsaný stav v historii); historie verzí s obnovením (automaticky nejvýš 1× za 10 min, pojmenovaná verze, stav při generování rozváděče a před obnovením, 30 verzí); převzetí nákresu z prohlížeče (`eldock.pb.floorplan`) při otevření seznamu; „📐 Upravit půdorys“ u rozváděče z půdorysu a vazba na nově vygenerovaný rozváděč; Zpět / Znovu (Ctrl+Z, Ctrl+Shift+Z / Ctrl+Y, tlačítka – tažení i klik = jeden krok); `FloorplanEditor.tsx` rozdělen (`ElementPanels.tsx`, `background-image.ts`, hooky `useDraftHistory` / `useFloorplanSync`) | ✅ |
+| 95 | Nativní import BIM (IFC2x3 / IFC4 / IFC4X3, ISO 16739): parser STEP ISO 10303-21 v čistém TypeScriptu (`src/lib/bim/` – jednotky MILLI / METRE, hierarchie IfcLocalPlacement → globální XYZ, česká diakritika `\X2\`, projekt / areál / budovy / podlaží / místnosti s půdorysem a plochou, stěny, okna, dveře, zdroje TR / DA / UPS, rozváděče, kabelové žlaby a kabely s 3D délkou, stroje a VZT, svítidla, zásuvky, ovladače, čidla a pohony; In, P, U, fáze, IP a okruh z property setů i z českých / revitových parametrů, úroveň zálohování a topologie napájení z portů, okruhů IfcSystem a Revit „Panel“); Správa závodů – 🏢 import BIM a ✨ vzorová hala na mapě závodu i ve Studiu (okno kontroly se stavbou, zdroji, rozváděči, stroji a trasami; nová budova s podlažími, místnostmi a zařízeními se zálohováním, údaji z BIMu a QR kódy, nebo aktualizace rozváděčů podle kódů), ⚡ rozváděč z BIMu do AI Panel Builderu (vývody k napájeným zařízením, hlavní vypínač, skříň); 2D půdorys – nahrání `.ifc` (podlaží, plátno 1 : 1 bez kalibrace, místnosti, okna, dveře, rozváděče, zásuvky, svítidla, stroje jako vlastní spotřebiče); vzorový model `public/samples/eldock-sample-plant.ifc`; migrace `phase95_bim` | 🟦 |
 | 94 | Oficiální data ABB ETIM 9.0 (`ELSB_ETIM-9.0_2026-05.zip`, BMEcat EDXF 5.0): proudový import `scripts/import-abb-etim9.mjs` (`npm run catalog:etim`, ZIP bez rozbalení, `src/lib/catalog/etim.ts`) – 526 skutečných fotek výrobce WebP 400 × 400 v `public/catalog-images/` + `manifest.json` s objednacím číslem a EAN (řady ABB: spínač, zásuvka, rámeček 1R a víceramček 2R v každé barvě, u řad bez čísla v kusovníku reprezentativní výrobek řady; chytrá domácnost; 204 rozvodnic); rámečky 1R–5R s EAN a ověřením v datech výrobce (galerie, ⚠ u čísel mimo ETIM), EAN a ověření v kusovníku (CSV / XLSX, dokumentace), vestavné hloubky přístrojů v hlídači krabic KOPOS (volné místo za přístrojem, nad 40 mm hluboká krabice), DIN přístroje ABB s EAN, Pv výrobce, hloubkou a technickým listem a 101 dalších rozvodnic ABB ve výběru skříně; fotky v galerii řad (díly s objednacím číslem, dlaždice barvy rámečku), na kartách chytré domácnosti a u rozvodnic (výběr skříně, nový projekt, dokumentace) | ✅ |
 | 93 | Obchodní centra (ČSN 33 2000-7-718, BD4) a zdravotnictví (ČSN 33 2000-7-710 ed. 2): typ objektu a normativní režim (🏠 BD1 / 🛍️ BD4 / 🏥 Skupina 1 – `occupancy.ts`) v 2D půdorysu (krok 2, kompaktní lišta) i v projektu AI Panel Builderu (založení, hlavička, štítek; migrace `phase93_occupancy_backup`); BD4 = všechny kabely bezhalogenové (`1-CHKE-R (N2XH-J/O) … B2ca-s1,d1,a1`, `J-H(St)H 2×2×0,8 B2ca`, `U/FTP CAT6A LSOH`) v okruzích, výkazu, trasách, PDF / DXF a kusovníku, krabice jen HF (KOPOS KU 68-45/HF, KPR 68-70/HF, KU 68 LD/1HF, KPL 64-50/2LD HF), protokol vnějších vlivů BD4 / BE2, nouzové svítidlo NO_SV, rozváděč nájemní jednotky se spouští CENTRAL STOP a elektroměrem MID a Elektro-linter s doplněním 1 klikem; zdravotnictví = EKV, lůžková rampa LUZ (okruh A / B + PE + RJ45), lehátko LEH_Z, zásuvky lékařských místností ve 2 okruzích na vlastních RCBO 30 mA typ A, světla na 2 okruzích, linter (2 nezávislé ochrany, AC zakázán, IΔn ≤ 30 mA), hlídač EKV / jediné zásuvky / jediného světla s opravou 1 klikem; areál – `powerBackupTier` rozváděčů a přívodů (síť / DA 15 s / UPS · ZIS IT, karta rozváděče i Studio), filtr větví nad mapou s páteří, součtem kW a rezervou zdroje, nájemní jednotka / oddělení s hledáním; Kniha revizí – zdravotnické přístroje (ČSN EN 62353 ed. 2), zdravotnické prostory Skupiny 1 / 2 a IMD / ZIS IT, nouzové osvětlení s měsíční zkouškou funkce, CENTRAL STOP (vyhl. 246/2001 Sb.), předvolby průmysl / OC / zdravotnictví a souhrnný tisk pro SÚIP / TIČR, HZS a akreditační komisi MZ | ✅ |
 | 92 | Onboarding bez čtecích bublin a dva oddělené světy: trenažér 2D půdorysu „Dokončit rozdělaný dům 3 kliky“ (`/panel-builder/floorplan/trenazer`, bungalov 4+kk z 85 % hotový na ABB-free@home – `floorplan-sandbox-preset.ts`, 3 úkoly se samoodškrtáváním podle nákresu, pulzující paleta a terčík, rozváděč bez kreditu → AI Panel Builder s gratulací), úvodní volba trenažér / prázdný půdorys, živý tahák zakázky `FloorplanLiveChecklist` (5 bodů, tlačítka na místo v editoru, pilulka, trvalé vypnutí); 3 tréninkové zakázky AI Panel Builderu za 0 kreditů (byt 3+kk 48M TN-S, RD + FVE + wallbox 96M s chráničem wallboxu typu A pro Elektro-linter, chytrý dům ABB-free@home 120M – značka `trainerPreset`, migrace `phase92_trainer`) a u rozváděčů z trenažérů živý tahák na krocích 1–5; průvodce výrobním závodem `IndustrialPlantOnboarding` (🧭 v horní liště, karta na prázdném závodě – A: hala s rozvodnou a hlavním rozváděčem / trafostanicí → první stroj s PDF schématem v1.0 → QR štítek 20 × 20 / 40 × 40 mm a karta stroje; B: 90s mise noční poruchy se skutečnými výpočty); reálné fotky řad – harvester `scripts/harvest-switch-photos.mjs` + `public/catalog-images/manifest.json` a nahrávač Ctrl+V / soubor pro velín (`POST /api/catalog-images/upload`, WebP v `storage/catalog-images`) | ✅ |
@@ -4687,7 +4856,7 @@ Fáze 86, 87 a 89 nasazeny 2026-11-10 (commit `c5ce70e`; commity `0388470`, `e92
 
 ## B. Otevřená fáze
 
-Fáze 76–94 jsou hotové a nasazené (2026-11-10 a 2026-11-11; zadání fáze 81 `docs/archiv/ZADANI-faze-81.md`, fází 83–85 `docs/archiv/ZADANI-faze-83-85.md`, fáze 87 `docs/archiv/ZADANI-faze-87.md`, fáze 89 `docs/archiv/ZADANI-faze-89.md`, fáze 90 `docs/archiv/ZADANI-faze-90.md`, fáze 91 `docs/archiv/ZADANI-faze-91.md`, fáze 92 `docs/archiv/ZADANI-faze-92.md`, fáze 93 `docs/archiv/ZADANI-faze-93.md` a fáze 94 `docs/archiv/ZADANI-faze-94.md`; fáze 88 = katalog ABB pro ČR, zadání v deníku). Otevřené body jsou v sekci D; další fáze podle roadmapy níže.
+Fáze 95 (nativní import BIM .ifc – parser IFC, import do Správy závodů a 2D půdorysu, rozváděč z BIMu do AI Panel Builderu, vzorová hala) je hotová a čeká na nasazení – migrace `phase95_bim` (před nasazením záloha databáze); zadání `docs/archiv/ZADANI-faze-95.md`. Další na řadě je fáze 96 (viditelnost a indexace ve vyhledávačích). Fáze 76–94 jsou hotové a nasazené (2026-11-10 a 2026-11-11; zadání fáze 81 `docs/archiv/ZADANI-faze-81.md`, fází 83–85 `docs/archiv/ZADANI-faze-83-85.md`, fáze 87 `docs/archiv/ZADANI-faze-87.md`, fáze 89 `docs/archiv/ZADANI-faze-89.md`, fáze 90 `docs/archiv/ZADANI-faze-90.md`, fáze 91 `docs/archiv/ZADANI-faze-91.md`, fáze 92 `docs/archiv/ZADANI-faze-92.md`, fáze 93 `docs/archiv/ZADANI-faze-93.md` a fáze 94 `docs/archiv/ZADANI-faze-94.md`; fáze 88 = katalog ABB pro ČR, zadání v deníku). Otevřené body jsou v sekci D; další fáze podle roadmapy níže.
 
 Roadmapa po fázi 79 (`ZADANI-faze-71.md` až `ZADANI-faze-73.md`): vydání aplikací v Google Play a App Store, podepsaný instalátor pro Windows a podpis vydání Androidu vlastním klíčem až s účty Eldock s.r.o.; ověření aplikace pro iOS na skutečném iPhonu (Mac nebo ruční workflow; server závodu přes http v interní síti – ATS a dotaz na místní síť); synchronizace na pozadí (iOS BGTask, Android WorkManager), univerzální odkazy https a push oznámení. **Rozhodnuto 2026-11-09:** provoz obojí podle závodu – aplikace vždy offline s denní synchronizací přímo s eldock.cz, závod s interní sítí bez internetu navíc server závodu (Windows, zařízení `PLANT_SERVER`, denní synchronizace s cloudem); účty Apple (Organization, 99 USD/rok), Google Play s ověřením vývojáře Android (organizace, 25 USD) a podpis aplikace pro Windows přes Azure Artifact Signing (9,99 USD/měsíc, v EU jen firmy) až na zapsanou Eldock s.r.o. s číslem D-U-N-S – do té doby vývoj a zkušební sestavení mimo obchody; e-maily přes schránku `noreply@eldock.cz` u Zoneru (MX i SPF domény jsou u Zoneru); zálohy mimo server do Hetzner Object Storage v Helsinkách (HEL1, server je ve Falkensteinu `fsn1-dc14`). **Na straně uživatele:** schránka u Zoneru → `ELDOCK_SMTP_URL` + `ELDOCK_MAIL_FROM` do `.env` (DKIM a DMARC v DNS doporučeno); bucket v HEL1, klíče S3 a heslo záloh → `ELDOCK_BACKUP_S3_*` + `ELDOCK_BACKUP_KEY` do `.env` (heslo uložit i mimo server); po zápisu do OR údaje firmy v `lib/company.ts`, D-U-N-S a účty Apple, Google a Artifact Signing. Další plánované fáze z analýzy webu (`docs/archiv/ZADANI-faze-54.md`): normový registr v Eldocku, Projekt elektroinstalace jako produkt.
 
@@ -4695,8 +4864,8 @@ Roadmapa po fázi 79 (`ZADANI-faze-71.md` až `ZADANI-faze-73.md`): vydání apl
 
 | Fáze | Datum | Poznámky |
 |---|---|---|
+| 95 | 2026-11-11 | Zadání z chatu → `docs/archiv/ZADANI-faze-95.md` (i rozhodnutí a odchylky). **Parser:** `src/lib/bim/step.ts` (`readStep` – entity se parsují líně, `decodeStepString`), `ifc-parser.ts` (`parseIfc`: jednotky, placement, tvary – extruze, profily, obálka B-rep, vlastnosti a množství, `electricalKindOf`, `backupTierOf`, topologie), `bim-summary.ts`, `bim-payload.ts` (zmenšený model + schéma zod), `bim-plant.ts` (`bimToPlantPlan` → koncept Studia + údaje zařízení), `bim-floorplan.ts` (`bimToFloorplan`), `bim-board.ts` (`bimBoardPlan` – vývody, jištění, kabel, úbytek napětí, smyčka), `sample-ifc.ts` (`samplePlantIfc`, `stepText`; `npm run bim:sample`). **Server:** migrace `phase95_bim` (`Equipment.bimGuid`, `ratedPowerKw`), `services/bim-import.ts` (`importBimToPlant` CREATE / UPDATE nad `saveStudioConceptInTx`), `createProjectFromBimBoard`, akce `importBimAction` a `createBimBoardProjectAction` (1 kredit). **UI:** `BimImportButtons` (mapa závodu, Studio), `BimBoardButton` (karta rozváděče z BIMu), nahrání `.ifc` v 2D půdorysu. **Testy:** `src/lib/bim/__tests__/ifc-parser.test.ts` (12), `src/server/services/phase95.test.ts` (3); E2E `e2e/phase95.spec.ts` (2). |
 | 94 | 2026-11-11 | Zadání z chatu → `docs/archiv/ZADANI-faze-94.md` (i rozhodnutí a odchylky). **Import:** `scripts/lib/etim-zip.mjs` (ZIP / ZIP64, inflateRaw, `productBlocks`), `src/lib/catalog/etim.ts` (`parseEtimProduct`, `featureNumber`, `productPhoto`, `productDocuments`), `scripts/import-abb-etim9.mjs` (plán z kusovníku `compileFloorplanBom` přes všechny prvky palety, `PHOTO_FALLBACKS`, fotky přes sharp, statistika) → `abb-etim.generated.ts` (`ETIM_FRAMES`, `ETIM_DEVICE_DEPTHS`, `ETIM_GTIN`, `ETIM_SMART`), `abb-etim-components.generated.ts`, `abb-etim-enclosures.generated.ts`. **Logika:** `mounting-boxes-catalog.ts` (`deviceDepthOf`, `BoxNeed.device`, `ResolvedBox.freeDepthMm`), `floorplan-norms.ts` (hloubka výrobce v hlášení), `wiring-bom.ts` (`eanOf`, `ean`, sloupec EAN), `catalog-images.ts` (díl `frame`, `enclosure`, `enclosureImage`, `mpn`), `etim-enclosures.ts`, seed `applyEtimComponents` + `seedVerifiedEnclosures`. **UI:** galerie řad (fotky dílů s objednacím číslem, dlaždice rámečků s fotkou, rámečky 1R–5R z ETIM), `EnclosurePhoto` (výběr skříně, nový projekt, dokumentace), EAN v kusovníku a v listu 4. **Testy:** `src/lib/panel-builder/phase94.test.ts` (10, mj. načtení `manifest.json` s fotkami), `src/lib/catalog/etim.test.ts` (2), `src/server/services/phase94.test.ts` (2). |
-| 93 | 2026-11-11 | Zadání z chatu → `docs/archiv/ZADANI-faze-93.md` (i rozhodnutí a odchylky). **Logika:** `occupancy.ts` (režimy, `halogenFreeCable`, `halogenFreeBomItem`, `shuntTripConfig`, `midMeterConfig`, okruhy A / B, `occupancyProtocol`, `legalFrameworkFor`), `analyzeDraft` → `halogenFreePlan` / `halogenFreeSummary`, most `generateCircuitsFromFloorplan` (`occupancy`: zásuvky lékařských místností a rampy LUZ do okruhů A / B, světla na 2 okruhy) a `buildSwitchboardFromCircuits` (BD4 spoušť + MID), `buildPlan` (rampa = uzly `#A`, `#B`, `#D`), krabice `boxPickOptionsOf` (jen `halogenFree`), `floorplan-norms.ts` (`occupancyIssues`, `ekvHeightAt`, oprava `add` / `boxMaker`), `linter.ts` (`bd4-central-stop`, `bd4-mid-meter`, `medical-sockets`, `medical-rcd-sensitivity`, oprava `add-devices`), `power-backup.ts` (`effectiveTiers`, `backupSummary`, `matchesTenant`), `inspection-rules.ts` (`MEDICAL_DEVICE`, `MEDICAL_ROOM`, `FIRE`, varianty, `checkMonths`), `inspection-presets.ts`. **Server:** `placeLintDevices`, `services/power-backup.ts` + akce, `getPlantPower`, Studio (`powerBackupTier` konceptu a úprav), nastavení lhůty s variantou, typ `FUNCTION_TEST`. **UI:** výběr typu objektu (editor, `OccupancySelect`), `PowerBackupFilter` + `CampusMap` (zvýraznění a páteř), `PowerBackupCard`, předvolby v přehledu revizí a v auditním reportu (`?predvolba=`), měsíční zkouška v Knize revizí. **Testy:** `src/engine/__tests__/commercial-medical-modes.test.ts` (17 testů); E2E `e2e/phase93.spec.ts` (4 testy). |
 
 ## D. Známé nedostatky a backlog
 
@@ -4709,14 +4878,13 @@ Roadmapa po fázi 79 (`ZADANI-faze-71.md` až `ZADANI-faze-73.md`): vydání apl
 - Fáze 73: aplikace pro iOS se sestaví pro simulátor v GitHub Actions (ověřeno 9. 11. 2026 na macos-15-intel s Xcode 26.3 – runnery Apple Silicon GitHub tehdy nesehnal), spuštění v simulátoru ani na iPhonu zatím neověřené; server závodu přes http z iPhonu ověřit na zařízení (ATS, dotaz na místní síť); na pozadí aplikace nesynchronizuje (jen připomenutí oznámením); APK podepsané ladicím klíčem – vydání vlastním klíčem a v obchodech s účty Eldock s.r.o.
 - Fáze 74–75: fotky výrobců v galerii řad čekají na potvrzení práv (`SERIES_PHOTOS` prázdný – zatím vektorové náhledy); dvoubarevné kódy rámeček / klapka mimo Katalog ABB 2026 neověřené; text ČSN 33 2130 ed. 4 k umývacímu prostoru (převzato z ed. 3, čl. 7.8) a ČSN 33 2000-7-701 ed. 3 ověřit v licencovaném textu; SPD v podružném rozváděči zůstává T1+T2 (u RP ve stejné budově obvykle stačí T2 – posoudí projektant); kresba umývacího prostoru přesahuje 250 mm za stěnu (`BASIN_WALL_MM`); vnitřní odkazy PDF ověřené pro tisk z Chrome / Edge (jiné prohlížeče je mohou zahodit).
 - Testovací firma Správy závodů (2026-11-10, `PLANT_TESTER`: `test@eldock.cz` a `test-udrzba@eldock.cz`, `db:plant-tester` při startu s `ELDOCK_SEED_DEMO=1`): hesla jsou veřejná v repozitáři – před registrací první skutečné firmy ji smazat ve velínu a nastavit `ELDOCK_SEED_DEMO=0` (CLAUDE.md, oddíl 7); s SMTP by šlo z testovacího účtu rozesílat pozvánky. Nasazeno 2026-11-10 (commit `97932c5`; start kontejneru firmu založil – závod TZ s halou A a 5 zařízeními; bez migrací, kontejner `healthy`, log bez chyb, úklid mezivrstev 1,23 GB, volno 24 GB).
-- Fáze 76–80: náhledy výrobců – klíčové řady ABB mají vlastní rendery (fáze 80), ostatní řady ABB a Schneider / Legrand / Hager kreslený náhled; originální fotky výrobců smí být ve veřejném repozitáři (potvrzeno 2026-11-10), ale zatím nejsou – chybí zdroj ke stažení (`npm run catalog:images -- --download` podle `zdroje.json`); MEAN WELL HDR, obecné řadiče PWM a binární vstupy jsou neověřené (typ bez objednacího čísla); import DXF jen ASCII (binární DXF a DWG ne), ELLIPSE, SPLINE, HATCH a DIMENSION se nekreslí (jen počet ve výsledku importu), podklad CAD není v tisku PDF ani v exportu DXF půdorysu, přichytávání jen při vkládání a kreslení místností (ne při přesunu prvku), přichycená nástěnná značka mimo nakreslenou místnost drží natočení předchozí značky.
-- Fáze 81: bez ověřeného čísla (null / „ověřte“) jsou stříbrná a zlatá IP TOUCH, bílý Trevion, bílý Loxone Wall Display, krabice OneTouch 7", Loxone Touch Pure Display a DALI Extension (100200 ze zadání), všechny kusy TapHome (čísla, šířky a Pv ze zadání); Pv akčních členů ABB mimo rešerši datasheetů a šířka UD/S 4.210.2.1 (6 M) jsou orientační; TapHome nemá akční člen topení (výpočet hlásí doplnit ručně); SmartTouch jen ve variantě free@home (KNX verze v katalogu výrobců není).
+- Fáze 76–80: náhledy výrobců – klíčové řady ABB mají vlastní rendery (fáze 80), ostatní řady ABB a Schneider / Legrand / Hager kreslený náhled; originální fotky výrobců smí být ve veřejném repozitáři (potvrzeno 2026-11-10), ale zatím nejsou – chybí zdroj ke stažení (`npm run catalog:images -- --download` podle `zdroje.json`); MEAN WELL HDR, obecné řadiče PWM a binární vstupy jsou neověřené (typ bez objednacího čísla); import DXF jen ASCII (binární DXF a DWG ne), ELLIPSE, SPLINE, HATCH a DIMENSION se nekreslí (jen počet ve výsledku importu), podklad CAD není v tisku PDF ani v exportu DXF půdorysu, přichytávání jen při vkládání a kreslení místností (ne při přesunu prvku), přichycená nástěnná značka mimo nakreslenou místnost drží natočení předchozí značky. Fáze 81: bez ověřeného čísla (null / „ověřte“) jsou stříbrná a zlatá IP TOUCH, bílý Trevion, bílý Loxone Wall Display, krabice OneTouch 7", Loxone Touch Pure Display a DALI Extension (100200 ze zadání), všechny kusy TapHome (čísla, šířky a Pv ze zadání); Pv akčních členů ABB mimo rešerši datasheetů a šířka UD/S 4.210.2.1 (6 M) jsou orientační; TapHome nemá akční člen topení (výpočet hlásí doplnit ručně); SmartTouch jen ve variantě free@home (KNX verze v katalogu výrobců není).
 - Fáze 82: limit zásuvek na světelném okruhu norma neuvádí (Eldock hlídá 10 vývodů světla + zásuvky na okruh); text ČSN 33 2130 ed. 4 o zásuvkách na světelném obvodu ověřit v licencovaném textu; volba jištění 10 / 13 A platí pro celý půdorys (ne po okruzích). Fáze 83: plátno drží poměr stran plochy – u úzké a hluboké plochy (např. 15 × 40 m) je vysoké a posouvá se stránka; u haly 100 m je mřížka po 1 m v celkovém pohledu hustá.
 - Fáze 84: pokud produkční `.env` nastavuje `ELDOCK_BANK_IBAN` na jiný platný účet, má přednost před účtem Raiffeisenbank (vzorový demo IBAN se ignoruje) – ověřit na serveru. Fáze 85: dvířka v náhledu jsou orientační (katalog skříní nevede druh dvířek – u ověřených rozvodnic fáze 86 je náhled bere z popisu výrobce).
 - Fáze 86: Rittal zůstává jen orientační AX (rozvodnice s řadami modulů Rittal nevede – AX / KX s moduly Ri4Power ISV nejsou jedna objednatelná skříň); ABB Unifix, ComfortLine CW a Eaton DBP / DBM výrobci nevedou, Eaton dál jen z exportu (BC, BF, BP, IKA, KLV, MINI). Nezařazeno: Hager FWU73S (výrobce uvádí 21 řad), FW2 (FW…FT), FWU…N / K1, univers na omítku jen FWB z exportu, Schrack BK080109, BK080113, BK080163, BK080057 a provedení -H do dutých stěn. Rozpory Schracku: zapuštěné s bílými dveřmi mají v popisu „s průhlednými dveřmi“ a BK080058 / BK080059 u dveří „Plast průhledný“ – platí název výrobku; BK080153 je podle výrobce 482 mm vysoká (průhledná BK080103 525 mm); P_max = „Ztrátový výkon“ (web ho píše se znaménkem minus). ABB a Hager P_max neuvádí (null). Vícepolové skříně (ABB 2–4 sloupce, Hager 2–3 pole) mají v návrhu lištu přes celou řadu – přístroj přes hranici pole Eldock nehlídá. Údaje ověřeny 10. 11. 2026 – změny sortimentu (např. konec Hager vector II L / PN) je nutné doplnit ručně. Fáze 87: komentář syntetizuje Edge TTS (text kapitol jde na službu Microsoftu – je veřejný na /navody; `--tts=local` = lokální hlas Windows, robotičtější); video 1 ukazuje aplikaci k 2026-11-11 po fázi 90 (průvodce půdorysem v 5 krocích s krokovými kartami), video 2 k 2026-11-10 po fázi 88 (řada Mistral65) – po změně UI, které ukazují (editor půdorysu, kroky Panel Builderu), je přegenerovat (`npm run tutorials:generate`, ~15 min); akce kapitoly 3 videa 1 (osazení) jsou delší než komentář o pár sekund; Interactive Tour je jen v editoru půdorysu (cíle = `targets` kapitol); titulky jsou vypálené ve videu (bez samostatné stopy WebVTT). Fáze 88: Pv přístrojů z katalogu ABB pro ČR je odhad (ABB CZ ho neuvádí – typická hodnota nahrazeného řádku nebo IEC); vazby S201 / S201M → PS1 a S203 / S203M → PS3 jsou odvozené z pólů (neověřeno), PSc → DS301C, PS-END a E292 → E290 podle katalogu. Chyby stránek ABB CZ (platí typové označení, poznámka u zdroje): FH204 A-40 a A-63 uvádí 25 A typ AC, OVR T2 jiné kA, 41P18X42A / 41P18X41A „18 (18x4)“. Nezařazeno: S2C a CP-D (new.abb.com se nedá číst), OT, spínače, tlačítka a zvonky, S3C, kryty, CU VMW / K, multimediální UK600 / AK600, ARIA / APO; S202 / S204 katalog ABB pro ČR nevede; externí řada „Mistral“ má dál jen MISTRAL65 1 × 4 M (1SL1200A00 – na stránce řady Mistral65 není), UK600 zůstává z exportu. DS201 B16 A30: ruční zápis (referenční PB-001) má 2CSR255140R1165, katalog ABB pro ČR i externí databáze 2CSR255180R1165 – v katalogu vyhrává ruční zápis, ověřit. V databázích s importem externí databáze zůstávají z dřívějška dvojice orientační řádek + kus s objednacím číslem (DS201 B10 A30, DS201 C16 A30, ESB25-20N-01) – adopce přeznačí jen řádek, jehož objednací číslo databáze ještě nemá. Údaje ověřeny 10. 11. 2026.
 - Fáze 89: plátno s panely zabírá v krocích 1, 3, 4 a 5 průvodce 73–81 % výšky okna (1882 × 1253), krok 2 s celým výběrem výrobců a barev 52 % – výběr designu je velký záměrně; profil uživatele = profil firmy (Panel Builder nemá osobní účty), volba v prohlížeči platí pro všechny firmy v něm. Fáze 90: okna a dveře nepřerušují čáru stěny (kreslí se přes ni) a nehlídají kolizi s nábytkem; objednací čísla monobloků Garant / Praktik / Variant+ v kusovníku chybí jako dosud; pás 0,2 m u umyvadla přístroje IP44 podle zadání nehlídá (v plném znění ČSN 33 2130 ed. 4 ověřit); krok průvodce si pamatuje jen karta prohlížeče (jiná karta otevře krok podle obsahu nákresu).
-- Fáze 91: fotografie výrobců se nestahovaly (rendery jsou vlastní dílo; fotky se schváleným zdrojem do `public/catalog-images/`); Schneider Electric na webu ověřen jen pro vzduchotěsné krabice Multifix Air do dutých stěn a SEZ bez objednacích čísel hlubokých krabic – jinde kusovník ukáže „doplnit“; limity Schneider / Legrand / Hager jsou ze zadání (katalogy neověřeny), řady berker B.7, K.1, K.5, R.classic a W.1 půdorys nenabízí; svislý víceramček se v půdorysu nekreslí (limit `vertical` jen v pravidlech); rozbočovací zásuvka (víc než 2 kabely) se pozná jen z tras aktivního podlaží a ne v dokumentaci rozváděče; mezery a rozpěrky 1159-34 mezi krabicemi Decenta kusovník nepočítá.
-- Fáze 92: harvester fotek (`npm run catalog:photos`) web ABB 2026-11-11 nepustil (headless prohlížeč – net::ERR_HTTP2_PROTOCOL_ERROR; blokace se neobchází), `public/catalog-images/manifest.json` je prázdný – reálné fotky zatím jen přes nahrávač Ctrl+V ve velínu; adaptér harvesteru jen pro ABB (Schneider / Legrand / Hager ručně); nástěnné monobloky Garant / Praktik / Variant+ bez ověřeného objednacího čísla v kusovníku harvester přeskočí. Trenažér 2D půdorysu je bungalov na ABB-free@home (stmívací akční člen v rozváděči je pravdivý jen ve sběrnicové instalaci); velikosti tréninkových zakázek jsou podle výběru generátoru (48M / 96M / 120M, ne 36M / 72M / 108M ze zadání – rezerva 25 %). Průvodce závodem nevytváří vzorový závod v datech firmy (mise B jen v prohlížeči); režim A jen s právem Studio výstavby.
+- Fáze 91: fotografie výrobců se nestahovaly (rendery jsou vlastní dílo; fotky se schváleným zdrojem do `public/catalog-images/`); Schneider Electric na webu ověřen jen pro vzduchotěsné krabice Multifix Air do dutých stěn a SEZ bez objednacích čísel hlubokých krabic – jinde kusovník ukáže „doplnit“; limity Schneider / Legrand / Hager jsou ze zadání (katalogy neověřeny), řady berker B.7, K.1, K.5, R.classic a W.1 půdorys nenabízí; svislý víceramček se v půdorysu nekreslí (limit `vertical` jen v pravidlech); rozbočovací zásuvka (víc než 2 kabely) se pozná jen z tras aktivního podlaží a ne v dokumentaci rozváděče; mezery a rozpěrky 1159-34 mezi krabicemi Decenta kusovník nepočítá. Fáze 92: harvester fotek (`npm run catalog:photos`) web ABB 2026-11-11 nepustil (headless prohlížeč – net::ERR_HTTP2_PROTOCOL_ERROR; blokace se neobchází), `public/catalog-images/manifest.json` je prázdný – reálné fotky zatím jen přes nahrávač Ctrl+V ve velínu; adaptér harvesteru jen pro ABB (Schneider / Legrand / Hager ručně); nástěnné monobloky Garant / Praktik / Variant+ bez ověřeného objednacího čísla v kusovníku harvester přeskočí. Trenažér 2D půdorysu je bungalov na ABB-free@home (stmívací akční člen v rozváděči je pravdivý jen ve sběrnicové instalaci); velikosti tréninkových zakázek jsou podle výběru generátoru (48M / 96M / 120M, ne 36M / 72M / 108M ze zadání – rezerva 25 %). Průvodce závodem nevytváří vzorový závod v datech firmy (mise B jen v prohlížeči); režim A jen s právem Studio výstavby.
 - Fáze 93: bezhalogenové krabice HF ověřené jen u KOPOS (kopos.cz 2026-11-11: KU 68-45/HF_HA, KPR 68-70/HF_HA, KU 68 LD/1HF_HA, KPL 64-50/2LD HF_KA) – ostatní výrobci a hluboká HF krabice do SDK se v kusovníku doplní ručně (hlídač nabídne přepnutí na KOPOS); KPR 68_KA a KU 68 LD_NA ze zadání nejsou podle stránky výrobce bezhalogenové. Typy spouště a elektroměru MID (ABB S2C-A2, B23 312-100 …) jsou příklady ze zadání bez ověření objednacích čísel; vodič EKV v kusovníku je odhad 3 m na přípojku. Lhůty zdravotnických prostorů a přístrojů podle zadání (ČSN 33 2000-7-710 ed. 2, ČSN EN 62353 ed. 2) jako normové (ne závazné) – ověřit v licencovaném znění. Kapacitu DA / UPS zadává uživatel u kořene větve; výkon větve = Ib (naměřený, jinak součet podřízených × 0,8) · √3 · 400 V · cos φ 0,9.
 - Fáze 94: data ETIM ABB nemají ceny (PRODUCT_PRICE 0) ani šířku DIN přístrojů v modulech; vestavnou hloubku stmívačů, termostatů a USB zásuvek řad neuvádějí (hlídač u nich dál podle pravidel fáze 91); Time Arbo v datech není (zůstává render), Garant jen šedý hliníkový IP55; dvoubarevné rámečky Zoni 241–244 a Swing 5R z matice katalogu ETIM nevede (⚠ / „ověřit“). Fotka řady bez čísla v kusovníku je reprezentativní výrobek řady (číslo pod fotkou), Swing L má ve všech barvách bílý střed Swing. Pv z ETIM je na celý přístroj (vícepólový = všechny póly).
+- Fáze 95: místnosti IfcSpace jdou do Studia jako obálka (obdélník; mnohoúhelník jen v 2D půdorysu), kabelové žlaby nemají v mapě závodu vlastní vrstvu (u zařízení jen délka a typ přívodu), DA a UPS jsou v závodě kořenové zdroje typu trafostanice se zálohováním a kapacitou (napájení UPS z DA zůstane v popisu), IfcGridPlacement a zakřivené profily se nevyhodnocují; stroje v 2D půdorysu jsou vlastní spotřebiče do 32 A (nad to varování), vývody a hlavní vypínač nad 125 A navrhne AI Panel Builder jako orientační kus; Server Action nese jen zmenšený model (do ~1 MB – velký export z Revitu importujte po budovách).
 - Backlog z MVP: skutečný serverový přepis hlasu, redlining nad PDF (pdf.js), PostgreSQL, elektronický podpis schválení.
