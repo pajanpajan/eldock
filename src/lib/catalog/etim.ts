@@ -66,6 +66,12 @@ function tag(block: string, name: string, lang?: string): string | null {
   return match ? decode(match[1]) : null;
 }
 
+/** Značka bez atributů (`<DESCRIPTION_SHORT>…</DESCRIPTION_SHORT>`) – popis jednojazyčného katalogu. */
+function plainTag(block: string, name: string): string | null {
+  const match = new RegExp(`<${name}>([^<]*)</${name}>`).exec(block);
+  return match ? decode(match[1]) || null : null;
+}
+
 function features(block: string): Record<string, EtimFeature> {
   const result: Record<string, EtimFeature> = {};
   for (const match of block.matchAll(/<FEATURE>([\s\S]*?)<\/FEATURE>/g)) {
@@ -103,8 +109,9 @@ export function parseEtimProduct(block: string): EtimProduct | null {
     pid,
     gtin: /<INTERNATIONAL_PID type="gtin">([^<]*)</.exec(block)?.[1]?.trim() || null,
     typeCode: tag(block, "MANUFACTURER_TYPE_DESCR"),
-    shortCze: tag(block, "DESCRIPTION_SHORT", "cze"),
-    longCze: tag(block, "DESCRIPTION_LONG", "cze"),
+    // Fáze 97: jednojazyčný katalog (Hager CZ, výchozí jazyk cze v hlavičce) píše popisy bez atributu lang
+    shortCze: tag(block, "DESCRIPTION_SHORT", "cze") ?? plainTag(block, "DESCRIPTION_SHORT"),
+    longCze: tag(block, "DESCRIPTION_LONG", "cze") ?? plainTag(block, "DESCRIPTION_LONG"),
     shortEng: tag(block, "DESCRIPTION_SHORT", "eng"),
     etimClass: /<REFERENCE_FEATURE_GROUP_ID>(EC\d+)</.exec(block)?.[1] ?? null,
     series: tag(block, "UDX.EDXF.PRODUCT_SERIES"),

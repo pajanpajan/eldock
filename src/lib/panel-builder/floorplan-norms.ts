@@ -19,7 +19,7 @@ import { BASIN_MARGIN_MM, BASIN_RECOMMENDED_MM, BASIN_STRICT_MM, WASH_AREA_TOP_M
 import { BOX_MAKERS, type BoxChoice, type BoxMaker } from "./box-options";
 import { allElements, floorsOf, heightKindOf, paletteItem, snapToWall, wallRotation, type EditorElement, type EditorRoom, type FloorSheet, type FloorplanDraft } from "./floorplan-editor";
 import { frameLimitOf, gangsOf } from "./floorplan-frames";
-import { DEVICE_DEPTH_SOURCE, boxMakerLabel, boxPickOptionsOf, formatMm, pickBox, resolveBox, wallTypeOf, type BoxDepthClass } from "./mounting-boxes-catalog";
+import { boxMakerLabel, boxPickOptionsOf, formatMm, pickBox, resolveBox, wallTypeOf, type BoxDepthClass } from "./mounting-boxes-catalog";
 import { EKV_ROOM, isCommercial, isMedical, isMedicalRoom } from "./occupancy";
 import { frameRulesOf, splitFrameGangs, splitLabel } from "./residential-series-catalog";
 import { MOUNTING_BOXES } from "./mounting-boxes-catalog";
@@ -483,14 +483,14 @@ export function boxDepthIssues(draft: FloorplanDraft, cableEnds: Readonly<Record
         : `${boxMakerLabel(maker)} vhodnou krabici ${wallTypeOf(resolved.wall).short} nevede – zvolte jiného výrobce krabic.`;
       // Fáze 94: oficiální vestavná hloubka přístroje (ABB ETIM 9.0) a volné místo za ním ve zvolené krabici
       const device = resolved.need.device;
-      const official = device ? ` Vestavná hloubka přístroje ${device.mpn} je podle ${DEVICE_DEPTH_SOURCE} ${formatMm(device.depthMm)} mm${resolved.freeDepthMm !== undefined ? (resolved.freeDepthMm < 0 ? ` – do zvolené krabice se nevejde (chybí ${formatMm(-resolved.freeDepthMm)} mm)` : `, ve zvolené krabici za ním zbývá ${formatMm(resolved.freeDepthMm)} mm`) : ""}.` : "";
+      const official = device ? ` Vestavná hloubka přístroje ${device.mpn} je podle ${device.source} ${formatMm(device.depthMm)} mm${resolved.freeDepthMm !== undefined ? (resolved.freeDepthMm < 0 ? ` – do zvolené krabice se nevejde (chybí ${formatMm(-resolved.freeDepthMm)} mm)` : `, ve zvolené krabici za ním zbývá ${formatMm(resolved.freeDepthMm)} mm`) : ""}.` : "";
       const why = resolved.need.reasons.length ? resolved.need.reasons.join(", ") : "přístroj";
       issues.push({
         id: `box-depth:${element.id}`,
         rule: "box-depth",
         level: "warning",
         text: `⚠️ Nedostatečná hloubka krabičky u ${labelOf(element)} v místnosti ${element.room}: zvolena krabice ${chosen?.depthMm ?? "?"} mm (${chosen ? `${boxMakerLabel(chosen.maker)} ${chosen.type}` : "mělká"}), ale ${why} vyžaduje min. ${resolved.need.minDepthMm} mm!${official} ${tip}`,
-        source: `vestavná hloubka přístroje a svorkování (katalogy výrobců přístrojů a krabic${device ? `, data výrobce ${DEVICE_DEPTH_SOURCE}` : ""})`,
+        source: `vestavná hloubka přístroje a svorkování (katalogy výrobců přístrojů a krabic${device ? `, data výrobce ${device.source}` : ""})`,
         elementIds: [element.id],
         fix: { label: need === "electronics" ? "Opravit na krabici s prostorem pro elektroniku (1 klik)" : "Opravit na hlubokou krabici (1 klik)", replace: [], boxes: [{ id: element.id, box: "auto" }] },
       });

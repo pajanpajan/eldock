@@ -7,6 +7,7 @@
 // zaručuje mělká krabice (40 mm), chce hlubokou; u zvolené krabice se počítá volné místo za přístrojem.
 
 import { ETIM_DEVICE_DEPTHS } from "./abb-etim.generated";
+import { BRAND_DEVICE_DEPTHS, KOPOS_BOX_DATA, KOPOS_DATA_SOURCE, type KoposBoxData } from "./brand-etim.generated";
 import { BOX_MAKERS, DEFAULT_BOX_MAKER, DEFAULT_WALL_TYPE, WALL_TYPES, type BoxChoice, type BoxDepthClass, type BoxMaker, type WallType } from "./box-options";
 import { allElements, floorsOf, paletteItem, type EditorElement, type EditorRoom, type FloorplanDraft } from "./floorplan-editor";
 import { gangsOf } from "./floorplan-frames";
@@ -40,13 +41,26 @@ export interface MountingBox {
   /** Určení podle výrobce. */
   purpose: string;
   source: string;
+  /** Fáze 97: EAN (GTIN) podle dat výrobce (KOPOS – stránka výrobku a ceník). */
+  ean?: string;
+  /** Fáze 97: technický (datový) list výrobce. */
+  datasheet?: string;
 }
 
 const KOPOS = "https://www.kopos.cz/cs/produkt/";
 const KAISER = "https://www.kaisergroup.com/de-KAISER/";
 const OBO = "https://www.obo.de/de-de/produkte/";
 
-const box = (entry: MountingBox): MountingBox => entry;
+/**
+ * Fáze 97: krabice KOPOS doplní data ze stránky výrobku (`npm run catalog:parse`) – EAN, technický list, bezhalogenovost
+ * a přesná hloubka (u krabic do zateplení zůstává tloušťka izolace, ne hloubka krabice).
+ */
+const box = (entry: MountingBox): MountingBox => {
+  const data = entry.maker === "kopos" && entry.code ? KOPOS_BOX_DATA[entry.code] : undefined;
+  if (!data) return entry;
+  const exactDepth = data.depthMm && (entry.role === "shallow" || entry.role === "deep" || entry.role === "electronics") ? { depthMm: data.depthMm } : {};
+  return { ...entry, ...exactDepth, ...(data.ean ? { ean: data.ean } : {}), ...(data.datasheet ? { datasheet: data.datasheet } : {}), ...(data.halogenFree ? { halogenFree: true } : {}) };
+};
 const MASONRY: readonly WallType[] = ["masonry"];
 const HOLLOW: readonly WallType[] = ["drywall"];
 const AIRTIGHT: readonly WallType[] = ["timber"];
@@ -114,15 +128,27 @@ export interface DeviceDepth {
   depthMm: number;
   /** Objednací číslo dílu (strojek, zásuvka), jehož hloubku data výrobce uvádějí. */
   mpn: string;
+  /** Fáze 97: zdroj údaje („ABB ETIM 9.0“, „Hager ETIM 10“). */
+  source: string;
 }
 
-/** Zdroj vestavných hloubek přístrojů (detail prvku, hlášení kontroly). */
+/** Zdroj vestavných hloubek přístrojů ABB (detail prvku, hlášení kontroly). */
 export const DEVICE_DEPTH_SOURCE = "ABB ETIM 9.0";
 
-/** Fáze 94: vestavná hloubka přístroje řady („ABB|Tango“ + „socket“) z dat ETIM; null = výrobce ji v datech neuvádí. */
+/**
+ * Fáze 94: vestavná hloubka přístroje řady („ABB|Tango“ + „socket“) z dat ETIM; fáze 97 i řady Hager (ETIM 10). null =
+ * výrobce ji v datech neuvádí.
+ */
 export function deviceDepthOf(series: string | null | undefined, item: string): DeviceDepth | null {
-  return series ? (ETIM_DEVICE_DEPTHS[`${series}|${item}`] ?? null) : null;
+  if (!series) return null;
+  const abb = ETIM_DEVICE_DEPTHS[`${series}|${item}`];
+  if (abb) return { ...abb, source: DEVICE_DEPTH_SOURCE };
+  return BRAND_DEVICE_DEPTHS[`${series}|${item}`] ?? null;
 }
+
+/** Fáze 97: krabice KOPOS ze stránky výrobku (EAN, hloubka, průměr, bezhalogenovost, technický list, ceník). */
+export const koposBoxData = (code: string | null | undefined): KoposBoxData | null => (code ? (KOPOS_BOX_DATA[code] ?? null) : null);
+export { KOPOS_DATA_SOURCE };
 
 /** Milimetry s desetinnou čárkou („24,6“). */
 export const formatMm = (value: number) => String(Math.round(value * 10) / 10).replace(".", ",");
@@ -214,7 +240,7 @@ export function boxNeed(draft: FloorplanDraft, element: EditorElement, context: 
   if (product?.wiring === "flextronics") reasons.push("elektronická vložka ABB-flexTronics® pod rámečkem");
   if (draft.installation === "smart_retrofit" && item.kind === "switch" && !item.bus && (element.controls.length > 0 || item.control === "blind")) reasons.push(item.control === "blind" ? "žaluziový modul pod vypínač" : "chytrý modul pod vypínač (retrofit)");
   // Přístroj hlubší, než zaručuje i hluboká krabice (66 mm) → nejhlubší třída (KOPOS KPR 68-70)
-  if (device && device.depthMm > MIN_DEPTH_MM.deep) reasons.push(`vestavná hloubka přístroje ${formatMm(device.depthMm)} mm (${DEVICE_DEPTH_SOURCE})`);
+  if (device && device.depthMm > MIN_DEPTH_MM.deep) reasons.push(`vestavná hloubka přístroje ${formatMm(device.depthMm)} mm (${device.source})`);
   if (reasons.length) return withDevice({ kind: "electronics", minDepthMm: MIN_DEPTH_MM.electronics, reasons });
   // Hluboký strojek a svorkování
   if (item.wiringCategory === "WD_DIMMER") reasons.push("stmívač 230 V (hluboký strojek)");
@@ -225,7 +251,7 @@ export function boxNeed(draft: FloorplanDraft, element: EditorElement, context: 
   if (draft.installation === "classic" && item.kind === "switch" && !item.bus && !item.sensor) reasons.push("WAGO svorky pro rozbočení ke svítidlům za strojkem");
   if ((item.kind === "single_socket" || item.kind === "double_socket") && (context.cableEnds ?? 0) > 2) reasons.push(`rozbočení – v krabici končí ${context.cableEnds} kabely`);
   // Fáze 94: přístroj hlubší než 40 mm (nejmenší hloubka mělké krabice) se do mělké krabice nevejde
-  if (device && device.depthMm > MIN_DEPTH_MM.shallow) reasons.push(`vestavná hloubka přístroje ${formatMm(device.depthMm)} mm (${DEVICE_DEPTH_SOURCE}) – víc než ${MIN_DEPTH_MM.shallow} mm mělké krabice`);
+  if (device && device.depthMm > MIN_DEPTH_MM.shallow) reasons.push(`vestavná hloubka přístroje ${formatMm(device.depthMm)} mm (${device.source}) – víc než ${MIN_DEPTH_MM.shallow} mm mělké krabice`);
   if (reasons.length) return withDevice({ kind: "deep", minDepthMm: MIN_DEPTH_MM.deep, reasons });
   return withDevice({ kind: "shallow", minDepthMm: MIN_DEPTH_MM.shallow, reasons: [] });
 }

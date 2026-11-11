@@ -26,11 +26,12 @@ import {
 } from "@/lib/panel-builder/floorplan-editor";
 import { frameGangs, frameLimitOf, frameOf, isFrameable } from "@/lib/panel-builder/floorplan-frames";
 import { BOX_CHOICES, WALL_TYPES, type BoxChoice, type WallType } from "@/lib/panel-builder/box-options";
-import { DEVICE_DEPTH_SOURCE, formatMm, type ResolvedBox } from "@/lib/panel-builder/mounting-boxes-catalog";
+import { formatMm, type ResolvedBox } from "@/lib/panel-builder/mounting-boxes-catalog";
 import { DESIGN_BRANDS, appearanceLabel, colorForSeries, designSeriesOf, hasFrameChoice, seriesColors, seriesFrameColors } from "@/lib/panel-builder/wiring-designs";
 import { cn } from "@/lib/utils";
 
 import { AddToFrameControl, SaveTemplateControl } from "./FrameAssemblyPalette";
+import { BoxPhoto } from "./BoxPhoto";
 import { DeviceControls, LightOptions } from "./LightOptions";
 import { FixtureControls } from "./FixtureShape";
 import type { BasinZone } from "@/lib/panel-builder/fixtures";
@@ -242,9 +243,14 @@ export function ElementDetail({
       {/* Fáze 91: instalační krabička – doporučená podle přístroje a stěny, ruční volba a hlídač hloubky */}
       {box && box.resolved.kind !== "none" ? (
         <div className={cn("flex flex-col gap-1 rounded-lg border p-2 text-xs", box.resolved.tooShallow ? "border-amber-400/70 bg-amber-500/10" : "border-border/70")} data-testid="element-box" data-kind={box.resolved.kind}>
-          <p>
-            <span className="font-semibold">📦 Instalační krabička:</span> <span data-testid="element-box-summary">{box.summary}</span>
-          </p>
+          <div className="flex items-start gap-2">
+            {/* Fáze 97: fotka zvolené krabice výrobce (KOPOS) */}
+            <BoxPhoto code={box.resolved.box?.code} label={box.resolved.box?.type} className="size-10" />
+            <p>
+              <span className="font-semibold">📦 Instalační krabička:</span> <span data-testid="element-box-summary">{box.summary}</span>
+              {box.resolved.box?.ean ? <span className="block text-[10px] text-muted-foreground" data-testid="element-box-ean">EAN {box.resolved.box.ean}</span> : null}
+            </p>
+          </div>
           {box.resolved.need.kind === "shallow" || box.resolved.need.kind === "deep" || box.resolved.need.kind === "electronics" ? (
             <label className="flex items-center gap-1.5 text-muted-foreground">
               Volba krabice
@@ -272,7 +278,7 @@ export function ElementDetail({
           {/* Fáze 94: vestavná hloubka přístroje z oficiálních dat výrobce a volné místo za ním v krabici */}
           {box.resolved.need.device ? (
             <p className="text-muted-foreground" data-testid="element-box-device" data-depth={box.resolved.need.device.depthMm}>
-              Vestavná hloubka přístroje podle výrobce: <b className="text-foreground">{formatMm(box.resolved.need.device.depthMm)} mm</b> ({DEVICE_DEPTH_SOURCE}, údaj u {box.resolved.need.device.mpn})
+              Vestavná hloubka přístroje podle výrobce: <b className="text-foreground">{formatMm(box.resolved.need.device.depthMm)} mm</b> ({box.resolved.need.device.source}, údaj u {box.resolved.need.device.mpn})
               {box.resolved.freeDepthMm !== undefined
                 ? box.resolved.freeDepthMm < 0
                   ? ` – do krabice ${box.resolved.box?.depthMm} mm se nevejde`

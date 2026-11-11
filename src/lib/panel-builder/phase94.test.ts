@@ -13,7 +13,7 @@ import { INSTALLATION_LABELS, type EnclosureInstallation } from "./enclosures";
 import { etimEnclosures, etimSeriesName } from "./etim-enclosures";
 import { emptyDraft, type EditorElement, type FloorplanDraft } from "./floorplan-editor";
 import { floorplanNorms } from "./floorplan-norms";
-import { boxNeed, deviceDepthOf, resolveBox } from "./mounting-boxes-catalog";
+import { boxNeed, deviceDepthOf, koposBoxData, resolveBox } from "./mounting-boxes-catalog";
 import { seriesPhoto } from "./series-photos";
 import { VERIFIED_ENCLOSURES } from "./verified-enclosures";
 import { bomTable, compileFloorplanBom } from "./wiring-bom";
@@ -103,8 +103,8 @@ describe("fáze 94 – rámečky 1R–5R a EAN z dat výrobce", () => {
     expect(bom.find((row) => row.mpn === "6619A-A06357 B")).toMatchObject({ category: "Zásuvky", verified: true, ean: "8592624446804" });
     expect(bom.find((row) => row.mpn === "3559-A01345")?.ean).toBe(ETIM_GTIN["3559-A01345"]);
     expect(bom.find((row) => row.category === "Rámečky")?.ean).toBe("8595017208782");
-    // Krabice jiných výrobců EAN z dat ABB nedostanou
-    expect(bom.filter((row) => row.box).every((row) => !row.ean)).toBe(true);
+    // Krabice jiných výrobců EAN z dat ABB nedostanou – fáze 97: jen vlastní EAN výrobce krabice (KOPOS, stránka výrobku)
+    expect(bom.filter((row) => row.box).every((row) => !row.ean || row.ean === koposBoxData(row.mpn)?.ean)).toBe(true);
     const table = bomTable(bom);
     expect(table[0]).toEqual(["Kategorie", "Objednací číslo (MPN)", "EAN (GTIN)", "Název a specifikace", "Řada a barva", "Počet", "Jednotka", "Ověření"]);
     expect(table.find((row) => row[1] === "6619A-A06357 B")).toEqual(expect.arrayContaining(["8592624446804", "data výrobce ETIM 9.0"]));
@@ -113,8 +113,8 @@ describe("fáze 94 – rámečky 1R–5R a EAN z dat výrobce", () => {
 
 describe("fáze 94 – vestavná hloubka přístroje v hlídači krabic KOPOS", () => {
   it("hloubka z ETIM u přístroje řady a volné místo za ním ve zvolené krabici", () => {
-    expect(deviceDepthOf("ABB|Tango", "socket")).toEqual({ mpn: "6619A-A06357 B", depthMm: 40 });
-    expect(deviceDepthOf("ABB|Tango", "switch-1")).toEqual({ mpn: "3559-A01345", depthMm: 17 });
+    expect(deviceDepthOf("ABB|Tango", "socket")).toEqual({ mpn: "6619A-A06357 B", depthMm: 40, source: "ABB ETIM 9.0" });
+    expect(deviceDepthOf("ABB|Tango", "switch-1")).toEqual({ mpn: "3559-A01345", depthMm: 17, source: "ABB ETIM 9.0" });
     expect(deviceDepthOf(null, "socket")).toBeNull();
     // Zásuvka Tango 40 mm v KU 68-45 (45 mm) → 5 mm, Zoni 24,6 mm → 20,4 mm
     const tango = drawing([el("z", "socket")], { series: "ABB|Tango", color: "abb-tango-b" });

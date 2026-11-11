@@ -5,6 +5,7 @@
 // a 548); Schneider Electric, Legrand a Hager podle zadání fáze 91. Barva rámečku řady s vlastními objednacími čísly
 // (Busch-Jaeger) rozsah zúží: rámeček bez objednacího čísla v té barvě neexistuje. Čisté funkce.
 
+import { ETIM_FRAME_LIMITS } from "./brand-etim.generated";
 import { designSeriesOf, resolveFrameColor } from "./wiring-designs";
 
 export type FrameOrientation = "horizontal" | "vertical";
@@ -39,6 +40,12 @@ const rules = (maxFrameGang: number, source: string, extra: Partial<Omit<SeriesF
 const ABB = "Katalog ABB 2026";
 const SPEC = "zadání fáze 91 (katalog výrobce 2026)";
 
+/** Fáze 97: pravidlo řady s nejvyšším rámečkem z dat ETIM výrobce (`npm run catalog:parse`); bez dat původní údaj. */
+const etimRules = (key: string, fallback: number, spec: string): SeriesFrameRules => {
+  const limit = ETIM_FRAME_LIMITS[key];
+  return limit ? rules(limit.maxFrameGang, `${limit.source} (ověřeno v datech výrobce)`) : rules(fallback, spec);
+};
+
 /** Pravidla podle klíče „výrobce|řada“ (názvy řad z `DESIGN_BRANDS`). */
 export const SERIES_FRAME_RULES: Record<string, SeriesFrameRules> = {
   "ABB|Zoni": rules(5, `${ABB}, str. 81`),
@@ -67,8 +74,9 @@ export const SERIES_FRAME_RULES: Record<string, SeriesFrameRules> = {
   "Legrand|Valena Allure": rules(5, SPEC),
   "Legrand|Céliane": rules(5, SPEC),
   "Legrand|Plexo (IP55)": rules(3, `${SPEC}; nástěnná řada`, { isSurfaceMounted: true }),
-  "Hager|lumina": rules(5, SPEC),
-  "Hager|berker S.1 / B.3 / Q.1 / Q.3": rules(5, SPEC),
+  // Fáze 97: nejvyšší rámeček řad Hager ověřený v datech výrobce (BMEcat ETIM 10, počet násobků EF000074)
+  "Hager|lumina": etimRules("Hager|lumina", 5, SPEC),
+  "Hager|berker S.1 / B.3 / Q.1 / Q.3": etimRules("Hager|berker S.1 / B.3 / Q.1 / Q.3", 5, SPEC),
 };
 
 /** Řada bez údaje výrobce – obecný limit editoru (rámečky 1R–5R). */

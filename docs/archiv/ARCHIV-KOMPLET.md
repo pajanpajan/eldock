@@ -53,24 +53,26 @@
 47. ZADANI-faze-94.md
 48. ZADANI-faze-95.md
 49. ZADANI-faze-96.md
-50. DENIK-faze-49-54.md
-51. DENIK-faze-55-59.md
-52. DENIK-faze-60-61.md
-53. DENIK-faze-62-65.md
-54. DENIK-faze-66-67.md
-55. DENIK-faze-68-70.md
-56. DENIK-faze-71-73.md
-57. DENIK-faze-74-77.md
-58. DENIK-faze-78-80.md
-59. DENIK-faze-81-82.md
-60. DENIK-faze-83-85.md
-61. DENIK-faze-86-88.md
-62. DENIK-faze-89-90.md
-63. DENIK-faze-91.md
-64. DENIK-faze-92.md
-65. DENIK-faze-93.md
-66. DENIK-faze-94.md
-67. docs/PLAN.md (aktuální plán a deník posledních fází)
+50. ZADANI-faze-97.md
+51. DENIK-faze-49-54.md
+52. DENIK-faze-55-59.md
+53. DENIK-faze-60-61.md
+54. DENIK-faze-62-65.md
+55. DENIK-faze-66-67.md
+56. DENIK-faze-68-70.md
+57. DENIK-faze-71-73.md
+58. DENIK-faze-74-77.md
+59. DENIK-faze-78-80.md
+60. DENIK-faze-81-82.md
+61. DENIK-faze-83-85.md
+62. DENIK-faze-86-88.md
+63. DENIK-faze-89-90.md
+64. DENIK-faze-91.md
+65. DENIK-faze-92.md
+66. DENIK-faze-93.md
+67. DENIK-faze-94.md
+68. DENIK-faze-95.md
+69. docs/PLAN.md (aktuální plán a deník posledních fází)
 
 ---
 
@@ -4651,6 +4653,170 @@ Seznam.cz (`https://search.seznam.cz/indexnow`) a Microsoft Bing (`https://api.i
 
 ---
 
+# 📄 ZADANI-faze-97.md
+
+# Zadání fáze 97 – vyhledání a stažení datových balíčků výrobců (ETIM / BMEcat / XLSX / feedy), reálné fotky a data do katalogů
+
+Vloženo z chatu 2026-11-11 (po nasazení fáze 96). Celé zadání beze změn je níže, za ním rozhodnutí při implementaci.
+
+## Zadání (z chatu)
+
+Víme, že výrobci elektroinstalačního materiálu (ABB, KOPOS Kolín, OEZ, Schneider Electric, Legrand, Hager, Eaton, Schrack, Saltek) vystavují na svých webech veřejné datové balíčky pro e-shopy, velkoobchody a projektanty (ETIM 8/9, BMEcat XML, e-shopové XML/CSV feedy a XLSX ceníky s technickými daty a URL adresami produktových fotek).
+
+Tvým úkolem je tyto balíčky a datové zdroje **sám aktivně dohledat na webu, stáhnout je na disk, rozbalit a kompletně z nich vytěžit reálné produktové fotky i technická ETIM data do ELDOCKu**.
+
+Zapiš tuto etapu jako novou fázi do `docs/PLAN.md` a proveď ji kompletně od začátku do konce v těchto 5 krocích:
+
+================================================================================
+KROK 1: AUTONOMNÍ VYHLEDÁNÍ A STAŽENÍ ETIM / BMEcat / XML / XLSX BALÍČKŮ (`scripts/discover-and-download-etim.mjs`)
+================================================================================
+
+Použij kombinaci vyhledávání na webu (Web Search / Fetch) a Playwright prohlížeče (reálné Chromium, které projde stránky *Ke stažení / Podpora pro e-shopy / Ceníky a databáze* a odchytí všechny přímé odkazy na `.zip`, `.xml`, `.xlsx`, `.csv`) a prohledej tyto oficiální zdroje:
+
+1. **ABB (`nizke-napeti.cz.abb.com`):**
+   - Zpracuj lokální archiv `ELSB_ETIM-9.0_2026-05.zip` (pokud je na disku) A ZÁROVEŇ prohledej `https://nizke-napeti.cz.abb.com/ke-stazeni/ceniky` a `https://nizke-napeti.cz.abb.com/ke-stazeni`, kde ABB veřejně publikuje aktuální datové soubory ceníků a ETIM/BMEcat balíčky (obsahující MPN, EAN, ETIM parametry a přímé odkazy na produktové fotografie v PIM/CDN ABB).
+
+2. **KOPOS Kolín (`kopos.cz`):**
+   - Prohledej `https://www.kopos.cz/cs/ke-stazeni`, `https://www.kopos.cz/cs/ceniky`, `https://www.kopos.cz/cs/podpora-pro-projektanty` a e-shopové/velkoobchodní XML/CSV/XLSX exporty KOPOSu.
+   - Dohledej a stáhni datový soubor s instalačními krabičkami (`KU 68-1901`, `KPR 68`, `KPR 68/71`, `KPR 68/L`, `KUP 68`, `KPRL 68-70/LD NA`, `KEZ KB`, `MDZ KB`, `KP 64/FD`, `KP 68/2`, `KP 68/3`), vytáhni z něj přesné rozměry, hloubky v mm, bezhalogenovost a stáhni reálné produktové fotky všech krabiček z `kopos.cz`!
+
+3. **OEZ Letohrad (`oez.cz`):**
+   - Prohledej `https://www.oez.cz/ke-stazeni` / `https://www.oez.cz/podpora/ceniky` (OEZ veřejně nabízí ke stažení kompletní databáze výrobků v XLSX/XML/ETIM včetně ztrátových výkonů $P_v$, šířek v modulech a přímých URL adres na obrázky jističů Minia `LTN`, chráničů `LFE`/`LFN`, jističochráničů `LFI`, pojistkových odpínačů `OPVP` a rozvodnic `RZA`/`RZG`/`RN`).
+
+4. **Schneider Electric (`se.com/cz/cs`):**
+   - Prohledej sekci ke stažení a ceníky na `se.com/cz/cs/` a pro všechny naše řady vypínačů/zásuvek (`Nová Unica`, `Sedna Design & Elements`, `Asfora`, `Mureva Styl IP55`) i přístrojů/rozvodnic (`Acti9`, `Resi9`, `Mini Pragma`, `Kaedra`) stáhni ETIM data a originální studiové fotky přímo z veřejného multimediálního serveru Schneider Electric:
+     * `https://download.schneider-electric.com/files?p_Doc_Ref=<MPN>&p_File_Type=rendition_369_jpg` (příp. `rendition_1500_jpg` / JSON data ze stránky `https://www.se.com/cz/cs/product/<MPN>`).
+
+5. **Legrand (`legrand.cz`):**
+   - Prohledej `https://www.legrand.cz/ke-stazeni` / ceníky a e-katalog `legrand.cz` pro řady `Valena Life`, `Valena Allure`, `Céliane`, `Plexo IP55` a rozvodnice `Practibox S` / `Nedbox` + přístroje `RX3` / `DX3`. Podle 6místných objednacích kódů stáhni ETIM parametry a originální produktové fotky.
+
+6. **Hager (`hager.com/cz`):**
+   - Prohledej `https://hager.com/cz/ke-stazeni` (ceníky a datové soubory XLSX/BMEcat) a katalogové JSON endpointy pro domovní řady `lumina`, `berker S.1`, `berker B.3 / B.7`, `berker Q.1 / Q.3`, `berker K.1 / K.5`, `berker R.classic`, `berker W.1 IP55` a rozvodnice `Vector`, `Volta`, `Golf`, `Univers`.
+
+7. **Eaton, Schrack a Saltek (`eaton.com/cz`, `schrack.cz`, `saltek.eu`):**
+   - Dohledej veřejné datové soubory (zejména Saltek a Schrack mají veřejné XML/ETIM feedy pro e-shopy) a stáhni reálné fotky a parametry svodičů přepětí, jističů, chráničů a rozvodnic (`KLV`, `xEnergy`, `BC-O`).
+
+Všechny stažené balíčky ulož do `data/etim/downloads/<brand>/` (složku `data/etim/downloads/` přidej do `.gitignore`, aby nezahltila git repozitář).
+
+================================================================================
+KROK 2: UNIVERZÁLNÍ PARSER STAŽENÝCH BALÍČKŮ (BMEcat XML + ETIM CSV/XLSX + E-SHOP FEEDY) (`scripts/parse-etim-packages.mjs`)
+================================================================================
+
+Vytvoř robustní parser (podporující `.zip`, `.xml` BMEcat 1.2 / 2005 / ETIM 7/8/9, `.xlsx` přes `xlsx`/`exceljs` a `.csv`), který ze všech stažených balíčků v `data/etim/` automaticky vytáhne:
+
+1. **Identifikaci produktu:**
+   - `MPN` / `SUPPLIER_PID` / `Objednací číslo`, `EAN` (`GTIN`), český název, řadu (`Design/Series`) a odkaz na PDF katalogový list (`datasheetUrl`).
+2. **Exaktní technické parametry ETIM:**
+   - **Pro vypínače, zásuvky, stmívače, termostaty a rámečky (`EC001590`, `EC000125`, `EC000050`):**
+     * Skutečnou vestavnou hloubku v mm (`EF000218`),
+     * Maximální počet jednotek ve vícerámečku `1R` až `5R` (`EF000137`) a orientaci (vodorovná/svislá),
+     * Skutečnou barvu (`EF000007`), číslo RAL (`EF000116`), materiál (`EF002169` – plast, sklo, porcelán, dřevo, kov, břidlice, beton), povrch (`EF006569` – matný/lesklý) a krytí IP (`EF005474`).
+   - **Pro instalační krabičky (`EC002601`, `EC000062`):**
+     * Vnitřní hloubku v mm, průměr (68 / 73 mm), způsob montáže (pod omítku do zdiva / do dutých stěn SDK / do zateplení / větruvzdorná s membránou) a bezhalogenovost (`HF`).
+   - **Pro rozvodnice (`EC000214`) a DIN přístroje (`EC000042`, `EC000003`, `EC000905`, `EC000941`):**
+     * Počet řad, počet modulů na řadu, celkový počet modulů, rozměry V×Š×H v mm, krytí IP, způsob montáže (pod omítku / nástěnná), tepelný ztrátový výkon $P_v$ [W] (`EF005455`) a šířku v modulech (`EF002950`).
+3. **Originální produktové fotografie (`MIME_INFO` / `IMAGE_URL`):**
+   - Stáhni každou produktovou fotku z URL uvedené v balíčku (nebo z veřejného CDN výrobce podle MPN/EAN).
+   - **KRITICKÁ KONTROLA KVALITY OBRÁZKU:** Před uložením ověř HTTP status `200`, `Content-Type: image/*`, minimální velikost souboru (`> 1.5 KB`) a platnou hlavičku obrázku (JPEG/PNG/WebP magic bytes), aby se na disk nikdy neuložila chybová HTML stránka 404!
+   - Převeď fotku do čistého `.webp` (`400×400 px`, průhledné nebo čistě bílé studiové pozadí) a ulož ji do:
+     * `public/catalog-images/<brand>/<seriesId>/<slot-nebo-colorId>.webp` (pro domovní spínače, zásuvky a rámečky)
+     * `public/catalog-images/<brand>/boxes/<codeId>.webp` (pro krabičky KOPOS a další)
+     * `public/catalog-images/<brand>/enclosures/<mpn>.webp` (pro rozvodnice)
+     * `public/catalog-images/<brand>/devices/<mpn>.webp` (pro DIN přístroje a Smart Home panely)
+   - Zapiš kompletní mapu všech ověřených fotek do `public/catalog-images/manifest.json`.
+
+================================================================================
+KROK 3: AUTOMATICKÁ AKTUALIZACE KATALOGŮ V KÓDU ELDOCKU PODLE STAŽENÝCH ETIM DAT
+================================================================================
+
+Promítni vytěžená ETIM data přímo do našich datových souborů a databáze:
+1. **`src/lib/panel-builder/residential-series-catalog.ts`:**
+   - Doplň u všech řad (ABB, Schneider, Legrand, Hager) skutečné MPN a EAN kódy ze stažených ceníků/ETIMu, přesné vestavné hloubky strojků v mm (`mechanismDepthMm`), ověřené `maxFrameGang` (`1` až `5`) a odkazy na reálné `.webp` fotky z `manifest.json`.
+2. **`src/lib/panel-builder/mounting-boxes-catalog.ts`:**
+   - Doplň reálné fotky krabiček KOPOS (`public/catalog-images/kopos/boxes/...`), přesné hloubky v mm a objednací čísla ze staženého feedu KOPOSu.
+3. **Rozvodnice a DIN přístroje (`CatalogComponent` + výběr rozvodnice v AI Panel Builderu):**
+   - Aktualizuj seznam rozvodnic (ABB Mistral41/Mistral65/ComfortLine/Unifix, Eaton KLV/xEnergy/BC-O, Hager Vector/Volta/Golf, OEZ RZA/RZG/RN, Schneider Mini Pragma/Kaedra) o přesné typové a objednací kódy, rozměry, počty modulů a reálné fotky skříní.
+
+================================================================================
+KROK 4: VIZUÁLNÍ KONTROLA PŘES PLAYWRIGHT (OVĚŘENÍ, ŽE SE FOTKY SKUTEČNĚ NAČÍTAJÍ!)
+================================================================================
+
+Po doběhnutí stahování a parsování napiš automatický verifikační test v Playwrightu, který:
+1. Otevře v prohlížeči modal `Designové řady a barvy` a postupně přepne výrobce **ABB**, **Schneider Electric**, **Legrand** a **Hager**.
+2. Zkontroluje u vykreslených `<img>` elementů vlastnost `img.complete === true && img.naturalWidth > 50`, čímž 100% potvrdí, že se zákazníkovi na obrazovce vykreslují skutečné stažené `.webp` fotografie produktů (a ne rozbité odkazy nebo prázdné placeholdery)!
+3. Stejně tak ověří načtení fotek krabiček KOPOS v kusovníku a fotek rozvodnic v AI Panel Builderu.
+
+================================================================================
+KROK 5: VÝPIS STATISTIKY, COMMIT A NASAZENÍ NA PRODUKCI
+================================================================================
+
+1. Vypiš mi do terminálu přesnou tabulku výsledků:
+   - Které balíčky / ceníky / ETIM feedy se podařilo na webech výrobců dohledat a stáhnout,
+   - Kolik reálných `.webp` fotek bylo uloženo a ověřeno pro každou značku (`ABB`, `KOPOS`, `OEZ`, `Schneider`, `Legrand`, `Hager`, `Eaton`, `Loxone`, `TapHome`),
+   - Kolik položek v katalogu dostalo zpřesněné ETIM parametry (hloubka v mm, $P_v$ [W], EAN, MPN).
+2. Spusť `npm run verify`, udělej git commit (včetně všech vygenerovaných `.webp` fotek v `public/catalog-images/` a `manifest.json`, ale bez surových ZIP/XML archivů v `data/etim/downloads/`) a rovnou vše pushni a nasaď na produkční server `https://eldock.cz`.
+
+## Rozhodnutí při implementaci
+
+Stav webů výrobců ověřený 2026-11-11 skriptem `npm run catalog:discover` (přehled `data/etim/downloads/discovery.json`):
+
+- **Pravidla stahování:** robots.txt každého webu (zakázaná cesta se přeskočí – např. stránkování katalogu Legrand
+  `?page=`), jeden požadavek po druhém s pauzou, obecný identifikátor klienta bez osobních údajů, bez přihlašování.
+  Stránky se čtou HTTP požadavkem a v Playwrightu (Edge, bez úprav identity) jen tam, kde web HTTP odmítne (403).
+  Web, který automatizovaný přístup odmítne, je „blokuje“ – nikdy se neobchází jinou identitou prohlížeče ani CAPTCHA.
+  Zaheslované soubory se stáhnou, ale nepoužijí (heslo se nehádá). Kreslicí data (Revit / DXF / STEP) a sešity s makry
+  nejsou datové balíčky výrobků.
+- **ABB:** nizke-napeti.cz.abb.com automatizovaný přístup odmítá (HTTP spojení bez odpovědi, prohlížeč
+  `net::ERR_HTTP2_PROTOCOL_ERROR`, stejně jako ve fázi 92) – použitá vlastní kopie `ELSB_ETIM-9.0_2026-05.zip`
+  (stejný balíček vystavuje ABB na stránce Dokumenty a katalogy; ceníky ABB jsou jen po přihlášení). Nově fotky
+  307 DIN přístrojů ABB z katalogu AI Panel Builderu (`abb/devices/`); řady, rozvodnice a chytrá domácnost z fáze 94.
+- **KOPOS:** stránky ze zadání vrací 404; skutečné jsou `/cs/ceniky-ke-stazeni` (ceník XLSX od 1. 8. 2026 – kód,
+  název, popis, cena za 1 000 MJ, EAN), `/cs/pro-projektanty` (jen knihovny Revit tvarovek žlabů) a `/cs/katalogy`
+  (PDF). ETIM / BMEcat ani XML feed KOPOS veřejně nevede → feed ze stránek výrobků e-shopu (sitemap, 263 krabic
+  a desek: EAN, materiál, průměr, hloubka, datový list, fotka). Všech 23 krabic KOPOS katalogu krabic má fotku, EAN
+  a hloubku (souhlasí s katalogem), 11 průměr, 6 bezhalogenových. Kódy ze zadání: KPR 68 → KPR 68_KA, KPRL 68-70/LD NA
+  → KPRL 68-70/LD_NA, KEZ KB → KEZ_KB, MDZ KB → MDZ_KB, KP 68/2 → KP 68/2_KA; KU 68-1901 už výrobce nevede (stránka
+  KU 68-45: „přímá náhrada krabice KU 68-1901“), KPR 68/71 přesně nevede (nejbližší KPR 68/71L_NA – v katalogu je),
+  KPR 68/L, KUP 68 (označení SEZ), KP 64/FD a KP 68/3 v aktuálních datech KOPOS nejsou. Ceníkové ceny jsou v datech
+  (`priceCzk`), aplikace je zatím nezobrazuje.
+- **OEZ:** `/ke-stazeni` vede na `/ke-stazeni/dokumenty` (PDF katalogy), ceník CSV se generuje jen přihlášenému partnerovi
+  („Nemáte oprávnění ke stažení ceníku“) – nestahuje se. Feed ze stránek výrobků oez.cz (sitemap, stránka podle
+  typového označení ověřená objednacím kódem – „ltn-16b-1“ je LTN-1,6B-1): 370 z 371 výrobků katalogu Eldocku (EAN,
+  počet modulů, rozměry, hloubka, fotka); ztrátový výkon Pv stránky OEZ neuvádějí.
+- **Schneider Electric:** se.com odmítá HTTP (403), čte se v Playwrightu; stránka ke stažení nemá datové soubory.
+  Adresa obrázku podle MPN (`p_Doc_Ref=<MPN>`) neexistuje (404) a varianta `_main` vrací zástupný obrázek 1 329 B –
+  kontrola kvality ho odmítne; skutečné reference (`<MPN>_IOP-default…`, `PB…`) jsou na stránce výrobku. 128 stránek
+  (43 dílů řad Nová Unica / Sedna / Asfora, 85 rozvodnic), 125 fotek; EAN stránky se.com neuvádějí (z katalogu
+  Eldocku). Mureva Styl nemá v katalogu domovních přístrojů díly. Schneider není mezi výrobci výběru skříně
+  (`ENCLOSURE_MANUFACTURERS`) – fotky jeho rozvodnic ukazuje katalog přístrojů.
+- **Legrand:** `/ke-stazeni` 404; `/cs/ke-stazeni/databaze-etim`: databáze ETIM V10 / V9 a Netatmo jsou ZIP se
+  zašifrovaným XML a ceníky XLSX zaheslované sešity Office (heslo výrobce posílá e-mailem) – nepoužité. Veřejný archiv
+  fotek výrobků (16 GB ZIP) se přes HTTP Range čte jen po částech: adresář (22 495 fotek) a 27 fotek dílů Valena Life /
+  Valena Allure / Mosaic / Plexo podle 6místného kódu (hlavní fotka `<kód>-LEGRAND-1000.jpg`). Plexo nové generace
+  s „L“ (`069621L` …) archiv z 2022 nevede – fotka jiného čísla se nepoužije. Céliane a Niloé nemají v katalogu
+  domovních přístrojů díly pro galerii; Practibox S, Nedbox a RX3 / DX3 nejsou v katalogu Eldocku.
+- **Hager:** `/cz/ke-stazeni` 404, skutečná stránka `/cz/ke-stazeni-a-udalosti/etim-data`: BMEcat ETIM 10 (13 183
+  výrobků, fotky assets.hager.com), Excel ETIM (popisy, hlavní fotka, bezhalogenovost) a 7 GB archiv fotek (není potřeba).
+  Díly řad lumina a berker S.1 (řada „berker S.1 / B.3 / Q.1 / Q.3“) podle popisu a třídy ETIM; vestavné hloubky
+  (lumina spínač i zásuvka 35 mm, berker zásuvka 40 mm) do hlídače krabic; rámečky obou řad v ETIM do 5R (pravidla
+  potvrzena). Řady berker B.7, K.1, K.5, R.classic, W.1 a lumina passion / soul nejsou samostatné řady katalogu Eldocku
+  – nepřidávají se (nová řada = kusovník, pravidla a náhledy). Rozvodnice: 65 fotek; golf VF212TD a VS212TD opravené
+  na 2 × 12 (ETIM i popis výrobce „2-řadá, 24 mod.“, katalog měl 1 × 12), Volta VA24B ponechaná 2 × 12 (ETIM uvádí
+  24 modulů v řadě – rozpor s názvem). Pv u Hager jen u jističů, které katalog Eldocku nevede.
+- **Eaton:** eaton.com odmítá prohlížeč (`net::ERR_HTTP2_PROTOCOL_ERROR`) i HTTP – blokuje, KLV / xEnergy / BC-O bez dat.
+  **Schrack:** robots.txt zakazuje katalogové stažení (`/eshop/catalog/download/*`), veřejný je jen dopravní ceník FVE.
+  **Saltek:** veřejný datový soubor nenalezen. **Loxone / TapHome:** nejsou mezi výrobci zadání – 0 nových fotek.
+- **ETIM vlastnosti:** EF000137 a EF005455 v datech výrobců nejsou – počet násobků rámečku je EF000074, ztrátový výkon
+  EF005387 (stejně jako fáze 94), řady rozvodnice EF000266, moduly v řadě EF002950, vestavná hloubka EF012278 / EF000218.
+- **Parser** bez knihoven `xlsx` / `exceljs` (XLSX = ZIP + XML, vlastní čtení i CSV) – žádná nová závislost.
+- **Fotky:** WebP 400 × 400 v bílém poli (sharp, jako fáze 94), 963 nových (ABB 307, KOPOS 23, OEZ 370, Schneider 125,
+  Legrand 27, Hager 111), všechny s GTIN. Krabice, rozvodnice a přístroje jsou v `manifest.json` jako `products`;
+  fotky DIN přístrojů jen pro serverový katalog (`device-photos.generated.ts`) – v klientském balíčku by přidaly stovky
+  kB. Licence u každé fotky: „užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)“
+  (ABB jako ve fázi 94).
+
+---
+
 # 📄 DENIK-faze-49-54.md
 
 # Deník fází 49–54 (přesunuto z docs/PLAN.md 2026-11-06)
@@ -4875,6 +5041,16 @@ Fáze 83–85 nasazeny 2026-11-10 (commit `af4e1f2`; commity `242449c`, `329e631
 
 ---
 
+# 📄 DENIK-faze-95.md
+
+# Deník fáze 95 (přesunuto z `docs/PLAN.md`, sekce C)
+
+| Fáze | Datum | Poznámky |
+|---|---|---|
+| 95 | 2026-11-11 | Zadání z chatu → `docs/archiv/ZADANI-faze-95.md` (i rozhodnutí a odchylky). **Parser:** `src/lib/bim/step.ts` (`readStep` – entity se parsují líně, `decodeStepString`), `ifc-parser.ts` (`parseIfc`: jednotky, placement, tvary – extruze, profily, obálka B-rep, vlastnosti a množství, `electricalKindOf`, `backupTierOf`, topologie), `bim-summary.ts`, `bim-payload.ts` (zmenšený model + schéma zod), `bim-plant.ts` (`bimToPlantPlan` → koncept Studia + údaje zařízení), `bim-floorplan.ts` (`bimToFloorplan`), `bim-board.ts` (`bimBoardPlan` – vývody, jištění, kabel, úbytek napětí, smyčka), `sample-ifc.ts` (`samplePlantIfc`, `stepText`; `npm run bim:sample`). **Server:** migrace `phase95_bim` (`Equipment.bimGuid`, `ratedPowerKw`), `services/bim-import.ts` (`importBimToPlant` CREATE / UPDATE nad `saveStudioConceptInTx`), `createProjectFromBimBoard`, akce `importBimAction` a `createBimBoardProjectAction` (1 kredit). **UI:** `BimImportButtons` (mapa závodu, Studio), `BimBoardButton` (karta rozváděče z BIMu), nahrání `.ifc` v 2D půdorysu. **Testy:** `src/lib/bim/__tests__/ifc-parser.test.ts` (12), `src/server/services/phase95.test.ts` (3); E2E `e2e/phase95.spec.ts` (2). |
+
+---
+
 # 📄 docs/PLAN.md
 
 # ELDOCK – rotující plán
@@ -4958,6 +5134,7 @@ a postup nasazení jsou v `CLAUDE.md`. Soubor drž pod 150 řádky.
 | 62 | 2D půdorys: kabeláž jde skrýt (přepínač „Kabeláž“ u plátna i v liště kroku, klávesa K), při párování vypínačů se světly je ve výchozím stavu skrytá; lišta probíhajícího kroku nad projektem (`ModeBar`, lepkavá pod hlavičkou) s názvem kroku, nápovědou a „Hotovo“ pro párování, vkládání, kreslení, zakreslení změn, ořez / kalibraci („Zrušit“) i úpravu vybraného prvku – v bočním panelu „Hotovo“ není, v kroku 1 Panel Builderu ukončuje úpravu přístroje lišta nad rozváděčem; sestavy ve víceramečku v panelu nad paletou (hotové: 2–4× jednozásuvka, 2–3× vypínač č. 1, vypínač + přepínač, vypínač + zásuvky, zásuvka + RJ45, sběrnicové tlačítko + zásuvky; vlastní sestava po pozicích do 5R) s náhledem u kurzoru a vložením jedním klikem přisazeným ke stěně, ▦+ a „Přidat do rámečku“ u vybraného přístroje; rámeček s dvojzásuvkou na začátku se při otáčení a posunu v rámečku už neposouvá, přístroj v rámečku jde přesně vybrat (klikací plocha jen na jeho pozici) | ✅ |
 | 63 | 2D půdorys: paleta jako akordeon (počty osazených prvků, sbalit / rozbalit vše, režim jedné kategorie); zařizovací předměty ve skutečném rozměru – vana, sprchový kout, umyvadlo UMY 600 × 450 a dvojumyvadlo DUM 1200 × 450 s architektonickou značkou, žlutým rohem a posuvnými stranami (živé kóty X × Y), otočením 90° / 45° a přesným rozměrem v detailu, zóny 0–2 a pás nad a pod umyvadlem se přepočítají, hlídač vzdálenosti zásuvek a spínačů od vany, sprchy a umyvadla; knihovna samostatných spotřebičů (název, zkratka, příkon, jistič 1P / 3P B / C, chránič A / F / B / RCBO, kabel, výška, vlastní spotřebiče ze šablon, prohlížeč + profil firmy, okruhy podle zadání); lišta výrobců s rodinami ABB (domovní přístroje / ABB-free@home / ABB i-bus KNX & ABB-flexTronics), Loxone a TapHome s výrobky k vložení a akčními členy na DIN lištu jako informací; věrné náhledy řad (Levit, Zoni, Tango, Time, Time Arbo, Decento, Céliane, Nová Unica, Sedna, Asfora …) a „🌐 Prohlédnout řadu na webu výrobce ↗“; ruční posun úseků tras (vodorovný jen v ose Y, svislý jen v ose X, šikmý kolmo ke stěně), odskok dvojklikem, reset pravým tlačítkem / v panelu, délky kabelů z upravené trasy; polygonální místnosti se šikmými stěnami (přichytávání 0° / 45° / 90°, Shift = volný úhel), trasy podél stěn v odsazení 200 mm s kolmou odbočkou; normové CAD značení kabelů (rysky žil, čárkovaně ovládání a sběrnice, štítek okruhu) a export výkresu do PDF (A3 / A4, razítko, legenda, tabulka okruhů) a DXF (8 hladin, mm 1 : 1) | ✅ |
 | 64 | 2D půdorys jako uložený projekt na serveru: modely `Floorplan` + `FloorplanVersion` (migrace `floorplans`), seznam půdorysů firmy `/panel-builder/floorplan` (zákazník, místo, podlaží / místnosti / prvky, poslední úprava, vygenerovaný rozváděč; údaje, kopie, koš s obnovením a trvalým smazáním), nový půdorys `/novy` vznikne na serveru při první změně, editor `/[id]`; průběžné ukládání s kontrolou verze a zálohou neuložených změn v prohlížeči, souběh dvou oken s volbou „Načíst aktuální verzi“ / „Ponechat mou verzi“ (odmítnutý i přepsaný stav v historii); historie verzí s obnovením (automaticky nejvýš 1× za 10 min, pojmenovaná verze, stav při generování rozváděče a před obnovením, 30 verzí); převzetí nákresu z prohlížeče (`eldock.pb.floorplan`) při otevření seznamu; „📐 Upravit půdorys“ u rozváděče z půdorysu a vazba na nově vygenerovaný rozváděč; Zpět / Znovu (Ctrl+Z, Ctrl+Shift+Z / Ctrl+Y, tlačítka – tažení i klik = jeden krok); `FloorplanEditor.tsx` rozdělen (`ElementPanels.tsx`, `background-image.ts`, hooky `useDraftHistory` / `useFloorplanSync`) | ✅ |
+| 97 | Datové balíčky výrobců a reálné fotky: `npm run catalog:discover` (`scripts/discover-and-download-etim.mjs`) projde stránky ke stažení ABB, KOPOS, OEZ, Schneider Electric, Legrand, Hager, Eaton, Schrack a Saltek (robots.txt, Playwright jen kde web odmítá HTTP, zaheslované a blokující zdroje se neobcházejí) a stáhne balíčky do `data/etim/downloads/` – Hager BMEcat ETIM 10 + Excel ETIM, ceník KOPOS XLSX, ABB ETIM 9.0 z vlastní kopie, adresář 16 GB fotobanky Legrand přes HTTP Range, feedy ze stránek výrobků (e-shop KOPOS 263 krabic, katalog OEZ 370, se.com 128); `npm run catalog:parse` (`scripts/parse-etim-packages.mjs`, BMEcat / XLSX / CSV / feedy bez závislostí) – 963 ověřených fotek WebP 400 × 400 (HTTP 200, image/*, > 1,5 kB, hlavička obrázku): díly řad Schneider / Legrand / Hager v galerii řad (100), krabice KOPOS s EAN v kusovníku a detailu prvku (23), rozvodnice Hager / OEZ / Schneider (176) a DIN přístroje ABB / OEZ / Hager v katalogu (664); vestavné hloubky řad Hager v hlídači krabic, rámečky řad Hager z ETIM, EAN a hloubka 343 přístrojů OEZ, řady × moduly rozvodnic golf VF212TD / VS212TD podle výrobce | 🟦 |
 | 96 | Viditelnost a indexace ve vyhledávačích (Google.cz, Seznam.cz, Bing a AI vyhledávače): bez přihlášení (200 i pro roboty) veřejná vstupní stránka `/panel-builder` s ukázkou, trenažérem a katalogem a katalog přístrojů `/panel-builder/catalog` jen ke čtení; 5 SEO vstupních stránek (`/ai-panel-builder`, `/2d-pudorys-elektroinstalace`, `/vypocet-otepleni-rozvadece` s interaktivním náhledem výpočtu IEC TR 60890, `/kusova-zkouska-rozvadece`, `/prumyslova-udrzba-a-revize`) s nadpisy H1–H3, srovnávacími tabulkami a FAQ, prolinkované z patičky; robots.txt s Allow pro *, Googlebot, SeznamBot, bingbot, OAI-SearchBot, GPTBot, PerplexityBot a ClaudeBot (zakázané jen /api/ a /superadmin), sitemap.xml s prioritami, JSON-LD Organization / WebSite / SoftwareApplication v layoutu a FAQPage na stránkách, ověřovací meta Google / Seznam z prostředí serveru, kanonické URL; IndexNow – klíč `public/<klíč>.txt`, `npm run seo:ping` (search.seznam.cz a api.indexnow.org) a `POST /api/seo/ping` | ✅ |
 | 95 | Nativní import BIM (IFC2x3 / IFC4 / IFC4X3, ISO 16739): parser STEP ISO 10303-21 v čistém TypeScriptu (`src/lib/bim/` – jednotky MILLI / METRE, hierarchie IfcLocalPlacement → globální XYZ, česká diakritika `\X2\`, projekt / areál / budovy / podlaží / místnosti s půdorysem a plochou, stěny, okna, dveře, zdroje TR / DA / UPS, rozváděče, kabelové žlaby a kabely s 3D délkou, stroje a VZT, svítidla, zásuvky, ovladače, čidla a pohony; In, P, U, fáze, IP a okruh z property setů i z českých / revitových parametrů, úroveň zálohování a topologie napájení z portů, okruhů IfcSystem a Revit „Panel“); Správa závodů – 🏢 import BIM a ✨ vzorová hala na mapě závodu i ve Studiu (okno kontroly se stavbou, zdroji, rozváděči, stroji a trasami; nová budova s podlažími, místnostmi a zařízeními se zálohováním, údaji z BIMu a QR kódy, nebo aktualizace rozváděčů podle kódů), ⚡ rozváděč z BIMu do AI Panel Builderu (vývody k napájeným zařízením, hlavní vypínač, skříň); 2D půdorys – nahrání `.ifc` (podlaží, plátno 1 : 1 bez kalibrace, místnosti, okna, dveře, rozváděče, zásuvky, svítidla, stroje jako vlastní spotřebiče); vzorový model `public/samples/eldock-sample-plant.ifc`; migrace `phase95_bim` | ✅ |
 | 94 | Oficiální data ABB ETIM 9.0 (`ELSB_ETIM-9.0_2026-05.zip`, BMEcat EDXF 5.0): proudový import `scripts/import-abb-etim9.mjs` (`npm run catalog:etim`, ZIP bez rozbalení, `src/lib/catalog/etim.ts`) – 526 skutečných fotek výrobce WebP 400 × 400 v `public/catalog-images/` + `manifest.json` s objednacím číslem a EAN (řady ABB: spínač, zásuvka, rámeček 1R a víceramček 2R v každé barvě, u řad bez čísla v kusovníku reprezentativní výrobek řady; chytrá domácnost; 204 rozvodnic); rámečky 1R–5R s EAN a ověřením v datech výrobce (galerie, ⚠ u čísel mimo ETIM), EAN a ověření v kusovníku (CSV / XLSX, dokumentace), vestavné hloubky přístrojů v hlídači krabic KOPOS (volné místo za přístrojem, nad 40 mm hluboká krabice), DIN přístroje ABB s EAN, Pv výrobce, hloubkou a technickým listem a 101 dalších rozvodnic ABB ve výběru skříně; fotky v galerii řad (díly s objednacím číslem, dlaždice barvy rámečku), na kartách chytré domácnosti a u rozvodnic (výběr skříně, nový projekt, dokumentace) | ✅ |
@@ -4995,7 +5172,7 @@ Fáze 86, 87 a 89 nasazeny 2026-11-10 (commit `c5ce70e`; commity `0388470`, `e92
 
 ## B. Otevřená fáze
 
-Fáze 76–96 jsou hotové a nasazené (2026-11-10 a 2026-11-11; zadání fáze 81 `docs/archiv/ZADANI-faze-81.md`, fází 83–85 `docs/archiv/ZADANI-faze-83-85.md`, fáze 87 `docs/archiv/ZADANI-faze-87.md`, fáze 89 `docs/archiv/ZADANI-faze-89.md`, fáze 90 `docs/archiv/ZADANI-faze-90.md`, fáze 91 `docs/archiv/ZADANI-faze-91.md`, fáze 92 `docs/archiv/ZADANI-faze-92.md`, fáze 93 `docs/archiv/ZADANI-faze-93.md`, fáze 94 `docs/archiv/ZADANI-faze-94.md`, fáze 95 `docs/archiv/ZADANI-faze-95.md` a fáze 96 `docs/archiv/ZADANI-faze-96.md`; fáze 88 = katalog ABB pro ČR, zadání v deníku). Otevřené body jsou v sekci D; další fáze podle roadmapy níže.
+Fáze 97 (datové balíčky výrobců – stažení, univerzální parser, 963 reálných fotek a data ETIM v katalozích) je hotová a čeká na nasazení – bez migrace; zadání `docs/archiv/ZADANI-faze-97.md`. Fáze 98 (fázový průvodce 2D půdorysu, rozvržení na výšku okna, fáze v AI Panel Builderu a Průmyslu) následuje. Fáze 76–96 jsou hotové a nasazené (2026-11-10 a 2026-11-11; zadání fáze 81 `docs/archiv/ZADANI-faze-81.md`, fází 83–85 `docs/archiv/ZADANI-faze-83-85.md`, fáze 87 `docs/archiv/ZADANI-faze-87.md`, fáze 89 `docs/archiv/ZADANI-faze-89.md`, fáze 90 `docs/archiv/ZADANI-faze-90.md`, fáze 91 `docs/archiv/ZADANI-faze-91.md`, fáze 92 `docs/archiv/ZADANI-faze-92.md`, fáze 93 `docs/archiv/ZADANI-faze-93.md`, fáze 94 `docs/archiv/ZADANI-faze-94.md`, fáze 95 `docs/archiv/ZADANI-faze-95.md` a fáze 96 `docs/archiv/ZADANI-faze-96.md`; fáze 88 = katalog ABB pro ČR, zadání v deníku). Otevřené body jsou v sekci D; další fáze podle roadmapy níže.
 
 Roadmapa po fázi 79 (`ZADANI-faze-71.md` až `ZADANI-faze-73.md`): vydání aplikací v Google Play a App Store, podepsaný instalátor pro Windows a podpis vydání Androidu vlastním klíčem až s účty Eldock s.r.o.; ověření aplikace pro iOS na skutečném iPhonu (Mac nebo ruční workflow; server závodu přes http v interní síti – ATS a dotaz na místní síť); synchronizace na pozadí (iOS BGTask, Android WorkManager), univerzální odkazy https a push oznámení. **Rozhodnuto 2026-11-09:** provoz obojí podle závodu – aplikace vždy offline s denní synchronizací přímo s eldock.cz, závod s interní sítí bez internetu navíc server závodu (Windows, zařízení `PLANT_SERVER`, denní synchronizace s cloudem); účty Apple (Organization, 99 USD/rok), Google Play s ověřením vývojáře Android (organizace, 25 USD) a podpis aplikace pro Windows přes Azure Artifact Signing (9,99 USD/měsíc, v EU jen firmy) až na zapsanou Eldock s.r.o. s číslem D-U-N-S – do té doby vývoj a zkušební sestavení mimo obchody; e-maily přes schránku `noreply@eldock.cz` u Zoneru (MX i SPF domény jsou u Zoneru); zálohy mimo server do Hetzner Object Storage v Helsinkách (HEL1, server je ve Falkensteinu `fsn1-dc14`). **Na straně uživatele:** schránka u Zoneru → `ELDOCK_SMTP_URL` + `ELDOCK_MAIL_FROM` do `.env` (DKIM a DMARC v DNS doporučeno); bucket v HEL1, klíče S3 a heslo záloh → `ELDOCK_BACKUP_S3_*` + `ELDOCK_BACKUP_KEY` do `.env` (heslo uložit i mimo server); po zápisu do OR údaje firmy v `lib/company.ts`, D-U-N-S a účty Apple, Google a Artifact Signing. Další plánované fáze z analýzy webu (`docs/archiv/ZADANI-faze-54.md`): normový registr v Eldocku, Projekt elektroinstalace jako produkt.
 
@@ -5003,8 +5180,8 @@ Roadmapa po fázi 79 (`ZADANI-faze-71.md` až `ZADANI-faze-73.md`): vydání apl
 
 | Fáze | Datum | Poznámky |
 |---|---|---|
+| 97 | 2026-11-11 | Zadání z chatu → `docs/archiv/ZADANI-faze-97.md` (i rozhodnutí, výsledky výrobců a odchylky). **Stažení:** `scripts/discover-and-download-etim.mjs` (zdroje výrobců, robots.txt, HTTP → Playwright, zaheslování, `discovery.json`, feedy KOPOS / OEZ / Schneider), `scripts/lib/remote-zip.mjs` (ZIP po částech přes HTTP Range). **Parser:** `scripts/parse-etim-packages.mjs`, `scripts/lib/xlsx-read.mjs` (XLSX / CSV bez závislostí), `src/lib/catalog/manufacturer-data.ts` (robots.txt, druh souboru, kontrola fotky, sloupce tabulek, stránky KOPOS a OEZ), `series-photo-targets.ts` (díly řad pro galerii), `etim.ts` (popisy bez `lang`). **Katalogy:** `brand-etim.generated.ts` (hloubky řad Hager, rámečky ETIM, krabice KOPOS), `brand-etim-components.generated.ts` (seed: EAN / Pv / hloubka, opravy rozvodnic `applyEnclosureFixes`), `device-photos.generated.ts` (jen server), manifest `products` (`parseProductPhotos`), složky `boxes` / `devices`. **UI:** `BoxPhoto` (kusovník, detail prvku), `DevicePhoto` a fotky rozvodnic v katalogu, popisek `EnclosurePhoto` podle výrobce. **Testy:** `src/lib/catalog/phase97.test.ts` (17), `scripts/lib/phase97-readers.test.ts` (4), `src/server/services/phase97.test.ts` (2), upravené `phase94.test.ts`, `mounting-boxes-catalog.test.ts` a `panel-builder.test.ts`; E2E `e2e/phase97.spec.ts` (3). |
 | 96 | 2026-11-11 | Zadání z chatu → `docs/archiv/ZADANI-faze-96.md` (i rozhodnutí a odchylky). **Brána:** `src/proxy.ts` (`PUBLIC_PATHS` + `/panel-builder`, `/panel-builder/catalog` a 5 SEO stránek, průchod `/api/seo/ping`). **Obsah:** `src/lib/seo-landings.ts` (5 stránek: H1, sekce, tabulka, FAQ, související), `SeoLandingPage` + `seoLandingMetadata`, `ThermalPreview` (nad `calculateThermal`), `PanelBuilderPublicLanding`, katalog bez firmy jen ke čtení, patička „Nástroje a návody“ (`footerSections`). **SEO:** `seo.ts` (`PUBLIC_PAGES` s prioritami, `PRIVATE_PATHS` = /api/ a /superadmin, `SEARCH_BOTS`, `siteJsonLd`, `faqJsonLd`), `robots.ts` (pravidlo pro každého robota), layout (JSON-LD webu, `verification` z `GOOGLE_SITE_VERIFICATION` / `SEZNAM_WMT_VERIFICATION`). **IndexNow:** `src/lib/indexnow.ts`, `scripts/seo-indexnow-ping.mjs` (`npm run seo:ping`), `POST /api/seo/ping` (Bearer `ELDOCK_CRON_SECRET` nebo velín). **Testy:** `src/lib/phase96.test.ts` (8), upravený `phase48.test.ts`; E2E `e2e/phase96.spec.ts` (2). |
-| 95 | 2026-11-11 | Zadání z chatu → `docs/archiv/ZADANI-faze-95.md` (i rozhodnutí a odchylky). **Parser:** `src/lib/bim/step.ts` (`readStep` – entity se parsují líně, `decodeStepString`), `ifc-parser.ts` (`parseIfc`: jednotky, placement, tvary – extruze, profily, obálka B-rep, vlastnosti a množství, `electricalKindOf`, `backupTierOf`, topologie), `bim-summary.ts`, `bim-payload.ts` (zmenšený model + schéma zod), `bim-plant.ts` (`bimToPlantPlan` → koncept Studia + údaje zařízení), `bim-floorplan.ts` (`bimToFloorplan`), `bim-board.ts` (`bimBoardPlan` – vývody, jištění, kabel, úbytek napětí, smyčka), `sample-ifc.ts` (`samplePlantIfc`, `stepText`; `npm run bim:sample`). **Server:** migrace `phase95_bim` (`Equipment.bimGuid`, `ratedPowerKw`), `services/bim-import.ts` (`importBimToPlant` CREATE / UPDATE nad `saveStudioConceptInTx`), `createProjectFromBimBoard`, akce `importBimAction` a `createBimBoardProjectAction` (1 kredit). **UI:** `BimImportButtons` (mapa závodu, Studio), `BimBoardButton` (karta rozváděče z BIMu), nahrání `.ifc` v 2D půdorysu. **Testy:** `src/lib/bim/__tests__/ifc-parser.test.ts` (12), `src/server/services/phase95.test.ts` (3); E2E `e2e/phase95.spec.ts` (2). |
 
 ## D. Známé nedostatky a backlog
 
@@ -5017,12 +5194,11 @@ Roadmapa po fázi 79 (`ZADANI-faze-71.md` až `ZADANI-faze-73.md`): vydání apl
 - Fáze 74–75: fotky výrobců v galerii řad čekají na potvrzení práv (`SERIES_PHOTOS` prázdný – zatím vektorové náhledy); dvoubarevné kódy rámeček / klapka mimo Katalog ABB 2026 neověřené; text ČSN 33 2130 ed. 4 k umývacímu prostoru (převzato z ed. 3, čl. 7.8) a ČSN 33 2000-7-701 ed. 3 ověřit v licencovaném textu; SPD v podružném rozváděči zůstává T1+T2 (u RP ve stejné budově obvykle stačí T2 – posoudí projektant); kresba umývacího prostoru přesahuje 250 mm za stěnu (`BASIN_WALL_MM`); vnitřní odkazy PDF ověřené pro tisk z Chrome / Edge (jiné prohlížeče je mohou zahodit).
 - Testovací firma Správy závodů (2026-11-10, `PLANT_TESTER`: `test@eldock.cz` a `test-udrzba@eldock.cz`, `db:plant-tester` při startu s `ELDOCK_SEED_DEMO=1`): hesla jsou veřejná v repozitáři – před registrací první skutečné firmy ji smazat ve velínu a nastavit `ELDOCK_SEED_DEMO=0` (CLAUDE.md, oddíl 7); s SMTP by šlo z testovacího účtu rozesílat pozvánky. Nasazeno 2026-11-10 (commit `97932c5`; start kontejneru firmu založil – závod TZ s halou A a 5 zařízeními; bez migrací, kontejner `healthy`, log bez chyb, úklid mezivrstev 1,23 GB, volno 24 GB).
 - Fáze 76–80: náhledy výrobců – klíčové řady ABB mají vlastní rendery (fáze 80), ostatní řady ABB a Schneider / Legrand / Hager kreslený náhled; originální fotky výrobců smí být ve veřejném repozitáři (potvrzeno 2026-11-10), ale zatím nejsou – chybí zdroj ke stažení (`npm run catalog:images -- --download` podle `zdroje.json`); MEAN WELL HDR, obecné řadiče PWM a binární vstupy jsou neověřené (typ bez objednacího čísla); import DXF jen ASCII (binární DXF a DWG ne), ELLIPSE, SPLINE, HATCH a DIMENSION se nekreslí (jen počet ve výsledku importu), podklad CAD není v tisku PDF ani v exportu DXF půdorysu, přichytávání jen při vkládání a kreslení místností (ne při přesunu prvku), přichycená nástěnná značka mimo nakreslenou místnost drží natočení předchozí značky. Fáze 81: bez ověřeného čísla (null / „ověřte“) jsou stříbrná a zlatá IP TOUCH, bílý Trevion, bílý Loxone Wall Display, krabice OneTouch 7", Loxone Touch Pure Display a DALI Extension (100200 ze zadání), všechny kusy TapHome (čísla, šířky a Pv ze zadání); Pv akčních členů ABB mimo rešerši datasheetů a šířka UD/S 4.210.2.1 (6 M) jsou orientační; TapHome nemá akční člen topení (výpočet hlásí doplnit ručně); SmartTouch jen ve variantě free@home (KNX verze v katalogu výrobců není).
-- Fáze 82: limit zásuvek na světelném okruhu norma neuvádí (Eldock hlídá 10 vývodů světla + zásuvky na okruh); text ČSN 33 2130 ed. 4 o zásuvkách na světelném obvodu ověřit v licencovaném textu; volba jištění 10 / 13 A platí pro celý půdorys (ne po okruzích). Fáze 83: plátno drží poměr stran plochy – u úzké a hluboké plochy (např. 15 × 40 m) je vysoké a posouvá se stránka; u haly 100 m je mřížka po 1 m v celkovém pohledu hustá.
-- Fáze 84: pokud produkční `.env` nastavuje `ELDOCK_BANK_IBAN` na jiný platný účet, má přednost před účtem Raiffeisenbank (vzorový demo IBAN se ignoruje) – ověřit na serveru. Fáze 85: dvířka v náhledu jsou orientační (katalog skříní nevede druh dvířek – u ověřených rozvodnic fáze 86 je náhled bere z popisu výrobce).
+- Fáze 82: limit zásuvek na světelném okruhu norma neuvádí (Eldock hlídá 10 vývodů světla + zásuvky na okruh); text ČSN 33 2130 ed. 4 o zásuvkách na světelném obvodu ověřit v licencovaném textu; volba jištění 10 / 13 A platí pro celý půdorys (ne po okruzích). Fáze 83: plátno drží poměr stran plochy – u úzké a hluboké plochy (např. 15 × 40 m) je vysoké a posouvá se stránka; u haly 100 m je mřížka po 1 m v celkovém pohledu hustá. Fáze 84: pokud produkční `.env` nastavuje `ELDOCK_BANK_IBAN` na jiný platný účet, má přednost před účtem Raiffeisenbank (vzorový demo IBAN se ignoruje) – ověřit na serveru. Fáze 85: dvířka v náhledu jsou orientační (katalog skříní nevede druh dvířek – u ověřených rozvodnic fáze 86 je náhled bere z popisu výrobce).
 - Fáze 86: Rittal zůstává jen orientační AX (rozvodnice s řadami modulů Rittal nevede – AX / KX s moduly Ri4Power ISV nejsou jedna objednatelná skříň); ABB Unifix, ComfortLine CW a Eaton DBP / DBM výrobci nevedou, Eaton dál jen z exportu (BC, BF, BP, IKA, KLV, MINI). Nezařazeno: Hager FWU73S (výrobce uvádí 21 řad), FW2 (FW…FT), FWU…N / K1, univers na omítku jen FWB z exportu, Schrack BK080109, BK080113, BK080163, BK080057 a provedení -H do dutých stěn. Rozpory Schracku: zapuštěné s bílými dveřmi mají v popisu „s průhlednými dveřmi“ a BK080058 / BK080059 u dveří „Plast průhledný“ – platí název výrobku; BK080153 je podle výrobce 482 mm vysoká (průhledná BK080103 525 mm); P_max = „Ztrátový výkon“ (web ho píše se znaménkem minus). ABB a Hager P_max neuvádí (null). Vícepolové skříně (ABB 2–4 sloupce, Hager 2–3 pole) mají v návrhu lištu přes celou řadu – přístroj přes hranici pole Eldock nehlídá. Údaje ověřeny 10. 11. 2026 – změny sortimentu (např. konec Hager vector II L / PN) je nutné doplnit ručně. Fáze 87: komentář syntetizuje Edge TTS (text kapitol jde na službu Microsoftu – je veřejný na /navody; `--tts=local` = lokální hlas Windows, robotičtější); video 1 ukazuje aplikaci k 2026-11-11 po fázi 90 (průvodce půdorysem v 5 krocích s krokovými kartami), video 2 k 2026-11-10 po fázi 88 (řada Mistral65) – po změně UI, které ukazují (editor půdorysu, kroky Panel Builderu), je přegenerovat (`npm run tutorials:generate`, ~15 min); akce kapitoly 3 videa 1 (osazení) jsou delší než komentář o pár sekund; Interactive Tour je jen v editoru půdorysu (cíle = `targets` kapitol); titulky jsou vypálené ve videu (bez samostatné stopy WebVTT). Fáze 88: Pv přístrojů z katalogu ABB pro ČR je odhad (ABB CZ ho neuvádí – typická hodnota nahrazeného řádku nebo IEC); vazby S201 / S201M → PS1 a S203 / S203M → PS3 jsou odvozené z pólů (neověřeno), PSc → DS301C, PS-END a E292 → E290 podle katalogu. Chyby stránek ABB CZ (platí typové označení, poznámka u zdroje): FH204 A-40 a A-63 uvádí 25 A typ AC, OVR T2 jiné kA, 41P18X42A / 41P18X41A „18 (18x4)“. Nezařazeno: S2C a CP-D (new.abb.com se nedá číst), OT, spínače, tlačítka a zvonky, S3C, kryty, CU VMW / K, multimediální UK600 / AK600, ARIA / APO; S202 / S204 katalog ABB pro ČR nevede; externí řada „Mistral“ má dál jen MISTRAL65 1 × 4 M (1SL1200A00 – na stránce řady Mistral65 není), UK600 zůstává z exportu. DS201 B16 A30: ruční zápis (referenční PB-001) má 2CSR255140R1165, katalog ABB pro ČR i externí databáze 2CSR255180R1165 – v katalogu vyhrává ruční zápis, ověřit. V databázích s importem externí databáze zůstávají z dřívějška dvojice orientační řádek + kus s objednacím číslem (DS201 B10 A30, DS201 C16 A30, ESB25-20N-01) – adopce přeznačí jen řádek, jehož objednací číslo databáze ještě nemá. Údaje ověřeny 10. 11. 2026.
 - Fáze 89: plátno s panely zabírá v krocích 1, 3, 4 a 5 průvodce 73–81 % výšky okna (1882 × 1253), krok 2 s celým výběrem výrobců a barev 52 % – výběr designu je velký záměrně; profil uživatele = profil firmy (Panel Builder nemá osobní účty), volba v prohlížeči platí pro všechny firmy v něm. Fáze 90: okna a dveře nepřerušují čáru stěny (kreslí se přes ni) a nehlídají kolizi s nábytkem; objednací čísla monobloků Garant / Praktik / Variant+ v kusovníku chybí jako dosud; pás 0,2 m u umyvadla přístroje IP44 podle zadání nehlídá (v plném znění ČSN 33 2130 ed. 4 ověřit); krok průvodce si pamatuje jen karta prohlížeče (jiná karta otevře krok podle obsahu nákresu).
 - Fáze 91: fotografie výrobců se nestahovaly (rendery jsou vlastní dílo; fotky se schváleným zdrojem do `public/catalog-images/`); Schneider Electric na webu ověřen jen pro vzduchotěsné krabice Multifix Air do dutých stěn a SEZ bez objednacích čísel hlubokých krabic – jinde kusovník ukáže „doplnit“; limity Schneider / Legrand / Hager jsou ze zadání (katalogy neověřeny), řady berker B.7, K.1, K.5, R.classic a W.1 půdorys nenabízí; svislý víceramček se v půdorysu nekreslí (limit `vertical` jen v pravidlech); rozbočovací zásuvka (víc než 2 kabely) se pozná jen z tras aktivního podlaží a ne v dokumentaci rozváděče; mezery a rozpěrky 1159-34 mezi krabicemi Decenta kusovník nepočítá. Fáze 92: harvester fotek (`npm run catalog:photos`) web ABB 2026-11-11 nepustil (headless prohlížeč – net::ERR_HTTP2_PROTOCOL_ERROR; blokace se neobchází), `public/catalog-images/manifest.json` je prázdný – reálné fotky zatím jen přes nahrávač Ctrl+V ve velínu; adaptér harvesteru jen pro ABB (Schneider / Legrand / Hager ručně); nástěnné monobloky Garant / Praktik / Variant+ bez ověřeného objednacího čísla v kusovníku harvester přeskočí. Trenažér 2D půdorysu je bungalov na ABB-free@home (stmívací akční člen v rozváděči je pravdivý jen ve sběrnicové instalaci); velikosti tréninkových zakázek jsou podle výběru generátoru (48M / 96M / 120M, ne 36M / 72M / 108M ze zadání – rezerva 25 %). Průvodce závodem nevytváří vzorový závod v datech firmy (mise B jen v prohlížeči); režim A jen s právem Studio výstavby.
 - Fáze 93: bezhalogenové krabice HF ověřené jen u KOPOS (kopos.cz 2026-11-11: KU 68-45/HF_HA, KPR 68-70/HF_HA, KU 68 LD/1HF_HA, KPL 64-50/2LD HF_KA) – ostatní výrobci a hluboká HF krabice do SDK se v kusovníku doplní ručně (hlídač nabídne přepnutí na KOPOS); KPR 68_KA a KU 68 LD_NA ze zadání nejsou podle stránky výrobce bezhalogenové. Typy spouště a elektroměru MID (ABB S2C-A2, B23 312-100 …) jsou příklady ze zadání bez ověření objednacích čísel; vodič EKV v kusovníku je odhad 3 m na přípojku. Lhůty zdravotnických prostorů a přístrojů podle zadání (ČSN 33 2000-7-710 ed. 2, ČSN EN 62353 ed. 2) jako normové (ne závazné) – ověřit v licencovaném znění. Kapacitu DA / UPS zadává uživatel u kořene větve; výkon větve = Ib (naměřený, jinak součet podřízených × 0,8) · √3 · 400 V · cos φ 0,9. Fáze 94: data ETIM ABB nemají ceny (PRODUCT_PRICE 0) ani šířku DIN přístrojů v modulech; vestavnou hloubku stmívačů, termostatů a USB zásuvek řad neuvádějí (hlídač u nich dál podle pravidel fáze 91); Time Arbo v datech není (zůstává render), Garant jen šedý hliníkový IP55; dvoubarevné rámečky Zoni 241–244 a Swing 5R z matice katalogu ETIM nevede (⚠ / „ověřit“). Fotka řady bez čísla v kusovníku je reprezentativní výrobek řady (číslo pod fotkou), Swing L má ve všech barvách bílý střed Swing. Pv z ETIM je na celý přístroj (vícepólový = všechny póly).
-- Fáze 95: místnosti IfcSpace jdou do Studia jako obálka (obdélník; mnohoúhelník jen v 2D půdorysu), kabelové žlaby nemají v mapě závodu vlastní vrstvu (u zařízení jen délka a typ přívodu), DA a UPS jsou v závodě kořenové zdroje typu trafostanice se zálohováním a kapacitou (napájení UPS z DA zůstane v popisu), IfcGridPlacement a zakřivené profily se nevyhodnocují; stroje v 2D půdorysu jsou vlastní spotřebiče do 32 A (nad to varování), vývody a hlavní vypínač nad 125 A navrhne AI Panel Builder jako orientační kus; Server Action nese jen zmenšený model (do ~1 MB – velký export z Revitu importujte po budovách).
-- Fáze 96: kanonickou URL má každá veřejná stránka zvlášť (v layoutu by všechny podstránky ukazovaly na úvod); ověřovací meta Google / Seznam se vypíší jen s proměnnými `GOOGLE_SITE_VERIFICATION` / `SEZNAM_WMT_VERIFICATION` v `.env` serveru (Seznam jde ověřit i souborem `seznam-wmt-….txt`); trenažér 2D půdorysu, editor a ukládání projektů dál vyžadují přihlášení firmy; IndexNow se po nasazení spouští `npm run seo:ping` (nebo `POST /api/seo/ping` s `ELDOCK_CRON_SECRET`) – automatický ping při každém startu kontejneru záměrně není.
+- Fáze 95: místnosti IfcSpace jdou do Studia jako obálka (obdélník; mnohoúhelník jen v 2D půdorysu), kabelové žlaby nemají v mapě závodu vlastní vrstvu (u zařízení jen délka a typ přívodu), DA a UPS jsou v závodě kořenové zdroje typu trafostanice se zálohováním a kapacitou (napájení UPS z DA zůstane v popisu), IfcGridPlacement a zakřivené profily se nevyhodnocují; stroje v 2D půdorysu jsou vlastní spotřebiče do 32 A (nad to varování), vývody a hlavní vypínač nad 125 A navrhne AI Panel Builder jako orientační kus; Server Action nese jen zmenšený model (do ~1 MB – velký export z Revitu importujte po budovách). Fáze 96: kanonickou URL má každá veřejná stránka zvlášť (v layoutu by všechny podstránky ukazovaly na úvod); ověřovací meta Google / Seznam se vypíší jen s proměnnými `GOOGLE_SITE_VERIFICATION` / `SEZNAM_WMT_VERIFICATION` v `.env` serveru (Seznam jde ověřit i souborem `seznam-wmt-….txt`); trenažér 2D půdorysu, editor a ukládání projektů dál vyžadují přihlášení firmy; IndexNow se po nasazení spouští `npm run seo:ping` (nebo `POST /api/seo/ping` s `ELDOCK_CRON_SECRET`) – automatický ping při každém startu kontejneru záměrně není.
+- Fáze 97: web ABB (nizke-napeti.cz.abb.com) a Eaton automatizovaný přístup odmítají (spojení bez odpovědi / ERR_HTTP2_PROTOCOL_ERROR) – ABB z vlastní kopie `ELSB_ETIM-9.0_2026-05.zip`, Eaton bez dat; databáze ETIM a ceníky Legrand jsou pod heslem (výrobce ho posílá e-mailem), ceník OEZ jen po přihlášení partnera, KOPOS a Schneider ETIM / BMEcat veřejně nevedou (data ze stránek výrobků), Schrack a Saltek bez veřejného datového souboru výrobků; Plexo s „L“ (`069621L` …) fotobanka Legrand nevede (fotka jiného čísla se nepoužije); Schneider zatím není ve výběru skříně (rozvodnice s fotkou jen v katalogu přístrojů); ceny KOPOS z ceníku jsou v datech, aplikace je nezobrazuje.
 - Backlog z MVP: skutečný serverový přepis hlasu, redlining nad PDF (pdf.js), PostgreSQL, elektronický podpis schválení.

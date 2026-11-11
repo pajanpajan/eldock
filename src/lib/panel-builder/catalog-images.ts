@@ -56,7 +56,9 @@ export function catalogImageEntry(maker: string, series: string, file: string, l
   // Fáze 94: id výrobků chytré domácnosti obsahují i podtržítko („abb_knx-knx-sa8“)
   if (series === "smart") return /^[a-z0-9_-]{2,60}$/.test(base) ? { series: "smart", color: base, part: "product", ...meta } : null;
   // Fáze 94: fotky rozvodnic podle objednacího čísla (`abb/enclosures/<mpn>.webp`)
-  if (series === "enclosures") return /^[a-z0-9-]{2,60}$/.test(base) ? { series: "enclosure", color: base, part: "product", ...meta } : null;
+  if (series === "enclosures") return /^[a-z0-9-]{2,80}$/.test(base) ? { series: "enclosure", color: base, part: "product", ...meta } : null;
+  // Fáze 97: fotky instalačních krabic podle objednacího kódu (`kopos/boxes/<kód>.webp`)
+  if (series === "boxes") return /^[a-z0-9-]{2,80}$/.test(base) ? { series: "box", color: base, part: "product", ...meta } : null;
   const key = seriesForFolder(maker, series);
   const match = /^(.+)-(switch|socket|set|frame)$/.exec(base);
   if (!key || !match) return null;
@@ -85,4 +87,11 @@ export function enclosureImage(articleNumber: string | null | undefined, images:
   if (!articleNumber) return null;
   const key = catalogSlug(articleNumber);
   return images.find((image) => image.series === "enclosure" && image.color === key) ?? null;
+}
+
+/** Fáze 97: fotka instalační krabice podle objednacího kódu výrobce („KU 68-45_KA“); null = bez fotky. */
+export function boxImage(code: string | null | undefined, images: readonly CatalogImage[]): CatalogImage | null {
+  if (!code) return null;
+  const key = catalogSlug(code);
+  return images.find((image) => image.series === "box" && image.color === key) ?? null;
 }

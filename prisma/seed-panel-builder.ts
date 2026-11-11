@@ -22,8 +22,9 @@ import { demoDetections } from "../src/lib/panel-builder/matching";
 import { REFERENCE_DEVICES, REFERENCE_DIMS, withPositions } from "../src/lib/panel-builder/reference";
 import { applyDetections, applyProposedTree } from "../src/server/services/panel-builder";
 import { ROUTINE_TEST_POINTS } from "../src/lib/legislation-2027";
-import { applyEtimComponents, importExternalCatalog, importWiringDevices, seedStandardEnclosures, seedVerifiedEnclosures } from "../src/server/services/catalog-sync";
+import { applyEnclosureFixes, applyEtimComponents, importExternalCatalog, importWiringDevices, seedStandardEnclosures, seedVerifiedEnclosures } from "../src/server/services/catalog-sync";
 import { readSnapshot, readWiringSnapshot } from "./external-catalog-source";
+import { BRAND_ETIM_COMPONENTS } from "../src/lib/panel-builder/brand-etim-components.generated";
 import { TESTER_COMPANY } from "../src/lib/registered-company";
 import { hashPassword } from "../src/server/password";
 
@@ -507,7 +508,11 @@ export async function seedPanelBuilder(prisma: PrismaClient, options: { external
   if (wiringRows) await step("domovní přístroje", () => importWiringDevices(prisma, wiringRows), null);
   // Fáze 94: oficiální data ABB ETIM 9.0 (EAN, Pv, vestavná hloubka, technický list) až po importu externí databáze
   const etim = await step("data ABB ETIM 9.0", () => applyEtimComponents(prisma), 0);
-  return { components, project, tester, enclosures, verifiedEnclosures, external, fans, etim, failures };
+  // Fáze 97: data výrobců Hager (BMEcat ETIM 10) a OEZ (stránky výrobků) – EAN, Pv, hloubka, technický list
+  const brandEtim = await step("data výrobců Hager / OEZ", () => applyEtimComponents(prisma, BRAND_ETIM_COMPONENTS), 0);
+  // Fáze 97: řady × moduly rozvodnic podle dat výrobce (ETIM potvrzený popisem) – po importu externí databáze
+  const enclosureFixes = await step("rozvodnice podle dat výrobce", () => applyEnclosureFixes(prisma), 0);
+  return { components, project, tester, enclosures, verifiedEnclosures, external, fans, etim, brandEtim, enclosureFixes, failures };
 }
 
 /** Filtrační ventilátory rozváděčů – upsert podle objednacího čísla. Vrací počet ventilátorů. */

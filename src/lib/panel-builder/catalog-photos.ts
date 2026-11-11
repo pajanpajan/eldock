@@ -39,9 +39,64 @@ export interface ManifestPhoto {
   gtin?: string;
 }
 
+/**
+ * Fáze 97: fotka výrobku podle objednacího čísla – instalační krabice (`<výrobce>/boxes/<kód>.webp`), rozvodnice
+ * (`<výrobce>/enclosures/<objednací číslo>.webp`) a DIN přístroje (`<výrobce>/devices/<objednací číslo>.webp`).
+ */
+export type ProductPhotoKind = "box" | "enclosure" | "device";
+
+export interface ManifestProductPhoto {
+  kind: ProductPhotoKind;
+  /** Výrobce („KOPOS“, „OEZ“, „Hager“ …). */
+  brand: string;
+  /** Objednací číslo / kód výrobku tak, jak ho vede katalog Eldocku („KU 68-45_KA“, „OEZ:41634“). */
+  mpn: string;
+  /** Cesta vůči kořeni katalogu („kopos/boxes/ku-68-45-ka.webp“). */
+  file: string;
+  source: string;
+  license: string;
+  sourceUrl?: string;
+  retrievedAt?: string;
+  gtin?: string;
+}
+
 export interface PhotoManifest {
   version: 1;
   photos: ManifestPhoto[];
+  /** Fáze 97: fotky výrobků (krabice, rozvodnice, přístroje). */
+  products?: ManifestProductPhoto[];
+}
+
+const PRODUCT_FOLDERS: Record<ProductPhotoKind, string> = { box: "boxes", enclosure: "enclosures", device: "devices" };
+const PRODUCT_FILE = /^[a-z0-9-]+\/(boxes|enclosures|devices)\/[a-z0-9-]{2,80}\.(webp|png|jpg|jpeg|avif)$/;
+
+/** Fáze 97: fotky výrobků z manifestu – neplatné položky (cizí složka, neznámý druh) se zahodí. */
+export function parseProductPhotos(value: unknown): ManifestProductPhoto[] {
+  const list = value && typeof value === "object" && Array.isArray((value as PhotoManifest).products) ? (value as PhotoManifest).products! : [];
+  const result: ManifestProductPhoto[] = [];
+  for (const raw of list) {
+    if (!raw || typeof raw !== "object") continue;
+    const { kind, brand, mpn, file, source, license, sourceUrl, retrievedAt, gtin } = raw as Partial<ManifestProductPhoto>;
+    if (!kind || !(kind in PRODUCT_FOLDERS) || typeof brand !== "string" || typeof mpn !== "string" || typeof file !== "string" || typeof source !== "string" || typeof license !== "string") continue;
+    if (!PRODUCT_FILE.test(file) || file.split("/")[1] !== PRODUCT_FOLDERS[kind]) continue;
+    result.push({
+      kind,
+      brand: brand.slice(0, 40),
+      mpn: mpn.trim().slice(0, 60),
+      file,
+      source: source.slice(0, 160),
+      license: license.slice(0, 160),
+      ...(typeof sourceUrl === "string" && /^https:\/\//.test(sourceUrl) ? { sourceUrl: sourceUrl.slice(0, 400) } : {}),
+      ...(typeof retrievedAt === "string" ? { retrievedAt: retrievedAt.slice(0, 32) } : {}),
+      ...(typeof gtin === "string" && /^\d{8,14}$/.test(gtin) ? { gtin } : {}),
+    });
+  }
+  return result;
+}
+
+/** Fáze 97: nová fotka výrobku – nahrazuje stávající položku stejného souboru. */
+export function upsertProductPhoto(products: readonly ManifestProductPhoto[], photo: ManifestProductPhoto): ManifestProductPhoto[] {
+  return [...products.filter((entry) => entry.file !== photo.file), photo];
 }
 
 const FILE_PATTERN = /^[a-z0-9-]+\/[a-z0-9-]+\/[a-z0-9-]+-(switch|socket|set|frame)\.(webp|png|jpg|jpeg|avif)$/;
@@ -72,9 +127,12 @@ export function parsePhotoManifest(value: unknown): ManifestPhoto[] {
   return photos;
 }
 
-/** Stabilní zápis manifestu (řazení podle souboru, aby se soubor neměnil bez důvodu). */
-export function renderPhotoManifest(photos: readonly ManifestPhoto[]): string {
-  const manifest: PhotoManifest = { version: 1, photos: [...photos].sort((a, b) => a.file.localeCompare(b.file)) };
+/**
+ * Stabilní zápis manifestu (řazení podle souboru, aby se soubor neměnil bez důvodu). Fáze 97: i fotky výrobků
+ * (`products`) – kdo je nepředá, nesmí manifest přepsat bez nich (import ETIM 9.0 je načte a předá dál).
+ */
+export function renderPhotoManifest(photos: readonly ManifestPhoto[], products: readonly ManifestProductPhoto[] = []): string {
+  const manifest: PhotoManifest = { version: 1, photos: [...photos].sort((a, b) => a.file.localeCompare(b.file)), ...(products.length ? { products: [...products].sort((a, b) => a.file.localeCompare(b.file)) } : {}) };
   return `${JSON.stringify(manifest, null, 2)}\n`;
 }
 

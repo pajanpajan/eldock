@@ -4,6 +4,7 @@ import type { PrismaClient } from "@/generated/prisma/client";
 import { standardEnclosureMatrix } from "@/lib/panel-builder/enclosures";
 import { EXTERNAL_SOURCE, deriveRelations, mapExternalProduct, type ExternalProduct, type MappedComponent, type MappedEnclosure } from "@/lib/panel-builder/external-catalog";
 import { ABB_ETIM_COMPONENTS, type EtimComponentData } from "@/lib/panel-builder/abb-etim-components.generated";
+import { BRAND_ENCLOSURE_FIXES, type EnclosureFix } from "@/lib/panel-builder/brand-etim-components.generated";
 import { etimEnclosures } from "@/lib/panel-builder/etim-enclosures";
 import { VERIFIED_ENCLOSURES, VERIFIED_ENCLOSURE_SOURCE, verifiedEnclosureData } from "@/lib/panel-builder/verified-enclosures";
 import { mapWiringDevice, type ExternalWiringDevice } from "@/lib/panel-builder/wiring-devices";
@@ -151,6 +152,20 @@ export async function applyEtimComponents(prisma: PrismaClient, data: Readonly<R
   });
   await inBatches(updates, (batch) => prisma.$transaction([...batch]));
   return rows.length;
+}
+
+/**
+ * Fáze 97: opravy řad × modulů rozvodnic z externí databáze podle dat výrobce (Hager ETIM 10 potvrzený popisem výrobce –
+ * např. golf VF212TD „2-řadá, 24 mod.“ místo 1 × 12). Po každém importu externí databáze znovu. Vrací počet opravených.
+ */
+export async function applyEnclosureFixes(prisma: PrismaClient, fixes: Readonly<Record<string, EnclosureFix>> = BRAND_ENCLOSURE_FIXES) {
+  let updated = 0;
+  for (const [articleNumber, fix] of Object.entries(fixes)) {
+    // MANUFACTURER_CATALOG: zdroj v popisu, import externí databáze řádek pak nepřepíše (fáze 86)
+    const result = await prisma.panelEnclosure.updateMany({ where: { articleNumber }, data: { rows: fix.rows, modulesPerRow: fix.modulesPerRow, totalModules: fix.totalModules, dataSource: "MANUFACTURER_CATALOG", description: fix.source } });
+    updated += result.count;
+  }
+  return updated;
 }
 
 export const WIRING_SYNC_MARKER = "catalog.wiring-sync";

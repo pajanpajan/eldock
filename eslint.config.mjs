@@ -31,6 +31,8 @@ const eslintConfig = defineConfig([
     // Fáze 73: nativní projekty Android a iOS (do nich Capacitor kopíruje sestavené rozhraní)
     "apps/client/android/**",
     "apps/client/ios/**",
+    // Fáze 97: stažené balíčky výrobců (nedůvěryhodná data, ne zdrojový kód)
+    "data/**",
   ]),
 ]);
 

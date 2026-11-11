@@ -9,6 +9,8 @@ import { BOX_TABLE_TITLE, bomBoxRows, bomMainRows, bomTable, type WiringBomRow }
 import { buildXlsx } from "@/lib/xlsx";
 import { cn } from "@/lib/utils";
 
+import { BoxPhoto } from "./BoxPhoto";
+
 function download(name: string, data: BlobPart, type: string) {
   const url = URL.createObjectURL(new Blob([data], { type }));
   const link = document.createElement("a");
@@ -43,7 +45,7 @@ export function WiringBomDialog({ rows }: { rows: readonly WiringBomRow[] }) {
           <DialogHeader>
             <DialogTitle>Kusovník domovní instalace</DialogTitle>
             <DialogDescription>
-              Přístroj + kryt + rámeček podle sestavování přístrojů Katalogu ABB 2026 (víceramček, který řada nevyrábí, rozdělený na skutečné rámečky), kabely z výkazu kabeláže a na konci instalační krabice podle výrobce, konstrukce stěn a hloubky přístroje. EAN = objednací číslo je v oficiálních datech výrobce ABB ETIM 9.0, „ověřit“ = číslo odvozené z matice katalogu, které data výrobce neuvádějí, „doplnit“ = objednací číslo v podkladech chybí.
+              Přístroj + kryt + rámeček podle sestavování přístrojů Katalogu ABB 2026 (víceramček, který řada nevyrábí, rozdělený na skutečné rámečky), kabely z výkazu kabeláže a na konci instalační krabice podle výrobce, konstrukce stěn a hloubky přístroje. EAN = objednací číslo je v oficiálních datech výrobce ABB ETIM 9.0, „ověřit“ = číslo odvozené z matice katalogu, které data výrobce neuvádějí, „doplnit“ = objednací číslo v podkladech chybí. Krabice KOPOS mají fotku, EAN a hloubku ze stránky výrobku kopos.cz.
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-wrap gap-2 print:hidden">
@@ -96,6 +98,9 @@ export function WiringBomDialog({ rows }: { rows: readonly WiringBomRow[] }) {
               <table className="w-full border-collapse text-xs" data-testid="wiring-bom-boxes-table">
                 <thead>
                   <tr className="border-b border-border text-left text-muted-foreground">
+                    <th className="py-1.5 pr-2">
+                      <span className="sr-only">Fotka</span>
+                    </th>
                     <th className="py-1.5 pr-2">Výrobce</th>
                     <th className="py-1.5 pr-2">Typové označení</th>
                     <th className="py-1.5 pr-2">Objednací kód / katalogové číslo</th>
@@ -107,9 +112,20 @@ export function WiringBomDialog({ rows }: { rows: readonly WiringBomRow[] }) {
                 <tbody>
                   {boxes.map((row) => (
                     <tr key={`${row.mpn ?? row.name}-${row.box.maker}`} className="border-b border-border/60" data-testid="wiring-bom-box" data-code={row.mpn ?? ""}>
+                      {/* Fáze 97: fotka krabice výrobce (KOPOS) */}
+                      <td className="w-14 py-1 pr-2">
+                        <BoxPhoto code={row.mpn} label={row.box.type} />
+                      </td>
                       <td className="py-1 pr-2">{row.box.maker}</td>
                       <td className="py-1 pr-2 font-semibold">{row.box.type}</td>
-                      <td className={cn("py-1 pr-2 font-mono", !row.mpn && "text-amber-300")}>{row.mpn ?? "doplnit"}</td>
+                      <td className={cn("py-1 pr-2 font-mono", !row.mpn && "text-amber-300")}>
+                        {row.mpn ?? "doplnit"}
+                        {row.ean ? (
+                          <span className="block font-sans text-[10px] text-muted-foreground" data-testid="wiring-bom-box-ean" title="EAN (GTIN) ze stránky výrobku">
+                            EAN {row.ean}
+                          </span>
+                        ) : null}
+                      </td>
                       <td className="py-1 pr-2 text-right font-mono">{row.box.depthMm ?? "–"}</td>
                       <td className="py-1 pr-2 text-muted-foreground">{row.box.purpose}</td>
                       <td className="py-1 text-right font-mono">{row.quantity.toLocaleString("cs-CZ")}</td>

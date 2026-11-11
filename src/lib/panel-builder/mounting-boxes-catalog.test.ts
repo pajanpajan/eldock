@@ -98,7 +98,7 @@ describe("fáze 91 – katalog krabic a kusovník", () => {
     const table = bomTable(bom);
     const title = table.findIndex((row) => String(row[0]).startsWith("📦 Doporučené instalační krabičky"));
     expect(title).toBeGreaterThan(0);
-    expect(table[title + 1]).toEqual(["Výrobce", "Typové označení", "Objednací kód / katalogové číslo", "Hloubka (mm)", "Určení / prostředí", "Počet ks"]);
+    expect(table[title + 1]).toEqual(["Výrobce", "Typové označení", "Objednací kód / katalogové číslo", "EAN (GTIN)", "Hloubka (mm)", "Určení / prostředí", "Počet ks"]);
   });
 
   it("nákres si pamatuje výrobce krabic, konstrukci stěn místnosti a ruční volbu krabice", () => {

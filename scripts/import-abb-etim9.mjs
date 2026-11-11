@@ -45,7 +45,7 @@ if (process.env.ELDOCK_ETIM_TSX !== "1") {
 
 const { productBlocks, zipEntries, zipEntryStream } = await import("./lib/etim-zip.mjs");
 const { ETIM_CLASSES, ETIM_UNITS, featureNumber, normalizeMpn, parseEtimProduct, productDocuments, productPhoto } = await import("../src/lib/catalog/etim.ts");
-const { parsePhotoManifest, photoTarget, renderPhotoManifest, upsertPhoto } = await import("../src/lib/panel-builder/catalog-photos.ts");
+const { parsePhotoManifest, parseProductPhotos, photoTarget, renderPhotoManifest, upsertPhoto } = await import("../src/lib/panel-builder/catalog-photos.ts");
 const { PALETTE, emptyDraft } = await import("../src/lib/panel-builder/floorplan-editor.ts");
 const { compileFloorplanBom } = await import("../src/lib/panel-builder/wiring-bom.ts");
 const { DESIGN_BRANDS, seriesColors } = await import("../src/lib/panel-builder/wiring-designs.ts");
@@ -418,7 +418,8 @@ async function main() {
       if (!(error instanceof Blocked)) throw error;
       blocked = error.message;
     }
-    await writeFile(MANIFEST, renderPhotoManifest(photos));
+    // Fáze 97: fotky výrobků (krabice, rozvodnice, přístroje z `parse-etim-packages`) zůstávají v manifestu
+    await writeFile(MANIFEST, renderPhotoManifest(photos, await readProducts()));
     for (const folder of ["smart", "enclosures"]) {
       const dir = path.join(IMAGES, "abb", folder);
       if (existsSync(dir)) await writeFile(path.join(dir, "zdroj.json"), `${JSON.stringify({ source: SOURCE, license: LICENSE }, null, 2)}\n`);
@@ -514,6 +515,14 @@ async function main() {
 async function readManifest() {
   try {
     return parsePhotoManifest(JSON.parse(await readFile(MANIFEST, "utf8")));
+  } catch {
+    return [];
+  }
+}
+
+async function readProducts() {
+  try {
+    return parseProductPhotos(JSON.parse(await readFile(MANIFEST, "utf8")));
   } catch {
     return [];
   }

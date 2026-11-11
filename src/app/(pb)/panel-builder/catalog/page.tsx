@@ -7,6 +7,8 @@ import { PageTransition } from "@/components/layout/PageTransition";
 import { ModuleDisabled } from "@/components/common/ModuleDisabled";
 import { CatalogSearch } from "@/components/panel-builder/CatalogSearch";
 import { DatasheetImport } from "@/components/panel-builder/DatasheetImport";
+import { DevicePhoto } from "@/components/panel-builder/DevicePhoto";
+import { EnclosurePhoto } from "@/components/panel-builder/EnclosurePhoto";
 import { ManufacturerLogo } from "@/components/panel-builder/ManufacturerLogo";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -168,6 +170,8 @@ export default async function CatalogPage({ searchParams }: PageProps<"/panel-bu
                     <TableRow key={row.id}>
                       <TableCell className="text-xs text-muted-foreground">{row.series}</TableCell>
                       <TableCell className="font-medium">
+                        {/* Fáze 97: fotka přístroje výrobce (ABB ETIM 9.0, Hager ETIM 10, OEZ) */}
+                        <DevicePhoto articleNumber={row.articleNumber} label={row.typeCode} className="mr-2 inline-block align-middle" />
                         {row.typeCode}
                         {/* Fáze 81: funkce aktoru chytré domácnosti */}
                         {(() => {
@@ -215,7 +219,13 @@ export default async function CatalogPage({ searchParams }: PageProps<"/panel-bu
                 <TableBody>
                   {result.rows.map((row) => (
                     <TableRow key={row.id}>
-                      <TableCell className="font-medium">{row.model}</TableCell>
+                      <TableCell className="font-medium">
+                        {/* Fáze 97: fotka rozvodnice výrobce */}
+                        <span className="flex items-center gap-2">
+                          <EnclosurePhoto articleNumber={row.articleNumber} label={row.model} size="sm" />
+                          {row.model}
+                        </span>
+                      </TableCell>
                       <TableCell className="font-mono text-xs">{row.articleNumber}</TableCell>
                       <TableCell className="text-right font-mono">
                         {row.rows} × {row.modulesPerRow} = {row.totalModules}

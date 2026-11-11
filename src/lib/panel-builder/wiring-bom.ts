@@ -395,6 +395,8 @@ export function compileFloorplanBom(draft: FloorplanDraft, options: BomOptions =
         appearance: line.box ? boxMakerLabel(line.box.maker) : maker,
         unit: "ks",
         box: { maker: line.box ? boxMakerLabel(line.box.maker) : maker, type: line.box?.type ?? "–", depthMm: line.box?.depthMm ?? null, purpose: line.box ? line.box.purpose : `${line.missing ?? "Instalační krabice"} (${wall})` },
+        // Fáze 97: EAN krabice ze stránky výrobku (KOPOS)
+        ...(line.box?.ean ? { ean: line.box.ean } : {}),
       },
       line.quantity,
     );
@@ -418,7 +420,7 @@ export const bomBoxRows = (rows: readonly WiringBomRow[]) => rows.filter((row): 
 
 /** Fáze 91: tabulka doporučených krabic (hlavička + data). */
 export function boxTable(rows: readonly WiringBomRow[]): (string | number)[][] {
-  return [["Výrobce", "Typové označení", "Objednací kód / katalogové číslo", "Hloubka (mm)", "Určení / prostředí", "Počet ks"], ...bomBoxRows(rows).map((row) => [row.box.maker, row.box.type, row.mpn ?? "doplnit", row.box.depthMm ?? "–", row.box.purpose, row.quantity])];
+  return [["Výrobce", "Typové označení", "Objednací kód / katalogové číslo", "EAN (GTIN)", "Hloubka (mm)", "Určení / prostředí", "Počet ks"], ...bomBoxRows(rows).map((row) => [row.box.maker, row.box.type, row.mpn ?? "doplnit", row.ean ?? "", row.box.depthMm ?? "–", row.box.purpose, row.quantity])];
 }
 
 /** Řádky tabulky pro CSV / XLSX (hlavička + data); fáze 91 – krabice v samostatné tabulce na konci. */

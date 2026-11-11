@@ -28,7 +28,7 @@ import { fileURLToPath } from "node:url";
 
 import { chromium } from "@playwright/test";
 
-import { photoTarget, parsePhotoManifest, renderPhotoManifest, upsertPhoto } from "../src/lib/panel-builder/catalog-photos.ts";
+import { photoTarget, parsePhotoManifest, parseProductPhotos, renderPhotoManifest, upsertPhoto } from "../src/lib/panel-builder/catalog-photos.ts";
 import { emptyDraft } from "../src/lib/panel-builder/floorplan-editor.ts";
 import { compileFloorplanBom } from "../src/lib/panel-builder/wiring-bom.ts";
 import { DESIGN_BRANDS, seriesColors } from "../src/lib/panel-builder/wiring-designs.ts";
@@ -212,7 +212,9 @@ async function main() {
     console.error(`  ⛔ ${error.message}`);
   } finally {
     await browser.close();
-    await writeFile(MANIFEST, renderPhotoManifest(photos));
+    // Fáze 97: fotky výrobků (krabice, rozvodnice, přístroje) v manifestu zůstávají
+    const products = await readFile(MANIFEST, "utf8").then((text) => parseProductPhotos(JSON.parse(text))).catch(() => []);
+    await writeFile(MANIFEST, renderPhotoManifest(photos, products));
     await writeCatalogManifest();
   }
   console.log(`Hotovo: ${report.saved} nových fotek, ${report.kept} ponecháno, ${report.missing.length} bez fotky se stejným objednacím číslem.`);

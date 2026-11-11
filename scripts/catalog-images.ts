@@ -14,7 +14,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { CATALOG_IMAGE_EXTENSIONS, CATALOG_IMAGE_MAX_BYTES, catalogImageEntry, renderCatalogImages, type CatalogImage } from "../src/lib/panel-builder/catalog-images";
-import { parsePhotoManifest } from "../src/lib/panel-builder/catalog-photos";
+import { parsePhotoManifest, parseProductPhotos } from "../src/lib/panel-builder/catalog-photos";
 
 const ROOT_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const CATALOG_IMAGES_DIR = path.join(ROOT_DIR, "public", "catalog-images");
@@ -64,9 +64,13 @@ export async function scanCatalogImages(): Promise<{ images: CatalogImage[]; ski
   const skipped: string[] = [];
   if (!existsSync(root)) return { images, skipped };
   // Fáze 92: fotky se zdrojem a licencí u každého souboru
-  const photos = new Map(parsePhotoManifest(await readJson(path.join(root, "manifest.json"))).map((photo) => [photo.file, photo]));
+  const manifest = await readJson(path.join(root, "manifest.json"));
+  const photos = new Map<string, { source: string; license: string; mpn?: string }>(parsePhotoManifest(manifest).map((photo) => [photo.file, photo]));
+  // Fáze 97: fotky výrobků (krabice, rozvodnice) se zdrojem a licencí u každého souboru
+  for (const product of parseProductPhotos(manifest)) photos.set(product.file, product);
   for (const maker of (await readdir(root, { withFileTypes: true })).filter((entry) => entry.isDirectory())) {
-    for (const series of (await readdir(path.join(root, maker.name), { withFileTypes: true })).filter((entry) => entry.isDirectory())) {
+    // Fáze 97: fotky DIN přístrojů (`<výrobce>/devices/`) mají vlastní manifest jen pro server (device-photos.generated.ts)
+    for (const series of (await readdir(path.join(root, maker.name), { withFileTypes: true })).filter((entry) => entry.isDirectory() && entry.name !== "devices")) {
       const dir = path.join(root, maker.name, series.name);
       const license = (await readJson(path.join(dir, "zdroj.json"))) as { source?: unknown; license?: unknown } | null;
       for (const file of (await readdir(dir)).sort()) {

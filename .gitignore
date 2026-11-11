@@ -69,3 +69,6 @@ public/*.mp4
 # Fáze 94: zdrojová data výrobců ETIM (stovky MB XML) – do gitu jen vyextrahované WebP fotky a JSON katalog
 **/ELSB_ETIM*.zip
 data/etim/raw/**
+
+# Fáze 97: stažené balíčky výrobců (ETIM / BMEcat / ceníky / feedy) – do gitu jen vyextrahované WebP fotky a JSON katalog
+data/etim/downloads/

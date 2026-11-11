@@ -42,3 +42,20 @@ Složky výrobce a řady jsou názvy bez diakritiky a mezer (`ABB` → `abb`, `T
   a uloží do trvalého úložiště `storage/catalog-images/` (svazek Dockeru – `public/` je v obrazu jen ze sestavení),
   manifest `storage/catalog-images/manifest.json`; galerie ji hned ukáže všem uživatelům
   (`GET /api/catalog-images/manifest`, soubory `GET /api/catalog-images/file/…`).
+
+## Datové balíčky výrobců (fáze 97)
+
+1. `npm run catalog:discover` (`scripts/discover-and-download-etim.mjs`) projde stránky „Ke stažení / Ceníky / Databáze
+   ETIM“ výrobců (ABB, KOPOS, OEZ, Schneider Electric, Legrand, Hager, Eaton, Schrack, Saltek), stáhne datové soubory
+   (BMEcat / ETIM, XLSX / CSV ceníky) do `data/etim/downloads/<výrobce>/` (mimo git) a u výrobců bez veřejného balíčku
+   přečte stránky výrobků (KOPOS e-shop, katalog OEZ, se.com). Respektuje robots.txt, zaheslované soubory nepoužije
+   a weby, které automatizovaný přístup odmítnou, označí „blokuje“ – nic neobchází. Přehled `discovery.json`.
+2. `npm run catalog:parse` (`scripts/parse-etim-packages.mjs`) z nich sestaví výrobky, stáhne fotky (kontrola: HTTP 200,
+   `image/*`, víc než 1,5 kB, hlavička JPEG / PNG / WebP / GIF), převede je na WebP 400 × 400 a zapíše:
+   - `<výrobce>/<řada>/<barva>-<díl>.webp` – díly řad Schneider / Legrand / Hager pro galerii (položky `photos`),
+   - `kopos/boxes/<kód>.webp` – instalační krabice, `<výrobce>/enclosures/<objednací číslo>.webp` – rozvodnice
+     (položky `products` s druhem `box` / `enclosure`; v aplikaci `catalog-images.generated.ts`),
+   - `<výrobce>/devices/<objednací číslo>.webp` – DIN přístroje (`products` s druhem `device`; manifest jen pro server
+     `src/lib/panel-builder/device-photos.generated.ts`, do klientského balíčku nepatří).
+   Data výrobců (hloubky přístrojů řad Hager, rámečky podle ETIM, krabice KOPOS, EAN / Pv / hloubka DIN přístrojů) jdou do
+   `brand-etim.generated.ts` a `brand-etim-components.generated.ts`.

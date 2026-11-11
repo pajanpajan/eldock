@@ -5815,5 +5815,2995 @@ export const CATALOG_IMAGES: readonly CatalogImage[] = [
     "license": "fotka výrobce ABB – užití v Eldocku (i ve veřejném repozitáři) potvrdil provozovatel 2026-11-10",
     "photo": true,
     "mpn": "3559T-A00651 500"
+  },
+  {
+    "series": "Hager|berker S.1 / B.3 / Q.1 / Q.3",
+    "color": "alu",
+    "part": "set",
+    "src": "/catalog-images/hager/berker-s-1-b-3-q-1-q-3/alu-set.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "10129959"
+  },
+  {
+    "series": "Hager|berker S.1 / B.3 / Q.1 / Q.3",
+    "color": "black",
+    "part": "frame",
+    "src": "/catalog-images/hager/berker-s-1-b-3-q-1-q-3/black-frame.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "10119949"
+  },
+  {
+    "series": "Hager|berker S.1 / B.3 / Q.1 / Q.3",
+    "color": "black",
+    "part": "set",
+    "src": "/catalog-images/hager/berker-s-1-b-3-q-1-q-3/black-set.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "10129949"
+  },
+  {
+    "series": "Hager|berker S.1 / B.3 / Q.1 / Q.3",
+    "color": "black",
+    "part": "socket",
+    "src": "/catalog-images/hager/berker-s-1-b-3-q-1-q-3/black-socket.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "41231606"
+  },
+  {
+    "series": "Hager|berker S.1 / B.3 / Q.1 / Q.3",
+    "color": "black",
+    "part": "switch",
+    "src": "/catalog-images/hager/berker-s-1-b-3-q-1-q-3/black-switch.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "15701606"
+  },
+  {
+    "series": "Hager|berker S.1 / B.3 / Q.1 / Q.3",
+    "color": "grey",
+    "part": "frame",
+    "src": "/catalog-images/hager/berker-s-1-b-3-q-1-q-3/grey-frame.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "10119939"
+  },
+  {
+    "series": "Hager|berker S.1 / B.3 / Q.1 / Q.3",
+    "color": "grey",
+    "part": "set",
+    "src": "/catalog-images/hager/berker-s-1-b-3-q-1-q-3/grey-set.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "10129939"
+  },
+  {
+    "series": "Hager|berker S.1 / B.3 / Q.1 / Q.3",
+    "color": "grey",
+    "part": "socket",
+    "src": "/catalog-images/hager/berker-s-1-b-3-q-1-q-3/grey-socket.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "41231404"
+  },
+  {
+    "series": "Hager|berker S.1 / B.3 / Q.1 / Q.3",
+    "color": "grey",
+    "part": "switch",
+    "src": "/catalog-images/hager/berker-s-1-b-3-q-1-q-3/grey-switch.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "15701404"
+  },
+  {
+    "series": "Hager|berker S.1 / B.3 / Q.1 / Q.3",
+    "color": "ivory",
+    "part": "frame",
+    "src": "/catalog-images/hager/berker-s-1-b-3-q-1-q-3/ivory-frame.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "10118912"
+  },
+  {
+    "series": "Hager|berker S.1 / B.3 / Q.1 / Q.3",
+    "color": "ivory",
+    "part": "set",
+    "src": "/catalog-images/hager/berker-s-1-b-3-q-1-q-3/ivory-set.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "10228912"
+  },
+  {
+    "series": "Hager|berker S.1 / B.3 / Q.1 / Q.3",
+    "color": "ivory",
+    "part": "socket",
+    "src": "/catalog-images/hager/berker-s-1-b-3-q-1-q-3/ivory-socket.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "41238982"
+  },
+  {
+    "series": "Hager|berker S.1 / B.3 / Q.1 / Q.3",
+    "color": "ivory",
+    "part": "switch",
+    "src": "/catalog-images/hager/berker-s-1-b-3-q-1-q-3/ivory-switch.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "5316208992"
+  },
+  {
+    "series": "Hager|berker S.1 / B.3 / Q.1 / Q.3",
+    "color": "white",
+    "part": "frame",
+    "src": "/catalog-images/hager/berker-s-1-b-3-q-1-q-3/white-frame.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "10118919"
+  },
+  {
+    "series": "Hager|berker S.1 / B.3 / Q.1 / Q.3",
+    "color": "white",
+    "part": "set",
+    "src": "/catalog-images/hager/berker-s-1-b-3-q-1-q-3/white-set.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "10228919"
+  },
+  {
+    "series": "Hager|berker S.1 / B.3 / Q.1 / Q.3",
+    "color": "white",
+    "part": "socket",
+    "src": "/catalog-images/hager/berker-s-1-b-3-q-1-q-3/white-socket.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "41238989"
+  },
+  {
+    "series": "Hager|berker S.1 / B.3 / Q.1 / Q.3",
+    "color": "white",
+    "part": "switch",
+    "src": "/catalog-images/hager/berker-s-1-b-3-q-1-q-3/white-switch.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "5316208999"
+  },
+  {
+    "series": "enclosure",
+    "color": "fwb31",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/fwb31.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "FWB31"
+  },
+  {
+    "series": "enclosure",
+    "color": "fwb32",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/fwb32.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "FWB32"
+  },
+  {
+    "series": "enclosure",
+    "color": "fwb41",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/fwb41.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "FWB41"
+  },
+  {
+    "series": "enclosure",
+    "color": "fwb42",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/fwb42.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "FWB42"
+  },
+  {
+    "series": "enclosure",
+    "color": "fwb62",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/fwb62.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "FWB62"
+  },
+  {
+    "series": "enclosure",
+    "color": "fwu31s",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/fwu31s.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "FWU31S"
+  },
+  {
+    "series": "enclosure",
+    "color": "fwu32s",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/fwu32s.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "FWU32S"
+  },
+  {
+    "series": "enclosure",
+    "color": "fwu33s",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/fwu33s.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "FWU33S"
+  },
+  {
+    "series": "enclosure",
+    "color": "fwu41s",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/fwu41s.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "FWU41S"
+  },
+  {
+    "series": "enclosure",
+    "color": "fwu42s",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/fwu42s.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "FWU42S"
+  },
+  {
+    "series": "enclosure",
+    "color": "fwu43s",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/fwu43s.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "FWU43S"
+  },
+  {
+    "series": "enclosure",
+    "color": "fwu51s",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/fwu51s.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "FWU51S"
+  },
+  {
+    "series": "enclosure",
+    "color": "fwu52s",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/fwu52s.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "FWU52S"
+  },
+  {
+    "series": "enclosure",
+    "color": "fwu53s",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/fwu53s.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "FWU53S"
+  },
+  {
+    "series": "enclosure",
+    "color": "fwu61s",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/fwu61s.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "FWU61S"
+  },
+  {
+    "series": "enclosure",
+    "color": "fwu62s",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/fwu62s.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "FWU62S"
+  },
+  {
+    "series": "enclosure",
+    "color": "fwu63s",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/fwu63s.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "FWU63S"
+  },
+  {
+    "series": "enclosure",
+    "color": "fwu71s",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/fwu71s.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "FWU71S"
+  },
+  {
+    "series": "enclosure",
+    "color": "fwu72s",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/fwu72s.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "FWU72S"
+  },
+  {
+    "series": "enclosure",
+    "color": "gd106n",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/gd106n.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "GD106N"
+  },
+  {
+    "series": "enclosure",
+    "color": "gd110n",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/gd110n.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "GD110N"
+  },
+  {
+    "series": "enclosure",
+    "color": "va24b",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/va24b.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "VA24B"
+  },
+  {
+    "series": "enclosure",
+    "color": "va36b",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/va36b.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "VA36B"
+  },
+  {
+    "series": "enclosure",
+    "color": "va48b",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/va48b.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "VA48B"
+  },
+  {
+    "series": "enclosure",
+    "color": "ve106sn",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/ve106sn.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "VE106SN"
+  },
+  {
+    "series": "enclosure",
+    "color": "ve110sn",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/ve110sn.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "VE110SN"
+  },
+  {
+    "series": "enclosure",
+    "color": "ve112sn",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/ve112sn.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "VE112SN"
+  },
+  {
+    "series": "enclosure",
+    "color": "ve118sn",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/ve118sn.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "VE118SN"
+  },
+  {
+    "series": "enclosure",
+    "color": "ve212sn",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/ve212sn.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "VE212SN"
+  },
+  {
+    "series": "enclosure",
+    "color": "ve218sn",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/ve218sn.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "VE218SN"
+  },
+  {
+    "series": "enclosure",
+    "color": "ve312sn",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/ve312sn.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "VE312SN"
+  },
+  {
+    "series": "enclosure",
+    "color": "ve318sn",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/ve318sn.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "VE318SN"
+  },
+  {
+    "series": "enclosure",
+    "color": "ve412sn",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/ve412sn.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "VE412SN"
+  },
+  {
+    "series": "enclosure",
+    "color": "vf108td",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/vf108td.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "VF108TD"
+  },
+  {
+    "series": "enclosure",
+    "color": "vf112pd",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/vf112pd.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "VF112PD"
+  },
+  {
+    "series": "enclosure",
+    "color": "vf112td",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/vf112td.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "VF112TD"
+  },
+  {
+    "series": "enclosure",
+    "color": "vf118pd",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/vf118pd.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "VF118PD"
+  },
+  {
+    "series": "enclosure",
+    "color": "vf122pd",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/vf122pd.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "VF122PD"
+  },
+  {
+    "series": "enclosure",
+    "color": "vf212pd",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/vf212pd.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "VF212PD"
+  },
+  {
+    "series": "enclosure",
+    "color": "vf212td",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/vf212td.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "VF212TD"
+  },
+  {
+    "series": "enclosure",
+    "color": "vf218pd",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/vf218pd.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "VF218PD"
+  },
+  {
+    "series": "enclosure",
+    "color": "vf312pd",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/vf312pd.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "VF312PD"
+  },
+  {
+    "series": "enclosure",
+    "color": "vf318pd",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/vf318pd.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "VF318PD"
+  },
+  {
+    "series": "enclosure",
+    "color": "vs108pd",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/vs108pd.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "VS108PD"
+  },
+  {
+    "series": "enclosure",
+    "color": "vs112pd",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/vs112pd.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "VS112PD"
+  },
+  {
+    "series": "enclosure",
+    "color": "vs112td",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/vs112td.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "VS112TD"
+  },
+  {
+    "series": "enclosure",
+    "color": "vs118pd",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/vs118pd.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "VS118PD"
+  },
+  {
+    "series": "enclosure",
+    "color": "vs122pd",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/vs122pd.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "VS122PD"
+  },
+  {
+    "series": "enclosure",
+    "color": "vs212pd",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/vs212pd.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "VS212PD"
+  },
+  {
+    "series": "enclosure",
+    "color": "vs212td",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/vs212td.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "VS212TD"
+  },
+  {
+    "series": "enclosure",
+    "color": "vs218pd",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/vs218pd.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "VS218PD"
+  },
+  {
+    "series": "enclosure",
+    "color": "vs312pd",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/vs312pd.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "VS312PD"
+  },
+  {
+    "series": "enclosure",
+    "color": "vs312td",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/vs312td.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "VS312TD"
+  },
+  {
+    "series": "enclosure",
+    "color": "vs318pd",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/vs318pd.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "VS318PD"
+  },
+  {
+    "series": "enclosure",
+    "color": "vs412pd",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/vs412pd.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "VS412PD"
+  },
+  {
+    "series": "enclosure",
+    "color": "vu12nc",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/vu12nc.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "VU12NC"
+  },
+  {
+    "series": "enclosure",
+    "color": "vu12ne",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/vu12ne.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "VU12NE"
+  },
+  {
+    "series": "enclosure",
+    "color": "vu24nc",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/vu24nc.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "VU24NC"
+  },
+  {
+    "series": "enclosure",
+    "color": "vu24ne",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/vu24ne.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "VU24NE"
+  },
+  {
+    "series": "enclosure",
+    "color": "vu36nc",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/vu36nc.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "VU36NC"
+  },
+  {
+    "series": "enclosure",
+    "color": "vu36ne",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/vu36ne.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "VU36NE"
+  },
+  {
+    "series": "enclosure",
+    "color": "vu36nwb",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/vu36nwb.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "VU36NWB"
+  },
+  {
+    "series": "enclosure",
+    "color": "vu48nc",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/vu48nc.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "VU48NC"
+  },
+  {
+    "series": "enclosure",
+    "color": "vu48ne",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/vu48ne.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "VU48NE"
+  },
+  {
+    "series": "enclosure",
+    "color": "vu60ne",
+    "part": "product",
+    "src": "/catalog-images/hager/enclosures/vu60ne.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "VU60NE"
+  },
+  {
+    "series": "Hager|lumina",
+    "color": "alu",
+    "part": "frame",
+    "src": "/catalog-images/hager/lumina/alu-frame.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "WL9012"
+  },
+  {
+    "series": "Hager|lumina",
+    "color": "alu",
+    "part": "set",
+    "src": "/catalog-images/hager/lumina/alu-set.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "WL9222"
+  },
+  {
+    "series": "Hager|lumina",
+    "color": "black",
+    "part": "frame",
+    "src": "/catalog-images/hager/lumina/black-frame.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "WL5513"
+  },
+  {
+    "series": "Hager|lumina",
+    "color": "black",
+    "part": "set",
+    "src": "/catalog-images/hager/lumina/black-set.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "WL5723"
+  },
+  {
+    "series": "Hager|lumina",
+    "color": "black",
+    "part": "socket",
+    "src": "/catalog-images/hager/lumina/black-socket.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "WL1453"
+  },
+  {
+    "series": "Hager|lumina",
+    "color": "black",
+    "part": "switch",
+    "src": "/catalog-images/hager/lumina/black-switch.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "WL0013"
+  },
+  {
+    "series": "Hager|lumina",
+    "color": "grey",
+    "part": "frame",
+    "src": "/catalog-images/hager/lumina/grey-frame.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "WL5512"
+  },
+  {
+    "series": "Hager|lumina",
+    "color": "grey",
+    "part": "socket",
+    "src": "/catalog-images/hager/lumina/grey-socket.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "WL1452"
+  },
+  {
+    "series": "Hager|lumina",
+    "color": "grey",
+    "part": "switch",
+    "src": "/catalog-images/hager/lumina/grey-switch.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "WL0012"
+  },
+  {
+    "series": "Hager|lumina",
+    "color": "white",
+    "part": "frame",
+    "src": "/catalog-images/hager/lumina/white-frame.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "WL5510"
+  },
+  {
+    "series": "Hager|lumina",
+    "color": "white",
+    "part": "set",
+    "src": "/catalog-images/hager/lumina/white-set.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "WL5720"
+  },
+  {
+    "series": "Hager|lumina",
+    "color": "white",
+    "part": "socket",
+    "src": "/catalog-images/hager/lumina/white-socket.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "WL1450"
+  },
+  {
+    "series": "Hager|lumina",
+    "color": "white",
+    "part": "switch",
+    "src": "/catalog-images/hager/lumina/white-switch.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "WL0010"
+  },
+  {
+    "series": "Hager|lumina",
+    "color": "wood",
+    "part": "frame",
+    "src": "/catalog-images/hager/lumina/wood-frame.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "WL9014"
+  },
+  {
+    "series": "Hager|lumina",
+    "color": "wood",
+    "part": "set",
+    "src": "/catalog-images/hager/lumina/wood-set.webp",
+    "source": "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
+    "license": "fotka výrobce Hager – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "WL9224"
+  },
+  {
+    "series": "box",
+    "color": "kez-3-kb",
+    "part": "product",
+    "src": "/catalog-images/kopos/boxes/kez-3-kb.webp",
+    "source": "KOPOS KOLÍN – e-shop kopos.cz (stránka výrobku) a ceník XLSX od 1. 8. 2026",
+    "license": "fotka výrobce KOPOS – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "KEZ-3_KB"
+  },
+  {
+    "series": "box",
+    "color": "kez-kb",
+    "part": "product",
+    "src": "/catalog-images/kopos/boxes/kez-kb.webp",
+    "source": "KOPOS KOLÍN – e-shop kopos.cz (stránka výrobku) a ceník XLSX od 1. 8. 2026",
+    "license": "fotka výrobce KOPOS – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "KEZ_KB"
+  },
+  {
+    "series": "box",
+    "color": "kp-64-2-ka",
+    "part": "product",
+    "src": "/catalog-images/kopos/boxes/kp-64-2-ka.webp",
+    "source": "KOPOS KOLÍN – e-shop kopos.cz (stránka výrobku) a ceník XLSX od 1. 8. 2026",
+    "license": "fotka výrobce KOPOS – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "KP 64/2_KA"
+  },
+  {
+    "series": "box",
+    "color": "kp-64-3-ka",
+    "part": "product",
+    "src": "/catalog-images/kopos/boxes/kp-64-3-ka.webp",
+    "source": "KOPOS KOLÍN – e-shop kopos.cz (stránka výrobku) a ceník XLSX od 1. 8. 2026",
+    "license": "fotka výrobce KOPOS – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "KP 64/3_KA"
+  },
+  {
+    "series": "box",
+    "color": "kp-64-4-ka",
+    "part": "product",
+    "src": "/catalog-images/kopos/boxes/kp-64-4-ka.webp",
+    "source": "KOPOS KOLÍN – e-shop kopos.cz (stránka výrobku) a ceník XLSX od 1. 8. 2026",
+    "license": "fotka výrobce KOPOS – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "KP 64/4_KA"
+  },
+  {
+    "series": "box",
+    "color": "kp-64-5-ka",
+    "part": "product",
+    "src": "/catalog-images/kopos/boxes/kp-64-5-ka.webp",
+    "source": "KOPOS KOLÍN – e-shop kopos.cz (stránka výrobku) a ceník XLSX od 1. 8. 2026",
+    "license": "fotka výrobce KOPOS – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "KP 64/5_KA"
+  },
+  {
+    "series": "box",
+    "color": "kpl-64-45-ld-na",
+    "part": "product",
+    "src": "/catalog-images/kopos/boxes/kpl-64-45-ld-na.webp",
+    "source": "KOPOS KOLÍN – e-shop kopos.cz (stránka výrobku) a ceník XLSX od 1. 8. 2026",
+    "license": "fotka výrobce KOPOS – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "KPL 64-45/LD_NA"
+  },
+  {
+    "series": "box",
+    "color": "kpl-64-50-2ld-hf-ka",
+    "part": "product",
+    "src": "/catalog-images/kopos/boxes/kpl-64-50-2ld-hf-ka.webp",
+    "source": "KOPOS KOLÍN – e-shop kopos.cz (stránka výrobku) a ceník XLSX od 1. 8. 2026",
+    "license": "fotka výrobce KOPOS – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "KPL 64-50/2LD HF_KA"
+  },
+  {
+    "series": "box",
+    "color": "kpl-64-50-2ld-na",
+    "part": "product",
+    "src": "/catalog-images/kopos/boxes/kpl-64-50-2ld-na.webp",
+    "source": "KOPOS KOLÍN – e-shop kopos.cz (stránka výrobku) a ceník XLSX od 1. 8. 2026",
+    "license": "fotka výrobce KOPOS – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "KPL 64-50/2LD_NA"
+  },
+  {
+    "series": "box",
+    "color": "kpl-64-50-3ld-na",
+    "part": "product",
+    "src": "/catalog-images/kopos/boxes/kpl-64-50-3ld-na.webp",
+    "source": "KOPOS KOLÍN – e-shop kopos.cz (stránka výrobku) a ceník XLSX od 1. 8. 2026",
+    "license": "fotka výrobce KOPOS – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "KPL 64-50/3LD_NA"
+  },
+  {
+    "series": "box",
+    "color": "kpl-64-50-4ld-na",
+    "part": "product",
+    "src": "/catalog-images/kopos/boxes/kpl-64-50-4ld-na.webp",
+    "source": "KOPOS KOLÍN – e-shop kopos.cz (stránka výrobku) a ceník XLSX od 1. 8. 2026",
+    "license": "fotka výrobce KOPOS – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "KPL 64-50/4LD_NA"
+  },
+  {
+    "series": "box",
+    "color": "kpl-64-50-5ld-na",
+    "part": "product",
+    "src": "/catalog-images/kopos/boxes/kpl-64-50-5ld-na.webp",
+    "source": "KOPOS KOLÍN – e-shop kopos.cz (stránka výrobku) a ceník XLSX od 1. 8. 2026",
+    "license": "fotka výrobce KOPOS – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "KPL 64-50/5LD_NA"
+  },
+  {
+    "series": "box",
+    "color": "kpr-68-70-hf-ha",
+    "part": "product",
+    "src": "/catalog-images/kopos/boxes/kpr-68-70-hf-ha.webp",
+    "source": "KOPOS KOLÍN – e-shop kopos.cz (stránka výrobku) a ceník XLSX od 1. 8. 2026",
+    "license": "fotka výrobce KOPOS – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "KPR 68-70/HF_HA"
+  },
+  {
+    "series": "box",
+    "color": "kpr-68-70-ka",
+    "part": "product",
+    "src": "/catalog-images/kopos/boxes/kpr-68-70-ka.webp",
+    "source": "KOPOS KOLÍN – e-shop kopos.cz (stránka výrobku) a ceník XLSX od 1. 8. 2026",
+    "license": "fotka výrobce KOPOS – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "KPR 68-70_KA"
+  },
+  {
+    "series": "box",
+    "color": "kpr-68-71l-na",
+    "part": "product",
+    "src": "/catalog-images/kopos/boxes/kpr-68-71l-na.webp",
+    "source": "KOPOS KOLÍN – e-shop kopos.cz (stránka výrobku) a ceník XLSX od 1. 8. 2026",
+    "license": "fotka výrobce KOPOS – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "KPR 68/71L_NA"
+  },
+  {
+    "series": "box",
+    "color": "kpr-68-ka",
+    "part": "product",
+    "src": "/catalog-images/kopos/boxes/kpr-68-ka.webp",
+    "source": "KOPOS KOLÍN – e-shop kopos.cz (stránka výrobku) a ceník XLSX od 1. 8. 2026",
+    "license": "fotka výrobce KOPOS – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "KPR 68_KA"
+  },
+  {
+    "series": "box",
+    "color": "kprl-68-70-ld-na",
+    "part": "product",
+    "src": "/catalog-images/kopos/boxes/kprl-68-70-ld-na.webp",
+    "source": "KOPOS KOLÍN – e-shop kopos.cz (stránka výrobku) a ceník XLSX od 1. 8. 2026",
+    "license": "fotka výrobce KOPOS – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "KPRL 68-70/LD_NA"
+  },
+  {
+    "series": "box",
+    "color": "ku-68-45-hf-ha",
+    "part": "product",
+    "src": "/catalog-images/kopos/boxes/ku-68-45-hf-ha.webp",
+    "source": "KOPOS KOLÍN – e-shop kopos.cz (stránka výrobku) a ceník XLSX od 1. 8. 2026",
+    "license": "fotka výrobce KOPOS – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "KU 68-45/HF_HA"
+  },
+  {
+    "series": "box",
+    "color": "ku-68-45-ka",
+    "part": "product",
+    "src": "/catalog-images/kopos/boxes/ku-68-45-ka.webp",
+    "source": "KOPOS KOLÍN – e-shop kopos.cz (stránka výrobku) a ceník XLSX od 1. 8. 2026",
+    "license": "fotka výrobce KOPOS – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "KU 68-45_KA"
+  },
+  {
+    "series": "box",
+    "color": "ku-68-ld-1hf-ha",
+    "part": "product",
+    "src": "/catalog-images/kopos/boxes/ku-68-ld-1hf-ha.webp",
+    "source": "KOPOS KOLÍN – e-shop kopos.cz (stránka výrobku) a ceník XLSX od 1. 8. 2026",
+    "license": "fotka výrobce KOPOS – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "KU 68 LD/1HF_HA"
+  },
+  {
+    "series": "box",
+    "color": "mdz-kb",
+    "part": "product",
+    "src": "/catalog-images/kopos/boxes/mdz-kb.webp",
+    "source": "KOPOS KOLÍN – e-shop kopos.cz (stránka výrobku) a ceník XLSX od 1. 8. 2026",
+    "license": "fotka výrobce KOPOS – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "MDZ_KB"
+  },
+  {
+    "series": "box",
+    "color": "sb-kp-68-50-m-ab",
+    "part": "product",
+    "src": "/catalog-images/kopos/boxes/sb-kp-68-50-m-ab.webp",
+    "source": "KOPOS KOLÍN – e-shop kopos.cz (stránka výrobku) a ceník XLSX od 1. 8. 2026",
+    "license": "fotka výrobce KOPOS – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "SB-KP 68-50/M_AB"
+  },
+  {
+    "series": "box",
+    "color": "sb-kp-68-70-m-ab",
+    "part": "product",
+    "src": "/catalog-images/kopos/boxes/sb-kp-68-70-m-ab.webp",
+    "source": "KOPOS KOLÍN – e-shop kopos.cz (stránka výrobku) a ceník XLSX od 1. 8. 2026",
+    "license": "fotka výrobce KOPOS – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "SB-KP 68-70/M_AB"
+  },
+  {
+    "series": "Legrand|Mosaic",
+    "color": "alu",
+    "part": "frame",
+    "src": "/catalog-images/legrand/mosaic/alu-frame.webp",
+    "source": "Legrand – archiv fotek výrobků legrand.cz (cz_cs_Legrand_obrazky_CZ_202212)",
+    "license": "fotka výrobce Legrand – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "079301L"
+  },
+  {
+    "series": "Legrand|Mosaic",
+    "color": "alu",
+    "part": "socket",
+    "src": "/catalog-images/legrand/mosaic/alu-socket.webp",
+    "source": "Legrand – archiv fotek výrobků legrand.cz (cz_cs_Legrand_obrazky_CZ_202212)",
+    "license": "fotka výrobce Legrand – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "079214"
+  },
+  {
+    "series": "Legrand|Mosaic",
+    "color": "black",
+    "part": "socket",
+    "src": "/catalog-images/legrand/mosaic/black-socket.webp",
+    "source": "Legrand – archiv fotek výrobků legrand.cz (cz_cs_Legrand_obrazky_CZ_202212)",
+    "license": "fotka výrobce Legrand – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "079121L"
+  },
+  {
+    "series": "Legrand|Mosaic",
+    "color": "white",
+    "part": "frame",
+    "src": "/catalog-images/legrand/mosaic/white-frame.webp",
+    "source": "Legrand – archiv fotek výrobků legrand.cz (cz_cs_Legrand_obrazky_CZ_202212)",
+    "license": "fotka výrobce Legrand – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "078801L"
+  },
+  {
+    "series": "Legrand|Mosaic",
+    "color": "white",
+    "part": "socket",
+    "src": "/catalog-images/legrand/mosaic/white-socket.webp",
+    "source": "Legrand – archiv fotek výrobků legrand.cz (cz_cs_Legrand_obrazky_CZ_202212)",
+    "license": "fotka výrobce Legrand – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "077140"
+  },
+  {
+    "series": "Legrand|Plexo (IP55)",
+    "color": "ivory",
+    "part": "frame",
+    "src": "/catalog-images/legrand/plexo-ip55/ivory-frame.webp",
+    "source": "Legrand – archiv fotek výrobků legrand.cz (cz_cs_Legrand_obrazky_CZ_202212)",
+    "license": "fotka výrobce Legrand – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "069692"
+  },
+  {
+    "series": "Legrand|Valena Allure",
+    "color": "alu",
+    "part": "frame",
+    "src": "/catalog-images/legrand/valena-allure/alu-frame.webp",
+    "source": "Legrand – archiv fotek výrobků legrand.cz (cz_cs_Legrand_obrazky_CZ_202212)",
+    "license": "fotka výrobce Legrand – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "754391"
+  },
+  {
+    "series": "Legrand|Valena Allure",
+    "color": "black",
+    "part": "frame",
+    "src": "/catalog-images/legrand/valena-allure/black-frame.webp",
+    "source": "Legrand – archiv fotek výrobků legrand.cz (cz_cs_Legrand_obrazky_CZ_202212)",
+    "license": "fotka výrobce Legrand – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "754401"
+  },
+  {
+    "series": "Legrand|Valena Allure",
+    "color": "white",
+    "part": "frame",
+    "src": "/catalog-images/legrand/valena-allure/white-frame.webp",
+    "source": "Legrand – archiv fotek výrobků legrand.cz (cz_cs_Legrand_obrazky_CZ_202212)",
+    "license": "fotka výrobce Legrand – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "754301"
+  },
+  {
+    "series": "Legrand|Valena Life",
+    "color": "alu",
+    "part": "frame",
+    "src": "/catalog-images/legrand/valena-life/alu-frame.webp",
+    "source": "Legrand – archiv fotek výrobků legrand.cz (cz_cs_Legrand_obrazky_CZ_202212)",
+    "license": "fotka výrobce Legrand – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "754131"
+  },
+  {
+    "series": "Legrand|Valena Life",
+    "color": "alu",
+    "part": "set",
+    "src": "/catalog-images/legrand/valena-life/alu-set.webp",
+    "source": "Legrand – archiv fotek výrobků legrand.cz (cz_cs_Legrand_obrazky_CZ_202212)",
+    "license": "fotka výrobce Legrand – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "754132"
+  },
+  {
+    "series": "Legrand|Valena Life",
+    "color": "alu",
+    "part": "socket",
+    "src": "/catalog-images/legrand/valena-life/alu-socket.webp",
+    "source": "Legrand – archiv fotek výrobků legrand.cz (cz_cs_Legrand_obrazky_CZ_202212)",
+    "license": "fotka výrobce Legrand – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "753380"
+  },
+  {
+    "series": "Legrand|Valena Life",
+    "color": "alu",
+    "part": "switch",
+    "src": "/catalog-images/legrand/valena-life/alu-switch.webp",
+    "source": "Legrand – archiv fotek výrobků legrand.cz (cz_cs_Legrand_obrazky_CZ_202212)",
+    "license": "fotka výrobce Legrand – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "752301"
+  },
+  {
+    "series": "Legrand|Valena Life",
+    "color": "black",
+    "part": "frame",
+    "src": "/catalog-images/legrand/valena-life/black-frame.webp",
+    "source": "Legrand – archiv fotek výrobků legrand.cz (cz_cs_Legrand_obrazky_CZ_202212)",
+    "license": "fotka výrobce Legrand – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "754251"
+  },
+  {
+    "series": "Legrand|Valena Life",
+    "color": "black",
+    "part": "set",
+    "src": "/catalog-images/legrand/valena-life/black-set.webp",
+    "source": "Legrand – archiv fotek výrobků legrand.cz (cz_cs_Legrand_obrazky_CZ_202212)",
+    "license": "fotka výrobce Legrand – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "754252"
+  },
+  {
+    "series": "Legrand|Valena Life",
+    "color": "black",
+    "part": "socket",
+    "src": "/catalog-images/legrand/valena-life/black-socket.webp",
+    "source": "Legrand – archiv fotek výrobků legrand.cz (cz_cs_Legrand_obrazky_CZ_202212)",
+    "license": "fotka výrobce Legrand – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "756380"
+  },
+  {
+    "series": "Legrand|Valena Life",
+    "color": "black",
+    "part": "switch",
+    "src": "/catalog-images/legrand/valena-life/black-switch.webp",
+    "source": "Legrand – archiv fotek výrobků legrand.cz (cz_cs_Legrand_obrazky_CZ_202212)",
+    "license": "fotka výrobce Legrand – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "756301"
+  },
+  {
+    "series": "Legrand|Valena Life",
+    "color": "ivory",
+    "part": "frame",
+    "src": "/catalog-images/legrand/valena-life/ivory-frame.webp",
+    "source": "Legrand – archiv fotek výrobků legrand.cz (cz_cs_Legrand_obrazky_CZ_202212)",
+    "license": "fotka výrobce Legrand – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "754041"
+  },
+  {
+    "series": "Legrand|Valena Life",
+    "color": "ivory",
+    "part": "set",
+    "src": "/catalog-images/legrand/valena-life/ivory-set.webp",
+    "source": "Legrand – archiv fotek výrobků legrand.cz (cz_cs_Legrand_obrazky_CZ_202212)",
+    "license": "fotka výrobce Legrand – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "754042"
+  },
+  {
+    "series": "Legrand|Valena Life",
+    "color": "ivory",
+    "part": "socket",
+    "src": "/catalog-images/legrand/valena-life/ivory-socket.webp",
+    "source": "Legrand – archiv fotek výrobků legrand.cz (cz_cs_Legrand_obrazky_CZ_202212)",
+    "license": "fotka výrobce Legrand – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "753280"
+  },
+  {
+    "series": "Legrand|Valena Life",
+    "color": "ivory",
+    "part": "switch",
+    "src": "/catalog-images/legrand/valena-life/ivory-switch.webp",
+    "source": "Legrand – archiv fotek výrobků legrand.cz (cz_cs_Legrand_obrazky_CZ_202212)",
+    "license": "fotka výrobce Legrand – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "752201"
+  },
+  {
+    "series": "Legrand|Valena Life",
+    "color": "white",
+    "part": "frame",
+    "src": "/catalog-images/legrand/valena-life/white-frame.webp",
+    "source": "Legrand – archiv fotek výrobků legrand.cz (cz_cs_Legrand_obrazky_CZ_202212)",
+    "license": "fotka výrobce Legrand – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "754001"
+  },
+  {
+    "series": "Legrand|Valena Life",
+    "color": "white",
+    "part": "set",
+    "src": "/catalog-images/legrand/valena-life/white-set.webp",
+    "source": "Legrand – archiv fotek výrobků legrand.cz (cz_cs_Legrand_obrazky_CZ_202212)",
+    "license": "fotka výrobce Legrand – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "754002"
+  },
+  {
+    "series": "Legrand|Valena Life",
+    "color": "white",
+    "part": "socket",
+    "src": "/catalog-images/legrand/valena-life/white-socket.webp",
+    "source": "Legrand – archiv fotek výrobků legrand.cz (cz_cs_Legrand_obrazky_CZ_202212)",
+    "license": "fotka výrobce Legrand – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "753180"
+  },
+  {
+    "series": "Legrand|Valena Life",
+    "color": "white",
+    "part": "switch",
+    "src": "/catalog-images/legrand/valena-life/white-switch.webp",
+    "source": "Legrand – archiv fotek výrobků legrand.cz (cz_cs_Legrand_obrazky_CZ_202212)",
+    "license": "fotka výrobce Legrand – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "752101"
+  },
+  {
+    "series": "Legrand|Valena Life",
+    "color": "wood",
+    "part": "frame",
+    "src": "/catalog-images/legrand/valena-life/wood-frame.webp",
+    "source": "Legrand – archiv fotek výrobků legrand.cz (cz_cs_Legrand_obrazky_CZ_202212)",
+    "license": "fotka výrobce Legrand – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "754171"
+  },
+  {
+    "series": "Legrand|Valena Life",
+    "color": "wood",
+    "part": "set",
+    "src": "/catalog-images/legrand/valena-life/wood-set.webp",
+    "source": "Legrand – archiv fotek výrobků legrand.cz (cz_cs_Legrand_obrazky_CZ_202212)",
+    "license": "fotka výrobce Legrand – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "754172"
+  },
+  {
+    "series": "enclosure",
+    "color": "oez-40554",
+    "part": "product",
+    "src": "/catalog-images/oez/enclosures/oez-40554.webp",
+    "source": "OEZ – katalog oez.cz (stránka výrobku)",
+    "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "OEZ:40554"
+  },
+  {
+    "series": "enclosure",
+    "color": "oez-40555",
+    "part": "product",
+    "src": "/catalog-images/oez/enclosures/oez-40555.webp",
+    "source": "OEZ – katalog oez.cz (stránka výrobku)",
+    "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "OEZ:40555"
+  },
+  {
+    "series": "enclosure",
+    "color": "oez-40556",
+    "part": "product",
+    "src": "/catalog-images/oez/enclosures/oez-40556.webp",
+    "source": "OEZ – katalog oez.cz (stránka výrobku)",
+    "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "OEZ:40556"
+  },
+  {
+    "series": "enclosure",
+    "color": "oez-40557",
+    "part": "product",
+    "src": "/catalog-images/oez/enclosures/oez-40557.webp",
+    "source": "OEZ – katalog oez.cz (stránka výrobku)",
+    "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "OEZ:40557"
+  },
+  {
+    "series": "enclosure",
+    "color": "oez-40559",
+    "part": "product",
+    "src": "/catalog-images/oez/enclosures/oez-40559.webp",
+    "source": "OEZ – katalog oez.cz (stránka výrobku)",
+    "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "OEZ:40559"
+  },
+  {
+    "series": "enclosure",
+    "color": "oez-40562",
+    "part": "product",
+    "src": "/catalog-images/oez/enclosures/oez-40562.webp",
+    "source": "OEZ – katalog oez.cz (stránka výrobku)",
+    "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "OEZ:40562"
+  },
+  {
+    "series": "enclosure",
+    "color": "oez-40563",
+    "part": "product",
+    "src": "/catalog-images/oez/enclosures/oez-40563.webp",
+    "source": "OEZ – katalog oez.cz (stránka výrobku)",
+    "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "OEZ:40563"
+  },
+  {
+    "series": "enclosure",
+    "color": "oez-40564",
+    "part": "product",
+    "src": "/catalog-images/oez/enclosures/oez-40564.webp",
+    "source": "OEZ – katalog oez.cz (stránka výrobku)",
+    "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "OEZ:40564"
+  },
+  {
+    "series": "enclosure",
+    "color": "oez-40565",
+    "part": "product",
+    "src": "/catalog-images/oez/enclosures/oez-40565.webp",
+    "source": "OEZ – katalog oez.cz (stránka výrobku)",
+    "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "OEZ:40565"
+  },
+  {
+    "series": "enclosure",
+    "color": "oez-40578",
+    "part": "product",
+    "src": "/catalog-images/oez/enclosures/oez-40578.webp",
+    "source": "OEZ – katalog oez.cz (stránka výrobku)",
+    "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "OEZ:40578"
+  },
+  {
+    "series": "enclosure",
+    "color": "oez-40579",
+    "part": "product",
+    "src": "/catalog-images/oez/enclosures/oez-40579.webp",
+    "source": "OEZ – katalog oez.cz (stránka výrobku)",
+    "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "OEZ:40579"
+  },
+  {
+    "series": "enclosure",
+    "color": "oez-40581",
+    "part": "product",
+    "src": "/catalog-images/oez/enclosures/oez-40581.webp",
+    "source": "OEZ – katalog oez.cz (stránka výrobku)",
+    "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "OEZ:40581"
+  },
+  {
+    "series": "enclosure",
+    "color": "oez-40583",
+    "part": "product",
+    "src": "/catalog-images/oez/enclosures/oez-40583.webp",
+    "source": "OEZ – katalog oez.cz (stránka výrobku)",
+    "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "OEZ:40583"
+  },
+  {
+    "series": "enclosure",
+    "color": "oez-40586",
+    "part": "product",
+    "src": "/catalog-images/oez/enclosures/oez-40586.webp",
+    "source": "OEZ – katalog oez.cz (stránka výrobku)",
+    "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "OEZ:40586"
+  },
+  {
+    "series": "enclosure",
+    "color": "oez-40587",
+    "part": "product",
+    "src": "/catalog-images/oez/enclosures/oez-40587.webp",
+    "source": "OEZ – katalog oez.cz (stránka výrobku)",
+    "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "OEZ:40587"
+  },
+  {
+    "series": "enclosure",
+    "color": "oez-40589",
+    "part": "product",
+    "src": "/catalog-images/oez/enclosures/oez-40589.webp",
+    "source": "OEZ – katalog oez.cz (stránka výrobku)",
+    "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "OEZ:40589"
+  },
+  {
+    "series": "enclosure",
+    "color": "oez-40591",
+    "part": "product",
+    "src": "/catalog-images/oez/enclosures/oez-40591.webp",
+    "source": "OEZ – katalog oez.cz (stránka výrobku)",
+    "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "OEZ:40591"
+  },
+  {
+    "series": "enclosure",
+    "color": "oez-42599",
+    "part": "product",
+    "src": "/catalog-images/oez/enclosures/oez-42599.webp",
+    "source": "OEZ – katalog oez.cz (stránka výrobku)",
+    "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "OEZ:42599"
+  },
+  {
+    "series": "enclosure",
+    "color": "oez-42600",
+    "part": "product",
+    "src": "/catalog-images/oez/enclosures/oez-42600.webp",
+    "source": "OEZ – katalog oez.cz (stránka výrobku)",
+    "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "OEZ:42600"
+  },
+  {
+    "series": "enclosure",
+    "color": "oez-42601",
+    "part": "product",
+    "src": "/catalog-images/oez/enclosures/oez-42601.webp",
+    "source": "OEZ – katalog oez.cz (stránka výrobku)",
+    "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "OEZ:42601"
+  },
+  {
+    "series": "enclosure",
+    "color": "oez-42602",
+    "part": "product",
+    "src": "/catalog-images/oez/enclosures/oez-42602.webp",
+    "source": "OEZ – katalog oez.cz (stránka výrobku)",
+    "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "OEZ:42602"
+  },
+  {
+    "series": "enclosure",
+    "color": "oez-44451",
+    "part": "product",
+    "src": "/catalog-images/oez/enclosures/oez-44451.webp",
+    "source": "OEZ – katalog oez.cz (stránka výrobku)",
+    "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "OEZ:44451"
+  },
+  {
+    "series": "enclosure",
+    "color": "oez-44452",
+    "part": "product",
+    "src": "/catalog-images/oez/enclosures/oez-44452.webp",
+    "source": "OEZ – katalog oez.cz (stránka výrobku)",
+    "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "OEZ:44452"
+  },
+  {
+    "series": "enclosure",
+    "color": "oez-44453",
+    "part": "product",
+    "src": "/catalog-images/oez/enclosures/oez-44453.webp",
+    "source": "OEZ – katalog oez.cz (stránka výrobku)",
+    "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "OEZ:44453"
+  },
+  {
+    "series": "enclosure",
+    "color": "oez-44458",
+    "part": "product",
+    "src": "/catalog-images/oez/enclosures/oez-44458.webp",
+    "source": "OEZ – katalog oez.cz (stránka výrobku)",
+    "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "OEZ:44458"
+  },
+  {
+    "series": "enclosure",
+    "color": "oez-44459",
+    "part": "product",
+    "src": "/catalog-images/oez/enclosures/oez-44459.webp",
+    "source": "OEZ – katalog oez.cz (stránka výrobku)",
+    "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "OEZ:44459"
+  },
+  {
+    "series": "enclosure",
+    "color": "oez-44460",
+    "part": "product",
+    "src": "/catalog-images/oez/enclosures/oez-44460.webp",
+    "source": "OEZ – katalog oez.cz (stránka výrobku)",
+    "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "OEZ:44460"
+  },
+  {
+    "series": "Schneider|Asfora",
+    "color": "black",
+    "part": "frame",
+    "src": "/catalog-images/schneider/asfora/black-frame.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "EPH5800171"
+  },
+  {
+    "series": "Schneider|Asfora",
+    "color": "black",
+    "part": "set",
+    "src": "/catalog-images/schneider/asfora/black-set.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "EPH5800271"
+  },
+  {
+    "series": "Schneider|Asfora",
+    "color": "black",
+    "part": "socket",
+    "src": "/catalog-images/schneider/asfora/black-socket.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "EPH2800171"
+  },
+  {
+    "series": "Schneider|Asfora",
+    "color": "black",
+    "part": "switch",
+    "src": "/catalog-images/schneider/asfora/black-switch.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "EPH0100171"
+  },
+  {
+    "series": "Schneider|Asfora",
+    "color": "ivory",
+    "part": "frame",
+    "src": "/catalog-images/schneider/asfora/ivory-frame.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "EPH5800123"
+  },
+  {
+    "series": "Schneider|Asfora",
+    "color": "ivory",
+    "part": "set",
+    "src": "/catalog-images/schneider/asfora/ivory-set.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "EPH5800223"
+  },
+  {
+    "series": "Schneider|Asfora",
+    "color": "ivory",
+    "part": "socket",
+    "src": "/catalog-images/schneider/asfora/ivory-socket.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "EPH2800223"
+  },
+  {
+    "series": "Schneider|Asfora",
+    "color": "ivory",
+    "part": "switch",
+    "src": "/catalog-images/schneider/asfora/ivory-switch.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "EPH0100123"
+  },
+  {
+    "series": "Schneider|Asfora",
+    "color": "white",
+    "part": "frame",
+    "src": "/catalog-images/schneider/asfora/white-frame.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "EPH5800121"
+  },
+  {
+    "series": "Schneider|Asfora",
+    "color": "white",
+    "part": "set",
+    "src": "/catalog-images/schneider/asfora/white-set.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "EPH5800221"
+  },
+  {
+    "series": "Schneider|Asfora",
+    "color": "white",
+    "part": "socket",
+    "src": "/catalog-images/schneider/asfora/white-socket.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "EPH2800121"
+  },
+  {
+    "series": "Schneider|Asfora",
+    "color": "white",
+    "part": "switch",
+    "src": "/catalog-images/schneider/asfora/white-switch.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "EPH0100121"
+  },
+  {
+    "series": "enclosure",
+    "color": "ez9eua108",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/ez9eua108.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "EZ9EUA108"
+  },
+  {
+    "series": "enclosure",
+    "color": "ez9eua112",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/ez9eua112.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "EZ9EUA112"
+  },
+  {
+    "series": "enclosure",
+    "color": "ez9eua118",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/ez9eua118.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "EZ9EUA118"
+  },
+  {
+    "series": "enclosure",
+    "color": "ez9eua212",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/ez9eua212.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "EZ9EUA212"
+  },
+  {
+    "series": "enclosure",
+    "color": "ez9eua312",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/ez9eua312.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "EZ9EUA312"
+  },
+  {
+    "series": "enclosure",
+    "color": "ez9eub108",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/ez9eub108.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "EZ9EUB108"
+  },
+  {
+    "series": "enclosure",
+    "color": "ez9eub112",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/ez9eub112.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "EZ9EUB112"
+  },
+  {
+    "series": "enclosure",
+    "color": "ez9eub118",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/ez9eub118.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "EZ9EUB118"
+  },
+  {
+    "series": "enclosure",
+    "color": "ez9eub212",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/ez9eub212.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "EZ9EUB212"
+  },
+  {
+    "series": "enclosure",
+    "color": "ez9eub312",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/ez9eub312.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "EZ9EUB312"
+  },
+  {
+    "series": "enclosure",
+    "color": "ez9euc108",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/ez9euc108.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "EZ9EUC108"
+  },
+  {
+    "series": "enclosure",
+    "color": "ez9euc112",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/ez9euc112.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "EZ9EUC112"
+  },
+  {
+    "series": "enclosure",
+    "color": "ez9euc118",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/ez9euc118.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "EZ9EUC118"
+  },
+  {
+    "series": "enclosure",
+    "color": "ez9euc212",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/ez9euc212.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "EZ9EUC212"
+  },
+  {
+    "series": "enclosure",
+    "color": "ez9euc312",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/ez9euc312.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "EZ9EUC312"
+  },
+  {
+    "series": "enclosure",
+    "color": "ez9eud108",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/ez9eud108.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "EZ9EUD108"
+  },
+  {
+    "series": "enclosure",
+    "color": "ez9eud112",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/ez9eud112.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "EZ9EUD112"
+  },
+  {
+    "series": "enclosure",
+    "color": "ez9eud118",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/ez9eud118.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "EZ9EUD118"
+  },
+  {
+    "series": "enclosure",
+    "color": "ez9eud212",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/ez9eud212.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "EZ9EUD212"
+  },
+  {
+    "series": "enclosure",
+    "color": "ez9eud312",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/ez9eud312.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "EZ9EUD312"
+  },
+  {
+    "series": "enclosure",
+    "color": "lvsxn113",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/lvsxn113.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "LVSXN113"
+  },
+  {
+    "series": "enclosure",
+    "color": "lvsxn118",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/lvsxn118.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "LVSXN118"
+  },
+  {
+    "series": "enclosure",
+    "color": "lvsxn213",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/lvsxn213.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "LVSXN213"
+  },
+  {
+    "series": "enclosure",
+    "color": "lvsxn218",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/lvsxn218.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "LVSXN218"
+  },
+  {
+    "series": "enclosure",
+    "color": "lvsxn313",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/lvsxn313.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "LVSXN313"
+  },
+  {
+    "series": "enclosure",
+    "color": "lvsxn318",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/lvsxn318.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "LVSXN318"
+  },
+  {
+    "series": "enclosure",
+    "color": "lvsxn413",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/lvsxn413.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "LVSXN413"
+  },
+  {
+    "series": "enclosure",
+    "color": "lvsxn418",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/lvsxn418.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "LVSXN418"
+  },
+  {
+    "series": "enclosure",
+    "color": "lvsxp113",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/lvsxp113.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "LVSXP113"
+  },
+  {
+    "series": "enclosure",
+    "color": "lvsxp118",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/lvsxp118.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "LVSXP118"
+  },
+  {
+    "series": "enclosure",
+    "color": "lvsxp213",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/lvsxp213.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "LVSXP213"
+  },
+  {
+    "series": "enclosure",
+    "color": "lvsxp218",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/lvsxp218.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "LVSXP218"
+  },
+  {
+    "series": "enclosure",
+    "color": "lvsxq113",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/lvsxq113.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "LVSXQ113"
+  },
+  {
+    "series": "enclosure",
+    "color": "lvsxq118",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/lvsxq118.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "LVSXQ118"
+  },
+  {
+    "series": "enclosure",
+    "color": "lvsxq213",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/lvsxq213.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "LVSXQ213"
+  },
+  {
+    "series": "enclosure",
+    "color": "lvsxq218",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/lvsxq218.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "LVSXQ218"
+  },
+  {
+    "series": "enclosure",
+    "color": "lvsxq313",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/lvsxq313.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "LVSXQ313"
+  },
+  {
+    "series": "enclosure",
+    "color": "lvsxq318",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/lvsxq318.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "LVSXQ318"
+  },
+  {
+    "series": "enclosure",
+    "color": "lvsxq413",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/lvsxq413.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "LVSXQ413"
+  },
+  {
+    "series": "enclosure",
+    "color": "lvsxq418",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/lvsxq418.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "LVSXQ418"
+  },
+  {
+    "series": "enclosure",
+    "color": "lvsxq524",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/lvsxq524.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "LVSXQ524"
+  },
+  {
+    "series": "enclosure",
+    "color": "lvsxr113",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/lvsxr113.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "LVSXR113"
+  },
+  {
+    "series": "enclosure",
+    "color": "lvsxr118",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/lvsxr118.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "LVSXR118"
+  },
+  {
+    "series": "enclosure",
+    "color": "lvsxr213",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/lvsxr213.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "LVSXR213"
+  },
+  {
+    "series": "enclosure",
+    "color": "lvsxr218",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/lvsxr218.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "LVSXR218"
+  },
+  {
+    "series": "enclosure",
+    "color": "mip12104",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/mip12104.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "MIP12104"
+  },
+  {
+    "series": "enclosure",
+    "color": "mip12106",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/mip12106.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "MIP12106"
+  },
+  {
+    "series": "enclosure",
+    "color": "mip12106t",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/mip12106t.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "MIP12106T"
+  },
+  {
+    "series": "enclosure",
+    "color": "mip12108",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/mip12108.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "MIP12108"
+  },
+  {
+    "series": "enclosure",
+    "color": "mip12108t",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/mip12108t.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "MIP12108T"
+  },
+  {
+    "series": "enclosure",
+    "color": "mip12112",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/mip12112.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "MIP12112"
+  },
+  {
+    "series": "enclosure",
+    "color": "mip12112t",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/mip12112t.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "MIP12112T"
+  },
+  {
+    "series": "enclosure",
+    "color": "mip12118",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/mip12118.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "MIP12118"
+  },
+  {
+    "series": "enclosure",
+    "color": "mip12118t",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/mip12118t.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "MIP12118T"
+  },
+  {
+    "series": "enclosure",
+    "color": "mip12212",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/mip12212.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "MIP12212"
+  },
+  {
+    "series": "enclosure",
+    "color": "mip12212t",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/mip12212t.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "MIP12212T"
+  },
+  {
+    "series": "enclosure",
+    "color": "mip22104",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/mip22104.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "MIP22104"
+  },
+  {
+    "series": "enclosure",
+    "color": "mip22106",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/mip22106.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "MIP22106"
+  },
+  {
+    "series": "enclosure",
+    "color": "mip22108",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/mip22108.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "MIP22108"
+  },
+  {
+    "series": "enclosure",
+    "color": "mip22112",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/mip22112.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "MIP22112"
+  },
+  {
+    "series": "enclosure",
+    "color": "mip22112t",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/mip22112t.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "MIP22112T"
+  },
+  {
+    "series": "enclosure",
+    "color": "mip22118",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/mip22118.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "MIP22118"
+  },
+  {
+    "series": "enclosure",
+    "color": "mip22118t",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/mip22118t.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "MIP22118T"
+  },
+  {
+    "series": "enclosure",
+    "color": "mip22212",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/mip22212.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "MIP22212"
+  },
+  {
+    "series": "enclosure",
+    "color": "mip22212t",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/mip22212t.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "MIP22212T"
+  },
+  {
+    "series": "enclosure",
+    "color": "mip22312",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/mip22312.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "MIP22312"
+  },
+  {
+    "series": "enclosure",
+    "color": "pra20324",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/pra20324.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "PRA20324"
+  },
+  {
+    "series": "enclosure",
+    "color": "pra25324",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/pra25324.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "PRA25324"
+  },
+  {
+    "series": "enclosure",
+    "color": "pra30418",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/pra30418.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "PRA30418"
+  },
+  {
+    "series": "enclosure",
+    "color": "pra31313",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/pra31313.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "PRA31313"
+  },
+  {
+    "series": "enclosure",
+    "color": "pra31318",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/pra31318.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "PRA31318"
+  },
+  {
+    "series": "enclosure",
+    "color": "pra31418",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/pra31418.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "PRA31418"
+  },
+  {
+    "series": "enclosure",
+    "color": "schneider-13396",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/schneider-13396.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "SCHNEIDER:13396"
+  },
+  {
+    "series": "enclosure",
+    "color": "schneider-13431",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/schneider-13431.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "SCHNEIDER:13431"
+  },
+  {
+    "series": "enclosure",
+    "color": "schneider-13432",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/schneider-13432.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "SCHNEIDER:13432"
+  },
+  {
+    "series": "enclosure",
+    "color": "schneider-13433",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/schneider-13433.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "SCHNEIDER:13433"
+  },
+  {
+    "series": "enclosure",
+    "color": "schneider-13434",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/schneider-13434.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "SCHNEIDER:13434"
+  },
+  {
+    "series": "enclosure",
+    "color": "schneider-13435",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/schneider-13435.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "SCHNEIDER:13435"
+  },
+  {
+    "series": "enclosure",
+    "color": "schneider-13436",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/schneider-13436.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "SCHNEIDER:13436"
+  },
+  {
+    "series": "enclosure",
+    "color": "schneider-13437",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/schneider-13437.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "SCHNEIDER:13437"
+  },
+  {
+    "series": "enclosure",
+    "color": "schneider-13441",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/schneider-13441.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "SCHNEIDER:13441"
+  },
+  {
+    "series": "enclosure",
+    "color": "schneider-13442",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/schneider-13442.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "SCHNEIDER:13442"
+  },
+  {
+    "series": "enclosure",
+    "color": "schneider-13443",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/schneider-13443.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "SCHNEIDER:13443"
+  },
+  {
+    "series": "enclosure",
+    "color": "schneider-13444",
+    "part": "product",
+    "src": "/catalog-images/schneider/enclosures/schneider-13444.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "SCHNEIDER:13444"
+  },
+  {
+    "series": "Schneider|Nová Unica",
+    "color": "alu",
+    "part": "frame",
+    "src": "/catalog-images/schneider/nova-unica/alu-frame.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "NU200230"
+  },
+  {
+    "series": "Schneider|Nová Unica",
+    "color": "alu",
+    "part": "set",
+    "src": "/catalog-images/schneider/nova-unica/alu-set.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "NU200430"
+  },
+  {
+    "series": "Schneider|Nová Unica",
+    "color": "alu",
+    "part": "socket",
+    "src": "/catalog-images/schneider/nova-unica/alu-socket.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "NU303930E"
+  },
+  {
+    "series": "Schneider|Nová Unica",
+    "color": "alu",
+    "part": "switch",
+    "src": "/catalog-images/schneider/nova-unica/alu-switch.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "NU320130"
+  },
+  {
+    "series": "Schneider|Nová Unica",
+    "color": "black",
+    "part": "frame",
+    "src": "/catalog-images/schneider/nova-unica/black-frame.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "NU200154"
+  },
+  {
+    "series": "Schneider|Nová Unica",
+    "color": "black",
+    "part": "set",
+    "src": "/catalog-images/schneider/nova-unica/black-set.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "NU200454"
+  },
+  {
+    "series": "Schneider|Nová Unica",
+    "color": "black",
+    "part": "socket",
+    "src": "/catalog-images/schneider/nova-unica/black-socket.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "NU303954E"
+  },
+  {
+    "series": "Schneider|Nová Unica",
+    "color": "black",
+    "part": "switch",
+    "src": "/catalog-images/schneider/nova-unica/black-switch.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "NU320154"
+  },
+  {
+    "series": "Schneider|Nová Unica",
+    "color": "grey",
+    "part": "frame",
+    "src": "/catalog-images/schneider/nova-unica/grey-frame.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "NU230031"
+  },
+  {
+    "series": "Schneider|Nová Unica",
+    "color": "ivory",
+    "part": "frame",
+    "src": "/catalog-images/schneider/nova-unica/ivory-frame.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "NU200244"
+  },
+  {
+    "series": "Schneider|Nová Unica",
+    "color": "ivory",
+    "part": "set",
+    "src": "/catalog-images/schneider/nova-unica/ivory-set.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "NU200444"
+  },
+  {
+    "series": "Schneider|Nová Unica",
+    "color": "ivory",
+    "part": "socket",
+    "src": "/catalog-images/schneider/nova-unica/ivory-socket.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "NU303944E"
+  },
+  {
+    "series": "Schneider|Nová Unica",
+    "color": "ivory",
+    "part": "switch",
+    "src": "/catalog-images/schneider/nova-unica/ivory-switch.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "NU320144"
+  },
+  {
+    "series": "Schneider|Nová Unica",
+    "color": "white",
+    "part": "frame",
+    "src": "/catalog-images/schneider/nova-unica/white-frame.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "NU200218"
+  },
+  {
+    "series": "Schneider|Nová Unica",
+    "color": "white",
+    "part": "set",
+    "src": "/catalog-images/schneider/nova-unica/white-set.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "NU200418"
+  },
+  {
+    "series": "Schneider|Nová Unica",
+    "color": "white",
+    "part": "socket",
+    "src": "/catalog-images/schneider/nova-unica/white-socket.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "NU303918E"
+  },
+  {
+    "series": "Schneider|Nová Unica",
+    "color": "white",
+    "part": "switch",
+    "src": "/catalog-images/schneider/nova-unica/white-switch.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "NU310118"
+  },
+  {
+    "series": "Schneider|Sedna Design & Elements",
+    "color": "alu",
+    "part": "frame",
+    "src": "/catalog-images/schneider/sedna-design-elements/alu-frame.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "SDD313801"
+  },
+  {
+    "series": "Schneider|Sedna Design & Elements",
+    "color": "alu",
+    "part": "set",
+    "src": "/catalog-images/schneider/sedna-design-elements/alu-set.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "SDD313802"
+  },
+  {
+    "series": "Schneider|Sedna Design & Elements",
+    "color": "alu",
+    "part": "socket",
+    "src": "/catalog-images/schneider/sedna-design-elements/alu-socket.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "SDD113011"
+  },
+  {
+    "series": "Schneider|Sedna Design & Elements",
+    "color": "alu",
+    "part": "switch",
+    "src": "/catalog-images/schneider/sedna-design-elements/alu-switch.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "SDD113101"
+  },
+  {
+    "series": "Schneider|Sedna Design & Elements",
+    "color": "black",
+    "part": "frame",
+    "src": "/catalog-images/schneider/sedna-design-elements/black-frame.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "SDD314801"
+  },
+  {
+    "series": "Schneider|Sedna Design & Elements",
+    "color": "black",
+    "part": "set",
+    "src": "/catalog-images/schneider/sedna-design-elements/black-set.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "SDD314802"
+  },
+  {
+    "series": "Schneider|Sedna Design & Elements",
+    "color": "black",
+    "part": "socket",
+    "src": "/catalog-images/schneider/sedna-design-elements/black-socket.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "SDD114011"
+  },
+  {
+    "series": "Schneider|Sedna Design & Elements",
+    "color": "black",
+    "part": "switch",
+    "src": "/catalog-images/schneider/sedna-design-elements/black-switch.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "SDD114101"
+  },
+  {
+    "series": "Schneider|Sedna Design & Elements",
+    "color": "white",
+    "part": "frame",
+    "src": "/catalog-images/schneider/sedna-design-elements/white-frame.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "SDD311801"
+  },
+  {
+    "series": "Schneider|Sedna Design & Elements",
+    "color": "white",
+    "part": "set",
+    "src": "/catalog-images/schneider/sedna-design-elements/white-set.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "SDD311802"
+  },
+  {
+    "series": "Schneider|Sedna Design & Elements",
+    "color": "white",
+    "part": "socket",
+    "src": "/catalog-images/schneider/sedna-design-elements/white-socket.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "SDD111011"
+  },
+  {
+    "series": "Schneider|Sedna Design & Elements",
+    "color": "white",
+    "part": "switch",
+    "src": "/catalog-images/schneider/sedna-design-elements/white-switch.webp",
+    "source": "Schneider Electric – se.com (stránka výrobku, obrázek download.se.com)",
+    "license": "fotka výrobce Schneider Electric – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-11 (fáze 97)",
+    "photo": true,
+    "mpn": "SDD111101"
   }
 ];
