@@ -18,7 +18,9 @@ import { APP_HOME, isPlantRoute } from "@/lib/routes";
 // Fáze 54: právní stránky (zásady zpracování osobních údajů, obchodní podmínky)
 // Fáze 67: obnova a nastavení hesla (pozvánka zaměstnance) bez přihlášení
 // Fáze 87: video-návody `/navody` a jejich MP4 / náhledy v `public/tutorials` (odkaz pro kolegy elektrikáře)
-const PUBLIC_PATHS = new Set(["/", "/login", "/register-plant", "/panel-builder/auth", "/api/ares", "/ukazka-elaboratu", "/navody", "/ochrana-osobnich-udaju", "/obchodni-podminky", "/sitemap.xml", "/robots.txt", "/superadmin/login", "/api/consent", "/newsletter/potvrzeni", "/newsletter/odhlaseni", "/api/newsletter/unsubscribe", "/zapomenute-heslo", "/api/catalog-images/manifest"]);
+// Fáze 96: veřejná vstupní stránka a katalog AI Panel Builderu a SEO vstupní stránky – 200 bez přihlášení i pro roboty
+// vyhledávačů (přihlášení vyžaduje až uložení vlastního projektu, tisk s razítkem a další stránky Panel Builderu)
+const PUBLIC_PATHS = new Set(["/", "/login", "/register-plant", "/panel-builder", "/panel-builder/auth", "/panel-builder/catalog", "/api/ares", "/ukazka-elaboratu", "/navody", "/ai-panel-builder", "/2d-pudorys-elektroinstalace", "/vypocet-otepleni-rozvadece", "/kusova-zkouska-rozvadece", "/prumyslova-udrzba-a-revize", "/ochrana-osobnich-udaju", "/obchodni-podminky", "/sitemap.xml", "/robots.txt", "/superadmin/login", "/api/consent", "/newsletter/potvrzeni", "/newsletter/odhlaseni", "/api/newsletter/unsubscribe", "/zapomenute-heslo", "/api/catalog-images/manifest"]);
 // Fáze 92: nahrané produktové fotky řad a jejich manifest nejsou tajné (galerie řad všem uživatelům)
 const PUBLIC_PREFIXES = ["/opengraph-image", "/brands/", "/api/brand-logo/", "/nastavit-heslo/", "/tutorials/", "/api/catalog-images/file/"];
 const SUPERADMIN_PREFIX = "/superadmin";
@@ -44,6 +46,8 @@ export async function proxy(request: NextRequest) {
   if (PUBLIC_PATHS.has(pathname) || PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix))) return NextResponse.next();
   // Cron (avízo lhůt revizí) se ověřuje vlastním tajným tokenem v Route Handleru.
   if (pathname.startsWith("/api/cron/")) return NextResponse.next();
+  // Fáze 96: oznámení stránek vyhledávačům (IndexNow) po nasazení – tajný token / velín ověří Route Handler
+  if (pathname === "/api/seo/ping") return NextResponse.next();
   // Fáze 70: API synchronizace aplikací (Windows, iOS, Android) ověřuje token zařízení samo; soubory s tokenem
   // zařízení (`Authorization: Bearer`) vydá /api/files podle vlastníka firmy zařízení.
   if (pathname.startsWith("/api/sync/")) return NextResponse.next();

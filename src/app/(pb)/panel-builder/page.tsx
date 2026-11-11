@@ -5,19 +5,30 @@ import { Library } from "lucide-react";
 import { PageHeader } from "@/components/common/PageHeader";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { panelBuilderGuard } from "@/components/panel-builder/access";
+import { PanelBuilderPublicLanding } from "@/components/panel-builder/PanelBuilderPublicLanding";
 import { NewProjectDialog } from "@/components/panel-builder/NewProjectDialog";
 import { PanelTrainerJobs } from "@/components/panel-builder/PanelTrainerJobs";
 import { ProjectBoard, type BoardProject } from "@/components/panel-builder/ProjectBoard";
 import { isTrainerPreset, type TrainerPresetId } from "@/lib/panel-builder/panel-trainer-presets";
 import { TutorialVideoButton } from "@/components/tutorials/TutorialVideoButton";
 import { Button } from "@/components/ui/button";
-import { requirePanelCompany } from "@/server/panel-session";
+import { SITE_URL } from "@/lib/seo";
+import { getPanelCompany, requirePanelCompany } from "@/server/panel-session";
 import { getPanelProjects } from "@/server/queries/panel-builder";
 
-export const metadata: Metadata = { title: "AI Panel Builder" };
+// Fáze 96: veřejná vstupní stránka (bez přihlášené firmy) je indexovaná – titulek, popis a kanonická URL
+const DESCRIPTION = "AI Panel Builder: návrh rozváděče online z fotky i od nuly, Elektro-linter dle ČSN 33 2130 ed. 4, výpočet oteplení IEC TR 60890 a výrobní dokumentace dle ČSN EN IEC 61439 s prohlášením o shodě a štítkem CE.";
+export const metadata: Metadata = {
+  title: { absolute: "AI Panel Builder – návrh rozváděče online z fotky i od nuly | ELDOCK" },
+  description: DESCRIPTION,
+  alternates: { canonical: `${SITE_URL}/panel-builder` },
+  openGraph: { type: "website", locale: "cs_CZ", siteName: "ELDOCK", url: `${SITE_URL}/panel-builder`, title: "AI Panel Builder – návrh rozváděče online", description: DESCRIPTION },
+};
 
 // AI Panel Builder: projekty rozváděčů (pasportizace z fotky → strom → oteplení → dokumentace).
 export default async function PanelBuilderPage() {
+  // Fáze 96: nepřihlášený návštěvník (i robot vyhledávače) vidí veřejnou vstupní stránku místo přesměrování
+  if (!(await getPanelCompany())) return <PanelBuilderPublicLanding />;
   const guard = await panelBuilderGuard();
   if (guard) return guard;
   const [projects, company] = await Promise.all([getPanelProjects(), requirePanelCompany()]);

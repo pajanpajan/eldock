@@ -89,6 +89,19 @@ export function footerSections(options: { showcase: boolean }): { title: string;
         { href: "/register-plant", label: "Registrace výrobního závodu" },
       ],
     },
+    // Fáze 96: nástroje a návody – přímé odkazy na SEO vstupní stránky, veřejný katalog a video-návody
+    {
+      title: "Nástroje a návody",
+      links: [
+        { href: "/ai-panel-builder", label: "Návrh rozváděče online" },
+        { href: "/2d-pudorys-elektroinstalace", label: "Elektroinstalace v půdorysu" },
+        { href: "/vypocet-otepleni-rozvadece", label: "Výpočet oteplení rozváděče" },
+        { href: "/kusova-zkouska-rozvadece", label: "Kusová zkouška a prohlášení o shodě" },
+        { href: "/prumyslova-udrzba-a-revize", label: "Průmyslová údržba a revize" },
+        { href: "/panel-builder/catalog", label: "Katalog přístrojů" },
+        { href: "/navody", label: "Video-návody" },
+      ],
+    },
     {
       title: "Eldock",
       links: [

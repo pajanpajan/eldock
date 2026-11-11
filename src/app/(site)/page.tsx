@@ -8,7 +8,7 @@ import { SampleElaborateDialog } from "@/components/landing/SampleElaborateDialo
 import { SiteFooter, SiteHeader } from "@/components/landing/SiteChrome";
 import { LazyPromoVideo } from "@/components/lazy";
 import { Button } from "@/components/ui/button";
-import { OG_IMAGE, SEO_DESCRIPTION, SEO_KEYWORDS, SEO_TITLE, SITE_URL, jsonLdScript, landingJsonLd } from "@/lib/seo";
+import { OG_IMAGE, SEO_DESCRIPTION, SEO_KEYWORDS, SEO_TITLE, SITE_URL } from "@/lib/seo";
 import { SEGMENTS } from "@/lib/site-map";
 import { APP_HOME } from "@/lib/routes";
 import { hasShowcaseProject } from "@/server/queries/panel-builder";
@@ -39,7 +39,6 @@ export default async function LandingPage() {
   return (
     <div className="landing bg-blueprint flex flex-1 flex-col">
       {/* Strukturovaná data pro vyhledávače (SoftwareApplication + Organization) */}
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(landingJsonLd()) }} />
       <SiteHeader clientZone={clientZone} showcase={showcase} current="/" />
 
       <main className="flex flex-1 flex-col">

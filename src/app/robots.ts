@@ -1,12 +1,12 @@
 import type { MetadataRoute } from "next";
 
-import { PRIVATE_PATHS, PUBLIC_PAGES, SITE_URL } from "@/lib/seo";
+import { PRIVATE_PATHS, SEARCH_BOTS, SITE_URL } from "@/lib/seo";
 
-// robots.txt (fáze 48): veřejné vstupní stránky ano, interní aplikační trasy ne.
-// Konkrétnější pravidlo vyhrává, takže /panel-builder/auth zůstane povolené i při zákazu /panel-builder/.
+// robots.txt (fáze 48, fáze 96): indexace výslovně povolená klíčovým robotům (Google, Seznam, Bing a AI vyhledávače),
+// zakázané jen interní API a velín.
 export default function robots(): MetadataRoute.Robots {
   return {
-    rules: { userAgent: "*", allow: PUBLIC_PAGES.map((page) => page.path), disallow: PRIVATE_PATHS },
+    rules: SEARCH_BOTS.map((userAgent) => ({ userAgent, allow: "/", disallow: [...PRIVATE_PATHS] })),
     sitemap: `${SITE_URL}/sitemap.xml`,
     host: SITE_URL,
   };

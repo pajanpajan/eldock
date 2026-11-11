@@ -44,7 +44,8 @@
     "catalog:renders": "tsx scripts/catalog-renders.ts",
     "catalog:photos": "tsx scripts/harvest-switch-photos.mjs",
     "catalog:etim": "tsx scripts/import-abb-etim9.mjs",
-    "bim:sample": "tsx scripts/bim-sample.ts"
+    "bim:sample": "tsx scripts/bim-sample.ts",
+    "seo:ping": "node scripts/seo-indexnow-ping.mjs"
   },
   "dependencies": {
     "@prisma/adapter-better-sqlite3": "^7.10.1",

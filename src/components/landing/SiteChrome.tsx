@@ -53,7 +53,7 @@ export function SiteHeader({ clientZone, showcase, current }: { clientZone: Site
 export function SiteFooter({ clientZone, showcase }: { clientZone: SiteLink; showcase: boolean }) {
   return (
     <footer className="no-print border-t border-border bg-background/80" data-testid="site-footer">
-      <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-10 text-sm text-muted-foreground sm:px-6 md:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1fr]">
+      <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-10 text-sm text-muted-foreground sm:px-6 md:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1fr_1fr]">
         <div className="flex flex-col gap-3">
           <Logo withTagline />
           <p className="max-w-sm">{BRAND.description}.</p>

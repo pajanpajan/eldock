@@ -4,7 +4,7 @@ import { ArrowLeft, ExternalLink } from "lucide-react";
 
 import { PageHeader } from "@/components/common/PageHeader";
 import { PageTransition } from "@/components/layout/PageTransition";
-import { panelBuilderGuard } from "@/components/panel-builder/access";
+import { ModuleDisabled } from "@/components/common/ModuleDisabled";
 import { CatalogSearch } from "@/components/panel-builder/CatalogSearch";
 import { DatasheetImport } from "@/components/panel-builder/DatasheetImport";
 import { ManufacturerLogo } from "@/components/panel-builder/ManufacturerLogo";
@@ -19,8 +19,18 @@ import { WIRING_CATEGORIES, frameLabel } from "@/lib/panel-builder/wiring-device
 import { cn } from "@/lib/utils";
 import { DatasheetDialog } from "@/components/panel-builder/DatasheetDialog";
 import { getBrandGroups, getCatalogBrands, getGroupItems, searchWholeCatalog, type CatalogItemFilter } from "@/server/queries/panel-builder";
+import { SITE_URL } from "@/lib/seo";
+import { getFeatures } from "@/server/modules";
+import { getPanelCompany } from "@/server/panel-session";
 
-export const metadata: Metadata = { title: "Katalog prvků – AI Panel Builder" };
+// Fáze 96: veřejný katalog přístrojů (bez přihlášení jen ke čtení) – indexovaný vyhledávači
+const DESCRIPTION = "Katalog přístrojů ABB, Eaton, OEZ, Schneider Electric, Legrand, Hager, Loxone a TapHome pro návrh rozváděčů: jističe, chrániče, svodiče přepětí, skříně a domovní přístroje s objednacím číslem, ztrátovým výkonem a datasheetem.";
+export const metadata: Metadata = {
+  title: { absolute: "Katalog přístrojů ABB, Eaton, OEZ, Schneider, Legrand, Hager – AI Panel Builder | ELDOCK" },
+  description: DESCRIPTION,
+  alternates: { canonical: `${SITE_URL}/panel-builder/catalog` },
+  openGraph: { type: "website", locale: "cs_CZ", siteName: "ELDOCK", url: `${SITE_URL}/panel-builder/catalog`, title: "Katalog přístrojů pro návrh rozváděčů", description: DESCRIPTION },
+};
 
 const num = (value: number) => value.toLocaleString("cs-CZ", { maximumFractionDigits: 2 });
 const one = (value: string | string[] | undefined) => (typeof value === "string" && value ? value : undefined);
@@ -44,8 +54,10 @@ function href(params: Record<string, string | undefined>, patch: Record<string, 
 
 // Katalog prvků (fáze 47): rozcestník výrobců → kategorie výrobce → prvky s dlaždicovými filtry; globální hledání.
 export default async function CatalogPage({ searchParams }: PageProps<"/panel-builder/catalog">) {
-  const guard = await panelBuilderGuard();
-  if (guard) return guard;
+  // Fáze 96: katalog je veřejný – bez přihlášené firmy jen ke čtení (bez importu datasheetů a náhledů přes účet)
+  const [company, features] = await Promise.all([getPanelCompany(), getFeatures()]);
+  if (!features.on("enterprise.ai_panel_builder")) return <ModuleDisabled feature="enterprise.ai_panel_builder" canManage={false} />;
+  const signedIn = Boolean(company);
   const params = await searchParams;
   const q = one(params.q) ?? "";
   const brand = one(params.brand);
@@ -75,7 +87,13 @@ export default async function CatalogPage({ searchParams }: PageProps<"/panel-bu
           <Link href="/panel-builder/catalog/znacky" className="rounded-md border border-border px-3 py-2 text-sm hover:bg-muted" data-testid="symbol-library-link">
             Knihovna značek
           </Link>
-          <DatasheetImport />
+          {signedIn ? (
+            <DatasheetImport />
+          ) : (
+            <Link href="/panel-builder/auth?next=%2Fpanel-builder%2Fcatalog" className="rounded-md border border-primary/50 bg-primary/10 px-3 py-2 text-sm hover:bg-primary/20" data-testid="catalog-public-login">
+              Přihlásit firmu – vlastní projekty a import datasheetů
+            </Link>
+          )}
         </div>
       }
     />
@@ -176,7 +194,7 @@ export default async function CatalogPage({ searchParams }: PageProps<"/panel-bu
                         ) : null}
                       </TableCell>
                       <TableCell className="text-xs">
-                        <DatasheetDialog componentId={row.id} size="xs" label={row.datasheetUrl ? "Datasheet" : "Náhled"} />
+                        {signedIn ? <DatasheetDialog componentId={row.id} size="xs" label={row.datasheetUrl ? "Datasheet" : "Náhled"} /> : <Datasheet url={row.datasheetUrl} />}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -373,7 +391,7 @@ export default async function CatalogPage({ searchParams }: PageProps<"/panel-bu
                       <TableCell className="text-xs">{CATEGORY_LABELS[row.category]}</TableCell>
                       <TableCell className="text-right font-mono">{formatWatts(row.powerLossWatts)}</TableCell>
                       <TableCell className="text-xs">
-                        <DatasheetDialog componentId={row.id} size="xs" label={row.datasheetUrl ? "Datasheet" : "Náhled"} />
+                        {signedIn ? <DatasheetDialog componentId={row.id} size="xs" label={row.datasheetUrl ? "Datasheet" : "Náhled"} /> : <Datasheet url={row.datasheetUrl} />}
                       </TableCell>
                     </TableRow>
                   ))}

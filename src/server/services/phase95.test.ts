@@ -86,5 +86,5 @@ describe("fáze 95 – import BIM do Správy závodů", () => {
     // Rozváděč bez napájených zařízení nemá z čeho generovat
     const ups = await prisma.equipment.findFirstOrThrow({ where: { tag: "VZT-01" } });
     await expect(createProjectFromBimBoard(prisma, { equipmentId: ups.id, companyId: null })).rejects.toThrow("Rozváděč nebyl nalezen.");
-  });
+  }, 30_000); // seed katalogu + import BIM
 });

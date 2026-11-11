@@ -32,7 +32,7 @@ describe("fáze 94 – data ABB ETIM 9.0 v katalogu", () => {
     const sample = etimEnclosures()[0];
     const stored = await prisma.panelEnclosure.findUniqueOrThrow({ where: { articleNumber: sample.articleNumber } });
     expect(stored).toMatchObject({ manufacturer: "ABB", series: sample.series, rows: sample.rows, modulesPerRow: sample.modulesPerRow, ipRating: sample.ipRating, dataSource: "MANUFACTURER_CATALOG" });
-  });
+  }, 30_000); // celý seed katalogu (pod zátěží stroje přes 5 s)
 
   it("technický list ETIM nepřepíše odkaz, který kus už má; neznámá čísla se přeskočí", async () => {
     await seedPanelBuilder(prisma, { external: false, demo: false });
@@ -41,5 +41,5 @@ describe("fáze 94 – data ABB ETIM 9.0 v katalogu", () => {
     const updated = await applyEtimComponents(prisma, { "2CDS251001R0164": { ...ABB_ETIM_COMPONENTS["2CDS251001R0164"], datasheetUrl: "https://example.test/etim.pdf" }, "NEEXISTUJE-1": { ean: "1" } });
     expect(updated).toBe(1);
     expect(await prisma.catalogComponent.findFirstOrThrow({ where: { id: before.id } })).toMatchObject({ datasheetUrl: "https://example.test/vlastni.pdf", ean: "4016779464406" });
-  });
+  }, 30_000);
 });

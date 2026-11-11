@@ -30,12 +30,20 @@ export const SEO_KEYWORDS = [
 /** Veřejné vstupní stránky do sitemap.xml (cesta, priorita, četnost změn). */
 export const PUBLIC_PAGES = [
   { path: "/", priority: 1, changeFrequency: "weekly" },
+  // Fáze 96: veřejná vstupní stránka a katalog AI Panel Builderu, 5 SEO vstupních stránek, ukázka a návody
+  { path: "/panel-builder", priority: 0.95, changeFrequency: "weekly" },
+  { path: "/ai-panel-builder", priority: 0.95, changeFrequency: "monthly" },
+  { path: "/2d-pudorys-elektroinstalace", priority: 0.95, changeFrequency: "monthly" },
+  { path: "/vypocet-otepleni-rozvadece", priority: 0.95, changeFrequency: "monthly" },
+  { path: "/kusova-zkouska-rozvadece", priority: 0.95, changeFrequency: "monthly" },
+  { path: "/prumyslova-udrzba-a-revize", priority: 0.95, changeFrequency: "monthly" },
+  { path: "/ukazka-elaboratu", priority: 0.95, changeFrequency: "monthly" },
+  { path: "/panel-builder/catalog", priority: 0.95, changeFrequency: "weekly" },
+  // Fáze 87: video-návody s českým komentářem (odkaz pro testery a kolegy elektrikáře)
+  { path: "/navody", priority: 0.95, changeFrequency: "monthly" },
   // Fáze 58: dvě části webu – domovní elektroinstalace a průmysl
   { path: "/domovni-elektroinstalace", priority: 0.9, changeFrequency: "monthly" },
   { path: "/prumysl", priority: 0.9, changeFrequency: "monthly" },
-  { path: "/ukazka-elaboratu", priority: 0.8, changeFrequency: "monthly" },
-  // Fáze 87: video-návody s českým komentářem (odkaz pro testery a kolegy elektrikáře)
-  { path: "/navody", priority: 0.8, changeFrequency: "monthly" },
   { path: "/panel-builder/auth", priority: 0.8, changeFrequency: "monthly" },
   { path: "/register-plant", priority: 0.6, changeFrequency: "monthly" },
   // Fáze 54: právní stránky
@@ -43,13 +51,22 @@ export const PUBLIC_PAGES = [
   { path: "/ochrana-osobnich-udaju", priority: 0.3, changeFrequency: "yearly" },
 ] as const;
 
-/** Interní aplikační trasy – vyhledávače je neindexují (za přihlášením stejně nejsou vidět). */
-export const PRIVATE_PATHS = ["/plant/", "/equipment/", "/cae/", "/inspections/", "/admin/", "/api/", "/studio", "/app$", "/app/", "/panel-builder/", "/login", "/superadmin"];
+/**
+ * Fáze 96: robotům zakázané jen interní API a velín – aplikační stránky za přihlášením vrátí přesměrování na
+ * přihlášení samy, veřejný katalog a vstupní stránka AI Panel Builderu se indexují.
+ */
+export const PRIVATE_PATHS = ["/api/", "/superadmin"];
+
+/** Fáze 96: roboti vyhledávačů (vč. AI vyhledávačů) s výslovným povolením indexace v robots.txt. */
+export const SEARCH_BOTS = ["*", "Googlebot", "SeznamBot", "bingbot", "OAI-SearchBot", "GPTBot", "PerplexityBot", "ClaudeBot"] as const;
 
 export const absoluteUrl = (pathname: string) => (pathname === "/" ? SITE_URL : `${SITE_URL}${pathname}`);
 
-/** JSON-LD pro úvodní stránku: aplikace (SoftwareApplication) a provozovatel (Organization). */
-export function landingJsonLd() {
+/**
+ * JSON-LD celého webu (fáze 96 – v hlavním layoutu): provozovatel (Organization), web (WebSite) a aplikace
+ * (SoftwareApplication: BusinessApplication / CADSoftware, Web, cs-CZ, vyzkoušení zdarma).
+ */
+export function siteJsonLd() {
   const organization = {
     "@type": "Organization",
     "@id": `${SITE_URL}/#organization`,
@@ -60,15 +77,25 @@ export function landingJsonLd() {
     email: COMPANY_INFO.email,
     address: { "@type": "PostalAddress", addressLocality: "Jablonec nad Nisou", addressCountry: "CZ" },
   };
+  const website = {
+    "@type": "WebSite",
+    "@id": `${SITE_URL}/#website`,
+    name: BRAND.mark,
+    url: SITE_URL,
+    inLanguage: "cs-CZ",
+    description: SEO_DESCRIPTION,
+    publisher: { "@id": `${SITE_URL}/#organization` },
+  };
   const application = {
     "@type": "SoftwareApplication",
     "@id": `${SITE_URL}/#software`,
-    name: "ELDOCK AI Panel Builder",
+    name: BRAND.mark,
+    alternateName: "ELDOCK AI Panel Builder",
     applicationCategory: "BusinessApplication",
-    applicationSubCategory: "Návrh a dokumentace rozváděčů nízkého napětí",
-    operatingSystem: "Web, PWA (Windows, macOS, Android, iOS)",
-    inLanguage: "cs",
-    url: `${SITE_URL}/panel-builder/auth`,
+    applicationSubCategory: "CADSoftware",
+    operatingSystem: "Web",
+    inLanguage: "cs-CZ",
+    url: `${SITE_URL}/panel-builder`,
     description: SEO_DESCRIPTION,
     keywords: SEO_KEYWORDS.join(", "),
     featureList: [
@@ -78,10 +105,21 @@ export function landingJsonLd() {
       "Výrobní dokumentace: 6 listů A4, 1P schéma, kusovník, štítek rozváděče CE a EU prohlášení o shodě",
       "Správa elektrorevizí a lhůtník dle ČSN 33 1500",
     ],
-    offers: { "@type": "Offer", price: "0", priceCurrency: "CZK", description: "Testovací kredity po registraci firmy" },
+    offers: { "@type": "Offer", price: "0", priceCurrency: "CZK", description: "Vyzkoušení zdarma – testovací kredity po registraci firmy" },
     publisher: { "@id": `${SITE_URL}/#organization` },
   };
-  return { "@context": "https://schema.org", "@graph": [organization, application] };
+  return { "@context": "https://schema.org", "@graph": [organization, website, application] };
+}
+
+/** Fáze 96: časté dotazy vstupní stránky jako FAQPage (schema.org). */
+export function faqJsonLd(faq: readonly { question: string; answer: string }[], url: string) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "@id": `${url}#faq`,
+    inLanguage: "cs-CZ",
+    mainEntity: faq.map((item) => ({ "@type": "Question", name: item.question, acceptedAnswer: { "@type": "Answer", text: item.answer } })),
+  };
 }
 
 /** Bezpečné vložení JSON-LD do <script> (žádné ukončení tagu z dat). */

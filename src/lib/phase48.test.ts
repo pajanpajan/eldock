@@ -7,7 +7,7 @@ import { buildSwitchboardFromCircuits, generateCircuitsFromFloorplan } from "@/e
 import { standardEnclosureMatrix } from "@/lib/panel-builder/enclosures";
 import { filterProjects, isDeletableUpload, projectUploads, refundsCredit } from "@/lib/panel-builder/project-admin";
 import { stepProgress } from "@/lib/panel-builder/project";
-import { PRIVATE_PATHS, jsonLdScript, landingJsonLd } from "@/lib/seo";
+import { PRIVATE_PATHS, jsonLdScript, siteJsonLd } from "@/lib/seo";
 
 describe("fáze 48 – přehled projektů Panel Builderu", () => {
   const projects = [
@@ -64,23 +64,30 @@ describe("soupis místností → most půdorys → rozváděč", () => {
 });
 
 describe("technické SEO", () => {
-  it("robots.txt: veřejné stránky povolené, interní trasy zakázané, odkaz na sitemap", () => {
-    const rules = robots().rules as { allow: string[]; disallow: string[] };
-    expect(rules.allow).toEqual(expect.arrayContaining(["/", "/panel-builder/auth", "/register-plant", "/ukazka-elaboratu"]));
-    expect(rules.disallow).toEqual(expect.arrayContaining(["/plant/", "/equipment/", "/cae/", "/inspections/", "/admin/", "/api/"]));
+  it("robots.txt: indexace povolená, zakázané jen API a velín (fáze 96), odkaz na sitemap", () => {
+    const rules = robots().rules as { userAgent: string; allow: string; disallow: string[] }[];
+    expect(rules.find((rule) => rule.userAgent === "*")).toEqual({ userAgent: "*", allow: "/", disallow: ["/api/", "/superadmin"] });
     expect(PRIVATE_PATHS.some((path) => "/apple-icon".startsWith(path))).toBe(false);
     expect(robots().sitemap).toBe("https://eldock.cz/sitemap.xml");
   });
 
   it("sitemap.xml jen s veřejnými absolutními URL", () => {
     const urls = sitemap().map((entry) => entry.url);
-    // Fáze 54: + právní stránky; fáze 58: + části Domovní elektroinstalace a Průmysl; fáze 87: + video-návody
+    // Fáze 54: + právní stránky; fáze 58: + části Domovní elektroinstalace a Průmysl; fáze 87: + video-návody;
+    // fáze 96: + veřejný AI Panel Builder, katalog a 5 SEO vstupních stránek
     expect(urls).toEqual([
       "https://eldock.cz",
+      "https://eldock.cz/panel-builder",
+      "https://eldock.cz/ai-panel-builder",
+      "https://eldock.cz/2d-pudorys-elektroinstalace",
+      "https://eldock.cz/vypocet-otepleni-rozvadece",
+      "https://eldock.cz/kusova-zkouska-rozvadece",
+      "https://eldock.cz/prumyslova-udrzba-a-revize",
+      "https://eldock.cz/ukazka-elaboratu",
+      "https://eldock.cz/panel-builder/catalog",
+      "https://eldock.cz/navody",
       "https://eldock.cz/domovni-elektroinstalace",
       "https://eldock.cz/prumysl",
-      "https://eldock.cz/ukazka-elaboratu",
-      "https://eldock.cz/navody",
       "https://eldock.cz/panel-builder/auth",
       "https://eldock.cz/register-plant",
       "https://eldock.cz/obchodni-podminky",
@@ -88,9 +95,9 @@ describe("technické SEO", () => {
     ]);
   });
 
-  it("JSON-LD SoftwareApplication + Organization s klíčovými slovy, bezpečné do <script>", () => {
-    const ld = landingJsonLd();
-    expect(ld["@graph"].map((node) => node["@type"])).toEqual(["Organization", "SoftwareApplication"]);
+  it("JSON-LD Organization + WebSite + SoftwareApplication s klíčovými slovy, bezpečné do <script>", () => {
+    const ld = siteJsonLd();
+    expect(ld["@graph"].map((node) => node["@type"])).toEqual(["Organization", "WebSite", "SoftwareApplication"]);
     const text = JSON.stringify(ld);
     for (const keyword of ["návrh rozváděčů", "ČSN EN IEC 61439", "IEC 60890", "štítek rozváděče CE", "pasportizace rozváděče z fotky", "ČSN 33 1500"]) expect(text).toContain(keyword);
     expect(jsonLdScript({ text: "</script><script>alert(1)" })).not.toContain("</script>");

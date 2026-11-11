@@ -5,7 +5,7 @@ import { ConsentManager } from "@/components/consent/ConsentManager";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { BRAND } from "@/lib/brand";
-import { SEO_DESCRIPTION, SEO_KEYWORDS, SEO_TITLE, SITE_URL } from "@/lib/seo";
+import { SEO_DESCRIPTION, SEO_KEYWORDS, SEO_TITLE, SITE_URL, jsonLdScript, siteJsonLd } from "@/lib/seo";
 
 import "./globals.css";
 
@@ -35,6 +35,8 @@ export const metadata: Metadata = {
   twitter: { card: "summary_large_image", title: SEO_TITLE, description: SEO_DESCRIPTION },
   appleWebApp: { capable: true, title: BRAND.name, statusBarStyle: "black-translucent" },
   formatDetection: { telephone: false },
+  // Fáze 96: ověření vlastnictví webu v Google Search Console a Seznam Webmaster (hodnoty z prostředí serveru)
+  verification: { google: process.env.GOOGLE_SITE_VERIFICATION, other: process.env.SEZNAM_WMT_VERIFICATION ? { "seznam-wmt": process.env.SEZNAM_WMT_VERIFICATION } : {} },
 };
 
 export const viewport: Viewport = {
@@ -52,6 +54,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} dark h-full antialiased`}
     >
       <body className="bg-blueprint flex min-h-full flex-col">
+        {/* Fáze 96: strukturovaná data webu – Organization, WebSite a SoftwareApplication (schema.org) */}
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(siteJsonLd()) }} />
         <TooltipProvider delayDuration={200}>{children}</TooltipProvider>
         <Toaster position="top-center" />
         {/* Fáze 56: souhlas s cookies – volitelné služby podle konfigurace serveru (ELDOCK_GA4_ID přes /api/consent) */}
