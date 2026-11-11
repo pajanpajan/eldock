@@ -1,7 +1,8 @@
 "use client";
 
-import { useId, useState, type ReactNode } from "react";
-import { ExternalLink, Palette } from "lucide-react";
+import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
+import { Camera, ExternalLink, Palette } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -9,13 +10,14 @@ import type { SeriesMaterial, SeriesShape } from "@/lib/panel-builder/abb-catalo
 import { lookOf, mockStyle, type LookColor } from "@/lib/panel-builder/series-look";
 import { renderDeviceSvg, type RenderGang } from "@/lib/panel-builder/series-render";
 import { seriesLink } from "@/lib/panel-builder/series-links";
-import { seriesPhoto, type SeriesPhotoPart } from "@/lib/panel-builder/series-photos";
+import { seriesPhoto, withUploadedPhotos, type SeriesPhoto, type SeriesPhotoPart } from "@/lib/panel-builder/series-photos";
 import { DESIGN_BRANDS, designSeriesOf, hasFrameChoice, isMonoblockSeries, resolveFrameColor, seriesColors, seriesFrameColors, type DesignSeries } from "@/lib/panel-builder/wiring-designs";
 
 export { lookOf, mockStyle };
 import { cn } from "@/lib/utils";
 
 import { ManufacturerLogo } from "../ManufacturerLogo";
+import { SeriesPreviewIllustration, sameSlot, uploadSeriesPhoto, useCatalogPhotos, type PhotoSlot } from "./SeriesPreviewIllustration";
 
 /**
  * Fáze 61: věrnější náhled designových řad – rámeček v tvaru řady (tenký, zaoblený, vrstvený, kovový, dřevěný,
@@ -54,31 +56,11 @@ export function combineLook(insert: LookColor | null | undefined, frame?: LookCo
 }
 
 /**
- * Fáze 74: originální fotka dílu (je-li schválená v `series-photos.ts`) se zdrojem, jinak vektorový náhled. Fáze 80:
- * primárně produktový náhled z `public/catalog-images/` (render řady ABB); u rámečku v jiné barvě než klapka kreslený
- * náhled (rendery jsou jen pro barvu řady).
- */
-function PhotoOrMockup({ series, color, part, caption, mockup, exact = true }: { series: string; color: string; part: SeriesPhotoPart; caption: string; mockup: ReactNode; exact?: boolean }) {
-  const photo = exact ? seriesPhoto(series, color, part) : null;
-  return (
-    <figure className="flex flex-col items-center gap-1 text-[11px] text-muted-foreground" data-photo={photo ? "true" : "false"}>
-      {photo ? (
-        // eslint-disable-next-line @next/next/no-img-element -- náhledy z public/catalog-images a public/series (statické soubory)
-        <img src={photo.src} alt={`${caption} – náhled řady`} className="h-28 w-auto max-w-full rounded-lg object-contain shadow-sm" data-testid="gallery-photo" />
-      ) : (
-        mockup
-      )}
-      {caption}
-    </figure>
-  );
-}
-
-/**
  * Fáze 80: malý náhled řady v barvě (seznam řad, vzorky barev, lišta řad) – render z `public/catalog-images/`, jinak
  * kreslený náhled. Obrázek je dekorativní (název má tlačítko), okraj studiového pozadí se ořízne.
  */
-export function SeriesThumb({ seriesKey, colorId, fallback, className }: { seriesKey: string; colorId: string | null | undefined; fallback: ReactNode; className?: string }) {
-  const photo = colorId ? seriesPhoto(seriesKey, colorId, "switch") : null;
+export function SeriesThumb({ seriesKey, colorId, fallback, className, photos }: { seriesKey: string; colorId: string | null | undefined; fallback: ReactNode; className?: string; /** Fáze 92: i nahrané fotky. */ photos?: readonly SeriesPhoto[] }) {
+  const photo = colorId ? seriesPhoto(seriesKey, colorId, "switch", photos) : null;
   if (!photo || (photo.color && photo.color !== colorId)) return <>{fallback}</>;
   return (
     <span className={cn("block shrink-0 overflow-hidden", className)} data-testid="series-thumb-photo" data-src={photo.src}>
@@ -92,6 +74,13 @@ export function SeriesThumb({ seriesKey, colorId, fallback, className }: { serie
 export function SeriesGallery({ seriesKey, color, frameColor = null, available, onChoose }: { seriesKey: string | null; color: string; frameColor?: string | null; available: Map<string, number>; onChoose: (patch: { series: string; color: string; frameColor: string | null }) => void }) {
   const [open, setOpen] = useState(false);
   const [pick, setPick] = useState<{ series: string; color: string; frameColor: string | null }>({ series: seriesKey ?? "ABB|Zoni", color, frameColor });
+  // Fáze 92: reálné fotky – nahrané ve velínu (úložiště) mají přednost před staženými a před rendery
+  const catalog = useCatalogPhotos(open);
+  const photos = useMemo(() => withUploadedPhotos(catalog.photos), [catalog.photos]);
+  const [uploadMode, setUploadMode] = useState(false);
+  const [slot, setSlot] = useState<PhotoSlot | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [photoSource, setPhotoSource] = useState("");
   const current = designSeriesOf(pick.series);
   const brand = current?.brand ?? DESIGN_BRANDS[0];
   const series: DesignSeries = current?.series ?? brand.series[0];
@@ -113,6 +102,38 @@ export function SeriesGallery({ seriesKey, color, frameColor = null, available, 
   const details = chosen;
   const seriesKeyOf = `${brand.manufacturer}|${series.name}`;
   const link = seriesLink(seriesKeyOf);
+  const colorId = chosen?.id ?? pick.color;
+  const sourceText = photoSource.trim() || `${brand.label} – web / katalog výrobce`;
+
+  /** Fáze 92: fotka do slotu (velín) – hned v galerii a pro všechny uživatele. */
+  async function sendPhoto(target: PhotoSlot, file: Blob) {
+    setSlot(target);
+    setBusy(true);
+    const result = await uploadSeriesPhoto(file, { series: seriesKeyOf, slot: target, source: sourceText });
+    setBusy(false);
+    if (typeof result === "string") return void toast.error(result);
+    catalog.add(result);
+    toast.success(`📷 Fotka uložena (${target.part === "switch" ? "spínač" : target.part === "socket" ? "zásuvka" : "víceramček"}${target.color ? ` · ${colors.find((option) => option.id === target.color)?.label ?? target.color}` : ""}) – vidí ji všichni uživatelé.`);
+  }
+
+  // Ctrl+V v režimu nahrávání: první obrázek ze schránky do vybraného slotu
+  useEffect(() => {
+    if (!open || !uploadMode) return;
+    const onPaste = (event: ClipboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
+      const file = [...(event.clipboardData?.items ?? [])].find((item) => item.kind === "file" && item.type.startsWith("image/"))?.getAsFile();
+      if (!file) return void toast.error("Ve schránce není obrázek – zkopírujte fotku (pravé tlačítko → Kopírovat obrázek) a vložte znovu.");
+      event.preventDefault();
+      if (!slot) return void toast.error("Nejdřív klikněte na slot (Spínač 1R, Zásuvka 1R, Vícerámeček nebo dlaždici barvy).");
+      void sendPhoto(slot, file);
+    };
+    document.addEventListener("paste", onPaste);
+    return () => document.removeEventListener("paste", onPaste);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sendPhoto čte aktuální řadu a slot z vykreslení
+  }, [open, uploadMode, slot, seriesKeyOf, sourceText]);
+
+  const uploadFor = (part: PhotoSlot["part"]) => (uploadMode ? { selected: sameSlot(slot, { part, color: colorId }), busy, onSelect: setSlot, onFile: (target: PhotoSlot, file: File) => void sendPhoto(target, file) } : null);
   return (
     <Dialog
       open={open}
@@ -131,6 +152,33 @@ export function SeriesGallery({ seriesKey, color, frameColor = null, available, 
           <DialogTitle>Designové řady a barvy</DialogTitle>
           <DialogDescription>Náhled rámečku, krytů a víceramečku v barvách řady (ABB podle katalogu 2026) – barvu klapky a rámečku jde zvolit zvlášť. Klíčové řady ABB mají produktový render, ostatní kreslený náhled; barvy na obrazovce jsou orientační – přesný vzhled ověřte odkazem na web výrobce.</DialogDescription>
         </DialogHeader>
+        {catalog.canUpload ? (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-yellow-400/40 bg-yellow-400/5 px-2 py-1.5 text-xs" data-testid="gallery-upload-bar">
+            <Button
+              type="button"
+              size="sm"
+              variant={uploadMode ? "default" : "outline"}
+              className={cn("h-8 gap-1.5", uploadMode && "bg-yellow-400 text-zinc-950 hover:bg-yellow-300")}
+              aria-pressed={uploadMode}
+              onClick={() => {
+                setUploadMode((value) => !value);
+                setSlot((current) => current ?? { part: "switch", color: colorId });
+              }}
+              data-testid="gallery-upload-toggle"
+            >
+              <Camera className="size-3.5" aria-hidden /> [ 📷 Nahrát reálné fotky (Ctrl+V / Soubor) ]
+            </Button>
+            {uploadMode ? (
+              <>
+                <span className="text-muted-foreground">Zkopírujte fotku z webu výrobce nebo z PDF katalogu, klikněte na slot a stiskněte Ctrl+V (nebo obrázek přetáhněte). Uvidí ji všichni uživatelé.</span>
+                <label className="flex items-center gap-1">
+                  Zdroj
+                  <input value={photoSource} onChange={(event) => setPhotoSource(event.target.value)} placeholder={`${brand.label} – web / katalog výrobce`} maxLength={160} className="h-7 w-56 rounded border border-input bg-transparent px-1.5" data-testid="gallery-upload-source" />
+                </label>
+              </>
+            ) : null}
+          </div>
+        ) : null}
         <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Výrobce">
           {DESIGN_BRANDS.map((option) => (
             <button key={option.manufacturer} type="button" role="radio" aria-checked={brand.manufacturer === option.manufacturer} aria-label={option.label} onClick={() => setPick({ series: `${option.manufacturer}|${option.series[0].name}`, color: seriesColors(`${option.manufacturer}|${option.series[0].name}`)[0].id, frameColor: null })} className={cn("flex h-10 w-24 items-center justify-center rounded-md border bg-white p-1", brand.manufacturer === option.manufacturer ? "border-primary ring-2 ring-primary" : "border-border")}>
@@ -146,7 +194,7 @@ export function SeriesGallery({ seriesKey, color, frameColor = null, available, 
               return (
                 <li key={option.name}>
                   <button type="button" role="radio" aria-checked={series.name === option.name} onClick={() => setPick({ series: key, color: seriesColors(key)[0].id, frameColor: null })} className={cn("flex w-full items-center gap-2 rounded-lg border p-1.5 text-left text-xs", series.name === option.name ? "border-primary bg-primary/15" : "border-border hover:border-primary/60")} data-testid={`gallery-series-${option.name}`}>
-                    <SeriesThumb seriesKey={key} colorId={first?.id} className="h-10 w-10 rounded" fallback={<DeviceMockup seriesKey={key} shape={option.shape ?? "square"} color={first ?? { swatch: "#f8fafc" }} items={["switch"]} className="h-10 w-10 shrink-0 rounded" />} />
+                    <SeriesThumb seriesKey={key} colorId={first?.id} photos={photos} className="h-10 w-10 rounded" fallback={<DeviceMockup seriesKey={key} shape={option.shape ?? "square"} color={first ?? { swatch: "#f8fafc" }} items={["switch"]} className="h-10 w-10 shrink-0 rounded" />} />
                     <span className="min-w-0">
                       <b className="block">{option.name}</b>
                       <span className="text-muted-foreground">{colorCount(option.colors?.length || seriesColors(key).length)}{option.ip ? ` · ${option.ip}` : ""}</span>
@@ -169,18 +217,19 @@ export function SeriesGallery({ seriesKey, color, frameColor = null, available, 
             </div>
             <div className="grid gap-3 sm:grid-cols-[1fr_1fr_2fr]" data-testid="gallery-preview">
               {/* Fáze 74: schválená fotka výrobce (zdroj a licence pod fotkou), jinak kreslený náhled */}
-              <PhotoOrMockup series={seriesKeyOf} color={chosen?.id ?? pick.color} exact={!pick.frameColor} part="switch" caption="Spínač 1R" mockup={<DeviceMockup seriesKey={seriesKeyOf} shape={shape} color={look} items={["switch"]} className="h-28 w-28 rounded-lg" label={`Spínač ${series.name}`} />} />
-              <PhotoOrMockup series={seriesKeyOf} color={chosen?.id ?? pick.color} exact={!pick.frameColor} part="socket" caption="Zásuvka 1R" mockup={<DeviceMockup seriesKey={seriesKeyOf} shape={shape} color={look} items={["socket"]} className="h-28 w-28 rounded-lg" label={`Zásuvka ${series.name}`} />} />
+              {/* Fáze 92: reálná fotka (nahraná / stažená) před renderem; v režimu nahrávání sloty pro Ctrl+V */}
+              <SeriesPreviewIllustration photo={!pick.frameColor ? seriesPhoto(seriesKeyOf, colorId, "switch", photos) : null} slot={{ part: "switch", color: colorId }} upload={uploadFor("switch")} caption="Spínač 1R" mockup={<DeviceMockup seriesKey={seriesKeyOf} shape={shape} color={look} items={["switch"]} className="h-28 w-28 rounded-lg" label={`Spínač ${series.name}`} />} />
+              <SeriesPreviewIllustration photo={!pick.frameColor ? seriesPhoto(seriesKeyOf, colorId, "socket", photos) : null} slot={{ part: "socket", color: colorId }} upload={uploadFor("socket")} caption="Zásuvka 1R" mockup={<DeviceMockup seriesKey={seriesKeyOf} shape={shape} color={look} items={["socket"]} className="h-28 w-28 rounded-lg" label={`Zásuvka ${series.name}`} />} />
               {monoblock ? (
                 // Fáze 90: monobloky nemají víceramček – nástěnná dvojzásuvka pod odklápěcími víčky
-                <PhotoOrMockup series={seriesKeyOf} color={chosen?.id ?? pick.color} exact part="set" caption={`Dvojzásuvka ${series.ip ?? "IP44"} s odklápěcím víčkem (nástěnná)`} mockup={<DeviceMockup seriesKey={seriesKeyOf} shape={shape} color={look} items={["socket", "socket"]} className="h-28 w-full max-w-60 rounded-lg" label={`Dvojzásuvka ${series.name} s víčkem`} />} />
+                <SeriesPreviewIllustration photo={seriesPhoto(seriesKeyOf, colorId, "set", photos)} slot={{ part: "set", color: colorId }} upload={uploadFor("set")} caption={`Dvojzásuvka ${series.ip ?? "IP44"} s odklápěcím víčkem (nástěnná)`} mockup={<DeviceMockup seriesKey={seriesKeyOf} shape={shape} color={look} items={["socket", "socket"]} className="h-28 w-full max-w-60 rounded-lg" label={`Dvojzásuvka ${series.name} s víčkem`} />} />
               ) : (
-                <PhotoOrMockup series={seriesKeyOf} color={chosen?.id ?? pick.color} exact={!pick.frameColor} part="set" caption={series.fixedPairs ? "3 samostatné přístroje · rozteč 91 mm" : "Víceramček 3R – vypínač + 2 zásuvky"} mockup={<DeviceMockup seriesKey={seriesKeyOf} shape={shape} color={look} items={["switch", "socket", "socket"]} className="h-28 w-full max-w-80 rounded-lg" label={`Víceramček 3R ${series.name}`} />} />
+                <SeriesPreviewIllustration photo={!pick.frameColor ? seriesPhoto(seriesKeyOf, colorId, "set", photos) : null} slot={{ part: "set", color: colorId }} upload={uploadFor("set")} caption={series.fixedPairs ? "3 samostatné přístroje · rozteč 91 mm" : "Víceramček 3R – vypínač + 2 zásuvky"} mockup={<DeviceMockup seriesKey={seriesKeyOf} shape={shape} color={look} items={["switch", "socket", "socket"]} className="h-28 w-full max-w-80 rounded-lg" label={`Víceramček 3R ${series.name}`} />} />
               )}
             </div>
             {/* Fáze 80: zdroj a podmínky užití náhledů jednou pod řádkem náhledů */}
             {(() => {
-              const sources = [...new Set(PREVIEW_PARTS.map((part) => (pick.frameColor ? null : seriesPhoto(seriesKeyOf, chosen?.id ?? pick.color, part))).filter((photo) => photo !== null).map((photo) => `${photo.source} · ${photo.license}`))];
+              const sources = [...new Set(PREVIEW_PARTS.map((part) => (pick.frameColor ? null : seriesPhoto(seriesKeyOf, colorId, part, photos))).filter((photo) => photo !== null).map((photo) => `${photo.source} · ${photo.license}`))];
               return sources.length ? (
                 <p className="-mt-1 text-[10px] text-muted-foreground" data-testid="gallery-photo-source">
                   Zdroj náhledu: {sources.join(" · ")}
@@ -192,8 +241,29 @@ export function SeriesGallery({ seriesKey, color, frameColor = null, available, 
               {colors.map((option) => {
                 const seriesColor = (series.colors ?? []).find((candidate) => candidate.id === option.id) ?? null;
                 return (
-                  <button key={option.id} type="button" role="radio" aria-checked={pick.color === option.id} onClick={() => setPick((value) => ({ ...value, color: option.id }))} className={cn("flex w-28 flex-col items-center gap-1 rounded-lg border p-1.5 text-center text-[11px] leading-tight", pick.color === option.id ? "border-primary bg-primary/15" : "border-border hover:border-primary/60")} data-testid="gallery-color">
-                    <SeriesThumb seriesKey={seriesKeyOf} colorId={seriesColor?.id} className="h-12 w-12 rounded" fallback={<DeviceMockup seriesKey={seriesKeyOf} shape={shape} color={seriesColor ?? { swatch: option.swatch }} items={["switch"]} className="h-12 w-12 rounded" />} />
+                  <button
+                    key={option.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={pick.color === option.id}
+                    onClick={() => {
+                      setPick((value) => ({ ...value, color: option.id }));
+                      if (uploadMode) setSlot({ part: "switch", color: option.id });
+                    }}
+                    onDragOver={uploadMode ? (event) => event.preventDefault() : undefined}
+                    onDrop={
+                      uploadMode
+                        ? (event) => {
+                            event.preventDefault();
+                            const file = [...event.dataTransfer.files].find((candidate) => candidate.type.startsWith("image/"));
+                            if (file) void sendPhoto({ part: "switch", color: option.id }, file);
+                          }
+                        : undefined
+                    }
+                    className={cn("flex w-28 flex-col items-center gap-1 rounded-lg border p-1.5 text-center text-[11px] leading-tight", pick.color === option.id ? "border-primary bg-primary/15" : "border-border hover:border-primary/60", uploadMode && sameSlot(slot, { part: "switch", color: option.id }) && "ring-2 ring-yellow-400")}
+                    data-testid="gallery-color"
+                  >
+                    <SeriesThumb seriesKey={seriesKeyOf} colorId={seriesColor?.id} photos={photos} className="h-12 w-12 rounded" fallback={<DeviceMockup seriesKey={seriesKeyOf} shape={shape} color={seriesColor ?? { swatch: option.swatch }} items={["switch"]} className="h-12 w-12 rounded" />} />
                     {option.label}
                   </button>
                 );

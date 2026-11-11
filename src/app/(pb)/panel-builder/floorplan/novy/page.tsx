@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { panelBuilderGuard } from "@/components/panel-builder/access";
 import { FloorplanEditorLoader } from "@/components/panel-builder/floorplan/FloorplanEditorLoader";
-import { getFloorplanEditorData } from "@/server/queries/floorplans";
+import { getFloorplanEditorData, isFirstFloorplan } from "@/server/queries/floorplans";
 
 export const metadata: Metadata = { title: "Nový 2D půdorys" };
 
@@ -11,10 +11,11 @@ export const metadata: Metadata = { title: "Nový 2D půdorys" };
 export default async function NewFloorplanPage() {
   const guard = await panelBuilderGuard();
   if (guard) return guard;
-  const data = await getFloorplanEditorData();
+  const [data, first] = await Promise.all([getFloorplanEditorData(), isFirstFloorplan()]);
   return (
     <PageTransition>
-      <FloorplanEditorLoader {...data} stored={null} help={"Nahrajte půdorys (obrázek / PDF) nebo nakreslete místnosti, zkalibrujte měřítko, osaďte zásuvky, světla, vypínače a spotřebiče. Výkaz kabeláže porovná vedení spodem, vrchem a optimalizovaně; rozváděč vygenerujete jedním klikem."} />
+      {/* Fáze 92: první půdorys firmy – volba trenažér nanečisto / prázdný půdorys v pravém sloupci editoru */}
+      <FloorplanEditorLoader {...data} stored={null} startChoice={first} help={"Nahrajte půdorys (obrázek / PDF) nebo nakreslete místnosti, zkalibrujte měřítko, osaďte zásuvky, světla, vypínače a spotřebiče. Výkaz kabeláže porovná vedení spodem, vrchem a optimalizovaně; rozváděč vygenerujete jedním klikem."} />
     </PageTransition>
   );
 }

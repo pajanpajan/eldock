@@ -20,6 +20,8 @@ export interface CatalogImage {
   src: string;
   source: string;
   license: string;
+  /** Fáze 92: reálná fotka výrobce (`manifest.json`, zdroj a licence u fotky) – má přednost před vektorovým renderem. */
+  photo?: boolean;
 }
 
 /** Slug složky: malá písmena bez diakritiky, mezery a znaky → „-“ („Time Arbo“ → „time-arbo“, „Variant+“ → „variant“). */
@@ -42,12 +44,12 @@ export function seriesForFolder(maker: string, series: string): string | null {
 }
 
 /** Soubor ve složce → položka manifestu (`<barva>-<díl>`, `rada-<díl>` bez barvy, `smart/<id výrobku>`). */
-export function catalogImageEntry(maker: string, series: string, file: string, license: { source: string; license: string }): CatalogImage | null {
+export function catalogImageEntry(maker: string, series: string, file: string, license: { source: string; license: string }, options: { photo?: boolean } = {}): CatalogImage | null {
   const extension = file.split(".").pop()?.toLowerCase() ?? "";
   if (!CATALOG_IMAGE_EXTENSIONS.includes(extension)) return null;
   const base = file.slice(0, -(extension.length + 1));
   const src = `/catalog-images/${maker}/${series}/${file}`;
-  const meta = { src, source: license.source.slice(0, 160), license: license.license.slice(0, 160) };
+  const meta = { src, source: license.source.slice(0, 160), license: license.license.slice(0, 160), ...(options.photo ? { photo: true } : {}) };
   if (series === "smart") return /^[a-z0-9-]{2,60}$/.test(base) ? { series: "smart", color: base, part: "product", ...meta } : null;
   const key = seriesForFolder(maker, series);
   const match = /^(.+)-(switch|socket|set)$/.exec(base);

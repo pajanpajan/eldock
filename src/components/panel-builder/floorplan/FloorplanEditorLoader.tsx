@@ -18,6 +18,8 @@ export function FloorplanEditorLoader({
   company = null,
   stored = null,
   help = null,
+  sandbox = false,
+  startChoice = false,
 }: {
   series: SeriesOption[];
   manufacturers?: { name: string; count: number }[];
@@ -29,7 +31,11 @@ export function FloorplanEditorLoader({
   stored?: StoredFloorplan | null;
   /** Fáze 89: nápověda k nadpisu editoru (ikona „?“). */
   help?: string | null;
+  /** Fáze 92: trenažér 2D půdorysu (rozdělaný bungalov, nic se neukládá). */
+  sandbox?: boolean;
+  /** Fáze 92: první půdorys firmy – volba trenažér / prázdný půdorys v pravém sloupci editoru. */
+  startChoice?: boolean;
 }) {
   // Jiný půdorys = nový editor (vlastní historie Zpět / Znovu a ukládání)
-  return <FloorplanEditor key={stored?.id ?? "novy"} series={series} manufacturers={manufacturers} applianceJson={applianceJson} libraryJson={libraryJson} company={company} stored={stored} help={help} />;
+  return <FloorplanEditor key={sandbox ? "trenazer" : (stored?.id ?? "novy")} series={series} manufacturers={manufacturers} applianceJson={applianceJson} libraryJson={libraryJson} company={company} stored={stored} help={help} sandbox={sandbox} startChoice={startChoice} />;
 }

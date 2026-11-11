@@ -46,6 +46,13 @@ export const getFloorplanList = cache(async (): Promise<{ active: FloorplanRow[]
   return { active: active.map(toRow), deleted: deleted.map(toRow) };
 });
 
+/** Fáze 92: firma zatím nemá žádný půdorys (ani v koši) – nový uživatel dostane volbu trenažér / prázdný půdorys. */
+export const isFirstFloorplan = cache(async (): Promise<boolean> => {
+  const company = await getPanelCompany();
+  if (!company) return false;
+  return (await prisma.floorplan.count({ where: { companyId: company.id } })) === 0;
+});
+
 /** Uložený půdorys pro editor; nákres jako JSON (klient ho ověří `parseDraft`). */
 export const getFloorplanForEditor = cache(async (id: string) => {
   const company = await getPanelCompany();

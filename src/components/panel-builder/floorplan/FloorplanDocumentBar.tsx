@@ -65,7 +65,10 @@ export function FloorplanDocumentBar({
   onRestored,
   onReload,
   onKeepMine,
+  trainer = false,
 }: {
+  /** Fáze 92: trenažér – nákres se nikam neukládá (místo stavu ukládání štítek trenažéru). */
+  trainer?: boolean;
   /** Fáze 89: nadpis stránky s nápovědou (?) v jednom řádku s projektovou lištou. */
   leading?: ReactNode;
   meta: FloorplanMetaState;
@@ -121,7 +124,13 @@ export function FloorplanDocumentBar({
           <Button type="button" variant="outline" size="sm" className="gap-1" onClick={onRedo} disabled={!canRedo} title="Znovu (Ctrl+Shift+Z / Ctrl+Y)" aria-label="Znovu (Ctrl+Shift+Z)" data-testid="floorplan-redo">
             <Redo2 className="size-4" aria-hidden /> Znovu
           </Button>
-          <SaveState status={status} onRetry={() => void flush()} />
+          {trainer ? (
+            <span className="flex items-center gap-1.5 rounded-full border border-yellow-400/60 px-2.5 py-0.5 text-xs text-yellow-200" data-testid="floorplan-save-status" data-state="trainer" role="status">
+              🎯 Trenažér – nic se neukládá
+            </span>
+          ) : (
+            <SaveState status={status} onRetry={() => void flush()} />
+          )}
           <VersionHistoryButton floorplanId={floorplanId} flush={flush} onRestored={onRestored} />
           {fileMenu}
           {project ? (

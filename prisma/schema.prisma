@@ -1095,6 +1095,9 @@ model PanelBoardProject {
   boardCode              String?
   parentBoardId          String?
   feederJson             String?
+  /// Fáze 92: rozváděč z trenažéru bez kreditu – „pudorys-bungalov“ (trenažér 2D půdorysu) nebo tréninková zakázka
+  /// („byt-3kk“, „rd-fve“, „chytry-dum“); null = vlastní zakázka firmy.
+  trainerPreset          String?
 
   createdById String?
   /// Registrovaná firma (fáze 41): vidí jen své rozváděče, její údaje se propisují do dokumentace.

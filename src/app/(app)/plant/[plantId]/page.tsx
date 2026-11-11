@@ -13,6 +13,7 @@ import { InspectionWatcher } from "@/components/inspections/InspectionWatcher";
 import { PredictiveWatch } from "@/components/inspections/PredictiveWatch";
 import { getPredictiveSummary } from "@/server/queries/health";
 import { CampusExplorer } from "@/components/map/campus/CampusExplorer";
+import { PlantOnboardingLoader } from "@/components/plant/PlantOnboardingLoader";
 import { Button } from "@/components/ui/button";
 import { EQUIPMENT_STATUS } from "@/lib/status";
 import { getInspectionWatch } from "@/server/queries/inspections";
@@ -27,10 +28,14 @@ export async function generateMetadata({ params }: PageProps<"/plant/[plantId]">
 }
 
 // Level 1 – Půdorys areálu.
-export default async function PlantPage({ params }: PageProps<"/plant/[plantId]">) {
-  const [{ plantId }, account, modules] = await Promise.all([params, getCurrentAccount(), getFeatures()]);
+export default async function PlantPage({ params, searchParams }: PageProps<"/plant/[plantId]">) {
+  const [{ plantId }, { pruvodce }, account, modules] = await Promise.all([params, searchParams, getCurrentAccount(), getFeatures()]);
   const [plant, watch, predictive] = await Promise.all([getPlantOverview(plantId, account.types), getInspectionWatch(plantId, new Date(), account.types), getPredictiveSummary(plantId, account.types)]);
   if (!plant) notFound();
+  // Fáze 92: průvodce závodem – režim A zakládá skutečná data (právo Studio), režim B je mise nad vzorovým závodem
+  const canBuild = account.can("studio") && modules.on("enterprise.studio");
+  const canAudit = account.can("audit") && modules.on("inspections.audit");
+  const guide = pruvodce === "zavod" ? "build" : pruvodce === "mise" ? "mission" : pruvodce ? "choose" : null;
 
   return (
     <PageTransition>
@@ -56,6 +61,9 @@ export default async function PlantPage({ params }: PageProps<"/plant/[plantId]"
           ) : null
         }
       />
+
+      {/* Fáze 92: nový závod – průvodce založením a mise noční poruchy (dialog i z horní lišty „🧭 Průvodce závodem“) */}
+      <PlantOnboardingLoader plantId={plant.id} plantName={plant.name} canBuild={canBuild} canAudit={canAudit} empty={plant.buildings.length === 0} open={guide} />
 
       {plant.buildings.length === 0 ? (
         <EmptyState

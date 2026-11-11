@@ -18,8 +18,9 @@ import { APP_HOME, isPlantRoute } from "@/lib/routes";
 // Fáze 54: právní stránky (zásady zpracování osobních údajů, obchodní podmínky)
 // Fáze 67: obnova a nastavení hesla (pozvánka zaměstnance) bez přihlášení
 // Fáze 87: video-návody `/navody` a jejich MP4 / náhledy v `public/tutorials` (odkaz pro kolegy elektrikáře)
-const PUBLIC_PATHS = new Set(["/", "/login", "/register-plant", "/panel-builder/auth", "/api/ares", "/ukazka-elaboratu", "/navody", "/ochrana-osobnich-udaju", "/obchodni-podminky", "/sitemap.xml", "/robots.txt", "/superadmin/login", "/api/consent", "/newsletter/potvrzeni", "/newsletter/odhlaseni", "/api/newsletter/unsubscribe", "/zapomenute-heslo"]);
-const PUBLIC_PREFIXES = ["/opengraph-image", "/brands/", "/api/brand-logo/", "/nastavit-heslo/", "/tutorials/"];
+const PUBLIC_PATHS = new Set(["/", "/login", "/register-plant", "/panel-builder/auth", "/api/ares", "/ukazka-elaboratu", "/navody", "/ochrana-osobnich-udaju", "/obchodni-podminky", "/sitemap.xml", "/robots.txt", "/superadmin/login", "/api/consent", "/newsletter/potvrzeni", "/newsletter/odhlaseni", "/api/newsletter/unsubscribe", "/zapomenute-heslo", "/api/catalog-images/manifest"]);
+// Fáze 92: nahrané produktové fotky řad a jejich manifest nejsou tajné (galerie řad všem uživatelům)
+const PUBLIC_PREFIXES = ["/opengraph-image", "/brands/", "/api/brand-logo/", "/nastavit-heslo/", "/tutorials/", "/api/catalog-images/file/"];
 const SUPERADMIN_PREFIX = "/superadmin";
 const PANEL_PREFIX = "/panel-builder";
 
@@ -69,7 +70,8 @@ export async function proxy(request: NextRequest) {
     // Fáze 68: nahrání a soubory pustí brána každému přihlášení – o přístupu k souboru rozhoduje jeho vlastník
     // (registr `StoredFile` v GET /api/files): firma Panel Builderu tak vidí i své logo a razítko, velín vše.
     // Fáze 69: export dat firmy (Panel Builder a velín) – oprávnění ověří route handler
-    const fileApi = pathname === "/api/uploads" || pathname.startsWith("/api/files/") || pathname === "/api/data-export";
+    // Fáze 92: nahrání fotky do katalogu řad – oprávnění velínu ověří route handler
+    const fileApi = pathname === "/api/uploads" || pathname.startsWith("/api/files/") || pathname === "/api/data-export" || pathname === "/api/catalog-images/upload";
     if (plant || ((company || superadmin) && fileApi)) return NextResponse.next();
     return NextResponse.json({ error: "Nepřihlášeno – přihlaste se na /login." }, { status: 401, headers: { "Cache-Control": "no-store" } });
   }

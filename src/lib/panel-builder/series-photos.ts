@@ -20,6 +20,8 @@ export interface SeriesPhoto {
   /** Zdroj fotky (fotobanka / stránka výrobce) a podmínky užití – zobrazí se pod fotkou. */
   source: string;
   license: string;
+  /** Fáze 92: reálná fotka (stažená harvesterem nebo nahraná ve velínu), jinak render / kresba. */
+  photo?: boolean;
 }
 
 /**
@@ -35,8 +37,14 @@ export const SERIES_PHOTOS: readonly SeriesPhoto[] = [];
  */
 export const ALL_SERIES_PHOTOS: readonly SeriesPhoto[] = [
   ...SERIES_PHOTOS,
-  ...CATALOG_IMAGES.filter((image): image is CatalogImage & { part: SeriesPhotoPart } => image.part !== "product").map((image) => ({ series: image.series, ...(image.color ? { color: image.color } : {}), part: image.part, src: image.src, source: image.source, license: image.license })),
+  // Fáze 92: reálné fotky (`manifest.json`) před rendery stejného dílu a barvy
+  ...CATALOG_IMAGES.filter((image): image is CatalogImage & { part: SeriesPhotoPart } => image.part !== "product")
+    .map((image) => ({ series: image.series, ...(image.color ? { color: image.color } : {}), part: image.part, src: image.src, source: image.source, license: image.license, ...(image.photo ? { photo: true } : {}) }))
+    .sort((a, b) => Number(Boolean(b.photo)) - Number(Boolean(a.photo))),
 ];
+
+/** Fáze 92: nahrané fotky (velín, trvalé úložiště) mají přednost před staženými fotkami a rendery z repozitáře. */
+export const withUploadedPhotos = (uploaded: readonly SeriesPhoto[], photos: readonly SeriesPhoto[] = ALL_SERIES_PHOTOS): readonly SeriesPhoto[] => (uploaded.length ? [...uploaded.map((photo) => ({ ...photo, photo: true })), ...photos] : photos);
 
 /** Fotka dílu řady v barvě (přesná barva, jinak fotka řady bez barvy); null = vektorový náhled. */
 export function seriesPhoto(series: string | null | undefined, color: string | null | undefined, part: SeriesPhotoPart, photos: readonly SeriesPhoto[] = ALL_SERIES_PHOTOS): SeriesPhoto | null {

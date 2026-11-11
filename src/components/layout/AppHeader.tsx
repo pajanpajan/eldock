@@ -5,11 +5,13 @@ import { isAccountSwitcherLocked } from "@/lib/auth";
 import type { Permission } from "@/lib/accounts";
 import { LockedNavItem } from "@/components/modules/Upsell";
 import type { FeatureKey } from "@/lib/modules";
-import { APP_HOME, auditReportHref, inspectionsHref, plannerHref, rapidInspectionHref } from "@/lib/routes";
+import { APP_HOME, auditReportHref, inspectionsHref, plannerHref, plantHref, rapidInspectionHref } from "@/lib/routes";
 import { getFeatures } from "@/server/modules";
 import { getAccountUsers } from "@/server/queries/accounts";
 import { getPlants } from "@/server/queries/plant";
 import { getAuthSession, getCurrentAccount, getRememberedPlantId } from "@/server/session";
+
+import { PlantGuideButton } from "@/components/plant/PlantGuideButton";
 
 import { AccountSwitcher } from "./AccountSwitcher";
 import { LogoutButton } from "./LogoutButton";
@@ -47,6 +49,8 @@ export async function AppHeader() {
     (item) => account.can(item.permission) && (!item.feature || features.show(item.feature)) && !(item.hideInFieldView && account.definition.fieldView),
   );
   const canManageModules = account.can("manageModules");
+  // Fáze 92: 🧭 Průvodce závodem (založení haly a stroje / mise noční poruchy) v naposledy otevřeném závodě
+  const guidePlant = plants.find((plant) => plant.id === rememberedPlantId)?.id ?? plants[0]?.id ?? null;
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur">
@@ -82,6 +86,7 @@ export async function AppHeader() {
         ) : null}
 
         <div className="ml-auto flex items-center gap-3">
+          {guidePlant ? <PlantGuideButton href={`${plantHref(guidePlant)}?pruvodce=1`} /> : null}
           <AccountSwitcher
             accounts={accounts.flatMap(({ id, name, title, accountType }) => (accountType ? [{ id, name, title, accountType }] : []))}
             currentId={account.user.id}

@@ -57,7 +57,7 @@ function readStored(): Stored {
   }
 }
 
-export function PaletteAccordion({ sections }: { sections: PaletteSection[] }) {
+export function PaletteAccordion({ sections, focus = null }: { sections: PaletteSection[]; /** Fáze 92: položka trenažéru – její kategorie je rozbalená a položka pulzuje žlutě. */ focus?: string | null }) {
   const [state, setState] = useState<Stored>(readStored);
   useEffect(() => {
     try {
@@ -67,7 +67,8 @@ export function PaletteAccordion({ sections }: { sections: PaletteSection[] }) {
     }
   }, [state]);
   const ids = sections.map((section) => section.id);
-  const open = (id: string) => !state.closed.includes(id);
+  const focusSection = focus ? (sections.find((section) => section.entries.some((entry) => entry.id === focus))?.id ?? null) : null;
+  const open = (id: string) => id === focusSection || !state.closed.includes(id);
   const allOpen = ids.every(open);
   const allClosed = ids.every((id) => !open(id));
   const toggle = (id: string) =>
@@ -142,13 +143,13 @@ export function PaletteAccordion({ sections }: { sections: PaletteSection[] }) {
               <div id={`palette-${section.id}`} className="flex flex-col gap-0.5 px-1 pb-1.5">
                 {section.action ? <div className="flex justify-end px-1 pb-0.5">{section.action}</div> : null}
                 {section.entries.map((entry) => (
-                  <div key={entry.id} className="flex items-stretch gap-0.5" data-entry={entry.id} data-favorite={entry.favorite ? "true" : undefined}>
+                  <div key={entry.id} className="flex items-stretch gap-0.5" data-entry={entry.id} data-favorite={entry.favorite ? "true" : undefined} data-trainer-focus={focus === entry.id ? "true" : undefined}>
                     <button
                       type="button"
                       aria-pressed={entry.active}
                       onClick={entry.onPick}
                       title={entry.title ?? entry.label}
-                      className={cn("flex min-w-0 flex-1 items-center gap-1.5 rounded-md border px-1.5 py-1 text-left text-xs leading-tight", entry.active ? "border-primary bg-primary/20 text-foreground" : "border-transparent text-muted-foreground hover:border-border hover:bg-muted/50 hover:text-foreground")}
+                      className={cn("flex min-w-0 flex-1 items-center gap-1.5 rounded-md border px-1.5 py-1 text-left text-xs leading-tight", entry.active ? "border-primary bg-primary/20 text-foreground" : "border-transparent text-muted-foreground hover:border-border hover:bg-muted/50 hover:text-foreground", focus === entry.id && !entry.active && "trainer-pulse border-yellow-400 text-yellow-100")}
                     >
                       <span className="w-11 shrink-0 truncate rounded bg-muted px-1 py-0.5 text-center font-mono text-[10px] font-bold text-foreground">{entry.symbol}</span>
                       <span className="min-w-0 flex-1 line-clamp-2">{entry.label}</span>

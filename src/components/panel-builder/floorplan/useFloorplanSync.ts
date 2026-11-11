@@ -39,6 +39,7 @@ export function useFloorplanSync({
   initialSaved,
   meta,
   replaceDraft,
+  disabled = false,
 }: {
   /** Půdorys na serveru při otevření (null = nový). */
   stored: { id: string; code?: string | null; version: number; savedAt: string } | null;
@@ -48,6 +49,8 @@ export function useFloorplanSync({
   meta: FloorplanMetaState;
   /** Nahrazení nákresu v editoru (načtení ze serveru, obnovení verze) – bez historie Zpět. */
   replaceDraft: (draft: FloorplanDraft) => void;
+  /** Fáze 92: trenažér – nic se neukládá na server ani do zálohy v prohlížeči (cvičný bungalov se nikde neobjeví). */
+  disabled?: boolean;
 }) {
   const [floorplanId, setFloorplanId] = useState<string | null>(stored?.id ?? null);
   /** Fáze 78: kód půdorysu ve firmě (nový ho dostane při prvním uložení). */
@@ -70,12 +73,14 @@ export function useFloorplanSync({
     replaceRef.current = replaceDraft;
   });
 
+  const off = useRef(disabled);
   const backup = useCallback(() => {
-    if (draftRef.current === savedRef.current) return;
+    if (off.current || draftRef.current === savedRef.current) return;
     writeBackup(idRef.current, { baseVersion: idRef.current ? version.current : null, draft: draftRef.current, at: Date.now() });
   }, []);
 
   const save = useCallback((options: { force?: boolean } = {}): Promise<boolean> => {
+    if (off.current) return Promise.resolve(true);
     if (inflight.current) return inflight.current;
     const snapshot = draftRef.current;
     if (snapshot === savedRef.current && !options.force) return Promise.resolve(true);
@@ -124,7 +129,7 @@ export function useFloorplanSync({
     return promise;
   }, []);
 
-  const dirty = draft !== saved;
+  const dirty = !disabled && draft !== saved;
 
   // Odložené uložení po úpravě (nejpozději po SAVE_MAX_WAIT_MS nepřetržité práce); při souběhu / výpadku jen záloha
   useEffect(() => {

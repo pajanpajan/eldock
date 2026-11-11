@@ -14,6 +14,7 @@ import { duplicateFloorplanAction, importBrowserFloorplanAction, trashFloorplanA
 import type { FloorplanRow } from "@/server/queries/floorplans";
 
 import { FloorplanMetaDialog } from "./FloorplanMetaDialog";
+import { StartChoiceButtons } from "./FloorplanStartChoice";
 
 // Fáze 64: seznam uložených 2D půdorysů firmy – otevření, údaje, kopie, koš s obnovením. Rozpracovaný nákres z prohlížeče
 // (do fáze 63 jediný slot `eldock.pb.floorplan`) se při otevření seznamu převezme na server.
@@ -79,6 +80,10 @@ export function FloorplanList({ active, deleted }: { active: FloorplanRow[]; del
         <Link href="/panel-builder/floorplan/novy" className="inline-flex h-10 items-center gap-1.5 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90" data-testid="floorplan-new">
           <Plus className="size-4" aria-hidden /> Nový půdorys
         </Link>
+        {/* Fáze 92: trenažér nanečisto – rozdělaný bungalov 4+kk, rozváděč bez kreditu */}
+        <Link href="/panel-builder/floorplan/trenazer" className="inline-flex h-10 items-center gap-1.5 rounded-md border border-yellow-400/70 px-4 text-sm font-semibold text-yellow-200 hover:bg-yellow-400/10" data-testid="floorplan-trainer-open">
+          🎯 Vyzkoušet nanečisto (Trenažér zdarma)
+        </Link>
         <p className="text-xs text-muted-foreground">Půdorysy se ukládají na server průběžně při kreslení – otevřete je z libovolného počítače.</p>
       </div>
 
@@ -129,8 +134,10 @@ export function FloorplanList({ active, deleted }: { active: FloorplanRow[]; del
           ))}
         </ul>
       ) : (
-        <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground" data-testid="floorplan-empty">
-          Zatím nemáte žádný uložený půdorys. Začněte tlačítkem <strong>Nový půdorys</strong> – nahrajte výkres (obrázek / PDF) nebo nakreslete místnosti.
+        <div className="flex flex-col gap-3 rounded-xl border border-dashed border-border p-6 text-sm text-muted-foreground" data-testid="floorplan-empty">
+          <p className="text-center">Zatím nemáte žádný uložený půdorys. Jak chcete začít?</p>
+          {/* Fáze 92: přívětivá volba pro nového uživatele */}
+          <StartChoiceButtons />
         </div>
       )}
 

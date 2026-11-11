@@ -53,3 +53,18 @@ export function QrLabelFace({ label, className }: { label: LabelData; className?
     </div>
   );
 }
+
+/**
+ * Fáze 92: čtvercový štítek na stroj 20 × 20 mm (QR a tag) nebo 40 × 40 mm (QR, tag a název) – stejný odkaz s kódem
+ * štítku jako obdélníkový štítek 62 × 29 mm.
+ */
+export function QrSquareLabel({ label, size, className }: { label: LabelData; size: 20 | 40; className?: string }) {
+  const shortName = label.name.replace(`${label.tag} - `, "");
+  return (
+    <div className={cn("qr-label @container flex aspect-square flex-col items-center justify-center overflow-hidden rounded-[2cqw] border-[1.2cqw] border-black bg-white text-black", size === 20 ? "gap-[2cqw] p-[5cqw]" : "gap-[1.5cqw] p-[5cqw]", className)} data-testid="qr-square-label" data-size={size}>
+      <QRCodeSVG value={label.url} level="M" marginSize={0} className={size === 20 ? "size-[74cqw]" : "size-[62cqw]"} title={`QR kód – ${label.tag}`} />
+      <div className={cn("max-w-full truncate font-mono leading-none font-black", size === 20 ? "text-[13cqw]" : "text-[11cqw]")}>{label.tag}</div>
+      {size === 40 ? <div className="line-clamp-2 max-w-full text-center text-[6.5cqw] leading-tight font-medium">{shortName}</div> : null}
+    </div>
+  );
+}

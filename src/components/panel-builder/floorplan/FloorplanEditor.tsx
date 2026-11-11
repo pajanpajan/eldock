@@ -120,6 +120,10 @@ import { cn } from "@/lib/utils";
 import { boxSummary, resolveBox } from "@/lib/panel-builder/mounting-boxes-catalog";
 import { compileFloorplanBom } from "@/lib/panel-builder/wiring-bom";
 import { createFloorplanProjectAction } from "@/server/actions/panel-projects";
+import { createSandboxProjectAction } from "@/server/actions/panel-trainer";
+import { SANDBOX_BATH_LIGHT_ID, SANDBOX_BED_TARGET, SANDBOX_NAME, SANDBOX_SOCKET_ITEM, bathDimmerOf, sandboxDraft, sandboxProgress } from "@/lib/panel-builder/floorplan-sandbox-preset";
+import { liveChecklist } from "@/lib/panel-builder/floorplan-live-checklist";
+import { BOX_MAKERS } from "@/lib/panel-builder/box-options";
 import { stashFloorplanDraftAction, updateFloorplanMetaAction } from "@/server/actions/floorplans";
 import { bootDraft, clearBackup, defaultFloorplanName, readBackup } from "@/lib/panel-builder/floorplan-storage";
 
@@ -182,6 +186,9 @@ import { contentView, growPlane, meters, resizePlane } from "@/lib/panel-builder
 import { assignLightingCircuit, assignSocketCircuit, isSocketElement, lightingSocketRows, moveSocketsToCircuit, nextSocketCircuit, optimizeSocketCircuits, socketCircuitRows, type SocketCircuitRow } from "@/lib/panel-builder/socket-circuits";
 import { BACKGROUND_PX, preloadImage, rasterizeSvg } from "@/lib/panel-builder/background-image";
 import { TutorialVideoButton } from "@/components/tutorials/TutorialVideoButton";
+import { FloorplanSandboxTrainer } from "./FloorplanSandboxTrainer";
+import { FloorplanLiveChecklist, useLiveChecklistMode } from "./FloorplanLiveChecklist";
+import { FloorplanStartChoice } from "./FloorplanStartChoice";
 
 // 2D editor půdorysu elektroinstalace (fáze 49, úprava PDF / značky / úroveň instalace fáze 57, fáze 59: natočení další
 // značky podle předchozí, vícenásobný výběr, víceramečky s přisazením, přiřazení vypínačů ke světlům, zakreslení změn
@@ -276,6 +283,8 @@ export function FloorplanEditor({
   company = null,
   stored = null,
   help = null,
+  sandbox = false,
+  startChoice = false,
 }: {
   series: SeriesOption[];
   manufacturers?: { name: string; count: number }[];
@@ -286,6 +295,10 @@ export function FloorplanEditor({
   stored?: StoredFloorplan | null;
   /** Fáze 89: nápověda k nadpisu (ikona „?“ místo dvouřádkového popisu). */
   help?: string | null;
+  /** Fáze 92: trenažér – rozdělaný bungalov 4+kk, nic se neukládá, rozváděč bez kreditu. */
+  sandbox?: boolean;
+  /** Fáze 92: první půdorys firmy – v pravém sloupci volba trenažér nanečisto / prázdný půdorys. */
+  startChoice?: boolean;
 }) {
   const router = useRouter();
   const svg = useRef<SVGSVGElement>(null);
@@ -293,10 +306,11 @@ export function FloorplanEditor({
   // Fáze 63: knihovna spotřebičů firmy (prohlížeč / profil firmy) – nákres ji převezme při načtení a při každém uložení
   const [library, saveLibrary] = useApplianceLibrary(applianceJson);
   // Fáze 64: uložený půdorys ze serveru (+ neuložené změny ze zálohy v prohlížeči), historie Zpět / Znovu, průběžné ukládání
-  const [boot] = useState(() => bootDraft(stored, library?.specs ?? null));
+  // Fáze 92: trenažér začíná rozdělaným bungalovem (stejný objekt = nic k uložení)
+  const [boot] = useState(() => (sandbox ? sandboxBoot() : bootDraft(stored, library?.specs ?? null)));
   const { draft, setDraft, undo, redo, reset, canUndo, canRedo, gestureActive } = useDraftHistory(() => boot.initial);
-  const [meta, setMeta] = useState<FloorplanMetaState>(() => ({ name: stored?.name ?? defaultFloorplanName(), customerName: stored?.customerName ?? null, installationSite: stored?.installationSite ?? null }));
-  const sync = useFloorplanSync({ stored: stored ? { id: stored.id, code: stored.code ?? null, version: stored.version, savedAt: stored.updatedAt } : null, draft, initialSaved: boot.initialSaved, meta, replaceDraft: reset });
+  const [meta, setMeta] = useState<FloorplanMetaState>(() => ({ name: sandbox ? SANDBOX_NAME : (stored?.name ?? defaultFloorplanName()), customerName: stored?.customerName ?? null, installationSite: stored?.installationSite ?? null }));
+  const sync = useFloorplanSync({ stored: stored ? { id: stored.id, code: stored.code ?? null, version: stored.version, savedAt: stored.updatedAt } : null, draft, initialSaved: boot.initialSaved, meta, replaceDraft: reset, disabled: sandbox });
   // Fáze 78: šablony sestav a oblíbené položky firmy (prohlížeč + profil firmy, novější vyhrává)
   const [floorLibrary, saveFloorLibrary] = useFloorplanLibrary(libraryJson);
   // Fáze 89: průvodce v 5 krocích / kompaktní CAD lišta (prohlížeč i profil firmy), aktivní krok a vodicí čáry přichytávání
@@ -620,6 +634,16 @@ export function FloorplanEditor({
   const datasheetSystem = (datasheetFamily?.system ?? "abb_freeathome") as SmartSystemId;
   const catalog = useMemo(() => applianceCatalog(draft.appliances), [draft.appliances]);
   const checklist = generationChecklist(draft);
+  // Fáze 92: trenažér (úkoly podle nákresu) a živý tahák vlastní zakázky
+  const [sandboxGenerated, setSandboxGenerated] = useState(false);
+  const trainer = sandbox ? sandboxProgress(draft, sandboxGenerated) : null;
+  const trainerDimmer = useMemo(() => (sandbox ? bathDimmerOf(draft) : null), [sandbox, draft]);
+  const [checklistMode, setChecklistMode] = useLiveChecklistMode();
+  const boxMakerLabel = (BOX_MAKERS.find((maker) => maker.id === draft.boxMaker)?.label ?? "KOPOS Kolín").replace(/ (Kolín|Electric|Bettermann|Dolný Kubín)$/, "");
+  const fresh = emptyDraft();
+  const taskList = sandbox
+    ? null
+    : liveChecklist(draft, { seriesLabel: appearanceLabel(draft.series, draft.color, draft.frameColor), defaultSeries: draft.series === fresh.series && draft.color === fresh.color, generated: Boolean(stored?.project), boxMaker: boxMakerLabel });
 
   const floors = floorsOf(draft);
   // Fáze 90: zařizovací předměty, okna, dveře a nábytek se kreslí pod značkami (klik na zásuvku u postele vybere
@@ -1333,6 +1357,7 @@ export function FloorplanEditor({
 
   /** Fáze 89: ⚡ z lišty průvodce / kompaktní lišty – stejné generování jako v kartě „Založit rozváděč“ (její údaje). */
   function generateFromBar() {
+    if (sandbox) return generateSandbox();
     if (!checklist.ready) {
       document.querySelector('[data-testid="generation-checklist"]')?.scrollIntoView({ block: "center", behavior: "smooth" });
       return void toast.error(checklist.items.find((item) => !item.ok)?.label ?? "Doplňte kontrolní seznam před generováním.");
@@ -1528,7 +1553,67 @@ export function FloorplanEditor({
     toast.success(`Přiřazeno ${result.paired} světel k nejbližšímu vypínači v místnosti.${result.skipped.length ? ` Bez vypínače: ${result.skipped.join(", ")}.` : ""}`);
   }
 
+  /** Fáze 92: ⚡ z trenažéru – rozváděč z cvičného bungalovu bez kreditu, pak AI Panel Builder s gratulací. */
+  function generateSandbox() {
+    startTransition(async () => {
+      const result = await createSandboxProjectAction({ draft });
+      if (!result.ok) return void toast.error(result.error);
+      setSandboxGenerated(true);
+      toast.success(`🎉 Rozváděč z trenažéru vygenerován: ${result.data.circuits} okruhů, ${result.data.devices} přístrojů${result.data.enclosure ? `, skříň ${result.data.enclosure}` : ""} – bez odečtu kreditu.`);
+      router.push(`/panel-builder/${result.data.id}?trenazer=hotovo`);
+    });
+  }
+
+  /** Fáze 92: trenažér znovu od začátku (rozdělaný bungalov). */
+  function restartSandbox() {
+    reset({ ...sandboxDraft(), updatedAt: Date.now() });
+    setSandboxGenerated(false);
+    setTool({ kind: "select" });
+    setSelection([]);
+    setSelectedRoomId(null);
+  }
+
+  /** Fáze 92: nástroj z taháku / trenažéru (vkládání prvku palety). */
+  function pickPaletteTool(item: string) {
+    setTool({ kind: "place", item });
+    setSelection([]);
+    setSelectedRoomId(null);
+    setSelectedNoteId(null);
+    setHover(null);
+  }
+
+  /** Fáze 92: zvýraznit místo v editoru (žlutý pulzující rámeček na 4 s). */
+  function flash(selector: string) {
+    const target = document.querySelector<HTMLElement>(selector);
+    if (!target) return false;
+    target.scrollIntoView({ block: "center", behavior: "smooth" });
+    target.classList.add("trainer-pulse");
+    window.setTimeout(() => target.classList.remove("trainer-pulse"), 4000);
+    return true;
+  }
+
+  /** Fáze 92: tahák – „Ukázat kde“ (vložení místnosti X × Y a nahrání PDF / DXF v kroku 1). */
+  function showBase() {
+    if (uiMode === "wizard") setWizard(1);
+    else clickTestId("compact-room");
+    window.setTimeout(() => {
+      const room = flash('[data-testid="room-by-size"]');
+      const upload = flash('[data-tour="floorplan-upload"]');
+      if (!room && !upload) toast.info("Místnost X × Y a nahrání PDF / DXF najdete v kroku 1 – Podklad a místnosti.");
+    }, 80);
+  }
+
+  /** Fáze 92: tahák – „Změnit řadu/barvu“ otevře galerii designových řad. */
+  function openSeriesGallery() {
+    if (uiMode === "wizard") setWizard(2);
+    else clickTestId("compact-design");
+    window.setTimeout(() => {
+      if (!clickTestId("series-gallery-open")) toast.info("Výrobce, řadu a barvu zvolíte v kroku 2 – Systém, výrobce a design.");
+    }, 80);
+  }
+
   function generate(form: FormData) {
+    if (sandbox) return generateSandbox();
     if (!checklist.ready) return void toast.error(checklist.items.find((item) => !item.ok)?.label ?? "Doplňte kontrolní seznam.");
     startTransition(async () => {
       // Fáze 64: nejdřív uložit půdorys (nový tím vznikne na serveru) – rozváděč se k němu naváže a nákres jde do historie verzí
@@ -2168,7 +2253,17 @@ export function FloorplanEditor({
       />
     </>
   );
-  const modeToggle = <UiModeToggle mode={uiMode} onMode={setUiMode} />;
+  const modeToggle = (
+    <>
+      <UiModeToggle mode={uiMode} onMode={setUiMode} />
+      {/* Fáze 92: trvale vypnutý tahák zakázky jde zase zapnout */}
+      {!sandbox && checklistMode === "off" ? (
+        <Button type="button" variant="outline" size="sm" className="h-8 px-2 text-xs" onClick={() => setChecklistMode("open")} title="Zapnout tahák zakázky (Co teď udělat)" data-testid="live-checklist-on">
+          🧭 Tahák
+        </Button>
+      ) : null}
+    </>
+  );
   const designBadge = (
     <button type="button" onClick={() => (uiMode === "wizard" ? setWizard(2) : undefined)} className="rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-xs font-semibold text-foreground hover:border-primary" title="Výrobce, designová řada a barvy – změníte v kroku 2" data-testid="design-badge">
       🎨 {appearanceLabel(draft.series, draft.color, draft.frameColor)}
@@ -2248,7 +2343,7 @@ export function FloorplanEditor({
   );
 
   return (
-    <div className="flex flex-col gap-3" data-testid="floorplan-editor">
+    <div className="flex flex-col gap-3" data-testid="floorplan-editor" data-trainer-step={trainer?.current ?? undefined}>
       {/* Fáze 64: uložený půdorys – údaje, Zpět / Znovu, stav ukládání, historie verzí, rozváděč, souběh dvou oken */}
       <FloorplanDocumentBar
         leading={
@@ -2258,8 +2353,22 @@ export function FloorplanEditor({
             </Link>
             <h1 className="text-lg font-semibold tracking-tight">📐 2D půdorys & kabeláž</h1>
             {help ? <HelpTip text={help} /> : null}
+            {/* Fáze 92: trenažér nanečisto – rozdělaný dům ze 3 kliků (vlastní nákres zůstane, jak je); jen ikona, aby se
+                lišta dokumentu nezalomila do dvou řádků (posunula by plátno) */}
+            {sandbox ? null : (
+              <Link
+                href="/panel-builder/floorplan/trenazer"
+                className="flex size-7 items-center justify-center rounded-md border border-yellow-400/60 text-sm hover:bg-yellow-400/10"
+                data-testid="floorplan-trainer-link"
+                title="🎯 Vyzkoušet nanečisto – rozdělaný bungalov 4+kk dokončíte 3 kliky za 45 s, rozváděč z trenažéru je zdarma"
+                aria-label="Vyzkoušet nanečisto – trenažér 2D půdorysu"
+              >
+                🎯
+              </Link>
+            )}
           </span>
         }
+        trainer={sandbox}
         meta={meta}
         code={sync.code}
         fileMenu={
@@ -2476,7 +2585,7 @@ export function FloorplanEditor({
             }}
           />
           {/* Fáze 63: paleta značek jako akordeon (počty osazených prvků, sbalit / rozbalit vše, jedna kategorie) */}
-          <PaletteAccordion sections={paletteSections} />
+          <PaletteAccordion sections={paletteSections} focus={trainer?.current === "bed-socket" ? SANDBOX_SOCKET_ITEM : null} />
         </div>
 
         {/* Plátno půdorysu */}
@@ -2853,6 +2962,32 @@ export function FloorplanEditor({
                   data-kind={guide.kind}
                 />
               ))}
+              {/* Fáze 92: trenažér – terčík „⊕ Sem položte dvojzásuvku“ u postele a zvýrazněné svítidlo v koupelně */}
+              {trainer?.current === "bed-socket" ? (
+                <g pointerEvents="none" data-testid="trainer-target">
+                  <circle cx={SANDBOX_BED_TARGET.x} cy={SANDBOX_BED_TARGET.y + ui * 0.9} r={ui * 0.85} fill="rgba(250,204,21,0.14)" stroke="#facc15" strokeWidth={stroke * 2.5} strokeDasharray={`${ui / 4} ${ui / 6}`}>
+                    <animate attributeName="r" values={`${ui * 0.7};${ui * 1.05};${ui * 0.7}`} dur="1.6s" repeatCount="indefinite" />
+                  </circle>
+                  <text x={SANDBOX_BED_TARGET.x} y={SANDBOX_BED_TARGET.y + ui * 2.6} fontSize={ui * 0.55} fontWeight={700} textAnchor="middle" fill="#fde047" stroke="#09090b" strokeWidth={ui * 0.06} paintOrder="stroke">
+                    ⊕ Sem položte dvojzásuvku
+                  </text>
+                </g>
+              ) : null}
+              {trainer?.current === "bath-dimmer"
+                ? (() => {
+                    const light = draft.elements.find((element) => element.id === SANDBOX_BATH_LIGHT_ID);
+                    return light ? (
+                      <g pointerEvents="none" data-testid="trainer-light-target">
+                        <circle cx={light.x} cy={light.y} r={ui * 0.9} fill="none" stroke="#facc15" strokeWidth={stroke * 2.5}>
+                          <animate attributeName="r" values={`${ui * 0.75};${ui * 1.1};${ui * 0.75}`} dur="1.6s" repeatCount="indefinite" />
+                        </circle>
+                        <text x={light.x} y={light.y + ui * 1.9} fontSize={ui * 0.5} fontWeight={700} textAnchor="middle" fill="#fde047" stroke="#09090b" strokeWidth={ui * 0.06} paintOrder="stroke">
+                          🔆 Klikněte na svítidlo
+                        </text>
+                      </g>
+                    ) : null;
+                  })()
+                : null}
             </svg>
             {/* Zoom */}
             <div className="absolute right-2 bottom-2 flex items-center gap-1 rounded-lg border border-border bg-card/90 p-1 text-xs shadow" role="group" aria-label="Zoom půdorysu">
@@ -2920,6 +3055,25 @@ export function FloorplanEditor({
         {/* Detail prvku + výkaz kabeláže */}
         {/* Fáze 76: pravý sloupec ze sbalovacích karet se Sbalit / Rozbalit vše */}
         <RightPanels label="Detail a výkaz kabeláže" ids={RIGHT_PANEL_IDS}>
+          {/* Fáze 92: první půdorys firmy – volba trenažér / prázdný půdorys; živý tahák vlastní zakázky nahoře v pravém sloupci
+              (sbalitelný do pilulky, trvale vypnutelný) – nic neposouvá plátno */}
+          {startChoice && !sandbox ? <FloorplanStartChoice /> : null}
+          {taskList ? (
+            <FloorplanLiveChecklist
+              checklist={taskList}
+              mode={checklistMode}
+              onMode={setChecklistMode}
+              boxMaker={boxMakerLabel}
+              pending={pending}
+              onShowBase={showBase}
+              onChangeSeries={openSeriesGallery}
+              onPickPanel={() => pickPaletteTool("panel")}
+              onOpenBom={() => {
+                if (!clickTestId("wiring-bom-open")) toast.info("Kusovník bude k dispozici, jakmile v půdorysu osadíte první prvky.");
+              }}
+              onGenerate={generateFromBar}
+            />
+          ) : null}
           <PanelSection id="detail" title="Detail vybraného prvku / místnosti" testId="right-detail" bare>
           {!selectedRoom && !selectedNote && selection.length <= 1 && !selected ? <p className="px-2 pb-2 text-xs text-muted-foreground">Vyberte na plátně prvek nebo místnost – zobrazí se tu jejich vlastnosti.</p> : null}
           {selectedRoom ? (
@@ -3128,6 +3282,23 @@ export function FloorplanEditor({
         </RightPanels>
       </div>
 
+      {/* Fáze 92: trenažér rozdělaného domu – karta v pravém dolním rohu (jen stránka trenažéru) */}
+      {trainer ? (
+        <FloorplanSandboxTrainer
+          progress={trainer}
+          dimmer={trainerDimmer}
+          pending={pending}
+          onPickTool={() => pickPaletteTool(SANDBOX_SOCKET_ITEM)}
+          onShowLight={() => {
+            setTool({ kind: "select" });
+            setSelectedRoomId(null);
+            setSelection([SANDBOX_BATH_LIGHT_ID]);
+          }}
+          onGenerate={generateSandbox}
+          onRestart={restartSandbox}
+        />
+      ) : null}
+
       {/* Fáze 63: knihovna samostatných spotřebičů (✎ Upravit / + Přidat v paletě) */}
       <ApplianceEditor open={applianceOpen} onOpenChange={setApplianceOpen} specs={catalog} onSave={saveAppliances} />
       {/* Fáze 65: technický list přístroje chytré domácnosti (katalog, paleta, přehled akčních členů) */}
@@ -3184,6 +3355,12 @@ export function FloorplanEditor({
       ) : null}
     </div>
   );
+}
+
+/** Fáze 92: start trenažéru – rozdělaný bungalov, který odpovídá „uloženému“ stavu (nic se neukládá). */
+function sandboxBoot() {
+  const initial = sandboxDraft();
+  return { initial, initialSaved: initial, restored: false, staleBackup: null, corrupted: false };
 }
 
 /** Fáze 89: rychlá akce lišty spustí stejné tlačítko jinde na stránce (kusovník, soubor projektu, verze). */

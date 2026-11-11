@@ -117,6 +117,32 @@
   }
 }
 
+/* Fáze 92: trenažéry a taháky – žlutý pulzující rámeček kolem prvku, na který má uživatel kliknout (paleta, tlačítko
+   generování, zvýrazněné místo editoru); bez animace, když uživatel omezuje pohyb. */
+@keyframes trainer-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(250 204 21 / 0.7);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgb(250 204 21 / 0);
+  }
+}
+.trainer-pulse,
+[data-trainer-step="generate"] [data-testid="wizard-generate"],
+[data-trainer-step="generate"] [data-testid="generate-from-floorplan"] {
+  outline: 2px solid #facc15;
+  outline-offset: 2px;
+  animation: trainer-pulse 1.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .trainer-pulse,
+  [data-trainer-step="generate"] [data-testid="wizard-generate"],
+  [data-trainer-step="generate"] [data-testid="generate-from-floorplan"] {
+    animation: none;
+  }
+}
+
 /* Veřejná úvodní stránka: kotevní odkazy plynule (pokud uživatel nechce omezit pohyb). */
 @media (prefers-reduced-motion: no-preference) {
   html:has(.landing) {

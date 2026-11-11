@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { PrintToolbar } from "@/components/common/PrintToolbar";
-import { QrLabelFace } from "@/components/equipment/QrLabelFace";
+import { QrLabelFace, QrSquareLabel } from "@/components/equipment/QrLabelFace";
 import { summarizeInspections } from "@/lib/inspection";
-import { LABEL_SIZE_MM } from "@/lib/qr-label";
+import { LABEL_SIZE_MM, squareLabelOf } from "@/lib/qr-label";
 import { buildLabelData } from "@/server/equipment-label";
 import { getEquipmentLabel } from "@/server/queries/equipment";
 import { getCurrentAccount } from "@/server/session";
@@ -16,12 +16,14 @@ export async function generateMetadata({ params }: PageProps<"/equipment/[id]/la
 }
 
 // Ořezaný tisk štítku pro štítkovače (62 × 29 mm): stránka = štítek, bez okrajů, záhlaví a zápatí prohlížeče.
-export default async function LabelPrintPage({ params }: PageProps<"/equipment/[id]/label">) {
-  const { id } = await params;
+// Fáze 92: `?format=20` / `?format=40` = čtvercový štítek na stroj 20 × 20 / 40 × 40 mm.
+export default async function LabelPrintPage({ params, searchParams }: PageProps<"/equipment/[id]/label">) {
+  const [{ id }, { format }] = await Promise.all([params, searchParams]);
+  const square = squareLabelOf(format);
   const [equipment, account] = await Promise.all([getEquipmentLabel(id), getCurrentAccount()]);
   if (!equipment || !account.canSee(equipment.type)) notFound();
   const label = await buildLabelData(equipment, summarizeInspections(equipment.inspections));
-  const { width, height } = LABEL_SIZE_MM;
+  const { width, height } = square ? { width: square, height: square } : LABEL_SIZE_MM;
 
   return (
     <div className="label-print flex flex-1 flex-col items-center justify-center gap-6 p-6">
@@ -43,7 +45,7 @@ export default async function LabelPrintPage({ params }: PageProps<"/equipment/[
           </>
         }
       />
-      <QrLabelFace label={label} className="w-full max-w-[34rem] shadow-xl shadow-black/50" />
+      {square ? <QrSquareLabel label={label} size={square} className="w-full max-w-[18rem] shadow-xl shadow-black/50" /> : <QrLabelFace label={label} className="w-full max-w-[34rem] shadow-xl shadow-black/50" />}
     </div>
   );
 }

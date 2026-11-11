@@ -4,6 +4,11 @@
 /** Rozměry štítku pro průmyslové štítkovače (Brother DK-22205 a pod.), v milimetrech. */
 export const LABEL_SIZE_MM = { width: 62, height: 29 } as const;
 
+/** Fáze 92: čtvercové štítky na stroje 20 × 20 mm (jen QR a tag) a 40 × 40 mm (QR, tag a název). */
+export const SQUARE_LABEL_MM = [20, 40] as const;
+export type SquareLabelMm = (typeof SQUARE_LABEL_MM)[number];
+export const squareLabelOf = (value: unknown): SquareLabelMm | null => (value === "20" || value === 20 ? 20 : value === "40" || value === 40 ? 40 : null);
+
 const TOKEN_BYTES = 5;
 
 /** Nový kód štítku: 10 hex znaků velkými písmeny (stejný formát jako migrace). */

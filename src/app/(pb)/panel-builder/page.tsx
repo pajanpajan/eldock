@@ -6,7 +6,9 @@ import { PageHeader } from "@/components/common/PageHeader";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { panelBuilderGuard } from "@/components/panel-builder/access";
 import { NewProjectDialog } from "@/components/panel-builder/NewProjectDialog";
+import { PanelTrainerJobs } from "@/components/panel-builder/PanelTrainerJobs";
 import { ProjectBoard, type BoardProject } from "@/components/panel-builder/ProjectBoard";
+import { isTrainerPreset, type TrainerPresetId } from "@/lib/panel-builder/panel-trainer-presets";
 import { TutorialVideoButton } from "@/components/tutorials/TutorialVideoButton";
 import { Button } from "@/components/ui/button";
 import { requirePanelCompany } from "@/server/panel-session";
@@ -35,6 +37,11 @@ export default async function PanelBuilderPage() {
     };
   });
 
+  // Fáze 92: tréninkové zakázky – nová firma (bez vlastních projektů) je vidí rozbalené; už otevřené se jen znovu otevřou
+  const own = projects.filter((project) => !project.trainerPreset).length;
+  const opened: Partial<Record<TrainerPresetId, string>> = {};
+  for (const project of projects) if (isTrainerPreset(project.trainerPreset) && !opened[project.trainerPreset]) opened[project.trainerPreset] = project.id;
+
   return (
     <PageTransition>
       <PageHeader
@@ -53,6 +60,7 @@ export default async function PanelBuilderPage() {
           </>
         }
       />
+      <PanelTrainerJobs initiallyOpen={own === 0} opened={opened} />
       <ProjectBoard projects={board} />
     </PageTransition>
   );

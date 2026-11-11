@@ -5,6 +5,8 @@
 // Každá složka řady musí mít `zdroj.json` ({ "source": "…", "license": "…" }) – bez něj se fotky do manifestu nedostanou
 // (aplikace pod fotkou vypisuje zdroj a podmínky užití). Název souboru: `<barva>-<díl>.<přípona>` (díl switch / socket /
 // set, barva = id barvy řady, „rada“ = bez barvy), chytrá domácnost `smart/<id výrobku>.<přípona>`.
+// Fáze 92: reálné fotky výrobců z `public/catalog-images/manifest.json` (`scripts/harvest-switch-photos.mjs`) nesou zdroj
+// a licenci samy (zdroj.json složky pro ně neplatí) a v manifestu mají příznak `photo` – přednost před renderem.
 
 import { existsSync } from "node:fs";
 import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
@@ -12,6 +14,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { CATALOG_IMAGE_EXTENSIONS, CATALOG_IMAGE_MAX_BYTES, catalogImageEntry, renderCatalogImages, type CatalogImage } from "../src/lib/panel-builder/catalog-images";
+import { parsePhotoManifest } from "../src/lib/panel-builder/catalog-photos";
 
 const ROOT_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const CATALOG_IMAGES_DIR = path.join(ROOT_DIR, "public", "catalog-images");
@@ -60,6 +63,8 @@ export async function scanCatalogImages(): Promise<{ images: CatalogImage[]; ski
   const images: CatalogImage[] = [];
   const skipped: string[] = [];
   if (!existsSync(root)) return { images, skipped };
+  // Fáze 92: fotky se zdrojem a licencí u každého souboru
+  const photos = new Map(parsePhotoManifest(await readJson(path.join(root, "manifest.json"))).map((photo) => [photo.file, photo]));
   for (const maker of (await readdir(root, { withFileTypes: true })).filter((entry) => entry.isDirectory())) {
     for (const series of (await readdir(path.join(root, maker.name), { withFileTypes: true })).filter((entry) => entry.isDirectory())) {
       const dir = path.join(root, maker.name, series.name);
@@ -68,6 +73,17 @@ export async function scanCatalogImages(): Promise<{ images: CatalogImage[]; ski
         const extension = path.extname(file).slice(1).toLowerCase();
         if (!CATALOG_IMAGE_EXTENSIONS.includes(extension)) continue;
         const relative = `${maker.name}/${series.name}/${file}`;
+        const photo = photos.get(relative);
+        if (photo) {
+          if ((await stat(path.join(dir, file))).size > CATALOG_IMAGE_MAX_BYTES) {
+            skipped.push(`${relative} (větší než ${CATALOG_IMAGE_MAX_BYTES / 1024 / 1024} MB)`);
+            continue;
+          }
+          const entry = catalogImageEntry(maker.name, series.name, file, { source: photo.source, license: photo.license }, { photo: true });
+          if (entry) images.push(entry);
+          else skipped.push(`${relative} (neznámý výrobce / řada / díl)`);
+          continue;
+        }
         if (typeof license?.source !== "string" || typeof license.license !== "string") {
           skipped.push(`${relative} (chybí zdroj.json se zdrojem a licencí)`);
           continue;

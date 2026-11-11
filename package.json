@@ -41,7 +41,8 @@
     "verify": "npm run typecheck && npm run lint && npm run test && npm run build",
     "plant-server": "tsx scripts/plant-server.ts",
     "catalog:images": "tsx scripts/catalog-images.ts",
-    "catalog:renders": "tsx scripts/catalog-renders.ts"
+    "catalog:renders": "tsx scripts/catalog-renders.ts",
+    "catalog:photos": "tsx scripts/harvest-switch-photos.mjs"
   },
   "dependencies": {
     "@prisma/adapter-better-sqlite3": "^7.10.1",
