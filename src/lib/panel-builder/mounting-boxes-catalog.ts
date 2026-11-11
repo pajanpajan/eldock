@@ -8,6 +8,7 @@ import { BOX_MAKERS, DEFAULT_BOX_MAKER, DEFAULT_WALL_TYPE, WALL_TYPES, type BoxC
 import { allElements, floorsOf, paletteItem, type EditorElement, type EditorRoom, type FloorplanDraft } from "./floorplan-editor";
 import { gangsOf } from "./floorplan-frames";
 import { frameRulesOf, isSurfaceMountedSeries } from "./residential-series-catalog";
+import { isCommercial } from "./occupancy";
 import { productById } from "./smart-catalog";
 
 export { BOX_CHOICES, BOX_MAKERS, DEFAULT_BOX_MAKER, DEFAULT_WALL_TYPE, WALL_TYPES, isBoxChoice, isBoxMaker, isWallType } from "./box-options";
@@ -60,7 +61,8 @@ export const MOUNTING_BOXES: readonly MountingBox[] = [
   box({ maker: "kopos", type: "KP 64/5", code: "KP 64/5_KA", depthMm: 45, gangs: 5, walls: MASONRY, role: "shallow", purpose: "Do zdiva – pětinásobná krabice pro sdružené rámečky (rozteč 71 mm)", source: `${KOPOS}2346-krabice-pristrojova` }),
   box({ maker: "kopos", type: "KPL 64-45/LD", code: "KPL 64-45/LD_NA", depthMm: 45, gangs: 1, walls: HOLLOW, role: "shallow", airtight: true, purpose: "Do sádrokartonu / dutých stěn – 45 mm, membránové vstupy, bez zahlubování okraje SDK", source: `${KOPOS}9395-krabice-pristrojova` }),
   box({ maker: "kopos", type: "KPR 68/71L", code: "KPR 68/71L_NA", depthMm: 70, gangs: 1, walls: HOLLOW, role: "deep", pitch71: true, purpose: "Do sádrokartonu / dutých stěn – hluboká 70 mm pro přístroje s velkou hloubkou a svorkovnici", source: `${KOPOS}2351-krabice-pristrojova` }),
-  box({ maker: "kopos", type: "KU 68 LD/1HF", code: "KU 68 LD/1HF_HA", depthMm: 45, gangs: 1, walls: AIRTIGHT, role: "shallow", airtight: true, halogenFree: true, purpose: "Do dřevostavby / pasivního domu – bezhalogenová vzduchotěsná 45 mm s membránou", source: `${KOPOS}2885-krabice-univerzalni-bezhalogenova` }),
+  // Fáze 93: výrobce ji řadí do dutých stěn (šrouby do sádrokartonu) – i do SDK, nejen do dřevostavby
+  box({ maker: "kopos", type: "KU 68 LD/1HF", code: "KU 68 LD/1HF_HA", depthMm: 45, gangs: 1, walls: HOLLOW_AIRTIGHT, role: "shallow", airtight: true, halogenFree: true, purpose: "Do dutých stěn, dřevostavby a pasivního domu – bezhalogenová 45 mm s membránou", source: `${KOPOS}2885-krabice-univerzalni-bezhalogenova` }),
   box({ maker: "kopos", type: "KPRL 68-70/LD", code: "KPRL 68-70/LD_NA", depthMm: 70, gangs: 1, walls: HOLLOW_AIRTIGHT, role: "deep", airtight: true, pitch71: true, purpose: "Do dřevostavby / pasivního domu i zvukotěsné SDK stěny – vzduchotěsná hluboká 70 mm", source: `${KOPOS}3048-krabice-pristrojova` }),
   box({ maker: "kopos", type: "KPL 64-50/2LD", code: "KPL 64-50/2LD_NA", depthMm: 50, gangs: 2, walls: HOLLOW_AIRTIGHT, role: "shallow", airtight: true, purpose: "Do dutých stěn – dvojnásobná vzduchotěsná 50 mm pro sdružené rámečky", source: `${KOPOS}3073-krabice-pristrojova` }),
   box({ maker: "kopos", type: "KPL 64-50/3LD", code: "KPL 64-50/3LD_NA", depthMm: 50, gangs: 3, walls: HOLLOW_AIRTIGHT, role: "shallow", airtight: true, purpose: "Do dutých stěn – trojnásobná vzduchotěsná 50 mm pro sdružené rámečky", source: `${KOPOS}3081-krabice-pristrojova` }),
@@ -71,6 +73,10 @@ export const MOUNTING_BOXES: readonly MountingBox[] = [
   box({ maker: "kopos", type: "KEZ", code: "KEZ_KB", depthMm: 200, gangs: 1, walls: ["etics"], role: "etics-box", purpose: "Do zateplené fasády 50–200 mm – krabice s izolační trubkou, bez tepelného mostu", source: `${KOPOS}2348-krabice-elektroinstalacni-do-zatepleni` }),
   box({ maker: "kopos", type: "KEZ-3", code: "KEZ-3_KB", depthMm: 250, gangs: 3, walls: ["etics"], role: "etics-box", purpose: "Do zateplené fasády 100–250 mm – 2 až 3 přístroje s roztečí 71 mm", source: `${KOPOS}2882-krabice-elektroinstalacni-vicenasobna-do-zatepleni` }),
   box({ maker: "kopos", type: "MDZ", code: "MDZ_KB", depthMm: 200, gangs: 1, walls: ["etics"], role: "etics-plate", purpose: "Montážní deska do zateplení 50–200 mm – venkovní svítidla, pohybová čidla, kamery a zásuvky 400 V", source: `${KOPOS}2349-montazni-deska-do-zatepleni` }),
+  // Fáze 93: bezhalogenové krabice HF pro prostory pro veřejnost (BD4) – kategorie „bezhalogenové“ na kopos.cz (2026-11-11)
+  box({ maker: "kopos", type: "KU 68-45/HF", code: "KU 68-45/HF_HA", depthMm: 45, gangs: 1, walls: MASONRY, role: "shallow", halogenFree: true, purpose: "Do zdiva / pod omítku – bezhalogenová univerzální krabice 45 mm (BD4, prostory pro veřejnost)", source: `${KOPOS}12905-krabice-univerzalni-bezhalogenova` }),
+  box({ maker: "kopos", type: "KPR 68-70/HF", code: "KPR 68-70/HF_HA", depthMm: 70, gangs: 1, walls: MASONRY, role: "electronics", halogenFree: true, purpose: "Pod omítku – bezhalogenová přístrojová krabice 70 mm pro hluboké přístroje a svorkování (BD4)", source: `${KOPOS}12906-krabice-pristrojova-bezhalogenova` }),
+  box({ maker: "kopos", type: "KPL 64-50/2LD HF", code: "KPL 64-50/2LD HF_KA", depthMm: 50, gangs: 2, walls: HOLLOW, role: "shallow", halogenFree: true, purpose: "Do dutých stěn – bezhalogenová dvojnásobná krabice 50 mm pro sdružené rámečky (BD4)", source: `${KOPOS}13519-krabice-pristrojova-bezhalogenova` }),
   // ── Kaiser ──────────────────────────────────────────────────────────────────────────────────────────────
   box({ maker: "kaiser", type: "Gerätedose UP¹", code: "1055-05", depthMm: 46, gangs: 1, walls: MASONRY, role: "shallow", pitch71: true, purpose: "Do zdiva – přístrojová krabice 46 mm (osazení do sádry)", source: `${KAISER}p/Geraetedose-UP1/1055-05` }),
   box({ maker: "kaiser", type: "Geräte-Verbindungsdose UP¹", code: "1555-05", depthMm: 66, gangs: 1, walls: MASONRY, role: "deep", pitch71: true, purpose: "Do zdiva – přístrojová a rozbočovací krabice 66 mm", source: `${KAISER}p/Geraete-Verbindungsdose-UP1/1555-05` }),
@@ -100,9 +106,17 @@ export const MOUNTING_BOXES: readonly MountingBox[] = [
 export const boxMakerLabel = (maker: BoxMaker) => BOX_MAKERS.find((entry) => entry.id === maker)?.label ?? maker;
 export const wallTypeOf = (wall: WallType) => WALL_TYPES.find((entry) => entry.id === wall)!;
 
+/** Fáze 93: volby výběru krabice – v BD4 (obchodní centrum) jen bezhalogenové krabice HF. */
+export interface BoxPickOptions {
+  halogenFree?: boolean;
+}
+
+/** Fáze 93: volby výběru krabic podle režimu objektu nákresu. */
+export const boxPickOptionsOf = (draft: Partial<Pick<FloorplanDraft, "occupancy">>): BoxPickOptions => (isCommercial(draft.occupancy) ? { halogenFree: true } : {});
+
 /** Krabice výrobce podle stěny a třídy (hlubší vyhoví i mělčí potřebě); null = výrobce takovou krabici nevede. */
-export function pickBox(maker: BoxMaker, wall: WallType, need: BoxDepthClass, gangs = 1): MountingBox | null {
-  const candidates = MOUNTING_BOXES.filter((entry) => entry.maker === maker && entry.walls.includes(wall) && entry.gangs === gangs && entry.role !== "etics-box" && entry.role !== "etics-plate");
+export function pickBox(maker: BoxMaker, wall: WallType, need: BoxDepthClass, gangs = 1, options: BoxPickOptions = {}): MountingBox | null {
+  const candidates = MOUNTING_BOXES.filter((entry) => entry.maker === maker && entry.walls.includes(wall) && entry.gangs === gangs && entry.role !== "etics-box" && entry.role !== "etics-plate" && (!options.halogenFree || entry.halogenFree));
   const fits = (entry: MountingBox) => (entry.depthMm ?? 0) >= MIN_DEPTH_MM[need] && CLASS_ORDER[entry.role as BoxDepthClass] >= (need === "electronics" ? CLASS_ORDER.deep : CLASS_ORDER[need]);
   // Přednost: přesně požadovaná třída, pak nejbližší hlubší (s prostorem pro elektroniku → hluboká 66 mm, když ji výrobce nevede)
   const order: BoxDepthClass[] = need === "shallow" ? ["shallow", "deep", "electronics"] : need === "deep" ? ["deep", "electronics"] : ["electronics", "deep"];
@@ -114,8 +128,8 @@ export function pickBox(maker: BoxMaker, wall: WallType, need: BoxDepthClass, ga
 }
 
 /** Krabice / deska do zateplené fasády (přístroj, nebo montážní deska pro svítidlo a čidlo). */
-export function pickEticsBox(maker: BoxMaker, role: "etics-box" | "etics-plate", gangs = 1): MountingBox | null {
-  const candidates = MOUNTING_BOXES.filter((entry) => entry.maker === maker && entry.role === role);
+export function pickEticsBox(maker: BoxMaker, role: "etics-box" | "etics-plate", gangs = 1, options: BoxPickOptions = {}): MountingBox | null {
+  const candidates = MOUNTING_BOXES.filter((entry) => entry.maker === maker && entry.role === role && (!options.halogenFree || entry.halogenFree));
   return candidates.find((entry) => entry.gangs === gangs) ?? candidates.find((entry) => entry.gangs >= gangs) ?? null;
 }
 
@@ -194,6 +208,8 @@ export interface ResolvedBox {
   box: MountingBox | null;
   /** Ruční volba je mělčí, než přístroj potřebuje. */
   tooShallow: boolean;
+  /** Fáze 93: obchodní centrum (BD4) – jen bezhalogenové krabice HF. */
+  halogenFree?: boolean;
 }
 
 /** Krabice prvku: automaticky podle potřeby, nebo ruční volba z detailu prvku. */
@@ -206,8 +222,9 @@ export function resolveBox(draft: FloorplanDraft, element: EditorElement, contex
   // Ruční volba platí jen u přístrojů do krabice (nástěnná montáž i u nich)
   const kind: BoxNeed["kind"] = device && choice !== "auto" ? choice : need.kind;
   const tooShallow = device && (kind === "shallow" || kind === "deep" || kind === "electronics") && kind !== need.kind && CLASS_ORDER[kind] < CLASS_ORDER[need.kind as BoxDepthClass];
-  const chosenBox = wall === "etics" && device ? pickEticsBox(maker, "etics-box") : kind === "etics-plate" ? pickEticsBox(maker, "etics-plate") : kind === "shallow" || kind === "deep" || kind === "electronics" ? pickBox(maker, wall, kind) : null;
-  return { need, choice, kind, wall, box: chosenBox, tooShallow };
+  const options = boxPickOptionsOf(draft);
+  const chosenBox = wall === "etics" && device ? pickEticsBox(maker, "etics-box", 1, options) : kind === "etics-plate" ? pickEticsBox(maker, "etics-plate", 1, options) : kind === "shallow" || kind === "deep" || kind === "electronics" ? pickBox(maker, wall, kind, 1, options) : null;
+  return { need, choice, kind, wall, box: chosenBox, tooShallow, ...(options.halogenFree ? { halogenFree: true } : {}) };
 }
 
 /** Popis krabice do detailu prvku: „Hluboká 66 mm – KOPOS KPR 68 (stmívač 230 V)“. */
@@ -217,7 +234,7 @@ export function boxSummary(resolved: ResolvedBox, maker: BoxMaker): string {
   if (kind === "surface") return "bez podomítkové krabice – nástěnná montáž";
   if (kind === "panel") return "originální montážní krabice výrobce panelu";
   const why = need.reasons.length ? ` (${need.reasons.join(", ")})` : "";
-  if (!own) return `${kind === "etics-plate" ? "Montážní deska do zateplení" : CLASS_LABEL[kind as BoxDepthClass]} – ${boxMakerLabel(maker)} tento typ nevede, doplňte ručně${why}`;
+  if (!own) return `${kind === "etics-plate" ? "Montážní deska do zateplení" : CLASS_LABEL[kind as BoxDepthClass]}${resolved.halogenFree ? " bezhalogenová (HF)" : ""} – ${boxMakerLabel(maker)} tento typ nevede, doplňte ručně${why}`;
   const depth = own.depthMm ? (own.role === "etics-box" || own.role === "etics-plate" ? ` (izolace do ${own.depthMm} mm)` : ` ${own.depthMm} mm`) : "";
   const label = own.role === "etics-box" ? "Do zateplení" : own.role === "etics-plate" ? "Montážní deska do zateplení" : CLASS_LABEL[own.role as BoxDepthClass];
   return `${label}${depth} – ${boxMakerLabel(own.maker)} ${own.type}${why}`;
@@ -241,7 +258,7 @@ export interface BoxBomLine {
  * Krabice pro skupinu pozic (víceramček nebo prvek s N kusy v rámečku): vícenásobná krabice, když všechny pozice stačí
  * mělká a výrobce ji pro stěnu vede, jinak spojovatelné krabice po jedné pozici (rozteč 71 mm) podle potřeby každé pozice.
  */
-export function boxesForPositions(maker: BoxMaker, wall: WallType, positions: readonly BoxDepthClass[]): BoxBomLine[] {
+export function boxesForPositions(maker: BoxMaker, wall: WallType, positions: readonly BoxDepthClass[], options: BoxPickOptions = {}): BoxBomLine[] {
   const lines: BoxBomLine[] = [];
   const add = (entry: MountingBox | null, missing: string | undefined, quantity: number) => {
     const same = lines.find((line) => line.box === entry && line.missing === missing);
@@ -249,15 +266,15 @@ export function boxesForPositions(maker: BoxMaker, wall: WallType, positions: re
     else lines.push({ box: entry, ...(missing ? { missing } : {}), maker, quantity });
   };
   if (positions.length >= 2 && positions.every((position) => position === "shallow")) {
-    const multi = pickBox(maker, wall, "shallow", positions.length);
+    const multi = pickBox(maker, wall, "shallow", positions.length, options);
     if (multi && multi.gangs === positions.length) {
       add(multi, undefined, 1);
       return lines;
     }
   }
   for (const position of positions) {
-    const own = pickBox(maker, wall, position);
-    add(own, own ? undefined : `${CLASS_LABEL[position]} krabice ${wallTypeOf(wall).short}`, 1);
+    const own = pickBox(maker, wall, position, 1, options);
+    add(own, own ? undefined : `${CLASS_LABEL[position]} krabice${options.halogenFree ? " bezhalogenová (HF)" : ""} ${wallTypeOf(wall).short}`, 1);
   }
   return lines;
 }
@@ -275,6 +292,8 @@ export interface BoxUsage extends BoxBomLine {
  */
 export function compileBoxUsage(draft: FloorplanDraft, cableEnds: Readonly<Record<string, number>> = {}): BoxUsage[] {
   const maker = draft.boxMaker ?? DEFAULT_BOX_MAKER;
+  // Fáze 93: obchodní centrum (BD4) – jen bezhalogenové krabice HF
+  const options = boxPickOptionsOf(draft);
   const usage: BoxUsage[] = [];
   const push = (wall: WallType, lines: BoxBomLine[]) => {
     for (const line of lines) {
@@ -296,18 +315,18 @@ export function compileBoxUsage(draft: FloorplanDraft, cableEnds: Readonly<Recor
       if (resolved.every(({ own }) => own.kind === "surface" || own.kind === "none")) continue;
       const positions = resolved.flatMap(({ member, own }) => (own.kind === "shallow" || own.kind === "deep" || own.kind === "electronics" ? Array.from({ length: gangsOf(member) }, () => own.kind as BoxDepthClass) : []));
       if (wall === "etics") {
-        const multi = positions.length >= 2 && positions.length <= 3 ? pickEticsBox(maker, "etics-box", 3) : null;
-        const single = pickEticsBox(maker, "etics-box");
+        const multi = positions.length >= 2 && positions.length <= 3 ? pickEticsBox(maker, "etics-box", 3, options) : null;
+        const single = pickEticsBox(maker, "etics-box", 1, options);
         push(wall, multi && multi.gangs >= positions.length ? [{ box: multi, maker, quantity: 1 }] : [{ box: single, ...(single ? {} : { missing: "Krabice do zateplené fasády" }), maker, quantity: positions.length }]);
         continue;
       }
       // Decento nejde do vícenásobných rámečků – každý přístroj ve vlastní krabici
       const separate = frameRulesOf(members[0].series ?? draft.series).separateDevices;
       if (separate) {
-        for (const position of positions) push(wall, boxesForPositions(maker, wall, [position]));
+        for (const position of positions) push(wall, boxesForPositions(maker, wall, [position], options));
         continue;
       }
-      push(wall, boxesForPositions(maker, wall, positions));
+      push(wall, boxesForPositions(maker, wall, positions, options));
     }
   }
   for (const element of everything) {
@@ -320,15 +339,15 @@ export function compileBoxUsage(draft: FloorplanDraft, cableEnds: Readonly<Recor
     }
     if (own.kind !== "shallow" && own.kind !== "deep" && own.kind !== "electronics") continue;
     if (own.wall === "etics") {
-      const single = pickEticsBox(maker, "etics-box");
-      push(own.wall, [{ box: single, ...(single ? {} : { missing: "Krabice do zateplené fasády" }), maker, quantity: units }]);
+      const single = pickEticsBox(maker, "etics-box", 1, options);
+      push(own.wall, [{ box: single, ...(single ? {} : { missing: `Krabice do zateplené fasády${options.halogenFree ? " bezhalogenová (HF)" : ""}` }), maker, quantity: units }]);
       continue;
     }
     // N stejných kusů v jednom rámečku (frameUnits) = N pozic; Decento vždy samostatně
     const separate = frameRulesOf(element.series ?? draft.series).separateDevices;
     const positions = Array.from({ length: units }, () => own.kind as BoxDepthClass);
-    if (separate || units === 1) for (const position of positions) push(own.wall, boxesForPositions(maker, own.wall, [position]));
-    else push(own.wall, boxesForPositions(maker, own.wall, positions));
+    if (separate || units === 1) for (const position of positions) push(own.wall, boxesForPositions(maker, own.wall, [position], options));
+    else push(own.wall, boxesForPositions(maker, own.wall, positions, options));
   }
   return usage;
 }

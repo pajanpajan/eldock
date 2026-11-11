@@ -5,7 +5,7 @@
 import type { EquipmentType, InstallationKind } from "@/generated/prisma/enums";
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import { DEADLINE_TYPES, computeValidUntil } from "@/lib/inspection";
-import { BUILDING_RULE_FIELDS, RULE_FIELDS, inspectionRuleFor, intervalIssue, ruleInputFrom, ruleKindOf } from "@/lib/inspection-rules";
+import { BUILDING_RULE_FIELDS, RULE_FIELDS, inspectionRuleFor, intervalIssue, ruleInputFrom, ruleKindOf, variantsFor } from "@/lib/inspection-rules";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 
 import type { Tx } from "./workflow";
@@ -24,6 +24,8 @@ export interface InspectionSettingsInput {
   handHeld?: boolean;
   /** Budova zařízení podle PBŘ umožňuje přítomnost více než 200 osob – platí pro celou budovu. */
   crowdOver200?: boolean;
+  /** Fáze 93: varianta zdravotnické kategorie (`variantsFor`). */
+  inspectionVariant?: string | null;
 }
 
 const settingsSelect = {
@@ -52,6 +54,11 @@ export async function updateInspectionSettings(prisma: PrismaClient, input: Insp
     usageGroup: kind === "APPLIANCE" && input.usageGroup !== undefined ? normalizeGroup(input.usageGroup) : equipment.usageGroup,
     protectionClass: appliance && input.protectionClass !== undefined ? normalizeClass(input.protectionClass) : equipment.protectionClass,
     handHeld: equipment.type === "APPLIANCE" ? (input.handHeld ?? equipment.handHeld) : equipment.handHeld,
+    // Fáze 93: varianta jen u zdravotnických přístrojů a prostorů (jiná hodnota se ignoruje)
+    inspectionVariant:
+      input.inspectionVariant !== undefined && variantsFor(equipment.type).length
+        ? (variantsFor(equipment.type).find((variant) => variant.id === input.inspectionVariant)?.id ?? null)
+        : equipment.inspectionVariant,
   };
   const crowdOver200 = input.crowdOver200 ?? building.crowdOver200;
   const rule = inspectionRuleFor({ type: equipment.type, ...next, buildingType: building.type, crowdOver200 });

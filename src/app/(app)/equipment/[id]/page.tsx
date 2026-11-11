@@ -46,6 +46,8 @@ import { getEquipmentPassports } from "@/server/queries/panel-builder";
 import { getEquipmentHealth } from "@/server/queries/health";
 import { ComponentLifespan } from "@/components/equipment/ComponentLifespan";
 import { FeederCableCard } from "@/components/equipment/FeederCableCard";
+import { PowerBackupCard } from "@/components/equipment/PowerBackupCard";
+import { hasBackupTier, isPowerBackupTier, tierOf } from "@/lib/power-backup";
 import { CABLE_STATUS } from "@/lib/cable-sizing";
 import { LIFESPAN_STATUS, assessComponent } from "@/lib/component-lifespan";
 import { getCurrentAccount } from "@/server/session";
@@ -246,6 +248,7 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
         protectionClass: equipment.protectionClass,
         handHeld: equipment.handHeld,
         intervalMonths: equipment.inspectionIntervalMonths,
+        inspectionVariant: equipment.inspectionVariant,
       }}
       ratedVoltage={equipment.ratedVoltage}
       reportDefaults={reportDefaultTexts}
@@ -269,6 +272,18 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
         canEdit={canEditCard}
       />
       <LazyQrLabelCard label={label} printHref={`${basePath}/label`} canEdit={canEditCard} />
+      {/* Fáze 93: zálohování napájení rozváděče / zdroje a nájemní jednotka / zdravotnické oddělení */}
+      {hasBackupTier(equipment.type) ? (
+        <PowerBackupCard
+          equipmentId={equipment.id}
+          tag={equipment.tag}
+          tier={isPowerBackupTier(equipment.powerBackupTier) ? equipment.powerBackupTier : "GRID_STANDARD"}
+          capacityKva={equipment.backupCapacityKva}
+          tenantUnit={equipment.tenantUnit}
+          tiered
+          canEdit={canEditCard || account.can("studio")}
+        />
+      ) : null}
       {/* Pasport z AI Panel Builderu (propuštěná dokumentace rozváděče) */}
       {passports.map((passport) => (
         <div key={passport.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-4 lg:col-span-2" data-testid="panel-passport">
@@ -353,6 +368,12 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
               {equipment.usageGroup ? <span>{USAGE_GROUP_LABELS[equipment.usageGroup as UsageGroup] ?? `Skupina ${equipment.usageGroup}`}</span> : null}
               {equipment.protectionClass ? <span>Třída ochrany {equipment.protectionClass}</span> : null}
               {equipment.assignedZone ? <span>{equipment.assignedZone}</span> : null}
+              {hasBackupTier(equipment.type) && equipment.powerBackupTier !== "GRID_STANDARD" ? (
+                <span className="rounded px-1.5 font-mono text-xs font-bold text-white" style={{ background: tierOf(equipment.powerBackupTier).color }} data-testid="header-backup-tier">
+                  {tierOf(equipment.powerBackupTier).badge}
+                </span>
+              ) : null}
+              {equipment.tenantUnit ? <span data-testid="header-tenant-unit">🏬 {equipment.tenantUnit}</span> : null}
               {equipment.fedFrom ? (
                 <Link href={equipmentHref(equipment.fedFrom.id)} className="inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline">
                   <Cable className="size-3.5" aria-hidden />

@@ -10,13 +10,17 @@ import { computeValidUntil } from "./inspection";
 //  • LPS: kritické systémy 2 roky, ostatní 4 roky, u všech vizuální kontrola nejméně 1× ročně.
 //  • Stroje: kontrola nejméně 1× za 12 měsíců (NV 378/2001 Sb., § 4 odst. 2).
 //  • Spotřebiče a nářadí: ČSN 33 1600 ed. 2, tab. 1 (skupina užívání, držené v ruce, třída ochrany).
+//  • Fáze 93: zdravotnické elektrické přístroje (ČSN EN 62353 ed. 2, zákon č. 375/2022 Sb. – 12 / 24 měsíců), zdravotnické
+//    prostory Skupiny 1 / 2 a hlídač izolačního stavu IMD v soustavě ZIS IT (ČSN 33 2000-7-710 ed. 2 – 36 / 12 / 6 měsíců),
+//    nouzové únikové osvětlení a CBS (ČSN EN 50172, ČSN EN 1838 – měsíční zkouška funkce a roční zkouška plné doby) a
+//    požární vypínací prvky CENTRAL / TOTAL STOP s odpojením z EPS (vyhláška č. 246/2001 Sb. – 12 měsíců).
 // Lhůty VTZ a LPS jsou právně závazné – zařízení nesmí mít delší. U ostatních jde o normové hodnoty: delší lhůta
 // je jen varování (průvodní dokumentace výrobce nebo vyhodnocení rizik provozovatele).
 
 export type UsageGroup = "A" | "B" | "C" | "D" | "E";
 export type ProtectionClass = "I" | "II" | "III";
 /** Druh pravidla: předpis, kontrola osvědčení revizního technika a náležitosti zprávy. */
-export type RuleKind = "VTZ" | "LPS" | "MACHINE" | "APPLIANCE" | "WELDER" | "EMERGENCY";
+export type RuleKind = "VTZ" | "LPS" | "MACHINE" | "APPLIANCE" | "WELDER" | "EMERGENCY" | "MEDICAL_DEVICE" | "MEDICAL_ROOM" | "FIRE";
 
 export interface RuleInput {
   type: EquipmentType;
@@ -34,6 +38,8 @@ export interface RuleInput {
   preventiveMaintenance?: boolean | null;
   /** Spotřebič držený v ruce (nářadí a prodlužovací přívody vždy). */
   handHeld?: boolean | null;
+  /** Fáze 93: varianta kategorie – zdravotnický přístroj STANDARD_24 / CRITICAL_12, prostor GROUP_1 / GROUP_2 / IMD_IT. */
+  inspectionVariant?: string | null;
 }
 
 export interface InspectionRule {
@@ -48,6 +54,8 @@ export interface InspectionRule {
   standard: string;
   /** Zdůvodnění lhůty pro tooltip, dialog a zprávu. */
   basis: string;
+  /** Fáze 93: průběžná zkouška mezi revizemi [měsíce] – nouzové osvětlení 1× měsíčně (`FUNCTION_TEST`). */
+  checkMonths?: number;
 }
 
 export const USAGE_GROUP_LABELS: Record<UsageGroup, string> = {
@@ -73,6 +81,9 @@ export const LIGHT_CARD_TYPES: readonly EquipmentType[] = [
   "LIGHTNING_ROD",
   "EMERGENCY_LIGHTING",
   "WIRING_DEVICE",
+  "MEDICAL_DEVICE",
+  "MEDICAL_ROOM",
+  "FIRE_SHUTDOWN",
 ];
 
 /** Přenosná zařízení měřená v rychlé revizi (R_PE, R_iso). */
@@ -93,6 +104,7 @@ export const RULE_FIELDS = {
   lpsCritical: true,
   preventiveMaintenance: true,
   handHeld: true,
+  inspectionVariant: true,
   inspectionIntervalMonths: true,
 } as const;
 
@@ -107,6 +119,9 @@ export const ruleInputFrom = <T extends Omit<RuleInput, "buildingType" | "crowdO
 export function ruleKindOf(type: EquipmentType): RuleKind {
   if (type === "LIGHTNING_ROD") return "LPS";
   if (type === "EMERGENCY_LIGHTING") return "EMERGENCY";
+  if (type === "MEDICAL_DEVICE") return "MEDICAL_DEVICE";
+  if (type === "MEDICAL_ROOM") return "MEDICAL_ROOM";
+  if (type === "FIRE_SHUTDOWN") return "FIRE";
   if (type === "WELDER") return "WELDER";
   if (type === "POWER_TOOL" || type === "APPLIANCE" || type === "EXTENSION_CORD") return "APPLIANCE";
   if (MACHINE_TYPES.includes(type)) return "MACHINE";
@@ -269,7 +284,58 @@ const EMERGENCY_RULE: InspectionRule = {
   kind: "EMERGENCY",
   binding: false,
   standard: "ČSN EN 50172",
-  basis: "Nouzové osvětlení – zkouška plné doby funkce 1× ročně a krátká zkouška funkce 1× měsíčně (ČSN EN 50172).",
+  basis: "Nouzové únikové osvětlení a centrální bateriový systém (CBS) – zkouška plné doby funkce 1× ročně (12 měsíců) a krátká zkouška funkce 1× měsíčně (1 měsíc) podle ČSN EN 50172 a ČSN EN 1838, kontrola provozuschopnosti dle vyhlášky č. 246/2001 Sb.",
+  checkMonths: 1,
+};
+
+// ---------------------------------------------------------------------------
+//  Fáze 93: zdravotnictví a požární vypínací prvky
+// ---------------------------------------------------------------------------
+
+export type MedicalDeviceVariant = "STANDARD_24" | "CRITICAL_12";
+export type MedicalRoomVariant = "GROUP_1" | "GROUP_2" | "IMD_IT";
+
+export const MEDICAL_DEVICE_VARIANTS: readonly { id: MedicalDeviceVariant; label: string; months: number }[] = [
+  { id: "STANDARD_24", label: "Zdravotnický přístroj – opakovaná zkouška 24 měsíců", months: 24 },
+  { id: "CRITICAL_12", label: "Přístroj s vyšším rizikem / podpora životních funkcí – 12 měsíců", months: 12 },
+];
+export const MEDICAL_ROOM_VARIANTS: readonly { id: MedicalRoomVariant; label: string; months: number }[] = [
+  { id: "GROUP_1", label: "Zdravotnický prostor Skupiny 1 – revize 36 měsíců", months: 36 },
+  { id: "GROUP_2", label: "Zdravotnický prostor Skupiny 2 – revize 12 měsíců", months: 12 },
+  { id: "IMD_IT", label: "Hlídač izolačního stavu IMD / ZIS IT – zkouška funkce 6 měsíců", months: 6 },
+];
+/** Varianty kategorie podle typu zařízení (výběr na kartě zařízení). */
+export const variantsFor = (type: EquipmentType): readonly { id: string; label: string; months: number }[] =>
+  type === "MEDICAL_DEVICE" ? MEDICAL_DEVICE_VARIANTS : type === "MEDICAL_ROOM" ? MEDICAL_ROOM_VARIANTS : [];
+
+export function medicalDeviceRule(input: Pick<RuleInput, "inspectionVariant">): InspectionRule {
+  const variant = MEDICAL_DEVICE_VARIANTS.find((entry) => entry.id === input.inspectionVariant) ?? MEDICAL_DEVICE_VARIANTS[0];
+  return {
+    months: variant.months,
+    maxMonths: variant.months,
+    kind: "MEDICAL_DEVICE",
+    binding: false,
+    standard: "ČSN EN 62353 ed. 2",
+    basis: `${variant.label} – opakovaná zkouška zdravotnického elektrického přístroje (měření ochranného vodiče, unikajících proudů a izolace) podle ČSN EN 62353 ed. 2 v rozsahu bezpečnostně technické kontroly dle zákona č. 375/2022 Sb.; kratší lhůtu stanoví návod výrobce.`,
+  };
+}
+
+export function medicalRoomRule(input: Pick<RuleInput, "inspectionVariant">): InspectionRule {
+  const variant = MEDICAL_ROOM_VARIANTS.find((entry) => entry.id === input.inspectionVariant) ?? MEDICAL_ROOM_VARIANTS[0];
+  const what =
+    variant.id === "IMD_IT"
+      ? "zkouška funkce hlídače izolačního stavu IMD a signalizace v soustavě ZIS IT"
+      : `revize elektrické instalace zdravotnického prostoru ${variant.id === "GROUP_2" ? "Skupiny 2" : "Skupiny 1"} (chrániče ≤ 30 mA typ A / B, doplňující pospojování EKV, izolační stav)`;
+  return { months: variant.months, maxMonths: variant.months, kind: "MEDICAL_ROOM", binding: false, standard: "ČSN 33 2000-7-710 ed. 2", basis: `${capitalize(what)} – ${variant.months} měsíců (ČSN 33 2000-7-710 ed. 2).` };
+}
+
+const FIRE_RULE: InspectionRule = {
+  months: 12,
+  maxMonths: 12,
+  kind: "FIRE",
+  binding: false,
+  standard: "Vyhl. 246/2001 Sb.",
+  basis: "Požární vypínací prvek CENTRAL / TOTAL STOP a odpojení z elektrické požární signalizace (EPS) – kontrola provozuschopnosti 1× za 12 měsíců (vyhláška č. 246/2001 Sb., o požární prevenci).",
 };
 
 /** Nejdelší lhůta revize a předpis pro dané zařízení. */
@@ -287,6 +353,12 @@ export function inspectionRuleFor(input: RuleInput): InspectionRule {
       return WELDER_RULE;
     case "EMERGENCY":
       return EMERGENCY_RULE;
+    case "MEDICAL_DEVICE":
+      return medicalDeviceRule(input);
+    case "MEDICAL_ROOM":
+      return medicalRoomRule(input);
+    case "FIRE":
+      return FIRE_RULE;
   }
 }
 

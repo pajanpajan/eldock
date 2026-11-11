@@ -27,6 +27,7 @@ import {
   intervalIssue,
   lpsCriticalReasons,
   ruleKindOf,
+  variantsFor,
   type UsageGroup,
 } from "@/lib/inspection-rules";
 import { cn } from "@/lib/utils";
@@ -45,6 +46,8 @@ export interface InspectionSettings {
   protectionClass: string | null;
   handHeld: boolean;
   intervalMonths: number;
+  /** Fáze 93: varianta zdravotnické kategorie (přístroj 24 / 12 měsíců, prostor Skupina 1 / 2 / IMD). */
+  inspectionVariant?: string | null;
 }
 
 interface Props {
@@ -70,6 +73,8 @@ export function InspectionSettingsDialog({ equipmentId, tag, type, building, set
   const [protectionClass, setProtectionClass] = useState(settings.protectionClass ?? "I");
   const [handHeld, setHandHeld] = useState(settings.handHeld);
   const [crowdOver200, setCrowdOver200] = useState(building.crowdOver200);
+  const variants = variantsFor(type);
+  const [variant, setVariant] = useState(settings.inspectionVariant ?? variants[0]?.id ?? null);
   const kind = ruleKindOf(type);
   const rule = inspectionRuleFor({
     type,
@@ -80,6 +85,7 @@ export function InspectionSettingsDialog({ equipmentId, tag, type, building, set
     usageGroup,
     protectionClass,
     handHeld,
+    inspectionVariant: variant,
     buildingType: building.type,
     crowdOver200,
   });
@@ -107,6 +113,7 @@ export function InspectionSettingsDialog({ equipmentId, tag, type, building, set
         ...(kind === "VTZ" || kind === "LPS" ? { crowdOver200 } : {}),
         ...(kind === "APPLIANCE" ? { usageGroup: usageGroup as UsageGroup, protectionClass: protectionClass as "I" | "II" | "III", handHeld } : {}),
         ...(kind === "WELDER" ? { protectionClass: protectionClass as "I" | "II" | "III" } : {}),
+        ...(variants.length && variant ? { inspectionVariant: variant as "STANDARD_24" | "CRITICAL_12" | "GROUP_1" | "GROUP_2" | "IMD_IT" } : {}),
       });
       if (!response.ok) {
         toast.error(response.error);
@@ -235,6 +242,19 @@ export function InspectionSettingsDialog({ equipmentId, tag, type, building, set
                   </select>
                 </div>
                 {type === "APPLIANCE" ? <div className="flex items-end pb-2">{check("settings-hand", handHeld, setHandHeld, "Spotřebič držený v ruce")}</div> : null}
+              </div>
+            ) : null}
+
+            {variants.length ? (
+              <div className="space-y-1">
+                <Label htmlFor="settings-variant">{type === "MEDICAL_ROOM" ? "Zdravotnický prostor (ČSN 33 2000-7-710 ed. 2)" : "Zdravotnický přístroj (ČSN EN 62353 ed. 2)"}</Label>
+                <select id="settings-variant" value={variant ?? ""} onChange={(event) => setVariant(event.target.value)} className={SELECT} data-testid="settings-variant">
+                  {variants.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
               </div>
             ) : null}
 

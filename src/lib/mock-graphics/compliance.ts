@@ -233,6 +233,7 @@ const REPORT_TITLES: Record<InspectionType, string> = {
   EXTRAORDINARY: "Zpráva o mimořádné revizi",
   THERMOVISION: "Protokol o termovizním měření",
   VISUAL_CHECK: "Záznam o vizuální kontrole LPS",
+  FUNCTION_TEST: "Záznam o měsíční zkoušce funkce",
 };
 
 const VERDICTS: Record<InspectionResult, { label: string; tone: DocumentTone }> = {

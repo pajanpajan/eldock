@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { toCsv } from "@/lib/csv";
 
 /** Tisk Knihy revizí (`@media print`, třída `.print-report`) a export CSV pro Excel. */
-export function AuditReportActions({ csvRows, fileName }: { csvRows: string[][]; fileName: string }) {
+export function AuditReportActions({ csvRows, fileName, printLabel = "🖨️ Tisk oficiální Knihy revizí závodu (PDF)" }: { csvRows: string[][]; fileName: string; printLabel?: string }) {
   function download() {
     const url = URL.createObjectURL(new Blob([toCsv(csvRows)], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a");
@@ -19,7 +19,7 @@ export function AuditReportActions({ csvRows, fileName }: { csvRows: string[][];
   return (
     <div className="flex flex-wrap gap-2 print:hidden">
       <Button size="lg" className="touch-target gap-2" onClick={() => window.print()}>
-        🖨️ Tisk oficiální Knihy revizí závodu (PDF)
+        {printLabel}
       </Button>
       <Button size="lg" variant="outline" className="touch-target gap-2" onClick={download}>
         <FileDown className="size-4" aria-hidden />

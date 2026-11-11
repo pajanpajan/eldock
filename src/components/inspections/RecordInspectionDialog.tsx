@@ -127,7 +127,8 @@ export function RecordInspectionDialog({
   const [progress, setProgress] = useState<number | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
-  const types = equipmentType === "LIGHTNING_ROD" ? [...BASE_TYPES, "VISUAL_CHECK" as const] : BASE_TYPES;
+  // Fáze 93: nouzové osvětlení – měsíční zkouška funkce mezi ročními zkouškami plné doby
+  const types = equipmentType === "LIGHTNING_ROD" ? [...BASE_TYPES, "VISUAL_CHECK" as const] : equipmentType === "EMERGENCY_LIGHTING" ? [...BASE_TYPES, "FUNCTION_TEST" as const] : BASE_TYPES;
   const report = isReportType(type);
   const validity = months ?? defaultValidityMonths(type, intervalMonths);
   let validUntil: string | null = null;
@@ -202,7 +203,7 @@ export function RecordInspectionDialog({
         ...(measurable
           ? { measuringInstrument: instrument || null, protectiveConductorResistance: toNumber(rpe), insulationResistance: toNumber(riso), leakageCurrent: toNumber(leakage) }
           : { measuringInstrument: instrument.trim() || null }),
-        ...(type === "THERMOVISION" || type === "VISUAL_CHECK" ? {} : { functionalTest: functional === "" ? null : functional === "ok" }),
+        ...(type === "THERMOVISION" || type === "VISUAL_CHECK" ? {} : { functionalTest: type === "FUNCTION_TEST" ? result !== "INCAPABLE" : functional === "" ? null : functional === "ok" }),
         ...(!measurable && report && (rcd.noTrip || rcd.tripTime || rcd.tripCurrent || rcd.loop)
           ? {
               rcdTest: {
@@ -288,6 +289,8 @@ export function RecordInspectionDialog({
               </ToggleGroup>
               {type === "VISUAL_CHECK" ? (
                 <p className="text-xs text-muted-foreground">Vizuální kontrola LPS nejméně 1× ročně (NV 190/2022 Sb., příloha č. 4) – ověří, že LPS není viditelně poškozen. Lhůtu revize neposouvá.</p>
+              ) : type === "FUNCTION_TEST" ? (
+                <p className="text-xs text-muted-foreground">Měsíční zkouška funkce nouzového únikového osvětlení (ČSN EN 50172) – krátké přepnutí na baterii, kontrola rozsvícení a signalizace. Roční zkoušku plné doby funkce zapište jako pravidelnou revizi.</p>
               ) : null}
             </div>
 

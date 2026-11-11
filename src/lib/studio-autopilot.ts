@@ -22,6 +22,9 @@ const TAG_PATTERNS: Record<EquipmentType, { prefix: string; width: number }> = {
   LIGHTNING_ROD: { prefix: "LPS-{code}", width: 0 },
   EMERGENCY_LIGHTING: { prefix: "NO-{code}", width: 0 },
   WIRING_DEVICE: { prefix: "DP-", width: 4 },
+  MEDICAL_DEVICE: { prefix: "ZEP-", width: 3 },
+  MEDICAL_ROOM: { prefix: "ZP-{code}-", width: 2 },
+  FIRE_SHUTDOWN: { prefix: "CS-{code}", width: 0 },
   OTHER: { prefix: "X-", width: 2 },
 };
 
@@ -56,6 +59,9 @@ const BASE_NAMES: Partial<Record<EquipmentType, string>> = {
   LIGHTNING_ROD: "Hromosvod",
   EMERGENCY_LIGHTING: "Nouzové osvětlení",
   WIRING_DEVICE: "Zásuvka",
+  MEDICAL_DEVICE: "Zdravotnický přístroj",
+  MEDICAL_ROOM: "Zdravotnický prostor",
+  FIRE_SHUTDOWN: "CENTRAL STOP",
   OTHER: "Zařízení",
 };
 
@@ -72,7 +78,7 @@ export function suggestName(type: EquipmentType, context: { tag: string; zone: s
   const number = /(\d+)$/.exec(context.tag)?.[1];
   const numbered = ["PRODUCTION_LINE", "MACHINE", "CNC_MACHINE", "ROBOT_CELL", "HVAC_UNIT", "COMPRESSOR", "TRANSFORMER"].includes(type);
   const base = BASE_NAMES[type] ?? "Zařízení";
-  if (type === "LIGHTNING_ROD" || type === "EMERGENCY_LIGHTING") return `${base} ${buildingShortName(context.buildingName)}${zone}`;
+  if (type === "LIGHTNING_ROD" || type === "EMERGENCY_LIGHTING" || type === "FIRE_SHUTDOWN") return `${base} ${buildingShortName(context.buildingName)}${zone}`;
   return `${base}${numbered && number ? ` ${Number(number)}` : ""}${zone}`;
 }
 

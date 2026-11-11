@@ -8,6 +8,7 @@ import { estimatePowerLoss } from "@/lib/panel-builder/catalog";
 import type { ItemConfig } from "@/lib/panel-builder/configurator";
 import type { EnclosureLike } from "@/lib/panel-builder/enclosures";
 import { constructionDetails } from "@/lib/panel-builder/environments";
+import { CENTRAL_STOP_LABEL, MEDICAL_CIRCUIT, MID_METER_LABEL, isCommercial, isMedical, isMedicalRoom, midMeterConfig, shuntTripConfig, type MedicalCircuit, type OccupancyId } from "@/lib/panel-builder/occupancy";
 
 import { planSocketGroups, type SocketGrouping } from "./socket-zones";
 
@@ -79,6 +80,13 @@ export interface FloorNode {
   lightControl?: "phase" | "dali" | "pwm";
   /** Fáze 77: pohon žaluzie – 230 V AC na žaluziovém okruhu, 24 V DC / sběrnicový ze zdroje a řadiče v rozváděči. */
   blindDrive?: "ac230" | "dc24" | "bus";
+  /**
+   * Fáze 93: zásuvka lůžkové rampy LUZ – pevný okruh A (zelené / bílé) nebo B (oranžové / zálohované) zdravotnického
+   * prostoru Skupiny 1; ostatní zásuvky lékařské místnosti se střídají A / B automaticky.
+   */
+  medicalCircuit?: MedicalCircuit;
+  /** Fáze 93: nouzové únikové svítidlo NO_SV (s vlastním akumulátorem, nespínaný přívod světelného okruhu). */
+  emergency?: boolean;
 }
 
 /** Fáze 63: zadání samostatného spotřebiče z knihovny spotřebičů (`lib/panel-builder/appliances.ts`). */
@@ -561,6 +569,11 @@ export interface DesignOptions {
   upstreamDropPct?: number;
   /** Fáze 82: jištění světelného okruhu se zásuvkami – 10 A (výchozí) nebo 13 A. */
   lightingSocketA?: LightingSocketA;
+  /**
+   * Fáze 93: typ objektu – zdravotnický prostor Skupiny 1 rozdělí zásuvky lékařských místností do okruhů A / B (každý
+   * s vlastním RCBO 1P+N B16 30 mA typ A) a světla místnosti na 2 okruhy; obchodní centrum (BD4) mění jen kabely.
+   */
+  occupancy?: OccupancyId;
 }
 
 /** Fáze 82: jistič světelného okruhu, na kterém jsou i zásuvky (10 A, nebo 13 A – nikdy 16 A). */
@@ -819,11 +832,16 @@ export function generateCircuitsFromFloorplan(plan: Floorplan, calibration: Cali
   // ČSN 33 2130 ed. 4: limit 10 platí pro skutečné zásuvky – dvojzásuvka = 2 (přepínač `countDoubleAsTwo`)
   const outletsOf = (node: FloorNode) => (node.kind === "double_socket" && countDoubleAsTwo ? 2 : 1);
   const weight = (nodes: readonly FloorNode[]) => nodes.reduce((sum, node) => sum + outletsOf(node), 0);
+  // Fáze 93: zdravotnický prostor Skupiny 1 – zásuvky lékařských místností a lůžkových ramp mimo zóny (okruhy A / B níže)
+  const medical = isMedical(options.occupancy);
+  const medicalSockets = medical ? sockets.filter((node) => node.medicalCircuit || isMedicalRoom(roomName.get(node.room) ?? node.room)) : [];
+  const medicalIds = new Set(medicalSockets.map((node) => node.id));
+  const zoneSockets = medicalIds.size ? sockets.filter((node) => !medicalIds.has(node.id)) : sockets;
   // Fáze 65: běžné zásuvky – ruční okruhy, pak kompaktní zóny / po místnostech / podle vzdálenosti (`socket-zones.ts`);
   // fáze 59: zásuvkový okruh nikdy nespojuje dvě podlaží
-  const socketById = new Map(sockets.map((node) => [node.id, node]));
+  const socketById = new Map(zoneSockets.map((node) => [node.id, node]));
   const zones = planSocketGroups(
-    sockets.map((node) => ({
+    zoneSockets.map((node) => ({
       id: node.id,
       room: node.room,
       floor: node.floor ?? "",
@@ -860,6 +878,46 @@ export function generateCircuitsFromFloorplan(plan: Floorplan, calibration: Cali
     );
   }
 
+  // Fáze 93: ČSN 33 2000-7-710 ed. 2 (čl. 710.53 / 710.55) – zásuvky lékařské místnosti alespoň ze 2 samostatných obvodů
+  // (Okruh A zelené / bílé, Okruh B oranžové / zálohované), každý pod vlastním RCBO 1P+N B16 30 mA typ A
+  for (const [, roomNodes] of byRoom(medicalSockets)) {
+    const room = roomName.get(roomNodes[0].room) ?? roomNodes[0].room;
+    const sides: Record<MedicalCircuit, FloorNode[]> = { A: [], B: [] };
+    for (const node of roomNodes.filter((candidate) => candidate.medicalCircuit)) sides[node.medicalCircuit!].push(node);
+    for (const node of roomNodes.filter((candidate) => !candidate.medicalCircuit)) sides[weight(sides.A) <= weight(sides.B) ? "A" : "B"].push(node);
+    if (!sides.B.length && sides.A.length > 1) sides.B.push(sides.A.pop()!);
+    if (!sides.B.length) warnings.push(`${room}: zdravotnický prostor Skupiny 1 má jen 1 zásuvkový vývod – druhý samostatný obvod (Okruh B) nelze vytvořit; doplňte zásuvku okruhu B nebo lůžkovou rampu LUZ (ČSN 33 2000-7-710 ed. 2).`);
+    for (const side of ["A", "B"] as const) {
+      const nodes = sides[side];
+      const chunks: FloorNode[][] = [];
+      for (const node of nodes) {
+        const last = chunks[chunks.length - 1];
+        if (last && weight(last) + outletsOf(node) <= MAX_OUTLETS_PER_CIRCUIT) last.push(node);
+        else chunks.push([node]);
+      }
+      chunks.forEach((chunk, index) => {
+        const installedW = chunk.reduce((sum, node) => sum + (node.powerW ?? OUTLET_POWER_W), 0);
+        const circuit = MEDICAL_CIRCUIT[side];
+        push(
+          {
+            label: `Zásuvky – ${room} – ${circuit.label}${chunks.length > 1 ? ` (${index + 1})` : ""} (${circuit.colors})`,
+            kind: "sockets",
+            phases: 1,
+            protection: { device: "RCBO", poles: "1P+N", curve: "B", ratedA: 16, rcd: { type: "A", sensitivityMa: 30 } },
+            rooms: [chunk[0].room],
+            nodeIds: chunk.map((node) => node.id),
+            outlets: weight(chunk),
+            installedW,
+            designW: Math.min(installedW * SOCKET_SIMULTANEITY + OUTLET_POWER_W, 3680),
+            rcd: "own",
+          },
+          chunk,
+          2.5,
+        );
+      });
+    }
+  }
+
   // Světla: místnosti střídavě do min. 2 nezávislých okruhů, max. 10 bodů na okruh; fáze 59 – po podlažích
   // (každé podlaží s vlastními světelnými okruhy, jediné podlaží se světly = min. 2 okruhy)
   const lightFloors = [...new Set(lights.map((node) => node.floor ?? ""))];
@@ -872,7 +930,14 @@ export function generateCircuitsFromFloorplan(plan: Floorplan, calibration: Cali
     const groups: FloorNode[][] = Array.from({ length: Math.max(1, lightCount) }, () => []);
     if (lightRooms.length === 1) floorLights.forEach((node, index) => groups[index % groups.length].push(node));
     else
-      for (const [, nodes] of lightRooms) {
+      for (const [roomId, nodes] of lightRooms) {
+        // Fáze 93: lékařská místnost se 2 a více svítidly – světla střídavě do 2 nezávislých okruhů (výpadek ≠ tma)
+        if (medical && nodes.length >= 2 && isMedicalRoom(roomName.get(roomId) ?? roomId)) {
+          if (groups.length < 2) groups.push([]);
+          const [first, second] = [...groups].sort((a, b) => a.length - b.length);
+          nodes.forEach((node, index) => (index % 2 ? second : first).push(node));
+          continue;
+        }
         const target = groups.reduce((best, group) => (group.length < best.length ? group : best), groups[0]);
         target.push(...nodes);
       }
@@ -1344,6 +1409,11 @@ export function buildSwitchboardFromCircuits(
      * modul bez šířky (ventil) jde do kusovníku.
      */
     devices?: readonly SmartBoardModule[];
+    /**
+     * Fáze 93: typ objektu – obchodní centrum / prostor pro veřejnost (BD4, ČSN 33 2000-7-718): hlavní vypínač nájemní
+     * jednotky s vypínací spouští CENTRAL STOP a podružný elektroměr MID s komunikací Modbus / M-Bus.
+     */
+    occupancy?: OccupancyId;
   },
 ): Switchboard {
   const warnings: string[] = [];
@@ -1417,6 +1487,16 @@ export function buildSwitchboardFromCircuits(
         device("X", "Rozbočovací svorkovnice (HLAK)", "TERMINAL", "4P", 4, null, config({ category: "ACCESSORY", poles: "4P", modules: 4, moduleSubtype: "TERMINAL_BLOCK" })),
       ];
   groups.push([tree(head[0], "main", null), tree(head[1], "spd", "main"), tree(head[2], "terminal", "main")]);
+  // Fáze 93: BD4 – vypínací spoušť CENTRAL STOP / TOTAL STOP na hlavním vypínači a podružný elektroměr MID nájemní jednotky
+  if (isCommercial(options.occupancy)) {
+    const shunt = shuntTripConfig(null);
+    const meter = midMeterConfig(null, single ? 1 : 3);
+    groups.push([
+      tree(device("Y", CENTRAL_STOP_LABEL, "OTHER", shunt.poles, shunt.modules, null, shunt), "central-stop", "main"),
+      tree({ ...device("P", MID_METER_LABEL, "OTHER", meter.poles, meter.modules, null, meter), phase: single ? "L1,N" : "L1,L2,L3" }, "mid-meter", "main"),
+    ]);
+    addBom(bom, "Tlačítko CENTRAL STOP / TOTAL STOP u vstupu do nájemní jednotky (vazba na EPS – vyhláška č. 23/2008 Sb.)");
+  }
 
   const mcb = (circuit: Circuit) => {
     const { protection } = circuit;

@@ -15,7 +15,7 @@ import { RECOGNITION } from "@/lib/panel-builder/project";
 import { cn } from "@/lib/utils";
 import { addRailAction, analyzePanelProjectAction, configureItemAction, deleteRailAction, updateItemTextAction } from "@/server/actions/panel-builder";
 import { PANEL_PHOTO_MAX_PX, PANEL_PHOTO_QUALITY, resizeImage, uploadPanelFile } from "@/lib/upload-client";
-import { analyzeRailDetailAction, moveItemAction, moveRailAction, placeComponentsAction, setEnvironmentAction, setRailCapacityAction } from "@/server/actions/panel-design";
+import { analyzeRailDetailAction, moveItemAction, moveRailAction, placeComponentsAction, placeLintDevicesAction, setEnvironmentAction, setRailCapacityAction } from "@/server/actions/panel-design";
 import { nextChipLabel, presetConfig } from "@/lib/panel-builder/circuit-chips";
 import { ENVIRONMENTS, enclosureFitsEnvironment, environmentOf, ipLabel } from "@/lib/panel-builder/environments";
 import { validateSwitchboardState, type LintIssue } from "@/lib/panel-builder/linter";
@@ -92,6 +92,7 @@ export function RecognitionWorkspace({
   standardEdition = "CSN_61439_3_ED2",
   railPhotos = [],
   boardManufacturers = [],
+  occupancy = "RESIDENTIAL",
 }: {
   projectId: string;
   designMode: "PHOTO" | "DESIGN";
@@ -113,6 +114,8 @@ export function RecognitionWorkspace({
   railPhotos?: { rail: number; url: string }[];
   /** Fáze 60: výrobci, na které jde rozváděč převést (jističe i chrániče v databázi). */
   boardManufacturers?: { name: string; count: number }[];
+  /** Fáze 93: typ objektu – Elektro-linter BD4 (CENTRAL STOP, MID) a zdravotnictví (okruhy A / B, chrániče ≤ 30 mA). */
+  occupancy?: string;
 }) {
   const router = useRouter();
   const design = designMode === "DESIGN";
@@ -288,8 +291,9 @@ export function RecognitionWorkspace({
         })),
         capacities,
         enclosureModules: enclosure.totalModules,
+        occupancy,
       }),
-    [items, capacities, enclosure.totalModules],
+    [items, capacities, enclosure.totalModules, occupancy],
   );
 
   function fix(issue: LintIssue) {
@@ -319,6 +323,16 @@ export function RecognitionWorkspace({
       } else if (action.kind === "add-rail") {
         const result = await addRailAction(projectId);
         if (!result.ok) return void toast.error(result.error);
+      } else if (action.kind === "add-devices") {
+        // Fáze 93: úprava stávajících přístrojů (RCBO okruhů A / B) a doplnění nových na lištu s volným místem
+        for (const job of action.configure ?? []) {
+          const result = await configureItemAction(job.itemId, job.config);
+          if (!result.ok) return void toast.error(result.error);
+        }
+        if (action.devices.length) {
+          const result = await placeLintDevicesAction({ projectId, devices: action.devices });
+          if (!result.ok) return void toast.error(result.error);
+        }
       }
       toast.success(`Opraveno: ${action.label}`);
       router.refresh();

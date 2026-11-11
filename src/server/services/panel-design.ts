@@ -10,7 +10,7 @@ import { isStandardEdition, parseRoutineTest, routineTestVerdict, standardEditio
 import { freeOnRail, parseRailPhotos, railCapacities, railColumns, railMoveTarget, withRailCapacity, withRailsSwapped } from "@/lib/panel-builder/rails";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 
-import { componentForConfig, renumberProject } from "./panel-builder";
+import { addRail, componentForConfig, renumberProject } from "./panel-builder";
 import type { analyzeRailPhoto } from "./geminiPanelService";
 import { isMix } from "@/lib/panel-builder/catalog";
 import { matchDetection, type Detection } from "@/lib/panel-builder/matching";
@@ -120,6 +120,25 @@ export async function placeComponents(prisma: PrismaClient, projectId: string, i
   ]);
   await renumberProject(prisma, projectId);
   return { ids: created.slice(shifted.length).map((row) => row.id), placed: fits, requested, typeCode: component.typeCode };
+}
+
+/**
+ * Fáze 93: oprava Elektro-linteru 1 klikem – přístroje (spoušť CENTRAL STOP, elektroměr MID, okruh B zdravotnického
+ * prostoru) na první lištu s volným místem, jinak na novou DIN lištu (pokud ji skříň pustí).
+ */
+export async function placeLintDevices(prisma: PrismaClient, projectId: string, devices: readonly { config: ItemConfig; label: string }[]) {
+  const placed: { rail: number; typeCode: string }[] = [];
+  for (const device of devices) {
+    const project = await railProject(prisma, projectId);
+    let rail = project.capacities.findIndex((_, index) => freeOnRail(project.capacities, project.items, index + 1) + 1e-9 >= device.config.modules) + 1;
+    if (rail < 1) {
+      const added = await addRail(prisma, projectId);
+      rail = added.dinRailsCount;
+    }
+    const result = await placeComponents(prisma, projectId, { config: device.config, rail, count: 1, position: null, circuitLabel: device.label });
+    placed.push({ rail, typeCode: result.typeCode });
+  }
+  return placed;
 }
 
 export interface ConfigPreview {

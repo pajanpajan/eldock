@@ -108,6 +108,7 @@ export default async function PanelProjectPage({ params }: PageProps<"/panel-bui
         railPhotos={railPhotoList(project.railPhotosJson)}
         chipsJson={project.company?.circuitChipsJson ?? null}
         boardManufacturers={boardManufacturers}
+        occupancy={project.occupancy}
       />
       {/* Fáze 75: výrazný další krok dole na stránce */}
       <NextStepBar project={project} current="recognition" />

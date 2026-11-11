@@ -6,7 +6,7 @@ import { formatCount, formatDateShort, INSPECTION_TYPE_LABELS, plural } from "@/
 import { effectiveIntervalMonths, intervalIssue, isLightCard, isPortable, legalDeadline, type InspectionRule } from "@/lib/inspection-rules";
 import type { ReportDefaults } from "@/lib/inspection-report";
 import { scopeFromLicense } from "@/lib/inspector-certificate";
-import { VISUAL_CHECK_INTERVAL_MONTHS, computeValidUntil, governingInspection, inspectionStateFor, latestOfType, type InspectionState, type InspectionSummary } from "@/lib/inspection";
+import { FUNCTION_TEST_INTERVAL_MONTHS, VISUAL_CHECK_INTERVAL_MONTHS, computeValidUntil, governingInspection, inspectionStateFor, latestOfType, type InspectionState, type InspectionSummary } from "@/lib/inspection";
 import { defectState, thermalLevel } from "@/lib/defects";
 import { DEFECT_STATE, INSPECTION_RESULT, INSPECTION_STATE, THERMAL_LEVEL } from "@/lib/status";
 import { inspectionReportHref } from "@/lib/routes";
@@ -123,6 +123,11 @@ export function InspectionLogbook({
   const lastVisual = [visual?.inspectionDate, governing?.inspectionDate].filter((date): date is Date => !!date).sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
   const visualDue = lastVisual ? computeValidUntil(lastVisual, VISUAL_CHECK_INTERVAL_MONTHS) : null;
   const visualState = visualDue ? inspectionStateFor(visualDue, now) : "MISSING";
+  // Fáze 93: měsíční zkouška funkce nouzového osvětlení (revize ji zahrnuje)
+  const functionTest = latestOfType(inspections, "FUNCTION_TEST");
+  const lastFunction = [functionTest?.inspectionDate, governing?.inspectionDate].filter((date): date is Date => !!date).sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
+  const functionDue = lastFunction ? computeValidUntil(lastFunction, FUNCTION_TEST_INTERVAL_MONTHS) : null;
+  const functionState = functionDue ? inspectionStateFor(functionDue, now) : "MISSING";
 
   return (
     <div className="space-y-6">
@@ -173,6 +178,13 @@ export function InspectionLogbook({
               <dt className="text-muted-foreground">Vizuální kontrola (1× ročně)</dt>
               <dd className={cn("font-medium", INSPECTION_STATE[visualState].text)} data-testid="lps-visual-check">
                 {visualDue ? `${visualState === "EXPIRED" ? "propadlá" : "do"} ${formatDateShort(visualDue)}` : "chybí"}
+              </dd>
+            </div>
+          ) : type === "EMERGENCY_LIGHTING" ? (
+            <div>
+              <dt className="text-muted-foreground">Zkouška funkce (1× měsíčně)</dt>
+              <dd className={cn("font-medium", INSPECTION_STATE[functionState].text)} data-testid="emergency-function-test">
+                {functionDue ? `${functionState === "EXPIRED" ? "propadlá" : "do"} ${formatDateShort(functionDue)}` : "chybí"}
               </dd>
             </div>
           ) : isLightCard(type) ? (

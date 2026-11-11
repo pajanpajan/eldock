@@ -29,7 +29,8 @@ export type ArchType =
   | "island"
   | "wardrobe"
   | "tv"
-  | "wc";
+  | "wc"
+  | "exam_bed";
 
 export type FixtureType = "bath" | "shower" | "basin" | "double_basin" | ArchType;
 
@@ -87,6 +88,8 @@ export const FIXTURES: Record<string, FixtureSpec> = {
   "arch-wardrobe": furniture("wardrobe", "SKRIN", "Šatní / vestavěná skříň", 2000, 600),
   "arch-tv": furniture("tv", "TV_ST", "TV stolek / obývací stěna", 1800, 450),
   "arch-wc": furniture("wc", "WC_M", "WC mísa / závěsné WC", 400, 650),
+  // Fáze 93: zdravotnický prostor Skupiny 1 – vyšetřovací lehátko / nemocniční lůžko / stomatologické křeslo podél stěny
+  "arch-exam-bed": furniture("exam_bed", "LEH_Z", "Vyšetřovací lehátko / nemocniční lůžko / stomatologické křeslo", 2000, 900, "mirror"),
 };
 
 /** Fáze 90: okno, dveře nebo nábytek (orientační prvek bez zón a okruhů). */

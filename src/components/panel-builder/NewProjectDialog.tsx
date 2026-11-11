@@ -16,6 +16,7 @@ import { PANEL_PHOTO_MAX_PX, PANEL_PHOTO_QUALITY, resizeImage, uploadPanelFile }
 import { cn } from "@/lib/utils";
 import { VIDEO_ACCEPT, captureFrame, extractVideoFrames, loadVideo } from "@/lib/video-frames";
 import { createPanelProjectAction } from "@/server/actions/panel-builder";
+import { DEFAULT_OCCUPANCY, type OccupancyId } from "@/lib/panel-builder/occupancy";
 import { createScheduleProjectAction } from "@/server/actions/panel-projects";
 import { INSTALL_LEVELS, INSTALL_METHODS, type InstallLevel, type InstallMethod } from "@/engine/floorplan-bridge";
 import { SAMPLE_SCHEDULE, type ScheduleRoom } from "@/engine/room-schedule";
@@ -25,7 +26,7 @@ import { ScheduleEditor } from "./ScheduleEditor";
 import { brandLabel, enclosureRails } from "@/lib/panel-builder/enclosure-choice";
 import type { EnclosureLike } from "@/lib/panel-builder/enclosures";
 import { DEFAULT_SUPPLY, type SupplySystem } from "@/lib/panel-builder/supply";
-import { SupplySelect } from "./ProjectAdmin";
+import { OccupancySelect, SupplySelect } from "./ProjectAdmin";
 
 const selectClass = "h-10 rounded-md border border-input bg-transparent px-2 text-sm dark:bg-input/30";
 /** Ukázková fotka referenčního rozváděče (seed PB-001). */
@@ -67,6 +68,8 @@ export function NewProjectDialog({ credits = null }: { credits?: number | null }
   const videoInput = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [supply, setSupply] = useState<SupplySystem["id"]>(DEFAULT_SUPPLY.id);
+  // Fáze 93: typ objektu a normativní režim (BD1 / BD4 / zdravotnictví Skupina 1)
+  const [occupancy, setOccupancy] = useState<OccupancyId>(DEFAULT_OCCUPANCY);
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<Mode>("DESIGN");
   const [shots, setShots] = useState<Shot[]>([]);
@@ -174,7 +177,7 @@ export function NewProjectDialog({ credits = null }: { credits?: number | null }
   }
 
   function submit(form: FormData) {
-    const header = { name: String(form.get("name") ?? ""), customerName: String(form.get("customer") ?? "") || null, installationSite: String(form.get("site") ?? "") || null, supplySystem: supply };
+    const header = { name: String(form.get("name") ?? ""), customerName: String(form.get("customer") ?? "") || null, installationSite: String(form.get("site") ?? "") || null, supplySystem: supply, occupancy };
     if (schedule) {
       startTransition(async () => {
         const result = await createScheduleProjectAction({ ...header, mode: installMode, installMethod, countDoubleAsTwo, lightingSocketA, rooms });
@@ -286,6 +289,8 @@ export function NewProjectDialog({ credits = null }: { credits?: number | null }
           </div>
           {/* Fáze 55: soustava a počet fází přívodu (1f = 2P hlavní vypínač, 1f svodič, 2P chrániče, vše na L1) */}
           <SupplySelect id="pb-supply" value={supply} onChange={setSupply} />
+          {/* Fáze 93: typ objektu – BD4 (bezhalogenové kabely, CENTRAL STOP, elektroměr MID) / zdravotnictví (okruhy A / B) */}
+          <OccupancySelect id="pb-occupancy" value={occupancy} onChange={setOccupancy} />
           {/* Fáze 85: volitelný úvodní krok – konkrétní skříň / rozvodnice (výrobce → řada → model) */}
           {!schedule ? <EnclosureChoice value={enclosure} onChange={setEnclosure} /> : null}
           {schedule ? (

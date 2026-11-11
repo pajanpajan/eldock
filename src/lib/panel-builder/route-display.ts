@@ -11,6 +11,7 @@ import { boardDesignation } from "./boards";
 import type { analyzeDraft, FloorplanDraft } from "./floorplan-editor";
 import { roomWalls } from "./room-geometry";
 import { WALL_INSET_MM, insetWallRoute, legKey, type InsetWall, type PlanPoint } from "./route-edit";
+import { cableFor } from "./occupancy";
 import { elementIdOf } from "./socket-circuits";
 
 /** Fáze 74: druh okruhu pro vrstvy plátna a soupis okruhů. */
@@ -121,7 +122,8 @@ export function circuitEntries(analysis: Analysis): Omit<DisplayCircuit, "legs" 
       id: run.id,
       label: `Datová zásuvka – ${element?.room ?? "místnost"}`,
       designation: multiple ? `${run.board} D${index + 1}` : `D${index + 1}`,
-      cable: DATA_CABLE,
+      // Fáze 93: v obchodním centru (BD4) bezhalogenový datový kabel
+      cable: cableFor(analysis.occupancy)(DATA_CABLE),
       lengthM: run.lengthsM[analysis.summary.selected],
       routing: run.routing,
       lowVoltage: true,
@@ -197,8 +199,10 @@ export function displayRoutes(draft: FloorplanDraft, analysis: Analysis, options
   const line = analysis.summary.busLine;
   const busLegs = line ? legsOf(line.segments) : [];
   const busLength = line ? Math.round(line.totalMm / 100) / 10 : 0;
+  // Fáze 93: v obchodním centru (BD4) bezhalogenový sběrnicový kabel J-H(St)H B2ca
+  const busCable = cableFor(analysis.occupancy)(BUS_LEG_CABLE);
   const bus: DisplayCircuit | null = line && busLegs.length
-    ? { id: "bus", label: "Sběrnicová linka", designation: null, cable: BUS_LEG_CABLE, lengthM: busLength, routing: line.mode, legs: busLegs, edited: busLegs.some((leg) => leg.edited), lowVoltage: true, tag: `Sběrnice 24 V DC · ${BUS_LEG_CABLE.replace(/ \(.*\)$/, "")} · ${busLength.toLocaleString("cs-CZ", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} m`, layer: "bus", board: MAIN_BOARD, elementIds: [] }
+    ? { id: "bus", label: "Sběrnicová linka", designation: null, cable: busCable, lengthM: busLength, routing: line.mode, legs: busLegs, edited: busLegs.some((leg) => leg.edited), lowVoltage: true, tag: `Sběrnice 24 V DC · ${busCable.replace(/ \(.*\)$/, "")} · ${busLength.toLocaleString("cs-CZ", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} m`, layer: "bus", board: MAIN_BOARD, elementIds: [] }
     : null;
   return { circuits, bus };
 }

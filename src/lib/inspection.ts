@@ -126,10 +126,13 @@ export function compareByUrgency(a: InspectionSummary, b: InspectionSummary): nu
 
 /** Vizuální kontrola LPS nejméně 1× ročně (NV 190/2022 Sb., příl. 4, doplňující informace k LPS, písm. a). */
 export const VISUAL_CHECK_INTERVAL_MONTHS = 12;
+/** Fáze 93: měsíční zkouška funkce nouzového únikového osvětlení (ČSN EN 50172) – lhůtu revize neposouvá. */
+export const FUNCTION_TEST_INTERVAL_MONTHS = 1;
 
 /** Výchozí platnost nového záznamu podle typu revize a lhůty zařízení. */
 export function defaultValidityMonths(type: InspectionType, equipmentIntervalMonths: number): number {
   if (type === "THERMOVISION") return THERMOVISION_INTERVAL_MONTHS;
   if (type === "VISUAL_CHECK") return VISUAL_CHECK_INTERVAL_MONTHS;
+  if (type === "FUNCTION_TEST") return FUNCTION_TEST_INTERVAL_MONTHS;
   return equipmentIntervalMonths;
 }

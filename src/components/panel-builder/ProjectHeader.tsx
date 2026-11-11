@@ -14,6 +14,7 @@ import { OpenFloorplanButton } from "./floorplan/OpenFloorplanButton";
 import { DeleteProjectButton, EditProjectButton } from "./ProjectAdmin";
 import { ReportAiErrorButton } from "./ReportAiErrorButton";
 import { supplyOf } from "@/lib/panel-builder/supply";
+import { occupancyBadge, occupancyOf } from "@/lib/panel-builder/occupancy";
 
 /** Hlavička projektu rozváděče: kód, stav, skříň a štítek demo AI režimu. */
 export function ProjectHeader({ project }: { project: PanelProjectDetail }) {
@@ -37,6 +38,12 @@ export function ProjectHeader({ project }: { project: PanelProjectDetail }) {
         <>
           <span className={cn("rounded-full border px-2 py-0.5 text-xs", status.badge)}>{status.label}</span>
           {project.designMode === "DESIGN" ? <span className="rounded-full border border-sky-500/60 px-2 py-0.5 text-xs text-sky-200">📐 Návrh od nuly</span> : null}
+          {/* Fáze 93: typ objektu (obchodní centrum BD4 / zdravotnictví) – linter a protokol vnějších vlivů podle něj */}
+          {project.occupancy !== "RESIDENTIAL" ? (
+            <span className="rounded-full border border-amber-400/60 px-2 py-0.5 text-xs text-amber-200" data-testid="project-occupancy" title={occupancyOf(project.occupancy).label}>
+              {occupancyBadge(project.occupancy)}
+            </span>
+          ) : null}
           {project.designMode === "DESIGN" || isGeminiConfigured() ? null : (
             <span className="flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground" data-testid="demo-ai-badge">
               <Bot className="size-3.5" aria-hidden /> Demo AI režim (pro živé volání Gemini vložte GEMINI_API_KEY)
@@ -70,7 +77,7 @@ export function ProjectHeader({ project }: { project: PanelProjectDetail }) {
             🏷️ Tisk popisků a štítků (1:1)
           </Link>
           <ReportAiErrorButton projectId={project.id} />
-          <EditProjectButton project={{ id: project.id, code: project.code, name: project.name, customerName: project.customerName, installationSite: project.installationSite, status: project.status, supplySystem: supplyOf(project).id }} />
+          <EditProjectButton project={{ id: project.id, code: project.code, name: project.name, customerName: project.customerName, installationSite: project.installationSite, status: project.status, supplySystem: supplyOf(project).id, occupancy: occupancyOf(project.occupancy).id }} />
           <DeleteProjectButton project={{ id: project.id, code: project.code, name: project.name, customerName: project.customerName, installationSite: project.installationSite, status: project.status }} variant="full" redirectTo="/panel-builder" />
         </>
       }

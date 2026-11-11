@@ -34,6 +34,7 @@ import {
   levelLabel,
   moveRoom,
   paletteFor,
+  heightKindOf,
   paletteItem,
   recalibrate,
   removeFloor,
@@ -140,7 +141,8 @@ import { ModeBar, type ModeTone } from "../ModeBar";
 import { PdfEditMenu, type PdfEditAction } from "./PdfEditMenu";
 import { PlanChecks, SelectionPanel, type PlanCheck } from "./PlanPanels";
 import { SmartHomePanel } from "./SmartHomePanel";
-import { applyNormFix, floorplanNorms } from "@/lib/panel-builder/floorplan-norms";
+import { applyNormFix, ekvHeightAt, floorplanNorms } from "@/lib/panel-builder/floorplan-norms";
+import { OCCUPANCIES, isMedical, occupancyBadge, occupancyOf, type OccupancyId } from "@/lib/panel-builder/occupancy";
 import { smartPlanOf } from "@/lib/panel-builder/smart-home-plan";
 import { lightBadges } from "@/lib/panel-builder/field-devices";
 import { isSmartSystem, type SmartSystemId } from "@/lib/panel-builder/smart-home";
@@ -660,7 +662,8 @@ export function FloorplanEditor({
   const selectedNote = draft.annotations.find((note) => note.id === selectedNoteId) ?? null;
   const available = useMemo(() => new Map(series.map((option) => [option.key, option.count ?? 1])), [series]);
   const inventory = useMemo(() => wiringInventory(draft), [draft]);
-  const palette = paletteFor(draft.installation);
+  // Fáze 93: prvky zdravotnického prostoru (EKV, lůžková rampa LUZ) jen v režimu 🏥 Skupina 1
+  const palette = paletteFor(draft.installation, draft.occupancy);
   const selectionFrame = selection.length >= 2 ? createFrame(draft, selection) : null;
   const pairing = tool.kind === "pair" || tool.kind === "pair-light";
   const cablesShown = pairing ? pairCables : showCables;
@@ -856,7 +859,8 @@ export function FloorplanEditor({
         x: Math.round(target.position.x),
         y: Math.round(target.position.y),
         room: target.room?.name ?? lastRoom.current,
-        mountHeightMm: null,
+        // Fáze 93: EKV u vyšetřovacího lehátka LEH_Z ve výšce 1000 mm, jinak výchozí 300 mm z palety
+        mountHeightMm: item.kind === "bonding" ? ekvHeightAt(draft.elements, target.room?.name ?? lastRoom.current, target.position.x, target.position.y) : null,
         frameUnits: 1,
         series: single ? null : draft.series,
         color: single ? null : draft.color,
@@ -1523,11 +1527,20 @@ export function FloorplanEditor({
     const result = convertForLevel(draft, level);
     update(() => result.draft);
     setLevelPrompt(null);
-    if (tool.kind === "place" && !paletteFor(level).some((item) => item.id === tool.item)) setTool({ kind: "select" });
-    if (tool.kind === "place-set" && !tool.members.every((id) => paletteFor(level).some((item) => item.id === id))) setTool({ kind: "select" });
+    if (tool.kind === "place" && !paletteFor(level, draft.occupancy).some((item) => item.id === tool.item)) setTool({ kind: "select" });
+    if (tool.kind === "place-set" && !tool.members.every((id) => paletteFor(level, draft.occupancy).some((item) => item.id === id))) setTool({ kind: "select" });
     const label = INSTALL_LEVELS.find((option) => option.id === level)?.label ?? level;
     const converted = result.changes.reduce((sum, row) => sum + row.count, 0);
     toast.success(`${label}${converted ? ` – převedeno ${converted} ovladačů` : ""}${result.removed ? `, odstraněno ${result.removed}` : ""}. Paleta ovládání se změnila.`);
+  }
+
+  /** Fáze 93: změna typu objektu – kabely, krabice, okruhy a paleta se přepočítají samy. */
+  function changeOccupancy(occupancy: OccupancyId) {
+    if (occupancy === draft.occupancy) return;
+    update((current) => ({ ...current, occupancy }));
+    if (tool.kind === "place" && !paletteFor(draft.installation, occupancy).some((item) => item.id === tool.item)) setTool({ kind: "select" });
+    const mode = occupancyOf(occupancy);
+    toast.success(`${mode.icon} ${mode.short}: ${mode.hint}${isMedical(occupancy) ? " Paleta má novou skupinu 🏥 Zdravotnictví." : ""}`);
   }
 
   function selectFloor(id: string) {
@@ -1857,11 +1870,12 @@ export function FloorplanEditor({
       hint: group.id === "controls" ? CONTROLS_LABEL[draft.installation].hint : group.hint,
       count: groupCounts.get(group.id) ?? 0,
       entries: palette
-        .filter((item) => item.group === group.id || item.alsoIn?.includes(group.id))
+        // Fáze 93: skupina 🏥 Zdravotnictví jen v režimu zdravotnictví (lehátko LEH_Z je jinak v Architektuře)
+        .filter((item) => item.group === group.id || (item.alsoIn?.includes(group.id) && (group.id !== "medical" || isMedical(draft.occupancy))))
         .map((item) => {
           const active = tool.kind === "place" && tool.item === item.id && !tool.product;
           // Fáze 61: zařizovací předmět nemá výšku montáže – v titulku jen rozměr
-          const height = item.kind === "fixture" ? null : item.kind === "panel" || item.kind === "riser" ? draft.profile.switchboardHeightMm : (item.heightMm ?? mountHeight({ kind: item.kind, variant: item.variant, tag: item.tag }, draft.profile));
+          const height = item.kind === "fixture" ? null : item.kind === "panel" || item.kind === "riser" ? draft.profile.switchboardHeightMm : (item.heightMm ?? mountHeight({ kind: heightKindOf(item.kind), variant: item.variant, tag: item.tag }, draft.profile));
           return {
             id: item.id,
             label: item.label,
@@ -2111,6 +2125,25 @@ export function FloorplanEditor({
           </label>
     </>
   );
+  // Fáze 93: typ objektu a normativní režim (BD1 / BD4 / zdravotnictví Skupina 1)
+  const occupancyField = (
+    <label className="flex items-center gap-1 text-muted-foreground" title={occupancyOf(draft.occupancy).hint}>
+      Typ objektu:
+      <select
+        className="h-8 max-w-[34rem] rounded-md border border-input bg-transparent px-1.5 text-sm text-foreground dark:bg-input/30"
+        value={draft.occupancy}
+        onChange={(event) => changeOccupancy(event.target.value as OccupancyId)}
+        aria-label="Typ objektu a normativní režim"
+        data-testid="occupancy-select"
+      >
+        {OCCUPANCIES.map((mode) => (
+          <option key={mode.id} value={mode.id}>
+            {mode.icon} {mode.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
   const levelField = (
     <>
           <label className="flex items-center gap-1 text-muted-foreground">
@@ -2284,6 +2317,12 @@ export function FloorplanEditor({
     ) : null;
   const methodology = (
     <div className="flex flex-col gap-1.5 text-xs" role="group" aria-label="Metodika ČSN 33 2130 ed. 4" data-testid="install-methodology">
+      <div className="flex flex-wrap items-center gap-2">{occupancyField}</div>
+      {draft.occupancy !== "RESIDENTIAL" ? (
+        <p className="rounded-md border border-amber-400/40 bg-amber-400/10 px-2 py-1 text-foreground" data-testid="occupancy-note">
+          {occupancyOf(draft.occupancy).icon} {occupancyOf(draft.occupancy).hint}
+        </p>
+      ) : null}
       <div className="flex flex-wrap items-center gap-2">{levelField}</div>
       {levelNote}
     </div>
@@ -2504,6 +2543,11 @@ export function FloorplanEditor({
               {calibrateTool}
               <ToolbarPopover label={`Podlaží (${draft.floorName})`} testId="compact-floors" wide>
                 {floorBar}
+              </ToolbarPopover>
+              {/* Fáze 93: typ objektu viditelně i v kompaktní liště */}
+              <ToolbarPopover label={occupancyBadge(draft.occupancy)} testId="compact-occupancy" wide>
+                {occupancyField}
+                <p className="text-xs text-muted-foreground">{occupancyOf(draft.occupancy).hint}</p>
               </ToolbarPopover>
             </>
           }

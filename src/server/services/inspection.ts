@@ -301,6 +301,10 @@ function prepare(input: RecordInspectionInput, equipment: LoadedEquipment, now: 
   if (input.type === "VISUAL_CHECK" && equipment.type !== "LIGHTNING_ROD") {
     throw new WorkflowError("VALIDATION", "Vizuální kontrola se zapisuje jen u hromosvodů (LPS).");
   }
+  // Fáze 93: měsíční zkouška funkce jen u nouzového osvětlení (ČSN EN 50172)
+  if (input.type === "FUNCTION_TEST" && equipment.type !== "EMERGENCY_LIGHTING") {
+    throw new WorkflowError("VALIDATION", "Měsíční zkouška funkce se zapisuje jen u nouzového osvětlení.");
+  }
   const inspectionDate = parsePastDate(input.inspectionDate, now);
   const months = input.validityMonths ?? defaultValidityMonths(input.type, effectiveIntervalMonths(equipment.inspectionIntervalMonths, rule));
   if (!Number.isInteger(months) || months < 1 || months > 120) {

@@ -2,11 +2,15 @@
 // štítek vs. kategorie, popis vs. póly, proudové chrániče (ČSN 33 2000-4-41), rezerva modulů
 // (ČSN EN 61439) a společné hřebeny, dimenzování vůči hlavnímu vypínači. Každý nález může nést
 // opravu „1 klikem“. Čisté funkce.
+// Fáze 93: typ objektu – obchodní centrum (BD4, ČSN 33 2000-7-718): vypínací spoušť CENTRAL STOP a podružný elektroměr MID
+// nájemní jednotky (doplnění 1 klikem); zdravotnický prostor Skupiny 1 (ČSN 33 2000-7-710 ed. 2): zásuvky alespoň ze
+// 2 obvodů pod 2 nezávislými chrániči ≤ 30 mA typ A / B, chránič typu AC zakázán, IΔn nejvýš 30 mA.
 
 import type { ComponentCategory } from "@/generated/prisma/enums";
 
 import { sameManufacturer } from "./matching";
 import { defaultConfig, describeConfig, type ItemConfig } from "./configurator";
+import { BD4_FIX_LABEL, CENTRAL_STOP_EXAMPLES, CENTRAL_STOP_LABEL, MEDICAL_CIRCUIT, MID_METER_EXAMPLES, MEDICAL_SPLIT_FIX, MEDICAL_SPLIT_MESSAGE, MID_METER_LABEL, MID_METER_TEXT, SHUNT_TRIP_TEXT, isCommercial, isMedical, isMedicalRoom, midMeterConfig, shuntTripConfig } from "./occupancy";
 
 export interface LintDevice {
   id: string;
@@ -31,12 +35,28 @@ export type LintFix =
   | { kind: "configure-many"; items: { itemId: string; config: ItemConfig }[]; label: string }
   | { kind: "sync-text"; itemId: string; config: ItemConfig | null; label: string }
   | { kind: "add-rail"; label: string }
-  | { kind: "palette"; config: ItemConfig; label: string };
+  | { kind: "palette"; config: ItemConfig; label: string }
+  /** Fáze 93: doplnění přístrojů na lištu 1 klikem (spoušť CENTRAL STOP, elektroměr MID, okruh B) a úprava stávajících. */
+  | { kind: "add-devices"; devices: { config: ItemConfig; label: string }[]; configure?: { itemId: string; config: ItemConfig }[]; label: string };
 
 export interface LintIssue {
   id: string;
   severity: "error" | "warning";
-  rule: "label-category" | "label-poles" | "rcd-missing" | "rcd-overload" | "reserve" | "mixed-busbar" | "rating" | "rcd-type-ac" | "rcd-lighting-mixed" | "rcd-type-b";
+  rule:
+    | "label-category"
+    | "label-poles"
+    | "rcd-missing"
+    | "rcd-overload"
+    | "reserve"
+    | "mixed-busbar"
+    | "rating"
+    | "rcd-type-ac"
+    | "rcd-lighting-mixed"
+    | "rcd-type-b"
+    | "bd4-central-stop"
+    | "bd4-mid-meter"
+    | "medical-sockets"
+    | "medical-rcd-sensitivity";
   itemIds: string[];
   message: string;
   fix: LintFix | null;
@@ -69,10 +89,11 @@ function rcdChildren(rcd: LintDevice, devices: readonly LintDevice[]): LintDevic
   return (stop < 0 ? rail : rail.slice(0, stop)).filter((device) => device.category === "MCB");
 }
 
-/** Kontrola rozváděče – chyby (červeně) a varování (oranžově) s opravou 1 klikem. */
-export function validateSwitchboardState(state: { devices: readonly LintDevice[]; capacities: readonly number[]; enclosureModules?: number | null }): LintIssue[] {
+/** Kontrola rozváděče – chyby (červeně) a varování (oranžově) s opravou 1 klikem; fáze 93 – podle typu objektu. */
+export function validateSwitchboardState(state: { devices: readonly LintDevice[]; capacities: readonly number[]; enclosureModules?: number | null; occupancy?: string | null }): LintIssue[] {
   const issues: LintIssue[] = [];
   const { devices } = state;
+  const medical = isMedical(state.occupancy);
   const add = (issue: Omit<LintIssue, "id">) => issues.push({ ...issue, id: `${issue.rule}:${issue.itemIds.join(",") || "panel"}` });
 
   for (const device of devices) {
@@ -122,10 +143,13 @@ export function validateSwitchboardState(state: { devices: readonly LintDevice[]
   // 3b. Fáze 52 – typ chráničů a oddělení světel od zásuvek (ČSN 33 2130 ed. 4)
   for (const rcd of devices.filter((device) => (device.category === "RCD" || device.category === "RCBO") && device.config?.rcdType === "AC")) {
     add({
-      severity: "warning",
+      // Fáze 93: ve zdravotnickém prostoru je typ AC zakázán (chyba), jinak varování dle ČSN 33 2130 ed. 4
+      severity: medical ? "error" : "warning",
       rule: "rcd-type-ac",
       itemIds: [rcd.id],
-      message: `Chránič ${rcd.designation} je typu AC – dle ČSN 33 2130 ed. 4 musí být u koncových obvodů s elektronikou a LED osvětlením použit typ A (příp. B/F).`,
+      message: medical
+        ? `Chránič ${rcd.designation} je typu AC – ve zdravotnickém prostoru Skupiny 1 je typ AC zakázán (ČSN 33 2000-7-710 ed. 2), použijte typ A nebo B.`
+        : `Chránič ${rcd.designation} je typu AC – dle ČSN 33 2130 ed. 4 musí být u koncových obvodů s elektronikou a LED osvětlením použit typ A (příp. B/F).`,
       fix: { kind: "configure", itemId: rcd.id, config: { ...rcd.config!, rcdType: "A" }, label: "Opravit 1 klikem: Přepnout na Typ A" },
     });
   }
@@ -171,6 +195,10 @@ export function validateSwitchboardState(state: { devices: readonly LintDevice[]
       fix: rcbo.config ? { kind: "configure", itemId: rcbo.id, config: { ...rcbo.config, rcdType: "B" }, label: "Přepnout na typ B" } : null,
     });
   }
+
+  // 3c. Fáze 93 – typ objektu
+  if (isCommercial(state.occupancy) && devices.length) issues.push(...commercialIssues(devices));
+  if (medical && devices.length) issues.push(...medicalIssues(devices));
 
   // 4. Rezerva modulů a společné hřebeny
   const used = devices.reduce((sum, device) => sum + device.modulesWidth, 0);
@@ -224,4 +252,120 @@ export function validateSwitchboardState(state: { devices: readonly LintDevice[]
     }
   }
   return issues.sort((a, b) => (a.severity === b.severity ? 0 : a.severity === "error" ? -1 : 1));
+}
+
+// ---------------------------------------------------------------------------
+//  Fáze 93: obchodní centrum (BD4) a zdravotnický prostor Skupiny 1
+// ---------------------------------------------------------------------------
+
+const textOf = (device: LintDevice) => `${device.label} ${device.typeCode ?? ""} ${device.config?.power ?? ""}`;
+/** Vypínací spoušť hlavního vypínače (podtyp SHUNT_TRIP nebo štítek / typ). */
+export const isShuntTrip = (device: LintDevice) => device.config?.moduleSubtype === "SHUNT_TRIP" || SHUNT_TRIP_TEXT.test(textOf(device));
+/** Podružný elektroměr MID (elektroměr s MID ve štítku / typu). */
+export const isMidMeter = (device: LintDevice) => MID_METER_TEXT.test(textOf(device)) && (device.config?.moduleSubtype === "METER" || /elektroměr|meter|B23|iEM|7M\./i.test(textOf(device)));
+
+function commercialIssues(devices: readonly LintDevice[]): LintIssue[] {
+  const main = devices.find((device) => device.category === "MAIN_SWITCH") ?? null;
+  const manufacturer = main?.manufacturer ?? devices.find((device) => device.manufacturer)?.manufacturer ?? null;
+  const phases = main && /^2P|1P\+N/i.test(main.poles ?? "") ? 1 : 3;
+  const shunt = devices.some(isShuntTrip);
+  const meter = devices.some(isMidMeter);
+  const missing = [...(shunt ? [] : [{ config: shuntTripConfig(manufacturer), label: CENTRAL_STOP_LABEL }]), ...(meter ? [] : [{ config: midMeterConfig(manufacturer, phases), label: MID_METER_LABEL }])];
+  if (!missing.length) return [];
+  const fix: LintFix = { kind: "add-devices", devices: missing, label: BD4_FIX_LABEL };
+  const issues: LintIssue[] = [];
+  if (!shunt) {
+    issues.push({
+      id: "bd4-central-stop:panel",
+      severity: "error",
+      rule: "bd4-central-stop",
+      itemIds: main ? [main.id] : [],
+      message: `Obchodní centrum (BD4, ČSN 33 2000-7-718): hlavní vypínač${main ? ` ${main.designation}` : ""} nájemní jednotky nemá vypínací spoušť CENTRAL STOP / TOTAL STOP (0,5–1 M, např. ${CENTRAL_STOP_EXAMPLES}) – jednotku nejde odpojit z centrálního tlačítka ani z EPS (vyhláška č. 23/2008 Sb.).`,
+      fix,
+    });
+  }
+  if (!meter) {
+    issues.push({
+      id: "bd4-mid-meter:panel",
+      severity: "error",
+      rule: "bd4-mid-meter",
+      itemIds: [],
+      message: `Obchodní centrum (BD4): chybí podružný elektroměr MID s komunikací Modbus RTU / M-Bus pro fakturační měření nájemní jednotky (3f 4 M, např. ${MID_METER_EXAMPLES}).`,
+      fix,
+    });
+  }
+  return issues;
+}
+
+/** Ochrana zásuvkového okruhu: vlastní RCBO, nadřazený chránič ve stromu, jinak chránič vlevo na liště. */
+function protectionOf(device: LintDevice, devices: readonly LintDevice[]): LintDevice | null {
+  if (device.category === "RCBO") return device;
+  const byId = new Map(devices.map((candidate) => [candidate.id, candidate]));
+  for (let parent = device.parentItemId ? byId.get(device.parentItemId) : undefined, depth = 0; parent && depth < 10; parent = parent.parentItemId ? byId.get(parent.parentItemId) : undefined, depth++) {
+    if (parent.category === "RCD" || parent.category === "RCBO") return parent;
+  }
+  if (device.parentItemId) return null;
+  const left = devices.filter((candidate) => candidate.dinRailIndex === device.dinRailIndex && candidate.positionOnRail < device.positionOnRail).sort((a, b) => b.positionOnRail - a.positionOnRail);
+  for (const candidate of left) {
+    if (candidate.category === "RCD") return candidate;
+    if (candidate.category === "MAIN_SWITCH") return null;
+  }
+  return null;
+}
+
+/** Místnosti ze štítku zásuvkového okruhu („Zásuvky – Ordinace 1 – Okruh A (…)“ → [„Ordinace 1“]). */
+const roomsOfLabel = (label: string) =>
+  label
+    .replace(/^.*?zásuvk\S*\s*[–-]\s*/i, "")
+    .replace(/\s*[–-]\s*Okruh [AB].*$/i, "")
+    .replace(/\s*\(.*\)\s*$/, "")
+    .split(/,\s*/)
+    .map((room) => room.trim())
+    .filter(Boolean);
+
+function medicalIssues(devices: readonly LintDevice[]): LintIssue[] {
+  const issues: LintIssue[] = [];
+  const sockets = devices.filter((device) => (device.category === "MCB" || device.category === "RCBO") && SOCKET_LABEL.test(device.label) && !LIGHTING_LABEL.test(device.label));
+  const independent = (circuits: readonly LintDevice[]) => {
+    const protections = circuits.map((circuit) => protectionOf(circuit, devices));
+    const valid = protections.filter((rcd): rcd is LintDevice => rcd !== null && (rcd.config?.rcdType ?? "A") !== "AC" && (rcd.config?.rcdSensitivityMa ?? 30) <= 30);
+    return circuits.length >= 2 && new Set(valid.map((rcd) => rcd.id)).size >= 2 && valid.length === circuits.length;
+  };
+  // Lékařské místnosti podle štítků okruhů; bez nich celý rozváděč jako jedna lékařská místnost
+  const rooms = [...new Set(sockets.flatMap((device) => roomsOfLabel(device.label)).filter(isMedicalRoom))];
+  const groups = rooms.length ? rooms.map((room) => ({ room, circuits: sockets.filter((device) => roomsOfLabel(device.label).includes(room)) })) : [{ room: null as string | null, circuits: sockets }];
+  const failing = groups.filter((group) => group.circuits.length && !independent(group.circuits));
+  // Rozváděč bez zásuvkových okruhů (jen světla, technologie) pravidlo zásuvek lůžka / vyšetřovny netýká
+  if (sockets.length && failing.length) {
+    // Oprava: každý zásuvkový okruh na vlastní RCBO 1P+N B16 30 mA typ A; jediný okruh dostane druhý okruh (Okruh B)
+    const target = failing.flatMap((group) => group.circuits);
+    const manufacturer = target[0]?.manufacturer ?? devices.find((device) => device.manufacturer)?.manufacturer ?? null;
+    const rcbo = (device: LintDevice | null): ItemConfig => ({ ...defaultConfig("RCBO", { manufacturer: device?.manufacturer ?? manufacturer, modules: 2, ratedCurrentA: device?.ratedCurrentA ?? 16, curve: device?.config?.curve ?? "B" }), rcdType: "A", rcdSensitivityMa: 30 });
+    const configure = target.filter((device) => device.category !== "RCBO" || (device.config?.rcdType ?? "A") === "AC" || (device.config?.rcdSensitivityMa ?? 30) > 30).map((device) => ({ itemId: device.id, config: rcbo(device) }));
+    const lonely = failing.filter((group) => group.circuits.length < 2);
+    const added = lonely.flatMap((group) => {
+      const where = group.room ? ` – ${group.room}` : "";
+      const sides = group.circuits.length ? (["B"] as const) : (["A", "B"] as const);
+      return sides.map((side) => ({ config: rcbo(null), label: `Zásuvky${where} – ${MEDICAL_CIRCUIT[side].label} (${MEDICAL_CIRCUIT[side].colors})` }));
+    });
+    issues.push({
+      id: "medical-sockets:panel",
+      severity: "error",
+      rule: "medical-sockets",
+      itemIds: target.map((device) => device.id),
+      message: MEDICAL_SPLIT_MESSAGE,
+      fix: { kind: "add-devices", devices: added, configure, label: MEDICAL_SPLIT_FIX },
+    });
+  }
+  for (const rcd of devices.filter((device) => (device.category === "RCD" || device.category === "RCBO") && (device.config?.rcdSensitivityMa ?? 30) > 30)) {
+    issues.push({
+      id: `medical-rcd-sensitivity:${rcd.id}`,
+      severity: "error",
+      rule: "medical-rcd-sensitivity",
+      itemIds: [rcd.id],
+      message: `Chránič ${rcd.designation} má IΔn ${rcd.config!.rcdSensitivityMa} mA – ve zdravotnickém prostoru Skupiny 1 nejvýš 30 mA (ČSN 33 2000-7-710 ed. 2).`,
+      fix: rcd.config ? { kind: "configure", itemId: rcd.id, config: { ...rcd.config, rcdSensitivityMa: 30 }, label: "Opravit 1 klikem: IΔn 30 mA" } : null,
+    });
+  }
+  return issues;
 }

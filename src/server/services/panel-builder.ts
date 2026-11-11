@@ -1,3 +1,4 @@
+import { DEFAULT_OCCUPANCY, isOccupancyId } from "@/lib/panel-builder/occupancy";
 import type { PrismaClient } from "@/generated/prisma/client";
 import { HIDDEN_MANUFACTURER_NAMES } from "@/lib/panel-builder/brands";
 import type { ComponentCategory, EnclosureMaterial, EnclosureType } from "@/generated/prisma/enums";
@@ -116,6 +117,8 @@ export interface CreateProjectInput {
   supplySystem?: string;
   /** Fáze 85: skříň z katalogu zvolená při zakládání – lišty návrhu podle ní a omezení na její řady / moduly. */
   enclosureId?: string | null;
+  /** Fáze 93: typ objektu a normativní režim (bytová instalace / obchodní centrum BD4 / zdravotnictví Skupina 1). */
+  occupancy?: string;
 }
 
 export async function createPanelProject(prisma: PrismaClient, input: CreateProjectInput) {
@@ -132,6 +135,7 @@ export async function createPanelProject(prisma: PrismaClient, input: CreateProj
       customerName: input.customerName?.trim().slice(0, 120) || null,
       installationSite: input.installationSite?.trim().slice(0, 120) || null,
       ...supplyColumns(supplyById(input.supplySystem)),
+      occupancy: isOccupancyId(input.occupancy) ? input.occupancy : DEFAULT_OCCUPANCY,
       photoUrl: input.photoUrl,
       dominantManufacturer: input.dominantManufacturer ?? "ABB",
       manufacturerInfoJson: JSON.stringify(input.manufacturerInfo ?? {}),

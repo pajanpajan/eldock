@@ -1,3 +1,4 @@
+import type { PowerBackupTier } from "./power-backup";
 import type { BuildingType, EquipmentType } from "@/generated/prisma/enums";
 
 import type { GridGate, GridSpec, GridZone } from "./cad-grid";
@@ -35,6 +36,8 @@ export interface StudioEquipmentDraft {
   zone: string | null;
   /** Rozváděč bez nadřazeného = hlavní rozváděč. */
   isRoot: boolean;
+  /** Fáze 93: zálohování napájení rozváděče / zdroje a jeho přívodní trasy (bez údaje běžná síť). */
+  powerBackupTier?: PowerBackupTier;
 }
 
 export type StudioBuildingDraft =
@@ -83,6 +86,8 @@ export interface StudioEquipmentEdit {
   zone: string | null;
   /** Nová poloha v metrech od osy A1 (přesun / změna místnosti); bez ní pin zůstává. */
   pos?: { x: number; y: number } | null;
+  /** Fáze 93: zálohování napájení rozváděče / zdroje (bez údaje beze změny). */
+  powerBackupTier?: PowerBackupTier;
 }
 
 /** Jedna budova konceptu (Studio zvládne více budov v jednom průchodu). */

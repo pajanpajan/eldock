@@ -36,7 +36,9 @@ export async function deletePanelProjectsAction(ids: string[], bulk = false): Pr
   }
 }
 
-const headerSchema = z.object({ name: text.min(1), customerName: text.nullable(), installationSite: text.nullable(), supplySystem: supplySchema });
+// Fáze 93: typ objektu a normativní režim projektu
+const occupancySchema = z.enum(["RESIDENTIAL", "COMMERCIAL_BD4", "MEDICAL_G1"]).optional();
+const headerSchema = z.object({ name: text.min(1), customerName: text.nullable(), installationSite: text.nullable(), supplySystem: supplySchema, occupancy: occupancySchema });
 
 /** ✏️ Přejmenovat / upravit hlavičku projektu. */
 export async function updateProjectHeaderAction(projectId: string, input: z.input<typeof headerSchema>): Promise<ActionResult> {
@@ -63,6 +65,7 @@ const scheduleSchema = z.object({
   // Fáze 82: jištění světelného okruhu se zásuvkami
   lightingSocketA: z.union([z.literal(10), z.literal(13)]).default(10),
   supplySystem: supplySchema,
+  occupancy: occupancySchema,
   rooms: z
     .array(
       z.object({

@@ -2,7 +2,7 @@
 // na vstup mostu „půdorys → rozváděč“ (`src/engine/floorplan-bridge.ts`) a 3D výpočtu kabeláže.
 // Čisté funkce – bezpečné pro klient i server.
 
-import { BLIND_CABLE, BLIND_DC_CABLE, DOUBLE_TWO_WAY_CABLE, HEAD_CABLE, MANHATTAN, SENSOR_CABLE, floorMetric, ledCableLabel, summarizeCabling, type FloorLink, type RouteMetric, type RouteNode, type RoutePoint } from "@/engine/cable-routing";
+import { BLIND_CABLE, BLIND_DC_CABLE, DOUBLE_TWO_WAY_CABLE, HEAD_CABLE, MANHATTAN, SENSOR_CABLE, floorMetric, ledCableLabel, summarizeCabling, type CableSummary, type FloorLink, type RouteMetric, type RouteNode, type RoutePoint } from "@/engine/cable-routing";
 import { buildWallGraph, wallMetric, wallSegments } from "@/engine/wall-routing";
 import { isSocketGrouping, type SocketGrouping } from "@/engine/socket-zones";
 import {
@@ -45,9 +45,10 @@ import { parseCadUnderlay, type CadUnderlay } from "./cad-underlay";
 import { productById } from "./smart-catalog";
 import { DEFAULT_SUPPLY, supplyById, type SupplySystem } from "./supply";
 import { isEnvironmentId, type EnvironmentId } from "./environments";
+import { DEFAULT_OCCUPANCY, halogenFreeBomItem, halogenFreeCable, isCommercial, isOccupancyId, type OccupancyId } from "./occupancy";
 import { CALIBRATION_TOLERANCE_PCT, emptyCalibration, isRotation, planExtent, rotatedSize, type CalibrationRecord, type FloorplanBackground, type Rotation } from "./floorplan-pdf";
 
-export type PaletteGroup = "panel" | "sockets" | "lights" | "controls" | "shading" | "appliances" | "fixtures" | "architecture";
+export type PaletteGroup = "panel" | "sockets" | "lights" | "controls" | "shading" | "appliances" | "fixtures" | "architecture" | "medical";
 
 /** Fáze 57: role sběrnicového prvku (KNX / Loxone Tree / free@home) – kreslí se v rámečku „sběrnice“. */
 export type BusRole = "button" | "presence" | "room_unit" | "sensor" | "display" | "blind";
@@ -58,8 +59,11 @@ export interface PaletteItem {
   label: string;
   /** Krátká značka v půdorysu. */
   symbol: string;
-  /** "riser" = stoupací vedení mezi podlažími (fáze 59), "fixture" = zařizovací předmět pro koupelnové zóny (fáze 61) – nejsou elektrické vývody. */
-  kind: NodeKind | "panel" | "riser" | "fixture";
+  /**
+   * "riser" = stoupací vedení mezi podlažími (fáze 59), "fixture" = zařizovací předmět pro koupelnové zóny (fáze 61),
+   * "bonding" = přípojka doplňujícího ochranného pospojování EKV (fáze 93) – nejsou elektrické vývody okruhů.
+   */
+  kind: NodeKind | "panel" | "riser" | "fixture" | "bonding";
   variant?: NodeVariant;
   tag?: ApplianceTag;
   /** Číslo řazení vypínače (1 / 5 / 6 / 7) – jen informativně, skutečné řazení určí párování. */
@@ -92,6 +96,15 @@ export interface PaletteItem {
   lightForm?: "strip" | "spot";
   /** Fáze 90: položka je v paletě i v dalších kategoriích (WC v nábytku i v zařizovacích předmětech). */
   alsoIn?: PaletteGroup[];
+  /** Fáze 93: nouzové únikové svítidlo s piktogramem (NO_SV) – nespínané, ve výpočtu jako svítidlo světelného okruhu. */
+  emergency?: boolean;
+  /**
+   * Fáze 93: lůžková rampa / vyšetřovací pracoviště (LUZ) – ve výpočtu dvojzásuvka okruhu A, dvojzásuvka okruhu B a datová
+   * zásuvka RJ45 (svorka PE / EKV v rampě).
+   */
+  ramp?: boolean;
+  /** Fáze 93: režimy objektu, ve kterých se prvek nabízí v paletě (bez = všechny). */
+  occupancies?: readonly OccupancyId[];
 }
 
 /** Fáze 74: kategorie palety – ikona, krátký název a podtitul (norma, rozsah) pro přehledný levý panel. */
@@ -106,6 +119,8 @@ export const PALETTE_GROUPS: { id: PaletteGroup; icon: string; label: string; hi
   { id: "fixtures", icon: "🛁", label: "Zařizovací předměty", hint: "zóny ČSN 33 2000-7-701, umývací prostor" },
   // Fáze 90: orientační architektonické prvky – nevytváří okruhy, kreslí se na plátně, v PDF i v DXF (ARCHITEKTURA_NABYTEK)
   { id: "architecture", icon: "🛋️", label: "Okna, dveře a nábytek", hint: "orientační – rozměr X × Y, bez okruhů" },
+  // Fáze 93: zdravotnický prostor Skupiny 1 – jen v režimu 🏥 (ČSN 33 2000-7-710 ed. 2)
+  { id: "medical", icon: "🏥", label: "Zdravotnictví (Skupina 1)", hint: "EKV, lůžková rampa LUZ, lehátko – ČSN 33 2000-7-710 ed. 2" },
 ];
 
 /** Nadpis a podtitul skupiny ovládání podle úrovně instalace (fáze 57, fáze 74 krátce). */
@@ -116,6 +131,7 @@ export const CONTROLS_LABEL: Record<InstallLevel, { label: string; hint: string 
 };
 
 const CLASSIC: readonly InstallLevel[] = ["classic", "smart_retrofit"];
+const MEDICAL_ONLY: readonly OccupancyId[] = ["MEDICAL_G1"];
 const BUS: readonly InstallLevel[] = ["bus_loxone"];
 const RETROFIT: readonly InstallLevel[] = ["smart_retrofit"];
 
@@ -138,6 +154,8 @@ export const PALETTE: PaletteItem[] = [
   // Fáze 77: LED pásek (výchozí 24 V DC PWM ze zdroje v rozváděči) a bodové podhledové svítidlo
   { id: "led-strip", group: "lights", label: "LED pásek / nepřímé osvětlení", symbol: "LED_P", kind: "light", lightForm: "strip" },
   { id: "spot-light", group: "lights", label: "Bodové podhledové svítidlo", symbol: "BOD", kind: "light", lightForm: "spot" },
+  // Fáze 93: nouzové únikové svítidlo (BD4 i zdravotnictví – kdekoli, kde se z prostoru utíká)
+  { id: "emergency-light", group: "lights", label: "Nouzové únikové svítidlo s piktogramem (1h / 3h, SE/SA dle ČSN EN 1838)", symbol: "NO_SV", kind: "light", emergency: true, heightMm: 2200 },
   { id: "switch-1", group: "controls", levels: CLASSIC, label: "Vypínač č. 1 (jednopólový)", symbol: "S1", kind: "switch", switchNo: "1" },
   { id: "switch-5", group: "controls", levels: CLASSIC, label: "Sériový přepínač č. 5 (lustrový – 2 klapky)", symbol: "S5", kind: "switch", switchNo: "5", fixedSwitchNo: "5" },
   { id: "switch-6", group: "controls", levels: CLASSIC, label: "Střídavý přepínač č. 6 (schodový)", symbol: "S6", kind: "switch", switchNo: "6" },
@@ -216,12 +234,19 @@ export const PALETTE: PaletteItem[] = [
   { id: "arch-wardrobe", group: "architecture", label: "Šatní / vestavěná skříň (2,00 × 0,60 m)", symbol: "SKRIN", kind: "fixture" },
   { id: "arch-tv", group: "architecture", label: "TV stolek / obývací stěna (1,80 × 0,45 m)", symbol: "TV_ST", kind: "fixture" },
   { id: "arch-wc", group: "architecture", alsoIn: ["fixtures"], label: "WC mísa / závěsné WC (0,40 × 0,65 m)", symbol: "WC_M", kind: "fixture" },
+  // Fáze 93: zdravotnický prostor Skupiny 1 – doplňující ochranné pospojování, lůžková rampa a vyšetřovací lehátko
+  { id: "ekv", group: "medical", occupancies: MEDICAL_ONLY, label: "EKV – přípojka doplňujícího ochranného pospojování (CYA 6 mm² ZŽ, H07V-K)", symbol: "EKV", kind: "bonding", heightMm: 300 },
+  { id: "bed-ramp", group: "medical", occupancies: MEDICAL_ONLY, label: "LUZ – lůžková rampa / vyšetřovací pracoviště (Okruh A + Okruh B + PE + RJ45)", symbol: "LUZ", kind: "double_socket", ramp: true, heightMm: 1200 },
+  { id: "arch-exam-bed", group: "architecture", alsoIn: ["medical"], label: "Vyšetřovací lehátko / nemocniční lůžko / stomatologické křeslo (2,00 × 0,90 m)", symbol: "LEH_Z", kind: "fixture" },
 ];
 
 export const paletteItem = (id: string) => PALETTE.find((item) => item.id === id) ?? null;
 
+/** Fáze 93: druh uzlu pro výchozí montážní výšku (rozváděč, předmět a EKV jako zásuvka – výšku mají z profilu / palety). */
+export const heightKindOf = (kind: PaletteItem["kind"]): NodeKind => (kind === "panel" || kind === "riser" || kind === "fixture" || kind === "bonding" ? "single_socket" : kind);
+
 /** Paleta pro úroveň instalace (fáze 57): ovládání se mění, zásuvky / světla / spotřebiče zůstávají. */
-export const paletteFor = (level: InstallLevel) => PALETTE.filter((item) => !item.hidden && (!item.levels || item.levels.includes(level)));
+export const paletteFor = (level: InstallLevel, occupancy?: OccupancyId) => PALETTE.filter((item) => !item.hidden && (!item.levels || item.levels.includes(level)) && (!item.occupancies || !occupancy || item.occupancies.includes(occupancy)));
 export const availableIn = (item: PaletteItem, level: InstallLevel) => !item.levels || item.levels.includes(level);
 
 /** Ovladač, který se páruje se světly (ne žaluzie ani termostat). */
@@ -561,6 +586,11 @@ export interface FloorplanDraft {
   /** Fáze 91: výrobce instalačních krabic a výchozí konstrukce stěn (místnost ji může přepsat). */
   boxMaker: BoxMaker;
   wallType: WallType;
+  /**
+   * Fáze 93: typ objektu a normativní režim – bytová instalace (BD1), obchodní centrum / prostor pro veřejnost (BD4 –
+   * bezhalogenové kabely B2ca, krabice HF, CENTRAL STOP a elektroměr MID) nebo zdravotnický prostor Skupiny 1.
+   */
+  occupancy: OccupancyId;
   updatedAt: number;
 }
 
@@ -612,6 +642,7 @@ export const emptyDraft = (): FloorplanDraft => ({
   lightingSocketA: 10,
   boxMaker: DEFAULT_BOX_MAKER,
   wallType: DEFAULT_WALL_TYPE,
+  occupancy: DEFAULT_OCCUPANCY,
   updatedAt: 0,
 });
 
@@ -676,6 +707,8 @@ export function parseDraft(value: unknown): FloorplanDraft | null {
     // Fáze 91: instalační krabice (starší nákresy KOPOS do zdiva)
     boxMaker: isBoxMaker(draft.boxMaker) ? draft.boxMaker : DEFAULT_BOX_MAKER,
     wallType: isWallType(draft.wallType) ? draft.wallType : DEFAULT_WALL_TYPE,
+    // Fáze 93: režim objektu (starší nákresy = bytová instalace)
+    occupancy: isOccupancyId(draft.occupancy) ? draft.occupancy : DEFAULT_OCCUPANCY,
     updatedAt: num(draft.updatedAt, 0, 0, 1e15),
   });
 }
@@ -1328,6 +1361,13 @@ function lightNodeExtras(element: EditorElement, item: PaletteItem): Pick<FloorN
 /** Fáze 74: uzel trasy podružného rozváděče (cíl přívodu z hlavního rozváděče). */
 export const boardNodeId = (code: string) => `board-${code}`;
 
+/** Fáze 93: části lůžkové rampy LUZ ve výpočtu (uzly „id#A“, „id#B“, „id#D“). */
+const RAMP_PARTS: readonly { suffix: string; kind: NodeKind; circuit: "A" | "B" | null }[] = [
+  { suffix: "A", kind: "double_socket", circuit: "A" },
+  { suffix: "B", kind: "double_socket", circuit: "B" },
+  { suffix: "D", kind: "data_socket", circuit: null },
+];
+
 /** Fáze 59: osa víceramečku podle natočení kotvy (stěna nahoře / dole = vodorovně, vlevo / vpravo = svisle). */
 export const frameAxis = (rotation: number) => {
   // Fáze 63: rámeček u šikmé stěny leží v ose stěny
@@ -1417,25 +1457,29 @@ export function buildPlan(draft: FloorplanDraft): PlanBuild {
     }
     for (const element of floor.elements) {
       const item = paletteItem(element.item);
-      if (!item || item.kind === "panel" || item.kind === "riser" || item.kind === "fixture") continue;
+      if (!item || item.kind === "panel" || item.kind === "riser" || item.kind === "fixture" || item.kind === "bonding") continue;
       // Fáze 63: samostatný spotřebič z knihovny (upravený / vlastní) a výrobek z lišty výrobců
       const spec = item.kind === "appliance" ? applianceSpecFor(draft.appliances, element) : null;
       const override = applianceOverride(spec);
       const product = productById(element.product);
-      const units = item.kind === "single_socket" || item.kind === "double_socket" || item.kind === "data_socket" || item.kind === "switch" ? element.frameUnits : 1;
-      const slot = frameSlot.get(element.id);
-      const frame = slot?.frame ?? (units > 1 ? element.id : null);
+      // Fáze 93: lůžková rampa LUZ = dvojzásuvka okruhu A, dvojzásuvka okruhu B a datová zásuvka RJ45 v jednom tělese
+      const rampParts = item.ramp ? RAMP_PARTS : null;
+      const units = rampParts ? rampParts.length : item.kind === "single_socket" || item.kind === "double_socket" || item.kind === "data_socket" || item.kind === "switch" ? element.frameUnits : 1;
+      const slot = rampParts ? undefined : frameSlot.get(element.id);
+      const frame = rampParts ? null : (slot?.frame ?? (units > 1 ? element.id : null));
       const board = boardOfElement(boardInfos, element, floor.id);
       const origin = boardPoint.get(board) ?? panel;
       for (let unit = 0; unit < units; unit++) {
-        const id = units > 1 ? `${element.id}#${unit + 1}` : element.id;
+        const part = rampParts?.[unit] ?? null;
+        const id = part ? `${element.id}#${part.suffix}` : units > 1 ? `${element.id}#${unit + 1}` : element.id;
+        const kind: NodeKind = part ? part.kind : item.kind;
         const offset = ((slot?.start ?? 0) + unit) * FRAME_PITCH_MM;
         const px: [number, number] = slot ? [slot.origin.x + slot.axis.x * offset, slot.origin.y + slot.axis.y * offset] : [element.x + unit * FRAME_PITCH_MM, element.y];
         const height = heightOf(element, item) ?? spec?.heightMm ?? null;
         const node: FloorNode = {
           id,
           room: roomId(floor, element.room),
-          kind: item.kind,
+          kind,
           px,
           ...(item.tag ? { tag: item.tag } : {}),
           ...(item.variant ? { variant: item.variant } : {}),
@@ -1448,6 +1492,9 @@ export function buildPlan(draft: FloorplanDraft): PlanBuild {
           // Fáze 77: technologie svítidla (DALI = kabel 5×1,5, PWM = LED 24 V ze zdroje v rozváděči) a pohon žaluzie
           ...lightNodeExtras(element, item),
           ...(item.kind === "blind_motor" ? { blindDrive: element.drive ?? "ac230" } : {}),
+          // Fáze 93: okruh A / B lůžkové rampy a nouzové únikové svítidlo
+          ...(part?.circuit ? { medicalCircuit: part.circuit } : {}),
+          ...(item.emergency ? { emergency: true } : {}),
         };
         const heightMm = mountHeight(node, profile);
         // Fáze 74: délka přívodu prvku z jeho rozváděče
@@ -1456,7 +1503,7 @@ export function buildPlan(draft: FloorplanDraft): PlanBuild {
         elementOf.set(id, element);
         boardOf.set(id, board);
         routeNodes.push({ id, x: px[0], y: px[1], heightMm, room: node.room, floor: floor.id, board, ...(frame ? { frame } : {}) });
-        if (item.kind === "data_socket") dataNodeIds.push(id);
+        if (kind === "data_socket") dataNodeIds.push(id);
         // Bezdrátový výrobek / samostatný systém (videotelefon) nejde na sběrnicovou linku
         if (item.bus && draft.installation === "bus_loxone" && !product?.noBus) busNodeIds.push(id);
       }
@@ -1585,7 +1632,7 @@ export function parseCableReport(json: string | null | undefined): CableReport |
 }
 
 /** Volby návrhu dle ČSN 33 2130 ed. 4 z nákresu (fáze 52; fáze 65 rozdělení zásuvek). */
-export const designOptionsOf = (draft: Pick<FloorplanDraft, "installMethod" | "groupedCables" | "countDoubleAsTwo"> & Partial<Pick<FloorplanDraft, "environment" | "socketGrouping" | "lightingSocketA">>): DesignOptions => ({
+export const designOptionsOf = (draft: Pick<FloorplanDraft, "installMethod" | "groupedCables" | "countDoubleAsTwo"> & Partial<Pick<FloorplanDraft, "environment" | "socketGrouping" | "lightingSocketA" | "occupancy">>): DesignOptions => ({
   installMethod: draft.installMethod,
   groupedCables: draft.groupedCables,
   countDoubleAsTwo: draft.countDoubleAsTwo,
@@ -1593,6 +1640,8 @@ export const designOptionsOf = (draft: Pick<FloorplanDraft, "installMethod" | "g
   ...(draft.socketGrouping ? { socketGrouping: draft.socketGrouping } : {}),
   // Fáze 82: jištění světelného okruhu se zásuvkami
   ...(draft.lightingSocketA ? { lightingSocketA: draft.lightingSocketA } : {}),
+  // Fáze 93: zdravotnický prostor – zásuvky lékařských místností ve 2 okruzích A / B, světla ve 2 okruzích
+  ...(draft.occupancy && draft.occupancy !== DEFAULT_OCCUPANCY ? { occupancy: draft.occupancy } : {}),
 });
 
 /**
@@ -1652,7 +1701,30 @@ export function analyzeDraft(draft: FloorplanDraft) {
   // Fáze 76: obvodový router po stěnách (výchozí styl), u „Nejkratší v podlaze“ řetěz přímými trasami
   const treeRouter = draft.routeStyle !== "direct" ? createPerimeterRouter({ rooms: build.perimeterRooms, metric: build.metric }) : undefined;
   const summary = summarizeCabling({ circuits: circuits.circuits, nodes: build.routeNodes, panel: build.panel, panels, profile: draft.profile, selected: draft.mode, switchLinks: build.switchLinks, controlRuns: build.controlRuns, dataNodeIds: build.dataNodeIds, busNodeIds: build.busNodeIds, installation: draft.installation, metric: build.metric, routeEdits: draft.routeEdits, treeRouter, starRuns: build.starRuns });
-  return { build, circuits, summary };
+  // Fáze 93: obchodní centrum (BD4) – všechny kabely okruhů, výkazu, tras a kusovníku v bezhalogenovém provedení B2ca
+  const occupancy = draft.occupancy ?? DEFAULT_OCCUPANCY;
+  if (!isCommercial(occupancy)) return { build, circuits, summary, occupancy };
+  return { build, circuits: halogenFreePlan(circuits), summary: halogenFreeSummary(summary), occupancy };
+}
+
+/** Fáze 93: okruhy a kusovník výpočtu v bezhalogenovém provedení (BD4). */
+export function halogenFreePlan(plan: CircuitPlan): CircuitPlan {
+  const bom = new Map<string, number>();
+  for (const entry of plan.bom) {
+    const item = halogenFreeBomItem(entry.item);
+    bom.set(item, (bom.get(item) ?? 0) + entry.count);
+  }
+  return { ...plan, circuits: plan.circuits.map((circuit) => ({ ...circuit, cable: halogenFreeCable(circuit.cable) })), bom: [...bom.entries()].map(([item, count]) => ({ item, count })) };
+}
+
+/** Fáze 93: výkaz kabeláže v bezhalogenovém provedení – rozpis k nákupu sloučený podle nového označení. */
+export function halogenFreeSummary(summary: CableSummary): CableSummary {
+  const meters = new Map<string, number>();
+  for (const row of summary.byCable) {
+    const cable = halogenFreeCable(row.cable);
+    meters.set(cable, Math.round(((meters.get(cable) ?? 0) + row.meters) * 10) / 10);
+  }
+  return { ...summary, byCable: [...meters.entries()].map(([cable, value]) => ({ cable, meters: value })), circuits: summary.circuits.map((row) => ({ ...row, cable: halogenFreeCable(row.cable) })) };
 }
 
 // ---------------------------------------------------------------------------

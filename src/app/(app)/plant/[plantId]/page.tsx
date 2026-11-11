@@ -17,7 +17,7 @@ import { PlantOnboardingLoader } from "@/components/plant/PlantOnboardingLoader"
 import { Button } from "@/components/ui/button";
 import { EQUIPMENT_STATUS } from "@/lib/status";
 import { getInspectionWatch } from "@/server/queries/inspections";
-import { getPlantOverview } from "@/server/queries/plant";
+import { getPlantOverview, getPlantPower } from "@/server/queries/plant";
 import { getFeatures } from "@/server/modules";
 import { getCurrentAccount } from "@/server/session";
 
@@ -30,7 +30,7 @@ export async function generateMetadata({ params }: PageProps<"/plant/[plantId]">
 // Level 1 – Půdorys areálu.
 export default async function PlantPage({ params, searchParams }: PageProps<"/plant/[plantId]">) {
   const [{ plantId }, { pruvodce }, account, modules] = await Promise.all([params, searchParams, getCurrentAccount(), getFeatures()]);
-  const [plant, watch, predictive] = await Promise.all([getPlantOverview(plantId, account.types), getInspectionWatch(plantId, new Date(), account.types), getPredictiveSummary(plantId, account.types)]);
+  const [plant, watch, predictive, power] = await Promise.all([getPlantOverview(plantId, account.types), getInspectionWatch(plantId, new Date(), account.types), getPredictiveSummary(plantId, account.types), getPlantPower(plantId, account.types)]);
   if (!plant) notFound();
   // Fáze 92: průvodce závodem – režim A zakládá skutečná data (právo Studio), režim B je mise nad vzorovým závodem
   const canBuild = account.can("studio") && modules.on("enterprise.studio");
@@ -113,6 +113,7 @@ export default async function PlantPage({ params, searchParams }: PageProps<"/pl
 
       <CampusExplorer
         plant={plant}
+        power={power}
         legend={
           <StatusLegend
             extra={

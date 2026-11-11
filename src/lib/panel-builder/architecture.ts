@@ -244,6 +244,20 @@ function draw(type: ArchType, w: number, d: number): ArchPrimitive[] {
       const cy = -D + tank + (d - tank) / 2;
       return [rect(-W, -D, W, -D + tank, { weight: 1.3, fill: true }), ellipse(0, cy, W * 0.92, (d - tank) / 2, { weight: 1.3, fill: true }), ellipse(0, cy + (d - tank) * 0.04, W * 0.6, (d - tank) * 0.34, { weight: 0.7 })];
     }
+    case "exam_bed": {
+      // Fáze 93: vyšetřovací lehátko / lůžko – rám, polohovatelná hlavová část (dělicí čára), čalounění a role papíru u nohou
+      const inset = Math.min(45, d * 0.05);
+      const headEnd = -W + w * 0.3;
+      const roll = Math.min(90, w * 0.05);
+      return [
+        rect(-W, -D, W, D, { weight: 1.5, fill: true }),
+        roundRect(-W + inset, -D + inset, W - inset - roll, D - inset, 60, { weight: 0.8 }),
+        line(headEnd, -D + inset, headEnd, D - inset, { weight: 0.9 }),
+        roundRect(-W + inset * 2, -D + d * 0.25, -W + inset * 2 + w * 0.12, D - d * 0.25, 50, { weight: 0.7 }),
+        rect(W - roll, -D + inset, W - inset * 0.4, D - inset, { weight: 1.1 }),
+        line(W - roll * 0.5, -D + inset, W - roll * 0.5, D - inset, { weight: 0.5, dashed: true }),
+      ];
+    }
   }
 }
 

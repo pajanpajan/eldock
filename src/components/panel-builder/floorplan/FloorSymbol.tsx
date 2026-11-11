@@ -46,10 +46,11 @@ export function FloorSymbol({
   /** Barva domovních přístrojů (fáze 51) – tečka u popisku. */
   lem?: string | null;
 }) {
-  const ink = onPaper ? "#111827" : "#f4f4f5";
+  const parts = symbolParts(item, size, { switchNo, level });
+  // Fáze 93: nouzové únikové svítidlo zelenou kresbou
+  const ink = parts.color ?? (onPaper ? "#111827" : "#f4f4f5");
   const halo = active ? "#facc15" : onPaper ? "rgba(255,255,255,0.9)" : "rgba(9,9,11,0.85)";
   const w = size / 22;
-  const parts = symbolParts(item, size, { switchNo, level });
   const draw = (stroke: string, width: number, key: string) => (
     <g key={key} fill="none" stroke={stroke} strokeWidth={width} strokeLinecap="round" strokeLinejoin="round">
       {parts.paths.map((d, index) => (

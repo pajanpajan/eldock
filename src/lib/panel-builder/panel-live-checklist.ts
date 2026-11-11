@@ -28,7 +28,7 @@ export interface ChecklistItem {
 }
 
 /** Nálezy Elektro-linteru nad uloženým projektem – stejný výpočet jako v kroku 1 (`RecognitionWorkspace`). */
-export function projectLintIssues(project: { dinRailsCount: number; modulesPerRail: number; railModulesJson?: string | null; items: readonly ChecklistItem[] }, enclosureModules: number | null): LintIssue[] {
+export function projectLintIssues(project: { dinRailsCount: number; modulesPerRail: number; railModulesJson?: string | null; occupancy?: string | null; items: readonly ChecklistItem[] }, enclosureModules: number | null): LintIssue[] {
   return validateSwitchboardState({
     devices: project.items.map((item) => {
       const device = vectorDeviceFrom(item);
@@ -50,6 +50,7 @@ export function projectLintIssues(project: { dinRailsCount: number; modulesPerRa
     }),
     capacities: railCapacities(project),
     enclosureModules,
+    occupancy: project.occupancy ?? null,
   });
 }
 

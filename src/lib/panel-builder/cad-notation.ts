@@ -17,7 +17,7 @@ export function coresOf(cable: string): number {
 }
 
 /** Ovládací / sběrnicový / slaboproudý kabel – v normovém zobrazení čárkovaně. */
-export const isLowVoltageCable = (cable: string) => /24\s*V\s*DC|sběrnic|KNX|CAT\s*7|UTP|J-Y\(St\)Y/i.test(cable);
+export const isLowVoltageCable = (cable: string) => /24\s*V\s*DC|sběrnic|KNX|CAT\s*7|UTP|FTP|J-Y\(St\)Y|J-H\(St\)H/i.test(cable);
 
 const meters = (value: number) => value.toLocaleString("cs-CZ", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 

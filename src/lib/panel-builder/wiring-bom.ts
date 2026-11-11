@@ -16,11 +16,15 @@ import { productById } from "./smart-catalog";
 import { smartPlanOf } from "./smart-home-plan";
 import { panelBomRows, variantOf } from "./smart-panels";
 import { boxMakerLabel, compileBoxUsage, wallTypeOf } from "./mounting-boxes-catalog";
+import { EKV_CONDUCTOR } from "./occupancy";
 import { frameRulesOf, maxFrameGang, splitFrameGangs, splitLabel } from "./residential-series-catalog";
 import { appearanceLabel, colorCodeFor, designSeriesOf, hasFrameChoice, isMonoblockSeries, resolveFrameColor } from "./wiring-designs";
 
-export type BomCategory = "Přístroje spínačů" | "Kryty spínačů" | "Sběrnicové prvky" | "Chytré moduly" | "Zásuvky" | "Rámečky" | "Ostatní přístroje" | "Instalační krabice" | "Kabely";
-export const BOM_CATEGORIES: readonly BomCategory[] = ["Přístroje spínačů", "Kryty spínačů", "Sběrnicové prvky", "Chytré moduly", "Zásuvky", "Rámečky", "Ostatní přístroje", "Instalační krabice", "Kabely"];
+export type BomCategory = "Přístroje spínačů" | "Kryty spínačů" | "Sběrnicové prvky" | "Chytré moduly" | "Zásuvky" | "Rámečky" | "Ostatní přístroje" | "Bezpečnostní a zdravotnické prvky" | "Instalační krabice" | "Kabely";
+export const BOM_CATEGORIES: readonly BomCategory[] = ["Přístroje spínačů", "Kryty spínačů", "Sběrnicové prvky", "Chytré moduly", "Zásuvky", "Rámečky", "Ostatní přístroje", "Bezpečnostní a zdravotnické prvky", "Instalační krabice", "Kabely"];
+
+/** Fáze 93: odhad vodiče doplňujícího ochranného pospojování na jednu přípojku EKV (k přípojnici EKV místnosti) [m]. */
+export const EKV_CONDUCTOR_M = 3;
 
 export interface WiringBomRow {
   category: BomCategory;
@@ -207,8 +211,25 @@ export function compileFloorplanBom(draft: FloorplanDraft, options: BomOptions =
     };
   };
   const everything = allElements(draft);
+  // Fáze 93: přípojky doplňujícího ochranného pospojování (EKV a svorka PE lůžkové rampy) po místnostech
+  const bonding: EditorElement[] = [];
   for (const element of everything) {
     const item = paletteItem(element.item);
+    // Fáze 93: nouzové únikové svítidlo, přípojka EKV a lůžková rampa LUZ (kompletní těleso se zásuvkami okruhů A a B)
+    if (item?.emergency) {
+      add({ category: "Bezpečnostní a zdravotnické prvky", mpn: null, verified: false, name: "Nouzové únikové svítidlo s piktogramem (1 h / 3 h, SE / SA, ČSN EN 1838) – výrobce doplňte", appearance: "–", unit: "ks" }, 1);
+      continue;
+    }
+    if (item?.kind === "bonding") {
+      add({ category: "Bezpečnostní a zdravotnické prvky", mpn: null, verified: false, name: `Přípojka doplňujícího ochranného pospojování EKV (svorka PE, ${EKV_CONDUCTOR})`, appearance: "–", unit: "ks" }, 1);
+      bonding.push(element);
+      continue;
+    }
+    if (item?.ramp) {
+      add({ category: "Bezpečnostní a zdravotnické prvky", mpn: null, verified: false, name: "Lůžková rampa / vyšetřovací pracoviště – 2× zásuvka Okruh A (zelená / bílá), 2× zásuvka Okruh B (oranžová / zálohovaná), svorka PE / EKV, RJ45", appearance: "–", unit: "ks" }, 1);
+      bonding.push(element);
+      continue;
+    }
     if (!item || item.kind === "panel" || item.kind === "riser" || item.kind === "fixture" || item.kind === "light" || item.kind === "appliance") continue;
     const style = look(element);
     const { found, isAbb, matrix, code, appearance, monoblock, ip, decento } = style;
@@ -368,6 +389,11 @@ export function compileFloorplanBom(draft: FloorplanDraft, options: BomOptions =
     );
   }
   for (const cable of options.cables ?? []) add({ category: "Kabely", mpn: null, verified: true, name: cable.cable, appearance: "–", unit: "m" }, Math.ceil(cable.meters));
+  // Fáze 93: místní přípojnice EKV každé místnosti s přípojkami a vodič doplňujícího pospojování (odhad 3 m na přípojku)
+  if (bonding.length) {
+    add({ category: "Bezpečnostní a zdravotnické prvky", mpn: null, verified: false, name: "Přípojnice EKV místnosti (místní ekvipotenciální přípojnice zdravotnického prostoru)", appearance: "–", unit: "ks" }, new Set(bonding.map((element) => element.room)).size);
+    add({ category: "Kabely", mpn: null, verified: false, name: `${EKV_CONDUCTOR} – doplňující ochranné pospojování (odhad ${EKV_CONDUCTOR_M} m na přípojku EKV)`, appearance: "–", unit: "m" }, bonding.length * EKV_CONDUCTOR_M);
+  }
   const order = (row: WiringBomRow) => BOM_CATEGORIES.indexOf(row.category);
   return [...rows.values()].sort((a, b) => order(a) - order(b) || a.appearance.localeCompare(b.appearance, "cs") || (a.mpn ?? a.name).localeCompare(b.mpn ?? b.name, "cs"));
 }

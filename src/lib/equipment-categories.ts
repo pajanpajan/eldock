@@ -3,7 +3,7 @@ import type { EquipmentType } from "@/generated/prisma/enums";
 // Kategorie zařízení ve Studiu (krok 3): barva banneru, značky na půdorysu, seznamu i legendy
 // a způsob umístění – pevná zařízení do jemného rastru, spotřebiče a nářadí do místnosti.
 
-export type EquipmentCategoryKey = "TR" | "R" | "STR" | "ROB" | "TECH" | "SP" | "RN" | "DI";
+export type EquipmentCategoryKey = "TR" | "R" | "STR" | "ROB" | "TECH" | "SP" | "RN" | "DI" | "MED";
 export type PlacementMode = "grid" | "room";
 
 export interface EquipmentCategory {
@@ -37,6 +37,8 @@ export const EQUIPMENT_CATEGORIES: readonly EquipmentCategory[] = [
   { key: "RN", code: "RN", label: "Ruční nářadí", color: "#06b6d4", emoji: "🛠️", types: ["POWER_TOOL", "WELDER"], placement: "room" },
   // Fáze 47: domovní přístroje ABB (vypínače, zásuvky) z katalogu domovní instalace
   { key: "DI", code: "DI", label: "Domovní přístroje (zásuvky, vypínače)", color: "#84cc16", emoji: "🔲", types: ["WIRING_DEVICE"], placement: "room" },
+  // Fáze 93: nemocnice, polikliniky a obchodní centra – zdravotnické přístroje a prostory, požární vypínací prvky
+  { key: "MED", code: "MED / CS", label: "Zdravotnictví a požární vypínání", color: "#f43f5e", emoji: "🏥", types: ["MEDICAL_DEVICE", "MEDICAL_ROOM", "FIRE_SHUTDOWN"], placement: "grid" },
 ];
 
 const BY_TYPE = new Map<EquipmentType, EquipmentCategory>(EQUIPMENT_CATEGORIES.flatMap((category) => category.types.map((type) => [type, category] as const)));
@@ -120,6 +122,13 @@ export const PRODUCT_TEMPLATES: Record<EquipmentCategoryKey, readonly ProductTem
     product("switch", "Vypínač – ABB Tango (kryt 3558A-A651 B)", "🔘", "WIRING_DEVICE", "Vypínač"),
     product("switch6", "Přepínač střídavý (řazení 6)", "🔁", "WIRING_DEVICE", "Přepínač střídavý"),
     product("data", "Datová zásuvka – ABB Tango (5014A-A00410 B)", "🖧", "WIRING_DEVICE", "Datová zásuvka"),
+  ],
+  // Fáze 93: Kniha revizí nemocnic, poliklinik a obchodních center
+  MED: [
+    product("zep", "Zdravotnický elektrický přístroj (ČSN EN 62353 ed. 2)", "🩺", "MEDICAL_DEVICE", "Zdravotnický přístroj"),
+    product("zp1", "Zdravotnický prostor Skupiny 1 – ordinace / lůžka", "🏥", "MEDICAL_ROOM", "Zdravotnický prostor Sk. 1"),
+    product("zp2", "Zdravotnický prostor Skupiny 2 / ZIS IT s hlídačem IMD", "🫀", "MEDICAL_ROOM", "Zdravotnický prostor Sk. 2"),
+    product("central-stop", "Požární vypínací prvek CENTRAL / TOTAL STOP (EPS)", "🛑", "FIRE_SHUTDOWN", "CENTRAL STOP"),
   ],
 };
 

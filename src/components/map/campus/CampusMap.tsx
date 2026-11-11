@@ -19,6 +19,8 @@ interface Props {
   buildings: BuildingOverview[];
   hoveredId: string | null;
   onHover: (id: string | null) => void;
+  /** Fáze 93: zvýraznění budov větve zálohování (barva úrovně) a páteřních tras mezi budovami. */
+  highlight?: { ids: ReadonlySet<string>; color: string; routes: { from: string; to: string }[] } | null;
 }
 
 const ROOF = "#27303a";
@@ -35,7 +37,7 @@ function describeBuilding({ name, counts }: BuildingOverview): string {
 }
 
 /** Level 1 – SVG mapa areálu s klikacími budovami a štítky. */
-export function CampusMap({ plantCode, viewBox, buildings, hoveredId, onHover }: Props) {
+export function CampusMap({ plantCode, viewBox, buildings, hoveredId, onHover, highlight = null }: Props) {
   const router = useRouter();
   const layout = getSiteLayout(plantCode, viewBox.height);
   const { width, height } = viewBox;
@@ -96,7 +98,9 @@ export function CampusMap({ plantCode, viewBox, buildings, hoveredId, onHover }:
         {shapes.map(({ building, points, box }) => {
           const hovered = hoveredId === building.id;
           const status = building.worstStatus;
-          const statusStroke = status === "ACTIVE" ? EDGE : EQUIPMENT_STATUS[status].hex;
+          // Fáze 93: budova ve větvi zálohování barvou úrovně, ostatní ztlumené
+          const marked = highlight?.ids.has(building.id) ?? false;
+          const statusStroke = marked && highlight ? highlight.color : status === "ACTIVE" ? EDGE : EQUIPMENT_STATUS[status].hex;
           return (
             <g
               key={building.id}
@@ -104,6 +108,8 @@ export function CampusMap({ plantCode, viewBox, buildings, hoveredId, onHover }:
               tabIndex={0}
               aria-label={describeBuilding(building)}
               className="cursor-pointer outline-none"
+              opacity={highlight && !marked ? 0.35 : 1}
+              data-backup={marked ? "on" : undefined}
               onClick={() => open(building.href)}
               onKeyDown={(event) => onKeyDown(event, building.href)}
               onMouseEnter={() => {
@@ -118,7 +124,7 @@ export function CampusMap({ plantCode, viewBox, buildings, hoveredId, onHover }:
                 points={points}
                 fill={hovered ? ROOF_HOVER : ROOF}
                 stroke={hovered ? ACCENT : statusStroke}
-                strokeWidth={hovered ? 3 : status === "ACTIVE" ? 1.5 : 2.5}
+                strokeWidth={hovered ? 3 : marked ? 4 : status === "ACTIVE" ? 1.5 : 2.5}
                 strokeLinejoin="round"
                 style={{ transition: "fill 150ms, stroke 150ms" }}
               />
@@ -139,6 +145,29 @@ export function CampusMap({ plantCode, viewBox, buildings, hoveredId, onHover }:
                 </g>
               ) : null}
             </g>
+          );
+        })}
+
+        {/* Fáze 93: páteřní trasy zálohované větve mezi budovami (od zdroje k rozváděčům) */}
+        {highlight?.routes.map((route, index) => {
+          const from = buildings.find((building) => building.id === route.from);
+          const to = buildings.find((building) => building.id === route.to);
+          if (!from || !to) return null;
+          return (
+            <line
+              key={`${route.from}-${route.to}-${index}`}
+              x1={(from.labelX / 100) * width}
+              y1={(from.labelY / 100) * height}
+              x2={(to.labelX / 100) * width}
+              y2={(to.labelY / 100) * height}
+              stroke={highlight.color}
+              strokeWidth={5}
+              strokeDasharray="14 8"
+              strokeLinecap="round"
+              opacity={0.9}
+              pointerEvents="none"
+              data-testid="backup-route"
+            />
           );
         })}
       </svg>

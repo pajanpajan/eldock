@@ -119,10 +119,10 @@ describe("fáze 90 – průvodce: krok 1 bez automatického přeskoku, krokové 
 });
 
 describe("fáze 90 – okna, dveře a nábytek", () => {
-  it("paleta 🛋️ Okna, dveře a nábytek se 17 prvky, WC i v zařizovacích předmětech, bez okruhů a kusovníku", () => {
+  it("paleta 🛋️ Okna, dveře a nábytek s 18 prvky (fáze 93: vyšetřovací lehátko LEH_Z), WC i v zařizovacích předmětech, bez okruhů a kusovníku", () => {
     expect(PALETTE_GROUPS.find((group) => group.id === "architecture")).toMatchObject({ icon: "🛋️", label: "Okna, dveře a nábytek" });
     const items = PALETTE.filter((item) => item.group === "architecture");
-    expect(items.map((item) => item.symbol)).toEqual(["OKN_1", "OKN_2", "OKN_HS", "DVE_1", "DVE_2", "DVE_POS", "POST_2", "POST_1", "GAUC_L", "GAUC_R", "STUL_J", "STUL_PC", "LINKA", "OSTR", "SKRIN", "TV_ST", "WC_M"]);
+    expect(items.map((item) => item.symbol)).toEqual(["OKN_1", "OKN_2", "OKN_HS", "DVE_1", "DVE_2", "DVE_POS", "POST_2", "POST_1", "GAUC_L", "GAUC_R", "STUL_J", "STUL_PC", "LINKA", "OSTR", "SKRIN", "TV_ST", "WC_M", "LEH_Z"]);
     expect(items.every((item) => item.kind === "fixture" && isArchitecture(item.id) && FIXTURES[item.id].code === item.symbol)).toBe(true);
     expect(PALETTE.find((item) => item.id === "arch-wc")?.alsoIn).toEqual(["fixtures"]);
     expect(FIXTURES["arch-bed-double"]).toMatchObject({ w: 1800, d: 2000 });

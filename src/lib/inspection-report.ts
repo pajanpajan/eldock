@@ -60,6 +60,13 @@ export function defaultScopeNote({ equipment, location, kind }: Pick<ReportConte
     case "WELDER":
     case "APPLIANCE":
       return `${EQUIPMENT_TYPE_LABELS[equipment.type]} ${name}.`;
+    // Fáze 93: zdravotnictví a požární vypínací prvky
+    case "MEDICAL_DEVICE":
+      return `Zdravotnický elektrický přístroj ${name}, ${location}: opakovaná zkouška podle ČSN EN 62353 ed. 2.`;
+    case "MEDICAL_ROOM":
+      return `Zdravotnický prostor ${name}, ${location}: elektrická instalace, chrániče, doplňující ochranné pospojování EKV a hlídač izolačního stavu IMD (ČSN 33 2000-7-710 ed. 2).`;
+    case "FIRE":
+      return `Požární vypínací prvek ${name}, ${location}: tlačítko CENTRAL / TOTAL STOP, vypínací spoušť a odpojení z EPS.`;
   }
 }
 
@@ -70,6 +77,9 @@ const ACTS: Record<RuleKind, string> = {
   APPLIANCE: "Prohlídka, měření odporu ochranného vodiče, izolačního odporu a unikajícího proudu, funkční zkouška (ČSN 33 1600 ed. 2); vyhodnocení.",
   WELDER: "Prohlídka, měření ochranného vodiče, izolačního odporu, napětí naprázdno a unikajícího proudu, funkční zkouška (ČSN EN 60974-4); vyhodnocení.",
   EMERGENCY: "Zkouška funkce v nouzovém režimu a zkouška plné doby funkce svítidel a zdroje (ČSN EN 50172); vyhodnocení.",
+  MEDICAL_DEVICE: "Prohlídka, měření odporu ochranného vodiče, unikajících proudů (náhradní / přímou / rozdílovou metodou) a izolačního odporu, funkční zkouška podle ČSN EN 62353 ed. 2; vyhodnocení.",
+  MEDICAL_ROOM: "Prohlídka a zkoušky zdravotnického prostoru podle ČSN 33 2000-7-710 ed. 2: chrániče ≤ 30 mA typ A / B, odpor doplňujícího ochranného pospojování EKV, izolační stav, zkouška hlídače izolačního stavu IMD a přepínání zdrojů; vyhodnocení.",
+  FIRE: "Zkouška funkce tlačítka CENTRAL / TOTAL STOP, vypínací spouště hlavního vypínače a vazby na EPS (vyhláška č. 246/2001 Sb.); vyhodnocení.",
 };
 
 export const defaultActs = (kind: RuleKind) => ACTS[kind];

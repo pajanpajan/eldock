@@ -69,6 +69,9 @@ enum EquipmentType {
   LIGHTNING_ROD // Hromosvod / LPS
   EMERGENCY_LIGHTING // Nouzové osvětlení
   WIRING_DEVICE // Domovní přístroj – zásuvka, vypínač (fáze 47)
+  MEDICAL_DEVICE // Zdravotnický elektrický přístroj – ČSN EN 62353 ed. 2, zákon č. 375/2022 Sb. (fáze 93)
+  MEDICAL_ROOM // Zdravotnický prostor Skupiny 1 / 2 a hlídač izolačního stavu IMD / ZIS IT – ČSN 33 2000-7-710 ed. 2 (fáze 93)
+  FIRE_SHUTDOWN // Požární vypínací prvek CENTRAL / TOTAL STOP a odpojení z EPS – vyhláška č. 246/2001 Sb. (fáze 93)
   OTHER
 }
 
@@ -152,6 +155,7 @@ enum InspectionType {
   EXTRAORDINARY // Mimořádná revize
   THERMOVISION // Termovizní měření (doplňkové, nepočítá se do lhůty)
   VISUAL_CHECK // Vizuální kontrola LPS 1× ročně (NV 190/2022 Sb., příl. 4) – neposouvá lhůtu revize (fáze 66)
+  FUNCTION_TEST // Měsíční zkouška funkce nouzového osvětlení / hlídače izolačního stavu IMD – neposouvá lhůtu revize (fáze 93)
 }
 
 /// Celkový posudek revizní zprávy.
@@ -451,6 +455,12 @@ model Equipment {
   handHeld        Boolean @default(false) // spotřebič držený v ruce (sloupec tab. 1 ČSN 33 1600 ed. 2; nářadí a přívody vždy)
   inventoryNumber String?
   assignedZone    String? // "Kuchyňka – Energetika 1. NP", "Dílna údržby"
+
+  // Fáze 93: zálohování napájení (rozváděč a jeho přívodní trasa), nájemní jednotka / oddělení a varianta revize
+  powerBackupTier   String  @default("GRID_STANDARD") // GRID_STANDARD | BACKUP_GENERATOR_DA (DA, ATS ≤ 15 s) | CRITICAL_UPS_ZIS (UPS < 0,5 s / ZIS IT)
+  backupCapacityKva Float? // kapacita zdroje zálohy [kVA] u kořene zálohované větve (dieselagregát, UPS)
+  tenantUnit        String? // „Nájemní jednotka A12 – Lékárna“, „Interní oddělení – 2. NP“
+  inspectionVariant String? // zdravotnický přístroj STANDARD_24 / CRITICAL_12, zdravotnický prostor GROUP_1 / GROUP_2 / IMD_IT
 
   // Vizuální karta a QR štítek
   photoUrl            String? // fotografie zařízení (/api/files/photos/…)
@@ -1098,6 +1108,9 @@ model PanelBoardProject {
   /// Fáze 92: rozváděč z trenažéru bez kreditu – „pudorys-bungalov“ (trenažér 2D půdorysu) nebo tréninková zakázka
   /// („byt-3kk“, „rd-fve“, „chytry-dum“); null = vlastní zakázka firmy.
   trainerPreset          String?
+  /// Fáze 93: typ objektu a normativní režim – RESIDENTIAL (ČSN 33 2130 ed. 4, BD1) | COMMERCIAL_BD4 (ČSN 33 2000-7-718,
+  /// bezhalogenové kabely, CENTRAL STOP, elektroměr MID) | MEDICAL_G1 (ČSN 33 2000-7-710 ed. 2, Skupina 1).
+  occupancy              String             @default("RESIDENTIAL")
 
   createdById String?
   /// Registrovaná firma (fáze 41): vidí jen své rozváděče, její údaje se propisují do dokumentace.

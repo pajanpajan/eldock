@@ -9,6 +9,7 @@ import { drawingSymbolOf, renderPanelDrawingSvg, renderSingleLineDiagramSvg, typ
 import { enclosureMpn, enclosureOrderText, enclosureSummary } from "@/lib/panel-builder/enclosure-choice";
 import { symbolKindOf, symbolLegend } from "@/lib/panel-builder/iec-symbols";
 import { LEGAL_FRAMEWORK, externalInfluencesProtocol, isFlushEnclosure } from "@/lib/panel-builder/external-influences";
+import { legalFrameworkFor } from "@/lib/panel-builder/occupancy";
 import { analyzeDraft, floorsOf, parseCableReport, parseDraft, switchFloor, type FloorplanDraft } from "@/lib/panel-builder/floorplan-editor";
 import { planScaleFor } from "@/lib/panel-builder/plan-sheet";
 import { displayRoutes } from "@/lib/panel-builder/route-display";
@@ -110,8 +111,9 @@ export async function buildDocumentationData(project: PanelProjectDetail, origin
     installationSite: project.installationSite,
     cableReport,
     // Fáze 52: legislativní rámec (vyhl. 131/2024 Sb.) a protokol o určení vnějších vlivů z prostředí instalace
-    legalFramework: LEGAL_FRAMEWORK,
-    influences: externalInfluencesProtocol(project.environment),
+    // Fáze 93: typ objektu (BD4 / zdravotnictví) doplní normy a třídy vnějších vlivů
+    legalFramework: legalFrameworkFor(LEGAL_FRAMEWORK, project.occupancy),
+    influences: externalInfluencesProtocol(project.environment, project.occupancy),
     fullCover: isFlushEnclosure([project.enclosureModel, enclosure?.description].filter(Boolean).join(" ")),
     norm: edition.short,
     edition,

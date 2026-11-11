@@ -60,7 +60,7 @@ const defects = z.string().max(4000).optional().nullable();
 
 const recordSchema = z.object({
   equipmentId: id,
-  type: z.enum(["INITIAL", "PERIODIC", "EXTRAORDINARY", "THERMOVISION", "VISUAL_CHECK"]),
+  type: z.enum(["INITIAL", "PERIODIC", "EXTRAORDINARY", "THERMOVISION", "VISUAL_CHECK", "FUNCTION_TEST"]),
   inspectionDate: date,
   validityMonths: z.number().int().min(1).max(120).optional().nullable(),
   reportNumber: z.string().min(1).max(60),
@@ -117,6 +117,8 @@ const settingsSchema = z.object({
   protectionClass: z.enum(["I", "II", "III"]).optional().nullable(),
   handHeld: z.boolean().optional(),
   crowdOver200: z.boolean().optional(),
+  // Fáze 93: varianta zdravotnické kategorie (přístroj 24 / 12 měsíců, prostor Skupina 1 / 2 / IMD)
+  inspectionVariant: z.enum(["STANDARD_24", "CRITICAL_12", "GROUP_1", "GROUP_2", "IMD_IT"]).optional().nullable(),
 });
 
 async function run<S extends z.ZodType, T>(schema: S, raw: unknown, action: (input: z.infer<S>) => Promise<T>, fallback: string): Promise<ActionResult<T>> {

@@ -6,6 +6,7 @@ import type { BuildingType, EquipmentStatus, EquipmentType } from "@/generated/p
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/server/session";
+import { BACKUP_TYPES, isPowerBackupTier, type BackupNode } from "@/lib/power-backup";
 import { buildingEntryHref } from "@/lib/routes";
 import { worstEquipmentStatus } from "@/lib/status";
 
@@ -128,5 +129,34 @@ async function loadPlantOverview(plantId: string, types: EquipmentType[] | null 
 
 /** Deduplikace v rámci požadavku (generateMetadata + stránka). */
 export const getPlantOverview = cache(loadPlantOverview);
+
+/**
+ * Fáze 93: strom napájení závodu pro filtr větví nad mapou areálu – rozváděče a zdroje s úrovní zálohy, kapacitou zdroje,
+ * proudy (výkon větve) a nájemní jednotkou / oddělením. Účet bez rozváděčů ve výřezu dostane prázdný seznam.
+ */
+export async function getPlantPower(plantId: string, types: EquipmentType[] | null = null): Promise<BackupNode[]> {
+  const visible = types ? BACKUP_TYPES.filter((type) => types.includes(type)) : BACKUP_TYPES;
+  if (!visible.length) return [];
+  const rows = await prisma.equipment.findMany({
+    where: { type: { in: [...visible] }, floor: { building: { plantId } } },
+    orderBy: { tag: "asc" },
+    select: { id: true, tag: true, name: true, type: true, fedFromEquipmentId: true, powerBackupTier: true, backupCapacityKva: true, nominalCurrentA: true, measuredCurrentA: true, tenantUnit: true, floor: { select: { buildingId: true } } },
+  });
+  const ids = new Set(rows.map((row) => row.id));
+  return rows.map((row) => ({
+    id: row.id,
+    tag: row.tag,
+    name: row.name,
+    type: row.type,
+    // Napájení z rozváděče mimo výřez účtu = kořen větve
+    parentId: row.fedFromEquipmentId && ids.has(row.fedFromEquipmentId) ? row.fedFromEquipmentId : null,
+    buildingId: row.floor.buildingId,
+    tier: isPowerBackupTier(row.powerBackupTier) ? row.powerBackupTier : "GRID_STANDARD",
+    capacityKva: row.backupCapacityKva,
+    nominalCurrentA: row.nominalCurrentA,
+    measuredCurrentA: row.measuredCurrentA,
+    tenantUnit: row.tenantUnit,
+  }));
+}
 
 export type PlantOverview = NonNullable<Awaited<ReturnType<typeof getPlantOverview>>>;

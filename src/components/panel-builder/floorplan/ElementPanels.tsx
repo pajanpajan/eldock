@@ -11,6 +11,7 @@ import {
   controllersOf,
   controlsLights,
   effectiveSwitchNo,
+  heightKindOf,
   isWiredSwitch,
   paletteItem,
   roomDimensions,
@@ -209,7 +210,7 @@ export function ElementDetail({
 }) {
   const item = paletteItem(element.item)!;
   const isPanel = item.kind === "panel" || item.kind === "riser" || item.kind === "fixture";
-  const defaultHeight = isPanel ? draft.profile.switchboardHeightMm : (appliance?.heightMm ?? item.heightMm ?? mountHeight({ kind: item.kind as Exclude<typeof item.kind, "panel" | "riser" | "fixture">, variant: item.variant, tag: item.tag }, draft.profile));
+  const defaultHeight = isPanel ? draft.profile.switchboardHeightMm : (appliance?.heightMm ?? item.heightMm ?? mountHeight({ kind: heightKindOf(item.kind), variant: item.variant, tag: item.tag }, draft.profile));
   const light = item.kind === "light" ? lightSpecOf(element) : null;
   const frame = frameOf(draft, element.id);
   // Fáze 91: limit víceramečku řady prvku (rámeček v řadě a barvě kotvy rámečku)

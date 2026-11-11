@@ -8,6 +8,7 @@ import {
   ipLabel,
   type EnvironmentId,
 } from "./environments";
+import { isOccupancyId, occupancyBadge, occupancyProtocol } from "./occupancy";
 
 /** Právní předpisy a normy technické zprávy (vyhláška č. 131/2024 Sb., příloha 9, D.2.5 TPS – Silnoproud). */
 export const LEGAL_FRAMEWORK: readonly string[] = [
@@ -235,20 +236,29 @@ const OVERRIDES: Record<
   },
 };
 
-/** Protokol o určení vnějších vlivů z prostředí instalace (15 vlivů + požadované krytí IP / IK a stavební detaily). */
+/**
+ * Protokol o určení vnějších vlivů z prostředí instalace (15 vlivů + požadované krytí IP / IK a stavební detaily). Fáze 93:
+ * typ objektu doplní BD4 / BE2 (obchodní centrum, ČSN 33 2000-7-718, vyhláška č. 23/2008 Sb.) nebo zdravotnický prostor
+ * Skupiny 1 (ČSN 33 2000-7-710 ed. 2 – doplňující pospojování EKV, izolační stav a impedance) s opatřeními.
+ */
 export function externalInfluencesProtocol(
   environmentId: string | null | undefined,
+  occupancy?: string | null,
 ) {
   const environment = environmentOf(environmentId);
   const overrides = OVERRIDES[environment.id];
+  const special = occupancyProtocol(occupancy);
   const rows: InfluenceRow[] = Object.entries(NORMAL).map(([code, base]) => ({
     code,
     ...base,
     ...overrides[code],
+    ...(special?.overrides[code as keyof typeof special.overrides] ?? {}),
   }));
   return {
     environment: environment.label,
-    codes: environment.codes,
+    codes: special ? `${environment.codes}, ${special.codes.join(", ")}` : environment.codes,
+    /** Fáze 93: režim objektu a jeho normy (null = bytová / domovní instalace). */
+    occupancy: special && isOccupancyId(occupancy) ? { label: occupancyBadge(occupancy), norms: special.norms, measures: special.measures } : null,
     rows,
     requiredIp: ipLabel(environment.minIp),
     recommendedIp: ipLabel(environment.recommendedIp),

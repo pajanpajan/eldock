@@ -1,10 +1,11 @@
+import { DEFAULT_OCCUPANCY, isCommercial, isOccupancyId, type OccupancyId } from "@/lib/panel-builder/occupancy";
 import type { CableSummary } from "@/engine/cable-routing";
 import { MAIN_BOARD, buildSwitchboardFromCircuits, circuitDesignations, generateCircuitsFromFloorplan, type InstallLevel, type InstallMethod, type LightingSocketA } from "@/engine/floorplan-bridge";
 import { floorplanFromSchedule, sanitizeSchedule, type ScheduleRoom } from "@/engine/room-schedule";
 import type { PrismaClient } from "@/generated/prisma/client";
 import { isHiddenManufacturer } from "@/lib/panel-builder/brands";
 import { enclosureProjectData } from "@/lib/panel-builder/enclosures";
-import { allElements, analyzeDraft, circuitsOfBoard, floorsOf, paletteItem, parseDraft, type CableReport, type EditorElement, type FloorplanDraft, type FrameGroup, type PlanBuild } from "@/lib/panel-builder/floorplan-editor";
+import { allElements, analyzeDraft, circuitsOfBoard, floorsOf, halogenFreePlan, paletteItem, parseDraft, type CableReport, type EditorElement, type FloorplanDraft, type FrameGroup, type PlanBuild } from "@/lib/panel-builder/floorplan-editor";
 import { gangsOf } from "@/lib/panel-builder/floorplan-frames";
 import { environmentOf } from "@/lib/panel-builder/environments";
 import { pickWiringDevice, type WiringNeed } from "@/lib/panel-builder/wiring-picker";
@@ -81,6 +82,8 @@ export interface ProjectHeaderInput {
   installationSite: string | null;
   /** Fáze 55: soustava přívodu – mění `supplyPhases` a `networkSystem`. */
   supplySystem?: string;
+  /** Fáze 93: typ objektu a normativní režim (linter, protokol vnějších vlivů). */
+  occupancy?: string;
 }
 
 /** Rychlá úprava hlavičky z přehledu: název rozváděče, zákazník a místo instalace. */
@@ -90,7 +93,7 @@ export async function updateProjectHeader(prisma: PrismaClient, projectId: strin
   const clean = (value: string | null) => value?.trim().slice(0, 120) || null;
   return prisma.panelBoardProject.update({
     where: { id: projectId },
-    data: { name, customerName: clean(input.customerName), installationSite: clean(input.installationSite), ...(input.supplySystem ? supplyColumns(supplyById(input.supplySystem)) : {}) },
+    data: { name, customerName: clean(input.customerName), installationSite: clean(input.installationSite), ...(input.supplySystem ? supplyColumns(supplyById(input.supplySystem)) : {}), ...(isOccupancyId(input.occupancy) ? { occupancy: input.occupancy } : {}) },
     select: { id: true, name: true, customerName: true, installationSite: true },
   });
 }
@@ -107,6 +110,8 @@ export interface ScheduleProjectInput extends Omit<CreateProjectInput, "photoUrl
   countDoubleAsTwo?: boolean;
   /** Fáze 82: jištění světelného okruhu se zásuvkami (10 / 13 A). */
   lightingSocketA?: LightingSocketA;
+  /** Fáze 93: typ objektu – BD4 bezhalogenové kabely a CENTRAL STOP + MID, zdravotnictví okruhy A / B. */
+  occupancy?: OccupancyId;
 }
 
 /**
@@ -117,10 +122,13 @@ export async function createProjectFromSchedule(prisma: PrismaClient, input: Sch
   const rooms = sanitizeSchedule(input.rooms);
   if (!rooms.length) throw new WorkflowError("VALIDATION", "Zadejte alespoň jednu místnost.");
   const { plan, calibration } = floorplanFromSchedule(rooms, input.mode);
-  const circuits = generateCircuitsFromFloorplan(plan, calibration, { installMethod: input.installMethod, countDoubleAsTwo: input.countDoubleAsTwo, ...(input.lightingSocketA ? { lightingSocketA: input.lightingSocketA } : {}) });
+  const occupancy = isOccupancyId(input.occupancy) ? input.occupancy : DEFAULT_OCCUPANCY;
+  const planned = generateCircuitsFromFloorplan(plan, calibration, { installMethod: input.installMethod, countDoubleAsTwo: input.countDoubleAsTwo, ...(input.lightingSocketA ? { lightingSocketA: input.lightingSocketA } : {}), occupancy });
+  // Fáze 93: obchodní centrum (BD4) – bezhalogenové kabely okruhů a krabice HF v kusovníku
+  const circuits = isCommercial(occupancy) ? halogenFreePlan(planned) : planned;
   if (!circuits.circuits.length) throw new WorkflowError("VALIDATION", "Soupis neobsahuje žádný vývod (zásuvky, světla nebo spotřebiče).");
   const enclosures = (await prisma.panelEnclosure.findMany({ orderBy: { totalModules: "asc" } })).filter((row) => !isHiddenManufacturer(row.manufacturer));
-  const board = buildSwitchboardFromCircuits(circuits, { mode: input.mode, enclosures, supplyPhases: supplyById(input.supplySystem).phases });
+  const board = buildSwitchboardFromCircuits(circuits, { mode: input.mode, enclosures, supplyPhases: supplyById(input.supplySystem).phases, occupancy });
 
   return createPlanProject(prisma, input, circuits, board);
 }
@@ -335,10 +343,11 @@ export async function createProjectFromFloorplan(prisma: PrismaClient, input: Fl
   const field = draft.installation === "bus_loxone" ? null : classicDeviceModules(fieldDemand(draft));
   const switchboard = (plan: Parameters<typeof buildSwitchboardFromCircuits>[0], withSmart: boolean) => {
     const extra = withSmart ? { smart, ...(field?.modules.length ? { devices: field.modules } : {}) } : {};
-    const preferred = own.length ? buildSwitchboardFromCircuits(plan, { mode: draft.installation, enclosures: own, supplyPhases: supply.phases, ...extra }) : null;
-    return preferred?.enclosure ? preferred : buildSwitchboardFromCircuits(plan, { mode: draft.installation, enclosures, supplyPhases: supply.phases, ...extra });
+    // Fáze 93: BD4 – vypínací spoušť CENTRAL STOP a podružný elektroměr MID v každém rozváděči nájemní jednotky
+    const preferred = own.length ? buildSwitchboardFromCircuits(plan, { mode: draft.installation, enclosures: own, supplyPhases: supply.phases, occupancy: draft.occupancy, ...extra }) : null;
+    return preferred?.enclosure ? preferred : buildSwitchboardFromCircuits(plan, { mode: draft.installation, enclosures, supplyPhases: supply.phases, occupancy: draft.occupancy, ...extra });
   };
-  const header = { name: input.name, customerName: input.customerName, installationSite: input.installationSite, companyId: input.companyId, manufacturerInfo: input.manufacturerInfo, createdById: input.createdById, supplySystem: supply.id };
+  const header = { name: input.name, customerName: input.customerName, installationSite: input.installationSite, companyId: input.companyId, manufacturerInfo: input.manufacturerInfo, createdById: input.createdById, supplySystem: supply.id, occupancy: draft.occupancy };
   // Fáze 57: prostředí dle ČSN 33 2000-5-51 ed. 3 zvolené v půdorysu = potvrzené prostředí dokumentace
   const environment = draft.environment ? environmentOf(draft.environment) : null;
   // Fáze 74: hlavní rozváděč a ke každému podružnému rozváděči s okruhy vlastní propojený projekt (1 generování)

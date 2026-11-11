@@ -14,6 +14,8 @@ describe("kategorie zařízení ve Studiu", () => {
       SP: "#ec4899",
       RN: "#06b6d4",
       DI: "#84cc16",
+      // Fáze 93: zdravotnictví a požární vypínací prvky
+      MED: "#f43f5e",
     });
     expect(new Set(PLACEABLE_TYPES).size).toBe(PLACEABLE_TYPES.length);
     expect(categoryOf("CNC_MACHINE").key).toBe("STR");

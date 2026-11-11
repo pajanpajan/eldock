@@ -30,7 +30,8 @@ describe("map-layers", () => {
     expect(matchesLayers(item("POWER_TOOL", "EXPIRING"), filter)).toBe(true);
     expect(matchesLayers(item("EXTENSION_CORD", "FAILED"), filter)).toBe(true);
     expect(matchesLayers(item("SWITCHBOARD", "VALID"), filter)).toBe(false);
-    expect(ALL_LAYERS.size).toBe(5);
+    // Fáze 93: šestá vrstva – zdravotnické přístroje (ČSN EN 62353 ed. 2)
+    expect(ALL_LAYERS.size).toBe(6);
   });
 
   it("spočítá kusy a upozornění ve vrstvách", () => {

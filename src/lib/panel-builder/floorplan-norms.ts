@@ -16,11 +16,13 @@
 import { mountHeight } from "@/engine/floorplan-bridge";
 
 import { BASIN_MARGIN_MM, BASIN_RECOMMENDED_MM, BASIN_STRICT_MM, WASH_AREA_TOP_MM, WASH_HIGH_MM, ZONE2_MM, basinPlacement, distanceToFixture, fixtureGeometry, type FixtureGeometry } from "./fixtures";
-import type { BoxChoice } from "./box-options";
-import { floorsOf, paletteItem, type EditorElement, type FloorplanDraft } from "./floorplan-editor";
+import { BOX_MAKERS, type BoxChoice, type BoxMaker } from "./box-options";
+import { allElements, floorsOf, heightKindOf, paletteItem, snapToWall, wallRotation, type EditorElement, type EditorRoom, type FloorSheet, type FloorplanDraft } from "./floorplan-editor";
 import { frameLimitOf, gangsOf } from "./floorplan-frames";
-import { boxMakerLabel, pickBox, resolveBox, wallTypeOf, type BoxDepthClass } from "./mounting-boxes-catalog";
+import { boxMakerLabel, boxPickOptionsOf, pickBox, resolveBox, wallTypeOf, type BoxDepthClass } from "./mounting-boxes-catalog";
+import { EKV_ROOM, isCommercial, isMedical, isMedicalRoom } from "./occupancy";
 import { frameRulesOf, splitFrameGangs, splitLabel } from "./residential-series-catalog";
+import { MOUNTING_BOXES } from "./mounting-boxes-catalog";
 
 export { ZONE2_MM };
 
@@ -28,7 +30,25 @@ export type NormLevel = "error" | "warning" | "info";
 
 export interface NormIssue {
   id: string;
-  rule: "bath-zone" | "basin-area" | "basin-band" | "basin-strict" | "wet-room-ip" | "outdoor-ip" | "afdd" | "fixture-missing" | "lighting-socket" | "lighting-socket-worktop" | "frame-limit" | "box-depth";
+  rule:
+    | "bath-zone"
+    | "basin-area"
+    | "basin-band"
+    | "basin-strict"
+    | "wet-room-ip"
+    | "outdoor-ip"
+    | "afdd"
+    | "fixture-missing"
+    | "lighting-socket"
+    | "lighting-socket-worktop"
+    | "frame-limit"
+    | "box-depth"
+    | "medical-ekv"
+    | "medical-socket"
+    | "medical-light"
+    | "bd4-emergency"
+    | "bd4-boxes"
+    | "bd4-board";
   level: NormLevel;
   text: string;
   source: string;
@@ -38,7 +58,28 @@ export interface NormIssue {
    * Oprava jedním klikem: záměna prvku za jiný z palety (zásuvka → IP44); fáze 82 – zásuvky zpět na zásuvkový okruh;
    * fáze 91 – krabice prvků (`boxes`, „auto“ = doporučená) a rozdělení víceramečků po nejvýš `max` pozicích.
    */
-  fix?: { label: string; replace: { from: string; to: string }[]; offLighting?: string[]; boxes?: { id: string; box: BoxChoice }[]; splitFrames?: { id: string; max: number }[] };
+  fix?: {
+    label: string;
+    replace: { from: string; to: string }[];
+    offLighting?: string[];
+    boxes?: { id: string; box: BoxChoice }[];
+    splitFrames?: { id: string; max: number }[];
+    /** Fáze 93: nové prvky (EKV, nouzové svítidlo NO_SV, druhá zásuvka lékařské místnosti) na podlaží `floorId`. */
+    add?: NormAddition[];
+    /** Fáze 93: výrobce instalačních krabic (BD4 – výrobce s krabicemi HF). */
+    boxMaker?: BoxMaker;
+  };
+}
+
+/** Fáze 93: prvek, který oprava jedním klikem vloží do nákresu. */
+export interface NormAddition {
+  item: string;
+  floorId: string;
+  room: string;
+  x: number;
+  y: number;
+  rotation: number;
+  mountHeightMm: number | null;
 }
 
 const cm = (mm: number) => `${Math.round(mm / 10)} cm`;
@@ -87,7 +128,7 @@ export function floorplanNorms(draft: FloorplanDraft, context: { cableEnds?: Rea
     const heightOf = (element: EditorElement) => {
       const item = paletteItem(element.item);
       if (!item || item.kind === "panel" || item.kind === "riser" || item.kind === "fixture") return 0;
-      return element.mountHeightMm ?? item.heightMm ?? mountHeight({ kind: item.kind, variant: item.variant, tag: item.tag }, draft.profile);
+      return element.mountHeightMm ?? item.heightMm ?? mountHeight({ kind: heightKindOf(item.kind), variant: item.variant, tag: item.tag }, draft.profile);
     };
     /** Přesný název prvku s výškou do hlášky („Jednozásuvka (výška 300 mm)“). */
     const describe = (element: EditorElement) => `${paletteItem(element.item)?.label ?? element.item} (výška ${Math.round(heightOf(element))} mm)`;
@@ -236,7 +277,139 @@ export function floorplanNorms(draft: FloorplanDraft, context: { cableEnds?: Rea
       });
     }
   }
-  issues.push(...frameLimitIssues(draft), ...boxDepthIssues(draft, context.cableEnds ?? {}));
+  issues.push(...frameLimitIssues(draft), ...boxDepthIssues(draft, context.cableEnds ?? {}), ...occupancyIssues(draft));
+  return issues;
+}
+
+// ---------------------------------------------------------------------------
+//  Fáze 93: obchodní centrum (BD4) a zdravotnický prostor Skupiny 1
+// ---------------------------------------------------------------------------
+
+/** EKV u vyšetřovacího lehátka / lůžka (do 1,5 m) se osazuje výš – 1000 mm nad podlahou. */
+export const EKV_BED_HEIGHT_MM = 1000;
+const EKV_BED_REACH_MM = 1500;
+const EXAM_BED = "arch-exam-bed";
+const DOOR = /^arch-door-/;
+
+/** Fáze 93: výška nové přípojky EKV – u lehátka LEH_Z v téže místnosti 1000 mm, jinak výchozí 300 mm (null). */
+export function ekvHeightAt(elements: readonly EditorElement[], room: string, x: number, y: number): number | null {
+  return elements.some((element) => element.item === EXAM_BED && element.room === room && Math.hypot(element.x - x, element.y - y) <= EKV_BED_REACH_MM) ? EKV_BED_HEIGHT_MM : null;
+}
+
+const itemOf = (element: EditorElement) => paletteItem(element.item);
+const isEmergency = (element: EditorElement) => Boolean(itemOf(element)?.emergency);
+const isPlainLight = (element: EditorElement) => itemOf(element)?.kind === "light" && !isEmergency(element);
+
+/** Místo u stěny místnosti: u lehátka / dveří, jinak střed horní stěny (přichycené ke stěně, natočené od stěny). */
+function wallSpot(room: EditorRoom, near: { x: number; y: number } | null): { x: number; y: number; rotation: number } {
+  const start = near ?? { x: room.x + room.w / 2, y: room.y + Math.min(300, room.h / 4) };
+  const point = snapToWall(room, start.x, start.y, Math.max(room.w, room.h));
+  return { x: Math.round(point.x), y: Math.round(point.y), rotation: wallRotation(room, point.x, point.y) };
+}
+
+/** Zjištění režimu objektu (BD4, zdravotnictví) s opravou jedním klikem – vložení EKV, NO_SV a zásuvky okruhu B. */
+export function occupancyIssues(draft: FloorplanDraft): NormIssue[] {
+  if (!isMedical(draft.occupancy) && !isCommercial(draft.occupancy)) return [];
+  const issues: NormIssue[] = [];
+  const floors = floorsOf(draft);
+  const roomsOf = (floor: FloorSheet) => floor.rooms;
+  const inRoom = (floor: FloorSheet, room: EditorRoom) => floor.elements.filter((element) => element.room === room.name);
+  if (isMedical(draft.occupancy)) {
+    for (const floor of floors) {
+      // EKV v ordinaci, vyšetřovně a koupelně (čl. 710.415.2)
+      const missing = roomsOf(floor).filter((room) => EKV_ROOM.test(room.name) && !inRoom(floor, room).some((element) => element.item === "ekv"));
+      if (missing.length) {
+        const add = missing.map((room) => {
+          const bed = inRoom(floor, room).find((element) => element.item === EXAM_BED) ?? null;
+          const spot = wallSpot(room, bed);
+          return { item: "ekv", floorId: floor.id, room: room.name, ...spot, mountHeightMm: bed ? EKV_BED_HEIGHT_MM : null };
+        });
+        issues.push({
+          id: `medical-ekv:${floor.id}`,
+          rule: "medical-ekv",
+          level: "warning",
+          text: `${floor.name}: ${missing.map((room) => room.name).join(", ")} – chybí přípojka doplňujícího ochranného pospojování EKV (PE) pro zdravotnický prostor Skupiny 1.`,
+          source: "ČSN 33 2000-7-710 ed. 2, čl. 710.415.2 – doplňující ochranné pospojování (CYA 6 mm² ZŽ, odpor k přípojnici EKV ≤ 0,7 Ω)",
+          elementIds: [],
+          fix: { label: `Vložit EKV (PE) do ${missing.length === 1 ? "místnosti" : `${missing.length} místností`} (1 klik)`, replace: [], add },
+        });
+      }
+      for (const room of roomsOf(floor).filter((candidate) => isMedicalRoom(candidate.name))) {
+        const elements = inRoom(floor, room);
+        // Zásuvky ve 2 okruzích: jediný zásuvkový vývod (bez lůžkové rampy) nejde rozdělit na A / B
+        const sockets = elements.filter((element) => isSocket(element) && !itemOf(element)?.ramp);
+        const ramps = elements.filter((element) => itemOf(element)?.ramp);
+        if (!ramps.length && sockets.length === 1) {
+          const only = sockets[0];
+          const along = { x: Math.round(only.x + Math.cos((only.rotation * Math.PI) / 180) * 450), y: Math.round(only.y + Math.sin((only.rotation * Math.PI) / 180) * 450) };
+          issues.push({
+            id: `medical-socket:${floor.id}:${room.id}`,
+            rule: "medical-socket",
+            level: "warning",
+            text: `${floor.name}: ${room.name} – jediný zásuvkový vývod nejde napájet ze 2 samostatných obvodů (Okruh A / Okruh B); doplňte druhou zásuvku nebo lůžkovou rampu LUZ.`,
+            source: "ČSN 33 2000-7-710 ed. 2, čl. 710.53 / 710.55 – zásuvky lůžka / vyšetřovny alespoň ze 2 obvodů pod nezávislými chrániči ≤ 30 mA",
+            elementIds: [only.id],
+            fix: { label: "Doplnit dvojzásuvku okruhu B vedle stávající (1 klik)", replace: [], add: [{ item: "double-socket", floorId: floor.id, room: room.name, x: along.x, y: along.y, rotation: only.rotation, mountHeightMm: only.mountHeightMm }] },
+          });
+        }
+        // Osvětlení: jediné svítidlo bez nouzového = výpadek okruhu je tma
+        const lights = elements.filter(isPlainLight);
+        if (lights.length === 1 && !elements.some(isEmergency)) {
+          const door = elements.find((element) => DOOR.test(element.item)) ?? null;
+          issues.push({
+            id: `medical-light:${floor.id}:${room.id}`,
+            rule: "medical-light",
+            level: "warning",
+            text: `${floor.name}: ${room.name} – jediné svítidlo na jednom okruhu; při výpadku zůstane lékařská místnost ve tmě. Doplňte druhé svítidlo (rozdělí se na 2 okruhy) nebo nouzové svítidlo NO_SV.`,
+            source: "ČSN 33 2000-7-710 ed. 2, čl. 710.559 – osvětlení zdravotnických prostorů ze 2 zdrojů / s nouzovým svítidlem",
+            elementIds: [lights[0].id],
+            fix: { label: "Doplnit nouzové svítidlo NO_SV (1 klik)", replace: [], add: [{ item: "emergency-light", floorId: floor.id, room: room.name, ...wallSpot(room, door), mountHeightMm: null }] },
+          });
+        }
+      }
+    }
+    return issues;
+  }
+  // Obchodní centrum / prostor pro veřejnost (BD4)
+  const everything = allElements(draft);
+  if (!everything.some(isEmergency)) {
+    const add = floors.flatMap((floor) =>
+      roomsOf(floor).map((room) => {
+        const door = inRoom(floor, room).find((element) => DOOR.test(element.item)) ?? null;
+        return { item: "emergency-light", floorId: floor.id, room: room.name, ...wallSpot(room, door), mountHeightMm: null };
+      }),
+    );
+    issues.push({
+      id: "bd4-emergency",
+      rule: "bd4-emergency",
+      level: "warning",
+      text: "Prostor pro veřejnost (BD4) bez nouzového únikového osvětlení – doplňte svítidla NO_SV s piktogramem na únikové cesty a u východů.",
+      source: "ČSN EN 1838, ČSN EN 50172 a vyhláška č. 23/2008 Sb. (nouzové osvětlení únikových cest)",
+      elementIds: [],
+      ...(add.length ? { fix: { label: `Vložit nouzové svítidlo NO_SV do ${add.length === 1 ? "místnosti" : `${add.length} místností`} (1 klik)`, replace: [], add } } : {}),
+    });
+  }
+  const maker = draft.boxMaker;
+  if (!MOUNTING_BOXES.some((box) => box.maker === maker && box.halogenFree && box.role !== "etics-box" && box.role !== "etics-plate")) {
+    const kopos = BOX_MAKERS.find((entry) => entry.id === "kopos");
+    issues.push({
+      id: "bd4-boxes",
+      rule: "bd4-boxes",
+      level: "warning",
+      text: `Výrobce krabic ${BOX_MAKERS.find((entry) => entry.id === maker)?.label ?? maker} nemá v katalogu Eldocku ověřené bezhalogenové krabice HF – kusovník je vypíše k ručnímu doplnění. ${kopos?.label ?? "KOPOS"} vede řadu HF (KU 68-45/HF, KPR 68-70/HF, KU 68 LD/1HF, KPL 64-50/2LD HF).`,
+      source: "ČSN 33 2000-7-718 – bezhalogenové materiály v prostorech BD3 / BD4",
+      elementIds: [],
+      fix: { label: `Přepnout výrobce krabic na ${kopos?.label ?? "KOPOS"} (řada HF)`, replace: [], boxMaker: "kopos" },
+    });
+  }
+  issues.push({
+    id: "bd4-board",
+    rule: "bd4-board",
+    level: "info",
+    text: "Obchodní centrum (BD4): kabely a krabice jsou bezhalogenové (B2ca-s1,d1,a1, HF); vygenerovaný rozváděč nájemní jednotky dostane vypínací spoušť CENTRAL STOP a podružný elektroměr MID s Modbus / M-Bus.",
+    source: "ČSN 33 2000-7-718 a vyhláška č. 23/2008 Sb.",
+    elementIds: [],
+  });
   return issues;
 }
 
@@ -302,8 +475,9 @@ export function boxDepthIssues(draft: FloorplanDraft, cableEnds: Readonly<Record
       if (!resolved.tooShallow) continue;
       const need = resolved.need.kind as BoxDepthClass;
       const chosen = resolved.box;
-      const recommended = pickBox(maker, resolved.wall, need);
-      const other = resolved.wall === "masonry" ? pickBox(maker, "drywall", need) : resolved.wall === "drywall" ? pickBox(maker, "masonry", need) : null;
+      const options = boxPickOptionsOf(draft);
+      const recommended = pickBox(maker, resolved.wall, need, 1, options);
+      const other = resolved.wall === "masonry" ? pickBox(maker, "drywall", need, 1, options) : resolved.wall === "drywall" ? pickBox(maker, "masonry", need, 1, options) : null;
       const tip = recommended
         ? `Doporučujeme ${CLASS_LABEL[need]} ${boxMakerLabel(maker)} ${recommended.type} (${wallTypeOf(resolved.wall).short})${other ? ` nebo ${other.type} (${wallTypeOf(other.walls[0]).short})` : ""}.`
         : `${boxMakerLabel(maker)} vhodnou krabici ${wallTypeOf(resolved.wall).short} nevede – zvolte jiného výrobce krabic.`;
@@ -344,11 +518,23 @@ export function applyNormFix(draft: FloorplanDraft, issue: NormIssue): Floorplan
   };
   const splits = new Map((issue.fix.splitFrames ?? []).map((row) => [row.id, row.max]));
   const frames = <F extends { frames: FloorplanDraft["frames"]; elements: EditorElement[] }>(sheet: F): F["frames"] => (splits.size ? splitFrames(sheet, splits) : sheet.frames);
+  // Fáze 93: nové prvky (EKV, NO_SV, zásuvka okruhu B) s jedinečným id na svém podlaží
+  const taken = new Set(allElements(draft).map((element) => element.id));
+  const added = (issue.fix.add ?? []).map((row) => {
+    let index = taken.size + 1;
+    while (taken.has(`n93-${index}`)) index++;
+    const id = `n93-${index}`;
+    taken.add(id);
+    const element: EditorElement = { id, item: row.item, x: row.x, y: row.y, room: row.room, mountHeightMm: row.mountHeightMm, frameUnits: 1, series: draft.series, color: draft.color, controls: [], rotation: row.rotation, scale: null };
+    return { floorId: row.floorId, element };
+  });
+  const extra = (floorId: string) => added.filter((row) => row.floorId === floorId).map((row) => row.element);
   return {
     ...draft,
-    elements: draft.elements.map(map),
+    ...(issue.fix.boxMaker ? { boxMaker: issue.fix.boxMaker } : {}),
+    elements: [...draft.elements.map(map), ...extra(draft.floorId)],
     frames: frames(draft),
-    otherFloors: draft.otherFloors.map((floor) => ({ ...floor, elements: floor.elements.map(map), frames: frames(floor) })),
+    otherFloors: draft.otherFloors.map((floor) => ({ ...floor, elements: [...floor.elements.map(map), ...extra(floor.id)], frames: frames(floor) })),
   };
 }
 

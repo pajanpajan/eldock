@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { refundsCredit } from "@/lib/panel-builder/project-admin";
+import { OCCUPANCIES, type OccupancyId } from "@/lib/panel-builder/occupancy";
 import { SUPPLY_SYSTEMS, type SupplySystem } from "@/lib/panel-builder/supply";
 import { cn } from "@/lib/utils";
 import { deletePanelProjectsAction, updateProjectHeaderAction } from "@/server/actions/panel-projects";
@@ -27,6 +28,8 @@ export interface AdminProject {
   status: PanelProjectStatus;
   /** Fáze 55: soustava přívodu (id ze `SUPPLY_SYSTEMS`) – jen v hlavičce detailu, kde je známá. */
   supplySystem?: SupplySystem["id"];
+  /** Fáze 93: typ objektu a normativní režim – jen v hlavičce detailu. */
+  occupancy?: OccupancyId;
 }
 
 export const deleteQuestion = (project: Pick<AdminProject, "code" | "status">) =>
@@ -80,6 +83,7 @@ export function EditProjectButton({ project }: { project: AdminProject }) {
         customerName: String(form.get("customer") ?? "") || null,
         installationSite: String(form.get("site") ?? "") || null,
         ...(project.supplySystem ? { supplySystem: String(form.get("supply") ?? project.supplySystem) as SupplySystem["id"] } : {}),
+        ...(project.occupancy ? { occupancy: String(form.get("occupancy") ?? project.occupancy) as OccupancyId } : {}),
       });
       if (!result.ok) return void toast.error(result.error);
       toast.success(`Hlavička ${project.code} uložena.`);
@@ -103,6 +107,7 @@ export function EditProjectButton({ project }: { project: AdminProject }) {
             <Field id={`h-customer-${project.id}`} name="customer" label="Zákazník" defaultValue={project.customerName ?? ""} />
             <Field id={`h-site-${project.id}`} name="site" label="Místo instalace" defaultValue={project.installationSite ?? ""} placeholder="např. Liberec, Husova 5 – technická místnost" />
             {project.supplySystem ? <SupplySelect id={`h-supply-${project.id}`} name="supply" defaultValue={project.supplySystem} /> : null}
+            {project.occupancy ? <OccupancySelect id={`h-occupancy-${project.id}`} name="occupancy" defaultValue={project.occupancy} /> : null}
             <Button type="submit" className="touch-target" disabled={pending}>
               {pending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null} Uložit hlavičku
             </Button>
@@ -114,6 +119,30 @@ export function EditProjectButton({ project }: { project: AdminProject }) {
 }
 
 /** Fáze 55: soustava a počet fází přívodu (3f TN-C-S / TN-S / TT, 1f TN-S / TN-C-S). */
+/** Fáze 93: typ objektu a normativní režim (bytová instalace / obchodní centrum BD4 / zdravotnictví Skupina 1). */
+export function OccupancySelect({ id, name, defaultValue, value, onChange }: { id: string; name?: string; defaultValue?: OccupancyId; value?: OccupancyId; onChange?: (value: OccupancyId) => void }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Label htmlFor={id}>Typ objektu a normativní režim (Specializace prostoru)</Label>
+      <select
+        id={id}
+        name={name}
+        defaultValue={value === undefined ? defaultValue : undefined}
+        value={value}
+        onChange={onChange ? (event) => onChange(event.target.value as OccupancyId) : undefined}
+        className="h-11 rounded-md border border-input bg-background px-2 text-sm"
+        data-testid="occupancy-select"
+      >
+        {OCCUPANCIES.map((mode) => (
+          <option key={mode.id} value={mode.id}>
+            {mode.icon} {mode.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 export function SupplySelect({ id, name, defaultValue, value, onChange }: { id: string; name?: string; defaultValue?: SupplySystem["id"]; value?: SupplySystem["id"]; onChange?: (value: SupplySystem["id"]) => void }) {
   return (
     <div className="flex flex-col gap-1.5">

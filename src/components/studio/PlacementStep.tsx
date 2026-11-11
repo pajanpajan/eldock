@@ -44,6 +44,7 @@ import { POWER_ROLE_HINTS, powerRole, suggestCircuit, validatePlacement } from "
 import type { SpiderItem } from "@/lib/power-tree";
 import { bestParent, nextInSeries, nextTag, nextTagWithPrefix, type AutopilotSource } from "@/lib/studio-autopilot";
 import { frameOfFloor, layoutOfFloor } from "@/lib/studio-layout";
+import { POWER_BACKUP_TIERS, hasBackupTier, isPowerBackupTier, type PowerBackupTier } from "@/lib/power-backup";
 import { floorLabel, floorName, type StudioEquipmentDraft, type StudioEquipmentEdit, type StudioFloorDraft } from "@/lib/studio-draft";
 import { cn } from "@/lib/utils";
 import type { StudioData } from "@/server/queries/studio";
@@ -75,6 +76,8 @@ interface FloorItem {
   parentId: string | null;
   circuit: string | null;
   zone: string | null;
+  /** Fáze 93: zálohování napájení rozváděče / zdroje. */
+  tier: PowerBackupTier;
 }
 
 /** Výběr místnosti: klíč místnosti, „celé patro“, nebo zatím nic. */
@@ -236,6 +239,8 @@ export function PlacementStep({
   const [isRoot, setIsRoot] = useState(false);
   const [parentId, setParentId] = useState("");
   const [circuit, setCircuit] = useState("");
+  // Fáze 93: zálohování napájení nového rozváděče / zdroje
+  const [tier, setTier] = useState<PowerBackupTier>("GRID_STANDARD");
   const [editing, setEditing] = useState<string | null>(null);
   const [moving, setMoving] = useState<string | null>(null);
   const [hover, setHover] = useState<MeterPoint | null>(null);
@@ -307,6 +312,7 @@ export function PlacementStep({
               parentId: edit ? edit.parentId : item.fedFromEquipmentId,
               circuit: edit ? edit.circuit : item.fedFromCircuit,
               zone: edit?.zone ?? null,
+              tier: edit?.powerBackupTier ?? (isPowerBackupTier(item.powerBackupTier) ? item.powerBackupTier : "GRID_STANDARD"),
             };
           })
       : []),
@@ -323,6 +329,7 @@ export function PlacementStep({
         parentId: item.parent ? (item.parent.kind === "draft" ? `draft:${item.parent.key}` : item.parent.id) : null,
         circuit: item.circuit,
         zone: item.zone,
+        tier: item.powerBackupTier ?? "GRID_STANDARD",
       })),
   ];
   const inChoice = (item: FloorItem) => roomChoice === WHOLE_FLOOR || (roomChoice !== null && item.roomKey === roomChoice);
@@ -399,6 +406,7 @@ export function PlacementStep({
       circuit: role === "SOURCE" ? null : circuit,
       zone: (room?.name ?? zone) || null,
       isRoot: role === "SOURCE",
+      ...(hasBackupTier(type) && tier !== "GRID_STANDARD" ? { powerBackupTier: tier } : {}),
     });
     toast.success(`${insertedTag} vloženo${room ? ` do místnosti ${room.name}` : ""}.`);
     // Další kus stejného typu: nový tag hned připravený
@@ -869,6 +877,20 @@ export function PlacementStep({
                           </div>
                         </div>
                       ) : null}
+                      {hasBackupTier(type) ? (
+                        <div className="space-y-1">
+                          <Label htmlFor="eq-backup" className="text-xs">
+                            Zálohování napájení (rozváděč i přívodní trasa)
+                          </Label>
+                          <select id="eq-backup" value={tier} onChange={(event) => setTier(event.target.value as PowerBackupTier)} className={selectClass} data-testid="studio-backup-tier">
+                            {POWER_BACKUP_TIERS.map((option) => (
+                              <option key={option.id} value={option.id}>
+                                {option.badge} – {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      ) : null}
                       <p className="text-xs text-muted-foreground" data-testid="placement-room">
                         Místnost: <span className="font-semibold text-foreground">{zone || "–"}</span>
                       </p>
@@ -950,6 +972,7 @@ export function PlacementStep({
                                           parent,
                                           circuit: patch.circuit,
                                           zone: patch.zone,
+                                          ...(patch.powerBackupTier ? { powerBackupTier: patch.powerBackupTier } : {}),
                                           isRoot: !parent && (item.type === "SWITCHBOARD" || item.type === "TRANSFORMER"),
                                           ...(moved ? { pos: moved, roomKey: zoneAt(rooms, moved)?.key ?? null } : {}),
                                         });
@@ -1216,6 +1239,7 @@ function EditForm({
   const [parentId, setParentId] = useState(item.parentId ?? "");
   const [circuit, setCircuit] = useState(item.circuit ?? "");
   const [zone, setZone] = useState(item.zone ?? rooms.find((room) => room.key === item.roomKey)?.name ?? "");
+  const [tier, setTier] = useState<PowerBackupTier>(item.tier);
   return (
     <div className="space-y-2 border-t border-border p-2" data-testid="edit-form">
       <div className="grid grid-cols-[7rem_minmax(0,1fr)] gap-2">
@@ -1233,6 +1257,15 @@ function EditForm({
         </select>
         <Input aria-label="Vývod / okruh" value={circuit} onChange={(event) => setCircuit(event.target.value)} maxLength={80} placeholder="Vývod" className="h-9" />
       </div>
+      {hasBackupTier(item.type) ? (
+        <select aria-label="Zálohování napájení" value={tier} onChange={(event) => setTier(event.target.value as PowerBackupTier)} className={cn(selectClass, "h-9")} data-testid="studio-edit-backup-tier">
+          {POWER_BACKUP_TIERS.map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.badge} – {option.label}
+            </option>
+          ))}
+        </select>
+      ) : null}
       <select aria-label="Místnost" value={zone} onChange={(event) => setZone(event.target.value)} className={cn(selectClass, "h-9")}>
         <option value="">– bez místnosti –</option>
         {[...new Set([...rooms.map((room) => room.name), ...(zone ? [zone] : [])])].map((roomName) => (
@@ -1242,7 +1275,7 @@ function EditForm({
         ))}
       </select>
       <div className="flex flex-wrap gap-1.5">
-        <Button size="sm" className="h-9" onClick={() => onSave({ tag: tag.trim().toUpperCase(), name, parentId: parentId || null, circuit: circuit || null, zone: zone || null })} disabled={!tag.trim()}>
+        <Button size="sm" className="h-9" onClick={() => onSave({ tag: tag.trim().toUpperCase(), name, parentId: parentId || null, circuit: circuit || null, zone: zone || null, ...(hasBackupTier(item.type) ? { powerBackupTier: tier } : {}) })} disabled={!tag.trim()}>
           Uložit změny
         </Button>
         {onMove ? (

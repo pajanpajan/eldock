@@ -5,7 +5,7 @@ import { needsAttention, type InspectionState } from "./inspection";
 // Vrstvy půdorysu (Level 3): skupiny typů zařízení, které lze zapnout/vypnout, aby
 // stovky spotřebičů nezahltily mapu rozváděčů. Platí pro mapu i tabulku patra.
 
-export type LayerKey = "ENERGY" | "MACHINES" | "TOOLS" | "APPLIANCES" | "SAFETY";
+export type LayerKey = "ENERGY" | "MACHINES" | "TOOLS" | "APPLIANCES" | "SAFETY" | "HEALTH";
 
 export interface MapLayer {
   key: LayerKey;
@@ -24,7 +24,10 @@ export const MAP_LAYERS: readonly MapLayer[] = [
   },
   { key: "TOOLS", label: "Ruční nářadí a svářečky", types: ["POWER_TOOL", "WELDER"], defaultOn: false },
   { key: "APPLIANCES", label: "Spotřebiče a prodlužováky", types: ["APPLIANCE", "EXTENSION_CORD"], defaultOn: false },
-  { key: "SAFETY", label: "Hromosvody a bezpečnost", types: ["LIGHTNING_ROD", "EMERGENCY_LIGHTING"], defaultOn: false },
+  // Fáze 93: zdravotnické prostory (VTZ – vidí je i revizní technik VTZ) a požární vypínání v bezpečnosti, zdravotnické
+  // elektrické přístroje ve vlastní vrstvě (ČSN EN 62353 ed. 2 – ne technik spotřebičů podle ČSN 33 1600)
+  { key: "SAFETY", label: "Hromosvody a bezpečnost", types: ["LIGHTNING_ROD", "EMERGENCY_LIGHTING", "MEDICAL_ROOM", "FIRE_SHUTDOWN"], defaultOn: false },
+  { key: "HEALTH", label: "Zdravotnické přístroje", types: ["MEDICAL_DEVICE"], defaultOn: false },
 ];
 
 export const ALL_LAYERS: ReadonlySet<LayerKey> = new Set(MAP_LAYERS.map((layer) => layer.key));

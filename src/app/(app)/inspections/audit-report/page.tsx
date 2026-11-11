@@ -16,7 +16,8 @@ import { BRAND_PRINT_LINE } from "@/lib/brand";
 import { defectState } from "@/lib/defects";
 import { EQUIPMENT_TYPE_LABELS, formatDateShort, formatDateTime } from "@/lib/format";
 import { effectiveIntervalMonths, inspectionRuleFor, legalDeadline } from "@/lib/inspection-rules";
-import { equipmentHref } from "@/lib/routes";
+import { INSPECTION_PRESETS, presetButton, presetById } from "@/lib/inspection-presets";
+import { auditReportHref, equipmentHref } from "@/lib/routes";
 import { DEFECT_SEVERITY, DEFECT_STATE, INSPECTION_RESULT, INSPECTION_STATE, TEMP_MOD_OVERDUE, TEMP_MOD_STATUS, inspectionBadgeLabel } from "@/lib/status";
 import { tempModCountdown } from "@/lib/temporary-mod";
 import { cn } from "@/lib/utils";
@@ -28,14 +29,18 @@ import { getCurrentAccount, getRememberedPlantId } from "@/server/session";
 export const metadata: Metadata = { title: "Auditní report revizí" };
 
 // Kniha revizí závodu pro kontrolu TIČR / ISO: shoda, kategorie, závady, provizoria; tisk a CSV.
-export default async function AuditReportPage() {
-  const [account, plants, rememberedId] = await Promise.all([getCurrentAccount(), getPlants(), getRememberedPlantId()]);
+// Fáze 93: předvolba provozu (`?predvolba=INDUSTRY|RETAIL|HEALTH`) = souhrnný tisk pro SÚIP / TIČR, HZS nebo akreditační komisi MZ.
+export default async function AuditReportPage({ searchParams }: PageProps<"/inspections/audit-report">) {
+  const [{ predvolba }, account, plants, rememberedId] = await Promise.all([searchParams, getCurrentAccount(), getPlants(), getRememberedPlantId()]);
+  const preset = presetById(Array.isArray(predvolba) ? predvolba[0] : predvolba);
   if (!account.can("audit")) return <NoAccess title="Auditní report" current={account.accountType} suggest="PLANT_ADMIN" />;
   if (!(await getFeatures()).on("inspections.audit")) return <ModuleDisabled feature="inspections.audit" canManage={account.can("manageModules")} />;
   const role = account.definition.workflowRole;
   const plant = role === "MAINTENANCE" ? (plants.find((entry) => entry.id === rememberedId) ?? plants[0]) : undefined;
   const now = new Date();
-  const { rows, defects, mods } = await getAuditReport(plant?.id, now, account.types);
+  // Předvolba zúží výřez účtu na kategorie provozu (průnik – účet nikdy neuvidí víc, než smí)
+  const types = preset ? preset.types.filter((type) => !account.types || account.types.includes(type)) : account.types;
+  const { rows, defects, mods } = await getAuditReport(plant?.id, now, types);
   const { overall, byLayer } = summarizeAudit(rows.map((row) => ({ type: row.type, state: row.summary.state })));
   const overdueDefects = defects.filter((defect) => defectState(defect, now).state === "OVERDUE").length;
   const overdueMods = mods.filter((mod) => tempModCountdown(mod.expiresAt, now).overdue).length;
@@ -73,13 +78,25 @@ export default async function AuditReportPage() {
       <div className="print-report space-y-8">
         <p className="hidden items-center gap-2 text-xs font-semibold tracking-wide print:flex">
           <LogoMark className="size-5" />
-          {BRAND_PRINT_LINE} · Auditní report pro TIČR / ISO audit
+          {BRAND_PRINT_LINE} · {preset ? `Souhrnný export Knihy revizí pro ${preset.authority}` : "Auditní report pro TIČR / ISO audit"}
         </p>
         <PageHeader
-          title="Auditní report – Kniha revizí"
-          description={`${plantName} · stav k ${formatDateTime(now)} · zákon 250/2021 Sb., NV 190/2022 Sb. (příloha č. 4), NV 378/2001 Sb., ČSN 33 1500, ČSN 33 1600 ed. 2`}
-          actions={<AuditReportActions csvRows={csvRows} fileName={`kniha-revizi-${now.toISOString().slice(0, 10)}.csv`} />}
+          title={preset ? `Souhrnný export pro ${preset.authority} – ${presetButton(preset)}` : "Auditní report – Kniha revizí"}
+          description={`${plantName} · stav k ${formatDateTime(now)} · ${preset ? preset.norms : "zákon 250/2021 Sb., NV 190/2022 Sb. (příloha č. 4), NV 378/2001 Sb., ČSN 33 1500, ČSN 33 1600 ed. 2"}`}
+          actions={<AuditReportActions csvRows={csvRows} fileName={`kniha-revizi-${preset ? `${preset.id.toLowerCase()}-` : ""}${now.toISOString().slice(0, 10)}.csv`} {...(preset ? { printLabel: `🖨️ Souhrnný tisk pro ${preset.authority} (PDF)` } : {})} />}
         />
+
+        {/* Fáze 93: předvolby provozu – souhrnný tisk pro dozorový orgán */}
+        <nav className="flex flex-wrap items-center gap-2 print:hidden" aria-label="Předvolba provozu" data-testid="audit-presets">
+          <Link href={auditReportHref} className={cn("rounded-full border px-3 py-1.5 text-sm", !preset ? "border-primary/60 bg-primary/15 text-primary" : "border-border text-muted-foreground hover:text-foreground")}>
+            Celá Kniha revizí
+          </Link>
+          {INSPECTION_PRESETS.map((entry) => (
+            <Link key={entry.id} href={`${auditReportHref}?predvolba=${entry.id}`} className={cn("rounded-full border px-3 py-1.5 text-sm", preset?.id === entry.id ? "border-primary/60 bg-primary/15 text-primary" : "border-border text-muted-foreground hover:text-foreground")} data-testid={`audit-preset-${entry.id}`}>
+              [ {presetButton(entry)} ] → {entry.authority}
+            </Link>
+          ))}
+        </nav>
 
         <section aria-label="Souhrn shody" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <KpiTile

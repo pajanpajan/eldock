@@ -78,6 +78,9 @@ export const EQUIPMENT_TYPE_LABELS: Record<EquipmentType, string> = {
   LIGHTNING_ROD: "Hromosvod (LPS)",
   EMERGENCY_LIGHTING: "Nouzové osvětlení",
   WIRING_DEVICE: "Domovní přístroj (zásuvka, vypínač)",
+  MEDICAL_DEVICE: "Zdravotnický elektrický přístroj",
+  MEDICAL_ROOM: "Zdravotnický prostor / IMD (ZIS IT)",
+  FIRE_SHUTDOWN: "Požární vypínací prvek (CENTRAL / TOTAL STOP)",
   OTHER: "Ostatní",
 };
 
@@ -106,6 +109,7 @@ export const INSPECTION_TYPE_LABELS: Record<InspectionType, string> = {
   EXTRAORDINARY: "Mimořádná revize",
   THERMOVISION: "Termovize",
   VISUAL_CHECK: "Vizuální kontrola LPS",
+  FUNCTION_TEST: "Měsíční zkouška funkce",
 };
 
 export const COMPLIANCE_CATEGORY_LABELS: Record<ComplianceCategory, { label: string; hint: string }> = {

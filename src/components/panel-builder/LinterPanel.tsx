@@ -80,7 +80,8 @@ export function LinterPanel({ issues, busy, onFix, onFocus }: { issues: LintIssu
                     className="flex shrink-0 items-center gap-1 rounded-md border border-current/40 bg-background/40 px-2 py-0.5 font-semibold hover:bg-background/70 disabled:opacity-50"
                     title={issue.fix.label}
                   >
-                    <Wrench className="size-3" aria-hidden /> [Opravit 1 klikem] {issue.fix.label}
+                    {/* Fáze 93: oprava s vlastním textem tlačítka („… (1-klik)“) bez zdvojeného „Opravit 1 klikem“ */}
+                    <Wrench className="size-3" aria-hidden /> {/1[- ]kli/i.test(issue.fix.label) ? `[ ${issue.fix.label} ]` : `[Opravit 1 klikem] ${issue.fix.label}`}
                   </button>
                 ) : null}
                 <button type="button" className="shrink-0 rounded p-0.5 text-current/70 hover:bg-background/40" onClick={() => setHidden(new Set([...hidden, issue.id]))} aria-label={`Skrýt doporučení: ${issue.message}`}>

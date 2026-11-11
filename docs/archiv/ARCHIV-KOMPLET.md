@@ -49,20 +49,22 @@
 43. ZADANI-faze-90.md
 44. ZADANI-faze-91.md
 45. ZADANI-faze-92.md
-46. DENIK-faze-49-54.md
-47. DENIK-faze-55-59.md
-48. DENIK-faze-60-61.md
-49. DENIK-faze-62-65.md
-50. DENIK-faze-66-67.md
-51. DENIK-faze-68-70.md
-52. DENIK-faze-71-73.md
-53. DENIK-faze-74-77.md
-54. DENIK-faze-78-80.md
-55. DENIK-faze-81-82.md
-56. DENIK-faze-83-85.md
-57. DENIK-faze-86-88.md
-58. DENIK-faze-89-90.md
-59. docs/PLAN.md (aktuální plán a deník posledních fází)
+46. ZADANI-faze-93.md
+47. DENIK-faze-49-54.md
+48. DENIK-faze-55-59.md
+49. DENIK-faze-60-61.md
+50. DENIK-faze-62-65.md
+51. DENIK-faze-66-67.md
+52. DENIK-faze-68-70.md
+53. DENIK-faze-71-73.md
+54. DENIK-faze-74-77.md
+55. DENIK-faze-78-80.md
+56. DENIK-faze-81-82.md
+57. DENIK-faze-83-85.md
+58. DENIK-faze-86-88.md
+59. DENIK-faze-89-90.md
+60. DENIK-faze-91.md
+61. docs/PLAN.md (aktuální plán a deník posledních fází)
 
 ---
 
@@ -4101,6 +4103,178 @@ Vyřeš zobrazení reálných fotografií v modalu `Designové řady a barvy` (`
 
 ---
 
+# 📄 ZADANI-faze-93.md
+
+# Zadání fáze 93 – obchodní centra (ČSN 33 2000-7-718, BD4) a zdravotnictví (ČSN 33 2000-7-710 ed. 2, ČSN EN 62353 ed. 2)
+
+Vloženo z chatu 2026-11-11. Celé zadání beze změn je níže, za ním rozhodnutí při implementaci.
+
+## Zadání (z chatu)
+
+Rozšiřujeme platformu ELDOCK o plnou normativní a funkční podporu pro **Obchodní centra / Retail Parky (ČSN 33 2000-7-718, Vyhláška č. 23/2008 Sb.)** a **Nemocnice, polikliniky a lékařské ordinace (ČSN 33 2000-7-710 ed. 2, ČSN EN 62353 ed. 2)**.
+
+TVŮJ POSTUP:
+1. Zapiš tuto etapu jako novou fázi do `docs/PLAN.md` (zkontroluj v `git log` poslední číslo fáze a plynule navaž).
+2. Naimplementuj kompletně všechny 4 části níže.
+3. Napiš unit testy, spusť `npm run verify`, aktualizuj `docs/PLAN.md` + `CLAUDE.md`, udělej git commit a rovnou vše pushni a nasaď na produkční server `https://eldock.cz`.
+
+================================================================================
+ČÁST 1: PROFIL PROJEKTU „OBCHODNÍ CENTRUM / PROSTOR PRO VEŘEJNOST (BD4 – ČSN 33 2000-7-718)“ V 2D PŮDORYSU A AI PANEL BUILDERU
+================================================================================
+
+Do nastavení projektu v **2D Půdorysu (`/panel-builder/floorplan` – Krok 2 a Kompaktní lišta)** i při zakládání/úpravě projektu v **AI Panel Builderu (`/panel-builder` a `/panel-builder/[id]`)** přidej volbu **`Typ objektu a normativní režim (Specializace prostoru)`**:
+- `🏠 Bytová / Domovní instalace (ČSN 33 2130 ed. 4 – BD1, běžné kabely CYKY)` *(Výchozí)*
+- `🛍️ Obchodní centrum / Prostor pro veřejnost (ČSN 33 2000-7-718 · BD3/BD4 · Bezhalogenové kabely B2ca)`
+- `🏥 Zdravotnický prostor – Skupina 1: Ordinace, vyšetřovny a lůžka (ČSN 33 2000-7-710 ed. 2)`
+
+Jakmile uživatel zvolí režim **`🛍️ Obchodní centrum / Prostor pro veřejnost (BD3/BD4)`**, proveď automaticky tyto změny:
+
+1. AUTOMATICKÁ NÁHRADA KABELŮ ZA BEZHALOGENOVÉ `B2ca-s1, d1, a1` (DLE VYHLÁŠKY Č. 23/2008 Sb.):
+   - Ve všech okruzích 2D půdorysu, ve výkazu kabeláže, na kótách tras v PDF/DXF výkresu i ve finálním Kusovníku (BOM) automaticky nahraď standardní PVC kabely `CYKY` za bezhalogenové kabely se sníženou kouřivostí a třídou reakce na oheň **`B2ca-s1, d1, a1`**:
+     * `CYKY-J 3×1,5` -> **`1-CHKE-R (N2XH-J) 3×1,5 B2ca-s1,d1,a1`**
+     * `CYKY-O 3×1,5` -> **`1-CHKE-R (N2XH-O) 3×1,5 B2ca-s1,d1,a1`**
+     * `CYKY-J 5×1,5` -> **`1-CHKE-R (N2XH-J) 5×1,5 B2ca-s1,d1,a1`**
+     * `CYKY-J 3×2,5` -> **`1-CHKE-R (N2XH-J) 3×2,5 B2ca-s1,d1,a1`**
+     * `CYKY-J 5×2,5` -> **`1-CHKE-R (N2XH-J) 5×2,5 B2ca-s1,d1,a1`**
+     * `CYKY-J 5×4` / `5×6` / `5×10` -> **`1-CHKE-R (N2XH-J) 5×4 / 5×6 / 5×10 B2ca-s1,d1,a1`**
+     * Sběrnicové a datové kabely -> **`J-H(St)H 2×2×0,8 B2ca`** / **`U/FTP CAT6A LSOH B2ca-s1,d1,a1`**.
+   - Pro instalační krabičky v kusovníku automaticky vynucuj **bezhalogenové provedení (`HF` / `KA` – např. `KOPOS KPR 68 KA` / `KU 68 LD NA`)**.
+   - V protokolu vnějších vlivů (Krok 4 AI Panel Builderu) automaticky předvyplň vnější vliv **`BD4 (obtížný a pomalý únik osob, vysoká hustota osob)`**, **`BE2 (nebezpečí požáru)`**, normu **`ČSN 33 2000-7-718`** a **`Vyhlášku č. 23/2008 Sb.`**!
+
+2. NOUZOVÉ OSVĚTLENÍ V PŮDORYSU + KONTROLA CENTRAL STOP A MID ELEKTROMĚRU V ROZVÁDĚČI NÁJEMNÍ JEDNOTKY:
+   - Do levé palety `💡 Světla` v 2D půdorysu přidej prvek **`NO_SV` Nouzové únikové svítidlo s piktogramem (1h / 3h, SE/SA dle ČSN EN 1838)** (se zelenou schematickou značkou běžícího panáčka a šipky úniku, výchozí výška `2200 mm`).
+   - V **Elektro-linteru AI Panel Builderu (`src/engine/electrical-linter.ts`)** i při generování rozváděče z půdorysu v režimu `Obchodní centrum (BD4)` kontroluj a nabízej 1-klikovou opravu pro:
+     a) **Vypínací spoušť (Shunt Trip – CENTRAL STOP / TOTAL STOP od EPS):** Hlavní vypínač / hlavní jistič rozváděče nájemní jednotky MUSÍ mít osazenou boční **vypínací spoušť (`0,5M` / `1M`, např. `ABB S2C-A2`, `Eaton FAZ-XAA`, `OEZ SV-LT`, `Schneider iMX+OF`)** pro dálkové vypnutí z ústředny EPS / tlačítka CENTRAL STOP! Pokud v rozváděči chybí, linter zobrazí varování s tlačítkem **`[ + Doplnit vypínací spoušť CENTRAL STOP a podružný MID elektroměr (1-klik) ]`**.
+     b) **Podružný fakturační elektroměr (3f MID s Modbus / M-Bus):** Kontrola přítomnosti 3f elektroměru na DIN lištu (`4M`, např. `ABB B23 312-100`, `Schneider iEM3155`, `Finder 7M.38`) pro rozúčtování spotřeby nájemní jednotky.
+
+================================================================================
+ČÁST 2: PROFIL PROJEKTU „ZDRAVOTNICKÝ PROSTOR – SKUPINA 1 (ČSN 33 2000-7-710 ed. 2)“
+================================================================================
+
+Jakmile uživatel v 2D půdorysu nebo v AI Panel Builderu zvolí režim **`🏥 Zdravotnický prostor – Skupina 1 (Vyšetřovny, ordinace, lůžkové pokoje dle ČSN 33 2000-7-710 ed. 2)`**:
+
+1. NOVÉ ZDRAVOTNICKÉ PRVKY V LEVÉ PALETĚ 2D PŮDORYSU (`/panel-builder/floorplan`):
+   Do palety v 2D půdorysu přidej sekci / prvky pro zdravotnictví:
+   - **`EKV` Přípojka doplňujícího ochranného pospojování (Ekvipotenciální svorkovnice):**
+     * Výchozí výška `300 mm` (nebo `1000 mm` u vyšetřovacího lůžka), normová značka ochranného uzemnění v rámečku `EKV (PE)`, rozvod zelenožlutým vodičem **`CYA 6 mm² ZŽ (H07V-K)`** v trubce k kovovým částem, rozvodům vody/topení a k lůžkové rampě.
+   - **`LUZ` Zdravotnická lůžková rampa / Vyšetřovací pracoviště (Skupina 1):**
+     * Výchozí výška `1200 mm`, obsahuje dvojici/čtveřici zásuvek 230 V barevně/štítkem rozlišených na **Okruh A (Zelený/Bílý)** a **Okruh B (Oranžový/Zálohovaný)** + přípojný bod pospojování `PE` + datovou zásuvku `RJ45`.
+   - V sekci `🛋️ Okna, dveře a nábytek` přidej také orientační architektonický prvek **`LEH_Z` Vyšetřovací lehátko / Nemocniční lůžko / Stomatologické křeslo** (`2,00 × 0,90 m`, s aktivním rohem X×Y).
+
+2. AUTOMATICKÉ DĚLENÍ ZÁSUVEK DO 2 NEZÁVISLÝCH OKRUHŮ POD 2 CHRÁNIČE (ČSN 33 2000-7-710 ed. 2):
+   - Ve `floorplan-bridge.ts` (`buildSwitchboardFromCircuits`) v režimu `Zdravotnický prostor – Skupina 1`:
+     * Zásuvky v každé zdravotnické místnosti (vyšetřovně / ordinaci / lůžkovém pokoji) nebo na lůžkové rampě `LUZ` **automaticky rozděl minimálně na 2 samostatné jištěné okruhy (`Okruh A` a `Okruh B`)**, přičemž každý z nich MUSÍ být připojen pod **jiný samostatný proudový chránič $I_{\Delta n} \le 30\text{ mA}$ výhradně typu A nebo typu B** (nebo realizován pomocí dvou samostatných jističochráničů RCBO `1P+N B16A / 30mA typ A`!), aby při vybavení jednoho chrániče nikdy nezůstalo vyšetřovací lůžko nebo ordinace zcela bez napětí!
+     * Stejně tak světelné okruhy ve zdravotnickém prostoru rozděl nebo doplň o nouzové svítidlo, aby při výpadku jednoho okruhu nezůstala ordinace potmě.
+
+3. KONTROLY V ELEKTRO-LINTERU (2D PŮDORYS I AI PANEL BUILDER) PRO SKUPINU 1 DLE ČSN 33 2000-7-710 ed. 2:
+   - **Kontrola 1 (Povinné 2 nezávislé zásuvkové okruhy pod 2 chrániči):** Pokud má vyšetřovna/ordinace v půdorysu (nebo zdravotnický rozváděč v Panel Builderu) všechny zásuvky pověšené na jediném okruhu nebo pod jediným společným proudovým chráničem, zobraz v Elektro-linteru chybu:
+     * *"⚠️ ČSN 33 2000-7-710 ed. 2 (čl. 710.53 / 710.55): V zdravotnickém prostoru Skupiny 1 musí být zásuvky lůžka/vyšetřovny napájeny alespoň ze 2 samostatných obvodů pod 2 nezávislými chrániči ≤ 30 mA (typ A nebo B)!"* + tlačítko **`[ Opravit: Rozdělit zásuvky na 2 nezávislé RCBO/RCD okruhy (1-klik) ]`**.
+   - **Kontrola 2 (Přísný zákaz chráničů typu AC a kontrola $I_{\Delta n} \le 30\text{ mA}$):** Ve zdravotnických prostorech Skupiny 1 a 2 jsou chrániče typu `AC` normou ČSN 33 2000-7-710 ed. 2 výslovně zakázány – povolen je pouze typ `A` nebo `B`!
+   - **Kontrola 3 (Povinná přípojka doplňujícího pospojování `EKV`):** Pokud v půdorysu v místnosti označené jako ordinace/vyšetřovna/koupelna v režimu Skupiny 1 chybí prvek `EKV` (ekvipotenciální svorkovnice), zobraz v `Kontrola půdorysu a norem` varování s možností vložit `EKV` jedním klikem.
+   - **Protokol vnějších vlivů v Kroku 4:** Automaticky doplň normu **`ČSN 33 2000-7-710 ed. 2 (Zdravotnické prostory – Skupina 1)`**, požadavek na doplňující ochranné pospojování a kontrolu izolačního stavu / impedance.
+
+================================================================================
+ČÁST 3: PODPORA 3 ZDROJŮ NAPÁJENÍ (`SÍŤ` / `DIESELAGREGÁT DA` / `UPS`) A NÁJEMNÍCH JEDNOTEK VE SPRÁVĚ AREÁLU (`/`)
+================================================================================
+
+V modulu **Správa výrobních závodů a areálů (`/` – hlavní mapa a detail rozváděče)** přidej klíčovou funkcionalitu pro nemocnice, obchodní centra i moderní fabriky:
+
+1. KATEGORIE ZÁLOHOVÁNÍ NAPÁJENÍ ROZVÁDĚČE (`powerBackupTier`):
+   U každého rozváděče a napájecí trasy umožni zvolit (a v detailu rozváděče i v 2D Studiu přepínat) úroveň důležitosti napájení:
+   - **`GRID_STANDARD` – Běžné napájení ze sítě (Modrá / Šedá):** Odpojované při výpadku distribuční sítě (běžné kanceláře, obchody, nekritická technologie).
+   - **`BACKUP_GENERATOR_DA` – Důležité napájení – Dieselagregát DA do 15 s (Oranžová / Jantarová `⚡ DA 15s`):** Rozváděče zálohované náhradním zdrojem (motorgenerátor se záskokovým automatem ATS do 15 sekund – evakuační výtahy, požární větrání, vyšetřovny, chlazení, důležité osvětlení).
+   - **`CRITICAL_UPS_ZIS` – Velmi důležité / Kritické napájení – UPS do 0,5 s / ZIS IT (Červená / Purpurová `🔋 UPS <0,5s / IT`):** Bezvýpadkové napájení z centrální UPS / ZNZ nebo zdravotnické izolované soustavy IT (operační sály, JIP/ARO, serverovny, EPS, nouzové osvětlení).
+
+2. VIZUÁLNÍ FILTR VĚTVÍ NA 2D MAPĚ AREÁLU + EVIDENCE NÁJEMNÍ JEDNOTKY / ODDĚLENÍ:
+   - Přímo nad 2D mapou areálu na hlavní stránce `/` přidej přepínač pohledu napájecích větví:
+     * `[ Všechny rozvody ]` · `[ 🔵 Jen běžná síť ]` · `[ 🟠 Zálohováno Dieselagregátem (DA <15 s) ]` · `[ 🔴 Kritické okruhy UPS (<0,5 s) / ZIS IT ]`
+   - Když energetik nemocnice nebo správce obchodního centra klikne na filtr `🟠 Dieselagregát` nebo `🔴 Kritické UPS`, na mapě areálu se okamžitě barevně rozsvítí celá zálohovaná páteřní trasa a příslušné rozváděče včetně součtu zálohovaného příkonu v kW (např. *"Celkem na DA: 185 kW / kapacita DA 250 kVA -> Rezerva 26 %"*).
+   - Na kartě rozváděče přidej volitelné pole **`Nájemní jednotka / Zdravotnické oddělení`** (např. `"Jednotka 1.42 – Kavárna"` nebo `"Pavilon B – Chirurgická ambulance, Skupina 1"`), podle kterého lze v areálu rychle vyhledávat a filtrovat.
+
+================================================================================
+ČÁST 4: ROZŠÍŘENÍ KNIHY REVIZÍ O ZDRAVOTNICKÉ A POŽÁRNÍ REVIZE (`/revisions`)
+================================================================================
+
+Rozšiř modul **Kniha revizí** (`src/app/revisions/` a přehled revizí na hlavní stránce `/`), aby kromě standardních revizí elektrických rozvodů, strojů, hromosvodů a spotřebičů sledoval i zákonné revize vyžadované v nemocnicích a obchodních centrech:
+
+1. Přidej 4 nové specializované kategorie revizí se správnými zákonnými lhůtami a normami:
+   - **`🏥 Zdravotnické elektrické přístroje (ČSN EN 62353 ed. 2 / zák. č. 375/2022 Sb.)`** – Opakované zkoušky a kontroly bezpečnosti zdravotnických přístrojů (EKG, infuzní pumpy, defibrilátory, křesla; výchozí perioda **12 měsíců** nebo **24 měsíců** dle třídy rizika).
+   - **`🩺 Zdravotnické prostory Skupiny 1 a 2 & Hlídače izolačního stavu IMD / ZIS IT (ČSN 33 2000-7-710 ed. 2)`** – Pravidelná revize zdravotnických prostorů a test funkčnosti hlídačů izolačního stavu a záskoku UPS/DA (výchozí perioda **6 měsíců** pro funkční test IMD/ZIS, **12 měsíců** pro celkovou revizi prostoru Skupiny 2, **36 měsíců** pro Skupinu 1).
+   - **`🏃 Nouzové únikové osvětlení a CBS (ČSN EN 50172 / ČSN EN 1838 / Vyhl. č. 246/2001 Sb.)`** – Evidenční deník nouzového osvětlení:
+     * *Měsíční funkční zkouška* (perioda **1 měsíc**),
+     * *Roční zkouška plné doby svícení akumulátorů (1 h / 3 h) a revize* (perioda **12 měsíců**).
+   - **`🔥 Požární vypínací prvky CENTRAL / TOTAL STOP a EPS odpojení (Vyhl. č. 246/2001 Sb.)`** – Kontrola funkčnosti dálkového vypnutí rozváděčů nájemních jednotek a budovy (výchozí perioda **12 měsíců**).
+
+2. Přidej do Knihy revizí rychlé předvolby filtru podle typu provozu:
+   * `[ 🏭 Průmyslový závod ]` · `[ 🛍️ Obchodní centrum (BD4 + Nouzové osv. + Central Stop) ]` · `[ 🏥 Zdravotnictví (Skupina 1/2 + ČSN EN 62353 + ZIS IT) ]`, které jedním klikem vyfiltrují příslušné kontrolní okruhy a umožní exportovat souhrnný PDF výkaz pro kontrolu HZS (hasičů), SÚIP/TIČR nebo akreditační komisi Ministerstva zdravotnictví.
+
+================================================================================
+ČÁST 5: TESTY, VERIFIKACE A NASAZENÍ
+================================================================================
+
+- Napiš unit testy (např. v `src/engine/__tests__/commercial-medical-modes.test.ts`), které ověří:
+  1) Že při přepnutí projektu půdorysu do režimu `Obchodní centrum (BD4)` se všechny kabely `CYKY` v kusovníku automaticky přepočítají na bezhalogenové kabely `1-CHKE-R (N2XH-J) B2ca-s1,d1,a1` a krabičky na bezhalogenové `HF/KA`.
+  2) Že v režimu `Obchodní centrum (BD4)` Elektro-linter ohlásí chybějící vypínací spoušť `CENTRAL STOP` na hlavním vypínači a 1-kliková oprava ji osadí.
+  3) Že v režimu `Zdravotnický prostor – Skupina 1 (ČSN 33 2000-7-710 ed. 2)` most z půdorysu (`floorplan-bridge.ts`) automaticky rozdělí zásuvky vyšetřovny/lůžka (`LUZ`) na 2 nezávislé okruhy pod 2 samostatné chrániče 30 mA typu A/B a linter zablokuje použití chrániče typu AC nebo jednoho společného chrániče.
+  4) Že rozváděče ve Správě areálu podporují 3 úrovně zálohování (`GRID_STANDARD`, `BACKUP_GENERATOR_DA`, `CRITICAL_UPS_ZIS`) a Kniha revizí podporuje nové zdravotnické a požární kategorie.
+- Spusť `npm run verify`, aktualizuj `docs/PLAN.md` a `CLAUDE.md`, udělej commit a rovnou vše pushni a nasaď na produkční server `https://eldock.cz`.
+
+## Rozhodnutí při implementaci
+
+- **Kde je co:** zadání jmenuje `src/engine/electrical-linter.ts` a `src/app/revisions/` – Elektro-linter Eldocku je
+  `src/lib/panel-builder/linter.ts`, Kniha revizí je `/inspections` (přehled) a `/inspections/audit-report` (auditní
+  report). „Krok 4“ protokolu vnějších vlivů = protokol v dokumentaci rozváděče (krok 5 Dokumentace a PDF, list 5) –
+  krok 4 Panel Builderu je oteplení.
+- **Typ objektu** je jedna hodnota pro nákres (`FloorplanDraft.occupancy`, JSON nákresu, bez migrace) i projekt
+  (`PanelBoardProject.occupancy`, migrace `phase93_occupancy_backup`); rozváděč z půdorysu převezme typ z nákresu.
+  Výběr v kroku 2 průvodce (nad úrovní instalace), v kompaktní liště samostatné tlačítko se štítkem typu, v dialogu
+  nového projektu a v úpravě hlavičky; štítek v hlavičce projektu.
+- **Bezhalogenové kabely** vznikají na výstupu výpočtu (`analyzeDraft`) – okruhy, výkaz kabeláže (rozpis k nákupu se
+  sloučí podle nového označení), svody k vypínačům, datové a sběrnicové trasy, štítky tras v PDF / DXF a kusovník.
+  Ovládací CYSY → `1-CHKE-R (N2XH-O) n×1,5 B2ca-s1,d1,a1` (N2XH nejmenší průřez 1,5 mm²), signální SYKFY a sběrnice →
+  `J-H(St)H …×2×0,8 B2ca` (počet párů nahoru na řadu 1 / 2 / 4 / 6 / 10).
+- **Krabice HF:** v katalogu jen ověřené bezhalogenové typy z kategorie „bezhalogenové“ na kopos.cz (2026-11-11):
+  KU 68-45/HF_HA (pod omítku 45 mm), KPR 68-70/HF_HA (pod omítku 70 mm), KU 68 LD/1HF_HA (výrobce ji řadí do dutých
+  stěn – rozšířeno z dřevostavby i na SDK) a KPL 64-50/2LD HF_KA (dvojnásobná do dutých stěn). `KPR 68 KA` ze zadání
+  je podle stránky výrobce PVC krabice bez označení HF a `KU 68 LD NA` jsme jako bezhalogenovou nenašli – nepoužity.
+  Chybějící HF typ (jiný výrobce, hluboká HF krabice do SDK) kusovník vypíše „doplnit“ a hlídač nabídne přepnutí na
+  KOPOS (řada HF).
+- **NO_SV** je svítidlo světelného okruhu (nespínaný přívod, vlastní akumulátor) se zelenou značkou (štítek s běžícím
+  panáčkem a šipkou) a výškou 2200 mm; v kusovníku řádek „Nouzové únikové svítidlo … – výrobce doplňte“.
+- **CENTRAL STOP a MID:** rozváděč z půdorysu BD4 dostane za hlavní vypínač vypínací spoušť (příslušenství 1 M,
+  podtyp SHUNT_TRIP) a podružný elektroměr MID (3f 4 M, u 1f přívodu 2 M) + tlačítko CENTRAL STOP do kusovníku.
+  Typy (ABB S2C-A2, Eaton FAZ-XAA, OEZ SV-LT, Schneider iMX+OF; ABB B23 312-100, Schneider iEM3155, Finder 7M.38) jsou
+  jen příklady ze zadání ve štítku – konkrétní kus vybere konfigurátor z katalogu (jinak orientační kus). Oprava
+  1 klikem vloží chybějící přístroje na první lištu s volným místem, jinak přidá DIN lištu.
+- **Zdravotnictví:** lékařská místnost se pozná podle názvu (ordinace, vyšetřovna, lůžkový pokoj, zákrokový sál,
+  ošetřovna, ambulance, stomatologie …); zásuvky těchto místností a rampy LUZ jdou mimo zóny zásuvek do okruhů A / B,
+  každý okruh na vlastní RCBO 1P+N B16 30 mA typ A (= „2 samostatné jističochrániče“ ze zadání). Jediný zásuvkový
+  vývod v místnosti = varování (výpočet i hlídač s opravou „doplnit dvojzásuvku okruhu B“). Světla místnosti se 2 a více
+  svítidly se střídají na 2 světelné okruhy; jediné svítidlo bez NO_SV = varování s vložením NO_SV. LUZ se ve výpočtu
+  rozpadne na dvojzásuvku A, dvojzásuvku B a datovou zásuvku (uzly `id#A`, `id#B`, `id#D`); v kusovníku jako jedno
+  těleso. EKV není vývod okruhu – v kusovníku svorka EKV, přípojnice EKV místnosti a vodič CYA 6 mm² ZŽ (odhad 3 m
+  na přípojku); u lehátka LEH_Z (do 1,5 m) se vkládá ve výšce 1000 mm.
+- **Linter zdravotnictví** bere místnosti ze štítku okruhu („Zásuvky – Ordinace 1 – Okruh A …“); rozváděč bez
+  zásuvkových okruhů pravidlo zásuvek netýká; bez rozpoznané lékařské místnosti posoudí všechny zásuvkové okruhy
+  rozváděče. Chránič AC je ve zdravotnictví chyba (jinde varování), IΔn nad 30 mA chyba s opravou na 30 mA.
+- **Zálohování napájení:** úroveň má rozváděč a zdroj (`SWITCHBOARD`, `TRANSFORMER`) a platí i pro jeho přívodní trasu
+  (trasa = napájení rozváděče); podřízené rozváděče ji dědí, dokud nemají vlastní (UPS za DA). Výkon větve = Ib
+  (naměřený, jinak součet podřízených se soudobostí 0,8, jinak jmenovitý) · √3 · 400 V · cos φ 0,9; rezerva se počítá
+  ze zdánlivého výkonu (kVA) proti kapacitě zdroje zadané u kořene větve (`backupCapacityKva`) – proto u příkladu ze
+  zadání (185 kW / 250 kVA) vyjde 18 %, ne 26 % (zadání porovnávalo kW s kVA). Filtr zvýrazní budovy větve a páteřní
+  trasy mezi budovami; přehled rozváděčů větve s odkazy na karty. Nájemní jednotka / oddělení na kartě rozváděče,
+  hledání nad mapou bez diakritiky.
+- **Kniha revizí:** nové typy zařízení `MEDICAL_DEVICE` (12 / 24 měsíců – varianta na kartě), `MEDICAL_ROOM` (Skupina 1
+  36, Skupina 2 12, IMD / ZIS IT 6 měsíců) a `FIRE_SHUTDOWN` (12 měsíců, vyhláška č. 246/2001 Sb.); nouzové osvětlení
+  dostalo měsíční zkoušku funkce (`FUNCTION_TEST`, platnost 1 měsíc, lhůtu revize neposouvá) vedle roční zkoušky plné
+  doby. Lhůty jsou normové (varování), ne závazné jako u VTZ. Předvolby filtrují přehled i auditní report
+  (`?predvolba=INDUSTRY|RETAIL|HEALTH`, průnik s výřezem účtu); souhrnný tisk = tisk auditního reportu do PDF
+  s hlavičkou pro SÚIP / TIČR, HZS nebo akreditační komisi MZ. Zdravotnické přístroje mají vlastní vrstvu mapy
+  `HEALTH` (technik spotřebičů podle ČSN 33 1600 je nevidí), zdravotnické prostory a CENTRAL STOP jsou ve vrstvě
+  bezpečnosti (vidí je revizní technik VTZ).
+
+---
+
 # 📄 DENIK-faze-49-54.md
 
 # Deník fází 49–54 (přesunuto z docs/PLAN.md 2026-11-06)
@@ -4285,6 +4459,16 @@ Fáze 83–85 nasazeny 2026-11-10 (commit `af4e1f2`; commity `242449c`, `329e631
 
 ---
 
+# 📄 DENIK-faze-91.md
+
+# Deník fáze 91 (přesunuto z `docs/PLAN.md`, sekce C)
+
+| Fáze | Datum | Poznámky |
+|---|---|---|
+| 91 | 2026-11-11 | Zadání z chatu → `docs/archiv/ZADANI-faze-91.md` (i rozhodnutí a odchylky od zadání podle katalogů). **Audit:** lokální Katalog ABB 2026 (rámečky po řadách, Decento str. 144 / 147 / 548 – do vícenásobných rámečků nejde, Busch-axcent str. 165–166 a 170, solo carat str. 161), krabice z webů výrobců (KOPOS, Kaiser kaisergroup.com, OBO, Schneider se.com, SEZ sez.sk, ověřeno 2026-11-11, odkaz u každé položky). **Logika:** `residential-series-catalog.ts` (`SERIES_FRAME_RULES`, `maxFrameGang` zúžený i podle `frameMpn` barvy rámečku, `frameLimitText`, `splitFrameGangs`), `floorplan-frames.ts` (`frameLimitOf`, limit v `createFrame`, `assemblyError`, `placeAssembly`), `abb-catalog-2026.ts` (kryty Busch-Jaeger `bjCovers`, rámečky `frames` / `framePairs`, axcent 1R–5R, future linear mechová černá 5R, Decento bez černého dubu, převod starších id `LEGACY_SERIES_COLORS`), `wiring-designs.ts` (`seriesFrameColors`, `resolveFrameColor`, `frameColorForSeries`, `migrateSeriesColor`), `box-options.ts` + `mounting-boxes-catalog.ts` (`MOUNTING_BOXES`, `pickBox`, `boxNeed`, `resolveBox`, `compileBoxUsage`), `floorplan-norms.ts` (`frame-limit`, `box-depth`, oprava `splitFrames` / `boxes`), `wiring-bom.ts` (rozdělené rámečky, Decento a kryty Busch-Jaeger, krabice s `box` + `boxTable`), nákres `boxMaker` / `wallType`, místnost `wallType`, prvek `box`, palety zásuvka s USB a s T3. **UI:** `MountingBoxSettings` (krok 2, krok 5, kompaktní lišta), 📦 v detailu prvku a konstrukce stěn v detailu místnosti, štítek limitu v liště, panel sestav jen s vyráběnými sestavami, tabulka krabic v kusovníku a dokumentaci; náhledy `series-render.ts` jako jeden engine (`renderDeviceSvg`, `DeviceMockup` = obal). **Testy:** `residential-series-catalog.test.ts` (9), `mounting-boxes-catalog.test.ts` (9), upravené phase55 / 57 / 61 / 90 a `catalog-renders.test.ts`, E2E `phase91.spec.ts` (3). **Ověření:** `npm run verify` (typecheck, lint, 159 souborů / 1075 testů, build), E2E všech 24 specifikací 2D půdorysu 47/47 v msedge (`phase91.spec.ts` 3/3 – stmívač s mělkou krabicí → varování a oprava 1 klikem, SDK v místnosti a Kaiser, tabulka krabic v kusovníku; víceramček 5R po změně na Time Arbo → štítek v liště a rozdělení 4R + 1R, Decento bez sestav s rozdělením na samostatné přístroje; Busch-axcent beton s nosným rámečkem, Decento po 91 mm, Variant+ s pantem; `phase55` / `phase61` / `phase90` podle tabulky krabic a rámečku zvlášť); náhledy všech řad ABB prohlédnuty |
+
+---
+
 # 📄 docs/PLAN.md
 
 # ELDOCK – rotující plán
@@ -4368,6 +4552,7 @@ a postup nasazení jsou v `CLAUDE.md`. Soubor drž pod 150 řádky.
 | 62 | 2D půdorys: kabeláž jde skrýt (přepínač „Kabeláž“ u plátna i v liště kroku, klávesa K), při párování vypínačů se světly je ve výchozím stavu skrytá; lišta probíhajícího kroku nad projektem (`ModeBar`, lepkavá pod hlavičkou) s názvem kroku, nápovědou a „Hotovo“ pro párování, vkládání, kreslení, zakreslení změn, ořez / kalibraci („Zrušit“) i úpravu vybraného prvku – v bočním panelu „Hotovo“ není, v kroku 1 Panel Builderu ukončuje úpravu přístroje lišta nad rozváděčem; sestavy ve víceramečku v panelu nad paletou (hotové: 2–4× jednozásuvka, 2–3× vypínač č. 1, vypínač + přepínač, vypínač + zásuvky, zásuvka + RJ45, sběrnicové tlačítko + zásuvky; vlastní sestava po pozicích do 5R) s náhledem u kurzoru a vložením jedním klikem přisazeným ke stěně, ▦+ a „Přidat do rámečku“ u vybraného přístroje; rámeček s dvojzásuvkou na začátku se při otáčení a posunu v rámečku už neposouvá, přístroj v rámečku jde přesně vybrat (klikací plocha jen na jeho pozici) | ✅ |
 | 63 | 2D půdorys: paleta jako akordeon (počty osazených prvků, sbalit / rozbalit vše, režim jedné kategorie); zařizovací předměty ve skutečném rozměru – vana, sprchový kout, umyvadlo UMY 600 × 450 a dvojumyvadlo DUM 1200 × 450 s architektonickou značkou, žlutým rohem a posuvnými stranami (živé kóty X × Y), otočením 90° / 45° a přesným rozměrem v detailu, zóny 0–2 a pás nad a pod umyvadlem se přepočítají, hlídač vzdálenosti zásuvek a spínačů od vany, sprchy a umyvadla; knihovna samostatných spotřebičů (název, zkratka, příkon, jistič 1P / 3P B / C, chránič A / F / B / RCBO, kabel, výška, vlastní spotřebiče ze šablon, prohlížeč + profil firmy, okruhy podle zadání); lišta výrobců s rodinami ABB (domovní přístroje / ABB-free@home / ABB i-bus KNX & ABB-flexTronics), Loxone a TapHome s výrobky k vložení a akčními členy na DIN lištu jako informací; věrné náhledy řad (Levit, Zoni, Tango, Time, Time Arbo, Decento, Céliane, Nová Unica, Sedna, Asfora …) a „🌐 Prohlédnout řadu na webu výrobce ↗“; ruční posun úseků tras (vodorovný jen v ose Y, svislý jen v ose X, šikmý kolmo ke stěně), odskok dvojklikem, reset pravým tlačítkem / v panelu, délky kabelů z upravené trasy; polygonální místnosti se šikmými stěnami (přichytávání 0° / 45° / 90°, Shift = volný úhel), trasy podél stěn v odsazení 200 mm s kolmou odbočkou; normové CAD značení kabelů (rysky žil, čárkovaně ovládání a sběrnice, štítek okruhu) a export výkresu do PDF (A3 / A4, razítko, legenda, tabulka okruhů) a DXF (8 hladin, mm 1 : 1) | ✅ |
 | 64 | 2D půdorys jako uložený projekt na serveru: modely `Floorplan` + `FloorplanVersion` (migrace `floorplans`), seznam půdorysů firmy `/panel-builder/floorplan` (zákazník, místo, podlaží / místnosti / prvky, poslední úprava, vygenerovaný rozváděč; údaje, kopie, koš s obnovením a trvalým smazáním), nový půdorys `/novy` vznikne na serveru při první změně, editor `/[id]`; průběžné ukládání s kontrolou verze a zálohou neuložených změn v prohlížeči, souběh dvou oken s volbou „Načíst aktuální verzi“ / „Ponechat mou verzi“ (odmítnutý i přepsaný stav v historii); historie verzí s obnovením (automaticky nejvýš 1× za 10 min, pojmenovaná verze, stav při generování rozváděče a před obnovením, 30 verzí); převzetí nákresu z prohlížeče (`eldock.pb.floorplan`) při otevření seznamu; „📐 Upravit půdorys“ u rozváděče z půdorysu a vazba na nově vygenerovaný rozváděč; Zpět / Znovu (Ctrl+Z, Ctrl+Shift+Z / Ctrl+Y, tlačítka – tažení i klik = jeden krok); `FloorplanEditor.tsx` rozdělen (`ElementPanels.tsx`, `background-image.ts`, hooky `useDraftHistory` / `useFloorplanSync`) | ✅ |
+| 93 | Obchodní centra (ČSN 33 2000-7-718, BD4) a zdravotnictví (ČSN 33 2000-7-710 ed. 2): typ objektu a normativní režim (🏠 BD1 / 🛍️ BD4 / 🏥 Skupina 1 – `occupancy.ts`) v 2D půdorysu (krok 2, kompaktní lišta) i v projektu AI Panel Builderu (založení, hlavička, štítek; migrace `phase93_occupancy_backup`); BD4 = všechny kabely bezhalogenové (`1-CHKE-R (N2XH-J/O) … B2ca-s1,d1,a1`, `J-H(St)H 2×2×0,8 B2ca`, `U/FTP CAT6A LSOH`) v okruzích, výkazu, trasách, PDF / DXF a kusovníku, krabice jen HF (KOPOS KU 68-45/HF, KPR 68-70/HF, KU 68 LD/1HF, KPL 64-50/2LD HF), protokol vnějších vlivů BD4 / BE2, nouzové svítidlo NO_SV, rozváděč nájemní jednotky se spouští CENTRAL STOP a elektroměrem MID a Elektro-linter s doplněním 1 klikem; zdravotnictví = EKV, lůžková rampa LUZ (okruh A / B + PE + RJ45), lehátko LEH_Z, zásuvky lékařských místností ve 2 okruzích na vlastních RCBO 30 mA typ A, světla na 2 okruzích, linter (2 nezávislé ochrany, AC zakázán, IΔn ≤ 30 mA), hlídač EKV / jediné zásuvky / jediného světla s opravou 1 klikem; areál – `powerBackupTier` rozváděčů a přívodů (síť / DA 15 s / UPS · ZIS IT, karta rozváděče i Studio), filtr větví nad mapou s páteří, součtem kW a rezervou zdroje, nájemní jednotka / oddělení s hledáním; Kniha revizí – zdravotnické přístroje (ČSN EN 62353 ed. 2), zdravotnické prostory Skupiny 1 / 2 a IMD / ZIS IT, nouzové osvětlení s měsíční zkouškou funkce, CENTRAL STOP (vyhl. 246/2001 Sb.), předvolby průmysl / OC / zdravotnictví a souhrnný tisk pro SÚIP / TIČR, HZS a akreditační komisi MZ | 🟦 |
 | 92 | Onboarding bez čtecích bublin a dva oddělené světy: trenažér 2D půdorysu „Dokončit rozdělaný dům 3 kliky“ (`/panel-builder/floorplan/trenazer`, bungalov 4+kk z 85 % hotový na ABB-free@home – `floorplan-sandbox-preset.ts`, 3 úkoly se samoodškrtáváním podle nákresu, pulzující paleta a terčík, rozváděč bez kreditu → AI Panel Builder s gratulací), úvodní volba trenažér / prázdný půdorys, živý tahák zakázky `FloorplanLiveChecklist` (5 bodů, tlačítka na místo v editoru, pilulka, trvalé vypnutí); 3 tréninkové zakázky AI Panel Builderu za 0 kreditů (byt 3+kk 48M TN-S, RD + FVE + wallbox 96M s chráničem wallboxu typu A pro Elektro-linter, chytrý dům ABB-free@home 120M – značka `trainerPreset`, migrace `phase92_trainer`) a u rozváděčů z trenažérů živý tahák na krocích 1–5; průvodce výrobním závodem `IndustrialPlantOnboarding` (🧭 v horní liště, karta na prázdném závodě – A: hala s rozvodnou a hlavním rozváděčem / trafostanicí → první stroj s PDF schématem v1.0 → QR štítek 20 × 20 / 40 × 40 mm a karta stroje; B: 90s mise noční poruchy se skutečnými výpočty); reálné fotky řad – harvester `scripts/harvest-switch-photos.mjs` + `public/catalog-images/manifest.json` a nahrávač Ctrl+V / soubor pro velín (`POST /api/catalog-images/upload`, WebP v `storage/catalog-images`) | ✅ |
 | 91 | Katalogový audit designových řad a instalační krabičky: limity víceramečků podle katalogu (`residential-series-catalog.ts` – Time Arbo a solo carat 1R–4R, Classic 1R, Decento bez víceramečku jen jako samostatné přístroje s roztečí krabic min. 90 mm, nástěnné Garant / Praktik / Variant+ bez podomítkového rámečku i krabice) v sestavách, „Vložit do víceramečku“, linteru (rozdělení jedním klikem, štítek v horní liště) i kusovníku (rozdělení na skutečně vyráběné rámečky, Decento kompletní přístroje s objednacími čísly); Busch-axcent a solo carat s krytem ze společné kapitoly a rámečkem zvlášť (8 materiálů 1R–5R / bílé sklo, ocel, černé sklo 1R–4R); studiové náhledy všech řad ABB jedním enginem (Decento, Garant, Praktik, Variant+, Busch-axcent s texturami materiálů, Zoni, Tango, Time, solo); instalační krabice KOPOS / Kaiser / Schneider / OBO / SEZ podle konstrukce stěn nákresu a místnosti, potřebná hloubka u prvku (📦 v detailu s ruční volbou), hlídač hloubky s opravou jedním klikem a tabulka doporučených krabic na konci kusovníku (dialog, CSV / XLSX, dokumentace) | ✅ |
 | 90 | 2D půdorys: krok 1 průvodce bez automatického přeskoku na krok 2 (krok se pamatuje v relaci prohlížeče – přežije první uložení i obnovení stránky) a předvolba další místnosti po vytvoření; krokové karty (kroužek s číslem / ✓, živý podtitul „3 místnosti · měřítko OK“, šipky, žluté zvýraznění aktivního kroku); ABB Garant / Praktik / Variant+ jako nástěnné monobloky (skutečné barvy a strany katalogu 2026, bez rámečku, zásuvka pod víčkem IP44 / IP54, kusovník bez rámečku a krabice) a Decento (kulatý porcelán, víceramček ze spojených kruhů, pevné dvojice i bílá / černý dub); paleta 🛋️ Okna, dveře a nábytek (17 prvků s žlutým rohem, natočením 0–270°, levým / pravým otevíráním, přichycením otvorů ke stěně, PDF i DXF ARCHITEKTURA_NABYTEK); zóny koupelny do 2,25 m bez falešných poplachů (ZAL_M, MAG, čidla), hláška s názvem a výškou prvku, ořez zón stěnami, výrazný umyvadlový prostor | ✅ |
@@ -4401,7 +4586,7 @@ Fáze 86, 87 a 89 nasazeny 2026-11-10 (commit `c5ce70e`; commity `0388470`, `e92
 
 ## B. Otevřená fáze
 
-Fáze 76–92 jsou hotové a nasazené (2026-11-10 a 2026-11-11; zadání fáze 81 `docs/archiv/ZADANI-faze-81.md`, fází 83–85 `docs/archiv/ZADANI-faze-83-85.md`, fáze 87 `docs/archiv/ZADANI-faze-87.md`, fáze 89 `docs/archiv/ZADANI-faze-89.md`, fáze 90 `docs/archiv/ZADANI-faze-90.md`, fáze 91 `docs/archiv/ZADANI-faze-91.md` a fáze 92 `docs/archiv/ZADANI-faze-92.md`; fáze 88 = katalog ABB pro ČR, zadání v deníku). Otevřené body jsou v sekci D; další fáze podle roadmapy níže.
+Fáze 93 (obchodní centra BD4 a zdravotnictví Skupiny 1 – bezhalogenové kabely a krabice, CENTRAL STOP a elektroměr MID, okruhy A / B a EKV, zálohování napájení areálu, Kniha revizí) je hotová a čeká na nasazení – migrace `phase93_occupancy_backup` (před nasazením záloha databáze); zadání `docs/archiv/ZADANI-faze-93.md`. Fáze 76–92 jsou hotové a nasazené (2026-11-10 a 2026-11-11; zadání fáze 81 `docs/archiv/ZADANI-faze-81.md`, fází 83–85 `docs/archiv/ZADANI-faze-83-85.md`, fáze 87 `docs/archiv/ZADANI-faze-87.md`, fáze 89 `docs/archiv/ZADANI-faze-89.md`, fáze 90 `docs/archiv/ZADANI-faze-90.md`, fáze 91 `docs/archiv/ZADANI-faze-91.md` a fáze 92 `docs/archiv/ZADANI-faze-92.md`; fáze 88 = katalog ABB pro ČR, zadání v deníku). Otevřené body jsou v sekci D; další fáze podle roadmapy níže.
 
 Roadmapa po fázi 79 (`ZADANI-faze-71.md` až `ZADANI-faze-73.md`): vydání aplikací v Google Play a App Store, podepsaný instalátor pro Windows a podpis vydání Androidu vlastním klíčem až s účty Eldock s.r.o.; ověření aplikace pro iOS na skutečném iPhonu (Mac nebo ruční workflow; server závodu přes http v interní síti – ATS a dotaz na místní síť); synchronizace na pozadí (iOS BGTask, Android WorkManager), univerzální odkazy https a push oznámení. **Rozhodnuto 2026-11-09:** provoz obojí podle závodu – aplikace vždy offline s denní synchronizací přímo s eldock.cz, závod s interní sítí bez internetu navíc server závodu (Windows, zařízení `PLANT_SERVER`, denní synchronizace s cloudem); účty Apple (Organization, 99 USD/rok), Google Play s ověřením vývojáře Android (organizace, 25 USD) a podpis aplikace pro Windows přes Azure Artifact Signing (9,99 USD/měsíc, v EU jen firmy) až na zapsanou Eldock s.r.o. s číslem D-U-N-S – do té doby vývoj a zkušební sestavení mimo obchody; e-maily přes schránku `noreply@eldock.cz` u Zoneru (MX i SPF domény jsou u Zoneru); zálohy mimo server do Hetzner Object Storage v Helsinkách (HEL1, server je ve Falkensteinu `fsn1-dc14`). **Na straně uživatele:** schránka u Zoneru → `ELDOCK_SMTP_URL` + `ELDOCK_MAIL_FROM` do `.env` (DKIM a DMARC v DNS doporučeno); bucket v HEL1, klíče S3 a heslo záloh → `ELDOCK_BACKUP_S3_*` + `ELDOCK_BACKUP_KEY` do `.env` (heslo uložit i mimo server); po zápisu do OR údaje firmy v `lib/company.ts`, D-U-N-S a účty Apple, Google a Artifact Signing. Další plánované fáze z analýzy webu (`docs/archiv/ZADANI-faze-54.md`): normový registr v Eldocku, Projekt elektroinstalace jako produkt.
 
@@ -4409,8 +4594,8 @@ Roadmapa po fázi 79 (`ZADANI-faze-71.md` až `ZADANI-faze-73.md`): vydání apl
 
 | Fáze | Datum | Poznámky |
 |---|---|---|
+| 93 | 2026-11-11 | Zadání z chatu → `docs/archiv/ZADANI-faze-93.md` (i rozhodnutí a odchylky). **Logika:** `occupancy.ts` (režimy, `halogenFreeCable`, `halogenFreeBomItem`, `shuntTripConfig`, `midMeterConfig`, okruhy A / B, `occupancyProtocol`, `legalFrameworkFor`), `analyzeDraft` → `halogenFreePlan` / `halogenFreeSummary`, most `generateCircuitsFromFloorplan` (`occupancy`: zásuvky lékařských místností a rampy LUZ do okruhů A / B, světla na 2 okruhy) a `buildSwitchboardFromCircuits` (BD4 spoušť + MID), `buildPlan` (rampa = uzly `#A`, `#B`, `#D`), krabice `boxPickOptionsOf` (jen `halogenFree`), `floorplan-norms.ts` (`occupancyIssues`, `ekvHeightAt`, oprava `add` / `boxMaker`), `linter.ts` (`bd4-central-stop`, `bd4-mid-meter`, `medical-sockets`, `medical-rcd-sensitivity`, oprava `add-devices`), `power-backup.ts` (`effectiveTiers`, `backupSummary`, `matchesTenant`), `inspection-rules.ts` (`MEDICAL_DEVICE`, `MEDICAL_ROOM`, `FIRE`, varianty, `checkMonths`), `inspection-presets.ts`. **Server:** `placeLintDevices`, `services/power-backup.ts` + akce, `getPlantPower`, Studio (`powerBackupTier` konceptu a úprav), nastavení lhůty s variantou, typ `FUNCTION_TEST`. **UI:** výběr typu objektu (editor, `OccupancySelect`), `PowerBackupFilter` + `CampusMap` (zvýraznění a páteř), `PowerBackupCard`, předvolby v přehledu revizí a v auditním reportu (`?predvolba=`), měsíční zkouška v Knize revizí. **Testy:** `src/engine/__tests__/commercial-medical-modes.test.ts` (17 testů); E2E `e2e/phase93.spec.ts` (4 testy). |
 | 92 | 2026-11-11 | Zadání z chatu → `docs/archiv/ZADANI-faze-92.md` (i rozhodnutí a odchylky). **Logika:** `floorplan-sandbox-preset.ts` (`sandboxDraft`, `sandboxProgress`, `bedSocketOf`, `bathDimmerOf` – typ akčního členu z `smartPlanOf`, `sandboxDraftIssue`), `floorplan-live-checklist.ts` (`liveChecklist`, `deviceCounts`), `panel-trainer-presets.ts` (`TRAINER_JOBS`, nákresy bytu / RD s FVE / chytrého domu), `panel-live-checklist.ts` (`projectLintIssues` = výpočet kroku 1, `panelChecklist`), `plant-onboarding.ts` (`hallDraft`, `freeHallSpot`, mise `MISSION_*`, `missionAssessment`, `missionSimulation` nad `simulateAddedLoad`), `catalog-photos.ts` (`photoTarget`, `parsePhotoManifest`, `upsertPhoto`). **Server:** `services/panel-trainer.ts` (`createSandboxProject`, `openTrainerProject`, `injectWallboxDefect`, limit `TRAINER_PROJECT_LIMIT`), `services/plant-onboarding.ts` (`createOnboardingHall` přes `saveStudioBuilding`, `addOnboardingMachine` s výchozí revizí v1.0), `services/catalog-photo-store.ts` (sharp → WebP, manifest úložiště), akce `panel-trainer.ts` / `plant-onboarding.ts`, trasy `/api/catalog-images/{upload,manifest,file}`. **UI:** `FloorplanSandboxTrainer`, `FloorplanLiveChecklist`, `FloorplanStartChoice`, `PanelTrainerJobs`, `PanelLiveChecklist` + layout `[id]`, `IndustrialPlantOnboarding`, `NightShiftMission`, `PlantGuideButton`, `SeriesPreviewIllustration`, `QrSquareLabel`. **Testy:** `floorplan-sandbox-preset`, `floorplan-live-checklist`, `catalog-photos`, `phase92-separation`, `services/panel-trainer`, `services/plant-onboarding`; E2E `e2e/phase92.spec.ts` (7 testů). Harvester: web ABB 2026-11-11 headless prohlížeč odmítl (net::ERR_HTTP2_PROTOCOL_ERROR) – neobcházeno, manifest fotek prázdný. |
-| 91 | 2026-11-11 | Zadání z chatu → `docs/archiv/ZADANI-faze-91.md` (i rozhodnutí a odchylky od zadání podle katalogů). **Audit:** lokální Katalog ABB 2026 (rámečky po řadách, Decento str. 144 / 147 / 548 – do vícenásobných rámečků nejde, Busch-axcent str. 165–166 a 170, solo carat str. 161), krabice z webů výrobců (KOPOS, Kaiser kaisergroup.com, OBO, Schneider se.com, SEZ sez.sk, ověřeno 2026-11-11, odkaz u každé položky). **Logika:** `residential-series-catalog.ts` (`SERIES_FRAME_RULES`, `maxFrameGang` zúžený i podle `frameMpn` barvy rámečku, `frameLimitText`, `splitFrameGangs`), `floorplan-frames.ts` (`frameLimitOf`, limit v `createFrame`, `assemblyError`, `placeAssembly`), `abb-catalog-2026.ts` (kryty Busch-Jaeger `bjCovers`, rámečky `frames` / `framePairs`, axcent 1R–5R, future linear mechová černá 5R, Decento bez černého dubu, převod starších id `LEGACY_SERIES_COLORS`), `wiring-designs.ts` (`seriesFrameColors`, `resolveFrameColor`, `frameColorForSeries`, `migrateSeriesColor`), `box-options.ts` + `mounting-boxes-catalog.ts` (`MOUNTING_BOXES`, `pickBox`, `boxNeed`, `resolveBox`, `compileBoxUsage`), `floorplan-norms.ts` (`frame-limit`, `box-depth`, oprava `splitFrames` / `boxes`), `wiring-bom.ts` (rozdělené rámečky, Decento a kryty Busch-Jaeger, krabice s `box` + `boxTable`), nákres `boxMaker` / `wallType`, místnost `wallType`, prvek `box`, palety zásuvka s USB a s T3. **UI:** `MountingBoxSettings` (krok 2, krok 5, kompaktní lišta), 📦 v detailu prvku a konstrukce stěn v detailu místnosti, štítek limitu v liště, panel sestav jen s vyráběnými sestavami, tabulka krabic v kusovníku a dokumentaci; náhledy `series-render.ts` jako jeden engine (`renderDeviceSvg`, `DeviceMockup` = obal). **Testy:** `residential-series-catalog.test.ts` (9), `mounting-boxes-catalog.test.ts` (9), upravené phase55 / 57 / 61 / 90 a `catalog-renders.test.ts`, E2E `phase91.spec.ts` (3). **Ověření:** `npm run verify` (typecheck, lint, 159 souborů / 1075 testů, build), E2E všech 24 specifikací 2D půdorysu 47/47 v msedge (`phase91.spec.ts` 3/3 – stmívač s mělkou krabicí → varování a oprava 1 klikem, SDK v místnosti a Kaiser, tabulka krabic v kusovníku; víceramček 5R po změně na Time Arbo → štítek v liště a rozdělení 4R + 1R, Decento bez sestav s rozdělením na samostatné přístroje; Busch-axcent beton s nosným rámečkem, Decento po 91 mm, Variant+ s pantem; `phase55` / `phase61` / `phase90` podle tabulky krabic a rámečku zvlášť); náhledy všech řad ABB prohlédnuty |
 
 ## D. Známé nedostatky a backlog
 
@@ -4425,14 +4610,13 @@ Roadmapa po fázi 79 (`ZADANI-faze-71.md` až `ZADANI-faze-73.md`): vydání apl
 - Testovací firma Správy závodů (2026-11-10, `PLANT_TESTER`: `test@eldock.cz` a `test-udrzba@eldock.cz`, `db:plant-tester` při startu s `ELDOCK_SEED_DEMO=1`): hesla jsou veřejná v repozitáři – před registrací první skutečné firmy ji smazat ve velínu a nastavit `ELDOCK_SEED_DEMO=0` (CLAUDE.md, oddíl 7); s SMTP by šlo z testovacího účtu rozesílat pozvánky. Nasazeno 2026-11-10 (commit `97932c5`; start kontejneru firmu založil – závod TZ s halou A a 5 zařízeními; bez migrací, kontejner `healthy`, log bez chyb, úklid mezivrstev 1,23 GB, volno 24 GB).
 - Fáze 76–80: náhledy výrobců – klíčové řady ABB mají vlastní rendery (fáze 80), ostatní řady ABB a Schneider / Legrand / Hager kreslený náhled; originální fotky výrobců smí být ve veřejném repozitáři (potvrzeno 2026-11-10), ale zatím nejsou – chybí zdroj ke stažení (`npm run catalog:images -- --download` podle `zdroje.json`); MEAN WELL HDR, obecné řadiče PWM a binární vstupy jsou neověřené (typ bez objednacího čísla); import DXF jen ASCII (binární DXF a DWG ne), ELLIPSE, SPLINE, HATCH a DIMENSION se nekreslí (jen počet ve výsledku importu), podklad CAD není v tisku PDF ani v exportu DXF půdorysu, přichytávání jen při vkládání a kreslení místností (ne při přesunu prvku), přichycená nástěnná značka mimo nakreslenou místnost drží natočení předchozí značky.
 - Fáze 81: bez ověřeného čísla (null / „ověřte“) jsou stříbrná a zlatá IP TOUCH, bílý Trevion, bílý Loxone Wall Display, krabice OneTouch 7", Loxone Touch Pure Display a DALI Extension (100200 ze zadání), všechny kusy TapHome (čísla, šířky a Pv ze zadání); Pv akčních členů ABB mimo rešerši datasheetů a šířka UD/S 4.210.2.1 (6 M) jsou orientační; TapHome nemá akční člen topení (výpočet hlásí doplnit ručně); SmartTouch jen ve variantě free@home (KNX verze v katalogu výrobců není).
-- Fáze 82: limit zásuvek na světelném okruhu norma neuvádí (Eldock hlídá 10 vývodů světla + zásuvky na okruh); text ČSN 33 2130 ed. 4 o zásuvkách na světelném obvodu ověřit v licencovaném textu; volba jištění 10 / 13 A platí pro celý půdorys (ne po okruzích).
-- Fáze 83: plátno drží poměr stran plochy – u úzké a hluboké plochy (např. 15 × 40 m) je vysoké a posouvá se stránka; u haly 100 m je mřížka po 1 m v celkovém pohledu hustá.
-- Fáze 84: pokud produkční `.env` nastavuje `ELDOCK_BANK_IBAN` na jiný platný účet, má přednost před účtem Raiffeisenbank (vzorový demo IBAN se ignoruje) – ověřit na serveru.
-- Fáze 85: dvířka v náhledu jsou orientační (katalog skříní nevede druh dvířek – u ověřených rozvodnic fáze 86 je náhled bere z popisu výrobce).
+- Fáze 82: limit zásuvek na světelném okruhu norma neuvádí (Eldock hlídá 10 vývodů světla + zásuvky na okruh); text ČSN 33 2130 ed. 4 o zásuvkách na světelném obvodu ověřit v licencovaném textu; volba jištění 10 / 13 A platí pro celý půdorys (ne po okruzích). Fáze 83: plátno drží poměr stran plochy – u úzké a hluboké plochy (např. 15 × 40 m) je vysoké a posouvá se stránka; u haly 100 m je mřížka po 1 m v celkovém pohledu hustá.
+- Fáze 84: pokud produkční `.env` nastavuje `ELDOCK_BANK_IBAN` na jiný platný účet, má přednost před účtem Raiffeisenbank (vzorový demo IBAN se ignoruje) – ověřit na serveru. Fáze 85: dvířka v náhledu jsou orientační (katalog skříní nevede druh dvířek – u ověřených rozvodnic fáze 86 je náhled bere z popisu výrobce).
 - Fáze 86: Rittal zůstává jen orientační AX (rozvodnice s řadami modulů Rittal nevede – AX / KX s moduly Ri4Power ISV nejsou jedna objednatelná skříň); ABB Unifix, ComfortLine CW a Eaton DBP / DBM výrobci nevedou, Eaton dál jen z exportu (BC, BF, BP, IKA, KLV, MINI). Nezařazeno: Hager FWU73S (výrobce uvádí 21 řad), FW2 (FW…FT), FWU…N / K1, univers na omítku jen FWB z exportu, Schrack BK080109, BK080113, BK080163, BK080057 a provedení -H do dutých stěn. Rozpory Schracku: zapuštěné s bílými dveřmi mají v popisu „s průhlednými dveřmi“ a BK080058 / BK080059 u dveří „Plast průhledný“ – platí název výrobku; BK080153 je podle výrobce 482 mm vysoká (průhledná BK080103 525 mm); P_max = „Ztrátový výkon“ (web ho píše se znaménkem minus). ABB a Hager P_max neuvádí (null). Vícepolové skříně (ABB 2–4 sloupce, Hager 2–3 pole) mají v návrhu lištu přes celou řadu – přístroj přes hranici pole Eldock nehlídá. Údaje ověřeny 10. 11. 2026 – změny sortimentu (např. konec Hager vector II L / PN) je nutné doplnit ručně. Fáze 87: komentář syntetizuje Edge TTS (text kapitol jde na službu Microsoftu – je veřejný na /navody; `--tts=local` = lokální hlas Windows, robotičtější); video 1 ukazuje aplikaci k 2026-11-11 po fázi 90 (průvodce půdorysem v 5 krocích s krokovými kartami), video 2 k 2026-11-10 po fázi 88 (řada Mistral65) – po změně UI, které ukazují (editor půdorysu, kroky Panel Builderu), je přegenerovat (`npm run tutorials:generate`, ~15 min); akce kapitoly 3 videa 1 (osazení) jsou delší než komentář o pár sekund; Interactive Tour je jen v editoru půdorysu (cíle = `targets` kapitol); titulky jsou vypálené ve videu (bez samostatné stopy WebVTT).
 - Fáze 88: Pv přístrojů z katalogu ABB pro ČR je odhad (ABB CZ ho neuvádí – typická hodnota nahrazeného řádku nebo IEC); vazby S201 / S201M → PS1 a S203 / S203M → PS3 jsou odvozené z pólů (neověřeno), PSc → DS301C, PS-END a E292 → E290 podle katalogu. Chyby stránek ABB CZ (platí typové označení, poznámka u zdroje): FH204 A-40 a A-63 uvádí 25 A typ AC, OVR T2 jiné kA, 41P18X42A / 41P18X41A „18 (18x4)“. Nezařazeno: S2C a CP-D (new.abb.com se nedá číst), OT, spínače, tlačítka a zvonky, S3C, kryty, CU VMW / K, multimediální UK600 / AK600, ARIA / APO; S202 / S204 katalog ABB pro ČR nevede; externí řada „Mistral“ má dál jen MISTRAL65 1 × 4 M (1SL1200A00 – na stránce řady Mistral65 není), UK600 zůstává z exportu. DS201 B16 A30: ruční zápis (referenční PB-001) má 2CSR255140R1165, katalog ABB pro ČR i externí databáze 2CSR255180R1165 – v katalogu vyhrává ruční zápis, ověřit. V databázích s importem externí databáze zůstávají z dřívějška dvojice orientační řádek + kus s objednacím číslem (DS201 B10 A30, DS201 C16 A30, ESB25-20N-01) – adopce přeznačí jen řádek, jehož objednací číslo databáze ještě nemá. Údaje ověřeny 10. 11. 2026.
 - Fáze 89: plátno s panely zabírá v krocích 1, 3, 4 a 5 průvodce 73–81 % výšky okna (1882 × 1253), krok 2 s celým výběrem výrobců a barev 52 % – výběr designu je velký záměrně; profil uživatele = profil firmy (Panel Builder nemá osobní účty), volba v prohlížeči platí pro všechny firmy v něm.
 - Fáze 90: okna a dveře nepřerušují čáru stěny (kreslí se přes ni) a nehlídají kolizi s nábytkem; objednací čísla monobloků Garant / Praktik / Variant+ v kusovníku chybí jako dosud; pás 0,2 m u umyvadla přístroje IP44 podle zadání nehlídá (v plném znění ČSN 33 2130 ed. 4 ověřit); krok průvodce si pamatuje jen karta prohlížeče (jiná karta otevře krok podle obsahu nákresu).
 - Fáze 91: fotografie výrobců se nestahovaly (rendery jsou vlastní dílo; fotky se schváleným zdrojem do `public/catalog-images/`); Schneider Electric na webu ověřen jen pro vzduchotěsné krabice Multifix Air do dutých stěn a SEZ bez objednacích čísel hlubokých krabic – jinde kusovník ukáže „doplnit“; limity Schneider / Legrand / Hager jsou ze zadání (katalogy neověřeny), řady berker B.7, K.1, K.5, R.classic a W.1 půdorys nenabízí; svislý víceramček se v půdorysu nekreslí (limit `vertical` jen v pravidlech); rozbočovací zásuvka (víc než 2 kabely) se pozná jen z tras aktivního podlaží a ne v dokumentaci rozváděče; mezery a rozpěrky 1159-34 mezi krabicemi Decenta kusovník nepočítá.
 - Fáze 92: harvester fotek (`npm run catalog:photos`) web ABB 2026-11-11 nepustil (headless prohlížeč – net::ERR_HTTP2_PROTOCOL_ERROR; blokace se neobchází), `public/catalog-images/manifest.json` je prázdný – reálné fotky zatím jen přes nahrávač Ctrl+V ve velínu; adaptér harvesteru jen pro ABB (Schneider / Legrand / Hager ručně); nástěnné monobloky Garant / Praktik / Variant+ bez ověřeného objednacího čísla v kusovníku harvester přeskočí. Trenažér 2D půdorysu je bungalov na ABB-free@home (stmívací akční člen v rozváděči je pravdivý jen ve sběrnicové instalaci); velikosti tréninkových zakázek jsou podle výběru generátoru (48M / 96M / 120M, ne 36M / 72M / 108M ze zadání – rezerva 25 %). Průvodce závodem nevytváří vzorový závod v datech firmy (mise B jen v prohlížeči); režim A jen s právem Studio výstavby.
+- Fáze 93: bezhalogenové krabice HF ověřené jen u KOPOS (kopos.cz 2026-11-11: KU 68-45/HF_HA, KPR 68-70/HF_HA, KU 68 LD/1HF_HA, KPL 64-50/2LD HF_KA) – ostatní výrobci a hluboká HF krabice do SDK se v kusovníku doplní ručně (hlídač nabídne přepnutí na KOPOS); KPR 68_KA a KU 68 LD_NA ze zadání nejsou podle stránky výrobce bezhalogenové. Typy spouště a elektroměru MID (ABB S2C-A2, B23 312-100 …) jsou příklady ze zadání bez ověření objednacích čísel; vodič EKV v kusovníku je odhad 3 m na přípojku. Lhůty zdravotnických prostorů a přístrojů podle zadání (ČSN 33 2000-7-710 ed. 2, ČSN EN 62353 ed. 2) jako normové (ne závazné) – ověřit v licencovaném znění. Kapacitu DA / UPS zadává uživatel u kořene větve; výkon větve = Ib (naměřený, jinak součet podřízených × 0,8) · √3 · 400 V · cos φ 0,9.
 - Backlog z MVP: skutečný serverový přepis hlasu, redlining nad PDF (pdf.js), PostgreSQL, elektronický podpis schválení.

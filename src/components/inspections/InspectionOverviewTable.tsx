@@ -8,12 +8,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { normalizeSearch } from "@/lib/equipment-filter";
+import { INSPECTION_PRESETS, inPreset, presetButton, presetById, type InspectionPresetId } from "@/lib/inspection-presets";
 import { EQUIPMENT_TYPE_ICONS } from "@/lib/equipment-icons";
 import { EQUIPMENT_TYPE_LABELS, formatCount } from "@/lib/format";
 import { needsAttention } from "@/lib/inspection";
 import { effectiveIntervalMonths, inspectionRuleFor, intervalIssue } from "@/lib/inspection-rules";
 import { MAP_LAYERS, layerOf, type LayerKey } from "@/lib/map-layers";
-import { equipmentHref, inspectionReportHref } from "@/lib/routes";
+import { auditReportHref, equipmentHref, inspectionReportHref } from "@/lib/routes";
 import { INSPECTION_STATE } from "@/lib/status";
 import { cn } from "@/lib/utils";
 import type { InspectionOverviewItem } from "@/server/queries/inspections";
@@ -28,6 +29,7 @@ export function InspectionOverviewTable({
   showPlant,
   canBatchInspect = true,
   showReports = true,
+  showAudit = false,
 }: {
   items: InspectionOverviewItem[];
   today: string;
@@ -36,8 +38,13 @@ export function InspectionOverviewTable({
   canBatchInspect?: boolean;
   /** Generování PDF revizních zpráv (modul Revize & Legislativa). */
   showReports?: boolean;
+  /** Fáze 93: odkaz na souhrnný tisk předvolby (auditní report). */
+  showAudit?: boolean;
 }) {
   const [layer, setLayer] = useState<LayerKey | "ALL">("ALL");
+  // Fáze 93: předvolba provozu (průmysl / obchodní centrum / zdravotnictví)
+  const [presetId, setPresetId] = useState<InspectionPresetId | null>(null);
+  const preset = presetById(presetId);
   const [attentionOnly, setAttentionOnly] = useState(false);
   const [query, setQuery] = useState("");
   const [checked, setChecked] = useState<ReadonlySet<string>>(new Set());
@@ -45,6 +52,7 @@ export function InspectionOverviewTable({
   const q = normalizeSearch(query);
   const visible = items.filter(
     (item) =>
+      inPreset(item.type, preset) &&
       (layer === "ALL" || layerOf(item.type) === layer) &&
       (!attentionOnly || needsAttention(item.summary.state)) &&
       (!q || normalizeSearch(`${item.tag} ${item.name} ${item.location} ${item.assignedZone ?? ""}`).includes(q)),
@@ -71,6 +79,19 @@ export function InspectionOverviewTable({
 
   return (
     <div className="space-y-4 pb-24">
+      <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Předvolba provozu" data-testid="inspection-presets">
+        {INSPECTION_PRESETS.map((entry) => (
+          <button key={entry.id} type="button" aria-pressed={presetId === entry.id} className={chip(presetId === entry.id)} onClick={() => setPresetId((current) => (current === entry.id ? null : entry.id))} data-testid={`inspection-preset-${entry.id}`}>
+            [ {presetButton(entry)} ]
+            <span className="font-mono text-xs">{items.filter((item) => entry.types.includes(item.type)).length}</span>
+          </button>
+        ))}
+        {preset && showAudit ? (
+          <Link href={`${auditReportHref}?predvolba=${preset.id}`} className="ml-auto text-sm font-semibold text-primary underline-offset-4 hover:underline" data-testid="inspection-preset-print">
+            📄 Souhrnný tisk (PDF) pro {preset.authority}
+          </Link>
+        ) : null}
+      </div>
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative w-full sm:w-72">
           <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />

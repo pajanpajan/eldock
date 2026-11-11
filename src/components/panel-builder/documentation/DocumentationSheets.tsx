@@ -823,6 +823,18 @@ function InfluencesProtocol({ protocol }: { protocol: ExternalInfluencesProtocol
           ))}
         </tbody>
       </table>
+      {protocol.occupancy ? (
+        <div className="mt-1 rounded border border-zinc-400 p-1" data-testid="doc-occupancy">
+          <p>
+            Typ objektu: <b>{protocol.occupancy.label}</b> – {protocol.occupancy.norms.join(" · ")}
+          </p>
+          <ul className="list-disc pl-5">
+            {protocol.occupancy.measures.map((measure) => (
+              <li key={measure}>{measure}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       {protocol.notes.length || protocol.construction.length ? (
         <ul className="mt-1 list-disc pl-5" data-testid="doc-construction">
           {[...protocol.notes, ...protocol.construction].map((note) => (

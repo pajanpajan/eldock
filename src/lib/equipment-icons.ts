@@ -10,6 +10,9 @@ import {
   Fan,
   Flame,
   Gauge,
+  Hospital,
+  OctagonX,
+  Stethoscope,
   LampCeiling,
   Plug,
   Package,
@@ -37,5 +40,8 @@ export const EQUIPMENT_TYPE_ICONS: Record<EquipmentType, LucideIcon> = {
   LIGHTNING_ROD: CloudLightning,
   EMERGENCY_LIGHTING: LampCeiling,
   WIRING_DEVICE: Plug,
+  MEDICAL_DEVICE: Stethoscope,
+  MEDICAL_ROOM: Hospital,
+  FIRE_SHUTDOWN: OctagonX,
   OTHER: Package,
 };

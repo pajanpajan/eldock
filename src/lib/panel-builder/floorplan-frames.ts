@@ -9,6 +9,7 @@ import {
   allElements,
   controlsLights,
   frameAxis,
+  heightKindOf,
   mapAllElements,
   paletteFor,
   paletteItem,
@@ -79,7 +80,7 @@ export function frameGangs(draft: Pick<FloorplanDraft, "elements">, frame: Frame
 export function effectiveHeight(draft: Pick<FloorplanDraft, "profile">, element: EditorElement): number {
   const item = paletteItem(element.item);
   if (!item || item.kind === "panel" || item.kind === "riser" || item.kind === "fixture") return draft.profile?.switchboardHeightMm ?? DEFAULT_ELEVATION.switchboardHeightMm;
-  return mountHeight({ kind: item.kind, variant: item.variant, tag: item.tag, ...(element.mountHeightMm !== null ? { mountHeightMm: element.mountHeightMm } : item.heightMm ? { mountHeightMm: item.heightMm } : {}) }, draft.profile ?? DEFAULT_ELEVATION);
+  return mountHeight({ kind: heightKindOf(item.kind), variant: item.variant, tag: item.tag, ...(element.mountHeightMm !== null ? { mountHeightMm: element.mountHeightMm } : item.heightMm ? { mountHeightMm: item.heightMm } : {}) }, draft.profile ?? DEFAULT_ELEVATION);
 }
 
 /** Rozteč pozic rámečku ve výkresu: značky se dotýkají („přisazení“), skutečná rozteč krabic je 71 mm. */

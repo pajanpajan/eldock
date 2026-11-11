@@ -14,7 +14,7 @@ import { assertPanelFiles } from "@/server/file-access";
 import { readStoredFile } from "@/server/storage";
 import { saveRoutineTest, setStandardEdition } from "@/server/services/panel-design";
 import { ROUTINE_TEST_POINTS } from "@/lib/legislation-2027";
-import { listEnclosures, moveRail, placeComponents, previewConfig, releaseEnclosureLimit, saveApplianceLibrary, saveCircuitChips, selectEnclosure, setCompanyBranding, setEnvironment, setRailCapacity, type ConfigPreview } from "@/server/services/panel-design";
+import { listEnclosures, moveRail, placeComponents, placeLintDevices, previewConfig, releaseEnclosureLimit, saveApplianceLibrary, saveCircuitChips, selectEnclosure, setCompanyBranding, setEnvironment, setRailCapacity, type ConfigPreview } from "@/server/services/panel-design";
 import { MAX_CHIPS, type ChipSet } from "@/lib/panel-builder/circuit-chips";
 import { MAX_APPLIANCES, parseApplianceList } from "@/lib/panel-builder/appliances";
 
@@ -99,6 +99,22 @@ export async function placeComponentsAction(input: z.input<typeof placeSchema>):
     return { ok: true, data: result };
   } catch (error) {
     return actionFailure(error, "Přístroj se nepodařilo vložit na lištu.");
+  }
+}
+
+/** Fáze 93: oprava Elektro-linteru 1 klikem – doplnění přístrojů (CENTRAL STOP, elektroměr MID, okruh B) na lišty. */
+const lintDevicesSchema = z.object({ projectId: id, devices: z.array(z.object({ config: configSchema, label: z.string().trim().max(160) })).min(1).max(6) });
+
+export async function placeLintDevicesAction(input: z.input<typeof lintDevicesSchema>): Promise<ActionResult<{ placed: number }>> {
+  const parsed = lintDevicesSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Neplatná oprava rozváděče." };
+  try {
+    await guardProject(parsed.data.projectId);
+    const placed = await placeLintDevices(prisma, parsed.data.projectId, parsed.data.devices.map((device) => ({ config: device.config as ItemConfig, label: device.label.slice(0, 80) })));
+    revalidatePath(`/panel-builder/${parsed.data.projectId}`, "layout");
+    return { ok: true, data: { placed: placed.length } };
+  } catch (error) {
+    return actionFailure(error, "Přístroje se nepodařilo doplnit na lištu.");
   }
 }
 

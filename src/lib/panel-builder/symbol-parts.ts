@@ -12,6 +12,8 @@ export interface SymbolParts {
   fills: string[];
   texts: { x: number; y: number; size: number; value: string }[];
   label: string | null;
+  /** Fáze 93: vlastní barva kresby (nouzové únikové svítidlo zeleně); bez údaje barva podkladu. */
+  color?: string;
 }
 
 const f = (value: number) => Math.round(value * 10) / 10;
@@ -33,6 +35,28 @@ export function symbolParts(item: PaletteItem, size: number, options: { switchNo
   const parts: SymbolParts = { kind: "appliance", paths: [], circles: [], fills: [], texts: [], label: null };
   const R = size * 0.3;
   const L = size * 0.28;
+
+  // --- Fáze 93: lůžková rampa LUZ – těleso u stěny se zásuvkami okruhu A (zelené / bílé) a B (oranžové), PE a RJ45 ---
+  if (item.ramp) {
+    parts.kind = "ramp";
+    const half = size * 0.66;
+    const depth = size * 0.36;
+    const r = size * 0.13;
+    parts.paths.push(`M${f(-half)} 0 H${f(half)} V${f(depth)} H${f(-half)} Z`, `M0 0 V${f(depth)}`);
+    for (const cx of [-half * 0.5, half * 0.5]) parts.paths.push(`M${f(cx - r)} ${f(depth * 0.62)} A${f(r)} ${f(r)} 0 0 1 ${f(cx + r)} ${f(depth * 0.62)}`, `M${f(cx - r)} ${f(depth * 0.3)} H${f(cx + r)}`);
+    parts.texts.push({ x: -half * 0.82, y: depth * 0.5, size: size * 0.17, value: "A" }, { x: half * 0.82, y: depth * 0.5, size: size * 0.17, value: "B" });
+    parts.label = "LUZ · A + B + PE + RJ45";
+    return parts;
+  }
+  // --- Fáze 93: přípojka doplňujícího ochranného pospojování EKV – nožička ke stěně a značka ochranného spojení ---
+  if (item.kind === "bonding") {
+    parts.kind = "bonding";
+    const r = size * 0.28;
+    parts.paths.push(`M0 0 V${f(L)}`, `M${f(-r)} ${f(L)} H${f(r)}`, `M${f(-r * 0.64)} ${f(L + r * 0.38)} H${f(r * 0.64)}`, `M${f(-r * 0.3)} ${f(L + r * 0.76)} H${f(r * 0.3)}`);
+    parts.circles.push({ cx: 0, cy: L * 0.45, r: size * 0.05, fill: true });
+    parts.label = "EKV (PE)";
+    return parts;
+  }
 
   // --- Zásuvky (oblouk s nožičkou ke stěně v -y, ochranný kontakt) ---
   if (item.kind === "single_socket" || item.kind === "double_socket") {
@@ -57,6 +81,27 @@ export function symbolParts(item: PaletteItem, size: number, options: { switchNo
   }
 
   // --- Svítidla ---
+  if (item.kind === "light" && item.emergency) {
+    // Fáze 93: nouzové únikové svítidlo – zelený štítek s běžícím panáčkem a šipkou směru úniku (ISO 7010 E001 / E002)
+    parts.kind = "emergency";
+    parts.color = "#16a34a";
+    const w = size * 0.5;
+    const h = size * 0.3;
+    parts.paths.push(`M${f(-w)} ${f(-h)} H${f(w)} V${f(h)} H${f(-w)} Z`);
+    parts.circles.push({ cx: -w * 0.42, cy: -h * 0.55, r: size * 0.045, fill: true });
+    parts.paths.push(
+      // Trup, ruce a nohy v běhu
+      `M${f(-w * 0.46)} ${f(-h * 0.35)} L${f(-w * 0.56)} ${f(h * 0.15)}`,
+      `M${f(-w * 0.72)} ${f(-h * 0.05)} L${f(-w * 0.5)} ${f(-h * 0.25)} L${f(-w * 0.26)} ${f(-h * 0.1)}`,
+      `M${f(-w * 0.56)} ${f(h * 0.15)} L${f(-w * 0.34)} ${f(h * 0.4)} L${f(-w * 0.2)} ${f(h * 0.75)}`,
+      `M${f(-w * 0.56)} ${f(h * 0.15)} L${f(-w * 0.74)} ${f(h * 0.55)} L${f(-w * 0.9)} ${f(h * 0.6)}`,
+      // Šipka směru úniku
+      `M${f(-w * 0.02)} 0 H${f(w * 0.82)}`,
+      `M${f(w * 0.52)} ${f(-h * 0.42)} L${f(w * 0.82)} 0 L${f(w * 0.52)} ${f(h * 0.42)}`,
+    );
+    parts.label = "NO_SV";
+    return parts;
+  }
   if (item.kind === "light" && item.lightForm === "strip") {
     // Fáze 77: LED pásek – podélná čára s koncovými čárkami (jako lineární svítidlo 11-15-07) a body LED
     parts.kind = "light";

@@ -46,8 +46,14 @@ const equipmentType = z.enum([
   "LIGHTNING_ROD",
   "EMERGENCY_LIGHTING",
   "WIRING_DEVICE",
+  "MEDICAL_DEVICE",
+  "MEDICAL_ROOM",
+  "FIRE_SHUTDOWN",
   "OTHER",
 ]);
+
+// Fáze 93: zálohování napájení rozváděče / zdroje
+const backupTier = z.enum(["GRID_STANDARD", "BACKUP_GENERATOR_DA", "CRITICAL_UPS_ZIS"]).optional();
 
 const buildingSchema = z.object({
   grid: gridSchema,
@@ -92,13 +98,14 @@ const buildingSchema = z.object({
         circuit: text(80).nullable(),
         zone: text(80).nullable(),
         isRoot: z.boolean(),
+        powerBackupTier: backupTier,
       }),
     )
     .max(200),
   floorRenames: z.array(z.object({ id, usage: text(80) })).max(40).optional(),
   equipmentEdits: z
     .array(
-      z.object({ id, tag: text(24), name: text(120), parentId: id.nullable(), circuit: text(80).nullable(), zone: text(80).nullable(), pos: z.object({ x: meters, y: meters }).nullable().optional() }),
+      z.object({ id, tag: text(24), name: text(120), parentId: id.nullable(), circuit: text(80).nullable(), zone: text(80).nullable(), pos: z.object({ x: meters, y: meters }).nullable().optional(), powerBackupTier: backupTier }),
     )
     .max(400)
     .optional(),

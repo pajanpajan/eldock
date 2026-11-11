@@ -18,7 +18,7 @@ const schema = z.object({
   email: z.string().min(3).max(200),
   title: z.string().max(120).optional().nullable(),
   accountType: z.enum(["PLANT_ADMIN", "MAINTENANCE_LEAD", "MAINTENANCE_TECH", "INSPECTOR_VTZ", "INSPECTOR_APPLIANCES", "CAE_ENGINEER"]),
-  layers: z.array(z.enum(["ENERGY", "MACHINES", "TOOLS", "APPLIANCES", "SAFETY"])).max(5).optional(),
+  layers: z.array(z.enum(["ENERGY", "MACHINES", "TOOLS", "APPLIANCES", "SAFETY", "HEALTH"])).max(6).optional(),
 });
 const id = z.string().min(1).max(64);
 

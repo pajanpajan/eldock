@@ -69,6 +69,8 @@ const createSchema = z.object({
   supplySystem: z.enum(["3F_TNCS", "3F_TNS", "3F_TT", "1F_TNS", "1F_TNCS"]).optional(),
   /** Fáze 85: volitelně konkrétní skříň / rozvodnice z katalogu skříní. */
   enclosureId: id.nullable().optional(),
+  /** Fáze 93: typ objektu a normativní režim (bytová instalace / obchodní centrum BD4 / zdravotnictví). */
+  occupancy: z.enum(["RESIDENTIAL", "COMMERCIAL_BD4", "MEDICAL_G1"]).optional(),
 });
 
 const readPhoto = (url: string) => readStoredFile(url);

@@ -1,6 +1,7 @@
 // Studio výstavby závodu: uloží koncept budovy (patra s vygenerovaným půdorysem a zařízení
 // s hierarchií napájení) v jedné transakci. Záměrně bez `server-only` (testy nad SQLite).
 
+import { hasBackupTier } from "@/lib/power-backup";
 import type { PrismaClient } from "@/generated/prisma/client";
 import {
   EXISTING_FLOOR_FRAME,
@@ -322,6 +323,8 @@ async function saveBuildingInTx(prisma: Tx, draft: StudioDraft) {
           type: item.type,
           ...pin,
           assignedZone: item.zone?.trim() || null,
+          // Fáze 93: zálohování napájení rozváděče / zdroje ze Studia
+          ...(item.powerBackupTier && hasBackupTier(item.type) ? { powerBackupTier: item.powerBackupTier } : {}),
           usageGroup: isPortable(item.type) ? "C" : null,
           protectionClass: isPortable(item.type) ? "I" : null,
           inspectionIntervalMonths: inspectionRuleFor({
@@ -364,6 +367,7 @@ async function saveBuildingInTx(prisma: Tx, draft: StudioDraft) {
           fedFromEquipmentId: edit.parentId,
           fedFromCircuit: edit.parentId ? edit.circuit?.trim() || null : null,
           assignedZone: edit.zone?.trim() || null,
+          ...(edit.powerBackupTier ? { powerBackupTier: edit.powerBackupTier } : {}),
           ...(edit.pos && row ? metersToPercent(existingFrame(row.floorId), edit.pos) : {}),
         },
       });

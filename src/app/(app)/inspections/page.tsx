@@ -34,7 +34,7 @@ export default async function InspectionsPage() {
     <PageTransition>
       <PageHeader
         title="Přehled revizí"
-        description={`${plant ? plant.name : "Všechny závody"} · rozváděče a VTZ (NV 190/2022 Sb., příloha č. 4), stroje (NV 378/2001 Sb.), spotřebiče a nářadí (ČSN 33 1600 ed. 2), hromosvody a nouzové osvětlení.`}
+        description={`${plant ? plant.name : "Všechny závody"} · rozváděče a VTZ (NV 190/2022 Sb., příloha č. 4), stroje (NV 378/2001 Sb.), spotřebiče a nářadí (ČSN 33 1600 ed. 2), hromosvody, nouzové osvětlení a CENTRAL STOP, zdravotnické přístroje (ČSN EN 62353 ed. 2) a prostory (ČSN 33 2000-7-710 ed. 2).`}
         actions={
           <>
             {account.can("audit") && modules.on("inspections.audit") ? (
@@ -90,7 +90,7 @@ export default async function InspectionsPage() {
       />
       <div className="space-y-6">
         <InspectionWatcher watch={watch} showPlant={!plant} />
-        <InspectionOverviewTable items={items} today={pragueToday(now)} showPlant={!plant} canBatchInspect={account.can("recordInspection")} showReports={modules.on("inspections.pdf_reports")} />
+        <InspectionOverviewTable items={items} today={pragueToday(now)} showPlant={!plant} canBatchInspect={account.can("recordInspection")} showReports={modules.on("inspections.pdf_reports")} showAudit={account.can("audit") && modules.on("inspections.audit")} />
       </div>
     </PageTransition>
   );

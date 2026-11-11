@@ -43,6 +43,7 @@ export async function getStudioData(plantId: string) {
         pinY: true,
         fedFromEquipmentId: true,
         fedFromCircuit: true,
+        powerBackupTier: true,
         fedFrom: { select: { id: true, tag: true } },
       },
     }),
