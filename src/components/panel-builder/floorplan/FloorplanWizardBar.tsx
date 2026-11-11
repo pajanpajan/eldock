@@ -85,7 +85,7 @@ export function FloorplanWizardBar({
                   aria-current={active ? "step" : undefined}
                   aria-label={`${item.label}${state ? ` – ${state.subtitle}` : ""}${done ? " (hotovo)" : ""}`}
                   className={cn(
-                    "relative flex min-w-[10.5rem] flex-1 items-center gap-2 rounded-lg border-2 px-2 py-1 text-left transition-colors",
+                    "relative flex flex-1 items-center gap-2 rounded-lg border-2 px-2 py-1 text-left transition-colors",
                     active
                       ? "border-yellow-400 bg-yellow-400/15 text-foreground shadow-[inset_0_3px_0_0_#facc15,inset_0_-3px_0_0_#facc15,0_0_14px_rgba(250,204,21,0.25)]"
                       : done
@@ -105,9 +105,11 @@ export function FloorplanWizardBar({
                   >
                     {done ? "✓" : item.id}
                   </span>
-                  <span className="min-w-0">
-                    <b className={cn("block truncate text-[13px] font-extrabold leading-tight", active && "text-yellow-100")}>{item.short}</b>
-                    <span className={cn("block truncate text-[11px] leading-tight", active ? "text-yellow-200/90" : "text-muted-foreground")} data-testid={`wizard-step-${item.id}-status`}>
+                  {/* Název kroku se nezkracuje – určuje nejmenší šířku karty (při nedostatku místa se karty posouvají);
+                      podtitulek do šířky karty nepřispívá (w-0 + min-w-full), vyplní ji a dlouhý dostane trojtečku */}
+                  <span className="flex-1">
+                    <b className={cn("block whitespace-nowrap text-[13px] font-extrabold leading-tight", active && "text-yellow-100")}>{item.short}</b>
+                    <span className={cn("block w-0 min-w-full truncate text-[11px] leading-tight", active ? "text-yellow-200/90" : "text-muted-foreground")} title={state?.subtitle} data-testid={`wizard-step-${item.id}-status`}>
                       {state?.subtitle ?? item.label}
                     </span>
                   </span>

@@ -102,6 +102,22 @@ test("🧭 Krok 1: místnosti jedna za druhou bez přeskoku na krok 2, předvolb
   await expect(page.getByTestId("wizard-step-1")).toContainText("✓");
   await expect(page.getByTestId("wizard-step-2")).toHaveAttribute("aria-current", "step");
   await expect(page.getByTestId("wizard-step-2-status")).toContainText("ABB");
+
+  // Názvy krokových karet se nezkracují v běžných šířkách okna a karty se vejdou bez posuvníku
+  // (při 1920 px odznak designu a přepínač režimu v řádku karet dřív zkrátily „Podklad a místnosti“)
+  const stepper = page.getByTestId("wizard-stepper");
+  for (const width of [1920, 1600, 1366, 1280]) {
+    await page.setViewportSize({ width, height: 1080 });
+    await expect(async () => {
+      const layout = await stepper.evaluate((nav) => ({
+        cut: [...nav.querySelectorAll("button b")].filter((title) => title.scrollWidth > title.clientWidth + 1).map((title) => title.textContent),
+        overflow: nav.scrollWidth - nav.clientWidth,
+      }));
+      expect(layout.cut, `zkrácené názvy kroků při šířce ${width} px`).toEqual([]);
+      expect(layout.overflow, `posuvník krokových karet při šířce ${width} px`).toBeLessThanOrEqual(1);
+    }).toPass({ timeout: 10_000 });
+  }
+  await page.setViewportSize({ width: 1600, height: 1100 });
   await page.screenshot({ path: "test-results/phase90-stepper.png" });
 });
 
