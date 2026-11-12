@@ -84,6 +84,12 @@ export const getShowcaseProject = cache(() => prisma.panelBoardProject.findUniqu
 export const hasShowcaseProject = cache(async () => (await prisma.panelBoardProject.count({ where: { code: SAMPLE_PROJECT_CODE } })) > 0);
 
 export type PanelProjectDetail = NonNullable<Awaited<ReturnType<typeof getPanelProject>>>;
+
+/**
+ * Fáze 106: detail projektu bez kontroly přihlášené firmy – jen pro serverové toky, které oprávnění ověřily jinak
+ * (výrobce rozváděče se zakázkou na tento projekt v portálu /vyroba-rozvadecu).
+ */
+export const getPanelProjectById = cache(async (id: string): Promise<PanelProjectDetail | null> => prisma.panelBoardProject.findUnique({ where: { id }, include: projectDetail }));
 export type PanelItemDetail = PanelProjectDetail["items"][number];
 
 /** Rozváděče ve vlastním závodě firmy, ke kterým lze pasport propustit (krok 5); firma bez závodu → nic. */

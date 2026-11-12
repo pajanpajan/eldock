@@ -413,8 +413,8 @@ export function DocumentationSheets({ data }: { data: DocumentationData }) {
                 </tr>
               </thead>
               <tbody>
-                {data.functions.map((row) => (
-                  <tr key={row.designation} id={docAnchor("fn", row.designation)} data-testid="doc-hub-row">
+                {data.functions.map((row, index) => (
+                  <tr key={`${row.designation}-${index}`} id={docAnchor("fn", row.designation)} data-testid="doc-hub-row">
                     <td className={`${cell} font-mono font-semibold`}>
                       <a href={`#${docAnchor("sld", row.designation)}`}>{row.designation}</a>
                     </td>
@@ -466,8 +466,9 @@ export function DocumentationSheets({ data }: { data: DocumentationData }) {
             </tr>
           </thead>
           <tbody>
-            {data.parts.map((row) => (
-              <tr key={row.articleNumber + row.typeCode}>
+            {data.parts.map((row, index) => (
+              // Fáze 106: dva skupinové můstky N stejné velikosti mají stejné číslo i typ – klíč s pořadím
+              <tr key={`${index}-${row.articleNumber}${row.typeCode}`}>
                 <td className={`${cell} font-mono`}>{row.articleNumber}</td>
                 <td className={cell}>{row.typeCode}</td>
                 <td className={cell}>{row.manufacturer}</td>
@@ -491,8 +492,9 @@ export function DocumentationSheets({ data }: { data: DocumentationData }) {
             </tr>
           </thead>
           <tbody>
-            {data.components.map((row) => (
-              <tr key={row.designation}>
+            {data.components.map((row, index) => (
+              // Fáze 106: stejné značení může mít víc řádků (např. dva moduly -A1) – klíč s pořadím
+              <tr key={`${row.designation}-${index}`}>
                 <td className={`${cell} font-mono font-semibold`}>{row.designation}</td>
                 <td className={`${cell} font-mono`}>{row.articleNumber}</td>
                 <td className={cell}>{row.typeCode}</td>

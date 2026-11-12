@@ -29,7 +29,7 @@ export const RATE_LIMITS = {
 
 export type RateBucket = keyof typeof RATE_LIMITS;
 
-const EXPORT_PATH = /^\/api\/data-export$|^\/superadmin\/(leads-export|newsletter-export)$|^\/superadmin\/qr-stitky\/[^/]+\/zpl$|^\/api\/pool\/package\//;
+const EXPORT_PATH = /^\/api\/data-export$|^\/superadmin\/(leads-export|newsletter-export)$|^\/superadmin\/qr-stitky\/[^/]+\/zpl$|^\/api\/pool\/package\/|^\/api\/vyroba\/package\//;
 const API_PATH = /^\/api\/(catalog|panel-builder|qr-labels|ares)/;
 
 /**

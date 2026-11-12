@@ -5,6 +5,7 @@ import { PageTransition } from "@/components/layout/PageTransition";
 import { panelBuilderGuard } from "@/components/panel-builder/access";
 import { EnclosureLockBanner } from "@/components/panel-builder/EnclosureLockBanner";
 import { EnclosureWorkspace } from "@/components/panel-builder/EnclosureWorkspace";
+import { TurnkeyEntry } from "@/components/panel-builder/manufacturing/TurnkeyEntry";
 import { brandLabel } from "@/lib/panel-builder/enclosure-choice";
 import { NextStepBar, PanelSteps } from "@/components/panel-builder/PanelSteps";
 import { ProjectHeader } from "@/components/panel-builder/ProjectHeader";
@@ -47,6 +48,8 @@ export default async function PanelEnclosurePage({ params }: PageProps<"/panel-b
         lossW={project.items.length ? Math.round(thermal.totalLossW * 10) / 10 : null}
         preferredManufacturer={project.dominantManufacturer}
       />
+      {/* Fáze 106: poptávka / objednávka výroby rozváděče na klíč u certifikovaného výrobce ELDOCK */}
+      <TurnkeyEntry project={project} variant="button" />
       <NextStepBar project={project} current="enclosure" />
     </PageTransition>
   );

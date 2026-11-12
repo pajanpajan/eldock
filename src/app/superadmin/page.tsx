@@ -5,6 +5,7 @@ import { Bug, Building2, CircuitBoard, DatabaseBackup, Download, FolderLock, Har
 
 import { KpiTile } from "@/components/common/KpiTile";
 import { MarketTab } from "@/components/superadmin/MarketTab";
+import { ManufacturersTab } from "@/components/superadmin/ManufacturersTab";
 import { PoolTab } from "@/components/superadmin/PoolTab";
 import { QrLabelsTab } from "@/components/superadmin/QrLabelsTab";
 import { NewsletterComposer } from "@/components/superadmin/NewsletterComposer";
@@ -35,6 +36,8 @@ const TABS = [
   { id: "qr", label: "🏷️ Generátor QR štítků ELDOCK" },
   // Fáze 103: externí projektanti (přístupové kódy do /portal-projektantu) a předané Červenky
   { id: "pool", label: "🌐 ELDOCK Pool projektantů" },
+  // Fáze 106: zasmluvnění výrobci rozváděčů (portál /vyroba-rozvadecu) a zakázky výroby na klíč
+  { id: "manufacturers", label: "🏭 Výrobci rozváděčů" },
   { id: "orders", label: "Objednávky kreditů a fakturace" },
   { id: "feedback", label: "Hlášení chyb AI a fotky" },
   { id: "newsletter", label: "Newsletter" },
@@ -70,7 +73,7 @@ export default async function SuperadminPage({ searchParams }: PageProps<"/super
           </Link>
         ))}
       </nav>
-      {tab === "companies" ? <CompaniesTab /> : tab === "market" ? <MarketTab days={days} /> : tab === "qr" ? <QrLabelsTab /> : tab === "pool" ? <PoolTab /> : tab === "orders" ? <OrdersTab /> : tab === "newsletter" ? <NewsletterTab /> : tab === "backups" ? <BackupsTab /> : <FeedbackTab />}
+      {tab === "companies" ? <CompaniesTab /> : tab === "market" ? <MarketTab days={days} /> : tab === "qr" ? <QrLabelsTab /> : tab === "pool" ? <PoolTab /> : tab === "manufacturers" ? <ManufacturersTab /> : tab === "orders" ? <OrdersTab /> : tab === "newsletter" ? <NewsletterTab /> : tab === "backups" ? <BackupsTab /> : <FeedbackTab />}
     </div>
   );
 }

@@ -26,9 +26,11 @@ async function screen(canvas: Locator, x: number, y: number) {
   }, { x, y });
 }
 
-/** Obrázek se opravdu načetl (soubor existuje, prohlížeč ho dekódoval). */
+/** Obrázek se opravdu načetl (soubor existuje, prohlížeč ho dekódoval). Fotky jsou loading="lazy" – načtou se až
+ * v zorném poli, proto se k nim nejdřív posune (fáze 106 přidala do kroku 4 další sekce nad kartu skříně). */
 async function loaded(image: Locator) {
-  await expect.poll(() => image.evaluate((node) => (node as HTMLImageElement).complete && (node as HTMLImageElement).naturalWidth), { timeout: 30_000 }).toBeGreaterThan(0);
+  await image.scrollIntoViewIfNeeded();
+  await expect.poll(() => image.evaluate((node) => ((node as HTMLImageElement).complete ? (node as HTMLImageElement).naturalWidth : 0)), { timeout: 30_000 }).toBeGreaterThan(0);
 }
 
 test("🖼️ Galerie řad: skutečné fotky ABB s objednacím číslem, fotky rámečků v barvách a rámečky 1R–5R z dat výrobce", async ({ page }) => {

@@ -5,6 +5,7 @@ import { PageTransition } from "@/components/layout/PageTransition";
 import { panelBuilderGuard } from "@/components/panel-builder/access";
 import { ChosenEnclosureCard } from "@/components/panel-builder/documentation/ChosenEnclosureCard";
 import { QuoteWizardModal } from "@/components/quoting/QuoteWizardModal";
+import { TurnkeyEntry } from "@/components/panel-builder/manufacturing/TurnkeyEntry";
 import { DocumentationActions } from "@/components/panel-builder/documentation/DocumentationActions";
 import { DocumentationSheets } from "@/components/panel-builder/documentation/DocumentationSheets";
 import { NextStepBar, PanelSteps } from "@/components/panel-builder/PanelSteps";
@@ -110,6 +111,11 @@ export default async function PanelDocumentationPage({ params, searchParams }: P
           prefill={{ inspectorName: routineTest.testedBy.split(",")[0]?.trim() || project.company?.contactName || "", measuredAt: routineTest.testedAt ?? new Date().toISOString().slice(0, 10) }}
           highlight={query.revize === "1"}
         />
+        {/* Fáze 106: 🛠️ CNC & Výroba na klíč – CNC plán 1:1, drátovací list a objednávka výroby u výrobce ELDOCK
+            (až za skříní, kusovou zkouškou a uzamčením – výroba navazuje na hotovou dokumentaci) */}
+        <div className="no-print">
+          <TurnkeyEntry project={project} variant="full" source={quoteSource} blockers={blockers} />
+        </div>
         {/* Fáze 58: značka každého přístroje dle ČSN EN 60617 a náhled datasheetu */}
         <SymbolDatasheetList
           rows={readingOrder(project.items).map((item) => ({

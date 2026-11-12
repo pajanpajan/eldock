@@ -52,9 +52,17 @@ export function dxfText(value: string): string {
     .join("");
 }
 
-/** Zapisovač entit DXF (souřadnice výkresu v mm, y dolů → v DXF nahoru). */
-export class DxfWriter {
+/**
+ * Zapisovač entit DXF (souřadnice výkresu v mm, y dolů → v DXF nahoru). Fáze 106: vlastní sada hladin (CNC plán 1 : 1),
+ * výchozí jsou hladiny 2D půdorysu.
+ */
+export class DxfWriter<L extends string = DxfLayer> {
   private readonly rows: string[] = [];
+
+  constructor(
+    private readonly layers: readonly { name: string; color: number }[] = DXF_LAYERS,
+    private readonly comment = "ELDOCK - pudorys elektroinstalace, jednotky mm, meritko 1:1",
+  ) {}
   private min = { x: Infinity, y: Infinity };
   private max = { x: -Infinity, y: -Infinity };
 
@@ -67,7 +75,7 @@ export class DxfWriter {
     this.max = { x: Math.max(this.max.x, point.x), y: Math.max(this.max.y, -point.y) };
   }
 
-  line(layer: DxfLayer, a: P, b: P, dashed = false) {
+  line(layer: L, a: P, b: P, dashed = false) {
     if (Math.hypot(b.x - a.x, b.y - a.y) < 0.01) return;
     this.track(a);
     this.track(b);
@@ -82,12 +90,12 @@ export class DxfWriter {
     this.pair(31, 0);
   }
 
-  polyline(layer: DxfLayer, points: readonly P[], closed = false, dashed = false) {
+  polyline(layer: L, points: readonly P[], closed = false, dashed = false) {
     for (let index = 1; index < points.length; index++) this.line(layer, points[index - 1], points[index], dashed);
     if (closed && points.length > 2) this.line(layer, points[points.length - 1], points[0], dashed);
   }
 
-  circle(layer: DxfLayer, centre: P, radius: number) {
+  circle(layer: L, centre: P, radius: number) {
     if (radius <= 0) return;
     this.track({ x: centre.x - radius, y: centre.y - radius });
     this.track({ x: centre.x + radius, y: centre.y + radius });
@@ -100,7 +108,7 @@ export class DxfWriter {
   }
 
   /** Text; `angle` ve stupních výkresu (y dolů) – v DXF se úhel zrcadlí. */
-  text(layer: DxfLayer, at: P, height: number, value: string, angle = 0, align: "left" | "center" = "left") {
+  text(layer: L, at: P, height: number, value: string, angle = 0, align: "left" | "center" = "left") {
     if (!value.trim()) return;
     this.track(at);
     this.pair(0, "TEXT");
@@ -129,7 +137,7 @@ export class DxfWriter {
     const pair = (code: number, value: string | number) => out.push(String(code).padStart(3, " "), typeof value === "number" ? num(value) : value);
     const min = Number.isFinite(this.min.x) ? this.min : { x: 0, y: 0 };
     const max = Number.isFinite(this.max.x) ? this.max : { x: 1000, y: 1000 };
-    out.push("999", "ELDOCK - pudorys elektroinstalace, jednotky mm, meritko 1:1");
+    out.push("999", this.comment);
     pair(0, "SECTION");
     pair(2, "HEADER");
     pair(9, "$ACADVER");
@@ -173,8 +181,8 @@ export class DxfWriter {
     pair(0, "ENDTAB");
     pair(0, "TABLE");
     pair(2, "LAYER");
-    pair(70, DXF_LAYERS.length + 1);
-    for (const layer of [{ name: "0", color: 7 }, ...DXF_LAYERS]) {
+    pair(70, this.layers.length + 1);
+    for (const layer of [{ name: "0", color: 7 }, ...this.layers]) {
       pair(0, "LAYER");
       pair(2, layer.name);
       pair(70, 0);

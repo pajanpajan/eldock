@@ -26,7 +26,7 @@ const PUBLIC_PATHS = new Set(["/", "/login", "/register-plant", "/panel-builder"
 // Fáze 92: nahrané produktové fotky řad a jejich manifest nejsou tajné (galerie řad všem uživatelům)
 // Fáze 103: karta QR štítku /q/EL-… (technik u rozváděče bez přihlášení) a portál projektantů ELDOCK Poolu (vlastní
 // přihlášení e-mailem a přístupovým kódem; odevzdání souborů ověřuje /api/pool/ samo)
-const PUBLIC_PREFIXES = ["/opengraph-image", "/brands/", "/api/brand-logo/", "/nastavit-heslo/", "/tutorials/", "/api/catalog-images/file/", "/q/", "/portal-projektantu", "/api/pool/"];
+const PUBLIC_PREFIXES = ["/opengraph-image", "/brands/", "/api/brand-logo/", "/nastavit-heslo/", "/tutorials/", "/api/catalog-images/file/", "/q/", "/portal-projektantu", "/api/pool/", "/vyroba-rozvadecu", "/api/vyroba/"];
 const SUPERADMIN_PREFIX = "/superadmin";
 const PANEL_PREFIX = "/panel-builder";
 

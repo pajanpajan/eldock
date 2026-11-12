@@ -62,33 +62,35 @@
 56. ZADANI-faze-103.md
 57. ZADANI-faze-104.md
 58. ZADANI-faze-105.md
-59. DENIK-faze-100.md
-60. DENIK-faze-101.md
-61. DENIK-faze-102.md
-62. DENIK-faze-103.md
-63. DENIK-faze-49-54.md
-64. DENIK-faze-55-59.md
-65. DENIK-faze-60-61.md
-66. DENIK-faze-62-65.md
-67. DENIK-faze-66-67.md
-68. DENIK-faze-68-70.md
-69. DENIK-faze-71-73.md
-70. DENIK-faze-74-77.md
-71. DENIK-faze-78-80.md
-72. DENIK-faze-81-82.md
-73. DENIK-faze-83-85.md
-74. DENIK-faze-86-88.md
-75. DENIK-faze-89-90.md
-76. DENIK-faze-91.md
-77. DENIK-faze-92.md
-78. DENIK-faze-93.md
-79. DENIK-faze-94.md
-80. DENIK-faze-95.md
-81. DENIK-faze-96.md
-82. DENIK-faze-97.md
-83. DENIK-faze-98.md
-84. DENIK-faze-99.md
-85. docs/PLAN.md (aktuální plán a deník posledních fází)
+59. ZADANI-faze-106.md
+60. DENIK-faze-100.md
+61. DENIK-faze-101.md
+62. DENIK-faze-102.md
+63. DENIK-faze-103.md
+64. DENIK-faze-104.md
+65. DENIK-faze-49-54.md
+66. DENIK-faze-55-59.md
+67. DENIK-faze-60-61.md
+68. DENIK-faze-62-65.md
+69. DENIK-faze-66-67.md
+70. DENIK-faze-68-70.md
+71. DENIK-faze-71-73.md
+72. DENIK-faze-74-77.md
+73. DENIK-faze-78-80.md
+74. DENIK-faze-81-82.md
+75. DENIK-faze-83-85.md
+76. DENIK-faze-86-88.md
+77. DENIK-faze-89-90.md
+78. DENIK-faze-91.md
+79. DENIK-faze-92.md
+80. DENIK-faze-93.md
+81. DENIK-faze-94.md
+82. DENIK-faze-95.md
+83. DENIK-faze-96.md
+84. DENIK-faze-97.md
+85. DENIK-faze-98.md
+86. DENIK-faze-99.md
+87. docs/PLAN.md (aktuální plán a deník posledních fází)
 
 ---
 
@@ -6393,6 +6395,210 @@ Do okna **Kusovníku (BOM)** i do okna **Cenové nabídky** (jak v 2D půdorysu,
 
 ---
 
+# 📄 ZADANI-faze-106.md
+
+# Zadání fáze 106 – výroba rozváděče na klíč: CNC vrtací plán 1:1 (DXF + CSV), nářezový a drátovací list, zasmluvnění výrobci a portál /vyroba-rozvadecu s uzamčením Verze 1.0 pod QR štítkem
+
+Vloženo z chatu 2026-11-12 (během fáze 104). Celé zadání beze změn je níže, za ním rozhodnutí při implementaci.
+
+## Zadání (z chatu)
+
+Rozšiřujeme AI Panel Builder o přelomovou B2B funkci: **Konfigurace a zakázková výroba rozváděče na klíč (Turnkey Switchboard Manufacturing + CNC & Shop-Floor Data Package)**.
+
+Zákazník si v AI Panel Builderu rozmístí DIN lišty, nasadí a propojí modulární přístroje, nastaví parametry skříně (vývodky, dveřní prvky, krytí) a program automaticky vygeneruje:
+1) Kompletní výrobní podklady pro dílnu a CNC stroje (DXF 1:1 vrtací a frézovací šablony, Nářezový a drátovací list vodičů `Odkud -> Kam` s délkami a dutinkami, Nářezový list lišt, žlabů a hřebenů).
+2) Kompletní 6listovou dokumentaci dle ČSN EN IEC 61439.
+3) Okamžité odeslání poptávky/objednávky zasmluvněnému výrobci rozváděčů, který rozváděč vyrobí, osadí, prodrátuje, vyplní výstupní kusovou zkoušku, nalepí unikátní QR štítek ELDOCK (`https://eldock.cz/q/EL-xxxxxx`) odkazující na uzamčenou cloud dokumentaci a odešle hotový rozváděč zákazníkovi!
+
+Zapiš tuto etapu jako novou fázi do `docs/PLAN.md` a kompletně ji naimplementuj v těchto 5 částech:
+
+================================================================================
+ČÁST 1: KONFIGURÁTOR MECHANICKÝCH A VÝROBNÍCH PARAMETRŮ SKŘÍNĚ (`src/lib/panel-builder/cnc-manufacturing-engine.ts`)
+================================================================================
+
+Rozšiř konfiguraci rozváděče (v Kroku 1b `Skříň rozváděče` a v novém panelu `🏭 Výrobní podklady (CNC & Drátování)`) o automatický návrh a možnost doladění mechanického provedení skříně:
+
+1. AUTOMATICKÝ NÁVRH KABELOVÝCH VÝVODEK / PRŮCHODEK PODLE OKRUHŮ:
+   - Ze seznamu okruhů (přívodní kabel + všechny vývodové kabely z půdorysu nebo stromu zapojení) automaticky spočítej optimální sadu kabelových vývodek / membránových průchodek podle vnějšího průměru kabelů:
+     * Hlavní přívod (`CYKY 5×10` / `5×16` / `4×25`) -> **`1× Vývodka M32 / M40`** (s maticí a odlehčením tahu),
+     * Silové 3f vývody (`CYKY 5×2,5` / `5×4` / `5×6`) -> **`Vývodky M20 / M25`**,
+     * Koncové 1f okruhy (`CYKY 3×1,5` / `3×2,5`) a sběrnicové kabely -> **`Vývodky M16 / M20`** (nebo vícenásobná membránová příruba u zapuštěných rozvodnic).
+   - Umožni uživateli zvolit směr přívodu kabelů do skříně: **`[ ⬆️ Shora ]` · `[ ⬇️ Zespodu ]` · `[ ↕️ Shora i zespodu ]`** a typ montáže (`Pod omítku / Do SDK` vs. `Nástěnná / Stojanová s vývodkami`).
+
+2. AUTOMATICKÉ ROZMÍSTĚNÍ DIN LIŠT, KABELOVÝCH ŽLABŮ A DVEŘNÍCH PRVKŮ:
+   - Spočítej přesnou geometrii vnitřní montážní desky / rámu v milimetrech:
+     * Pozice a délky všech **DIN lišt `TS 35 × 7,5 / 15 mm`** (včetně souřadnic vrtacích otvorů M5/M6 na krajích lišt),
+     * Pozice a délky **perforovaných kabelových žlabů** (vodorovné žlaby mezi řadami DIN lišt + svislé postranní žlaby, např. `40×60 mm` nebo `25×60 mm`),
+     * Pozice **PE a N sběrnic** (`PE`, `N-hlavní`, `N1`, `N2`, `N3` držáky za chrániči),
+     * Případné **výřezy ve dveřích nebo bočnicích skříně** (např. větrací mřížka / ventilátor s filtrem `120×120 mm`, pokud to vyžaduje výpočet oteplení v Kroku 3; tlačítko `CENTRAL STOP Ø 22,5 mm`; kontrolky fází `L1/L2/L3 Ø 22,5 mm`; multimetr `92×92 mm`).
+
+================================================================================
+ČÁST 2: GENERÁTOR CNC PODKLADŮ (DXF 1:1 + CSV) A NÁŘEZOVÉHO / DRÁTOVACÍHO LISTU VODIČŮ
+================================================================================
+
+Vytvoř deterministický generátor výrobních dat (`generateManufacturingPackage(project)`), který na 1 klik vytvoří kompletní podklady pro výrobu skříně:
+
+1. **CNC VRTACÍ A FRÉZOVACÍ ŠABLONA 1:1 (`.dxf` a `.csv` pro Perforex / Steinhauer):**
+   - Vygeneruj platný CAD výkres **`CNC-Vrtaci-a-frezovaci-plan-1-1.dxf`** v měřítku **1:1 v milimetrech**, rozdělený do standardních CNC hladin (Layers):
+     * `0_OBRYS_SKRINE_A_DESKY` (vnější rozměr montážní desky, dveří a kabelových čel v mm),
+     * `1_CNC_VRTANI_ZAVITY` (přesné středy děr `[X, Y]` a průměry `Ø 4.2 mm / M5`, `Ø 5.0 mm / M6` pro uchycení DIN lišt TS 35, kabelových žlabů a PE/N držáků),
+     * `2_CNC_VYREZY_DVERE` (kruhové otvory `Ø 22.5 mm` pro návěstidla/tlačítka a obdélníkové výřezy pro ventilaci/měřidla),
+     * `3_CNC_VYVODKY_CELA` (rozmístění a průměry otvorů pro kabelové vývodky `M16 = Ø 16.5 mm`, `M20 = Ø 20.5 mm`, `M25 = Ø 25.5 mm`, `M32 = Ø 32.5 mm`, `M40 = Ø 40.5 mm` v horním/spodním čele skříně),
+     * `4_OSAZENI_PRISTROJU_KOTY` (obrysy přístrojů na DIN lištách s popisem `-F1`, `-FA1` a kótami).
+   - Současně vygeneruj strojový CSV soubor souřadnic otvorů a výřezů (`X_mm; Y_mm; Typ_operace; Prumer_nebo_Rozmer_mm; Hladina`), který lze přímo nahrát do CNC center (Kiesling Perforex / Rittal / Steinhauer).
+
+2. **NÁŘEZOVÝ A DRÁTOVACÍ LIST VODIČŮ (`Wire Harness & Cut List` – CSV / XLSX / PDF):**
+   - Ze stromu zapojení a 2D rozmístění přístrojů na DIN lištách automaticky vygeneruj tabulku **všech vnitřních vodičů v rozváděči** (pro automatické střihačky Komax / Schleuniger i pro ruční drátování):
+     * `Číslo vodiče` (`W001`, `W002`...),
+     * `Odkud (Přístroj : Svorka)` (např. `-Q1 : 2 (L1)` nebo `-FA1 : N-out`),
+     * `Kam (Přístroj : Svorka)` (např. `-FA1 : 1 (L1)` nebo `Sběrnice N1 : Svorka 1`),
+     * `Typ a průřez vodiče` (např. `H07V-K (CYA) 10 mm²`, `H07V-K 6 mm²`, `H07V-K 2,5 mm²`, `H07V-K 1,5 mm²`),
+     * `Barva vodiče` (`Černá / Hnědá (L)`, `Světle modrá (N)`, `Zelenožlutá (PE)`, `Červená / Modrá (Ovládání)`),
+     * `Přesná délka vodiče [mm]` (spočítaná po ortogonální trase přes vodorovné a svislé kabelové žlaby mezi souřadnicemi svorek + `90 mm` rezerva na ohyb do svorky!),
+     * `Zakončení Konce A / Konce B` (`Dutinka 10 mm² / 12 mm`, nebo **`Dvojitá TWIN dutinka 2×10 mm²`** tam, kde ze svorky pokračuje smyčka do dalšího chrániče!).
+   - Pokud jsou přístroje v jedné řadě propojeny **propojovacím hřebenem (lištou)**, označ tyto spoje jako `Hřebenová přípojnice 3P / 1P 10 mm² (délka X modulů / Y mm)` a vyřaď je z drátování ohebnými vodiči!
+
+3. **NÁŘEZOVÝ LIST LIŠT, ŽLABŮ A HŘEBENŮ:**
+   - Přehledná tabulka přesných délek v mm pro uříznutí na pile/nůžkách: kolik kusů a jakých délek DIN lišt `TS 35`, kabelových žlabů a propojovacích hřebenů je potřeba.
+
+================================================================================
+ČÁST 3: SYSTÉM ZASMLUVNĚNÝCH VÝROBCŮ ROZVÁDĚČŮ A POPTÁVKA VÝROBY NA KLÍČ (`/vyroba-rozvadecu`)
+================================================================================
+
+Propoj konfigurátor rozváděče s našimi zasmluvněnými výrobci rozváděčů (Contracted Panel Builders Marketplace):
+
+1. TLAČÍTKO V AI PANEL BUILDERU: **`[ 🏭 Poptat / Objednat výrobu rozváděče na klíč ]`** (v Kroku 1b i v Kroku 4):
+   - Otevře čistý modal **`Objednávka výroby rozváděče na klíč u certifikovaného výrobce ELDOCK`**, kde zákazník vidí:
+     * **Co dostane hotové na stavbu:** Kompletně osazený, prodrátovaný a otestovaný rozváděč podle jeho návrhu, s protokolem o kusové zkoušce, EU prohlášením o shodě, popisky jističů a **nalepeným odolným stříbrným QR štítkem ELDOCK (`https://eldock.cz/q/EL-xxxxxx`)**, pod kterým je v cloudu uzamčená kompletní dokumentace!
+     * **Orientační kalkulaci ceny výroby na klíč:** Materiál + Montáž, drátování a kusová zkouška + Doprava na stavbu.
+     * **Výběr zasmluvněného výrobce / regionu:** Možnost vybrat konkrétního partnerského výrobce rozváděčů (podle kraje / termínu dodání, např. *Expresní výroba do 5–7 pracovních dnů*) nebo **`[ ⚡ Odeslat všem certifikovaným výrobcům ELDOCK v mém regionu ]`**.
+     * **Automatická rezervace unikátního QR štítku ELDOCK:** Jakmile zákazník odešle poptávku na výrobu, systém z našeho sekvenčního registru (`qr-label-registry.ts`) **automaticky zarezervuje unikátní kód štítku `EL-xxxxxx`** přímo pro tento rozváděč!
+
+2. PORTÁL PRO ZASMLUVNĚNÉ VÝROBCE ROZVÁDĚČŮ (`src/app/vyroba-rozvadecu/page.tsx` + správa v `/superadmin`):
+   Vytvoř dedikovaný portál `/vyroba-rozvadecu` (dostupný pro naše zasmluvněné výrobce rozváděčů a kontrolovaný v `/superadmin`), kde výrobce vidí přijaté zakázky a provede celý výrobní proces:
+   - **Krok 1 (Přijetí zakázky a stažení CNC & dílenských podkladů):**
+     * Výrobce vidí detail zakázky, jedním klikem potvrdí cenu/termín (`[ ✅ Přijmout zakázku do výroby ]`) a stáhne si **Kompletní výrobní ZIP/balíček**:
+       - `1_CNC_Vrtaci_plan_1-1.dxf` + `.csv`,
+       - `2_Narezovy_a_dratovaci_list_vodicu.csv / .xlsx`,
+       - `3_Kusovnik_materialu_MPN_EAN.xlsx` (s exportem do Sonepar / Elkov / K&V),
+       - `4_6listovy_PDF_elaborat_a_1P_schema.pdf`,
+       - `5_Samolepici_stitky_pristroju_a_QR_stitek_EL-xxxxxx.pdf` (300 DPI).
+   - **Krok 2 (Výroba, drátování a Výstupní kusová zkouška výrobce):**
+     * Po zhotovení rozváděče na dílně vyplní výrobce přímo v portálu naměřené hodnoty **kusové zkoušky dle ČSN EN IEC 61439-1 ed. 3** ($R_{iso}$, spojitost PE, zkouška chráničů, utahovací momenty, jméno zkoušejícího a výrobní číslo skříně).
+   - **Krok 3 (Uzamčení dokumentace v cloudu a nalepení QR štítku ELDOCK):**
+     * Kliknutím na **`[ 🔒 Dokončit výrobu, uzamknout Verzi 1.0 pod QR štítkem a expedovat ]`** se:
+       1) Dokumentace rozváděče (včetně 2D půdorysu, pokud existuje) v cloudu **uzamkne jako schválená `Verze 1.0`** na adrese `https://eldock.cz/q/EL-xxxxxx`,
+       2) Výrobce vytiskne a nalepí na dveře skříně přidělený stříbrný QR štítek **`EL-xxxxxx` s logem ELDOCK**,
+       3) Zákazník dostane notifikaci, že jeho rozváděč je vyrobený, odzkoušený a připravený k převzetí / odeslání na stavbu!
+
+================================================================================
+ČÁST 4: NÁHLED CNC VRTACÍ ŠABLONY A DRÁTOVACÍHO LISTU PŘÍMO V PROHLÍŽEČI
+================================================================================
+
+Aby si tuto funkci mohl každý okamžitě prohlédnout (i během prezentace!), přidej do AI Panel Builderu (v Kroku 4 nebo jako podzáložku **`[ 🛠️ CNC & Výroba na klíč ]`**) interaktivní náhled:
+1. **Vizuální 2D CAD výkres `CNC Vrtací a frézovací plán 1:1`** (zobrazující okótovanou montážní desku, DIN lišty, kabelové žlaby, přesné souřadnice vrtaných děr `Ø 5.0 mm` v mm a otvory pro vývodky `M16–M40`).
+2. **Interaktivní tabulku `Nářezový a drátovací list vodičů (Odkud ➔ Kam)`** s průřezy, barvami, přesnou délkou v mm a typem dutinek + tlačítka pro stažení `.dxf`, `.csv` a `.xlsx`.
+3. **Tlačítko `[ 🏭 Objednat výrobu tohoto rozváděče na klíč ]`**.
+
+================================================================================
+ČÁST 5: TESTY, VERIFIKACE A NASAZENÍ NA PRODUKCI
+================================================================================
+
+1. Napiš unit testy v `src/lib/panel-builder/__tests__/cnc-manufacturing.test.ts` ověřující:
+   - Že `generateManufacturingPackage` vygeneruje platný `.dxf` soubor s CNC hladinami (`1_CNC_VRTANI_ZAVITY`, `3_CNC_VYVODKY_CELA`),
+   - Že drátovací list vodičů (`wireHarnessList`) spočítá spojení `Odkud -> Kam`, určí správný průřez/barvu vodiče, délku v mm a rozpozná dvojitou `TWIN` dutinku u smyčkovaných svorek,
+   - Že vytvoření objednávky výroby na klíč zarezervuje unikátní QR štítek `EL-xxxxxx` a po dokončení výrobcem uzamkne dokumentaci `Verze 1.0` na `/q/EL-xxxxxx`.
+2. Spusť `npm run verify`, aktualizuj `docs/PLAN.md` a `CLAUDE.md`, udělej commit a rovnou vše pushni a nasaď na produkční server `https://eldock.cz`.
+
+## Rozhodnutí při implementaci
+
+**1. Konfigurátor mechanického provedení (`src/lib/panel-builder/cnc-manufacturing-engine.ts`):**
+
+- Kabelové vývodky podle vnějšího průměru kabelu (tabulka CYKY-J / CYKY-O podle katalogů výrobců):
+  - rozsahy těsnění M16 4,5–10, M20 6–13, M25 9–17, M32 13–21 a M40 19–28 mm;
+  - hlavní přívod M32 / M40 (5×10 → M32, 5×16 a 4×25 → M40);
+  - 3f vývody 5×2,5 → M20, 5×4 / 5×6 → M25;
+  - 1f okruhy 3×1,5 → M16, 3×2,5 → M20;
+  - sběrnice a data M16.
+- Volba přívodu kabelů (⬆️ shora / ⬇️ zespodu / ↕️ shora i zespodu = přívod nahoře, vývody dole) a typu montáže. Pod
+  omítku / do SDK = membránová příruba bez otvorů vývodek; nástěnná / stojanová = vývodky v čele.
+- Geometrie montážní desky (skříň − 50 × 80 mm):
+  - DIN lišty TS 35 × 7,5 s otvory M5 (Ø 4,2 mm) 15 mm od krajů a po 250 mm;
+  - perforované žlaby 40 × 60 nad první lištou, mezi řadami a pod poslední, svislé žlaby 25 × 60 po stranách (M5 po
+    300 mm);
+  - sběrnice PE, N a N1… (jedna za každým chráničem, M6 Ø 5,0 mm).
+- Výřezy ve dveřích:
+  - kontrolky fází L1 / L2 / L3 a tlačítko CENTRAL STOP Ø 22,5 mm;
+  - multimetr 92 × 92 mm;
+  - ventilátor s filtrem 120 × 120 mm (zaškrtávací volby; ventilátor se předvyplní, když výpočet oteplení v kroku 3
+    nevyhoví).
+
+**2. Generátor výrobních podkladů (`cnc-outputs.ts`, `generateManufacturingPackage`):**
+
+- `1_CNC_Vrtaci_plan_1-1.dxf`: DXF R12 v mm 1 : 1 s hladinami `0_OBRYS_SKRINE_A_DESKY`, `1_CNC_VRTANI_ZAVITY`,
+  `2_CNC_VYREZY_DVERE`, `3_CNC_VYVODKY_CELA` a `4_OSAZENI_PRISTROJU_KOTY` (deska, dveře, horní a dolní čelo).
+- `1_CNC_Vrtaci_plan_1-1.csv`: `X_mm;Y_mm;Typ_operace;Prumer_nebo_Rozmer_mm;Hladina;Dil`. Strojové souřadnice dílu mají
+  počátek v levém dolním rohu.
+- Nářezový a drátovací list (CSV / XLSX):
+  - vodiče W001… podle stromu zapojení; svorky 1 / 3 / 5 a N vstup nahoře, 2 / 4 / 6 a N-out výstup dole;
+  - H07V-K (CYA) podle jmenovitého proudu napájeného přístroje (10 A 1,5 · 16 A 2,5 · 25 A 4 · 32 A 6 · 40 A 10 ·
+    63 A 16 mm²);
+  - barvy L1 hnědá, L2 černá, L3 šedá, L černá / hnědá, N světle modrá, PE zelenožlutá;
+  - délka po žlabech (svisle do žlabu, vodorovně, mezi řadami přes postranní žlab) + 90 mm na ohyb, zaokrouhleno na
+    5 mm;
+  - dutinky podle DIN 46228-4 a dvojitá TWIN dutinka na svorce, odkud pokračuje smyčka do dalšího chrániče;
+  - sousední jističe / jističochrániče jedné větve na stejné liště propojí hřeben „Hřebenová přípojnice 1P / 3P
+    10 mm² (n modulů / mm)“ a jsou vyřazené z drátování;
+  - N chráničů na sběrnice N1…, přepěťová ochrana z výstupu hlavního vypínače a na PE.
+- Nářezový list DIN lišt, žlabů, sběrnic a hřebenů (délky a kusy).
+- **Odchylka:** drátovací list pokrývá silové propojení přístrojů podle stromu. Ovládací obvody (cívky stykačů, vstupy
+  modulů) se negenerují a délky jsou z pravoúhlého modelu tras, ne z CAD výkresu skříně.
+
+**3. Zasmluvnění výrobci a výroba na klíč:**
+
+- Modely `PanelManufacturer` a `ManufacturingOrder`, migrace `phase106_turnkey_manufacturing`.
+- Tlačítko „🏭 Poptat / Objednat výrobu rozváděče na klíč“ v kroku 1b i v kroku 4. Okno ukazuje:
+  - co zákazník dostane;
+  - orientační kalkulaci: materiál z ceníků (fáze 105), montáž, drátování a kusová zkouška z normohodin
+    (650 Kč / h), doprava 1 490 Kč;
+  - blokace dokumentace (nevyhovující návrh se do výroby neposílá);
+  - výběr výrobce v kraji, nebo „⚡ Odeslat všem certifikovaným výrobcům ELDOCK v mém regionu“.
+- Odesláním vznikne zakázka `VYR-RRRR-NNNN` a z registru se hned zarezervuje QR štítek `EL-…` spárovaný s rozváděčem.
+  Poptávku „všem“ přijme jen první výrobce (podmíněný zápis).
+- Portál `/vyroba-rozvadecu` (e-mail + přístupový kód z velínu, vlastní cookie `eldock-vyroba`):
+  1. ✅ přijetí s cenou a termínem; 📦 výrobní balíček ZIP (CNC DXF + CSV, drátovací list CSV / XLSX, nářezový list,
+     kusovník MPN / EAN XLSX a košík Sonepar, README); tisk 6listového elaborátu a štítků;
+  2. výstupní kusová zkouška výrobce: R_iso, spojitost PE, RCD, utahovací momenty, zapojení, body čl. 11.2 / 11.3 /
+     11.5 / 11.6 / 11.7, zkoušející, výrobní číslo skříně;
+  3. „🔒 Dokončit výrobu, uzamknout Verzi 1.0 pod QR štítkem a expedovat“ – uzamčení jako ve fázi 103 (snímek
+     elaborátu s protokolem výrobce). Nevyhovující zkouška se nevydává; zákazník dostane e-mail.
+- E-maily výrobcům a zákazníkovi chodí jen s nastaveným `ELDOCK_SMTP_URL`. Stav zakázky vidí firma v kroku 1b / 4.
+- Velín: záložka „🏭 Výrobci rozváděčů“ (zasmluvnění výrobci s krajem a termínem, přístupový kód, přehled zakázek).
+- **Odchylky:**
+  - PDF elaborátu a štítků (300 DPI) se tisknou z prohlížeče ze stránek portálu – aplikace nemá serverový generátor
+    PDF; ZIP obsahuje odkazy. Štítky jsou vektorové (libovolné rozlišení).
+  - Výrobce rozváděčů = samostatný účet portálu, ne registrovaná firma.
+
+**4. Náhled v prohlížeči (krok 4, `CncManufacturingPanel`):**
+
+- Panel „🛠️ CNC & Výroba na klíč – výrobní podklady“:
+  - volby přívodu, montáže a prvků ve dveřích;
+  - CNC plán 1 : 1 (SVG: deska s lištami, žlaby, sběrnicemi, otvory s X / Y v titulku, čela s otvory vývodek);
+  - drátovací list Odkud ➔ Kam a nářezový list;
+  - stažení `.dxf`, `.csv` a `.xlsx`;
+  - „🏭 Objednat výrobu tohoto rozváděče na klíč“ a stav zakázek.
+
+**Testy:**
+
+- `src/lib/panel-builder/__tests__/cnc-manufacturing.test.ts` (7): DXF s CNC hladinami a CSV, vývodky, geometrie,
+  drátovací list (Odkud → Kam, průřez, barva, délka, TWIN, hřebeny, PE), kusová zkouška výrobce.
+- `src/server/services/phase106.test.ts` (3): poptávka rezervuje štítek EL-…, přijetí, zkouška a Verze 1.0;
+  poptávka všem v kraji přijme jen první; bez výrobce v kraji neprojde.
+- E2E `e2e/phase106.spec.ts` (1): velín, krok 1b, CNC v kroku 4 se stažením DXF, objednávka se štítkem, portál
+  výrobce s balíčkem, zkouškou a Verzí 1.0 na kartě `/q/EL-…`.
+
+---
+
 # 📄 DENIK-faze-100.md
 
 # Deník fáze 100 (přesunuto z `docs/PLAN.md`, sekce C)
@@ -6430,6 +6636,16 @@ Do okna **Kusovníku (BOM)** i do okna **Cenové nabídky** (jak v 2D půdorysu,
 | Fáze | Datum | Poznámky |
 |---|---|---|
 | 103 | 2026-11-12 | Zadání z chatu → `docs/archiv/ZADANI-faze-103.md` (i rozhodnutí a odchylky). **Migrace** `phase103_versions_qr_redlines` (`SwitchboardVersion`, `QrLabelCounter`, `QrLabelBatch`, `QrLabelItem`, `PoolDesigner`, `RedlineTask`, `PanelBoardProject.docState` / `qrSerial`, `Plant.designerName` / `designerEmail`). **Verze:** `src/lib/switchboard-versions.ts`, `src/server/services/switchboard-versions.ts`, `actions/switchboard-versions.ts`, `InspectorLockPanel.tsx`, `guardEditableProject` / `guardEditableItem`, snímek `snapshotStringify`, `DocumentationSheets` (`docVersion`, `inspection`, `FloorplanVersionSheets`), `src/app/q/[qrCode]/` (karta, `v/[version]`, `pudorys`). **Červenky:** `src/lib/redline-marketplace.ts`, `src/server/services/redlines.ts`, stavy ve `workflow.ts`, `RedlineRoutingChoice.tsx`, `PlantDesignerSettings.tsx`, `src/app/portal-projektantu/`, `/api/pool/*`, `pool-session.ts`, velín `PoolTab`. **Půdorys:** `roomsLocked` (`floorplan-phases.ts`), `RoomDetail` se zámkem; rychlé kliknutí (stisk a puštění v jednom snímku) už nezruší výběr ani nepohne místností – výběr obdélníkem až po pohybu ukazatele > 4 px, poloha z doby před stiskem se zahodí (plátno se po výběru místnosti posune o lištu kroku). **QR:** `src/lib/qr-label-registry.ts`, `src/server/services/qr-labels.ts`, `EldockQrLabel.tsx`, `LabelPrintSheet.tsx`, `/superadmin/qr-stitky/[batchId]/tisk` a `/zpl`, `/api/qr-labels`, `QrLabelsTab`, `ProjectQrLabelCard` (krok Štítky). **Testy:** `src/lib/phase103.test.ts` (10), `src/server/services/phase103.test.ts` (7), E2E `e2e/phase103.spec.ts` (4), `e2e/phase51.spec.ts` maže místnost v kroku 1. |
+
+---
+
+# 📄 DENIK-faze-104.md
+
+# Deník fáze 104 (přesunuto z `docs/PLAN.md`, sekce C)
+
+| Fáze | Datum | Poznámky |
+|---|---|---|
+| 104 | 2026-11-12 | Zadání z chatu → `docs/archiv/ZADANI-faze-104.md` (i rozhodnutí a odchylky). Bez migrace. **Build:** `next.config.ts` (`productionBrowserSourceMaps: false`, `poweredByHeader: false`). **Data:** `import "server-only"` v `abb-etim.generated.ts`, `brand-etim.generated.ts`, `catalog-images.generated.ts` (i generátory), veřejná část `catalog-public.ts` / `catalog-public.generated.ts` (`scripts/build-catalog-public.ts`), `src/server/catalog-data.ts` (`catalogEan`, `lookupCatalogImage`, `ALL_SERIES_PHOTOS`), `catalog-access.ts`, `actions/catalog-data.ts`, `/api/catalog-images/lookup`, klientská mezipaměť `catalog-lookup.ts` (`useCatalogImage`, `useCatalogEans`, `useCatalogEan`, `useEtimFrames`), `compileFloorplanBom(…, { ean })`. **Brána:** `src/lib/request-guard.ts` (`rateBucketOf`, `createRateLimiter`, `clientIpOf`, `SCRAPER_AGENT_PATTERN`), `src/proxy.ts`, `robots.ts`. **Doložka:** `IP_NOTICE` (`legal.ts`), `TERMS_VERSION` 1.1 (čl. 7). **Testy:** `src/lib/phase104.test.ts` (12), E2E `e2e/phase104.spec.ts` (3). **Oprava 2D půdorysu:** dvojklik na úsek trasy (odskok) už nevybere místnost pod posunutým úsekem (`routeJogAt`); `e2e/phase63.spec.ts` čeká na ustálenou trasu. |
 
 ---
 
@@ -6790,6 +7006,7 @@ a postup nasazení jsou v `CLAUDE.md`. Soubor drž pod 150 řádky.
 | 62 | 2D půdorys: kabeláž jde skrýt (přepínač „Kabeláž“ u plátna i v liště kroku, klávesa K), při párování vypínačů se světly je ve výchozím stavu skrytá; lišta probíhajícího kroku nad projektem (`ModeBar`, lepkavá pod hlavičkou) s názvem kroku, nápovědou a „Hotovo“ pro párování, vkládání, kreslení, zakreslení změn, ořez / kalibraci („Zrušit“) i úpravu vybraného prvku – v bočním panelu „Hotovo“ není, v kroku 1 Panel Builderu ukončuje úpravu přístroje lišta nad rozváděčem; sestavy ve víceramečku v panelu nad paletou (hotové: 2–4× jednozásuvka, 2–3× vypínač č. 1, vypínač + přepínač, vypínač + zásuvky, zásuvka + RJ45, sběrnicové tlačítko + zásuvky; vlastní sestava po pozicích do 5R) s náhledem u kurzoru a vložením jedním klikem přisazeným ke stěně, ▦+ a „Přidat do rámečku“ u vybraného přístroje; rámeček s dvojzásuvkou na začátku se při otáčení a posunu v rámečku už neposouvá, přístroj v rámečku jde přesně vybrat (klikací plocha jen na jeho pozici) | ✅ |
 | 63 | 2D půdorys: paleta jako akordeon (počty osazených prvků, sbalit / rozbalit vše, režim jedné kategorie); zařizovací předměty ve skutečném rozměru – vana, sprchový kout, umyvadlo UMY 600 × 450 a dvojumyvadlo DUM 1200 × 450 s architektonickou značkou, žlutým rohem a posuvnými stranami (živé kóty X × Y), otočením 90° / 45° a přesným rozměrem v detailu, zóny 0–2 a pás nad a pod umyvadlem se přepočítají, hlídač vzdálenosti zásuvek a spínačů od vany, sprchy a umyvadla; knihovna samostatných spotřebičů (název, zkratka, příkon, jistič 1P / 3P B / C, chránič A / F / B / RCBO, kabel, výška, vlastní spotřebiče ze šablon, prohlížeč + profil firmy, okruhy podle zadání); lišta výrobců s rodinami ABB (domovní přístroje / ABB-free@home / ABB i-bus KNX & ABB-flexTronics), Loxone a TapHome s výrobky k vložení a akčními členy na DIN lištu jako informací; věrné náhledy řad (Levit, Zoni, Tango, Time, Time Arbo, Decento, Céliane, Nová Unica, Sedna, Asfora …) a „🌐 Prohlédnout řadu na webu výrobce ↗“; ruční posun úseků tras (vodorovný jen v ose Y, svislý jen v ose X, šikmý kolmo ke stěně), odskok dvojklikem, reset pravým tlačítkem / v panelu, délky kabelů z upravené trasy; polygonální místnosti se šikmými stěnami (přichytávání 0° / 45° / 90°, Shift = volný úhel), trasy podél stěn v odsazení 200 mm s kolmou odbočkou; normové CAD značení kabelů (rysky žil, čárkovaně ovládání a sběrnice, štítek okruhu) a export výkresu do PDF (A3 / A4, razítko, legenda, tabulka okruhů) a DXF (8 hladin, mm 1 : 1) | ✅ |
 | 64 | 2D půdorys jako uložený projekt na serveru: modely `Floorplan` + `FloorplanVersion` (migrace `floorplans`), seznam půdorysů firmy `/panel-builder/floorplan` (zákazník, místo, podlaží / místnosti / prvky, poslední úprava, vygenerovaný rozváděč; údaje, kopie, koš s obnovením a trvalým smazáním), nový půdorys `/novy` vznikne na serveru při první změně, editor `/[id]`; průběžné ukládání s kontrolou verze a zálohou neuložených změn v prohlížeči, souběh dvou oken s volbou „Načíst aktuální verzi“ / „Ponechat mou verzi“ (odmítnutý i přepsaný stav v historii); historie verzí s obnovením (automaticky nejvýš 1× za 10 min, pojmenovaná verze, stav při generování rozváděče a před obnovením, 30 verzí); převzetí nákresu z prohlížeče (`eldock.pb.floorplan`) při otevření seznamu; „📐 Upravit půdorys“ u rozváděče z půdorysu a vazba na nově vygenerovaný rozváděč; Zpět / Znovu (Ctrl+Z, Ctrl+Shift+Z / Ctrl+Y, tlačítka – tažení i klik = jeden krok); `FloorplanEditor.tsx` rozdělen (`ElementPanels.tsx`, `background-image.ts`, hooky `useDraftHistory` / `useFloorplanSync`) | ✅ |
+| 106 | Výroba rozváděče na klíč: konfigurátor mechanického provedení (vývodky M16–M40 podle průměru kabelů, přívod shora / zespodu / oboje, pod omítku = membránová příruba, DIN lišty TS 35 s otvory M5, žlaby 40 × 60 a 25 × 60, PE / N / N1…, výřezy dveří Ø 22,5 / 92 × 92 / 120 × 120); `generateManufacturingPackage` – CNC plán 1 : 1 (DXF s hladinami 0–4 a CSV souřadnic pro Perforex / Steinhauer), nářezový a drátovací list vodičů (Odkud → Kam, H07V-K, barvy, délka po žlabech + 90 mm, dutinky, TWIN u smyček, hřebeny) a nářezový list lišt, žlabů a hřebenů; „🛠️ CNC & Výroba na klíč“ v kroku 4; „🏭 Poptat / Objednat výrobu rozváděče na klíč“ (kroky 1b a 4, kalkulace, výrobce v kraji nebo všem, rezervace QR štítku EL-…); portál `/vyroba-rozvadecu` (přijetí, ZIP podklady, kusová zkouška výrobce, uzamčení Verze 1.0 pod štítkem) a velín „🏭 Výrobci rozváděčů“ | 🟦 |
 | 105 | Balíčky „ETIM data“ (`npm run catalog:universal`): OEZ ETIM 8 – EAN, rozměry a fotky DIN přístrojů z balíčku, Hager ETIM 10, ceníkové ceny kabelů a vodičů Schrack (Kč / m) jen na serveru, `CatalogComponent.listPriceCzk`; náhled každé skříně v kroku 1b (fotka výrobce nebo render řady) vedle mřížky modulů; kabely osvětlení s přesnou topologií – přívod do krabic vypínačů, svislé svody (strop − výška vypínače) + 0,30 m, řazení 1 / 5 / 6 / 6+6 / 7, u sběrnice hvězda po skupinách světel, rozpad vodorovně + svody + rezerva = celkem; „🧊 3D Náhled & Kontrola výšek“ (izometrie, pohled na stěnu, zásuvky u linky na 1150 mm); „💰 Vytvořit cenovou nabídku“ (NH-2026.11, kalibrace, DPH 12 / 21 %, ARES, výstup pro zákazníka bez interních pojmů) a „🛒 Export poptávky do velkoobchodu“ (Sonepar, ELKOV, K&V, DEK, univerzální CSV / XLSX / XML, schránka, e-mail) | ✅ |
 | 104 | Technická ochrana know-how a katalogových dat: build bez zdrojových map v prohlížeči a bez hlavičky `X-Powered-By`; celé importy ETIM (EAN / GTIN, rámečky, KOPOS s EAN a ceníkovými cenami) a index produktových fotek jen `server-only` – prohlížeč dostane veřejnou část bez EAN a cen (`npm run catalog:public`), EAN kusovníku, rámečky řady a fotky výrobků po kouscích jen přihlášeným (serverové akce, `/api/catalog-images/lookup`); limit požadavků podle IP (60 / min katalogová, výpočtová a QR API a ARES, 15 / min exporty → `429`), kopírovací roboti (HTTrack, WebCopier, Teleport, SiteSnagger, Offline Explorer, python-requests…) mimo SEO stránky `403` a v `robots.txt`; doložka zák. č. 121/2000 Sb. v patičce, podmínkách užití 1.1 (čl. 7) a zápatí PDF výstupů | ✅ |
 | 103 | Cloudový trezor dokumentace rozváděče: stavy `DRAFT` / `PENDING_INSPECTION` / `LOCKED_PUBLISHED`, v kroku 4 „👨‍🔧 Část pro revizního technika / Výstupní kusovou zkoušku (Uzamčení do cloudu)“ (TIČR, R_iso, PE, Z_s / I_k, RCD, mechanika, verdikt) a „🔒 Potvrdit kusovou zkoušku, uzamknout PDF v cloudu a vydat Verzi X.Y“ = neměnný snímek 6listového elaborátu i navázaného 2D půdorysu (Verze 1.0, 1.1 … – předchozí `SUPERSEDED`), zámek úprav, veřejná karta `/q/EL-…` s historií verzí, červeným štítkem a vodoznakem NEAKTUÁLNÍ a „🔓 Odemknout / Založit novou revizi“; Červenky k překreslení – 🏢 firemní projektant závodu (Nastavení závodu) nebo 🌐 ELDOCK Pool (`/portal-projektantu`: přístupový kód z velínu, atomické „✋ Přijímám úkol“, balíček podkladů ZIP, odevzdání PDF + CAD = nová revize po schválení údržbou); místnosti a stěny 2D půdorysu zamčené v krocích 2–5; registr QR štítků ELDOCK (atomické počítadlo, UNIQUE `EL-000001`, série firmám s ARES, 30 × 15 / 50 × 25 / 70 × 40 mm, QR s korekcí H a logem EL, kotouč Zebra ZD421t 1:1, arch A4, ZPL, `/api/qr-labels`, velín „🏷️ Generátor QR štítků ELDOCK“, spárování s rozváděčem i strojem závodu) | ✅ |
@@ -6836,7 +7053,7 @@ Fáze 86, 87 a 89 nasazeny 2026-11-10 (commit `c5ce70e`; commity `0388470`, `e92
 
 ## B. Otevřená fáze
 
-Další fáze podle zadání z chatu. Fáze 76–105 jsou hotové a nasazené (2026-11-10 až 2026-11-12; zadání fáze 81 `docs/archiv/ZADANI-faze-81.md`, fází 83–85 `docs/archiv/ZADANI-faze-83-85.md`, fáze 87 `docs/archiv/ZADANI-faze-87.md`, fáze 89 `docs/archiv/ZADANI-faze-89.md`, fáze 90 `docs/archiv/ZADANI-faze-90.md`, fáze 91 `docs/archiv/ZADANI-faze-91.md`, fáze 92 `docs/archiv/ZADANI-faze-92.md`, fáze 93 `docs/archiv/ZADANI-faze-93.md`, fáze 94 `docs/archiv/ZADANI-faze-94.md`, fáze 95 `docs/archiv/ZADANI-faze-95.md`, fáze 96 `docs/archiv/ZADANI-faze-96.md`, fáze 97 `docs/archiv/ZADANI-faze-97.md`, fáze 98 `docs/archiv/ZADANI-faze-98.md`, fáze 99 `docs/archiv/ZADANI-faze-99.md`, fáze 100 `docs/archiv/ZADANI-faze-100.md`, fáze 101 `docs/archiv/ZADANI-faze-101.md`, fáze 102 `docs/archiv/ZADANI-faze-102.md`, fáze 103 `docs/archiv/ZADANI-faze-103.md`, fáze 104 `docs/archiv/ZADANI-faze-104.md` a fáze 105 `docs/archiv/ZADANI-faze-105.md`; fáze 88 = katalog ABB pro ČR, zadání v deníku). Otevřené body jsou v sekci D; další fáze podle roadmapy níže.
+Fáze 106 (výroba rozváděče na klíč – CNC plán 1 : 1, drátovací list, zasmluvnění výrobci a portál /vyroba-rozvadecu s uzamčením Verze 1.0 pod QR štítkem) je hotová a čeká na nasazení – migrace `phase106_turnkey_manufacturing` (nové tabulky, před nasazením záloha databáze); zadání `docs/archiv/ZADANI-faze-106.md`. Fáze 76–105 jsou hotové a nasazené (2026-11-10 až 2026-11-12; zadání fáze 81 `docs/archiv/ZADANI-faze-81.md`, fází 83–85 `docs/archiv/ZADANI-faze-83-85.md`, fáze 87 `docs/archiv/ZADANI-faze-87.md`, fáze 89 `docs/archiv/ZADANI-faze-89.md`, fáze 90 `docs/archiv/ZADANI-faze-90.md`, fáze 91 `docs/archiv/ZADANI-faze-91.md`, fáze 92 `docs/archiv/ZADANI-faze-92.md`, fáze 93 `docs/archiv/ZADANI-faze-93.md`, fáze 94 `docs/archiv/ZADANI-faze-94.md`, fáze 95 `docs/archiv/ZADANI-faze-95.md`, fáze 96 `docs/archiv/ZADANI-faze-96.md`, fáze 97 `docs/archiv/ZADANI-faze-97.md`, fáze 98 `docs/archiv/ZADANI-faze-98.md`, fáze 99 `docs/archiv/ZADANI-faze-99.md`, fáze 100 `docs/archiv/ZADANI-faze-100.md`, fáze 101 `docs/archiv/ZADANI-faze-101.md`, fáze 102 `docs/archiv/ZADANI-faze-102.md`, fáze 103 `docs/archiv/ZADANI-faze-103.md`, fáze 104 `docs/archiv/ZADANI-faze-104.md` a fáze 105 `docs/archiv/ZADANI-faze-105.md`; fáze 88 = katalog ABB pro ČR, zadání v deníku). Otevřené body jsou v sekci D; další fáze podle roadmapy níže.
 
 Roadmapa po fázi 79 (`ZADANI-faze-71.md` až `ZADANI-faze-73.md`): vydání aplikací v Google Play a App Store, podepsaný instalátor pro Windows a podpis vydání Androidu vlastním klíčem až s účty Eldock s.r.o.; ověření aplikace pro iOS na skutečném iPhonu (Mac nebo ruční workflow; server závodu přes http v interní síti – ATS a dotaz na místní síť); synchronizace na pozadí (iOS BGTask, Android WorkManager), univerzální odkazy https a push oznámení. **Rozhodnuto 2026-11-09:** provoz obojí podle závodu – aplikace vždy offline s denní synchronizací přímo s eldock.cz, závod s interní sítí bez internetu navíc server závodu (Windows, zařízení `PLANT_SERVER`, denní synchronizace s cloudem); účty Apple (Organization, 99 USD/rok), Google Play s ověřením vývojáře Android (organizace, 25 USD) a podpis aplikace pro Windows přes Azure Artifact Signing (9,99 USD/měsíc, v EU jen firmy) až na zapsanou Eldock s.r.o. s číslem D-U-N-S – do té doby vývoj a zkušební sestavení mimo obchody; e-maily přes schránku `noreply@eldock.cz` u Zoneru (MX i SPF domény jsou u Zoneru); zálohy mimo server do Hetzner Object Storage v Helsinkách (HEL1, server je ve Falkensteinu `fsn1-dc14`). **Na straně uživatele:** schránka u Zoneru → `ELDOCK_SMTP_URL` + `ELDOCK_MAIL_FROM` do `.env` (DKIM a DMARC v DNS doporučeno); bucket v HEL1, klíče S3 a heslo záloh → `ELDOCK_BACKUP_S3_*` + `ELDOCK_BACKUP_KEY` do `.env` (heslo uložit i mimo server); po zápisu do OR údaje firmy v `lib/company.ts`, D-U-N-S a účty Apple, Google a Artifact Signing. Další plánované fáze z analýzy webu (`docs/archiv/ZADANI-faze-54.md`): normový registr v Eldocku, Projekt elektroinstalace jako produkt.
 
@@ -6844,17 +7061,16 @@ Roadmapa po fázi 79 (`ZADANI-faze-71.md` až `ZADANI-faze-73.md`): vydání apl
 
 | Fáze | Datum | Poznámky |
 |---|---|---|
+| 106 | 2026-11-12 | Zadání z chatu → `docs/archiv/ZADANI-faze-106.md` (i rozhodnutí a odchylky). **Migrace** `phase106_turnkey_manufacturing` (`PanelManufacturer`, `ManufacturingOrder`). **CNC:** `src/lib/panel-builder/cnc-manufacturing-engine.ts` (`cncLayout`, `wireHarnessList`, `cutList`, `glandFor`), `cnc-outputs.ts` (`generateManufacturingPackage`, `cncDxf`, `cncCsv`), `DxfWriter` s vlastními hladinami, `CncManufacturingPanel.tsx`. **Výroba na klíč:** `turnkey-manufacturing.ts`, `src/server/services/manufacturing.ts`, `src/server/turnkey-data.ts`, `actions/manufacturing.ts`, `manufacturer-session.ts` (cookie `eldock-vyroba`), `TurnkeyEntry` / `ManufacturingSection` / `TurnkeyOrderModal`, `src/app/vyroba-rozvadecu/` (zakázky, elaborát, štítky), `/api/vyroba/package/[orderId]`, velín `ManufacturersTab`, `getPanelProjectById`. **Testy:** `src/lib/panel-builder/__tests__/cnc-manufacturing.test.ts` (7), `src/server/services/phase106.test.ts` (3), E2E `e2e/phase106.spec.ts` (1). **Opravy:** unikátní klíče řádků Listu 4 a soupisu přístrojů (dva můstky N stejné velikosti, dvakrát -A1), výchozí montáž podle skříně a ventilátor podle oteplení, materiál bez ceníku „doplní výrobce“. |
 | 105 | 2026-11-12 | Zadání z chatu → `docs/archiv/ZADANI-faze-105.md` (i rozhodnutí a odchylky). **Migrace** `phase105_quotes_list_prices` (`CatalogComponent.listPriceCzk` / `listPriceSource`, `RegisteredCompany.quoteSettingsJson`). **Data:** `scripts/import-etim-universal.mjs`, `list-prices.generated.ts` (server-only), `etim-universal.generated.ts` (seed `applyEtimComponents`), `src/server/quote-data.ts`, `src/lib/quoting/cable-designations.ts`. **Skříně:** `EnclosureVisual.tsx` v `EnclosureWorkspace`. **Kabely:** `src/engine/lighting-topology.ts`, `summarizeCabling` (`switchNos`, `fiveCoreLights`, `breakdown`, `lightingParts`), `buildPlan`, `CablePanel` (rozpad). **3D:** `src/lib/panel-builder/pseudo3d.ts`, `FloorplanPseudo3DModal.tsx`. **Nabídka:** `src/lib/quoting/` (`quote-engine`, `normohodiny-catalog`, `quote-print`, `quote-settings`, `quote-sources`, `wholesaler-export`), `QuoteWizardModal`, `WholesalerExport`, `actions/quotes.ts`, `src/server/quote-sources.ts` (krok 4). **Testy:** `src/lib/phase105.test.ts` (20), E2E `e2e/phase105.spec.ts` (3); upravené `phase51`, `phase57`, `commercial-medical-modes`, seed. |
-| 104 | 2026-11-12 | Zadání z chatu → `docs/archiv/ZADANI-faze-104.md` (i rozhodnutí a odchylky). Bez migrace. **Build:** `next.config.ts` (`productionBrowserSourceMaps: false`, `poweredByHeader: false`). **Data:** `import "server-only"` v `abb-etim.generated.ts`, `brand-etim.generated.ts`, `catalog-images.generated.ts` (i generátory), veřejná část `catalog-public.ts` / `catalog-public.generated.ts` (`scripts/build-catalog-public.ts`), `src/server/catalog-data.ts` (`catalogEan`, `lookupCatalogImage`, `ALL_SERIES_PHOTOS`), `catalog-access.ts`, `actions/catalog-data.ts`, `/api/catalog-images/lookup`, klientská mezipaměť `catalog-lookup.ts` (`useCatalogImage`, `useCatalogEans`, `useCatalogEan`, `useEtimFrames`), `compileFloorplanBom(…, { ean })`. **Brána:** `src/lib/request-guard.ts` (`rateBucketOf`, `createRateLimiter`, `clientIpOf`, `SCRAPER_AGENT_PATTERN`), `src/proxy.ts`, `robots.ts`. **Doložka:** `IP_NOTICE` (`legal.ts`), `TERMS_VERSION` 1.1 (čl. 7). **Testy:** `src/lib/phase104.test.ts` (12), E2E `e2e/phase104.spec.ts` (3). **Oprava 2D půdorysu:** dvojklik na úsek trasy (odskok) už nevybere místnost pod posunutým úsekem (`routeJogAt`); `e2e/phase63.spec.ts` čeká na ustálenou trasu. |
 
 ## D. Známé nedostatky a backlog
 
 - E2E na čistém dev serveru: první minuta kompilace stránky přenačítá – řeší zahřátí v `e2e/global-setup.ts` (`E2E_SKIP_WARMUP=1` ho vypne). Po změně kódu může první běh E2E uváznout ve smyčce obnovování (fáze 60–61, Next 16.4 s Turbopackem a trvalou cache v `.next-e2e`): každé načtení stránky zapíše log `.next-e2e/dev/logs/next-development.log`, server ohlásí přestavbu a stránka se znovu načte – stovky načtení za minutu, testy padají na `toPass` („navigated to … N×“) nebo „Execution context was destroyed“. Fáze 62: příčina je vestavěný MCP server Next.js (`experimental.mcpServer`, výchozí zapnutý) – zapisuje logy prohlížeče („Download the React DevTools…“) do toho souboru a watcher E2E serveru zápis bral jako změnu; smyčka pak trvala i v dalších bězích. E2E server ho má vypnutý (`next.config.ts`, podmínka `NEXT_DIST_DIR=.next-e2e`). Vrátí-li se, hledej v logu opakované „✓ Compiled in …ms“ za záznamem z prohlížeče. Během běhu v projektu nic neměňte ani nezakládejte. Fáze 77–79: druhý běh E2E nad cache `.next-e2e` z předchozího běhu dvakrát uvázl už v zahřívání (dev server na plný výkon, testy se nerozběhly ani za 12 min) – před každým během po změně kódu `.next-e2e` smažte; běhy ze smazané cache prošly napoprvé.
 - Vzorové závody na produkci doplní `db:demo-plant` jen jednou a jen na patrech bez vlastních úprav ze Studia; zařízení přidaná nebo smazaná mimo Studio štítky v uloženém půdorysu nepřepočítají (až další uložení patra ve Studiu).
-- Fáze 66: lhůtník (semafor, piny, hlídač e-mailem) dál počítá s `validUntil`; nejzazší zákonný termín je jen informace v lhůtníku, zprávě a auditním reportu. Vizuální kontrola LPS se hlídá jen na kartě zařízení (ne v hlídači a plánovači). Starší data bez `db:fix-intervals` ukážou u VTZ s delší lhůtou červené upozornění a termín „po zákonném termínu“. Fáze 67–68: Panel Builder má dál jedno heslo firmy; bez `ELDOCK_SMTP_URL` pozvánky a obnovy jen jako odkaz u správce / v logu serveru. Zálohy mimo server čekají na úložiště a heslo (`ELDOCK_BACKUP_*`) – do té doby jen místní snímky databáze na stejném serveru a soubory úložiště bez zálohy (ověřeno 2026-11-10: denní místní snímky od 8. 11. ve 02:30, nešifrované; `ELDOCK_BACKUP_KEY`, `ELDOCK_BACKUP_S3_*` ani `ELDOCK_SMTP_URL` v `.env` nejsou; databáze 7 MB, soubory 14 MB).
-- Fáze 69: export bez ZIP64 (do 4 GB a 65 535 souborů na firmu); opravy a omezení zpracování (čl. 16, 18 GDPR) jen přes kontaktní e-mail; smlouvu o zpracování (DPA) a zásady 1.2 před ostrým prodejem zkontrolovat právníkem. Fáze 70: z aplikací jde v1 jen 7 druhů úprav (revize VTZ se zprávou PDF, Studio a CAE back-office zůstávají na webu); server závodu ↔ cloud hotový ve fázi 72; bez push notifikací (aplikace se ptá při synchronizaci); CORS pro webové aplikace neřešen (nativní aplikace ho nepotřebují); přesun záznamu do jiného závodu žurnál nepřenese (rozsah se určí při vložení – aplikace ho nepodporují ani na webu).
+- Fáze 66: lhůtník (semafor, piny, hlídač e-mailem) dál počítá s `validUntil`; nejzazší zákonný termín je jen informace v lhůtníku, zprávě a auditním reportu. Vizuální kontrola LPS se hlídá jen na kartě zařízení (ne v hlídači a plánovači). Starší data bez `db:fix-intervals` ukážou u VTZ s delší lhůtou červené upozornění a termín „po zákonném termínu“. Fáze 67–68: Panel Builder má dál jedno heslo firmy; bez `ELDOCK_SMTP_URL` pozvánky a obnovy jen jako odkaz u správce / v logu serveru. Zálohy mimo server čekají na úložiště a heslo (`ELDOCK_BACKUP_*`) – do té doby jen místní snímky databáze na stejném serveru a soubory úložiště bez zálohy (ověřeno 2026-11-10: denní místní snímky od 8. 11. ve 02:30, nešifrované; `ELDOCK_BACKUP_KEY`, `ELDOCK_BACKUP_S3_*` ani `ELDOCK_SMTP_URL` v `.env` nejsou; databáze 7 MB, soubory 14 MB). Fáze 69: export bez ZIP64 (do 4 GB a 65 535 souborů na firmu); opravy a omezení zpracování (čl. 16, 18 GDPR) jen přes kontaktní e-mail; smlouvu o zpracování (DPA) a zásady 1.2 před ostrým prodejem zkontrolovat právníkem. Fáze 70: z aplikací jde v1 jen 7 druhů úprav (revize VTZ se zprávou PDF, Studio a CAE back-office zůstávají na webu); server závodu ↔ cloud hotový ve fázi 72; bez push notifikací (aplikace se ptá při synchronizaci); CORS pro webové aplikace neřešen (nativní aplikace ho nepotřebují); přesun záznamu do jiného závodu žurnál nepřenese (rozsah se určí při vložení – aplikace ho nepodporují ani na webu).
 - Fáze 73: aplikace pro iOS se sestaví pro simulátor v GitHub Actions (ověřeno 9. 11. 2026 na macos-15-intel s Xcode 26.3 – runnery Apple Silicon GitHub tehdy nesehnal), spuštění v simulátoru ani na iPhonu zatím neověřené; server závodu přes http z iPhonu ověřit na zařízení (ATS, dotaz na místní síť); na pozadí aplikace nesynchronizuje (jen připomenutí oznámením); APK podepsané ladicím klíčem – vydání vlastním klíčem a v obchodech s účty Eldock s.r.o.
 - Fáze 74–75: fotky výrobců v galerii řad čekají na potvrzení práv (`SERIES_PHOTOS` prázdný – zatím vektorové náhledy); dvoubarevné kódy rámeček / klapka mimo Katalog ABB 2026 neověřené; text ČSN 33 2130 ed. 4 k umývacímu prostoru (převzato z ed. 3, čl. 7.8) a ČSN 33 2000-7-701 ed. 3 ověřit v licencovaném textu; SPD v podružném rozváděči zůstává T1+T2 (u RP ve stejné budově obvykle stačí T2 – posoudí projektant); kresba umývacího prostoru přesahuje 250 mm za stěnu (`BASIN_WALL_MM`); vnitřní odkazy PDF ověřené pro tisk z Chrome / Edge (jiné prohlížeče je mohou zahodit). Fáze 76–80: náhledy výrobců – klíčové řady ABB mají vlastní rendery (fáze 80), ostatní řady ABB a Schneider / Legrand / Hager kreslený náhled; originální fotky výrobců smí být ve veřejném repozitáři (potvrzeno 2026-11-10), ale zatím nejsou – chybí zdroj ke stažení (`npm run catalog:images -- --download` podle `zdroje.json`); MEAN WELL HDR, obecné řadiče PWM a binární vstupy jsou neověřené (typ bez objednacího čísla); import DXF jen ASCII (binární DXF a DWG ne), ELLIPSE, SPLINE, HATCH a DIMENSION se nekreslí (jen počet ve výsledku importu), podklad CAD není v tisku PDF ani v exportu DXF půdorysu, přichytávání jen při vkládání a kreslení místností (ne při přesunu prvku), přichycená nástěnná značka mimo nakreslenou místnost drží natočení předchozí značky. Fáze 81: bez ověřeného čísla (null / „ověřte“) jsou stříbrná a zlatá IP TOUCH, bílý Trevion, bílý Loxone Wall Display, krabice OneTouch 7", Loxone Touch Pure Display a DALI Extension (100200 ze zadání), všechny kusy TapHome (čísla, šířky a Pv ze zadání); Pv akčních členů ABB mimo rešerši datasheetů a šířka UD/S 4.210.2.1 (6 M) jsou orientační; TapHome nemá akční člen topení (výpočet hlásí doplnit ručně); SmartTouch jen ve variantě free@home (KNX verze v katalogu výrobců není). Fáze 82: limit zásuvek na světelném okruhu norma neuvádí (Eldock hlídá 10 vývodů světla + zásuvky na okruh); text ČSN 33 2130 ed. 4 o zásuvkách na světelném obvodu ověřit v licencovaném textu; volba jištění 10 / 13 A platí pro celý půdorys (ne po okruzích). Fáze 83: plátno drží poměr stran plochy – u úzké a hluboké plochy (např. 15 × 40 m) je vysoké a posouvá se stránka; u haly 100 m je mřížka po 1 m v celkovém pohledu hustá. Fáze 84: pokud produkční `.env` nastavuje `ELDOCK_BANK_IBAN` na jiný platný účet, má přednost před účtem Raiffeisenbank (vzorový demo IBAN se ignoruje) – ověřit na serveru. Fáze 85: dvířka v náhledu jsou orientační (katalog skříní nevede druh dvířek – u ověřených rozvodnic fáze 86 je náhled bere z popisu výrobce). Fáze 86: Rittal zůstává jen orientační AX (rozvodnice s řadami modulů Rittal nevede – AX / KX s moduly Ri4Power ISV nejsou jedna objednatelná skříň); ABB Unifix, ComfortLine CW a Eaton DBP / DBM výrobci nevedou, Eaton dál jen z exportu (BC, BF, BP, IKA, KLV, MINI). Nezařazeno: Hager FWU73S (výrobce uvádí 21 řad), FW2 (FW…FT), FWU…N / K1, univers na omítku jen FWB z exportu, Schrack BK080109, BK080113, BK080163, BK080057 a provedení -H do dutých stěn. Rozpory Schracku: zapuštěné s bílými dveřmi mají v popisu „s průhlednými dveřmi“ a BK080058 / BK080059 u dveří „Plast průhledný“ – platí název výrobku; BK080153 je podle výrobce 482 mm vysoká (průhledná BK080103 525 mm); P_max = „Ztrátový výkon“ (web ho píše se znaménkem minus). ABB a Hager P_max neuvádí (null). Vícepolové skříně (ABB 2–4 sloupce, Hager 2–3 pole) mají v návrhu lištu přes celou řadu – přístroj přes hranici pole Eldock nehlídá. Údaje ověřeny 10. 11. 2026 – změny sortimentu (např. konec Hager vector II L / PN) je nutné doplnit ručně. Fáze 87: komentář syntetizuje Edge TTS (text kapitol jde na službu Microsoftu – je veřejný na /navody; `--tts=local` = lokální hlas Windows, robotičtější); video 1 ukazuje aplikaci k 2026-11-11 po fázi 90 (průvodce půdorysem v 5 krocích s krokovými kartami), video 2 k 2026-11-10 po fázi 88 (řada Mistral65) – po změně UI, které ukazují (editor půdorysu, kroky Panel Builderu), je přegenerovat (`npm run tutorials:generate`, ~15 min); akce kapitoly 3 videa 1 (osazení) jsou delší než komentář o pár sekund; Interactive Tour je jen v editoru půdorysu (cíle = `targets` kapitol); titulky jsou vypálené ve videu (bez samostatné stopy WebVTT). Fáze 88: Pv přístrojů z katalogu ABB pro ČR je odhad (ABB CZ ho neuvádí – typická hodnota nahrazeného řádku nebo IEC); vazby S201 / S201M → PS1 a S203 / S203M → PS3 jsou odvozené z pólů (neověřeno), PSc → DS301C, PS-END a E292 → E290 podle katalogu. Chyby stránek ABB CZ (platí typové označení, poznámka u zdroje): FH204 A-40 a A-63 uvádí 25 A typ AC, OVR T2 jiné kA, 41P18X42A / 41P18X41A „18 (18x4)“. Nezařazeno: S2C a CP-D (new.abb.com se nedá číst), OT, spínače, tlačítka a zvonky, S3C, kryty, CU VMW / K, multimediální UK600 / AK600, ARIA / APO; S202 / S204 katalog ABB pro ČR nevede; externí řada „Mistral“ má dál jen MISTRAL65 1 × 4 M (1SL1200A00 – na stránce řady Mistral65 není), UK600 zůstává z exportu. DS201 B16 A30: ruční zápis (referenční PB-001) má 2CSR255140R1165, katalog ABB pro ČR i externí databáze 2CSR255180R1165 – v katalogu vyhrává ruční zápis, ověřit. V databázích s importem externí databáze zůstávají z dřívějška dvojice orientační řádek + kus s objednacím číslem (DS201 B10 A30, DS201 C16 A30, ESB25-20N-01) – adopce přeznačí jen řádek, jehož objednací číslo databáze ještě nemá. Údaje ověřeny 10. 11. 2026. Fáze 89: profil uživatele = profil firmy (Panel Builder nemá osobní účty), volba v prohlížeči platí pro všechny firmy v něm. Fáze 90: okna a dveře nepřerušují čáru stěny (kreslí se přes ni) a nehlídají kolizi s nábytkem; objednací čísla monobloků Garant / Praktik / Variant+ v kusovníku chybí jako dosud; pás 0,2 m u umyvadla přístroje IP44 podle zadání nehlídá (v plném znění ČSN 33 2130 ed. 4 ověřit); krok průvodce si pamatuje jen karta prohlížeče (jiná karta otevře krok podle obsahu nákresu). Fáze 91: fotografie výrobců se nestahovaly (rendery jsou vlastní dílo; fotky se schváleným zdrojem do `public/catalog-images/`); Schneider Electric na webu ověřen jen pro vzduchotěsné krabice Multifix Air do dutých stěn a SEZ bez objednacích čísel hlubokých krabic – jinde kusovník ukáže „doplnit“; limity Schneider / Legrand / Hager jsou ze zadání (katalogy neověřeny), řady berker B.7, K.1, K.5, R.classic a W.1 půdorys nenabízí; svislý víceramček se v půdorysu nekreslí (limit `vertical` jen v pravidlech); rozbočovací zásuvka (víc než 2 kabely) se pozná jen z tras aktivního podlaží a ne v dokumentaci rozváděče; mezery a rozpěrky 1159-34 mezi krabicemi Decenta kusovník nepočítá. Fáze 92: harvester fotek (`npm run catalog:photos`) web ABB 2026-11-11 nepustil (headless prohlížeč – net::ERR_HTTP2_PROTOCOL_ERROR; blokace se neobchází), `public/catalog-images/manifest.json` je prázdný – reálné fotky zatím jen přes nahrávač Ctrl+V ve velínu; adaptér harvesteru jen pro ABB (Schneider / Legrand / Hager ručně); nástěnné monobloky Garant / Praktik / Variant+ bez ověřeného objednacího čísla v kusovníku harvester přeskočí. Trenažér 2D půdorysu je bungalov na ABB-free@home (stmívací akční člen v rozváděči je pravdivý jen ve sběrnicové instalaci); velikosti tréninkových zakázek jsou podle výběru generátoru (48M / 96M / 120M, ne 36M / 72M / 108M ze zadání – rezerva 25 %). Průvodce závodem nevytváří vzorový závod v datech firmy (mise B jen v prohlížeči); režim A jen s právem Studio výstavby. Fáze 93: bezhalogenové krabice HF ověřené jen u KOPOS (kopos.cz 2026-11-11: KU 68-45/HF_HA, KPR 68-70/HF_HA, KU 68 LD/1HF_HA, KPL 64-50/2LD HF_KA) – ostatní výrobci a hluboká HF krabice do SDK se v kusovníku doplní ručně (hlídač nabídne přepnutí na KOPOS); KPR 68_KA a KU 68 LD_NA ze zadání nejsou podle stránky výrobce bezhalogenové. Typy spouště a elektroměru MID (ABB S2C-A2, B23 312-100 …) jsou příklady ze zadání bez ověření objednacích čísel; vodič EKV v kusovníku je odhad 3 m na přípojku. Lhůty zdravotnických prostorů a přístrojů podle zadání (ČSN 33 2000-7-710 ed. 2, ČSN EN 62353 ed. 2) jako normové (ne závazné) – ověřit v licencovaném znění. Kapacitu DA / UPS zadává uživatel u kořene větve; výkon větve = Ib (naměřený, jinak součet podřízených × 0,8) · √3 · 400 V · cos φ 0,9. Fáze 94: data ETIM ABB nemají ceny (PRODUCT_PRICE 0) ani šířku DIN přístrojů v modulech; vestavnou hloubku stmívačů, termostatů a USB zásuvek řad neuvádějí (hlídač u nich dál podle pravidel fáze 91); Time Arbo v datech není (zůstává render), Garant jen šedý hliníkový IP55; dvoubarevné rámečky Zoni 241–244 a Swing 5R z matice katalogu ETIM nevede (⚠ / „ověřit“). Fotka řady bez čísla v kusovníku je reprezentativní výrobek řady (číslo pod fotkou), Swing L má ve všech barvách bílý střed Swing. Pv z ETIM je na celý přístroj (vícepólový = všechny póly). Fáze 95: místnosti IfcSpace jdou do Studia jako obálka (obdélník; mnohoúhelník jen v 2D půdorysu), kabelové žlaby nemají v mapě závodu vlastní vrstvu (u zařízení jen délka a typ přívodu), DA a UPS jsou v závodě kořenové zdroje typu trafostanice se zálohováním a kapacitou (napájení UPS z DA zůstane v popisu), IfcGridPlacement a zakřivené profily se nevyhodnocují; stroje v 2D půdorysu jsou vlastní spotřebiče do 32 A (nad to varování), vývody a hlavní vypínač nad 125 A navrhne AI Panel Builder jako orientační kus; Server Action nese jen zmenšený model (do ~1 MB – velký export z Revitu importujte po budovách). Fáze 96: kanonickou URL má každá veřejná stránka zvlášť (v layoutu by všechny podstránky ukazovaly na úvod); ověřovací meta Google / Seznam se vypíší jen s proměnnými `GOOGLE_SITE_VERIFICATION` / `SEZNAM_WMT_VERIFICATION` v `.env` serveru (Seznam jde ověřit i souborem `seznam-wmt-….txt`); trenažér 2D půdorysu, editor a ukládání projektů dál vyžadují přihlášení firmy; IndexNow se po nasazení spouští `npm run seo:ping` (nebo `POST /api/seo/ping` s `ELDOCK_CRON_SECRET`) – automatický ping při každém startu kontejneru záměrně není. Fáze 97: web ABB (nizke-napeti.cz.abb.com) a Eaton automatizovaný přístup odmítají (spojení bez odpovědi / ERR_HTTP2_PROTOCOL_ERROR) – ABB z vlastní kopie `ELSB_ETIM-9.0_2026-05.zip`, Eaton bez dat; databáze ETIM a ceníky Legrand jsou pod heslem (výrobce ho posílá e-mailem), ceník OEZ jen po přihlášení partnera, KOPOS a Schneider ETIM / BMEcat veřejně nevedou (data ze stránek výrobků), Schrack a Saltek bez veřejného datového souboru výrobků; Plexo s „L“ (`069621L` …) fotobanka Legrand nevede (fotka jiného čísla se nepoužije); Schneider zatím není ve výběru skříně (rozvodnice s fotkou jen v katalogu přístrojů); ceny KOPOS z ceníku jsou v datech, aplikace je nezobrazuje.
 - Testovací firma Správy závodů (2026-11-10, `PLANT_TESTER`: `test@eldock.cz` a `test-udrzba@eldock.cz`, `db:plant-tester` při startu s `ELDOCK_SEED_DEMO=1`): hesla jsou veřejná v repozitáři – před registrací první skutečné firmy ji smazat ve velínu a nastavit `ELDOCK_SEED_DEMO=0` (CLAUDE.md, oddíl 7); s SMTP by šlo z testovacího účtu rozesílat pozvánky. Nasazeno 2026-11-10 (commit `97932c5`; start kontejneru firmu založil – závod TZ s halou A a 5 zařízeními; bez migrací, kontejner `healthy`, log bez chyb, úklid mezivrstev 1,23 GB, volno 24 GB).
-- Fáze 98: fáze 2D půdorysu je krok průvodce (relace prohlížeče; kompaktní lišta ukazuje bez filtru vše – „Zobrazit vše“), agenda závodu jen v adrese `?faze=`; detail výběru je ve všech fázích a varování zón / krabiček i ve fázi 4 (odchylka od zadání, viz zadání); Elektro-linter s opravou jedním klikem zůstává u DIN lišt (část 1a), fáze 2 má jeho souhrn; kapitoly video-návodu AI Panel Builderu nesou čísla kroků z namluveného videa; rozvržení na výšku okna až od 1280 px (pod tím sloupce pod sebou); karta Nařízení (EU) 2023/1230 počítá jen otevřené změny s klasifikací podstatné změny (uzavřené jsou v historii zařízení). Fáze 99: demo scénář založí při každém kliknutí nový půdorys firmy (staré demo půdorysy se mažou ručně v seznamu) a rozváděč z něj stojí 1 kredit jako každý jiný; scénář průmyslového závodu jen odkazuje na agendy naposledy otevřeného závodu (plná vzorová data má závod obchodního dema); generování rozváděče z půdorysu trvalo na vývojovém serveru 3,3–3,8 s včetně překladu stránky – cíl pod 1 s na produkci samostatně neměřen; prezentace `/prezentace` je mimo vyhledávače (noindex, není v sitemap) a údaje jednání drží jen prohlížeč prezentujícího. Fáze 100: tahák zakázky je podle zadání v záložce Normy (přechody z taháku ji nechají otevřenou, lišta průvodce otevře výchozí záložku fáze); vzhled 🌗 se ukládá s podkladem podlaží a starší půdorysy bez údaje mají 60 %; fotky v `public/catalog-images/` mají mezipaměť `immutable` na rok – opravenou fotku ukládat pod novým názvem; 60 FPS ověřeno počtem překreslení vrstev v E2E, ne měřením snímků na slabém notebooku. Fáze 101: anténní zásuvka TV / SAT nemá v datech ABB ETIM objednací číslo (v kusovníku „dle katalogu výrobce“) a trasa koaxiálního kabelu se kreslí ve vrstvě datových rozvodů; svislý víceramček se v půdorysu kreslí kolmo ke stěně (schematicky), výšky pozic po 71 mm; offline převod BIM jen na už načtené stránce (bez service workeru). Fáze 102: služby třetích stran (GA4, Clarity, Sklik, Ads, LinkedIn) jsou připravené, ale na produkci bez ID v `.env` vypnuté; trychtýř počítá vstupy bez identifikátoru (obnovení vstupní stránky se započte znovu) a kontakt zachytí jen ukázková firma (export kusovníku, tisk elaborátu, uložení projektu – export PDF / DXF výkresu se jen počítá); oblíbenost řad a objem materiálu z nejnovějších 300 uložených půdorysů; zásady 1.4 před ostrým prodejem zkontrolovat právníkem. Fáze 103: PDF verze = tisk neměnného snímku z prohlížeče (snímek jsou data, ne uložený soubor PDF); ZPL tiskne čistý QR kód bez loga (logo jen v PDF 1:1); odevzdání z poolu platí až po schválení údržbou; e-mail firemnímu projektantovi jen s SMTP a u závodu registrované firmy; karta štítku je veřejná, ale osobní údaje zákazníka vidí jen firma výrobce (PIN dokumentace zatím není); odměny v poolu jsou orientační, platby projektantům platforma neřeší. Fáze 104: limit požadavků drží okna v paměti jedné instance (restart je vynuluje); blokace robotů podle User-Agent (podvrhnutelný – před vytěžováním chrání hlavně limit a přihlášení); výpočtové algoritmy zůstávají v minifikovaném klientském JS (editor a aplikace počítají offline), na serveru jsou surová data výrobců; podmínky užití 1.1 (čl. 7 ochrana databáze) před ostrým prodejem zkontrolovat právníkem. Fáze 105: ceníkové ceny přístrojů ABB / Hager / OEZ / Eaton v dodaných balíčcích nejsou (OEZ ETIM 8 má 0 Kč) – nabídka je nechá doplnit elektrikáři; ceny jen kabelů a vodičů (Schrack) a krabic KOPOS; šablony importu košíků velkoobchodů ověřit s obchodními zástupci; výška stropu jen v profilu nákresu (ne po místnostech).
+- Fáze 98: fáze 2D půdorysu je krok průvodce (relace prohlížeče; kompaktní lišta ukazuje bez filtru vše – „Zobrazit vše“), agenda závodu jen v adrese `?faze=`; detail výběru je ve všech fázích a varování zón / krabiček i ve fázi 4 (odchylka od zadání, viz zadání); Elektro-linter s opravou jedním klikem zůstává u DIN lišt (část 1a), fáze 2 má jeho souhrn; kapitoly video-návodu AI Panel Builderu nesou čísla kroků z namluveného videa; rozvržení na výšku okna až od 1280 px (pod tím sloupce pod sebou); karta Nařízení (EU) 2023/1230 počítá jen otevřené změny s klasifikací podstatné změny (uzavřené jsou v historii zařízení). Fáze 99: demo scénář založí při každém kliknutí nový půdorys firmy (staré demo půdorysy se mažou ručně v seznamu) a rozváděč z něj stojí 1 kredit jako každý jiný; scénář průmyslového závodu jen odkazuje na agendy naposledy otevřeného závodu (plná vzorová data má závod obchodního dema); generování rozváděče z půdorysu trvalo na vývojovém serveru 3,3–3,8 s včetně překladu stránky – cíl pod 1 s na produkci samostatně neměřen; prezentace `/prezentace` je mimo vyhledávače (noindex, není v sitemap) a údaje jednání drží jen prohlížeč prezentujícího. Fáze 100: tahák zakázky je podle zadání v záložce Normy (přechody z taháku ji nechají otevřenou, lišta průvodce otevře výchozí záložku fáze); vzhled 🌗 se ukládá s podkladem podlaží a starší půdorysy bez údaje mají 60 %; fotky v `public/catalog-images/` mají mezipaměť `immutable` na rok – opravenou fotku ukládat pod novým názvem; 60 FPS ověřeno počtem překreslení vrstev v E2E, ne měřením snímků na slabém notebooku. Fáze 101: anténní zásuvka TV / SAT nemá v datech ABB ETIM objednací číslo (v kusovníku „dle katalogu výrobce“) a trasa koaxiálního kabelu se kreslí ve vrstvě datových rozvodů; svislý víceramček se v půdorysu kreslí kolmo ke stěně (schematicky), výšky pozic po 71 mm; offline převod BIM jen na už načtené stránce (bez service workeru). Fáze 102: služby třetích stran (GA4, Clarity, Sklik, Ads, LinkedIn) jsou připravené, ale na produkci bez ID v `.env` vypnuté; trychtýř počítá vstupy bez identifikátoru (obnovení vstupní stránky se započte znovu) a kontakt zachytí jen ukázková firma (export kusovníku, tisk elaborátu, uložení projektu – export PDF / DXF výkresu se jen počítá); oblíbenost řad a objem materiálu z nejnovějších 300 uložených půdorysů; zásady 1.4 před ostrým prodejem zkontrolovat právníkem. Fáze 103: PDF verze = tisk neměnného snímku z prohlížeče (snímek jsou data, ne uložený soubor PDF); ZPL tiskne čistý QR kód bez loga (logo jen v PDF 1:1); odevzdání z poolu platí až po schválení údržbou; e-mail firemnímu projektantovi jen s SMTP a u závodu registrované firmy; karta štítku je veřejná, ale osobní údaje zákazníka vidí jen firma výrobce (PIN dokumentace zatím není); odměny v poolu jsou orientační, platby projektantům platforma neřeší. Fáze 104: limit požadavků drží okna v paměti jedné instance (restart je vynuluje); blokace robotů podle User-Agent (podvrhnutelný – před vytěžováním chrání hlavně limit a přihlášení); výpočtové algoritmy zůstávají v minifikovaném klientském JS (editor a aplikace počítají offline), na serveru jsou surová data výrobců; podmínky užití 1.1 (čl. 7 ochrana databáze) před ostrým prodejem zkontrolovat právníkem. Fáze 105: ceníkové ceny přístrojů ABB / Hager / OEZ / Eaton v dodaných balíčcích nejsou (OEZ ETIM 8 má 0 Kč) – nabídka je nechá doplnit elektrikáři; ceny jen kabelů a vodičů (Schrack) a krabic KOPOS; šablony importu košíků velkoobchodů ověřit s obchodními zástupci; výška stropu jen v profilu nákresu (ne po místnostech). Fáze 106: drátovací list jen silové propojení podle stromu (bez ovládacích obvodů), délky z pravoúhlého modelu tras; PDF elaborátu a štítků výrobce tiskne z prohlížeče (bez serverového PDF); orientační kalkulace s paušální dopravou 1 490 Kč; výrobci jsou samostatné účty portálu (kód z velínu).
 - Backlog z MVP: skutečný serverový přepis hlasu, redlining nad PDF (pdf.js), PostgreSQL, elektronický podpis schválení.
