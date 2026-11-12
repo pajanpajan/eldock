@@ -45,6 +45,8 @@ export interface PaletteSection {
   entries: PaletteEntry[];
   /** Tlačítko v těle kategorie (✎ Upravit / + Přidat u spotřebičů). */
   action?: ReactNode;
+  /** Fáze 101: obsah pod dlaždicemi (▣ Vícerámečky se zásuvkami / s vypínači). */
+  footer?: ReactNode;
 }
 
 const STORAGE_KEY = "eldock-floorplan-palette";
@@ -167,8 +169,9 @@ export function PaletteAccordion({
             </button>
             {expanded ? (
               <div id={`palette-${section.id}`} className="flex flex-col gap-1.5 px-1 pb-1.5">
-                {section.action ? <div className="flex justify-end px-1">{section.action}</div> : null}
                 <div className="grid grid-cols-2 gap-1.5" data-testid={`palette-grid-${section.id}`}>
+                  {/* Fáze 101: akce sekce (Knihovna spotřebičů) jako tlačítko přes celou šířku nad dlaždicemi – ve sloupci se lámala */}
+                  {section.action ? <div className="col-span-2 mb-1.5 w-full">{section.action}</div> : null}
                   {section.entries.map((entry) => (
                     <div key={entry.id} className="relative min-w-0" data-entry={entry.id} data-favorite={entry.favorite ? "true" : undefined} data-trainer-focus={focus === entry.id ? "true" : undefined}>
                       <button
@@ -198,6 +201,7 @@ export function PaletteAccordion({
                     </div>
                   ))}
                 </div>
+                {section.footer ?? null}
               </div>
             ) : null}
           </section>

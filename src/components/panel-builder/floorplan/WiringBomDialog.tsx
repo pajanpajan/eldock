@@ -5,7 +5,7 @@ import { FileSpreadsheet, FileText, ListChecks, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toCsv } from "@/lib/csv";
-import { BOX_TABLE_TITLE, bomBoxRows, bomMainRows, bomTable, type WiringBomRow } from "@/lib/panel-builder/wiring-bom";
+import { BOX_TABLE_TITLE, bomBoxRows, bomMainRows, bomOrderLabel, bomTable, type WiringBomRow } from "@/lib/panel-builder/wiring-bom";
 import { buildXlsx } from "@/lib/xlsx";
 import { cn } from "@/lib/utils";
 
@@ -45,7 +45,7 @@ export function WiringBomDialog({ rows }: { rows: readonly WiringBomRow[] }) {
           <DialogHeader>
             <DialogTitle>Kusovník domovní instalace</DialogTitle>
             <DialogDescription>
-              Přístroj + kryt + rámeček podle sestavování přístrojů Katalogu ABB 2026 (víceramček, který řada nevyrábí, rozdělený na skutečné rámečky), kabely z výkazu kabeláže a na konci instalační krabice podle výrobce, konstrukce stěn a hloubky přístroje. EAN = objednací číslo je v oficiálních datech výrobce ABB ETIM 9.0, „ověřit“ = číslo odvozené z matice katalogu, které data výrobce neuvádějí, „doplnit“ = objednací číslo v podkladech chybí. Krabice KOPOS mají fotku, EAN a hloubku ze stránky výrobku kopos.cz.
+              Kusovník má tři části: 1) přístroje, kryty a rámečky podle katalogu výrobce zvolené řady – EAN u čísla, které je v oficiálních datech výrobce (ABB ETIM 9.0); 2) silové, datové a sběrnicové kabely v metrech podle typového označení z výkazu kabeláže (výrobce podle nabídky velkoobchodu); 3) instalační krabice podle výrobce, konstrukce stěny a hloubky přístroje – KOPOS s fotkou, EAN a hloubkou ze stránky výrobku. Víceramček, který řada nevyrábí, je rozdělený na skutečné rámečky.
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-wrap gap-2 print:hidden">
@@ -73,8 +73,8 @@ export function WiringBomDialog({ rows }: { rows: readonly WiringBomRow[] }) {
               {main.map((row) => (
                 <tr key={`${row.category}-${row.mpn ?? row.name}-${row.appearance}`} className="border-b border-border/60">
                   <td className="py-1 pr-2 text-muted-foreground">{row.category}</td>
-                  <td className={cn("py-1 pr-2 font-mono", !row.mpn && "text-amber-300")}>
-                    {row.mpn ?? "doplnit"}
+                  <td className={cn("py-1 pr-2 font-mono", !row.mpn && "font-sans text-[11px] text-muted-foreground italic")} data-testid="wiring-bom-mpn">
+                    {bomOrderLabel(row)}
                     {row.mpn && !row.verified ? <span className="ml-1 rounded bg-amber-500/20 px-1 font-sans text-[10px] text-amber-200">ověřit</span> : null}
                     {/* Fáze 94: EAN z oficiálních dat výrobce ABB ETIM 9.0 */}
                     {row.ean ? (
@@ -118,8 +118,8 @@ export function WiringBomDialog({ rows }: { rows: readonly WiringBomRow[] }) {
                       </td>
                       <td className="py-1 pr-2">{row.box.maker}</td>
                       <td className="py-1 pr-2 font-semibold">{row.box.type}</td>
-                      <td className={cn("py-1 pr-2 font-mono", !row.mpn && "text-amber-300")}>
-                        {row.mpn ?? "doplnit"}
+                      <td className={cn("py-1 pr-2 font-mono", !row.mpn && "font-sans text-[11px] text-muted-foreground italic")}>
+                        {bomOrderLabel(row)}
                         {row.ean ? (
                           <span className="block font-sans text-[10px] text-muted-foreground" data-testid="wiring-bom-box-ean" title="EAN (GTIN) ze stránky výrobku">
                             EAN {row.ean}

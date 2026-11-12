@@ -1,9 +1,25 @@
-// Fáze 99: veřejná prezentace ELDOCK (`/prezentace`) – Pitch Deck (10 slidů) a tisknutelný Executive One-Pager A4.
-// Údaje jednání (cílová částka podpory, partner, kontakt, rozpad využití) si prezentující přepíše přímo v prohlížeči –
-// uloží se jen do localStorage jeho prohlížeče, na server nic nejde. Čisté funkce.
+// Fáze 99 / 101: veřejná prezentace ELDOCK (`/prezentace`) – 8 věcných inženýrských slidů a tisknutelný One-Pager A4.
+// Údaje jednání (cílová částka podpory, partner, kontakt, texty a rozpad využití) si prezentující přepíše přímo
+// v prohlížeči – uloží se jen do localStorage jeho prohlížeče, na server nic nejde. Čisté funkce.
 
 export const PITCH_STORAGE_KEY = "eldock-pitch-config";
-export const PITCH_SLIDE_COUNT = 10;
+export const PITCH_SLIDE_COUNT = 8;
+
+/** Fáze 101: plán využití podpory (slide 8, One-Pager) – výchozí texty, prezentující je může přepsat. */
+export const PITCH_PLAN: readonly { title: string; text: string }[] = [
+  {
+    title: "Pilotní nasazení a obchodní vstup na trh ČR/SK",
+    text: "Osobní nasazení u prvních desítek montážních firem a průmyslových areálů, technická podpora při zavádění.",
+  },
+  {
+    title: "Datová a velkoobchodní integrace",
+    text: "Dokončení plné certifikace katalogů výrobců (ETIM) a napojení přímého objednávání materiálu a tisku průmyslových štítků.",
+  },
+  {
+    title: "Vývoj navazujících modulů",
+    text: "Modul předvyplnění Výchozí revizní zprávy (VRZ dle ČSN 33 2000-6 ed. 2) a automatické cenové nabídky (materiál + práce).",
+  },
+];
 
 export interface PitchConfig {
   /** „8 mil. Kč“ – prázdné = „podle domluvy na jednání“. */
@@ -15,8 +31,10 @@ export interface PitchConfig {
   contactName: string;
   contactEmail: string;
   contactPhone: string;
-  /** Podíl využití podpory v % pro 1) obchod, 2) produkt a integrace, 3) podporu a onboarding (prázdné = bez čísla). */
+  /** Podíl využití podpory v % pro body plánu 1–3 (prázdné = bez čísla). */
   funds: [string, string, string];
+  /** Fáze 101: vlastní text bodů plánu 1–3 (prázdné = výchozí text `PITCH_PLAN`). */
+  plan: [string, string, string];
 }
 
 export const DEFAULT_PITCH_CONFIG: PitchConfig = {
@@ -27,22 +45,26 @@ export const DEFAULT_PITCH_CONFIG: PitchConfig = {
   contactEmail: "info@eldock.cz",
   contactPhone: "",
   funds: ["", "", ""],
+  plan: ["", "", ""],
 };
+
+const defaults = (): PitchConfig => ({ ...DEFAULT_PITCH_CONFIG, funds: [...DEFAULT_PITCH_CONFIG.funds], plan: [...DEFAULT_PITCH_CONFIG.plan] });
 
 const text = (value: unknown, max: number) => (typeof value === "string" ? value.slice(0, max) : null);
 
 /** Uložené údaje (localStorage) → platná konfigurace; cokoli neplatného nahradí výchozí hodnota. */
 export function parsePitchConfig(raw: string | null | undefined): PitchConfig {
-  if (!raw) return { ...DEFAULT_PITCH_CONFIG, funds: [...DEFAULT_PITCH_CONFIG.funds] };
+  if (!raw) return defaults();
   let value: Record<string, unknown>;
   try {
     const parsed: unknown = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object") throw new Error("tvar");
     value = parsed as Record<string, unknown>;
   } catch {
-    return { ...DEFAULT_PITCH_CONFIG, funds: [...DEFAULT_PITCH_CONFIG.funds] };
+    return defaults();
   }
   const funds = Array.isArray(value.funds) ? value.funds : [];
+  const plan = Array.isArray(value.plan) ? value.plan : [];
   return {
     amount: text(value.amount, 60) ?? DEFAULT_PITCH_CONFIG.amount,
     form: text(value.form, 60) ?? DEFAULT_PITCH_CONFIG.form,
@@ -51,8 +73,12 @@ export function parsePitchConfig(raw: string | null | undefined): PitchConfig {
     contactEmail: text(value.contactEmail, 80) ?? DEFAULT_PITCH_CONFIG.contactEmail,
     contactPhone: text(value.contactPhone, 40) ?? DEFAULT_PITCH_CONFIG.contactPhone,
     funds: [0, 1, 2].map((index) => text(funds[index], 6) ?? "") as [string, string, string],
+    plan: [0, 1, 2].map((index) => text(plan[index], 400) ?? "") as [string, string, string],
   };
 }
+
+/** Fáze 101: text bodu plánu – vlastní text prezentujícího, jinak výchozí. */
+export const planText = (config: Pick<PitchConfig, "plan">, index: number) => config.plan[index]?.trim() || PITCH_PLAN[index].text;
 
 /** Text částky na slidu a v One-Pageru. */
 export const amountLabel = (config: Pick<PitchConfig, "amount">) => config.amount.trim() || "podle domluvy na jednání";

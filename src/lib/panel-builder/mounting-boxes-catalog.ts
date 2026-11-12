@@ -2,7 +2,7 @@
 // SEZ Dolný Kubín) podle konstrukce stěny / prostředí, potřebná hloubka krabice u každého prvku půdorysu, hlídač hloubky
 // (ruční volba mělčí krabice, než přístroj a svorkování potřebují) a souhrn krabic do kusovníku.
 // Typová označení, objednací kódy a hloubky jen z oficiálních stránek výrobců (ověřeno 2026-11-11, odkaz `source`);
-// typ, který výrobce nevede, se nevymýšlí – kusovník pak ukáže „doplnit“. Čisté funkce.
+// typ, který výrobce nevede, se nevymýšlí – kusovník pak ukáže „dle katalogu výrobce“ (fáze 101). Čisté funkce.
 // Fáze 94: vestavná hloubka přístroje z oficiálních dat výrobce (ABB ETIM 9.0, EF012278 / EF000218) – přístroj hlubší, než
 // zaručuje mělká krabice (40 mm), chce hlubokou; u zvolené krabice se počítá volné místo za přístrojem.
 
@@ -245,7 +245,7 @@ export function boxNeed(draft: FloorplanDraft, element: EditorElement, context: 
   // Hluboký strojek a svorkování
   if (item.wiringCategory === "WD_DIMMER") reasons.push("stmívač 230 V (hluboký strojek)");
   if (item.control === "thermostat") reasons.push("prostorový termostat (hluboký strojek)");
-  if (item.kind === "data_socket") reasons.push("datová zásuvka RJ45 – poloměr ohybu kabelu Cat6A / Cat7");
+  if (item.kind === "data_socket") reasons.push(item.variant === "tv" ? "anténní zásuvka TV / SAT – poloměr ohybu koaxiálního kabelu" : "datová zásuvka RJ45 – poloměr ohybu kabelu Cat6A / Cat7");
   if (item.variant === "usb") reasons.push("zásuvka s USB-A / USB-C nabíječkou (hluboký strojek)");
   if (item.variant === "surge") reasons.push("zásuvka s přepěťovou ochranou T3 (hluboký strojek)");
   if (draft.installation === "classic" && item.kind === "switch" && !item.bus && !item.sensor) reasons.push("WAGO svorky pro rozbočení ke svítidlům za strojkem");

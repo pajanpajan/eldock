@@ -82,8 +82,13 @@ import {
   framePitch,
   gangsOf,
   idleSwitches,
+  frameNeighbors,
   isFrameable,
+  joinNeighbors,
   layoutFrame,
+  resizeFrame,
+  setFrameOrientation,
+  setFrameSlot,
   moveAnnotation,
   moveInFrame,
   newAnnotation,
@@ -175,6 +180,7 @@ import { useFloorplanSync, type FloorplanMetaState } from "./useFloorplanSync";
 import { useFloorplanLibrary } from "./useFloorplanLibrary";
 import { CadLayersPanel } from "./CadLayersPanel";
 import { DWG_MESSAGE, DxfError, parseDxf } from "@/lib/panel-builder/dxf-import";
+import { FloorplanBimImport } from "@/components/bim/BimLocalNotice";
 import { bimToFloorplan } from "@/lib/bim/bim-floorplan";
 import { IfcError, parseIfc } from "@/lib/bim/ifc-parser";
 import { CAD_GEOMETRY_MAX_BYTES, buildSnapIndex, geometryOf, parseCadGeometry, planSizeFor, snapToCad, underlayOf, type CadGeometry } from "@/lib/panel-builder/cad-underlay";
@@ -209,7 +215,7 @@ type Tool =
   | { kind: "select" }
   | { kind: "place"; item: string; appliance?: string; product?: string; /** Fáze 81: barva a krabice panelu. */ variant?: string; box?: "flush" | "surface" }
   /** Fáze 62: sestava ve víceramečku z palety – vloží se celá jedním klikem. */
-  | { kind: "place-set"; key: string; members: string[]; label: string }
+  | { kind: "place-set"; key: string; members: string[]; label: string; orientation?: "vertical" }
   | { kind: "room" }
   /** Fáze 63: polygonální místnost se šikmými stěnami – rohy po obvodu. */
   | { kind: "polygon" }
@@ -755,6 +761,8 @@ export function FloorplanEditor({
   const roomNames = draft.rooms.map((room) => room.name);
   const panelFloorId = floors.find((floor) => floor.elements.some((element) => element.item === "panel"))?.id ?? null;
   const selected = draft.elements.find((element) => element.id === selectedId) ?? null;
+  // Fáze 101: sousední přístroje u stejné stěny do 35 cm (🔗 Spojit do společného víceramečku)
+  const selectedNeighbors = selected && selection.length === 1 ? frameNeighbors(draft, selected.id) : [];
   const selectedRoom = draft.rooms.find((room) => room.id === selectedRoomId) ?? null;
   // Fáze 76: místnost pro „Jen vybraná místnost“ (vybraná místnost, jinak místnost vybraného prvku)
   const focusRoomName = selectedRoom?.name ?? selected?.room ?? null;
@@ -841,6 +849,43 @@ export function FloorplanEditor({
       const next = addToFrame(current, elementId, itemId, id);
       return next.ok ? next.draft : current;
     });
+  }
+
+  /** Fáze 101: ▣ Sestava ve vícerámečku – počet pozic 1R (samostatně) až 5R na pozici prvku. */
+  function resizeElementFrame(elementId: string, gangs: number) {
+    const ids = Array.from({ length: MAX_FRAME_GANGS }, () => newId("e"));
+    const result = resizeFrame(draft, elementId, gangs, ids);
+    if (!result.ok) return void toast.error(result.error);
+    update((current) => {
+      const next = resizeFrame(current, elementId, gangs, ids);
+      return next.ok ? next.draft : current;
+    });
+  }
+
+  /** Fáze 101: obsah pozice víceramečku na 1 klik (zásuvka, RJ45, TV / SAT, vypínač č. 1 / 6 / 5 …). */
+  function setElementSlot(memberId: string, itemId: string) {
+    const result = setFrameSlot(draft, memberId, itemId);
+    if (!result.ok) return void toast.error(result.error);
+    update((current) => {
+      const next = setFrameSlot(current, memberId, itemId);
+      return next.ok ? next.draft : current;
+    });
+  }
+
+  /** Fáze 101: 🔗 vybraný přístroj + sousedé u stejné stěny do 35 cm do jednoho víceramečku. */
+  function joinElementNeighbors(elementId: string) {
+    const result = joinNeighbors(draft, elementId);
+    if (!result.ok) return void toast.error(result.error);
+    update(() => result.draft);
+    toast.success(`Víceramček ${result.gangs}R – sousední přístroje spojené a přisazené vedle sebe.`);
+  }
+
+  /** Fáze 101: ✂️ rozdělení víceramečku vybraného přístroje na samostatné přístroje. */
+  function splitElementFrame(elementId: string) {
+    const frame = frameOf(draft, elementId);
+    if (!frame) return;
+    update((current) => dissolveFrame(current, frame.id));
+    toast.success("Víceramček rozdělen – přístroje zůstaly na místě jako samostatné.");
   }
 
   /** Obsazené pozice rámečku prvku (bez rámečku pozice prvku samotného). */
@@ -1009,11 +1054,12 @@ export function FloorplanEditor({
       const target = placement(first, point);
       const at = { x: Math.round(target.position.x), y: Math.round(target.position.y), rotation: target.rotation, room: target.room?.name ?? lastRoom.current, series: draft.series, color: draft.color };
       const ids = tool.members.map(() => newId("e"));
-      const result = placeAssembly(draft, tool.members, at, ids);
+      const orientation = tool.orientation ?? "horizontal";
+      const result = placeAssembly(draft, tool.members, at, ids, orientation);
       if (!result.ok) return void toast.error(result.error);
       setPlaceRotation(target.rotation);
       update((current) => {
-        const next = placeAssembly(current, tool.members, at, ids);
+        const next = placeAssembly(current, tool.members, at, ids, orientation);
         return next.ok ? next.draft : current;
       });
       setSelection([ids[0]]);
@@ -2071,6 +2117,35 @@ export function FloorplanEditor({
     const group = paletteItem(element.item)?.group;
     if (group) groupCounts.set(group, (groupCounts.get(group) ?? 0) + 1);
   }
+  /**
+   * Fáze 101: ▣ Vícerámečky se zásuvkami (sekce Zásuvky, fáze 3) / s vypínači (sekce ovládání, fáze 4) – hotové sestavy,
+   * šablony firmy a „+ Vlastní sestava 2R–5R“ přímo v paletě (dřív samostatný panel nad paletou).
+   */
+  const assemblyGroup = (group: "sockets" | "controls") =>
+    assembliesVisible(phase) ? (
+      <FrameAssemblyPalette
+        group={group}
+        level={draft.installation}
+        // Fáze 91: jen sestavy, které zvolená řada vyrábí (Decento a nástěnné řady bez víceramečku, Time Arbo do 4R …)
+        limit={frameLimitOf(draft)}
+        active={tool.kind === "place-set" ? tool.key : null}
+        onPick={(pick) => {
+          setTool(tool.kind === "place-set" && tool.key === pick.key && !pick.key.startsWith("custom") ? { kind: "select" } : { kind: "place-set", ...pick });
+          setHover(null);
+        }}
+        // Fáze 78: šablony sestav firmy a oblíbené ⭐
+        templates={floorLibrary.templates}
+        favorites={floorLibrary.favorites}
+        onFavorite={toggleFavoriteKey}
+        onSaveTemplate={saveTemplate}
+        onRemoveTemplate={(template) => {
+          if (!window.confirm(`Smazat šablonu „${template.label}“? Ve firmě ji pak nikdo nevloží (osazené sestavy v půdorysech zůstanou).`)) return;
+          saveFloorLibrary(removeTemplate(floorLibrary, template.id));
+          if (tool.kind === "place-set" && tool.key === `template:${template.id}`) setTool({ kind: "select" });
+          toast.success(`Šablona „${template.label}“ smazána.`);
+        }}
+      />
+    ) : null;
   // Fáze 98: v levé paletě jen kategorie aktivní fáze (fáze 2 rozváděče, zařizovací předměty, okna / dveře / nábytek …)
   const paletteSections: PaletteSection[] = PALETTE_GROUPS.filter((group) => paletteGroupVisible(phase, group.id)).map((group): PaletteSection => {
     if (group.id === "appliances") {
@@ -2081,8 +2156,8 @@ export function FloorplanEditor({
         hint: group.hint,
         count: groupCounts.get(group.id) ?? 0,
         action: (
-          <button type="button" onClick={() => setApplianceOpen(true)} className="shrink-0 rounded-md border border-orange-500/50 px-2 py-0.5 text-[11px] font-semibold text-orange-200 hover:bg-orange-500/10" data-testid="appliance-edit">
-            ✎ Knihovna spotřebičů – upravit / přidat
+          <button type="button" onClick={() => setApplianceOpen(true)} className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-orange-500/50 bg-orange-500/5 px-2 py-1.5 text-center text-[11.5px] leading-tight font-semibold text-orange-200 hover:bg-orange-500/15" data-testid="appliance-edit">
+            ⚙️ Knihovna spotřebičů (upravit / přidat)
           </button>
         ),
         entries: catalog.map((spec) => {
@@ -2110,6 +2185,8 @@ export function FloorplanEditor({
     }
     return {
       id: group.id,
+      // Fáze 101: šablony víceramečků přímo v sekci palety – zásuvky (fáze 3) a vypínače / ovládání (fáze 4)
+      ...(group.id === "sockets" || group.id === "controls" ? { footer: assemblyGroup(group.id) } : {}),
       label: group.id === "controls" ? CONTROLS_LABEL[draft.installation].label : group.label,
       icon: group.id === "controls" ? CONTROLS_LABEL[draft.installation].icon : group.icon,
       hint: group.id === "controls" ? CONTROLS_LABEL[draft.installation].hint : group.hint,
@@ -2177,6 +2254,8 @@ export function FloorplanEditor({
         <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => fileInput.current?.click()} disabled={busy !== null} data-tour="floorplan-upload">
           {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <FileUp className="size-4" aria-hidden />} Nahrát půdorys (PDF / DXF / BIM .ifc / Obrázek)
         </Button>
+        {/* Fáze 101: import BIM v okně se zárukou 100% lokálního zpracování (soubor .ifc se nikam neodesílá) */}
+        <FloorplanBimImport disabled={busy !== null} onFile={(file) => void importIfc(file)} />
     </>
   );
   const pdfMenu = (
@@ -2925,30 +3004,6 @@ export function FloorplanEditor({
               </div>
             </section>
           ) : null}
-          {/* Fáze 62: sestavy zásuvek a vypínačů ve víceramečku – samostatný panel nad paletou, vloží se celé jedním klikem */}
-          {assembliesVisible(phase) ? (
-          <FrameAssemblyPalette
-            level={draft.installation}
-            // Fáze 91: jen sestavy, které zvolená řada vyrábí (Decento a nástěnné řady bez víceramečku, Time Arbo do 4R …)
-            limit={frameLimitOf(draft)}
-            active={tool.kind === "place-set" ? tool.key : null}
-            onPick={(pick) => {
-              setTool(tool.kind === "place-set" && tool.key === pick.key && pick.key !== "custom" ? { kind: "select" } : { kind: "place-set", ...pick });
-              setHover(null);
-            }}
-            // Fáze 78: šablony sestav firmy a oblíbené ⭐
-            templates={floorLibrary.templates}
-            favorites={floorLibrary.favorites}
-            onFavorite={toggleFavoriteKey}
-            onSaveTemplate={saveTemplate}
-            onRemoveTemplate={(template) => {
-              if (!window.confirm(`Smazat šablonu „${template.label}“? Ve firmě ji pak nikdo nevloží (osazené sestavy v půdorysech zůstanou).`)) return;
-              saveFloorLibrary(removeTemplate(floorLibrary, template.id));
-              if (tool.kind === "place-set" && tool.key === `template:${template.id}`) setTool({ kind: "select" });
-              toast.success(`Šablona „${template.label}“ smazána.`);
-            }}
-          />
-          ) : null}
           {/* Fáze 63: paleta značek jako akordeon (počty osazených prvků, sbalit / rozbalit vše, jedna kategorie); fáze 98:
               jen kategorie fáze, v průvodci automaticky rozbalené */}
           {paletteSections.length ? <PaletteAccordion key={phase ?? "all"} sections={paletteSections} focus={trainer?.current === "bed-socket" ? SANDBOX_SOCKET_ITEM : null} autoOpen={phase !== null} /> : null}
@@ -3217,6 +3272,9 @@ export function FloorplanEditor({
                         : undefined
                   }
                   onAddToFrame={isFrameable(selected) && usedGangs(selected) + gangsOf({ item: selected.item, frameUnits: 1 }) <= Math.min(MAX_FRAME_GANGS, frameLimitOf(draft, selected).max) ? () => addIntoFrame(selected.id, selected.item) : undefined}
+                  // Fáze 101: 🔗 spojit se sousedy u stejné stěny (do 35 cm) / ✂️ rozdělit víceramček
+                  onJoin={selectedNeighbors.length ? () => joinElementNeighbors(selected.id) : undefined}
+                  onSplit={frameOf(draft, selected.id) ? () => splitElementFrame(selected.id) : undefined}
                   // Fáze 77: rychlé volby svítidla (🔆 / 🌡️ / 🌈) přímo u světla
                   light={(() => {
                     const item = paletteItem(selected.item);
@@ -3497,6 +3555,24 @@ export function FloorplanEditor({
                   const frame = frameOf(draft, selected.id);
                   if (frame) update((current) => dissolveFrame(current, frame.id));
                 },
+              }}
+              frameActions={{
+                resize: (gangs) => resizeElementFrame(selected.id, gangs),
+                orientation: (orientation) => {
+                  const frame = frameOf(draft, selected.id);
+                  if (frame) update((current) => setFrameOrientation(current, frame.id, orientation));
+                },
+                slot: setElementSlot,
+                join: selectedNeighbors.length ? () => joinElementNeighbors(selected.id) : null,
+                joinCount: selectedNeighbors.length,
+                moveLeft: () => update((current) => moveInFrame(current, selected.id, -1)),
+                moveRight: () => update((current) => moveInFrame(current, selected.id, 1)),
+                rotate: () => {
+                  const frame = frameOf(draft, selected.id);
+                  if (frame) update((current) => rotateFrame(current, frame.id));
+                },
+                leave: () => update((current) => removeFromFrame(current, selected.id)),
+                dissolve: () => splitElementFrame(selected.id),
               }}
             />
           ) : null}

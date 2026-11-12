@@ -93,7 +93,7 @@ export function SmartHomePanel({ plan, onSystem, onDatasheet }: { plan: SmartPla
                     {module.channels && module.role !== "psu" && module.role !== "interface" && (module.role !== "system" || module.ratedA) ? ` · obsazeno ${module.assigned.length}/${module.channels}` : ""}
                   </span>
                 </td>
-                <td className={cn("font-mono text-[10px]", module.verified ? "" : "text-amber-200")}>{module.articleNumber ? `${module.articleNumber}${module.verified ? "" : " (ověřte)"}` : "doplnit"}</td>
+                <td className={cn("font-mono text-[10px]", module.verified ? "" : "text-amber-200")}>{module.articleNumber ? `${module.articleNumber}${module.verified ? "" : " (ověřte)"}` : "dle katalogu výrobce"}</td>
                 <td className="text-right font-mono tabular-nums">{module.modules} M</td>
               </tr>
             ))}

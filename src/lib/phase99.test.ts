@@ -10,7 +10,8 @@ describe("prezentace – ovládání a údaje jednání", () => {
     expect(["ArrowRight", " ", "PageDown"].map(slideKey)).toEqual(["next", "next", "next"]);
     expect(["ArrowLeft", "PageUp", "Home", "End", "a"].map(slideKey)).toEqual(["prev", "prev", "first", "last", null]);
     expect([slideFromHash("#slide-4"), slideFromHash("#slide-99"), slideFromHash("#nic"), slideFromHash("")]).toEqual([3, PITCH_SLIDE_COUNT - 1, 0, 0]);
-    expect([clampSlide(-3), clampSlide(4.4), clampSlide(42)]).toEqual([0, 4, 9]);
+    expect([clampSlide(-3), clampSlide(4.4), clampSlide(42)]).toEqual([0, 4, PITCH_SLIDE_COUNT - 1]);
+    expect(PITCH_SLIDE_COUNT).toBe(8);
   });
 
   it("uložené údaje: neplatná data → výchozí, oříznutí délky, podíly využití", () => {

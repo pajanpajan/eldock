@@ -89,7 +89,7 @@ export function SelectionPanel({
         </button>
       </div>
       <Button type="button" size="sm" className="gap-1.5" disabled={frameError !== null} onClick={onFrame} data-testid="make-frame">
-        <LayoutGrid className="size-4" aria-hidden /> Vložit do víceramečku {gangs >= 2 && gangs <= 5 ? `(${gangs}R)` : ""} a přisadit
+        <LayoutGrid className="size-4" aria-hidden /> 🔗 Spojit do společného vícerámečku {gangs >= 2 && gangs <= 5 ? `(${gangs}R)` : "(2R–5R)"} a přisadit
       </Button>
       {frameError ? <p className="text-xs text-amber-200">{frameError}</p> : <p className="text-xs text-muted-foreground">Přístroje se seřadí vedle sebe do jedné řady se stejným natočením, výškou, řadou a barvou.</p>}
       <div className="flex flex-wrap gap-1.5">

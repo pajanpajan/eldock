@@ -31,6 +31,7 @@ import { DESIGN_BRANDS, appearanceLabel, colorForSeries, designSeriesOf, hasFram
 import { cn } from "@/lib/utils";
 
 import { AddToFrameControl, SaveTemplateControl } from "./FrameAssemblyPalette";
+import { FrameSection, type FrameSectionActions } from "./FrameSection";
 import { BoxPhoto } from "./BoxPhoto";
 import { DeviceControls, LightOptions } from "./LightOptions";
 import { FixtureControls } from "./FixtureShape";
@@ -62,7 +63,7 @@ export interface LightQuickOptions {
 }
 
 /** Plovoucí lišta nad vybranou značkou (velikost drží stejnou na obrazovce i při zoomu). */
-export function ElementToolbar({ x, y, unit, onRotate, onScale, onDelete, onPair, onAddToFrame, light }: { x: number; y: number; unit: number; onRotate: () => void; onScale: (factor: number) => void; onDelete: () => void; onPair?: () => void; onAddToFrame?: () => void; light?: LightQuickOptions }) {
+export function ElementToolbar({ x, y, unit, onRotate, onScale, onDelete, onPair, onAddToFrame, onJoin, onSplit, light }: { x: number; y: number; unit: number; onRotate: () => void; onScale: (factor: number) => void; onDelete: () => void; onPair?: () => void; onAddToFrame?: () => void; onJoin?: () => void; onSplit?: () => void; light?: LightQuickOptions }) {
   const size = unit * 1.15;
   const set = (patch: Partial<LightSpec>) => light && light.onChange(applyLightOption(light.spec, patch, light.item));
   const colorful = Boolean(light && (light.spec.cct || light.spec.color));
@@ -83,6 +84,9 @@ export function ElementToolbar({ x, y, unit, onRotate, onScale, onDelete, onPair
       : []),
     // Fáze 62: stejný přístroj vedle do víceramečku (zásuvka → 2R → 3R …)
     ...(onAddToFrame ? [{ label: "Přidat stejný přístroj vedle do rámečku", text: "▦+", fill: "#a16207", onClick: onAddToFrame, font: 0.5 }] : []),
+    // Fáze 101: spojení se sousedy u stejné stěny (do 35 cm) a rozdělení víceramečku
+    ...(onJoin ? [{ label: "Spojit sousední prvky do společného vícerámečku (2R–5R)", text: "🔗▣", fill: "#a16207", onClick: onJoin, font: 0.42 }] : []),
+    ...(onSplit ? [{ label: "Rozdělit vícerámeček na samostatné přístroje", text: "✂️", fill: "#7f1d1d", onClick: onSplit }] : []),
     { label: "Otočit značku o 90°", text: "⟳", fill: "#27272a", onClick: onRotate },
     { label: "Zmenšit značku", text: "−", fill: "#27272a", onClick: () => onScale(1 / 1.25) },
     { label: "Zvětšit značku", text: "+", fill: "#27272a", onClick: () => onScale(1.25) },
@@ -180,6 +184,7 @@ export function ElementDetail({
   onBasinZone,
   onSaveTemplate,
   box,
+  frameActions,
 }: {
   draft: FloorplanDraft;
   element: EditorElement;
@@ -208,6 +213,8 @@ export function ElementDetail({
   onSaveTemplate?: (members: string[], label: string) => string | null;
   /** Fáze 91: instalační krabice prvku (doporučená / ručně zvolená) a popis. */
   box?: { resolved: ResolvedBox; summary: string } | null;
+  /** Fáze 101: ▣ Sestava ve vícerámečku – 1R–5R, orientace, obsah pozic, spojení a rozdělení. */
+  frameActions?: FrameSectionActions;
 }) {
   const item = paletteItem(element.item)!;
   const isPanel = item.kind === "panel" || item.kind === "riser" || item.kind === "fixture";
@@ -342,8 +349,10 @@ export function ElementDetail({
           ) : null}
           {/* Fáze 81: provedení panelu chytré domácnosti – barva a montážní krabice (do kusovníku) */}
           <PanelChoice draft={draft} element={element} onChange={onChange} />
-          {/* Fáze 59: víceramček – pořadí, otočení, vyjmutí a rozdělení */}
-          {frame ? (
+          {/* Fáze 101: ▣ Sestava ve vícerámečku (na této pozici) – 1R–5R, ↔ / ↕, obsah pozic, 🔗 spojit a ✂️ rozdělit */}
+          {frameActions && isFrameable(element) ? (
+            <FrameSection key={element.id} draft={draft} element={element} limit={frameLimit} actions={frameActions} usedGangs={usedGangs} onAddToFrame={onAddToFrame} onSaveTemplate={onSaveTemplate} />
+          ) : frame ? (
             <div className="flex flex-col gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/5 p-2 text-xs" data-testid="frame-detail">
               <p className="font-semibold text-amber-200">
                 <LayoutGrid className="mr-1 inline size-3.5" aria-hidden />

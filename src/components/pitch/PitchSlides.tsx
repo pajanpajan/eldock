@@ -2,51 +2,120 @@ import type { ReactNode } from "react";
 import { QRCodeSVG } from "qrcode.react";
 
 import { LogoMark } from "@/components/layout/Logo";
-import { phaseBubbleClass, phaseCardClass } from "@/components/phases/phase-style";
 import { WIZARD_STEPS } from "@/lib/panel-builder/floorplan-wizard";
-import { LIVE_DEMO, amountLabel, fundShare, type PitchConfig } from "@/lib/pitch";
+import { LIVE_DEMO, PITCH_PLAN, PITCH_SLIDE_COUNT, amountLabel, fundShare, planText, type PitchConfig } from "@/lib/pitch";
+import type { PitchLiveData } from "@/lib/pitch-live";
 import { cn } from "@/lib/utils";
 
-// Fáze 99: obsah 10 slidů prezentace ELDOCK a jednostránkového Executive One-Pageru A4 (texty podle zadání fáze 99,
-// čísla stavu projektu z repozitáře a katalogu k 12. 11. 2026).
+// Fáze 101: 8 věcných inženýrských slidů prezentace ELDOCK a jednostránkový One-Pager A4 – texty podle zadání fáze 101,
+// každé tvrzení ověřené v kódu aplikace; živá data (kusovník vzorového RD 4+kk, převod vzorového BIM modelu haly, listy
+// PDF elaborátu, úrovně napájení) počítá server při sestavení stránky stejnými funkcemi jako aplikace (`pitchLiveData`).
+// Slidy se kreslí na pevné plátno 1280 × 720 a celé se zmenší / zvětší na obrazovku (1366 × 768 i 1920 × 1080 bez posuvníku).
 
 export const SLIDE_TITLES = [
-  "Vize & hodnota",
-  "Problém na trhu",
-  "Řešení: 3 pilíře",
-  "Živá ukázka 1: Bytová a komerční elektroinstalace",
-  "Živá ukázka 2: Průmysl, OC a nemocnice",
-  "Technologický náskok",
-  "Trh a škálování",
+  "O čem je projekt ELDOCK",
+  "Reálný problém z praxe",
+  "Modul 1: 2D Půdorys & Kabeláž",
+  "Modul 2: Návrhář rozváděčů a normativní výpočty",
+  "Modul 3: Průmysl, obchodní centra a nemocnice",
+  "Férový stav projektu",
   "Obchodní model",
-  "Současný stav projektu",
-  "Žádost o podporu a roadmapa",
+  "Žádost o podporu a její využití",
 ] as const;
 
-/** Stav projektu (slide 9, One-Pager) – ověřená čísla z repozitáře, testů a katalogu. */
+/** Stav projektu (slide 6, One-Pager) – ověřitelná čísla z repozitáře k 12. 11. 2026. */
 export const PROJECT_STATS: readonly { value: string; label: string }[] = [
-  { value: "136 000+", label: "řádků inženýrského kódu (TypeScript)" },
-  { value: "1 200+", label: "automatických unit testů + 71 sad E2E testů" },
-  { value: "838", label: "přístrojů v katalogu s ETIM daty výrobců" },
-  { value: "963", label: "ověřených fotek výrobců (WebP)" },
-  { value: "264", label: "ověřených rozvodnic z katalogů výrobců" },
-  { value: "99", label: "dokončených vývojových fází, nasazeno v cloudu" },
+  { value: "160 000+", label: "řádků vlastního kódu (TypeScript)" },
+  { value: "1 200+", label: "automatických unit testů" },
+  { value: "73", label: "sad E2E testů v prohlížeči" },
+  { value: "1 300+", label: "kódů EAN z oficiálních dat výrobců" },
+  { value: "1 400+", label: "oficiálních fotek výrobců (WebP)" },
+  { value: "100+", label: "vývojových fází nasazených v produkci" },
 ];
 
-const ELDOCK_URL = "https://eldock.cz";
+/** Moduly platformy (slide 1, One-Pager). */
+const MODULES = [
+  { name: "2D Půdorys & Kabeláž", text: "Od podkladu PDF / DXF / IFC přes osazení prvků po trasy kabelů a kusovník s MPN / EAN." },
+  { name: "Návrhář rozváděčů (AI Panel Builder)", text: "Okruhy a fáze, kontrola českých norem, oteplení dle IEC TR 60890 a 6listový PDF elaborát." },
+  { name: "Správa dokumentace závodů a budov", text: "Lokální převod BIM .ifc, QR štítky u strojů, elektronická Červenka a Kniha revizí." },
+] as const;
 
-function SlideFrame({ index, title, children, className }: { index: number; title: string; children: ReactNode; className?: string }) {
+/** 5fázový průvodce 2D půdorysem – názvy fází z aplikace (`WIZARD_STEPS`), popis podle skutečných funkcí. */
+const WIZARD_TEXT = [
+  "Nahrání PDF / DXF / BIM (.ifc) nebo složení místností zadáním rozměrů X × Y.",
+  "Osazení rozváděče, vybavení a automatické hlídání koupelnových zón (ČSN 33 2000-7-701).",
+  "Rozmístění zásuvek a spotřebičů, skládání vícerámečků 1R–5R přímo na stěně.",
+  "Světla, vypínače a ovládání – včetně sestav ve vícerámečku u dveří a u postele.",
+  "Automatické obvodové trasování kabelů, potřebná hloubka krabic KOPOS (45 mm vs. 66 mm) a kompletní kusovník s výrobními čísly (MPN / EAN).",
+] as const;
+
+const PANEL_POINTS = [
+  { title: "Okruhy, fáze a sběrnice", text: "Automatické rozdělení okruhů, vyvážení fází L1 / L2 / L3 a dimenzování PE a oddělených N sběrnic (N1, N2 za každým chráničem)." },
+  { title: "Kontrola českých norem", text: "ČSN 33 2130 ed. 4, ČSN 33 2000-7-710 ed. 2 pro zdravotnictví, ČSN 33 2000-7-718 / BD4 pro obchodní centra." },
+  { title: "Oteplení dle IEC TR 60890", text: "Výpočet ze ztrátových výkonů přístrojů – Pv z oficiálních dat výrobců ETIM (ABB ETIM 9.0, Hager ETIM 10)." },
+  { title: "6listový PDF elaborát", text: "Okamžitý tisk výrobní dokumentace včetně protokolu kusové zkoušky, vnějších vlivů, ES prohlášení o shodě, štítku CE a samolepicích popisků 1:1." },
+] as const;
+
+const PLANT_POINTS = [
+  { icon: "🔒", title: "100% lokální a bezpečný převod BIM (.ifc)", text: "Stavební a TZB model → přehledná 2D mapa hal a rozváděčů přímo v prohlížeči. Soubor .ifc se nikam neodesílá a převod funguje i bez internetu." },
+  { icon: "📱", title: "QR diagnostika a elektronická Červenka", text: "Schéma v mobilu u stroje, zákres provozní změny přímo do výkresu a archiv záloh PLC / HMI s hlídáním podstatné změny stroje dle Nařízení EU 2023/1230." },
+  { icon: "🔋", title: "Přehled kritického napájení a Kniha revizí", text: "Barevná filtrace větví Běžná síť / Dieselagregát DA / Kritická UPS, simulátor připojení nového stroje a lhůty revizí včetně nouzového osvětlení a zdravotnických přístrojů." },
+] as const;
+
+const DONE = [
+  "Plně funkční jádro 2D půdorysu, návrháře rozváděčů i průmyslové správy areálu.",
+  "Výpočtové jádro: ČSN linter, oteplení IEC TR 60890, úbytky napětí, hloubky krabic a délky tras.",
+  "Zpracování dat ETIM 9.0, lokální parser BIM (.ifc), exporty DXF / PDF a generátor 6listové dokumentace.",
+] as const;
+
+const NEXT = [
+  "Pilotní testování v reálném provozu s prvními elektrikáři, revizními techniky a správci budov (sběr zpětné vazby z praxe).",
+  "Kompletní dopárování ceníkových matic všech výrobců a přímé propojení kusovníků s košíky elektro-velkoobchodů.",
+  "Rozšíření o modul Výchozích revizních zpráv (VRZ) a automatický rozpočet montážních prací pro zákazníka.",
+] as const;
+
+const REVENUE = [
+  { title: "Kredity a předplatné", text: "Kredity, měsíční a roční předplatné pro montážní elektrikáře, projektanty a revizní techniky." },
+  { title: "Firemní B2B licence", text: "Pro výrobní závody, obchodní centra a zdravotnická zařízení." },
+  { title: "Partnerské provize z materiálu a výroby rozváděčů", text: "Přenos přesného kusovníku k elektro-velkoobchodům a výrobcům rozváděčů." },
+] as const;
+
+export const AUTHOR_LINE = "Pavel Janoušek · zkušenosti z technického obchodu a elektrotechniky (ABB, Hilti, PC|SCHEMATIC) · https://eldock.cz";
+
+const ELDOCK_URL = "https://eldock.cz";
+const nn = (index: number) => String(index + 1).padStart(2, "0");
+const n = (value: number) => value.toLocaleString("cs-CZ");
+
+/** Rám slidu: horní technická linka (číslo · téma), nadpis, obsah a patička s číslem slidu. */
+function SlideFrame({ index, title, children }: { index: number; title: ReactNode; children: ReactNode }) {
   return (
-    <div className={cn("mx-auto flex h-full w-full max-w-6xl flex-col gap-5 px-6 py-8 sm:px-10", className)}>
-      <p className="flex items-center gap-3 font-mono text-xs tracking-widest text-yellow-300/80 uppercase">
-        <span className="rounded-md border border-yellow-400/40 px-2 py-0.5">{String(index + 1).padStart(2, "0")} / 10</span>
-        {title}
-      </p>
-      {children}
+    <div className="flex h-full flex-col px-14 pt-8 pb-6">
+      <header className="flex items-center justify-between border-b border-slate-700/70 pb-2.5 font-mono text-[11px] tracking-[0.2em] text-slate-400 uppercase">
+        <span className="flex items-center gap-3">
+          <span className="font-bold text-yellow-400">{nn(index)}</span>
+          <span className="h-3 w-px bg-slate-600" aria-hidden />
+          {SLIDE_TITLES[index]}
+        </span>
+        <span className="flex items-center gap-2 tracking-normal normal-case">
+          <LogoMark className="size-4" />
+          <span className="font-sans text-[13px] font-black">
+            <span className="text-yellow-400">EL</span>DOCK<span className="text-slate-500">.cz</span>
+          </span>
+        </span>
+      </header>
+      <h2 className="mt-5 max-w-[1100px] text-[30px] leading-[1.15] font-bold tracking-tight text-balance text-slate-50">{title}</h2>
+      <div className="mt-5 flex min-h-0 flex-1 flex-col">{children}</div>
+      <footer className="mt-3 flex items-center justify-between border-t border-slate-700/70 pt-2.5 font-mono text-[11px] text-slate-500">
+        <span>eldock.cz/prezentace</span>
+        <span>
+          {nn(index)} / {String(PITCH_SLIDE_COUNT).padStart(2, "0")}
+        </span>
+      </footer>
     </div>
   );
 }
 
+/** Tlačítko živé ukázky – otevře aplikaci v nové kartě (při tisku skryté). */
 function DemoButton({ href, children, variant = "primary", testId }: { href: string; children: ReactNode; variant?: "primary" | "outline"; testId?: string }) {
   return (
     <a
@@ -54,8 +123,8 @@ function DemoButton({ href, children, variant = "primary", testId }: { href: str
       target="_blank"
       rel="noopener"
       className={cn(
-        "pitch-no-print inline-flex min-h-11 items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold shadow-lg transition-colors",
-        variant === "primary" ? "bg-yellow-400 text-zinc-950 shadow-yellow-400/20 hover:bg-yellow-300" : "border border-yellow-400/60 text-yellow-100 hover:bg-yellow-400/10",
+        "pitch-no-print inline-flex h-10 items-center gap-2 rounded-md px-4 text-[14px] font-bold transition-colors",
+        variant === "primary" ? "bg-yellow-400 text-slate-950 hover:bg-yellow-300" : "border border-slate-600 text-slate-200 hover:border-yellow-400/70 hover:text-white",
       )}
       data-testid={testId}
     >
@@ -64,176 +133,288 @@ function DemoButton({ href, children, variant = "primary", testId }: { href: str
   );
 }
 
-const card = "rounded-2xl border border-white/10 bg-white/[0.04] p-5 shadow-xl shadow-black/30 backdrop-blur";
+/** Nadpis bloku – drobné verzálky s tenkou linkou (švýcarský styl). */
+function Label({ children, className }: { children: ReactNode; className?: string }) {
+  return <p className={cn("font-mono text-[11px] font-semibold tracking-[0.16em] text-slate-400 uppercase", className)}>{children}</p>;
+}
+
+/**
+ * Výřez skutečného snímku obrazovky aplikace (snímek z výukového videa 1280 × 720) – `region` = [x, y, šířka, výška]
+ * v pixelech snímku, zobrazí se v šířce `width`.
+ */
+function Shot({ src, alt, region, width, caption }: { src: string; alt: string; region: [number, number, number, number]; width: number; caption: string }) {
+  const [x, y, w, h] = region;
+  const scale = width / w;
+  return (
+    <figure className="flex flex-col gap-1.5">
+      <div className="relative overflow-hidden rounded-md border border-slate-700 bg-slate-900" style={{ width, height: Math.round(h * scale) }}>
+        {/* eslint-disable-next-line @next/next/no-img-element -- statický snímek z public/tutorials, výřez přes absolutní polohu */}
+        <img src={src} alt={alt} width={1280} height={720} loading="lazy" decoding="async" className="absolute max-w-none" style={{ width: Math.round(1280 * scale), left: -Math.round(x * scale), top: -Math.round(y * scale) }} />
+      </div>
+      <figcaption className="font-mono text-[10.5px] text-slate-500">{caption}</figcaption>
+    </figure>
+  );
+}
 
 function Slide1() {
   return (
-    <SlideFrame index={0} title={SLIDE_TITLES[0]} className="justify-center">
-      <div className="flex items-center gap-4">
-        <LogoMark className="size-16 sm:size-20" />
-        <span className="text-4xl font-black tracking-tight sm:text-6xl">
-          <span className="text-yellow-400">EL</span>DOCK<span className="text-yellow-400">.cz</span>
+    <div className="flex h-full flex-col px-14 pt-8 pb-6">
+      <header className="flex items-center justify-between border-b border-slate-700/70 pb-2.5 font-mono text-[11px] tracking-[0.2em] text-slate-400 uppercase">
+        <span className="flex items-center gap-3">
+          <span className="font-bold text-yellow-400">01</span>
+          <span className="h-3 w-px bg-slate-600" aria-hidden />
+          {SLIDE_TITLES[0]}
         </span>
-      </div>
-      <h1 className="max-w-5xl text-3xl leading-tight font-extrabold text-balance sm:text-5xl">
-        Digitální ekosystém pro návrh elektroinstalací, výrobu rozváděčů a provozní správu budov a průmyslu.
-      </h1>
-      <p className="max-w-4xl text-lg text-pretty text-zinc-300 sm:text-2xl">
-        Od 2D půdorysu a fotky rozváděče přes normativní výpočty až po digitální dvojče výrobního závodu, nemocnice či obchodního centra.
-      </p>
-      <div className="flex flex-wrap gap-2 text-sm">
-        {["2D půdorys & kabeláž", "AI Panel Builder", "ELDOCK Průmysl & Facility", "ČSN · EN · IEC", "ETIM 9.0", "BIM IFC"].map((tag) => (
-          <span key={tag} className="rounded-full border border-yellow-400/40 bg-yellow-400/10 px-3 py-1 font-semibold text-yellow-100">
-            {tag}
+        <span>{ELDOCK_URL.replace("https://", "")}</span>
+      </header>
+      <div className="flex flex-1 flex-col justify-center gap-6">
+        <div className="flex items-center gap-4">
+          <LogoMark className="size-14" />
+          <span className="text-[44px] leading-none font-black tracking-tight">
+            <span className="text-yellow-400">EL</span>DOCK<span className="text-slate-500">.cz</span>
           </span>
-        ))}
+        </div>
+        <h1 className="max-w-[1120px] text-[38px] leading-[1.12] font-bold tracking-tight text-balance text-slate-50">
+          <span className="text-yellow-400">ELDOCK.cz</span> – Propojení návrhu elektroinstalace, výroby rozváděčů a provozní dokumentace do jednoho pracovního postupu.
+        </h1>
+        <p className="max-w-[1040px] text-[19px] leading-relaxed text-pretty text-slate-300">
+          Praktický webový nástroj vyvíjený přímo z potřeb montážních elektrikářů, revizních techniků a průmyslové údržby. Odstraňuje ruční přepisování mezi stavebním půdorysem, kusovníkem materiálu, schématem rozváděče a dokumentací na stavbě či ve výrobním závodě.
+        </p>
+        <div>
+          <Label className="mb-2">3 reálné moduly v provozu</Label>
+          <ol className="grid grid-cols-3 border-y border-slate-700/70">
+            {MODULES.map((module, index) => (
+              <li key={module.name} className={cn("flex flex-col gap-1.5 py-4 pr-6", index > 0 && "border-l border-slate-700/70 pl-6")}>
+                <span className="flex items-baseline gap-2">
+                  <span className="font-mono text-[15px] font-bold text-yellow-400">{index + 1}.</span>
+                  <span className="text-[18px] font-bold text-slate-50">{module.name}</span>
+                </span>
+                <span className="text-[14px] leading-snug text-slate-400">{module.text}</span>
+                <span className="mt-1 flex items-center gap-1.5 font-mono text-[11px] text-emerald-400">
+                  <span className="size-1.5 rounded-full bg-emerald-400" aria-hidden /> běží na eldock.cz
+                </span>
+              </li>
+            ))}
+          </ol>
+        </div>
       </div>
-    </SlideFrame>
+      <footer className="flex items-center justify-between border-t border-slate-700/70 pt-2.5 font-mono text-[11px] text-slate-500">
+        <span>Pavel Janoušek · ELDOCK</span>
+        <span>01 / {String(PITCH_SLIDE_COUNT).padStart(2, "0")}</span>
+      </footer>
+    </div>
+  );
+}
+
+function Flow({ steps }: { steps: readonly string[] }) {
+  return (
+    <div className="mt-auto flex flex-wrap items-center gap-1.5 border-t border-slate-700/70 pt-4 font-mono text-[12px] text-slate-300">
+      {steps.map((step, index) => (
+        <span key={step} className="flex items-center gap-1.5">
+          {index > 0 ? (
+            <span className="text-slate-600" aria-hidden>
+              →
+            </span>
+          ) : null}
+          <span className="rounded border border-slate-700 bg-slate-900/60 px-2 py-1">{step}</span>
+        </span>
+      ))}
+    </div>
   );
 }
 
 function Slide2() {
   return (
-    <SlideFrame index={1} title={SLIDE_TITLES[1]}>
-      <h2 className="text-3xl font-extrabold sm:text-4xl">Proč vznikl ELDOCK</h2>
-      <div className="grid flex-1 gap-5 md:grid-cols-2">
-        <div className={cn(card, "flex flex-col gap-3")}>
-          <span className="text-4xl" aria-hidden>
-            🧰
-          </span>
-          <h3 className="text-xl font-bold">1. Montážní firmy a elektrikáři (40 000+ v ČR/SK)</h3>
-          <p className="text-lg text-zinc-300">
-            Ztrácejí desítky hodin měsíčně ručním počítáním kabelů z PDF půdorysů a večerním lepením výrobní dokumentace rozváděčů, kusových zkoušek a výpočtů oteplení v Excelu.
+    <SlideFrame index={1} title="Proč to dnes trvá tak dlouho">
+      <div className="grid flex-1 grid-cols-2 gap-10">
+        <section className="flex flex-col gap-3">
+          <Label>🏠 U domovní a komerční instalace</Label>
+          <p className="text-[19px] leading-relaxed text-slate-200">
+            Elektrikář dostane slepý PDF půdorys od stavaře. Ručně pravítkem měří délky kabelů, v Excelu sčítá vypínače, rámečky a krabičky, a po večerech lepí dokumentaci rozváděče, výpočet oteplení a štítky, aby prošel výchozí revizí.
+          </p>
+          <Flow steps={["PDF půdorys", "pravítko", "Excel", "dokumentace po večerech", "výchozí revize"]} />
+        </section>
+        <section className="flex flex-col gap-3 border-l border-slate-700/70 pl-10">
+          <Label>🏭 U výrobních závodů, obchodních center a nemocnic</Label>
+          <p className="text-[19px] leading-relaxed text-slate-200">
+            Dokumentace rozváděčů je rozházená v papírových šanonech nebo v těžkých 3D BIM modelech, které údržbář u stroje neotevře. Změny zapojení během nočních oprav se nezakreslují a chybí přehled o zálohovaných větvích (Síť / Dieselagregát / UPS) a termínech revizí.
+          </p>
+          <Flow steps={["šanony", "těžký BIM model", "nezakreslená oprava", "Síť / DA / UPS?", "lhůty revizí?"]} />
+        </section>
+      </div>
+    </SlideFrame>
+  );
+}
+
+function Slide3({ live }: { live: PitchLiveData }) {
+  return (
+    <SlideFrame index={2} title="Krok za krokem od stěn po kusovník">
+      <div className="grid flex-1 grid-cols-[1fr_560px] gap-10">
+        <div className="flex flex-col">
+          <p className="text-[15px] text-slate-300">5fázový průvodce, který zvládne i montér bez znalosti AutoCADu:</p>
+          <ol className="mt-3 flex flex-col">
+            {WIZARD_STEPS.map((step, index) => (
+              <li key={step.id} className="flex gap-3 border-t border-slate-700/70 py-2 first:border-t-0 first:pt-0">
+                <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-sm bg-yellow-400 font-mono text-[13px] font-black text-slate-950">{step.id}</span>
+                <span className="flex flex-col">
+                  <span className="text-[15px] font-bold text-slate-50">{step.short}</span>
+                  <span className="text-[13.5px] leading-snug text-slate-400">{WIZARD_TEXT[index]}</span>
+                </span>
+              </li>
+            ))}
+          </ol>
+          <div className="mt-auto pt-3">
+            <DemoButton href={LIVE_DEMO.floorplan} testId="pitch-demo-floorplan">
+              📐 Otevřít živou ukázku: 2D Půdorys
+            </DemoButton>
+          </div>
+        </div>
+        <div className="flex flex-col gap-3">
+          <Shot src="/tutorials/eldock-2d-pudorys-navod.jpg" alt="Snímek 2D půdorysu ELDOCK: automatické trasy kabelů po stěnách" region={[226, 100, 730, 420]} width={560} caption="Snímek z aplikace · automatické trasy kabelů v 2D půdorysu" />
+          <div className="rounded-md border border-slate-700" data-testid="pitch-live-bom">
+            <p className="flex items-baseline justify-between border-b border-slate-700 px-3 py-1.5">
+              <span className="text-[13px] font-bold text-slate-100">Vzorový RD 4+kk – výpočet aplikace</span>
+              <span className="font-mono text-[11px] text-slate-400">
+                {live.bomStats.circuits} okruhů · {n(live.bomStats.cableM)} m kabelu · {live.bomStats.rows} položek
+              </span>
+            </p>
+            <table className="w-full text-left text-[11.5px]">
+              <thead className="font-mono text-[10px] tracking-wider text-slate-500 uppercase">
+                <tr>
+                  <th className="px-3 py-1 font-semibold">Položka</th>
+                  <th className="px-2 py-1 font-semibold">MPN</th>
+                  <th className="px-2 py-1 font-semibold">EAN</th>
+                  <th className="px-3 py-1 text-right font-semibold">Ks</th>
+                </tr>
+              </thead>
+              <tbody>
+                {live.bom.map((row) => (
+                  <tr key={row.mpn} className="border-t border-slate-800">
+                    <td className="max-w-[230px] truncate px-3 py-1 text-slate-200">{row.name}</td>
+                    <td className="px-2 py-1 font-mono whitespace-nowrap text-yellow-200">{row.mpn}</td>
+                    <td className="px-2 py-1 font-mono text-slate-400">{row.ean ?? "–"}</td>
+                    <td className="px-3 py-1 text-right font-mono text-slate-200">{row.quantity}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </SlideFrame>
+  );
+}
+
+function Slide4({ live }: { live: PitchLiveData }) {
+  return (
+    <SlideFrame index={3} title="Návrhář rozváděčů a normativní výpočty (ČSN EN IEC 61439)">
+      <div className="grid flex-1 grid-cols-[1fr_560px] gap-10">
+        <div className="flex flex-col">
+          <p className="text-[15px] text-slate-300">Z půdorysu (nebo z fotky rozváděče na stavbě) ke kompletní výrobní dokumentaci:</p>
+          <ul className="mt-3 flex flex-col">
+            {PANEL_POINTS.map((point) => (
+              <li key={point.title} className="border-t border-slate-700/70 py-2 first:border-t-0 first:pt-0">
+                <p className="text-[15px] font-bold text-slate-50">{point.title}</p>
+                <p className="text-[13.5px] leading-snug text-slate-400">{point.text}</p>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-auto flex flex-wrap gap-2 pt-3">
+            <DemoButton href={LIVE_DEMO.panelBuilder} testId="pitch-demo-panel">
+              ⚡ Otevřít živou ukázku: Návrhář rozváděčů & PDF elaborát
+            </DemoButton>
+            <DemoButton href={LIVE_DEMO.sampleElaborate} variant="outline" testId="pitch-demo-elaborate">
+              📄 Vzorový elaborát bez přihlášení
+            </DemoButton>
+          </div>
+        </div>
+        <div className="flex flex-col gap-3">
+          <Shot src="/tutorials/eldock-ai-panel-builder-navod.jpg" alt="Snímek výpočtu oteplení rozváděče v ELDOCK podle IEC TR 60890" region={[408, 120, 816, 412]} width={560} caption="Snímek z aplikace · oteplení dle IEC TR 60890 a fázová bilance" />
+          <div className="rounded-md border border-slate-700 px-3 py-2" data-testid="pitch-live-sheets">
+            <p className="mb-1 text-[13px] font-bold text-slate-100">Listy PDF elaborátu (z generátoru dokumentace)</p>
+            <ol className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-[11.5px] leading-snug text-slate-300">
+              {live.sheets.map((sheet, index) => (
+                <li key={sheet} className="flex gap-1.5">
+                  <span className="font-mono text-yellow-400">{index + 1}</span>
+                  {sheet}
+                </li>
+              ))}
+            </ol>
+            <p className="mt-1 font-mono text-[10.5px] text-slate-500">+ samostatný tisk samolepicích popisků a štítků 1:1</p>
+          </div>
+        </div>
+      </div>
+    </SlideFrame>
+  );
+}
+
+function Slide5({ live }: { live: PitchLiveData }) {
+  const facts: [string, string][] = [
+    ["Rozměr haly", live.bim.dimensions],
+    ["Podlaží", String(live.bim.storeys)],
+    ["Místnosti", `${live.bim.spaces} · ${n(live.bim.areaM2)} m²`],
+    ["Rozváděče", String(live.bim.boards)],
+    ["Stroje", String(live.bim.machines)],
+    ["Kabely", `${n(live.bim.cableM)} m`],
+  ];
+  return (
+    <SlideFrame index={4} title="Průmyslové závody, obchodní centra a nemocnice: lokální BIM (.ifc) a provoz">
+      <div className="grid flex-1 grid-cols-[1fr_470px] gap-10">
+        <div className="flex flex-col">
+          <p className="text-[15px] text-slate-300">Praktické nástroje pro vedoucí údržby, energetiky a facility manažery:</p>
+          <ul className="mt-3 flex flex-col">
+            {PLANT_POINTS.map((point) => (
+              <li key={point.title} className="flex gap-3 border-t border-slate-700/70 py-2.5 first:border-t-0 first:pt-0">
+                <span className="text-[20px] leading-none" aria-hidden>
+                  {point.icon}
+                </span>
+                <span className="flex flex-col">
+                  <span className="text-[15px] font-bold text-slate-50">{point.title}</span>
+                  <span className="text-[13.5px] leading-snug text-slate-400">{point.text}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-auto flex flex-wrap gap-2 pt-3">
+            <DemoButton href={LIVE_DEMO.plant} testId="pitch-demo-plant">
+              🏭 Otevřít živou ukázku: Průmyslový areál & BIM import
+            </DemoButton>
+            <DemoButton href={LIVE_DEMO.clinic} variant="outline" testId="pitch-demo-clinic">
+              🏥 Ordinace – Skupina 1
+            </DemoButton>
+            <DemoButton href={LIVE_DEMO.shop} variant="outline" testId="pitch-demo-shop">
+              🛍️ Obchodní jednotka – BD4
+            </DemoButton>
+          </div>
+        </div>
+        <div className="flex flex-col gap-3" data-testid="pitch-live-bim">
+          <div className="rounded-md border border-slate-700">
+            <p className="border-b border-slate-700 px-3 py-1.5 text-[13px] font-bold text-slate-100">Vzorový BIM model haly (IFC4) – převod v prohlížeči</p>
+            <dl className="grid grid-cols-3">
+              {facts.map(([label, value], index) => (
+                <div key={label} className={cn("px-3 py-2", index % 3 > 0 && "border-l border-slate-800", index >= 3 && "border-t border-slate-800")}>
+                  <dt className="font-mono text-[10px] tracking-wider text-slate-500 uppercase">{label}</dt>
+                  <dd className="text-[16px] font-bold text-slate-50 tabular-nums">{value}</dd>
+                </div>
+              ))}
+            </dl>
+            <p className="border-t border-slate-700 px-3 py-1.5 font-mono text-[11px] text-slate-400">Zdroje: {live.bim.sources.map((source) => `${source.tag} (${source.tier})`).join(" · ")}</p>
+          </div>
+          <div className="rounded-md border border-slate-700 px-3 py-2">
+            <Label className="mb-1.5">Filtr napájení na mapě areálu</Label>
+            <ul className="flex flex-col gap-1 text-[12.5px] text-slate-200">
+              {live.tiers.map((tier) => (
+                <li key={tier.label} className="flex items-center gap-2">
+                  <span className="h-1 w-6 rounded-full" style={{ background: tier.color }} aria-hidden />
+                  {tier.label}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <p className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-[12.5px] leading-snug text-emerald-100">
+            🔒 Soubor .ifc čte a převádí jen prohlížeč – na server ani do žádné AI se neposílá. Do ELDOCKu (cloud nebo vlastní server firmy) se uloží až výsledná struktura, kterou potvrdíte.
           </p>
         </div>
-        <div className={cn(card, "flex flex-col gap-3")}>
-          <span className="text-4xl" aria-hidden>
-            🏭
-          </span>
-          <h3 className="text-xl font-bold">2. Průmyslové závody, OC a nemocnice</h3>
-          <p className="text-lg text-zinc-300">
-            „Mrtvá“ dokumentace v papírových šanonech nebo nepoužitelných 3D BIM modelech, prostoje při nočních poruchách strojů, nepodchycené ruční změny ve schématech a přísná nová legislativa (ČSN 33 2130 ed. 4, ČSN EN IEC 61439, Nařízení EU 2023/1230 o strojních zařízeních).
-          </p>
-        </div>
-      </div>
-    </SlideFrame>
-  );
-}
-
-const PILLARS = [
-  { icon: "📐", title: "2D Půdorys & Kabeláž", text: "Fázový průvodce 1–5, obvodové trasy dle ČSN, kusovník s krabičkami KOPOS a 1-klikový přenos do rozváděče." },
-  { icon: "⚡", title: "AI Panel Builder", text: "Rozváděč z fotky nebo z půdorysu za 3 minuty, Elektro-linter, oteplení dle IEC TR 60890, 6listový PDF elaborát, CE štítek a popisky 1:1." },
-  { icon: "🏭", title: "ELDOCK Průmysl & Facility", text: "Nativní BIM .ifc import, QR štítky na rozváděčích, elektronická Červenka, zálohy PLC, 3 zdroje Síť / DA / UPS a Kniha revizí." },
-];
-
-function Slide3() {
-  return (
-    <SlideFrame index={2} title={SLIDE_TITLES[2]}>
-      <h2 className="text-3xl font-extrabold sm:text-4xl">3 propojené pilíře platformy ELDOCK</h2>
-      <div className="grid flex-1 items-stretch gap-3 lg:grid-cols-[1fr_auto_1fr_auto_1fr]">
-        {PILLARS.map((pillar, index) => (
-          <div key={pillar.title} className="contents">
-            {index > 0 ? (
-              <span className="hidden items-center justify-center text-4xl font-black text-yellow-400 lg:flex" aria-hidden>
-                →
-              </span>
-            ) : null}
-            <div className={cn(card, "flex flex-col gap-3 border-yellow-400/30")}>
-              <span className="flex size-14 items-center justify-center rounded-2xl bg-yellow-400 text-3xl text-zinc-950" aria-hidden>
-                {pillar.icon}
-              </span>
-              <h3 className="text-xl font-bold">
-                {index + 1}) {pillar.title}
-              </h3>
-              <p className="text-base text-zinc-300">{pillar.text}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-      <p className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-center text-sm text-zinc-300">
-        Jedna datová páteř: katalog výrobců (ETIM 9.0, MPN / EAN) · normy ČSN / EN / IEC · BIM IFC (ISO 16739) · cloud a aplikace pro Windows, Android a iOS
-      </p>
-    </SlideFrame>
-  );
-}
-
-function Slide4() {
-  return (
-    <SlideFrame index={3} title={SLIDE_TITLES[3]}>
-      <h2 className="text-3xl font-extrabold sm:text-4xl">Od půdorysu po PDF elaborát za 3 minuty</h2>
-      <div className="grid gap-2 sm:grid-cols-5" aria-label="5fázový průvodce 2D půdorysem">
-        {WIZARD_STEPS.map((step, index) => (
-          <div key={step.id} className={phaseCardClass(index === 0, index > 0)}>
-            <span className={phaseBubbleClass(index === 0, index > 0)} aria-hidden>
-              {index > 0 ? "✓" : step.id}
-            </span>
-            <span className="min-w-0 text-sm leading-tight font-bold">{step.short}</span>
-          </div>
-        ))}
-      </div>
-      <div className="grid gap-3 md:grid-cols-4">
-        {[
-          ["📐", "Půdorys", "PDF / DXF / DWG / IFC nebo místnosti X × Y"],
-          ["🔌", "Osazení", "Zásuvky, světla, Smart Home, koupelnové zóny"],
-          ["⚡", "Rozváděč", "1 klik: okruhy, fáze L1 / L2 / L3, chrániče, PE / N"],
-          ["📄", "Elaborát", "6 listů PDF, kusovník, oteplení, štítky 1:1, CE"],
-        ].map(([icon, title, text]) => (
-          <div key={title} className={cn(card, "p-4")}>
-            <p className="text-2xl" aria-hidden>
-              {icon}
-            </p>
-            <p className="mt-1 font-bold">{title}</p>
-            <p className="text-sm text-zinc-300">{text}</p>
-          </div>
-        ))}
-      </div>
-      <div className="mt-auto flex flex-wrap gap-3">
-        <DemoButton href={LIVE_DEMO.floorplan} testId="pitch-demo-floorplan">
-          🚀 Otevřít živou ukázku: 2D Půdorys 4+kk
-        </DemoButton>
-        <DemoButton href={LIVE_DEMO.panelBuilder} testId="pitch-demo-panel">
-          ⚡ Otevřít živou ukázku: AI Panel Builder & 6listové PDF
-        </DemoButton>
-        <DemoButton href={LIVE_DEMO.sampleElaborate} variant="outline" testId="pitch-demo-elaborate">
-          📄 Vzorový 6listový elaborát (bez přihlášení)
-        </DemoButton>
-      </div>
-    </SlideFrame>
-  );
-}
-
-function Slide5() {
-  return (
-    <SlideFrame index={4} title={SLIDE_TITLES[4]}>
-      <h2 className="text-3xl font-extrabold sm:text-4xl">Průmyslové závody, obchodní centra a nemocnice</h2>
-      <div className="grid flex-1 gap-3 md:grid-cols-3">
-        {[
-          ["🏢", "BIM .ifc import", "Budovy, místnosti, rozváděče, trasy a stroje z modelu za pár sekund – přímo v prohlížeči."],
-          ["📱", "QR diagnostika u stroje", "Technik naskenuje štítek na rozváděči a má platné schéma, zálohy PLC i revize v ruce."],
-          ["🖍️", "Elektronická Červenka", "Změna zakreslená v hale jde rovnou CAE projektantovi, nová revize se schvaluje online."],
-          ["🛍️", "Obchodní centra BD4", "ČSN 33 2000-7-718: bezhalogenové kabely B2ca, CENTRAL STOP od EPS, elektroměr MID."],
-          ["🏥", "Zdravotnictví – Skupina 1", "ČSN 33 2000-7-710 ed. 2: lůžkové rampy LUZ, EKV, okruhy A / B pod samostatnými chrániči."],
-          ["🔋", "Síť / DA / UPS", "3 úrovně zálohování napájení v mapě areálu a What-If simulátor připojení nového stroje."],
-        ].map(([icon, title, text]) => (
-          <div key={title} className={cn(card, "p-4")}>
-            <p className="text-2xl" aria-hidden>
-              {icon}
-            </p>
-            <p className="mt-1 font-bold">{title}</p>
-            <p className="text-sm text-zinc-300">{text}</p>
-          </div>
-        ))}
-      </div>
-      <div className="flex flex-wrap gap-3">
-        <DemoButton href={LIVE_DEMO.plant} testId="pitch-demo-plant">
-          🏭 Otevřít živou ukázku: Průmyslový závod & BIM
-        </DemoButton>
-        <DemoButton href={LIVE_DEMO.clinic} variant="outline" testId="pitch-demo-clinic">
-          🏥 Ordinace – Skupina 1
-        </DemoButton>
-        <DemoButton href={LIVE_DEMO.shop} variant="outline" testId="pitch-demo-shop">
-          🛍️ Obchodní centrum – BD4
-        </DemoButton>
       </div>
     </SlideFrame>
   );
@@ -241,22 +422,39 @@ function Slide5() {
 
 function Slide6() {
   return (
-    <SlideFrame index={5} title={SLIDE_TITLES[5]}>
-      <h2 className="text-3xl font-extrabold sm:text-4xl">Proč nás nelze snadno zkopírovat</h2>
-      <div className="grid flex-1 gap-4 md:grid-cols-3">
-        {[
-          ["🧠", "Exaktní inženýrské jádro (ne jen kreslítko)", "Vestavěný deterministický Elektro-linter (ČSN 33 2130 ed. 4, ČSN 33 2000-7-701, 7-710, 7-718), normativní výpočet oteplení dle IEC TR 60890, automatické PE / N sběrnice a hlídač hloubky krabiček."],
-          ["📦", "Reálná katalogová data ETIM 9.0", "Přesná objednací čísla (MPN / EAN), ztrátové výkony ve wattech a vestavné hloubky předních výrobců (ABB, Schneider, Legrand, Hager, Eaton, OEZ, KOPOS, Loxone, TapHome)."],
-          ["🏗️", "Nativní BIM (.ifc) parser v prohlížeči", "Převod stavebně-elektrotechnického BIM modelu na živé provozní dvojče za 5 sekund bez drahých CAD licencí."],
-        ].map(([icon, title, text]) => (
-          <div key={title} className={cn(card, "flex flex-col gap-3")}>
-            <span className="text-4xl" aria-hidden>
-              {icon}
-            </span>
-            <h3 className="text-lg font-bold">{title}</h3>
-            <p className="text-base text-zinc-300">{text}</p>
-          </div>
-        ))}
+    <SlideFrame index={5} title="Kde přesně dnes jsme: co už běží vs. co je před námi">
+      <div className="grid grid-cols-2 gap-10">
+        <section>
+          <Label className="mb-2 text-emerald-400">✅ Hotové, otestované a běží na eldock.cz</Label>
+          <ul className="flex flex-col">
+            {DONE.map((item) => (
+              <li key={item} className="border-t border-slate-700/70 py-2.5 text-[16px] leading-snug text-slate-200">
+                {item}
+              </li>
+            ))}
+          </ul>
+        </section>
+        <section className="border-l border-slate-700/70 pl-10">
+          <Label className="mb-2 text-yellow-400">🛠️ Co nyní řešíme a kam směřuje další vývoj</Label>
+          <ul className="flex flex-col">
+            {NEXT.map((item) => (
+              <li key={item} className="border-t border-slate-700/70 py-2.5 text-[16px] leading-snug text-slate-200">
+                {item}
+              </li>
+            ))}
+          </ul>
+        </section>
+      </div>
+      <div className="mt-auto">
+        <Label className="mb-2">Ověřitelná čísla z repozitáře · 12. 11. 2026</Label>
+        <div className="grid grid-cols-6 border-y border-slate-700/70" data-testid="pitch-stats">
+          {PROJECT_STATS.map((stat, index) => (
+            <div key={stat.label} className={cn("flex flex-col gap-0.5 py-3 pr-3", index > 0 && "border-l border-slate-700/70 pl-3")}>
+              <span className="text-[24px] font-black text-yellow-400 tabular-nums">{stat.value}</span>
+              <span className="text-[12px] leading-snug text-slate-400">{stat.label}</span>
+            </div>
+          ))}
+        </div>
       </div>
     </SlideFrame>
   );
@@ -264,275 +462,244 @@ function Slide6() {
 
 function Slide7() {
   return (
-    <SlideFrame index={6} title={SLIDE_TITLES[6]}>
-      <h2 className="text-3xl font-extrabold sm:text-4xl">Tržní příležitost a škálování</h2>
-      <div className="flex flex-wrap items-center gap-2 text-lg font-bold" aria-label="Plán expanze">
-        {["🇨🇿 ČR", "🇸🇰 SK", "🇵🇱 PL / 🇭🇺 HU", "🇩🇪 🇦🇹 🇨🇭 DACH"].map((step, index) => (
-          <span key={step} className="flex items-center gap-2">
-            {index > 0 ? (
-              <span className="text-yellow-400" aria-hidden>
-                ➔
-              </span>
-            ) : null}
-            <span className="rounded-xl border border-yellow-400/40 bg-yellow-400/10 px-3 py-1.5">{step}</span>
-          </span>
-        ))}
-      </div>
-      <div className="grid flex-1 gap-4 md:grid-cols-2">
-        <div className={card}>
-          <p className="text-sm font-semibold tracking-wide text-yellow-300 uppercase">Segment A (SMB)</p>
-          <p className="mt-2 text-lg">Živnostníci, elektromontážní firmy, revizní technici, instalační firmy FVE a TČ.</p>
-        </div>
-        <div className={card}>
-          <p className="text-sm font-semibold tracking-wide text-yellow-300 uppercase">Segment B (Enterprise & Facility)</p>
-          <p className="mt-2 text-lg">Výrobní závody, obchodní centra a retail parky, nemocnice a polikliniky.</p>
-        </div>
-      </div>
-      <div className={cn(card, "p-4")}>
-        <p className="font-bold">Mezinárodní škálovatelnost díky harmonizovaným normám IEC / EN</p>
-        <div className="mt-2 flex flex-wrap gap-2 text-sm">
-          {["ČSN EN IEC 61439", "IEC TR 60890", "ISO 16739 IFC", "ETIM 9.0"].map((norm) => (
-            <span key={norm} className="rounded-full border border-white/15 px-3 py-1 font-mono">
-              {norm}
-            </span>
-          ))}
-        </div>
-      </div>
-    </SlideFrame>
-  );
-}
-
-function Slide8() {
-  return (
-    <SlideFrame index={7} title={SLIDE_TITLES[7]}>
-      <h2 className="text-3xl font-extrabold sm:text-4xl">Obchodní model a zdroje příjmů</h2>
-      <div className="grid flex-1 gap-4 md:grid-cols-3">
-        {[
-          ["💳", "1. SaaS předplatné & kreditový systém", "Pro montážní firmy a projektanty – okamžitá platba za vygenerovaný elaborát nebo měsíční / roční tarif."],
-          ["🏢", "2. Roční B2B Enterprise licence", "Pro výrobní závody, obchodní centra a nemocnice – v limitu přímého nákupu pod 2 mil. Kč bez zdlouhavých tendrů."],
-          ["🧾", "3. Transakční marže z kusovníků", "BOM Affiliate & rozváděče na klíč: jednoklikový přenos spočítaného kusovníku do e-shopů velkoobchodů a zakázková výroba rozváděčů s provizí z obratu materiálu."],
-        ].map(([icon, title, text]) => (
-          <div key={title} className={cn(card, "flex flex-col gap-3")}>
-            <span className="text-4xl" aria-hidden>
-              {icon}
-            </span>
-            <h3 className="text-lg font-bold">{title}</h3>
-            <p className="text-base text-zinc-300">{text}</p>
-          </div>
-        ))}
-      </div>
-    </SlideFrame>
-  );
-}
-
-function Slide9() {
-  return (
-    <SlideFrame index={8} title={SLIDE_TITLES[8]}>
-      <h2 className="text-3xl font-extrabold sm:text-4xl">100% funkční produkt v produkci</h2>
-      <p className="max-w-4xl text-lg text-zinc-300">
-        Platforma <b className="text-yellow-300">{ELDOCK_URL}</b> není prezentace nápadu na papíře, ale plně funkční, otestovaný systém běžící v cloudu s desítkami tisíc řádků inženýrského kódu, automatizovanými testy a napojeným katalogem.
-      </p>
-      <div className="grid flex-1 gap-3 sm:grid-cols-2 lg:grid-cols-3" data-testid="pitch-stats">
-        {PROJECT_STATS.map((stat) => (
-          <div key={stat.label} className={cn(card, "flex flex-col justify-center")}>
-            <p className="text-4xl font-black text-yellow-400 tabular-nums">{stat.value}</p>
-            <p className="text-sm text-zinc-300">{stat.label}</p>
-          </div>
-        ))}
-      </div>
-    </SlideFrame>
-  );
-}
-
-function Slide10({ config }: { config: PitchConfig }) {
-  const funds = ["Obchodní akvizice a B2B prodej (závody, OC, nemocnice, montážní firmy)", "Rozvoj produktového jádra a ETIM / velkoobchodních integrací", "Zákaznická podpora a onboarding"];
-  return (
-    <SlideFrame index={9} title={SLIDE_TITLES[9]}>
-      <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h2 className="text-3xl font-extrabold sm:text-4xl">Žádost o podporu · Roadmap 2026–2027</h2>
-        {config.partner.trim() ? (
-          <p className="rounded-full border border-yellow-400/50 px-3 py-1 text-sm text-yellow-100" data-testid="pitch-partner">
-            Připraveno pro: <b>{config.partner}</b>
+    <SlideFrame index={6} title="Obchodní model a komu ELDOCK šetří peníze">
+      <div className="grid grid-cols-[260px_1fr] items-center gap-8 border-y border-slate-700/70 py-5">
+        <p className="text-[64px] leading-none font-black tracking-tight text-yellow-400 tabular-nums">
+          6–10 <span className="text-[30px] text-slate-300">hodin</span>
+        </p>
+        <div>
+          <p className="text-[20px] leading-snug text-slate-100">
+            Pokud elektrikář na jediném rodinném domě ušetří <b className="text-yellow-300">6–10 hodin</b> ručního měření, počítání kusovníku a psaní dokumentace rozváděče, zaplatí se mu licence na celý rok na první zakázce.
           </p>
-        ) : null}
-      </div>
-      <div className="grid flex-1 gap-4 lg:grid-cols-[1.25fr_1fr]">
-        <div className="flex flex-col gap-4">
-          <div className={cn(card, "border-yellow-400/40")}>
-            <p className="text-sm font-semibold tracking-wide text-yellow-300 uppercase">Cílová podpora{config.form.trim() ? ` · ${config.form}` : ""}</p>
-            <p className="mt-1 text-4xl font-black text-yellow-400" data-testid="pitch-amount">
-              {amountLabel(config)}
-            </p>
-          </div>
-          <div className={card}>
-            <p className="font-bold">Cíl podpory / partnerství</p>
-            <p className="mt-1 text-zinc-300">
-              Akcelerace obchodního nasazení v ČR a expanze na Slovensko a do regionu CEE / DACH, přímé napojení API velkoobchodů a výrobců, certifikace a rozšíření modulu Výchozích revizních zpráv (VRZ) a automatických cenových nabídek.
-            </p>
-          </div>
+          <p className="mt-1.5 font-mono text-[11px] text-slate-500">Jasná ekonomika pro uživatele · odhad z praxe montážních firem</p>
         </div>
-        <div className="flex flex-col gap-4">
-          <div className={card}>
-            <p className="font-bold">Rozpad využití podpory</p>
-            <ol className="mt-2 flex flex-col gap-2">
-              {funds.map((item, index) => {
-                const share = fundShare(config.funds[index]);
-                return (
-                  <li key={item} className="flex items-start gap-2 text-sm">
-                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-yellow-400 font-black text-zinc-950">{index + 1}</span>
-                    <span className="flex-1 text-zinc-200">{item}</span>
-                    {share ? <b className="font-mono text-yellow-300">{share}</b> : null}
-                  </li>
-                );
-              })}
-            </ol>
-          </div>
-          <div className={cn(card, "flex items-center gap-4")}>
-            <QRCodeSVG value={ELDOCK_URL} size={96} bgColor="#ffffff" fgColor="#09090b" marginSize={2} className="shrink-0 rounded-md" aria-label="QR kód na eldock.cz" />
-            <div className="text-sm" data-testid="pitch-contact">
-              <p className="text-lg font-bold">
-                {config.contactName} · ELDOCK
+      </div>
+      <Label className="mt-6 mb-2">3 zdroje příjmů platformy</Label>
+      <ol className="grid grid-cols-3 gap-6">
+        {REVENUE.map((item, index) => (
+          <li key={item.title} className="flex flex-col gap-2 border-t-2 border-yellow-400/80 pt-3">
+            <span className="font-mono text-[13px] font-bold text-yellow-400">{index + 1})</span>
+            <span className="text-[18px] leading-snug font-bold text-slate-50">{item.title}</span>
+            <span className="text-[14.5px] leading-snug text-slate-400">{item.text}</span>
+          </li>
+        ))}
+      </ol>
+    </SlideFrame>
+  );
+}
+
+function Slide8({ config, onEdit }: { config: PitchConfig; onEdit?: () => void }) {
+  return (
+    <SlideFrame index={7} title="Proč žádáme o podporu a jak přesně ji využijeme">
+      <div className="grid flex-1 grid-cols-[1fr_400px] gap-10">
+        <div className="flex flex-col">
+          <div className="flex items-end justify-between gap-4 border-b border-slate-700/70 pb-3">
+            <div>
+              <Label>Cílová podpora{config.form.trim() ? ` · ${config.form}` : ""}</Label>
+              <p className="mt-1 text-[34px] leading-none font-black text-yellow-400" data-testid="pitch-amount">
+                {amountLabel(config)}
               </p>
+            </div>
+            {onEdit ? (
+              <button type="button" onClick={onEdit} className="pitch-no-print inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md border border-slate-600 px-3 text-[13px] font-semibold text-slate-200 hover:border-yellow-400/70 hover:text-white" data-testid="pitch-edit-slide">
+                ✏️ Upravit text / částku
+              </button>
+            ) : null}
+          </div>
+          {config.partner.trim() ? (
+            <p className="mt-2 text-[13px] text-slate-300" data-testid="pitch-partner">
+              Připraveno pro: <b className="text-slate-100">{config.partner}</b>
+            </p>
+          ) : null}
+          <ol className="mt-2 flex flex-col">
+            {PITCH_PLAN.map((item, index) => {
+              const share = fundShare(config.funds[index]);
+              return (
+                <li key={item.title} className="flex gap-3 border-b border-slate-700/70 py-2.5 last:border-b-0">
+                  <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-sm bg-yellow-400 font-mono text-[13px] font-black text-slate-950">{index + 1}</span>
+                  <span className="flex flex-1 flex-col">
+                    <span className="text-[16px] font-bold text-slate-50">{item.title}</span>
+                    <span className="text-[14px] leading-snug text-slate-400" data-testid={`pitch-plan-${index + 1}`}>
+                      {planText(config, index)}
+                    </span>
+                  </span>
+                  {share ? <b className="font-mono text-[15px] text-yellow-300">{share}</b> : null}
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+        <aside className="flex flex-col gap-4">
+          <div className="border-t-2 border-yellow-400/80 pt-3" data-testid="pitch-author">
+            <Label>Autor projektu</Label>
+            <p className="mt-1.5 text-[20px] font-bold text-slate-50">Pavel Janoušek</p>
+            <p className="text-[14px] leading-snug text-slate-300">zkušenosti z technického obchodu a elektrotechniky (ABB, Hilti, PC|SCHEMATIC)</p>
+            <p className="mt-1 font-mono text-[13px] text-yellow-300">{ELDOCK_URL}</p>
+          </div>
+          <div className="mt-auto flex items-center gap-4 rounded-md border border-slate-700 p-3">
+            <QRCodeSVG value={ELDOCK_URL} size={96} bgColor="#ffffff" fgColor="#090d16" marginSize={2} className="shrink-0 rounded-sm" aria-label="QR kód na eldock.cz" />
+            <div className="text-[13px]" data-testid="pitch-contact">
+              <p className="text-[16px] font-bold text-slate-50">{config.contactName} · ELDOCK</p>
               <p className="text-yellow-300">{ELDOCK_URL}</p>
-              {config.contactEmail ? <p className="text-zinc-300">{config.contactEmail}</p> : null}
-              {config.contactPhone ? <p className="text-zinc-300">{config.contactPhone}</p> : null}
+              {config.contactEmail ? <p className="text-slate-300">{config.contactEmail}</p> : null}
+              {config.contactPhone ? <p className="text-slate-300">{config.contactPhone}</p> : null}
             </div>
           </div>
-        </div>
+        </aside>
       </div>
     </SlideFrame>
   );
 }
 
-/** 10 slidů v pořadí prezentace. */
-export function pitchSlides(config: PitchConfig): ReactNode[] {
-  return [<Slide1 key={1} />, <Slide2 key={2} />, <Slide3 key={3} />, <Slide4 key={4} />, <Slide5 key={5} />, <Slide6 key={6} />, <Slide7 key={7} />, <Slide8 key={8} />, <Slide9 key={9} />, <Slide10 key={10} config={config} />];
+/** 8 slidů v pořadí prezentace (`onEdit` = tlačítko ✏️ přímo na slidu 8). */
+export function pitchSlides(config: PitchConfig, live: PitchLiveData, onEdit?: () => void): ReactNode[] {
+  return [<Slide1 key={1} />, <Slide2 key={2} />, <Slide3 key={3} live={live} />, <Slide4 key={4} live={live} />, <Slide5 key={5} live={live} />, <Slide6 key={6} />, <Slide7 key={7} />, <Slide8 key={8} config={config} onEdit={onEdit} />];
 }
 
-/** Executive Summary (One-Pager) – jedna stránka A4 na výšku pro rozdání u stolu. */
-export function OnePager({ config }: { config: PitchConfig }) {
+/** One-Pager – jedna stránka A4 na výšku pro rozdání u stolu (stejné ověřené texty jako slidy). */
+export function OnePager({ config, live }: { config: PitchConfig; live: PitchLiveData }) {
   const section = "break-inside-avoid";
-  const head = "mb-1 text-[9pt] font-black tracking-wider text-zinc-900 uppercase";
+  const head = "mb-[1mm] border-b border-zinc-300 pb-[0.6mm] text-[8.4pt] font-black tracking-wider text-zinc-900 uppercase";
   return (
-    <article className="onepager mx-auto flex w-[210mm] max-w-full flex-col gap-[3.2mm] bg-white p-[11mm] text-[8.6pt] leading-snug text-zinc-800 shadow-2xl" data-testid="pitch-onepager">
-      <header className="flex items-center justify-between gap-4 border-b-2 border-yellow-400 pb-[2.5mm]">
+    <article className="onepager mx-auto flex w-[210mm] max-w-full flex-col gap-[3mm] bg-white p-[11mm] text-[8.4pt] leading-snug text-zinc-800 shadow-2xl" data-testid="pitch-onepager">
+      <header className="flex items-center justify-between gap-4 border-b-2 border-zinc-900 pb-[2.5mm]">
         <div className="flex items-center gap-3">
-          <LogoMark className="size-12" />
+          <LogoMark className="size-11" />
           <div>
-            <p className="text-[20pt] leading-none font-black text-zinc-950">
+            <p className="text-[19pt] leading-none font-black text-zinc-950">
               <span className="text-yellow-500">EL</span>DOCK.cz
             </p>
-            <p className="text-[8pt] font-semibold text-zinc-600">Executive Summary · Digitální ekosystém pro elektroinstalace, rozváděče a provoz budov a průmyslu</p>
+            <p className="mt-[0.8mm] max-w-[120mm] text-[8.4pt] font-semibold text-zinc-700">Propojení návrhu elektroinstalace, výroby rozváděčů a provozní dokumentace do jednoho pracovního postupu</p>
           </div>
         </div>
-        <QRCodeSVG value={ELDOCK_URL} size={78} marginSize={1} aria-label="QR kód na eldock.cz" />
+        <QRCodeSVG value={ELDOCK_URL} size={74} marginSize={1} aria-label="QR kód na eldock.cz" />
       </header>
 
-      <section className={section}>
-        <p className="text-[10.5pt] font-bold text-zinc-950">
-          Od 2D půdorysu a fotky rozváděče přes normativní výpočty až po digitální dvojče výrobního závodu, nemocnice či obchodního centra.
-        </p>
-      </section>
-
-      <div className="grid grid-cols-2 gap-[4mm]">
-        <section className={section}>
-          <h2 className={head}>Problém</h2>
-          <ul className="list-disc pl-4">
-            <li>
-              <b>Montážní firmy a elektrikáři (40 000+ v ČR/SK)</b> ztrácejí desítky hodin měsíčně ručním počítáním kabelů z PDF půdorysů a lepením dokumentace rozváděčů, kusových zkoušek a výpočtů oteplení v Excelu.
-            </li>
-            <li>
-              <b>Závody, OC a nemocnice</b> mají „mrtvou“ dokumentaci v šanonech nebo nepoužitelných BIM modelech, prostoje při nočních poruchách, nepodchycené změny ve schématech a přísnou legislativu (ČSN 33 2130 ed. 4, ČSN EN IEC 61439, Nařízení EU 2023/1230).
-            </li>
-          </ul>
-        </section>
-        <section className={section}>
-          <h2 className={head}>Řešení – 3 propojené pilíře</h2>
-          <ol className="list-decimal pl-4">
-            {PILLARS.map((pillar) => (
-              <li key={pillar.title}>
-                <b>{pillar.title}:</b> {pillar.text}
-              </li>
-            ))}
-          </ol>
-        </section>
-      </div>
+      <p className={cn(section, "text-[9.2pt] text-zinc-900")}>
+        Praktický webový nástroj vyvíjený přímo z potřeb montážních elektrikářů, revizních techniků a průmyslové údržby. Odstraňuje ruční přepisování mezi stavebním půdorysem, kusovníkem materiálu, schématem rozváděče a dokumentací na stavbě či ve výrobním závodě.
+      </p>
 
       <section className={section}>
-        <h2 className={head}>Architektura platformy</h2>
-        <div className="grid grid-cols-[1fr_auto_1fr_auto_1fr] items-center gap-[2mm] text-center text-[8pt]">
-          {["📐 2D půdorys & kabeláž", "⚡ AI Panel Builder", "🏭 Průmysl & Facility"].map((label, index) => (
-            <div key={label} className="contents">
-              {index > 0 ? <span className="font-black text-yellow-500">→</span> : null}
-              <span className="rounded-md border border-zinc-300 bg-zinc-50 px-2 py-[1.5mm] font-bold">{label}</span>
-            </div>
-          ))}
-        </div>
-        <p className="mt-[1.5mm] text-center text-[7.6pt] text-zinc-600">Jedna datová páteř: katalog výrobců ETIM 9.0 (MPN / EAN) · normy ČSN / EN / IEC · BIM IFC (ISO 16739) · cloud a aplikace Windows / Android / iOS</p>
+        <h2 className={head}>Reálný problém z praxe</h2>
+        <ul className="list-disc pl-4">
+          <li>
+            <b>Domovní a komerční instalace:</b> slepý PDF půdorys, délky kabelů pravítkem, vypínače, rámečky a krabičky v Excelu, dokumentace rozváděče, oteplení a štítky po večerech kvůli výchozí revizi.
+          </li>
+          <li>
+            <b>Závody, obchodní centra a nemocnice:</b> dokumentace v šanonech nebo v těžkých BIM modelech, nezakreslené změny z nočních oprav, chybí přehled o větvích Síť / DA / UPS a termínech revizí.
+          </li>
+        </ul>
       </section>
 
       <div className="grid grid-cols-3 gap-[4mm]">
         <section className={section}>
-          <h2 className={head}>Technologický náskok</h2>
+          <h2 className={head}>1 · 2D Půdorys & Kabeláž</h2>
+          <ol className="list-decimal pl-4">
+            {WIZARD_STEPS.map((step, index) => (
+              <li key={step.id}>
+                <b>{step.short}:</b> {WIZARD_TEXT[index]}
+              </li>
+            ))}
+          </ol>
+        </section>
+        <section className={section}>
+          <h2 className={head}>2 · Návrhář rozváděčů</h2>
           <ul className="list-disc pl-4">
-            <li>Deterministický Elektro-linter (ČSN 33 2130 ed. 4, 7-701, 7-710, 7-718), oteplení dle IEC TR 60890, PE / N sběrnice.</li>
-            <li>Reálná data ETIM 9.0: MPN / EAN, ztráty ve W a vestavné hloubky předních výrobců.</li>
-            <li>Nativní BIM (.ifc) parser v prohlížeči – provozní dvojče za 5 s.</li>
+            {PANEL_POINTS.map((point) => (
+              <li key={point.title}>
+                <b>{point.title}:</b> {point.text}
+              </li>
+            ))}
           </ul>
         </section>
         <section className={section}>
-          <h2 className={head}>Trh a škálování</h2>
+          <h2 className={head}>3 · Závody, OC a nemocnice</h2>
           <ul className="list-disc pl-4">
-            <li>
-              <b>A (SMB):</b> elektromontážní firmy, revizní technici, FVE a TČ.
-            </li>
-            <li>
-              <b>B (Enterprise):</b> závody, OC a retail parky, nemocnice.
-            </li>
-            <li>ČR ➔ SK ➔ PL / HU ➔ DACH díky normám IEC / EN.</li>
+            {PLANT_POINTS.map((point) => (
+              <li key={point.title}>
+                <b>{point.title}:</b> {point.text}
+              </li>
+            ))}
+          </ul>
+        </section>
+      </div>
+
+      <section className={cn(section, "rounded-md border border-zinc-300 bg-zinc-50 px-[3mm] py-[1.5mm] text-[7.8pt]")}>
+        <b>Živá data z aplikace:</b> vzorový RD 4+kk = {live.bomStats.circuits} okruhů, {n(live.bomStats.cableM)} m kabelu, {live.bomStats.rows} položek kusovníku (např. {live.bom[0]?.mpn ?? "–"}, EAN {live.bom[0]?.ean ?? "–"}) · vzorová hala IFC4 {live.bim.dimensions} = {live.bim.spaces} místností, {live.bim.boards} rozváděče, zdroje {live.bim.sources.map((source) => source.tag).join(" / ")}.
+      </section>
+
+      <div className="grid grid-cols-2 gap-[4mm]">
+        <section className={section}>
+          <h2 className={head}>✅ Hotové a běží na eldock.cz</h2>
+          <ul className="list-disc pl-4">
+            {DONE.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
           </ul>
         </section>
         <section className={section}>
-          <h2 className={head}>Obchodní model</h2>
+          <h2 className={head}>🛠️ Co řešíme a kam směřuje vývoj</h2>
           <ul className="list-disc pl-4">
-            <li>SaaS předplatné a kreditový systém.</li>
-            <li>Roční B2B Enterprise licence (pod 2 mil. Kč bez tendrů).</li>
-            <li>Transakční marže z kusovníků a rozváděče na klíč.</li>
+            {NEXT.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
           </ul>
         </section>
       </div>
 
       <section className={section}>
-        <h2 className={head}>Současný stav – funkční produkt v produkci ({ELDOCK_URL})</h2>
-        <div className="grid grid-cols-3 gap-[2mm]">
+        <div className="grid grid-cols-6 gap-[1.5mm]">
           {PROJECT_STATS.map((stat) => (
-            <div key={stat.label} className="rounded-md border border-zinc-200 bg-zinc-50 px-2 py-[1.2mm]">
-              <b className="text-[11pt] text-zinc-950">{stat.value}</b> <span className="text-[7.4pt] text-zinc-600">{stat.label}</span>
+            <div key={stat.label} className="rounded-md border border-zinc-200 px-[1.5mm] py-[1mm]">
+              <b className="block text-[10.5pt] text-zinc-950">{stat.value}</b>
+              <span className="text-[6.8pt] leading-tight text-zinc-600">{stat.label}</span>
             </div>
           ))}
         </div>
       </section>
 
-      <section className={cn(section, "rounded-lg border-2 border-yellow-400 bg-yellow-50 p-[3mm]")}>
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className={cn(head, "mb-0")}>Žádost o podporu · Roadmap 2026–2027</h2>
-          {config.partner.trim() ? <span className="text-[8pt] text-zinc-700">Připraveno pro: <b>{config.partner}</b></span> : null}
-        </div>
-        <p className="mt-1">
-          <b>Cílová podpora{config.form.trim() ? ` (${config.form})` : ""}:</b> <span data-testid="onepager-amount">{amountLabel(config)}</span> · <b>Cíl:</b> akcelerace obchodního nasazení v ČR, expanze na Slovensko a do CEE / DACH, napojení API velkoobchodů a výrobců, certifikace a modul VRZ a automatických nabídek.
-        </p>
-        <p className="mt-1">
-          <b>Využití:</b> 1) obchodní akvizice a B2B prodej{fundShare(config.funds[0]) ? ` (${fundShare(config.funds[0])})` : ""} · 2) rozvoj jádra a ETIM / velkoobchodních integrací{fundShare(config.funds[1]) ? ` (${fundShare(config.funds[1])})` : ""} · 3) zákaznická podpora a onboarding{fundShare(config.funds[2]) ? ` (${fundShare(config.funds[2])})` : ""}
+      <section className={section}>
+        <h2 className={head}>Obchodní model</h2>
+        <p>
+          <b>6–10 hodin</b> ušetřených na jediném rodinném domě (ruční měření, kusovník, dokumentace rozváděče) zaplatí licenci na celý rok na první zakázce (odhad z praxe). Příjmy: 1) kredity, měsíční a roční předplatné pro elektrikáře, projektanty a revizní techniky · 2) firemní B2B licence pro závody, obchodní centra a zdravotnická zařízení · 3) partnerské provize z materiálu a výroby rozváděčů.
         </p>
       </section>
 
-      <footer className="mt-auto flex items-center justify-between border-t border-zinc-200 pt-[2mm] text-[8.4pt]">
+      <section className={cn(section, "rounded-md border-2 border-yellow-400 bg-yellow-50 p-[3mm]")}>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-[8.4pt] font-black tracking-wider text-zinc-900 uppercase">Žádost o podporu a její využití</h2>
+          {config.partner.trim() ? (
+            <span className="text-[8pt] text-zinc-700">
+              Připraveno pro: <b>{config.partner}</b>
+            </span>
+          ) : null}
+        </div>
+        <p className="mt-1">
+          <b>Cílová podpora{config.form.trim() ? ` (${config.form})` : ""}:</b> <span data-testid="onepager-amount">{amountLabel(config)}</span>
+        </p>
+        <ol className="mt-1 list-decimal pl-4">
+          {PITCH_PLAN.map((item, index) => {
+            const share = fundShare(config.funds[index]);
+            return (
+              <li key={item.title}>
+                <b>
+                  {item.title}
+                  {share ? ` (${share})` : ""}:
+                </b>{" "}
+                {planText(config, index)}
+              </li>
+            );
+          })}
+        </ol>
+      </section>
+
+      <footer className="mt-auto flex items-center justify-between gap-3 border-t border-zinc-300 pt-[2mm] text-[8pt]">
         <span>
-          <b className="text-zinc-950">{config.contactName} · ELDOCK</b> · {ELDOCK_URL}
+          <b className="text-zinc-950">{AUTHOR_LINE}</b>
           {config.contactEmail ? ` · ${config.contactEmail}` : ""}
           {config.contactPhone ? ` · ${config.contactPhone}` : ""}
         </span>
-        <span className="text-zinc-500">Živá ukázka: {ELDOCK_URL}/prezentace</span>
+        <span className="shrink-0 text-zinc-500">eldock.cz/prezentace</span>
       </footer>
     </article>
   );

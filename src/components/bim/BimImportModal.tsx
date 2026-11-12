@@ -14,6 +14,8 @@ import { IfcError, parseIfc, type BimModel } from "@/lib/bim/ifc-parser";
 import { buildingHref, equipmentHref, floorHref } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 import { createBimBoardProjectAction, importBimAction } from "@/server/actions/bim";
+
+import { BimLocalNotice } from "./BimLocalNotice";
 import type { BimImportResult } from "@/server/services/bim-import";
 
 /** Vzorový BIM model haly (`npm run bim:sample`). */
@@ -133,6 +135,8 @@ export function BimImportButtons({ plantId, canPanelBuilder, compact = false, au
                   {loaded.fileName} · {loaded.model.schema || "IFC"} · jednotky {loaded.model.lengthUnitLabel} · projekt „{loaded.model.project.name}“{loaded.model.site ? ` · ${loaded.model.site}` : ""}
                 </DialogDescription>
               </DialogHeader>
+              {/* Fáze 101: soubor .ifc se přečetl a převedl jen v prohlížeči (File.text() + parseIfc) */}
+              <BimLocalNotice result="budovy, podlaží, místnosti a zařízení, které potvrdíte" />
               <section className="grid gap-2 sm:grid-cols-4" aria-label="Stavební struktura" data-testid="bim-structure">
                 {[
                   ["Budovy / haly", String(loaded.summary.buildings)],

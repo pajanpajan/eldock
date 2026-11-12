@@ -76,7 +76,7 @@ export function symbolParts(item: PaletteItem, size: number, options: { switchNo
   if (item.kind === "data_socket") {
     parts.kind = "socket";
     parts.paths.push(`M0 0 V${f(L)}`, `M${f(-R)} ${f(L + R * 0.8)} V${f(L)} H${f(R)} V${f(L + R * 0.8)}`);
-    parts.label = "RJ45";
+    parts.label = item.variant === "tv" ? "TV" : "RJ45";
     return parts;
   }
 

@@ -1,8 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 import { rightTab } from "./floorplan-phases";
 
-// Fáze 99: „pre-flight check“ před prezentací (`npm run verify:demo`) – veřejná prezentace /prezentace s 10 slidy
-// a One-Pagerem A4, demo scénáře 2D půdorysu na 1 klik s fázemi 1–5 a přenosem do AI Panel Builderu, vzorový
+// Fáze 99 / 101: „pre-flight check“ před prezentací (`npm run verify:demo`) – veřejná prezentace /prezentace s 8 věcnými
+// slidy a One-Pagerem A4, demo scénáře 2D půdorysu na 1 klik s fázemi 1–5 a přenosem do AI Panel Builderu, vzorový
 // rozváděč (oteplení, 6listový PDF elaborát, štítky 1:1) a průmyslový závod (vzorový BIM, mapa Síť / DA / UPS,
 // Červenka u stroje, Kniha revizí). Vše bez jediné chyby v konzoli (`pageerror` / `console.error`).
 test.describe.configure({ mode: "serial" });
@@ -33,7 +33,7 @@ async function open(page: Page, url: string, ready: (page: Page) => Promise<void
 test.describe("veřejně bez přihlášení", () => {
   test.use({ storageState: { cookies: [], origins: [] } });
 
-  test("📊 /prezentace: 200 OK, 10 slidů s ovládáním, úprava čísel a Executive One-Pager A4", async ({ page, request }) => {
+  test("📊 /prezentace: 200 OK, 8 věcných slidů na 1366 × 768 i 1920 × 1080, úprava textu / částky a One-Pager A4", async ({ page, request }) => {
     test.setTimeout(240_000);
     expect((await request.get("/prezentace", { maxRedirects: 0 })).status()).toBe(200);
     const errors = watchErrors(page);
@@ -42,52 +42,69 @@ test.describe("veřejně bez přihlášení", () => {
       await expect(current.getByTestId("pitch-deck")).toBeVisible({ timeout: 15_000 });
     });
     const slides = page.getByTestId("pitch-slide");
-    await expect(slides).toHaveCount(10);
+    await expect(slides).toHaveCount(8);
     const counter = page.getByTestId("pitch-counter");
     const active = page.locator('[data-testid="pitch-slide"][data-active="true"]');
-    await expect(counter).toHaveText("1 / 10");
-    await expect(active).toContainText("Digitální ekosystém pro návrh elektroinstalací");
+    await expect(counter).toHaveText("1 / 8");
+    await expect(active).toContainText("Propojení návrhu elektroinstalace, výroby rozváděčů a provozní dokumentace do jednoho pracovního postupu");
+    await expect(active).toContainText("Správa dokumentace závodů a budov");
     // Klávesnice: → / mezerník / ← / End / Home, tečky dole
     await page.keyboard.press("ArrowRight");
-    await expect(counter).toHaveText("2 / 10");
+    await expect(counter).toHaveText("2 / 8");
     await page.keyboard.press(" ");
-    await expect(counter).toHaveText("3 / 10");
+    await expect(counter).toHaveText("3 / 8");
     await page.keyboard.press("ArrowLeft");
-    await expect(counter).toHaveText("2 / 10");
+    await expect(counter).toHaveText("2 / 8");
     await page.keyboard.press("End");
-    await expect(counter).toHaveText("10 / 10");
+    await expect(counter).toHaveText("8 / 8");
     await page.keyboard.press("Home");
-    await expect(counter).toHaveText("1 / 10");
-    await page.getByTestId("pitch-dot-4").click();
-    await expect(active).toContainText("Od půdorysu po PDF elaborát za 3 minuty");
+    await expect(counter).toHaveText("1 / 8");
+    // Slide 3: 5 fází průvodce, živý kusovník vzorového RD s MPN / EAN, tlačítko živé ukázky
+    await page.getByTestId("pitch-dot-3").click();
+    await expect(active).toContainText("Krok za krokem od stěn po kusovník");
+    await expect(active.getByTestId("pitch-live-bom")).toContainText(/\d+ okruhů · [\d\s]+ m kabelu/);
+    await expect(active.getByTestId("pitch-live-bom").locator("tbody tr").first()).toContainText(/\d{13}/);
     await expect(page.getByTestId("pitch-demo-floorplan")).toHaveAttribute("href", "/panel-builder/floorplan?demo=rd-4kk");
+    await page.getByTestId("pitch-dot-4").click();
+    await expect(active.getByTestId("pitch-live-sheets").locator("li")).toHaveCount(6);
     await expect(page.getByTestId("pitch-demo-panel")).toHaveAttribute("target", "_blank");
     await page.getByTestId("pitch-dot-5").click();
+    await expect(active.getByTestId("pitch-live-bim")).toContainText("84,0 × 42,5 m");
     await expect(page.getByTestId("pitch-demo-plant")).toHaveAttribute("href", "/app");
-    // Každý slide se vejde na projektor 1366 × 768 (obsah ve slidu bez posuvníku)
-    for (let index = 1; index <= 10; index++) {
-      await page.getByTestId(`pitch-dot-${index}`).click();
-      const overflow = await active.evaluate((node) => node.scrollHeight - node.clientHeight);
-      expect(overflow, `slide ${index} přetéká o ${overflow} px`).toBeLessThanOrEqual(4);
+    // Každý slide se vejde na projektor 1366 × 768 i na 1920 × 1080 – stránka bez posuvníku, slide bez přetečení
+    for (const size of [{ width: 1366, height: 768 }, { width: 1920, height: 1080 }]) {
+      await page.setViewportSize(size);
+      for (let index = 1; index <= 8; index++) {
+        await page.getByTestId(`pitch-dot-${index}`).click();
+        const overflow = await active.evaluate((node) => node.scrollHeight - node.clientHeight);
+        expect(overflow, `slide ${index} na ${size.width} × ${size.height} přetéká o ${overflow} px`).toBeLessThanOrEqual(1);
+        const pageScroll = await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight);
+        expect(pageScroll, `stránka na ${size.width} × ${size.height} má svislý posuvník`).toBeLessThanOrEqual(1);
+      }
     }
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await expect(active.getByTestId("pitch-author")).toContainText("Pavel Janoušek");
+    await expect(active.getByTestId("pitch-author")).toContainText("(ABB, Hilti, PC|SCHEMATIC)");
     await expect(active.getByTestId("pitch-contact")).toContainText("Pavel Janoušek · ELDOCK");
     await expect(active.getByTestId("pitch-amount")).toHaveText("podle domluvy na jednání");
-    await page.screenshot({ path: "test-results/demo-pitch-slide10.png" });
+    await page.screenshot({ path: "test-results/demo-pitch-slide8.png" });
 
-    // ✏️ Úprava čísel jednání – uloží se do prohlížeče a vydrží obnovení stránky
-    await page.getByTestId("pitch-edit").click();
+    // ✏️ Úprava textu / částky přímo na slidu – uloží se do prohlížeče a vydrží obnovení stránky
+    await active.getByTestId("pitch-edit-slide").click();
     const dialog = page.getByTestId("pitch-edit-dialog");
     await dialog.getByTestId("pitch-edit-amount").fill("8 mil. Kč");
     await dialog.getByTestId("pitch-edit-partner").fill("Ukázkový investiční fond");
     await dialog.getByTestId("pitch-edit-fund-0").fill("45");
+    await dialog.getByTestId("pitch-edit-plan-1").fill("Napojení objednávek materiálu přes API velkoobchodů.");
     await dialog.getByTestId("pitch-edit-save").click();
     await expect(active.getByTestId("pitch-amount")).toHaveText("8 mil. Kč");
     await expect(active.getByTestId("pitch-partner")).toContainText("Ukázkový investiční fond");
+    await expect(active.getByTestId("pitch-plan-2")).toHaveText("Napojení objednávek materiálu přes API velkoobchodů.");
     await page.reload();
-    await page.getByTestId("pitch-dot-10").click();
+    await page.getByTestId("pitch-dot-8").click();
     await expect(page.locator('[data-testid="pitch-slide"][data-active="true"]').getByTestId("pitch-amount")).toHaveText("8 mil. Kč");
 
-    // 📄 Executive One-Pager: A4 (210 mm), QR kód, částka; tisk bez ovládání
+    // 📄 One-Pager: A4 (210 mm), QR kód, částka; tisk bez ovládání
     await page.getByTestId("pitch-mode-onepager").click();
     const onePager = page.getByTestId("pitch-onepager");
     await expect(onePager).toBeVisible();

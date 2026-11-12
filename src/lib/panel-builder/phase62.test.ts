@@ -61,7 +61,7 @@ describe("fáze 62 – sestava ve víceramečku jedním klikem z palety", () => 
   it("hotové sestavy podle úrovně instalace: vypínače 230 V jen klasicky, sběrnicová tlačítka jen na sběrnici", () => {
     for (const assembly of FRAME_ASSEMBLIES) expect(assemblyError(assembly.members)).toBeNull();
     const classic = assembliesFor("classic").map((assembly) => assembly.id);
-    expect(classic).toEqual(expect.arrayContaining(["set-2z", "set-3z", "set-4z", "set-2s1", "set-s1-z", "set-z-rj"]));
+    expect(classic).toEqual(expect.arrayContaining(["set-2z", "set-3z", "set-4z", "set-2s1", "set-s1-z-v", "set-z-rj", "set-tv", "set-bed"]));
     expect(classic).not.toContain("set-b2-z");
     const bus = assembliesFor("bus_loxone").map((assembly) => assembly.id);
     expect(bus).toEqual(expect.arrayContaining(["set-2z", "set-b2-z"]));

@@ -6,7 +6,7 @@ import { useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { InstallLevel } from "@/engine/floorplan-bridge";
-import { MAX_FRAME_GANGS, assembliesFor, assemblyError, assemblyGangs, assemblyLabel, frameableItems, gangsOf, type FrameLimit } from "@/lib/panel-builder/floorplan-frames";
+import { MAX_FRAME_GANGS, assembliesFor, assemblyError, assemblyGangs, assemblyLabel, frameableItems, gangsOf, type FrameAssembly, type FrameLimit } from "@/lib/panel-builder/floorplan-frames";
 import { TEMPLATE_LABEL_MAX, favoritesFirst, templatesFor, type AssemblyTemplate } from "@/lib/panel-builder/floorplan-library";
 import { cn } from "@/lib/utils";
 
@@ -14,18 +14,16 @@ export interface AssemblyPick {
   key: string;
   members: string[];
   label: string;
+  /** Fáze 101: svislá sestava (vypínač nad zásuvkou). */
+  orientation?: "vertical";
 }
 
-/** Rozbalení panelu sestav si prohlížeč pamatuje (kdo sestavy nepoužívá, sbalí je jednou provždy). */
-const OPEN_KEY = "eldock-floorplan-assemblies-open";
+/** Fáze 101: skupina sestav uvnitř sekce palety (zásuvky ve fázi 3, vypínače a ovládání ve fázi 4). */
+export const ASSEMBLY_GROUP_TITLE: Record<FrameAssembly["group"], string> = {
+  sockets: "Vícerámečky se zásuvkami (2R–5R)",
+  controls: "Vícerámečky s vypínači (u dveří / u postele)",
+};
 
-function readOpen(): boolean {
-  try {
-    return window.localStorage.getItem(OPEN_KEY) !== "0";
-  } catch {
-    return true;
-  }
-}
 
 /** Fáze 78: hvězdička oblíbené položky (zežloutne; oblíbené jdou na začátek seznamu). */
 export function FavoriteStar({ on, label, onToggle, className }: { on: boolean; label: string; onToggle: () => void; className?: string }) {
@@ -92,6 +90,7 @@ export function SaveTemplateControl({ members, onSave, compact = false, limit }:
  * Fáze 91: jen sestavy, které zvolená řada vyrábí (`limit` – Decento a nástěnné řady bez víceramečku, Time Arbo do 4R …).
  */
 export function FrameAssemblyPalette({
+  group,
   level,
   limit = { max: MAX_FRAME_GANGS, text: null },
   active,
@@ -102,6 +101,8 @@ export function FrameAssemblyPalette({
   onSaveTemplate,
   onRemoveTemplate,
 }: {
+  /** Fáze 101: skupina v sekci palety (zásuvky / vypínače). */
+  group: FrameAssembly["group"];
   level: InstallLevel;
   active: string | null;
   onPick: (pick: AssemblyPick) => void;
@@ -116,49 +117,45 @@ export function FrameAssemblyPalette({
   const allowed = new Set(options.map((item) => item.id));
   const max = Math.min(MAX_FRAME_GANGS, limit.max);
   const fits = (members: readonly string[]) => assemblyGangs([...members]) <= max;
-  const presets = favoritesFirst(assembliesFor(level).filter((preset) => fits(preset.members)), (preset) => `assembly:${preset.id}`, favorites);
+  const presets = favoritesFirst(assembliesFor(level).filter((preset) => preset.group === group && fits(preset.members)), (preset) => `assembly:${preset.id}`, favorites);
+  // Šablony firmy v obou skupinách (uložená šablona nezmizí z očí, ať obsahuje vypínač, nebo ne)
   const own = favoritesFirst(templatesFor(templates, allowed).filter((template) => fits(template.members)), (template) => `template:${template.id}`, favorites);
   const starred = new Set(favorites);
-  const [expanded, setExpanded] = useState(readOpen);
-  const [custom, setCustom] = useState<string[]>(["socket", "socket"]);
+  const firstSwitch = options.find((option) => option.kind === "switch")?.id ?? "socket";
+  const [custom, setCustom] = useState<string[]>(group === "controls" ? [firstSwitch, "socket"] : ["socket", "socket"]);
   const [customOpen, setCustomOpen] = useState(false);
+  // Klíč vkládání vlastní sestavy podle skupiny (v kompaktní liště jsou vidět obě skupiny najednou)
+  const customKey = `custom-${group}`;
   // Po změně úrovně instalace zůstanou ve vlastní sestavě jen přístroje dostupné na nové úrovni
   const members = custom.filter((id) => allowed.has(id));
   const gangs = assemblyGangs(members);
   const error = assemblyError(members, limit);
 
-  const toggle = () => {
-    const next = !expanded;
-    setExpanded(next);
-    try {
-      window.localStorage.setItem(OPEN_KEY, next ? "1" : "0");
-    } catch {
-      // bez úložiště se stav jen nezapamatuje
-    }
-  };
-
   /** Změna vlastní sestavy; když se zrovna vkládá, vkládá se rovnou nová podoba. */
   const change = (next: string[]) => {
     setCustom(next);
-    if (active === "custom" && !assemblyError(next, limit)) onPick({ key: "custom", members: next, label: assemblyLabel(next) });
+    if (active === customKey && !assemblyError(next, limit)) onPick({ key: customKey, members: next, label: assemblyLabel(next) });
   };
 
   /** Sestava k vložení: `pick` = klíč vkládání (id sestavy / „template:…“), `favorite` = klíč hvězdičky. */
-  const chip = (pick: string, favorite: string, label: string, chipMembers: readonly string[], extra?: ReactNode) => {
+  const chip = (pick: string, favorite: string, label: string, chipMembers: readonly string[], extra?: ReactNode, orientation?: "vertical") => {
     const size = assemblyGangs([...chipMembers]);
     const pressed = active === pick;
+    const name = `${label} (${size}R${orientation === "vertical" ? " svislý" : ""})`;
     return (
-      <span key={pick} className={cn("flex items-center rounded-md border pr-0.5", pressed ? "border-primary bg-primary/20" : "border-border")} data-favorite={starred.has(favorite) ? "true" : "false"}>
+      <span key={pick} className={cn("flex w-full items-center rounded-md border pr-0.5", pressed ? "border-primary bg-primary/20" : "border-border")} data-favorite={starred.has(favorite) ? "true" : "false"}>
         <button
           type="button"
           aria-pressed={pressed}
-          onClick={() => onPick({ key: pick, members: [...chipMembers], label })}
-          title={`${label} – rámeček ${size}R, přisazené a vyrovnané`}
-          className={cn("flex items-center gap-1 px-1.5 py-0.5 text-left text-[11px] leading-tight", pressed ? "text-foreground" : "text-muted-foreground hover:text-foreground")}
+          onClick={() => onPick({ key: pick, members: [...chipMembers], label: orientation === "vertical" ? `${label} (svisle)` : label, ...(orientation ? { orientation } : {}) })}
+          title={`${name} – přístroje v jednom rámečku, přisazené a vyrovnané`}
+          className={cn("flex min-w-0 flex-1 items-center gap-1.5 px-1.5 py-1 text-left text-[11px] leading-tight", pressed ? "text-foreground" : "text-muted-foreground hover:text-foreground")}
           data-assembly={pick}
         >
-          <span className="rounded bg-amber-500/20 px-1 font-mono text-[10px] font-bold text-amber-200">{size}R</span>
-          {label}
+          <span className="shrink-0 rounded bg-amber-500/20 px-1 font-mono text-[10px] font-bold text-amber-200">
+            {size}R{orientation === "vertical" ? " ↕" : ""}
+          </span>
+          <span className="min-w-0 break-words">{name}</span>
         </button>
         <FavoriteStar on={starred.has(favorite)} label={label} onToggle={() => onFavorite(favorite)} />
         {extra}
@@ -167,14 +164,10 @@ export function FrameAssemblyPalette({
   };
 
   return (
-    <section aria-label="Sestavy ve víceramečku" className="flex flex-col gap-1.5 rounded-xl border border-amber-500/40 bg-card p-3" data-testid="assembly-palette">
-      <button type="button" onClick={toggle} aria-expanded={expanded} className="flex items-center justify-between gap-2 text-left text-xs font-bold text-amber-200" data-testid="assembly-palette-toggle">
-        <span>▦ Sestavy ve víceramečku</span>
-        <span className="font-normal text-muted-foreground">{expanded ? "▾" : `▸ ${presets.length + own.length}`}</span>
-      </button>
-      {expanded ? (
-        <>
-          <p className="text-[11px] text-muted-foreground">Vypínače a zásuvky v jednom rámečku – vloží se celé jedním klikem, u stěny přisazené a natočené ke stěně.</p>
+    <section aria-label={ASSEMBLY_GROUP_TITLE[group]} className="flex flex-col gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/5 p-1.5" data-testid="assembly-palette" data-assembly-group={group}>
+      <p className="text-[11.5px] leading-tight font-bold text-amber-200">▣ {ASSEMBLY_GROUP_TITLE[group]}</p>
+      {/* Fáze 101: šablony přímo v sekci palety (dřív samostatný panel nad paletou) – vloží se celé jedním klikem */}
+          <p className="text-[10.5px] leading-tight text-muted-foreground">Celá sestava jedním klikem – u stěny přisazená a natočená ke stěně.</p>
           {/* Fáze 91: limit víceramečku zvolené řady podle katalogu výrobce */}
           {limit.text ? (
             <p className="rounded-md border border-amber-500/50 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-100" data-testid="assembly-limit" data-max={max}>
@@ -184,7 +177,7 @@ export function FrameAssemblyPalette({
           {max >= 2 && own.length ? (
             <div className="flex flex-col gap-1" data-testid="assembly-templates">
               <p className="text-[11px] font-semibold text-amber-100">💾 Šablony firmy</p>
-              <div className="flex flex-wrap gap-1">
+              <div className="flex flex-col gap-1">
                 {own.map((template) =>
                   chip(
                     `template:${template.id}`,
@@ -200,13 +193,13 @@ export function FrameAssemblyPalette({
             </div>
           ) : null}
           {max >= 2 ? (
-            <div className="flex flex-wrap gap-1" data-testid="assembly-presets">
-              {presets.map((preset) => chip(preset.id, `assembly:${preset.id}`, preset.label, preset.members))}
+            <div className="flex flex-col gap-1" data-testid="assembly-presets">
+              {presets.map((preset) => chip(preset.id, `assembly:${preset.id}`, preset.label, preset.members, undefined, preset.orientation))}
             </div>
           ) : null}
           {max >= 2 ? (
-            <button type="button" onClick={() => setCustomOpen((value) => !value)} aria-expanded={customOpen} className="self-start text-xs font-semibold text-primary hover:underline" data-testid="assembly-custom-toggle">
-              {customOpen ? "▾" : "▸"} Vlastní sestava (2–{max} pozic)
+            <button type="button" onClick={() => setCustomOpen((value) => !value)} aria-expanded={customOpen} className="flex w-full items-center justify-center gap-1 rounded-md border border-dashed border-amber-500/50 px-2 py-1 text-[11px] font-semibold text-amber-100 hover:bg-amber-500/10" data-testid="assembly-custom-toggle">
+              {customOpen ? "▾" : "+"} Vlastní sestava 2R–{max}R
             </button>
           ) : null}
           {customOpen && max >= 2 ? (
@@ -251,8 +244,8 @@ export function FrameAssemblyPalette({
                 size="sm"
                 className="h-7 gap-1 text-xs"
                 disabled={Boolean(error)}
-                aria-pressed={active === "custom"}
-                onClick={() => onPick({ key: "custom", members, label: assemblyLabel(members) })}
+                aria-pressed={active === customKey}
+                onClick={() => onPick({ key: customKey, members, label: assemblyLabel(members) })}
                 data-testid="assembly-custom-place"
               >
                 <LayoutGrid className="size-3.5" aria-hidden /> Vložit sestavu {gangs}R
@@ -261,8 +254,6 @@ export function FrameAssemblyPalette({
               <SaveTemplateControl members={members} onSave={onSaveTemplate} limit={limit} />
             </div>
           ) : null}
-        </>
-      ) : null}
     </section>
   );
 }

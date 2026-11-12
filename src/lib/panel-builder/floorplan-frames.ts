@@ -13,6 +13,7 @@ import {
   mapAllElements,
   paletteFor,
   paletteItem,
+  roomAt,
   symbolSizeOf,
   type PaletteItem,
   type Annotation,
@@ -94,8 +95,12 @@ export function layoutFrame(draft: FloorplanDraft, frameId: string): FloorplanDr
   const frame = draft.frames.find((candidate) => candidate.id === frameId);
   const anchor = frame ? draft.elements.find((element) => element.id === frame.members[0]) : null;
   if (!frame || !anchor) return draft;
-  const axis = frameAxis(anchor.rotation);
   const pitch = framePitch(draft, anchor);
+  // Fáze 101: svislý víceramček – pozice pod sebou; v půdorysu přisazené kolmo ke stěně (do místnosti), výška po 71 mm
+  const vertical = frame.orientation === "vertical";
+  const axis = vertical ? intoRoom(draft, anchor, pitch) : frameAxis(anchor.rotation);
+  const top = vertical ? effectiveHeight(draft, anchor) : 0;
+  const heights = new Map<string, number>();
   const placed = new Map<string, { x: number; y: number }>();
   // Fáze 62: kotva drží svůj střed i jako dvojzásuvka (2 pozice) – dřív se rámeček při každém přepočtu
   // (otočení, posun v rámečku) posunul o půl pozice
@@ -107,9 +112,46 @@ export function layoutFrame(draft: FloorplanDraft, frameId: string): FloorplanDr
     const gangs = gangsOf(member);
     const offset = (start + (gangs - 1) / 2) * pitch - base;
     placed.set(id, { x: Math.round(anchor.x + axis.x * offset), y: Math.round(anchor.y + axis.y * offset) });
+    if (vertical) heights.set(id, Math.round(top - (start + (gangs - 1) / 2 - (gangsOf(anchor) - 1) / 2) * FRAME_PITCH_MM));
     start += gangs;
   }
-  return { ...draft, elements: draft.elements.map((element) => (placed.has(element.id) ? { ...element, ...placed.get(element.id)!, rotation: anchor.rotation, scale: anchor.scale } : element)) };
+  return {
+    ...draft,
+    elements: draft.elements.map((element) => (placed.has(element.id) ? { ...element, ...placed.get(element.id)!, rotation: anchor.rotation, scale: anchor.scale, ...(heights.has(element.id) ? { mountHeightMm: heights.get(element.id)! } : {}) } : element)),
+  };
+}
+
+/** Fáze 101: rozteč krabic víceramečku na stěně [mm] (KOPOS KP 64/2–5, rámečky řad). */
+export const FRAME_PITCH_MM = 71;
+
+/** Fáze 101: směr kolmo ke stěně do místnosti prvku (svislý víceramček se v půdorysu kreslí pod sebou do místnosti). */
+function intoRoom(draft: Pick<FloorplanDraft, "rooms">, anchor: EditorElement, pitch: number): { x: number; y: number } {
+  const along = frameAxis(anchor.rotation);
+  const normal = { x: -along.y, y: along.x };
+  const inside = (sign: 1 | -1) => roomAt(draft.rooms, anchor.x + normal.x * pitch * 1.5 * sign, anchor.y + normal.y * pitch * 1.5 * sign)?.name === anchor.room;
+  return inside(1) || !inside(-1) ? normal : { x: -normal.x, y: -normal.y };
+}
+
+/** Fáze 101: orientace víceramečku (↔ vodorovně vedle sebe / ↕ svisle pod sebou). */
+export const frameOrientationOf = (frame: Pick<FrameGroup, "orientation"> | null | undefined): "horizontal" | "vertical" => (frame?.orientation === "vertical" ? "vertical" : "horizontal");
+
+/**
+ * Fáze 101: přepnutí orientace rámečku – svisle = pozice pod sebou (horní pozice ve výšce rámečku, další po 71 mm níž),
+ * vodorovně = všechny pozice ve společné výšce horní pozice.
+ */
+export function setFrameOrientation(draft: FloorplanDraft, frameId: string, orientation: "horizontal" | "vertical"): FloorplanDraft {
+  const frame = draft.frames.find((candidate) => candidate.id === frameId);
+  const anchor = frame ? draft.elements.find((element) => element.id === frame.members[0]) : null;
+  if (!frame || !anchor) return draft;
+  const height = effectiveHeight(draft, anchor);
+  const frames = draft.frames.map((candidate) => {
+    if (candidate.id !== frameId) return candidate;
+    const { orientation: _previous, ...rest } = candidate;
+    void _previous;
+    return orientation === "vertical" ? { ...rest, orientation: "vertical" as const } : rest;
+  });
+  const elements = orientation === "horizontal" ? draft.elements.map((element) => (frame.members.includes(element.id) ? { ...element, mountHeightMm: height } : element)) : draft.elements;
+  return layoutFrame({ ...draft, frames, elements }, frameId);
 }
 
 export type FrameResult = { ok: true; draft: FloorplanDraft; frameId: string; gangs: number } | { ok: false; error: string };
@@ -240,20 +282,28 @@ export interface FrameAssembly {
   id: string;
   label: string;
   members: readonly string[];
+  /** Fáze 101: sekce palety – `sockets` = ▣ Vícerámečky se zásuvkami (fáze 3), `controls` = s vypínači (fáze 4). */
+  group: "sockets" | "controls";
+  /** Fáze 101: svislá sestava (vypínač nad zásuvkou). */
+  orientation?: "vertical";
 }
 
 export const FRAME_ASSEMBLIES: readonly FrameAssembly[] = [
-  { id: "set-2z", label: "2× jednozásuvka", members: ["socket", "socket"] },
-  { id: "set-3z", label: "3× jednozásuvka", members: ["socket", "socket", "socket"] },
-  { id: "set-4z", label: "4× jednozásuvka", members: ["socket", "socket", "socket", "socket"] },
-  { id: "set-2s1", label: "2× vypínač č. 1", members: ["switch-1", "switch-1"] },
-  { id: "set-3s1", label: "3× vypínač č. 1", members: ["switch-1", "switch-1", "switch-1"] },
-  { id: "set-s1-s6", label: "Vypínač č. 1 + přepínač č. 6", members: ["switch-1", "switch-6"] },
-  { id: "set-s1-z", label: "Vypínač č. 1 + jednozásuvka", members: ["switch-1", "socket"] },
-  { id: "set-s1-2z", label: "Vypínač č. 1 + 2× jednozásuvka", members: ["switch-1", "socket", "socket"] },
-  { id: "set-z-rj", label: "Jednozásuvka + datová RJ45", members: ["socket", "data-socket"] },
-  { id: "set-b2-z", label: "Sběrnicové tlačítko 2násobné + jednozásuvka", members: ["bus-2", "socket"] },
-  { id: "set-b1-2z", label: "Sběrnicové tlačítko 1násobné + 2× jednozásuvka", members: ["bus-1", "socket", "socket"] },
+  // Fáze 101: ▣ Vícerámečky se zásuvkami (2R–5R) – fáze 3
+  { id: "set-2z", label: "2× Zásuvka", members: ["socket", "socket"], group: "sockets" },
+  { id: "set-3z", label: "3× Zásuvka", members: ["socket", "socket", "socket"], group: "sockets" },
+  { id: "set-4z", label: "4× Zásuvka", members: ["socket", "socket", "socket", "socket"], group: "sockets" },
+  { id: "set-z-rj", label: "Zásuvka + RJ45", members: ["socket", "data-socket"], group: "sockets" },
+  { id: "set-tv", label: "TV sestava: 2× Zásuvka + RJ45 + TV", members: ["socket", "socket", "data-socket", "tv-socket"], group: "sockets" },
+  // Fáze 101: ▣ Vícerámečky s vypínači (u dveří / u postele) – fáze 4
+  { id: "set-s1-z-v", label: "Vypínač + Zásuvka pod ním", members: ["switch-1", "socket"], group: "controls", orientation: "vertical" },
+  { id: "set-2s1-z", label: "2× Vypínač + Zásuvka", members: ["switch-1", "switch-1", "socket"], group: "controls" },
+  { id: "set-s1-zal-ter", label: "Vypínač + Žaluzie + Termostat", members: ["switch-1", "blind", "thermostat"], group: "controls" },
+  { id: "set-bed", label: "U postele: Vypínač č. 6 + 2× Zásuvka", members: ["switch-6", "socket", "socket"], group: "controls" },
+  { id: "set-2s1", label: "2× Vypínač č. 1", members: ["switch-1", "switch-1"], group: "controls" },
+  { id: "set-s1-s6", label: "Vypínač č. 1 + přepínač č. 6", members: ["switch-1", "switch-6"], group: "controls" },
+  { id: "set-b2-z", label: "Sběrnicové tlačítko 2násobné + Zásuvka", members: ["bus-2", "socket"], group: "controls" },
+  { id: "set-b1-2z", label: "Sběrnicové tlačítko 1násobné + 2× Zásuvka", members: ["bus-1", "socket", "socket"], group: "controls" },
 ];
 
 /** Přístroje, které jdou na dané úrovni instalace do víceramečku (výběr pro vlastní sestavu). */
@@ -317,12 +367,14 @@ export interface AssemblyAnchor {
  * (společná výška, řada, barva a místnost – stejná pravidla jako „Vložit do víceramečku“). `ids` = předem
  * přidělená id členů (stejný výsledek i při opakovaném volání).
  */
-export function placeAssembly(draft: FloorplanDraft, members: readonly string[], at: AssemblyAnchor, ids: readonly string[] = members.map(() => uid("e"))): AssemblyResult {
+export function placeAssembly(draft: FloorplanDraft, members: readonly string[], at: AssemblyAnchor, ids: readonly string[] = members.map(() => uid("e")), orientation: "horizontal" | "vertical" = "horizontal"): AssemblyResult {
   const error = assemblyError(members, frameLimitOf(draft, { series: at.series, color: at.color }));
   if (error) return { ok: false, error };
   const elements: EditorElement[] = assemblyLayout(draft, members, at).map((slot, index) => ({ id: ids[index], item: slot.item, x: slot.x, y: slot.y, room: at.room, mountHeightMm: null, frameUnits: 1, series: at.series, color: at.color, controls: [], rotation: at.rotation, scale: null }));
   const result = createFrame({ ...draft, elements: [...draft.elements, ...elements] }, elements.map((element) => element.id));
-  return result.ok ? { ...result, ids: elements.map((element) => element.id) } : result;
+  if (!result.ok) return result;
+  // Fáze 101: svislá sestava (vypínač nad zásuvkou) – pozice pod sebou po 71 mm
+  return { ...result, draft: orientation === "vertical" ? setFrameOrientation(result.draft, result.frameId, "vertical") : result.draft, ids: elements.map((element) => element.id) };
 }
 
 /**
@@ -339,8 +391,148 @@ export function addToFrame(draft: FloorplanDraft, elementId: string, itemId: str
   // Za poslední člen – pořadí v rámečku se bere podle polohy v ose
   const reach = (gangsOf(last) + 1) * framePitch(draft, element);
   const added: EditorElement = { id, item: itemId, x: Math.round(last.x + axis.x * reach), y: Math.round(last.y + axis.y * reach), room: element.room, mountHeightMm: null, frameUnits: 1, series: element.series, color: element.color, controls: [], rotation: element.rotation, scale: element.scale };
+  const vertical = frameOf(draft, elementId)?.orientation === "vertical";
   const result = createFrame({ ...draft, elements: [...draft.elements, added] }, [...members, added.id]);
-  return result.ok ? { ...result, ids: [added.id] } : result;
+  if (!result.ok) return result;
+  // Fáze 101: rozšířený svislý víceramček zůstane svislý
+  return { ...result, draft: vertical ? setFrameOrientation(result.draft, result.frameId, "vertical") : result.draft, ids: [added.id] };
+}
+
+// ---------------------------------------------------------------------------
+//  Fáze 101: víceramček přímo v detailu prvku (1R–5R, obsah pozic) a spojení sousedních přístrojů
+// ---------------------------------------------------------------------------
+
+/** Rychlý obsah pozice víceramečku (Detail → ▣ Sestava ve vícerámečku) – na úrovni instalace jen dostupné přístroje. */
+export const SLOT_CHOICES: readonly { item: string; label: string }[] = [
+  { item: "socket", label: "Zásuvka 230 V" },
+  { item: "data-socket", label: "Datová RJ45" },
+  { item: "tv-socket", label: "TV / SAT" },
+  { item: "switch-1", label: "Vypínač č. 1" },
+  { item: "switch-6", label: "Vypínač č. 6" },
+  { item: "switch-5", label: "Vypínač č. 5" },
+  { item: "blind", label: "Žaluziový spínač" },
+  { item: "thermostat", label: "Termostat" },
+  { item: "usb-socket", label: "USB nabíječka" },
+  { item: "bus-1", label: "Tlačítko 1násobné" },
+  { item: "bus-2", label: "Tlačítko 2násobné" },
+];
+
+export function slotChoicesFor(level: InstallLevel): { item: string; label: string }[] {
+  const allowed = new Set(frameableItems(level).map((item) => item.id));
+  return SLOT_CHOICES.filter((choice) => allowed.has(choice.item));
+}
+
+/**
+ * „[ 1R (Samostatně) ] · [ 2R ] … [ 5R ]“: počet pozic víceramečku na pozici prvku. Víc pozic = na konec rámečku se
+ * přidají přístroje stejného druhu (dvojzásuvka → jednozásuvka), méně = odeberou se koncové přístroje (vybraný zůstane),
+ * 1R = prvek se z rámečku vyjme (ostatní zůstanou). Respektuje limit řady (`maxFrameGang`). Prvek se starým „N stejných
+ * kusů“ (`frameUnits`) se převede na skutečné pozice.
+ */
+export function resizeFrame(draft: FloorplanDraft, elementId: string, gangs: number, ids: readonly string[] = []): FrameResult {
+  const element = draft.elements.find((candidate) => candidate.id === elementId);
+  if (!element) return { ok: false, error: "Přístroj v nákresu nenalezen." };
+  if (!isFrameable(element)) return { ok: false, error: `${paletteItem(element.item)?.label ?? element.item} do víceramečku nejde.` };
+  const target = Math.max(1, Math.min(MAX_FRAME_GANGS, Math.round(gangs)));
+  const frame = frameOf(draft, elementId);
+  const anchor = frame ? (draft.elements.find((candidate) => candidate.id === frame.members[0]) ?? element) : element;
+  const limit = frameLimitOf(draft, anchor);
+  if (target > limit.max) return { ok: false, error: limit.text ?? `Víceramček řady pojme nejvýš ${limit.max} pozic.` };
+  let current: FloorplanDraft = !frame && element.frameUnits > 1 ? { ...draft, elements: draft.elements.map((candidate) => (candidate.id === elementId ? { ...candidate, frameUnits: 1 } : candidate)) } : draft;
+  if (target === 1) return { ok: true, draft: frame ? removeFromFrame(current, elementId) : current, frameId: "", gangs: 1 };
+  let used = frame ? frameGangs(current, frame) : gangsOf({ ...element, frameUnits: 1 });
+  if (frame && used > target) {
+    const removed: string[] = [];
+    for (const id of [...frame.members].reverse()) {
+      if (used <= target) break;
+      if (id === elementId) continue;
+      const member = current.elements.find((candidate) => candidate.id === id);
+      if (!member) continue;
+      used -= gangsOf(member);
+      removed.push(id);
+    }
+    current = removeElements(current, removed);
+    const left = frameOf(current, elementId);
+    return { ok: true, draft: left ? layoutFrame(current, left.id) : current, frameId: left?.id ?? "", gangs: left ? frameGangs(current, left) : gangsOf(element) };
+  }
+  const fill = paletteItem(element.item)?.kind === "double_socket" ? "socket" : element.item;
+  let frameId = frame?.id ?? "";
+  for (let index = 0; used < target; index++) {
+    const result = addToFrame(current, elementId, fill, ids[index] ?? uid("e"));
+    if (!result.ok) return result;
+    current = result.draft;
+    frameId = result.frameId;
+    used = result.gangs;
+  }
+  return { ok: true, draft: current, frameId, gangs: used };
+}
+
+/** Obsah pozice víceramečku na 1 klik (zásuvka, RJ45, TV / SAT, vypínač č. 1 / 6 / 5 …) – prvek si ponechá id a polohu. */
+export function setFrameSlot(draft: FloorplanDraft, elementId: string, itemId: string): FrameResult {
+  const element = draft.elements.find((candidate) => candidate.id === elementId);
+  const item = paletteItem(itemId);
+  if (!element || !item) return { ok: false, error: "Přístroj v nákresu nenalezen." };
+  if (!isFrameable({ item: itemId })) return { ok: false, error: `${item.label} do víceramečku nejde.` };
+  const frame = frameOf(draft, elementId);
+  const changed: EditorElement = { ...element, item: itemId, frameUnits: 1, controls: controlsLights(item) ? element.controls : [] };
+  delete changed.product;
+  const next = { ...draft, elements: draft.elements.map((candidate) => (candidate.id === elementId ? changed : candidate)) };
+  if (!frame) return { ok: true, draft: next, frameId: "", gangs: gangsOf(changed) };
+  const anchor = next.elements.find((candidate) => candidate.id === frame.members[0]) ?? changed;
+  const limit = frameLimitOf(next, anchor);
+  const gangs = frameGangs(next, frame);
+  if (gangs > Math.min(MAX_FRAME_GANGS, limit.max)) return { ok: false, error: overLimit(limit, gangs, "rámeček by měl") };
+  return { ok: true, draft: layoutFrame(next, frame.id), frameId: frame.id, gangs };
+}
+
+/** Stejná stěna: stejná osa natočení (± 1°). */
+const sameWall = (a: number, b: number) => {
+  const angle = (value: number) => ((value % 180) + 180) % 180;
+  const diff = Math.abs(angle(a) - angle(b));
+  return Math.min(diff, 180 - diff) <= 1;
+};
+
+/**
+ * Fáze 101: sousední přístroje u stejné stěny do `maxMm` (35 cm) od vybraného – kandidáti „🔗 Spojit sousední prvky do
+ * společného víceramečku“. Značky výkresu jsou větší než přístroj (300 mm), takže platí i značky přisazené vedle sebe
+ * (1,5 × rozteč rámečku ve výkresu). Stejná místnost a osa stěny, nejvýš 12 cm mimo linii stěny; nejbližší první.
+ * Přístroje rámečku vybraného prvku se nepočítají.
+ */
+export function frameNeighbors(draft: FloorplanDraft, elementId: string, maxMm = 350): EditorElement[] {
+  const element = draft.elements.find((candidate) => candidate.id === elementId);
+  if (!element || !isFrameable(element)) return [];
+  const own = new Set(frameOf(draft, elementId)?.members ?? [elementId]);
+  const axis = frameAxis(element.rotation);
+  // Souřadnice plánu jsou v mm; přisazené značky leží v rozteči výkresu (značka 300 mm), proto nejvýš o rozteč dál
+  const reach = Math.max(maxMm, framePitch(draft, element) * 1.5);
+  const along = (other: EditorElement) => Math.abs((other.x - element.x) * axis.x + (other.y - element.y) * axis.y);
+  const across = (other: EditorElement) => Math.abs((other.x - element.x) * -axis.y + (other.y - element.y) * axis.x);
+  return draft.elements
+    .filter((other) => !own.has(other.id) && isFrameable(other) && other.room === element.room && sameWall(other.rotation, element.rotation) && across(other) <= 120 && along(other) <= reach)
+    .sort((a, b) => along(a) - along(b));
+}
+
+/**
+ * „🔗 Spojit sousední prvky do společného víceramečku (2R–5R)“: vybraný přístroj (i se svým rámečkem) a nejbližší sousedé
+ * u stejné stěny (i s jejich rámečky), dokud se vejdou do limitu řady.
+ */
+export function joinNeighbors(draft: FloorplanDraft, elementId: string, maxMm = 350): FrameResult {
+  const element = draft.elements.find((candidate) => candidate.id === elementId);
+  if (!element) return { ok: false, error: "Přístroj v nákresu nenalezen." };
+  const neighbors = frameNeighbors(draft, elementId, maxMm);
+  if (!neighbors.length) return { ok: false, error: "U stejné stěny do 35 cm není žádný další přístroj – vyberte 2 až 5 přístrojů Shift + klikem." };
+  const limit = Math.min(MAX_FRAME_GANGS, frameLimitOf(draft, element).max);
+  const ids = [...(frameOf(draft, elementId)?.members ?? [elementId])];
+  let gangs = ids.reduce((sum, id) => sum + gangsOf(draft.elements.find((candidate) => candidate.id === id)!), 0);
+  for (const neighbor of neighbors) {
+    if (ids.includes(neighbor.id)) continue;
+    const group = frameOf(draft, neighbor.id)?.members ?? [neighbor.id];
+    const extra = group.reduce((sum, id) => sum + gangsOf(draft.elements.find((candidate) => candidate.id === id)!), 0);
+    if (gangs + extra > limit) continue;
+    ids.push(...group.filter((id) => !ids.includes(id)));
+    gangs += extra;
+  }
+  if (ids.length < 2) return { ok: false, error: `Sousední přístroje se do víceramečku řady (nejvýš ${limit}R) nevejdou.` };
+  return createFrame(draft, ids);
 }
 
 // ---------------------------------------------------------------------------

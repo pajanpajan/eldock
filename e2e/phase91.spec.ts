@@ -147,8 +147,8 @@ test("🔲 Víceramečky podle katalogu: 5R po změně na Time Arbo → štítek
   const { canvas, clickAt } = tools(page);
   await roomBySize(page, "Obývací pokoj", "5", "4");
   await page.getByTestId("wizard-step-3").click();
-  const sets = page.getByRole("region", { name: "Sestavy ve víceramečku" });
-  if ((await sets.getByTestId("assembly-palette-toggle").getAttribute("aria-expanded")) !== "true") await sets.getByTestId("assembly-palette-toggle").click();
+  // Fáze 101: sestavy přímo v sekci palety Zásuvky (▣ Vícerámečky se zásuvkami)
+  const sets = page.getByRole("region", { name: "Vícerámečky se zásuvkami (2R–5R)" });
   // Levit vyrábí rámečky 1R–5R – bez upozornění, sestava 4R v nabídce
   await expect(sets.getByTestId("assembly-limit")).toHaveCount(0);
   await expect(sets.locator('[data-assembly="set-4z"]')).toBeVisible();

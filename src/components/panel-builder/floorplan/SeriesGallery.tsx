@@ -147,8 +147,8 @@ export function SeriesGallery({ seriesKey, color, frameColor = null, available, 
       }}
     >
       <DialogTrigger asChild>
-        <Button type="button" size="sm" variant="outline" className="h-8 gap-1.5 text-xs" data-testid="series-gallery-open">
-          <Palette className="size-3.5" aria-hidden /> Galerie řad a barev
+        <Button type="button" size="sm" className="h-9 w-full gap-1.5 text-sm font-semibold" data-testid="series-gallery-open">
+          <Palette className="size-4" aria-hidden /> 🎨 Otevřít velkou galerii řad a barev
         </Button>
       </DialogTrigger>
       <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-5xl" data-testid="series-gallery">

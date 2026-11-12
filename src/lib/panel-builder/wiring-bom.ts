@@ -2,7 +2,9 @@
 // stavebnicový vypínač = přístroj (strojek) + kryt v barvě + rámeček 1R–5R, jednozásuvka = přístroj s krytem + rámeček,
 // dvojzásuvka = kompletní přístroj. K tomu instalační krabice KOPOS a kabely CYKY po metrech.
 // Objednací čísla: přímo ze zadání (matice ABB 2026) jsou `verified`; odvozená varianta stejné matice (dělený / žaluziový kryt
-// u řady, kde zadání uvádí jen jednoduchý kryt, dvoubarevný kód) má `verified: false`; bez podkladu je MPN null (doplnit).
+// u řady, kde zadání uvádí jen jednoduchý kryt, dvoubarevný kód) má `verified: false`; bez podkladu je MPN null.
+// Fáze 101: číslo, které v datech výrobce není, se nevymýšlí – kusovník u něj místo „doplnit“ uvede, odkud položka přijde
+// (`bomOrderLabel`: kabel podle typového označení, prvek podle projektu, přístroj podle katalogu výrobce).
 // Fáze 81: panel chytré domácnosti (IP TOUCH, SmartTouch, Trevion …) v barvě varianty s vlastní montážní krabicí místo
 // přístrojové a s mezirámečkem podle řady (Trevion v Zoni); systémový modul mimo DIN lištu (nástěnný SysAP) do kusovníku.
 // Fáze 91: víceramček, který řada nevyrábí, se rozdělí na skutečné rámečky (Time Arbo 5R → 4R + 1R, Classic po 1R);
@@ -20,7 +22,7 @@ import { panelBomRows, variantOf } from "./smart-panels";
 import { boxMakerLabel, compileBoxUsage, wallTypeOf } from "./mounting-boxes-catalog";
 import { EKV_CONDUCTOR } from "./occupancy";
 import { frameRulesOf, maxFrameGang, splitFrameGangs, splitLabel } from "./residential-series-catalog";
-import { appearanceLabel, colorCodeFor, designSeriesOf, hasFrameChoice, isMonoblockSeries, resolveFrameColor } from "./wiring-designs";
+import { appearanceLabel, colorCodeFor, colorForSeries, designSeriesOf, frameColorForSeries, hasFrameChoice, isMonoblockSeries, resolveFrameColor } from "./wiring-designs";
 
 export type BomCategory = "Přístroje spínačů" | "Kryty spínačů" | "Sběrnicové prvky" | "Chytré moduly" | "Zásuvky" | "Rámečky" | "Ostatní přístroje" | "Bezpečnostní a zdravotnické prvky" | "Instalační krabice" | "Kabely";
 export const BOM_CATEGORIES: readonly BomCategory[] = ["Přístroje spínačů", "Kryty spínačů", "Sběrnicové prvky", "Chytré moduly", "Zásuvky", "Rámečky", "Ostatní přístroje", "Bezpečnostní a zdravotnické prvky", "Instalační krabice", "Kabely"];
@@ -30,7 +32,7 @@ export const EKV_CONDUCTOR_M = 3;
 
 export interface WiringBomRow {
   category: BomCategory;
-  /** Objednací číslo; null = v podkladech chybí, doplnit z katalogu výrobce. */
+  /** Objednací číslo; null = v datech výrobce není (popis původu položky `bomOrderLabel`). */
   mpn: string | null;
   /** false = odvozeno z matice katalogu – ověřit před objednáním. */
   verified: boolean;
@@ -42,6 +44,18 @@ export interface WiringBomRow {
   box?: BomBoxInfo;
   /** Fáze 94: EAN (GTIN) z oficiálních dat výrobce ABB ETIM 9.0 – objednací číslo výrobce zná. */
   ean?: string;
+}
+
+/**
+ * Fáze 101: řádek bez objednacího čísla v datech výrobce – odkud položka přijde (nic se nevymýšlí): kabel se objednává podle
+ * typového označení (výrobce dle nabídky velkoobchodu), bezpečnostní a zdravotnické prvky podle projektu a dodavatele,
+ * přístroj a krabice podle katalogu svého výrobce.
+ */
+export function bomOrderLabel(row: Pick<WiringBomRow, "category" | "mpn">): string {
+  if (row.mpn) return row.mpn;
+  if (row.category === "Kabely") return "typové označení – výrobce dle nabídky";
+  if (row.category === "Bezpečnostní a zdravotnické prvky") return "dle projektu a dodavatele";
+  return "dle katalogu výrobce";
 }
 
 /** Fáze 94: EAN objednacího čísla z dat ABB ETIM 9.0 (null = číslo v datech výrobce není nebo nemá EAN). */
@@ -195,9 +209,12 @@ export function compileFloorplanBom(draft: FloorplanDraft, options: BomOptions =
   // Fáze 74: barva klapky / krytu (`color`) a barva rámečku (`frameColor`) zvlášť – kód barvy dílu do objednacího čísla
   const look = (element: Pick<EditorElement, "series" | "color" | "frameColor">) => {
     const seriesKey = element.series ?? draft.series;
-    const colorId = element.color ?? draft.color;
+    // Fáze 101: obecná barva nákresu („Bílá / Alpská bílá“) = barva řady ze stejné skupiny (ABB Levit → kód 03) – bez kódu
+    // barvy by objednací čísla krytů, zásuvek, datových zásuvek a rámečků chyběla
+    const colorId = colorForSeries(seriesKey, element.color ?? draft.color);
     // Fáze 90: monobloky a Decento – barva rámečku = barva provedení
-    const frameId = hasFrameChoice(seriesKey) ? frameColorOf(draft, element) : colorId;
+    // Fáze 101: i obecná barva rámečku = barva rámečku řady (u samostatné palety rámečků výchozí rámeček ke krytu)
+    const frameId = hasFrameChoice(seriesKey) ? (frameColorForSeries(seriesKey, frameColorOf(draft, element)) ?? colorId) : colorId;
     const found = designSeriesOf(seriesKey);
     const isAbb = found?.brand.manufacturer === "ABB";
     const seriesColor = found?.series.colors?.find((color) => color.id === colorId);
@@ -228,7 +245,7 @@ export function compileFloorplanBom(draft: FloorplanDraft, options: BomOptions =
     const item = paletteItem(element.item);
     // Fáze 93: nouzové únikové svítidlo, přípojka EKV a lůžková rampa LUZ (kompletní těleso se zásuvkami okruhů A a B)
     if (item?.emergency) {
-      add({ category: "Bezpečnostní a zdravotnické prvky", mpn: null, verified: false, name: "Nouzové únikové svítidlo s piktogramem (1 h / 3 h, SE / SA, ČSN EN 1838) – výrobce doplňte", appearance: "–", unit: "ks" }, 1);
+      add({ category: "Bezpečnostní a zdravotnické prvky", mpn: null, verified: false, name: "Nouzové únikové svítidlo s piktogramem (1 h / 3 h, SE / SA, ČSN EN 1838) – typ dle projektu nouzového osvětlení", appearance: "–", unit: "ks" }, 1);
       continue;
     }
     if (item?.kind === "bonding") {
@@ -338,7 +355,11 @@ export function compileFloorplanBom(draft: FloorplanDraft, options: BomOptions =
       else add({ category: "Zásuvky", ...withColor(matrix?.socket2 ?? null, code, true), name: "Dvojzásuvka 2N – kompletní přístroj", appearance, unit: "ks" }, units);
       continue;
     }
-    if (item.kind === "data_socket") {
+    if (item.kind === "data_socket" && item.variant === "tv") {
+      // Fáze 101: anténní zásuvka TV / SAT – koncová / průběžná podle rozvodu antény, typ podle katalogu výrobce řady
+      add({ category: "Ostatní přístroje", mpn: null, verified: false, name: "Anténní zásuvka TV / SAT (koaxiální, 75 Ω)", appearance, unit: "ks" }, units);
+      frame();
+    } else if (item.kind === "data_socket") {
       add({ category: "Ostatní přístroje", ...(decento ? decentoMpn(DECENTO_DATA, code) : { mpn: null, verified: false }), name: decento ? "Zásuvka komunikační Decento (pro 2× keystone RJ45) – kompletní přístroj" : "Datová zásuvka RJ45 (Cat6)", appearance, unit: "ks" }, units);
       frame();
     }
@@ -391,7 +412,7 @@ export function compileFloorplanBom(draft: FloorplanDraft, options: BomOptions =
         category: "Instalační krabice",
         mpn: line.box?.code ?? null,
         verified: Boolean(line.box?.code),
-        name: line.box ? `${line.box.type} – ${line.box.purpose}` : `${line.missing ?? "Instalační krabice"} – ${maker} tento typ nevede, doplňte ručně`,
+        name: line.box ? `${line.box.type} – ${line.box.purpose}` : `${line.missing ?? "Instalační krabice"} – ${maker} tento typ nevede (zvolte krabici jiného výrobce)`,
         appearance: line.box ? boxMakerLabel(line.box.maker) : maker,
         unit: "ks",
         box: { maker: line.box ? boxMakerLabel(line.box.maker) : maker, type: line.box?.type ?? "–", depthMm: line.box?.depthMm ?? null, purpose: line.box ? line.box.purpose : `${line.missing ?? "Instalační krabice"} (${wall})` },
@@ -420,12 +441,12 @@ export const bomBoxRows = (rows: readonly WiringBomRow[]) => rows.filter((row): 
 
 /** Fáze 91: tabulka doporučených krabic (hlavička + data). */
 export function boxTable(rows: readonly WiringBomRow[]): (string | number)[][] {
-  return [["Výrobce", "Typové označení", "Objednací kód / katalogové číslo", "EAN (GTIN)", "Hloubka (mm)", "Určení / prostředí", "Počet ks"], ...bomBoxRows(rows).map((row) => [row.box.maker, row.box.type, row.mpn ?? "doplnit", row.ean ?? "", row.box.depthMm ?? "–", row.box.purpose, row.quantity])];
+  return [["Výrobce", "Typové označení", "Objednací kód / katalogové číslo", "EAN (GTIN)", "Hloubka (mm)", "Určení / prostředí", "Počet ks"], ...bomBoxRows(rows).map((row) => [row.box.maker, row.box.type, bomOrderLabel(row), row.ean ?? "", row.box.depthMm ?? "–", row.box.purpose, row.quantity])];
 }
 
 /** Řádky tabulky pro CSV / XLSX (hlavička + data); fáze 91 – krabice v samostatné tabulce na konci. */
 export function bomTable(rows: readonly WiringBomRow[]): (string | number)[][] {
-  const main = [["Kategorie", "Objednací číslo (MPN)", "EAN (GTIN)", "Název a specifikace", "Řada a barva", "Počet", "Jednotka", "Ověření"], ...bomMainRows(rows).map((row) => [row.category, row.mpn ?? "doplnit", row.ean ?? "", row.name, row.appearance, row.quantity, row.unit, row.mpn ? (row.ean ? "data výrobce ETIM 9.0" : row.verified ? "katalog" : "ověřit") : "chybí"])];
+  const main = [["Kategorie", "Objednací číslo (MPN)", "EAN (GTIN)", "Název a specifikace", "Řada a barva", "Počet", "Jednotka", "Ověření"], ...bomMainRows(rows).map((row) => [row.category, bomOrderLabel(row), row.ean ?? "", row.name, row.appearance, row.quantity, row.unit, row.mpn ? (row.ean ? "data výrobce ETIM 9.0" : row.verified ? "katalog" : "ověřit") : "dle výrobce / projektu"])];
   const boxes = boxTable(rows);
   return boxes.length > 1 ? [...main, [], [BOX_TABLE_TITLE], ...boxes] : main;
 }

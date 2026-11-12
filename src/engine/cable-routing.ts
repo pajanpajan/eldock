@@ -262,6 +262,8 @@ export function circuitRoutes(nodes: readonly RouteNode[], panel: RoutePoint, pr
 export const cableLabel = (cable: string) => cable.replace(/(\d)x(\d)/, "$1×$2");
 export const SWITCH_LEG_CABLE = "CYKY-O 3×1,5";
 export const DATA_CABLE = "UTP Cat6";
+/** Fáze 101: anténní zásuvka TV / SAT – vlastní koaxiální kabel z rozváděče (multipřepínače), nikdy UTP. */
+export const COAX_CABLE = "Koaxiální kabel 75 Ω (TV / SAT)";
 /** Fáze 51: dvojitý střídavý přepínač č. 6+6 – L + korespondenční pár pro každou ze 2 větví. */
 export const DOUBLE_TWO_WAY_CABLE = "CYKY-O 5×1,5";
 /** Žaluziový ovladač → pohon žaluzie (L, N, PE, nahoru, dolů). */
@@ -354,6 +356,8 @@ export interface CablingInput {
   controlRuns?: readonly { id: string; kind: "blind" | "thermostat"; targetId?: string | null }[];
   /** Datové zásuvky – každá samostatný UTP z rozváděče / racku. */
   dataNodeIds?: readonly string[];
+  /** Fáze 101: anténní zásuvky TV / SAT – každá samostatný koaxiální kabel z rozváděče (multipřepínače). */
+  coaxNodeIds?: readonly string[];
   /** Fáze 52: úroveň instalace – hvězda světel (sběrnice), CYKY-J ke každému vypínači (retrofit). */
   installation?: InstallMode;
   /**
@@ -573,7 +577,8 @@ export function summarizeCabling(input: CablingInput): CableSummary {
   }
   // Datové zásuvky: samostatný UTP ze svého rozváděče, každá kratší cestou v režimu OPTIMIZED; fáze 74 s trasou na výkres
   const dataRuns: DataRun[] = [];
-  for (const id of input.dataNodeIds ?? []) {
+  const coax = new Set(input.coaxNodeIds ?? []);
+  for (const id of [...(input.dataNodeIds ?? []), ...coax]) {
     const node = byId.get(id);
     if (!node) continue;
     const board = node.board ?? "RH";
@@ -581,7 +586,7 @@ export function summarizeCabling(input: CablingInput): CableSummary {
     const routes = withEdits(circuitRoutes([node], origin, profile, metric), panelKey(board));
     for (const mode of ["BOTTOM", "TOP", "OPTIMIZED"] as const) totals[mode] += routes[mode].totalMm;
     const route = withPaths(routes[input.selected], byId, origin, metric);
-    add(DATA_CABLE, route.totalMm);
+    add(coax.has(id) ? COAX_CABLE : DATA_CABLE, route.totalMm);
     dataRuns.push({ id: `data-${id}`, nodeId: id, board, lengthsM: { BOTTOM: meters(routes.BOTTOM.totalMm), TOP: meters(routes.TOP.totalMm), OPTIMIZED: meters(routes.OPTIMIZED.totalMm) }, routing: route.mode, route });
   }
 

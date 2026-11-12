@@ -82,7 +82,9 @@ async function screen(page: Page, x: number, y: number) {
 
 test("šablona sestavy z vlastní sestavy, vložení jedním klikem a ⭐ oblíbené nahoru i zpět na původní místo", async ({ page }) => {
   await openFlat(page, "phase78-templates");
-  const sets = page.getByRole("region", { name: "Sestavy ve víceramečku" });
+  // Fáze 101: sestavy a šablony firmy jsou přímo v sekci palety Zásuvky (fáze 3)
+  await goPhaseForGroup(page, "sockets");
+  const sets = page.getByRole("region", { name: "Vícerámečky se zásuvkami (2R–5R)" });
   // Vlastní sestava vypínač č. 1 + jednozásuvka → šablona firmy
   await sets.getByTestId("assembly-custom-toggle").click();
   const custom = sets.getByTestId("assembly-custom");
@@ -129,7 +131,8 @@ test("šablona sestavy z vlastní sestavy, vložení jedním klikem a ⭐ oblíb
   // Po obnovení stránky šablona zůstává (prohlížeč + firma)
   await page.waitForTimeout(800);
   await page.reload();
-  await expect(page.getByRole("region", { name: "Sestavy ve víceramečku" }).getByTestId("assembly-templates")).toContainText("Vstup do pokoje 2R");
+  await goPhaseForGroup(page, "sockets");
+  await expect(page.getByRole("region", { name: "Vícerámečky se zásuvkami (2R–5R)" }).getByTestId("assembly-templates")).toContainText("Vstup do pokoje 2R");
 });
 
 test("projekt do počítače (.eldock.json) a zpět se stejným nákresem jako nový půdorys; 📂 Moje uložené půdorysy", async ({ page }) => {

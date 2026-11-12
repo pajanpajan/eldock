@@ -46,13 +46,12 @@ test("2D půdorys: sestavy ve víceramečku, ▦+, skrytí kabeláže při páro
   await expect(title).toContainText("Vkládání: Hlavní domovní");
   await canvas.click({ position: { x: 140, y: 520 } });
 
-  // Hotová sestava 3× jednozásuvka (panel sestav nad paletou): náhled celé sestavy u kurzoru, jedním klikem
-  // 3 zásuvky v rámečku 3R
-  // Fáze 98: sestavy ve víceramečku jsou v levém sloupci fází 3 a 4
+  // Hotová sestava 3× Zásuvka: náhled celé sestavy u kurzoru, jedním klikem 3 zásuvky v rámečku 3R
+  // Fáze 101: sestavy jsou přímo v sekci palety Zásuvky (▣ Vícerámečky se zásuvkami, fáze 3)
   await goPhase(page, 3);
-  const sets = page.getByRole("region", { name: "Sestavy ve víceramečku" });
+  const sets = page.getByRole("region", { name: "Vícerámečky se zásuvkami (2R–5R)" });
   await sets.locator('[data-assembly="set-3z"]').click();
-  await expect(title).toContainText("Vkládání sestavy: 3× jednozásuvka (3R)");
+  await expect(title).toContainText("Vkládání sestavy: 3× Zásuvka (3R)");
   await canvas.hover({ position: { x: 400, y: 116 } });
   await expect(canvas.getByTestId("place-set-ghost")).toHaveAttribute("data-members", "3");
   await canvas.click({ position: { x: 400, y: 116 } });

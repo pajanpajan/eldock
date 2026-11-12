@@ -43,7 +43,8 @@ export type NodeKind = "single_socket" | "double_socket" | "light" | "switch" | 
 
 /** Upřesnění prvku (fáze 49): zásuvka nad linkou, IP44, nástěnné svítidlo, tlačítko. */
 /** Fáze 91: „usb“ = zásuvka s USB nabíječkou, „surge“ = zásuvka s přepěťovou ochranou T3 (výška běžné zásuvky). */
-export type NodeVariant = "worktop" | "ip44" | "wall" | "button" | "usb" | "surge";
+/** Fáze 101: `tv` = anténní zásuvka TV / SAT (koaxiální kabel z rozváděče / multipřepínače, ne UTP). */
+export type NodeVariant = "worktop" | "ip44" | "wall" | "button" | "usb" | "surge" | "tv";
 
 /** Bod půdorysu (zásuvka, svítidlo, spínač nebo pevně připojený spotřebič). */
 export interface FloorNode {

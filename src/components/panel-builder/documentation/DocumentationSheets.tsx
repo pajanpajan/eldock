@@ -10,7 +10,7 @@ import { ROUTING_LABEL, type CableReport } from "@/lib/panel-builder/floorplan-e
 import type { ManufacturerInfo } from "@/lib/panel-builder/project";
 import type { ThermalResult } from "@/lib/thermalCalculation";
 import { ROUTINE_TEST_POINTS, minInsulationMOhm, routineTestVerdict, type RoutineTest, type StandardEdition } from "@/lib/legislation-2027";
-import { type WiringBomRow, BOX_TABLE_TITLE } from "@/lib/panel-builder/wiring-bom";
+import { type WiringBomRow, BOX_TABLE_TITLE, bomOrderLabel } from "@/lib/panel-builder/wiring-bom";
 import type { HotspotSink } from "@/lib/panel-builder/drawings";
 import type { FloorplanDraft } from "@/lib/panel-builder/floorplan-editor";
 import type { DisplayCircuit } from "@/lib/panel-builder/route-display";
@@ -480,7 +480,8 @@ export function DocumentationSheets({ data }: { data: DocumentationData }) {
                   <tr key={`${row.category}-${row.mpn ?? row.name}-${row.appearance}`}>
                     <td className={cell}>{row.category}</td>
                     <td className={`${cell} font-mono`}>
-                      {row.mpn ? `${row.mpn}${row.verified ? "" : " (ověřit)"}` : "doplnit"}
+                      {/* Fáze 101: bez čísla v datech výrobce pravdivý původ položky místo „doplnit“ */}
+                      {row.mpn ? `${row.mpn}${row.verified ? "" : " (ověřit)"}` : <span className="font-sans italic">{bomOrderLabel(row)}</span>}
                       {/* Fáze 94: EAN z oficiálních dat výrobce ABB ETIM 9.0 */}
                       {row.ean ? <span className="block text-[6.5pt] text-zinc-500">EAN {row.ean}</span> : null}
                     </td>
@@ -513,7 +514,7 @@ export function DocumentationSheets({ data }: { data: DocumentationData }) {
                       <tr key={`${row.mpn ?? row.name}-${row.box!.maker}`}>
                         <td className={cell}>{row.box!.maker}</td>
                         <td className={cell}>{row.box!.type}</td>
-                        <td className={`${cell} font-mono`}>{row.mpn ?? "doplnit"}</td>
+                        <td className={`${cell} font-mono`}>{bomOrderLabel(row)}</td>
                         <td className={`${cell} text-right font-mono`}>{row.box!.depthMm ?? "–"}</td>
                         <td className={cell}>{row.box!.purpose}</td>
                         <td className={`${cell} text-right font-mono`}>{row.quantity}</td>

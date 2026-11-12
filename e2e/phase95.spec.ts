@@ -18,6 +18,8 @@ test("🏢 Import vzorového BIM modelu haly do závodu → mapa, rozváděče s
   await page.getByTestId("bim-import-sample").click();
   const modal = page.getByTestId("bim-import-modal");
   await expect(modal).toBeVisible({ timeout: 30_000 });
+  // Fáze 101: záruka 100% lokálního zpracování – soubor .ifc převádí jen prohlížeč
+  await expect(modal.getByTestId("bim-local-notice")).toContainText("🔒 100% Lokální a bezpečné zpracování (Zero-Cloud & Offline-ready):");
   // Okno kontroly: stavba, zdroje, rozváděče, stroje a trasy z BIMu
   await expect(modal.getByTestId("bim-structure")).toContainText("84,0 × 42,5 m");
   await expect(modal.getByTestId("bim-structure")).toContainText("5 · 3 540 m²");

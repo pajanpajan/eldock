@@ -6,7 +6,7 @@
 //                                    závod – bez chyb v konzoli), e2e/phase99.spec.ts (rozlišení 1366 × 768 a 1536 × 864)
 //                                    a e2e/phase100.spec.ts (🌗 podklad, paleta, 4 záložky, výkon plátna, galerie řad)
 //   npm run verify:demo -- --prod  → navíc rychlá kontrola produkce https://eldock.cz (veřejné stránky, /prezentace
-//                                    s 10 slidy a One-Pagerem, fotky katalogu a jejich mezipaměť) – bez přihlášení, nic se
+//                                    s 8 slidy a One-Pagerem, fotky katalogu a jejich mezipaměť) – bez přihlášení, nic se
 //                                    nezapisuje
 //   npm run verify:demo -- --only-prod → jen kontrola produkce (po nasazení, bez lokálního E2E serveru)
 //   --keep-cache                   → nemazat build E2E serveru (.next-e2e) – rychlejší opakovaný běh bez změn kódu
@@ -58,10 +58,10 @@ async function productionCheck() {
     page.on("console", (message) => message.type() === "error" && errors.push(message.text()));
     await page.goto(`${PROD_URL}/prezentace`, { waitUntil: "networkidle" });
     const slides = await page.getByTestId("pitch-slide").count();
-    step("produkce /prezentace – 10 slidů", slides === 10, `${slides} slidů`);
+    step("produkce /prezentace – 8 slidů", slides === 8, `${slides} slidů`);
     await page.getByTestId("pitch-mode-onepager").click();
     const onePager = await page.getByTestId("pitch-onepager").isVisible();
-    step("produkce /prezentace – Executive One-Pager A4", onePager);
+    step("produkce /prezentace – One-Pager A4", onePager);
     step("produkce /prezentace – konzole bez chyb", errors.length === 0, errors.slice(0, 3).join(" | "));
   } finally {
     await browser.close();

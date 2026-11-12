@@ -130,16 +130,17 @@ export function DeviceAppearance({
         {/* Fáze 98: přívod rozváděče patří do fáze 2 průvodce (karta rozváděče a typu prostoru) */}
         {showSupply ? <SupplySelect supply={supply} onSupply={onSupply} className="ml-auto" /> : null}
       </div>
-      {/* Fáze 65: segmentový přepínač rodin ABB s ikonami a podtitulky */}
+      {/* Fáze 65: přepínač rodin ABB s ikonami a podtitulky; fáze 101: v úzkém pravém panelu pod sebou přes celou šířku
+          (ve 3 sloupcích se text lámal po slovech a překrýval ikony) */}
       {!smartBrand && brand.manufacturer === "ABB" ? (
-        <div className="grid gap-1 rounded-xl border border-border bg-background/60 p-1 sm:grid-cols-3" role="radiogroup" aria-label="Produktová rodina ABB" data-testid="abb-families">
+        <div className="flex flex-col gap-1.5 rounded-xl border border-border bg-background/60 p-1" role="radiogroup" aria-label="Produktová rodina ABB" data-testid="abb-families">
           {familiesOf("ABB").map((option) => {
             const Icon: LucideIcon = FAMILY_ICON[option.id] ?? ToggleRight;
             const active = abbFamily === option.id;
             return (
-              <button key={option.id} type="button" role="radio" aria-checked={active} onClick={() => setAbbFamily(option.id)} className={cn("flex items-center gap-2.5 rounded-lg px-3 py-2 text-left transition-colors", active ? "bg-primary text-primary-foreground shadow-sm" : "text-foreground hover:bg-muted")} data-family={option.id}>
+              <button key={option.id} type="button" role="radio" aria-checked={active} onClick={() => setAbbFamily(option.id)} className={cn("flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left transition-colors", active ? "bg-primary text-primary-foreground shadow-sm" : "text-foreground hover:bg-muted")} data-family={option.id}>
                 <Icon className="size-5 shrink-0" strokeWidth={1.6} aria-hidden />
-                <span className="min-w-0">
+                <span className="min-w-0 flex-1">
                   <span className="block text-sm font-semibold leading-tight">{option.label}</span>
                   <span className={cn("block text-[11px] leading-tight", active ? "text-primary-foreground/80" : "text-muted-foreground")}>{option.id === "abb-design" ? `${brand.series.length} ${option.subtitle}` : option.subtitle}</span>
                 </span>
@@ -168,7 +169,9 @@ export function DeviceAppearance({
         />
       ) : (
         <>
-          <div className="flex gap-1 overflow-x-auto pb-1" role="radiogroup" aria-label="2. Designová řada">
+          {/* Fáze 101: řady v čisté 3sloupcové mřížce s čitelnými popisky (dřív vodorovný pás s posuvníkem) */}
+          <p className="text-[11px] font-semibold text-muted-foreground">Designová řada {brand.label}</p>
+          <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label="2. Designová řada" data-testid="series-grid">
             {brand.series.map((series) => {
               const key = `${brand.manufacturer}|${series.name}`;
               const count = series.dbSeries.reduce((sum, name) => sum + (available.get(`${brand.manufacturer}|${name}`) ?? 0), 0);
@@ -182,7 +185,7 @@ export function DeviceAppearance({
                   aria-label={series.name}
                   onClick={() => onChange({ series: key })}
                   title={count ? `${count} přístrojů v katalogu` : "Řada zatím není v katalogu – přístroje doplníte v konfigurátoru"}
-                  className={cn("flex w-20 shrink-0 flex-col items-center gap-0.5 rounded-md border p-1 text-[10px] leading-tight", active ? "border-primary bg-primary/20 text-foreground" : count ? "border-border text-foreground hover:border-primary/60" : "border-dashed border-border text-muted-foreground")}
+                  className={cn("flex w-full min-w-0 flex-col items-center gap-1 rounded-md border px-1 py-1.5 text-[11px] leading-tight", active ? "border-primary bg-primary/20 text-foreground" : count ? "border-border text-foreground hover:border-primary/60" : "border-dashed border-border text-muted-foreground")}
                 >
                   {/* Fáze 80: produktový náhled řady v barvě (render z public/catalog-images), u jiné barvy rámečku kreslený */}
                   <SeriesThumb
@@ -196,8 +199,8 @@ export function DeviceAppearance({
               );
             })}
           </div>
-          <div className="flex flex-wrap items-center gap-1" role="radiogroup" aria-label="3. Barva klapky / krytu" data-testid="insert-colors">
-            <span className="mr-0.5 text-[11px] font-semibold text-muted-foreground">Klapka / kryt:</span>
+          <div className="flex flex-wrap items-center gap-1 border-t border-border/60 pt-2" role="radiogroup" aria-label="3. Barva klapky / krytu" data-testid="insert-colors">
+            <span className="basis-full text-[11px] font-semibold text-muted-foreground">Barva klapky / krytu</span>
             {colors.map((option) => {
               const look = current?.series.colors?.find((candidate) => candidate.id === option.id);
               return (
@@ -217,7 +220,7 @@ export function DeviceAppearance({
           </div>
           {/* Fáze 74: barva rámečku zvlášť (výchozí stejná jako klapka); fáze 90: monobloky a Decento ji nemají */}
           <div className="flex flex-wrap items-center gap-1" role="radiogroup" aria-label="4. Barva rámečku" data-testid="frame-colors">
-            <span className="mr-0.5 text-[11px] font-semibold text-muted-foreground">Rámeček:</span>
+            <span className="basis-full text-[11px] font-semibold text-muted-foreground">Barva rámečku</span>
             {!hasFrameChoice(seriesKey) ? (
               <span className="text-[11px] text-muted-foreground" data-testid="frame-color-none">
                 {isMonoblockSeries(seriesKey) ? "nástěnný monoblok – bez samostatného rámečku" : "pevná dvojice středu a rámečku (provedení řady)"}
@@ -235,8 +238,11 @@ export function DeviceAppearance({
                 {option.label}
               </button>
             ))}
-            <div className="ml-auto flex flex-wrap gap-1">
-              <SeriesGallery seriesKey={seriesKey} color={color} frameColor={frameColor} available={available} onChoose={(patch) => onChange(patch)} />
+          </div>
+          {/* Fáze 101: výrazná velká galerie přes celou šířku panelu, pod ní vedlejší akce */}
+          <div className="flex flex-col gap-1.5 border-t border-border/60 pt-2">
+            <SeriesGallery seriesKey={seriesKey} color={color} frameColor={frameColor} available={available} onChoose={(patch) => onChange(patch)} />
+            <div className="flex flex-wrap gap-1">
               {link ? (
                 <a href={link.url} target="_blank" rel="noopener noreferrer" title={link.label} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:border-primary/60" data-testid="series-web">
                   🌐 Prohlédnout řadu na webu výrobce <ExternalLink className="size-3.5" aria-hidden />

@@ -150,6 +150,8 @@ export const PALETTE: PaletteItem[] = [
   { id: "worktop-socket", group: "sockets", label: "Zásuvka nad linkou", symbol: "ZL", kind: "double_socket", variant: "worktop" },
   { id: "ip44-socket", group: "sockets", label: "Zásuvka IP44 koupelna / venek", symbol: "Z44", kind: "single_socket", variant: "ip44" },
   { id: "data-socket", group: "sockets", label: "Datová zásuvka RJ45", symbol: "RJ", kind: "data_socket" },
+  // Fáze 101: anténní zásuvka TV / SAT – vlastní koaxiální kabel z rozváděče (multipřepínače), do víceramečku
+  { id: "tv-socket", group: "sockets", label: "Anténní zásuvka TV / SAT", symbol: "TV", kind: "data_socket", variant: "tv" },
   // Fáze 91: zásuvky s hlubokým strojkem (hluboká instalační krabice 66 mm)
   { id: "usb-socket", group: "sockets", label: "Zásuvka s USB-A / USB-C nabíječkou", symbol: "ZUSB", kind: "single_socket", variant: "usb" },
   { id: "surge-socket", group: "sockets", label: "Zásuvka s přepěťovou ochranou T3", symbol: "ZT3", kind: "single_socket", variant: "surge" },
@@ -464,6 +466,11 @@ export interface EditorRoom {
 export interface FrameGroup {
   id: string;
   members: string[];
+  /**
+   * Fáze 101: orientace víceramečku na stěně – `vertical` = pozice pod sebou (vypínač nad zásuvkou, rozteč 71 mm),
+   * bez údaje vodorovně vedle sebe v ose stěny.
+   */
+  orientation?: "vertical";
 }
 
 /** Fáze 59: zakreslení změny do podkladu – nová příčka, bouraná konstrukce, šrafovaná oblast, textové pole. */
@@ -778,7 +785,7 @@ function parseSheet(raw: Partial<FloorSheet> & Partial<Pick<FloorplanDraft, "flo
   const frames = (Array.isArray(raw.frames) ? raw.frames : [])
     .filter((frame) => frame && typeof frame.id === "string" && Array.isArray(frame.members))
     .slice(0, 100)
-    .map((frame) => ({ id: frame.id.slice(0, 40), members: frame.members.filter((id): id is string => typeof id === "string" && ids.has(id) && !framed.has(id) && Boolean(framed.add(id))).slice(0, 5) }))
+    .map((frame) => ({ id: frame.id.slice(0, 40), members: frame.members.filter((id): id is string => typeof id === "string" && ids.has(id) && !framed.has(id) && Boolean(framed.add(id))).slice(0, 5), ...(frame.orientation === "vertical" ? { orientation: "vertical" as const } : {}) }))
     .filter((frame) => frame.members.length >= 2);
   const annotations = (Array.isArray(raw.annotations) ? raw.annotations : [])
     .filter((note) => note && typeof note.id === "string" && (note.kind === "wall" || note.kind === "demolish" || note.kind === "zone" || note.kind === "text"))
@@ -1334,6 +1341,8 @@ export interface PlanBuild {
   /** Žaluziové ovladače a termostaty (fáze 51). */
   controlRuns: { id: string; kind: "blind" | "thermostat"; targetId: string | null }[];
   dataNodeIds: string[];
+  /** Fáze 101: anténní zásuvky TV / SAT (koaxiální kabel). */
+  coaxNodeIds: string[];
   /** Fáze 57: sběrnicové prvky (tlačítka, čidla, jednotky) – jedna sběrnicová linka z rozváděče. */
   busNodeIds: string[];
   /** Uzel výpočtu → prvek nákresu (vícenásobný rámeček = víc uzlů). */
@@ -1422,6 +1431,7 @@ export function buildPlan(draft: FloorplanDraft): PlanBuild {
   const routeNodes: RouteNode[] = [];
   const elementOf = new Map<string, EditorElement>();
   const dataNodeIds: string[] = [];
+  const coaxNodeIds: string[] = [];
   const busNodeIds: string[] = [];
   /** Výška krabice pro výpočet (vlastní, z palety, jinak podle druhu). */
   const heightOf = (element: EditorElement, item: PaletteItem) => (element.mountHeightMm !== null ? element.mountHeightMm : (item.heightMm ?? null));
@@ -1509,7 +1519,7 @@ export function buildPlan(draft: FloorplanDraft): PlanBuild {
         elementOf.set(id, element);
         boardOf.set(id, board);
         routeNodes.push({ id, x: px[0], y: px[1], heightMm, room: node.room, floor: floor.id, board, ...(frame ? { frame } : {}) });
-        if (kind === "data_socket") dataNodeIds.push(id);
+        if (kind === "data_socket") (item.variant === "tv" ? coaxNodeIds : dataNodeIds).push(id);
         // Bezdrátový výrobek / samostatný systém (videotelefon) nejde na sběrnicovou linku
         if (item.bus && draft.installation === "bus_loxone" && !product?.noBus) busNodeIds.push(id);
       }
@@ -1579,7 +1589,7 @@ export function buildPlan(draft: FloorplanDraft): PlanBuild {
         return drawn ? [{ id: room.id, floor: room.floor, outline: roomPolygon(drawn) }] : [];
       })
     : [];
-  return { plan: { rooms, nodes, mode: draft.installation }, calibration, panel, routeNodes, switchLinks, controlRuns, dataNodeIds, busNodeIds, elementOf, floors: links, metric, wallFloors: [...bases.keys()], boards, boardOf, perimeterRooms, starRuns };
+  return { plan: { rooms, nodes, mode: draft.installation }, calibration, panel, routeNodes, switchLinks, controlRuns, dataNodeIds, coaxNodeIds, busNodeIds, elementOf, floors: links, metric, wallFloors: [...bases.keys()], boards, boardOf, perimeterRooms, starRuns };
 }
 
 /** Kalibrace na 2 kliky: úsečka v mm současného měřítka a skutečná délka → nové měřítko a přepočet prvků. */
@@ -1706,7 +1716,7 @@ export function analyzeDraft(draft: FloorplanDraft) {
   const panels = Object.fromEntries(build.boards.map((board) => [board.code, board.point]));
   // Fáze 76: obvodový router po stěnách (výchozí styl), u „Nejkratší v podlaze“ řetěz přímými trasami
   const treeRouter = draft.routeStyle !== "direct" ? createPerimeterRouter({ rooms: build.perimeterRooms, metric: build.metric }) : undefined;
-  const summary = summarizeCabling({ circuits: circuits.circuits, nodes: build.routeNodes, panel: build.panel, panels, profile: draft.profile, selected: draft.mode, switchLinks: build.switchLinks, controlRuns: build.controlRuns, dataNodeIds: build.dataNodeIds, busNodeIds: build.busNodeIds, installation: draft.installation, metric: build.metric, routeEdits: draft.routeEdits, treeRouter, starRuns: build.starRuns });
+  const summary = summarizeCabling({ circuits: circuits.circuits, nodes: build.routeNodes, panel: build.panel, panels, profile: draft.profile, selected: draft.mode, switchLinks: build.switchLinks, controlRuns: build.controlRuns, dataNodeIds: build.dataNodeIds, coaxNodeIds: build.coaxNodeIds, busNodeIds: build.busNodeIds, installation: draft.installation, metric: build.metric, routeEdits: draft.routeEdits, treeRouter, starRuns: build.starRuns });
   // Fáze 93: obchodní centrum (BD4) – všechny kabely okruhů, výkazu, tras a kusovníku v bezhalogenovém provedení B2ca
   const occupancy = draft.occupancy ?? DEFAULT_OCCUPANCY;
   if (!isCommercial(occupancy)) return { build, circuits, summary, occupancy };
