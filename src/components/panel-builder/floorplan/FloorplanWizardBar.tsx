@@ -9,7 +9,7 @@ import { WIZARD_STEPS, nextStep, prevStep, wizardStep, type FloorplanUiMode, typ
 import { cn } from "@/lib/utils";
 
 /**
- * Fáze 89: přepínač zobrazení horní lišty 2D půdorysu – 🧭 průvodce v 5 krocích, nebo ⚡ kompaktní CAD lišta pro
+ * Fáze 89: přepínač zobrazení horní lišty 2D půdorysu – 🧭 průvodce v 5 fázích, nebo ⚡ kompaktní CAD lišta pro
  * zkušené (volba se pamatuje v prohlížeči i v profilu firmy).
  */
 export function UiModeToggle({ mode, onMode }: { mode: FloorplanUiMode; onMode: (mode: FloorplanUiMode) => void }) {
@@ -17,7 +17,7 @@ export function UiModeToggle({ mode, onMode }: { mode: FloorplanUiMode; onMode: 
     <span className="flex overflow-hidden rounded-md border border-border text-xs" role="radiogroup" aria-label="Zobrazení lišty půdorysu" data-testid="ui-mode">
       {(
         [
-          ["wizard", "🧭 Průvodce (Krok 1–5)"],
+          ["wizard", "🧭 Průvodce (Fáze 1–5)"],
           ["compact", "⚡ Kompaktní lišta (Bez průvodce)"],
         ] as const
       ).map(([value, label]) => (
@@ -118,7 +118,8 @@ export function FloorplanWizardBar({
         {children}
         {/* Nápověda a další krok ve stejném řádku jako nástroje (zalomí se jen u dlouhé lišty) */}
         <span className="ml-auto flex min-w-[18rem] flex-1 basis-[24rem] items-center justify-end gap-2">
-          <span className="min-w-0 flex-1 text-right text-[11px] leading-tight text-muted-foreground" data-testid="wizard-hint">
+          {/* Fáze 99: pod 1536 px nejvýš 2 řádky (celý text v tooltipu) – lišta neubírá výšku plátnu na projektoru */}
+          <span className="line-clamp-2 min-w-0 flex-1 text-right text-[11px] leading-tight text-muted-foreground 2xl:line-clamp-none" title={info.hint} data-testid="wizard-hint">
             💡 {info.hint}
           </span>
           {/* Fáze 98: volný přechod tam i zpět mezi fázemi (data nákresu se nemění) */}

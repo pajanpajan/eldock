@@ -39,7 +39,7 @@ import { DEFAULT_BOX_MAKER, DEFAULT_WALL_TYPE, isBoxChoice, isBoxMaker, isWallTy
 import { DEFAULT_COLOR, appearanceLabel, designColor, migrateSeriesColor } from "./wiring-designs";
 import { CUSTOM_APPLIANCE_ITEM, applianceOverride, applianceSpecFor, parseApplianceList, type ApplianceSpec } from "./appliances";
 import { clampFixture, fixtureSpecOf, isBasinZone, type BasinZone } from "./fixtures";
-import { isPolygonRoom, nearestWall, pointInRoom, polygonBounds, roomArea, roomPolygon, translatePolygon } from "./room-geometry";
+import { isPolygonRoom, nearestWall, pointInRoom, polygonBounds, roomArea, roomPolygon, translatePolygon, type RoomShape } from "./room-geometry";
 import { createPerimeterRouter, type PerimeterRoom } from "./perimeter-router";
 import { parseCadUnderlay, type CadUnderlay } from "./cad-underlay";
 import { productById } from "./smart-catalog";
@@ -1809,6 +1809,30 @@ export function roomDimensions(w: number, h: number) {
   const m = (mm: number) => (Math.abs(mm) / 1000).toLocaleString("cs-CZ", { maximumFractionDigits: 2 });
   const area = (Math.abs(w) * Math.abs(h)) / 1e6;
   return { x: `${m(w)} m`, y: `${m(h)} m`, label: `${m(w)} × ${m(h)} m (${area.toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} m²)` };
+}
+
+/** Fáze 99: údaje do popisku místnosti od nejpodrobnějšího – kóty s plochou, rozměry, plocha (mnohoúhelník: plocha s rohy). */
+export function roomLabelDetails(room: RoomShape): string[] {
+  const area = `${(roomArea(room) / 1e6).toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} m²`;
+  if (isPolygonRoom(room)) return [`${area} (${room.points!.length} rohů)`, area];
+  const dims = roomDimensions(room.w, room.h);
+  return [dims.label, `${dims.x.replace(/ m$/, "")} × ${dims.y}`, area];
+}
+
+/**
+ * Fáze 99: popisek místnosti na plátně tak, aby nepřetékal do sousední místnosti (úzké WC, technická místnost) – celý
+ * na jednom řádku, jinak název a pod ním první údaj, který se vejde (`details`: kóty, rozměry, plocha), u nízké
+ * místnosti jen název; co se nevejde, zkrátí „…“. Šířka znaku je odhad 0,56 velikosti písma, okraj ½ písma z každé strany.
+ */
+export function roomLabelLines(name: string, details: readonly string[], box: { w: number; h: number }, fontSize: number): string[] {
+  const maxChars = Math.max(1, Math.floor((Math.abs(box.w) - fontSize) / (fontSize * 0.56)));
+  const fits = (text: string) => text.length <= maxChars;
+  const cut = (text: string) => (fits(text) ? text : `${text.slice(0, Math.max(1, maxChars - 1)).trimEnd()}…`);
+  const single = details[0] ? `${name} · ${details[0]}` : name;
+  if (fits(single)) return [single];
+  if (Math.abs(box.h) < fontSize * 3) return [cut(name)];
+  const second = details.find(fits);
+  return second ? [cut(name), second] : [cut(name)];
 }
 
 /** Prvek s domovním přístrojem (zásuvky, ovladače, datové zásuvky) – má řadu a barvu. */

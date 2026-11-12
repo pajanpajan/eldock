@@ -43,6 +43,10 @@ export default async function PlantPage({ params, searchParams }: PageProps<"/pl
   const [{ plantId }, query, account, modules] = await Promise.all([params, searchParams, getCurrentAccount(), getFeatures()]);
   const { pruvodce } = query;
   const phase = plantPhaseOf(query[PLANT_PHASE_PARAM]);
+  // Fáze 99: demo scénář závodu – `?bim=vzor` načte vzorový BIM model, `?stroj=75` nastaví simulátor nového stroje
+  const machineKw = Number(Array.isArray(query.stroj) ? query.stroj[0] : query.stroj);
+  const initialKw = Number.isFinite(machineKw) && machineKw > 0 && machineKw <= 500 ? machineKw : undefined;
+  const autoSample = query.bim === "vzor";
   const now = new Date();
   const [plant, watch, agenda] = await Promise.all([getPlantOverview(plantId, account.types), getInspectionWatch(plantId, now, account.types), getPlantAgenda(plantId, account.types)]);
   if (!plant) notFound();
@@ -79,7 +83,7 @@ export default async function PlantPage({ params, searchParams }: PageProps<"/pl
           phase === 1 && account.can("studio") && modules.on("enterprise.studio") ? (
             <div className="flex flex-wrap gap-2">
               {/* Fáze 95: import BIM (IFC) – budova, místnosti, zdroje, rozváděče, trasy a stroje z modelu */}
-              <BimImportButtons plantId={plant.id} canPanelBuilder={account.can("panelBuilder") && modules.on("enterprise.ai_panel_builder")} />
+              <BimImportButtons plantId={plant.id} canPanelBuilder={account.can("panelBuilder") && modules.on("enterprise.ai_panel_builder")} autoSample={autoSample} />
               <Button asChild size="lg" variant="outline" className="touch-target gap-2">
                 <Link href={`/studio?plant=${plant.id}&new=plant`}>
                   <Factory className="size-4" aria-hidden />+ Nový závod od nuly
@@ -126,7 +130,7 @@ export default async function PlantPage({ params, searchParams }: PageProps<"/pl
             </div>
           ) : null}
           <PlantMachineryRegulation rows={agenda} now={now} />
-          <PlantLoadSimulator nodes={cableNodes} boards={agenda.filter((row) => row.type === "SWITCHBOARD").map(({ id, tag, name }) => ({ id, tag, name }))} />
+          <PlantLoadSimulator nodes={cableNodes} boards={agenda.filter((row) => row.type === "SWITCHBOARD").map(({ id, tag, name }) => ({ id, tag, name }))} initialKw={initialKw} />
         </div>
       ) : null}
 

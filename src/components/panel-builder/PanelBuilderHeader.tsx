@@ -5,6 +5,8 @@ import { LogoMark } from "@/components/layout/Logo";
 import { logoutPanelCompanyAction } from "@/server/actions/companies";
 import type { PanelCompany } from "@/server/panel-session";
 
+import { DemoScenariosMenu } from "./DemoScenariosMenu";
+
 const link = "touch-target flex items-center gap-2 rounded-lg px-2.5 text-sm text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50";
 
 /**
@@ -36,10 +38,12 @@ export function PanelBuilderHeader({ company }: { company: Pick<PanelCompany, "c
               </Link>
             </nav>
             <div className="ml-auto flex flex-wrap items-center gap-2">
+              {/* Fáze 99: živá ukázka na 1 klik pro prezentaci */}
+              <DemoScenariosMenu />
               <div className="flex items-center gap-2 rounded-lg border border-border bg-card/60 px-3 py-1.5 text-sm" data-testid="panel-company">
                 <Building2 className="size-4 shrink-0 text-muted-foreground" aria-hidden />
                 <span className="leading-tight">
-                  <span className="block max-w-56 truncate font-semibold">{company.companyName}</span>
+                  <span className="block max-w-40 truncate font-semibold 2xl:max-w-56">{company.companyName}</span>
                   <span className="block font-mono text-[11px] text-muted-foreground">IČO {company.ico}</span>
                 </span>
               </div>
@@ -52,11 +56,12 @@ export function PanelBuilderHeader({ company }: { company: Pick<PanelCompany, "c
                 <Coins className="size-4" aria-hidden /> 🪙 Kredity: {company.creditsRemaining} (+ Dobít)
               </Link>
               <Link href="/panel-builder/company" className={`${link} border border-border bg-card/60`}>
-                <Stamp className="size-4" aria-hidden /> Firemní údaje a razítko
+                {/* Fáze 99: pod 1536 px jen ikona (lišta v jednom řádku i na projektoru 1366 × 768) */}
+                <Stamp className="size-4" aria-hidden /> <span className="sr-only 2xl:not-sr-only">Firemní údaje a razítko</span>
               </Link>
               <form action={logoutPanelCompanyAction}>
                 <button type="submit" className={`${link} border border-border bg-card/60`}>
-                  <LogOut className="size-4" aria-hidden /> Odhlásit
+                  <LogOut className="size-4" aria-hidden /> <span className="sr-only 2xl:not-sr-only">Odhlásit</span>
                 </button>
               </form>
             </div>

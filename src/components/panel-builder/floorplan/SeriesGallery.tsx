@@ -4,6 +4,7 @@ import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import { Camera, ExternalLink, Palette } from "lucide-react";
 import { toast } from "sonner";
 
+import { FallbackImg } from "@/components/common/FallbackImg";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import type { SeriesMaterial, SeriesShape } from "@/lib/panel-builder/abb-catalog-2026";
@@ -65,8 +66,7 @@ export function SeriesThumb({ seriesKey, colorId, fallback, className, photos }:
   if (!photo || (photo.color && photo.color !== colorId)) return <>{fallback}</>;
   return (
     <span className={cn("block shrink-0 overflow-hidden", className)} data-testid="series-thumb-photo" data-src={photo.src}>
-      {/* eslint-disable-next-line @next/next/no-img-element -- náhled z public/catalog-images (statický soubor) */}
-      <img src={photo.src} alt="" className="size-full scale-[1.45] object-cover" loading="lazy" decoding="async" />
+      <FallbackImg src={photo.src} fallback={fallback} alt="" className="size-full scale-[1.45] object-cover" loading="lazy" decoding="async" />
     </span>
   );
 }

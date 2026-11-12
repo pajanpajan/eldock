@@ -1,3 +1,4 @@
+import { FallbackImg } from "@/components/common/FallbackImg";
 import { catalogSlug } from "@/lib/panel-builder/catalog-images";
 import { DEVICE_PHOTO_SOURCES, DEVICE_PHOTOS } from "@/lib/panel-builder/device-photos.generated";
 import { cn } from "@/lib/utils";
@@ -17,7 +18,7 @@ export function DevicePhoto({ articleNumber, label, className }: { articleNumber
   const photo = devicePhoto(articleNumber);
   if (!photo) return null;
   return (
-    // eslint-disable-next-line @next/next/no-img-element -- statická fotka z public/catalog-images
-    <img src={photo.src} alt={`Fotka ${label ?? articleNumber}`} title={photo.source} className={cn("size-10 shrink-0 rounded bg-white object-contain p-0.5", className)} loading="lazy" decoding="async" data-testid="device-photo" />
+    // Fáze 99: nenačtená fotka se jen vynechá (žádný rozbitý obrázek)
+    <FallbackImg src={photo.src} alt={`Fotka ${label ?? articleNumber}`} title={photo.source} className={cn("size-10 shrink-0 rounded bg-white object-contain p-0.5", className)} loading="lazy" decoding="async" data-testid="device-photo" />
   );
 }

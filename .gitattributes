@@ -5,3 +5,5 @@ Caddyfile text eol=lf
 # Fáze 72: spouštěč a skript serveru závodu pro Windows vždy s CRLF
 *.cmd text eol=crlf
 *.ps1 text eol=crlf
+# Fáze 99: vzorový BIM model (IFC/STEP) vždy s LF – stejný soubor lokálně i na produkci
+*.ifc text eol=lf

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
+import { BrokenImageGuard } from "@/components/common/BrokenImageGuard";
 import { ConsentManager } from "@/components/consent/ConsentManager";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -58,6 +59,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(siteJsonLd()) }} />
         <TooltipProvider delayDuration={200}>{children}</TooltipProvider>
         <Toaster position="top-center" />
+        {/* Fáze 99: žádná ikona rozbitého obrázku (globální pojistka k vektorovým náhledům katalogu) */}
+        <BrokenImageGuard />
         {/* Fáze 56: souhlas s cookies – volitelné služby podle konfigurace serveru (ELDOCK_GA4_ID přes /api/consent) */}
         <ConsentManager />
       </body>

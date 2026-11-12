@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Building2, FileUp, Loader2, Sparkles, Zap } from "lucide-react";
@@ -30,7 +30,7 @@ const kw = (value: number | null) => (value === null ? "–" : `${value.toLocale
  * v prohlížeči (parser IFC), okno ukáže souhrn stavby a elektro výzbroje, po potvrzení vznikne budova se zařízeními (nebo
  * se aktualizují stávající rozváděče podle kódů) a u rozváděčů je tlačítko do AI Panel Builderu.
  */
-export function BimImportButtons({ plantId, canPanelBuilder, compact = false }: { plantId: string; canPanelBuilder: boolean; compact?: boolean }) {
+export function BimImportButtons({ plantId, canPanelBuilder, compact = false, autoSample = false }: { plantId: string; canPanelBuilder: boolean; compact?: boolean; autoSample?: boolean }) {
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
   const [loaded, setLoaded] = useState<Loaded | null>(null);
@@ -69,6 +69,15 @@ export function BimImportButtons({ plantId, canPanelBuilder, compact = false }: 
       return response.text();
     });
   }
+
+  // Fáze 99: demo scénář závodu (`?bim=vzor`) rovnou načte vzorový BIM model haly – jen jednou na otevření stránky
+  const autoStarted = useRef(false);
+  useEffect(() => {
+    if (!autoSample || autoStarted.current) return;
+    autoStarted.current = true;
+    sample();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- jednorázové načtení vzoru při otevření
+  }, [autoSample]);
 
   function confirm() {
     if (!loaded) return;

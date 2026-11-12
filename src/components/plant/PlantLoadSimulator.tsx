@@ -10,7 +10,7 @@ import type { PowerCableNode } from "@/lib/cable-sizing";
  * kterému se připojí nový stroj, a dopad přírůstku proudu kaskádou přívod → hlavní rozváděč → transformátor (stejný
  * výpočet jako v kartě přívodního kabelu zařízení).
  */
-export function PlantLoadSimulator({ nodes, boards }: { nodes: PowerCableNode[]; boards: readonly { id: string; tag: string; name: string }[] }) {
+export function PlantLoadSimulator({ nodes, boards, initialKw }: { nodes: PowerCableNode[]; boards: readonly { id: string; tag: string; name: string }[]; initialKw?: number }) {
   const [target, setTarget] = useState(boards[0]?.id ?? "");
   return (
     <section aria-labelledby="plant-simulator" className="flex flex-col gap-2 rounded-xl border border-border bg-card p-4" data-testid="plant-simulator">
@@ -29,7 +29,7 @@ export function PlantLoadSimulator({ nodes, boards }: { nodes: PowerCableNode[];
               ))}
             </select>
           </label>
-          <LoadSimulator key={target} equipmentId={target} nodes={nodes} />
+          <LoadSimulator key={target} equipmentId={target} nodes={nodes} initialKw={initialKw} />
         </>
       ) : (
         <p className="text-sm text-muted-foreground">Závod zatím nemá rozváděče – simulátor počítá dopad nového stroje na přívody a transformátor.</p>

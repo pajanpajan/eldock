@@ -6,6 +6,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { CheckCircle2, Circle, Minus, PartyPopper, X } from "lucide-react";
 
 import { PANEL_CHECKLIST_OFF_KEY, panelChecklist, panelChecklistKey, type PanelChecklistKey, type PanelChecklistState, type PanelChecklistVisits } from "@/lib/panel-builder/panel-live-checklist";
+import { panelPageCode } from "@/lib/panel-builder/panel-phases";
 import { cn } from "@/lib/utils";
 
 type Mode = "open" | "pill" | "off";
@@ -54,7 +55,7 @@ function useStored<T>(key: string, fallback: T): T {
 }
 
 /**
- * Fáze 92: živý tahák rozváděče na všech krocích projektu – pět bodů podle kroků projektu se odškrtává samo (nálezy
+ * Fáze 92: živý tahák rozváděče na všech fázích projektu – pět bodů podle fází projektu se odškrtává samo (nálezy
  * Elektro-linteru, strom zapojení, skříň, oteplení, tisk elaborátu) jako pruh nad projektem (nic nepřekrývá). U tréninkové
  * zakázky nese úkoly zakázky. Sbalí se do pilulky „🧭 Tahák (3/5 hotovo)“ nebo se trvale vypne; v tisku se neukazuje.
  */
@@ -66,7 +67,7 @@ export function PanelLiveChecklist({ projectId, state, job }: { projectId: strin
   const mode: Mode = storedMode === "pill" || storedMode === "off" ? storedMode : "open";
   const base = `/panel-builder/${projectId}`;
 
-  // Krok 4 otevřený = oteplení zkontrolované; tisk elaborátu z kroku 5 (Tisk / PDF i Ctrl+P)
+  // Fáze 3 otevřená = oteplení zkontrolované; tisk elaborátu z fáze 4 (Tisk / PDF i Ctrl+P)
   useEffect(() => {
     const remember = (patch: PanelChecklistVisits) => {
       let current: PanelChecklistVisits = {};
@@ -137,18 +138,17 @@ export function PanelLiveChecklist({ projectId, state, job }: { projectId: strin
           <span className="text-muted-foreground">{active.detail}</span>
           {activeHref && pathname !== activeHref ? (
             <Link href={activeHref} className="inline-flex h-6 items-center rounded-md border border-primary/60 px-2 font-semibold hover:bg-primary/10" data-testid={`panel-checklist-${active.key}-open`}>
-              Otevřít krok {STEP_NUMBER[active.key]} →
+              Otevřít fázi {panelPageCode(active.key)} →
             </Link>
           ) : null}
         </div>
       ) : (
-        <p className="text-[11px] text-emerald-200">✅ Všech 5 kroků je hotových – elaborát je vytištěný.</p>
+        <p className="text-[11px] text-emerald-200">✅ Všech 5 bodů taháku je hotových – elaborát je vytištěný.</p>
       )}
     </section>
   );
 }
 
-const STEP_NUMBER: Record<PanelChecklistKey, number> = { recognition: 1, tree: 2, enclosure: 3, thermal: 4, documentation: 5 };
 const NO_VISITS: PanelChecklistVisits = {};
 
 /** Fáze 92: gratulace po rozváděči z trenažéru 2D půdorysu (`?trenazer=hotovo`). */
@@ -161,7 +161,7 @@ export function TrainerCongrats() {
       <PartyPopper className="mt-0.5 size-5 shrink-0 text-yellow-300" aria-hidden />
       <div className="min-w-0 flex-1">
         <b className="text-yellow-100">🎉 Gratulujeme! Zakázku z trenažéru jste dokončili za 3 kliky.</b>
-        <p className="text-muted-foreground">Tohle je kompletní rozváděč vygenerovaný z cvičného bungalovu – jističe, chrániče, akční členy ABB-free@home, skříň i kabeláž. Kredit se neodečetl. Projděte kroky 1–5 podle taháku nad projektem a vytiskněte elaborát.</p>
+        <p className="text-muted-foreground">Tohle je kompletní rozváděč vygenerovaný z cvičného bungalovu – jističe, chrániče, akční členy ABB-free@home, skříň i kabeláž. Kredit se neodečetl. Projděte fáze 1–4 podle taháku nad projektem a vytiskněte elaborát.</p>
       </div>
       <button type="button" onClick={() => setOpen(false)} className="rounded p-0.5 text-muted-foreground hover:text-foreground" aria-label="Zavřít gratulaci">
         <X className="size-4" aria-hidden />

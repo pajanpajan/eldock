@@ -116,14 +116,15 @@ export function FloorplanFileMenu({
 
   return (
     <>
-      <Button type="button" variant="outline" size="sm" className="gap-1" onClick={() => setCloudOpen(true)} data-testid="floorplan-cloud-list">
-        <FolderOpen className="size-4" aria-hidden /> 📂 Moje uložené půdorysy
+      {/* Fáze 99: pod 1536 px (projektor 1366 × 768) jen ikony – lišta dokumentu zůstane v jednom řádku */}
+      <Button type="button" variant="outline" size="sm" className="gap-1" onClick={() => setCloudOpen(true)} title="Moje uložené půdorysy (cloud)" data-testid="floorplan-cloud-list">
+        <FolderOpen className="size-4" aria-hidden /> <span className="sr-only 2xl:not-sr-only">📂 Moje uložené půdorysy</span>
       </Button>
       <Button type="button" variant="outline" size="sm" className="gap-1" onClick={() => void exportFile()} disabled={busy !== null} title="Celý projekt do jednoho souboru – podlaží, podklady, prvky, trasy, řady a barvy, šablony sestav" data-testid="floorplan-export">
-        {busy === "export" ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Download className="size-4" aria-hidden />} 💾 Uložit do PC (.eldock)
+        {busy === "export" ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Download className="size-4" aria-hidden />} <span className="sr-only 2xl:not-sr-only">💾 Uložit do PC (.eldock)</span>
       </Button>
       <Button type="button" variant="outline" size="sm" className="gap-1" onClick={() => input.current?.click()} disabled={busy !== null} title="Otevře projekt ze souboru .eldock.json jako nový půdorys firmy" data-testid="floorplan-import">
-        {busy === "import" ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Upload className="size-4" aria-hidden />} 📥 Nahrát projekt z PC
+        {busy === "import" ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Upload className="size-4" aria-hidden />} <span className="sr-only 2xl:not-sr-only">📥 Nahrát projekt z PC</span>
       </Button>
       <input ref={input} type="file" accept=".json,application/json" className="hidden" aria-label="Soubor projektu .eldock.json" onChange={(event) => event.target.files?.[0] && void importFile(event.target.files[0])} data-testid="floorplan-import-input" />
       {cloudOpen ? <CloudFloorplans onClose={() => setCloudOpen(false)} currentId={floorplanId} flush={flush} /> : null}

@@ -47,6 +47,8 @@ import {
   pairsWith,
   roomAt,
   roomDimensions,
+  roomLabelDetails,
+  roomLabelLines,
   snapToWall,
   switchFloor,
   symbolSizeOf,
@@ -2866,8 +2868,12 @@ export function FloorplanEditor({
                 return (
                   <g key={room.id} data-room={room.name} aria-label={`Místnost ${room.name}`}>
                     {polygon ? <polygon points={corners.map((corner) => `${corner.x},${corner.y}`).join(" ")} strokeLinejoin="round" data-polygon="true" {...shape} /> : <rect x={room.x} y={room.y} width={room.w} height={room.h} {...shape} />}
-                    <text x={room.x + ui * 0.4} y={room.y + ui * 1.1} fontSize={ui * 0.8} fill={draft.background ? "#52525b" : "#d4d4d8"} pointerEvents="none">
-                      {room.name} · {polygon ? `${(polygonArea(corners) / 1e6).toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} m² (${corners.length} rohů)` : roomDimensions(room.w, room.h).label}
+                    <text x={room.x + ui * 0.4} y={room.y + ui * 1.1} fontSize={ui * 0.8} fill={draft.background ? "#52525b" : "#d4d4d8"} pointerEvents="none" data-testid="room-label">
+                      {roomLabelLines(room.name, roomLabelDetails(room), room, ui * 0.8).map((line, index) => (
+                        <tspan key={index} x={room.x + ui * 0.4} dy={index ? ui * 0.95 : 0}>
+                          {line}
+                        </tspan>
+                      ))}
                     </text>
                     {active && polygon ? (
                       <g data-testid="polygon-handles">
@@ -3532,7 +3538,7 @@ export function FloorplanEditor({
             onEnvironment={(environment) => update((current) => ({ ...current, environment }))}
             checklist={checklist}
             manufacturers={manufacturers}
-            defaults={{ customer: meta.customerName, site: meta.installationSite }}
+            defaults={{ customer: meta.customerName, site: meta.installationSite, name: meta.name }}
             wallFloors={analysis.ok ? analysis.build.wallFloors.length : 0}
             floorCount={floors.length}
             boards={analysis.ok ? analysis.build.boards.map((board) => board.code) : []}

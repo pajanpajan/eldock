@@ -30,7 +30,7 @@ export function PanelTrainerJobs({ initiallyOpen, opened }: { initiallyOpen: boo
         setBusy(null);
         return void toast.error(result.error);
       }
-      if (result.data.created) toast.success("Tréninková zakázka je připravená – kredit se neodečetl. Tahák nad projektem vás provede kroky 1–5.");
+      if (result.data.created) toast.success("Tréninková zakázka je připravená – kredit se neodečetl. Tahák nad projektem vás provede fázemi 1–4.");
       router.push(`/panel-builder/${result.data.id}`);
     });
   }

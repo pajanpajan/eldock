@@ -327,3 +327,8 @@
     text-decoration: none !important;
   }
 }
+
+/* Fáze 99: obrázek, který se nenačte, nikdy neukáže ikonu rozbitého obrázku (BrokenImageGuard ho označí) */
+img[data-broken="true"] {
+  visibility: hidden;
+}

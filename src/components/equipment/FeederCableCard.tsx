@@ -254,12 +254,15 @@ function Metric({
 export function LoadSimulator({
   equipmentId,
   nodes,
+  initialKw = 30,
 }: {
   equipmentId: string;
   nodes: PowerCableNode[];
+  /** Fáze 99: výchozí příkon nového stroje (demo scénář závodu: 75 kW). */
+  initialKw?: number;
 }) {
   const [unit, setUnit] = useState<"kW" | "A">("kW");
-  const [value, setValue] = useState(30);
+  const [value, setValue] = useState(initialKw);
   const amps = unit === "kW" ? kwToAmps(value) : value;
   const rows = useMemo(
     () => simulateAddedLoad(nodes, equipmentId, amps),

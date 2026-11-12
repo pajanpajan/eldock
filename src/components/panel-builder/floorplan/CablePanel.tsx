@@ -55,7 +55,8 @@ export function CablePanel({
   wallFloors?: number;
   floorCount?: number;
   /** Fáze 64: zákazník a místo stavby z údajů uloženého půdorysu (předvyplnění formuláře). */
-  defaults?: { customer: string | null; site: string | null };
+  /** Fáze 99: i název půdorysu – rozváděč dostane „RH – <název půdorysu>“ (demo scénáře, pojmenované zakázky). */
+  defaults?: { customer: string | null; site: string | null; name?: string | null };
   /** Fáze 74: rozváděče nákresu (RH, RP1 …) – podružné vzniknou jako propojené projekty. */
   boards?: readonly string[];
   /** Fáze 76: styl tras (po stěnách / nejkratší v podlaze). */
@@ -153,7 +154,7 @@ export function CablePanel({
       <form action={onGenerate} className="flex flex-col gap-2" key={`${defaults?.customer ?? ""}|${defaults?.site ?? ""}`}>
         <div className="flex flex-col gap-1">
           <Label htmlFor="fp-name">Název rozváděče</Label>
-          <Input id="fp-name" name="name" required maxLength={120} defaultValue="Rozvodnice RD – z půdorysu" />
+          <Input id="fp-name" name="name" required maxLength={120} defaultValue={defaults?.name?.trim() && !/^(Nový půdorys|Půdorys \d)/.test(defaults.name) ? `RH – ${defaults.name.trim()}`.slice(0, 120) : "Rozvodnice RD – z půdorysu"} />
         </div>
         <div className="grid grid-cols-2 gap-2">
           <div className="flex flex-col gap-1">

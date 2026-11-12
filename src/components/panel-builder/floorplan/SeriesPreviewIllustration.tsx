@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Loader2, Upload } from "lucide-react";
 
+import { FallbackImg } from "@/components/common/FallbackImg";
+
 import type { PhotoPart } from "@/lib/panel-builder/catalog-photos";
 import type { SeriesPhoto } from "@/lib/panel-builder/series-photos";
 import { cn } from "@/lib/utils";
@@ -82,9 +84,9 @@ export function SeriesPreviewIllustration({
       č. {photo.mpn}
     </span>
   ) : null;
+  // Fáze 99: fotka, která se nenačte, se hned nahradí vektorovým studiovým náhledem dílu
   const body = photo ? (
-    // eslint-disable-next-line @next/next/no-img-element -- fotky z public/catalog-images a z úložiště katalogu (/api/catalog-images)
-    <img src={photo.src} alt={`${caption} – ${photo.photo ? "fotka" : "náhled"} řady`} className="h-28 w-auto max-w-full rounded-lg object-contain shadow-sm" data-testid="gallery-photo" data-real={photo.photo ? "true" : "false"} />
+    <FallbackImg src={photo.src} fallback={mockup} alt={`${caption} – ${photo.photo ? "fotka" : "náhled"} řady`} className="h-28 w-auto max-w-full rounded-lg object-contain shadow-sm" data-testid="gallery-photo" data-real={photo.photo ? "true" : "false"} />
   ) : (
     mockup
   );

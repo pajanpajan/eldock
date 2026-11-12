@@ -11,6 +11,7 @@ import { getAccountUsers } from "@/server/queries/accounts";
 import { getPlants } from "@/server/queries/plant";
 import { getAuthSession, getCurrentAccount, getRememberedPlantId } from "@/server/session";
 
+import { PlantDemoMenu } from "@/components/plant/PlantDemoMenu";
 import { PlantGuideButton } from "@/components/plant/PlantGuideButton";
 
 import { AccountSwitcher } from "./AccountSwitcher";
@@ -86,6 +87,8 @@ export async function AppHeader() {
         ) : null}
 
         <div className="ml-auto flex items-center gap-3">
+          {/* Fáze 99: živá ukázka průmyslového závodu na 1 klik (agendy naposledy otevřeného závodu) */}
+          {guidePlant ? <PlantDemoMenu plantHref={plantHref(guidePlant)} /> : null}
           {guidePlant ? <PlantGuideButton href={`${plantHref(guidePlant)}?pruvodce=1`} /> : null}
           <AccountSwitcher
             accounts={accounts.flatMap(({ id, name, title, accountType }) => (accountType ? [{ id, name, title, accountType }] : []))}

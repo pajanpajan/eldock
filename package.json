@@ -39,6 +39,7 @@
     "eval:recognition": "tsx scripts/eval-recognition.ts",
     "test:e2e": "playwright test",
     "verify": "npm run typecheck && npm run lint && npm run test && npm run build",
+    "verify:demo": "node scripts/verify-demo-ready.mjs",
     "plant-server": "tsx scripts/plant-server.ts",
     "catalog:images": "tsx scripts/catalog-images.ts",
     "catalog:renders": "tsx scripts/catalog-renders.ts",

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ExternalLink, FileText, Minus, Plus, Target } from "lucide-react";
 
+import { FallbackImg } from "@/components/common/FallbackImg";
 import { Button } from "@/components/ui/button";
 import type { InstallLevel } from "@/engine/floorplan-bridge";
 import { productImage } from "@/lib/panel-builder/catalog-images";
@@ -70,9 +71,16 @@ function DeviceCard({ product, system, props }: { product: CatalogProduct; syste
   return (
     <article className={cn("flex flex-col gap-2 rounded-lg border bg-background/40 p-2", active ? "border-primary ring-1 ring-primary" : "border-border")} data-testid="device-card" data-card={product.id}>
       <div className="flex gap-2">
+        {/* Fáze 99: fotka, která se nenačte, se hned nahradí vektorovým náhledem výrobku */}
         {photo ? (
-          // eslint-disable-next-line @next/next/no-img-element -- schválené náhledy výrobců z public/catalog-images (statické soubory)
-          <img src={photo.src} alt={`${product.label} – náhled výrobce`} title={`Foto: ${photo.source} · ${photo.license}`} className="size-20 shrink-0 rounded-md bg-white object-contain p-1" data-testid="device-photo" />
+          <FallbackImg
+            src={photo.src}
+            fallback={<SmartHomeDeviceIllustration product={product} variant={variant?.id} system={system} tone={props.tone} className="size-20 shrink-0 rounded-md bg-muted/40 p-1" />}
+            alt={`${product.label} – náhled výrobce`}
+            title={`Foto: ${photo.source} · ${photo.license}`}
+            className="size-20 shrink-0 rounded-md bg-white object-contain p-1"
+            data-testid="device-photo"
+          />
         ) : (
           <SmartHomeDeviceIllustration product={product} variant={variant?.id} system={system} tone={props.tone} className="size-20 shrink-0 rounded-md bg-muted/40 p-1" />
         )}
