@@ -60,7 +60,8 @@ export function siteNav(options: { showcase: boolean }): SiteLink[] {
     { href: SEGMENTS.prumysl.path, label: SEGMENTS.prumysl.title },
     ...(options.showcase ? [{ href: "/ukazka-elaboratu", label: "Ukázka dokumentace" }] : []),
     { href: "/#novinky", label: "Novinky" },
-    { href: "/#kontakt", label: "Kontakt" },
+    // Fáze 107: samostatná stránka kontaktu, schůzek a spolupráce (formulář se 7 kategoriemi)
+    { href: "/kontakt", label: "Kontakt & Spolupráce" },
   ];
 }
 
@@ -107,7 +108,7 @@ export function footerSections(options: { showcase: boolean }): { title: string;
       links: [
         { href: "/#proc-eldock", label: "Proč Eldock vznikl" },
         { href: "/#novinky", label: "Novinky (newsletter)" },
-        { href: "/#kontakt", label: "Kontakt a ukázka" },
+        { href: "/kontakt", label: "Kontakt & Spolupráce" },
         { href: "/obchodni-podminky", label: "Obchodní podmínky" },
         { href: "/ochrana-osobnich-udaju", label: "Ochrana osobních údajů" },
       ],

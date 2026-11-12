@@ -2126,3 +2126,41 @@ model ManufacturingOrder {
   @@index([companyId])
   @@index([projectId])
 }
+
+/// Fáze 107: zpráva kontaktního a zpětnovazebního hubu (hlášení chyby s printscreeny, tip na zlepšení / chybějící prvek,
+/// schůzka a ukázka, spolupráce, B2B poptávka, QR štítky, poradna k projektu). Číslo tiketu „#EL-1042“ od 1001.
+model ContactMessage {
+  id              String    @id @default(cuid())
+  ticket          Int       @unique
+  /// BUG | IDEA | MEETING | PARTNER | B2B | QR | ADVICE
+  category        String
+  /// Podtyp / forma (tip: feature | catalog, schůzka: onsite | regional | online, partner, QR: samples | series)
+  subtype         String?
+  /// NEW | IN_PROGRESS | RESOLVED
+  status          String    @default("NEW")
+  name            String?
+  company         String?
+  ico             String?
+  email           String?
+  phone           String?
+  message         String    @default("")
+  /// Podrobnosti kategorie (štítky zájmu, velikosti a počet QR štítků, preferovaný termín, MPN …) – JSON
+  detailsJson     String    @default("{}")
+  /// Technická diagnostika z prohlížeče (currentUrl, module, wizardPhase, projectId, viewportSize, userAgent) – JSON
+  diagnosticsJson String    @default("{}")
+  /// Printscreeny `/api/files/feedback/…` (registr souborů bez firmy = čte jen velín) – JSON pole
+  attachmentsJson String    @default("[]")
+  internalNote    String?
+  /// Přihlášená firma Panel Builderu, která zprávu poslala (informativně, bez vazby)
+  senderCompanyId String?
+  notifiedAt      DateTime?
+  notifyError     String?
+  readAt          DateTime?
+  resolvedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([status, createdAt])
+  @@index([category, createdAt])
+  @@index([readAt])
+}

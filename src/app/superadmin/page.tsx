@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { Bug, Building2, CircuitBoard, DatabaseBackup, Download, FolderLock, HardDrive, Mail, Receipt } from "lucide-react";
 
 import { KpiTile } from "@/components/common/KpiTile";
+import { ContactMessagesTab } from "@/components/superadmin/ContactMessagesTab";
 import { MarketTab } from "@/components/superadmin/MarketTab";
 import { ManufacturersTab } from "@/components/superadmin/ManufacturersTab";
 import { PoolTab } from "@/components/superadmin/PoolTab";
@@ -23,6 +24,7 @@ import { getSuperadminCompanies, getSuperadminFeedback, getSuperadminOrders, get
 import { prisma } from "@/lib/prisma";
 import { audienceLabel } from "@/lib/newsletter";
 import { bankAccount, parseFeedbackSnapshot } from "@/server/services/credits";
+import { contactUnreadCount } from "@/server/services/contact";
 import { newsletterOverview } from "@/server/services/newsletter";
 import { isSuperadmin } from "@/server/superadmin-session";
 
@@ -30,6 +32,8 @@ export const metadata: Metadata = { title: "Přehled" };
 
 const TABS = [
   { id: "companies", label: "Registrované firmy a kredity" },
+  // Fáze 107: zprávy kontaktního hubu (chyby s printscreeny, tipy, schůzky, spolupráce, B2B, QR štítky, poradna)
+  { id: "zpravy", label: "📬 Zprávy, Chyby & Schůzky" },
   // Fáze 102: trychtýř, kontakty z trenažéru s daty z ARES, tržní data a souhlasy s cookies
   { id: "market", label: "📈 Návštěvnost, Leady & Tržní data" },
   // Fáze 103: registr globálně unikátních QR štítků EL-xxxxxx, série pro firmy, tisk Zebra ZD421t / A4 / ZPL
@@ -55,7 +59,8 @@ export default async function SuperadminPage({ searchParams }: PageProps<"/super
   const tab: TabId = TABS.some((item) => item.id === tabParam) ? (tabParam as TabId) : "companies";
   const daysParam = Number((await searchParams).dni);
   const days = [7, 30, 90, 365].includes(daysParam) ? daysParam : 30;
-  const overview = await getSuperadminOverview();
+  const filterParam = (await searchParams).filtr;
+  const [overview, unread] = await Promise.all([getSuperadminOverview(), contactUnreadCount(prisma)]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -70,10 +75,15 @@ export default async function SuperadminPage({ searchParams }: PageProps<"/super
         {TABS.map((item) => (
           <Link key={item.id} href={`/superadmin?tab=${item.id}`} aria-current={tab === item.id ? "page" : undefined} className={cn("rounded-t-lg px-4 py-2 text-sm", tab === item.id ? "bg-primary font-semibold text-primary-foreground" : "text-muted-foreground hover:text-foreground")}>
             {item.label}
+            {item.id === "zpravy" && unread ? (
+              <span className="ml-1.5 rounded-full bg-red-600 px-1.5 py-0.5 text-[11px] font-bold text-white" aria-label={`${unread} nepřečtených zpráv`} data-testid="contact-unread-badge">
+                {unread}
+              </span>
+            ) : null}
           </Link>
         ))}
       </nav>
-      {tab === "companies" ? <CompaniesTab /> : tab === "market" ? <MarketTab days={days} /> : tab === "qr" ? <QrLabelsTab /> : tab === "pool" ? <PoolTab /> : tab === "manufacturers" ? <ManufacturersTab /> : tab === "orders" ? <OrdersTab /> : tab === "newsletter" ? <NewsletterTab /> : tab === "backups" ? <BackupsTab /> : <FeedbackTab />}
+      {tab === "companies" ? <CompaniesTab /> : tab === "zpravy" ? <ContactMessagesTab filter={typeof filterParam === "string" ? filterParam : "all"} /> : tab === "market" ? <MarketTab days={days} /> : tab === "qr" ? <QrLabelsTab /> : tab === "pool" ? <PoolTab /> : tab === "manufacturers" ? <ManufacturersTab /> : tab === "orders" ? <OrdersTab /> : tab === "newsletter" ? <NewsletterTab /> : tab === "backups" ? <BackupsTab /> : <FeedbackTab />}
     </div>
   );
 }

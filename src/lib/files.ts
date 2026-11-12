@@ -2,7 +2,8 @@ import path from "node:path";
 
 // Soubory aplikace leží ve storage/uploads a servíruje je GET /api/files/[...path].
 
-export const UPLOAD_KINDS = ["photos", "revisions", "markups", "voice", "documents", "attachments", "software"] as const;
+// Fáze 107: „feedback“ = printscreeny kontaktních zpráv (zapisuje je jen /api/contact, čte je jen velín)
+export const UPLOAD_KINDS = ["photos", "revisions", "markups", "voice", "documents", "attachments", "software", "feedback"] as const;
 export type UploadKind = (typeof UPLOAD_KINDS)[number];
 
 export const CONTENT_TYPES: Record<string, string> = {

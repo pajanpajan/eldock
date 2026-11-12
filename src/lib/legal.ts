@@ -6,7 +6,7 @@
 
 import { COMPANY_INFO } from "./company";
 
-export const PRIVACY_VERSION = "1.4 – 12. 11. 2026";
+export const PRIVACY_VERSION = "1.5 – 12. 11. 2026";
 
 /**
  * Fáze 104: doložka ochrany databáze a autorských práv (patička webu, obchodní podmínky, zápatí PDF výstupů) – databáze
@@ -49,7 +49,8 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
       "spárované aplikace Eldock pro Windows, iOS a Android: název zařízení, platforma, verze aplikace, časy spárování, posledního spojení a synchronizace a evidence úprav odeslaných z aplikace (druh, výsledek a čas) – přístupový token zařízení ukládáme jen jako kryptografický otisk,",
       "evidence žádostí o export a výmaz dat (firma, druh žádosti a čas – bez jmen),",
       "souhrnná statistika používání webu bez cookies: navštívená stránka (bez parametrů adresy), doména odkazu, ze kterého jste přišli, a parametry kampaně (utm), druh akce (spuštěný trenažér, zvolená designová řada, vygenerovaný rozváděč, pokus o export) – bez IP adresy, bez údajů o prohlížeči a bez identifikátoru; jen s vaším souhlasem s analytickými cookies k tomu náhodný identifikátor prohlížeče (navazující návštěvy),",
-      "kontakt z trenažéru a ukázkové firmy: e-mail, volitelně IČO a podle něj údaje firmy z veřejného registru ARES (název, sídlo, DIČ, obory činnosti CZ-NACE), zvolené zaměření (elektrikář, projektant, údržba), co jste v ukázce vytvořili (např. počet okruhů a metráž kabelů), zdroj návštěvy a volitelný souhlas s novinkami.",
+      "kontakt z trenažéru a ukázkové firmy: e-mail, volitelně IČO a podle něj údaje firmy z veřejného registru ARES (název, sídlo, DIČ, obory činnosti CZ-NACE), zvolené zaměření (elektrikář, projektant, údržba), co jste v ukázce vytvořili (např. počet okruhů a metráž kabelů), zdroj návštěvy a volitelný souhlas s novinkami,",
+      "zprávy z kontaktního formuláře a hlášení chyb (tlačítko „💬 Nápověda, Chyby & Kontakt“, stránka Kontakt & Spolupráce): text zprávy, kategorie a její podrobnosti (např. forma schůzky, typ spolupráce, počet QR štítků), jméno, firma a IČO (údaje firmy z ARES), e-mail, telefon, přiložené printscreeny nebo fotky (zmenšené, bez metadat) a technická diagnostika, kterou formulář přiloží sám: adresa stránky, modul a krok průvodce, identifikátor otevřeného projektu, velikost okna a identifikace prohlížeče.",
     ],
   },
   {
@@ -63,7 +64,8 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
       "zasílání newsletteru s novinkami jen na základě vašeho souhlasu (čl. 6 odst. 1 písm. a) GDPR),",
       "statistika návštěvnosti webu (Google Analytics 4, Microsoft Clarity, produktová analytika s identifikátorem) a měření kampaní a remarketing (Seznam Sklik, Google Ads, LinkedIn), jen pokud k nim dáte souhlas v liště cookies (čl. 6 odst. 1 písm. a) GDPR),",
       "souhrnná statistika používání webu bez cookies a bez identifikátoru – zlepšování nástrojů a přehled o zájmu o ně (oprávněný zájem, čl. 6 odst. 1 písm. f) GDPR; proti tomu můžete vznést námitku),",
-      "kontakt z trenažéru: zaslání dokumentace, dokončení registrace a odpověď na váš zájem o platformu, včetně jednoho navazujícího obchodního kontaktu k vaší poptávce (oprávněný zájem, čl. 6 odst. 1 písm. f) GDPR); obchodní sdělení e-mailem jen s vaším souhlasem (čl. 6 odst. 1 písm. a) GDPR a § 7 zákona č. 480/2004 Sb.).",
+      "kontakt z trenažéru: zaslání dokumentace, dokončení registrace a odpověď na váš zájem o platformu, včetně jednoho navazujícího obchodního kontaktu k vaší poptávce (oprávněný zájem, čl. 6 odst. 1 písm. f) GDPR); obchodní sdělení e-mailem jen s vaším souhlasem (čl. 6 odst. 1 písm. a) GDPR a § 7 zákona č. 480/2004 Sb.),",
+      "vyřízení zprávy z kontaktního formuláře – odpověď, oprava nahlášené chyby, sjednání schůzky nebo ukázky a příprava nabídky (opatření před uzavřením smlouvy a oprávněný zájem, čl. 6 odst. 1 písm. b) a f) GDPR).",
     ],
   },
   {
@@ -72,7 +74,7 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
     list: [
       "Hetzner Online GmbH (Německo) – hosting serveru a databáze v EU, případně úložiště záloh v EU (zálohy mimo server jsou šifrované, klíč má jen Eldock),",
       "Google (Gemini API) – rozpoznání přístrojů z fotografií rozváděčů a čtení technických listů; odesílá se jen fotografie nebo dokument určený k analýze, který jste nahráli,",
-      "poskytovatel odesílání e-mailů – doručení avíz, systémových zpráv a newsletteru,",
+      "poskytovatel odesílání e-mailů – doručení avíz, systémových zpráv a newsletteru, případně i firemní komunikační nástroj Eldocku – upozornění na novou zprávu z kontaktního formuláře (text a kontakt, bez přiložených obrázků),",
       "Google Ireland Ltd. (Google Analytics 4, Google Ads), Microsoft Ireland Operations Ltd. (Clarity), Seznam.cz, a.s. (Sklik) a LinkedIn Ireland Unlimited Company (Insight Tag) – jen pokud je služba na webu zapnutá a dáte k ní souhlas v liště cookies,",
       "Ministerstvo financí ČR (registr ARES) – podle zadaného IČO načteme veřejné údaje firmy; posíláme jen IČO.",
     ],
@@ -96,7 +98,8 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
       "odebraný zaměstnanec: přihlášení, e-mail, telefon a dvoufázové ověření mažeme hned; jméno zůstává u záznamů, které ve firmě vytvořil (změny, revize), pokud ho firma nenechá anonymizovat,",
       "zálohy: denní snímky databáze 7 dní na serveru, mimo server 14 denních a 6 měsíčních snímků; soubor smazaný v aplikaci zmizí ze zálohy mimo server po 30 dnech – smazaná data tak ze záloh zmizí nejpozději po 6 měsících,",
       "souhrnná statistika používání webu: 14 měsíců; náhodný identifikátor prohlížeče (jen se souhlasem): 13 měsíců nebo do odvolání souhlasu,",
-      "kontakt z trenažéru: 2 roky od posledního kontaktu, s registrací firmy jako údaje účtu; námitkou nebo žádostí o výmaz ho smažeme hned.",
+      "kontakt z trenažéru: 2 roky od posledního kontaktu, s registrací firmy jako údaje účtu; námitkou nebo žádostí o výmaz ho smažeme hned,",
+      "zprávy z kontaktního formuláře včetně printscreenů: po dobu řešení a 2 roky od vyřízení; na žádost o výmaz je smažeme dřív, pokud je nepotřebujeme k obraně právních nároků.",
     ],
   },
   {
@@ -122,6 +125,14 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
     paragraphs: [
       "Když si v ukázkové firmě (trenažér, demo scénáře) stáhnete kusovník, vytisknete elaborát nebo uložíte projekt, požádáme vás o e-mail, kam dokumentaci poslat. IČO je nepovinné: podle něj načteme z veřejného registru ARES název, sídlo, DIČ a obory činnosti firmy, abychom vám mohli předvyplnit razítko a registraci. Ke kontaktu si uložíme, co jste v ukázce vytvořili a odkud jste na web přišli.",
       "Novinky a nabídky vám e-mailem pošleme jen se samostatným souhlasem (políčko v okně není předem zaškrtnuté) a po potvrzení odkazem v e-mailu; souhlas odvoláte jedním kliknutím v každém e-mailu. Kontakt nikomu neprodáváme ani nepředáváme.",
+    ],
+  },
+  {
+    id: "kontaktni-formular",
+    title: "7c. Kontaktní formulář a hlášení chyb",
+    paragraphs: [
+      "Zprávu z kontaktního formuláře (hlášení chyby, tip na zlepšení, schůzka a ukázka, spolupráce, poptávka, QR štítky, poradna k projektu) vidí jen provozovatel Eldocku v administraci platformy. Přiložené printscreeny a fotky se v prohlížeči zmenší, na serveru v EU se uloží bez metadat (např. polohy z fotky mobilem) a veřejně dostupné nejsou.",
+      "Na printscreenu může být cokoli, co bylo na obrazovce – údaje, které sdílet nechcete, před odesláním zakryjte. Technickou diagnostiku (adresa stránky, modul a krok průvodce, projekt, velikost okna, prohlížeč) formulář přiloží sám, abychom chybu rychle našli; co se odešle, vidíte ve formuláři před odesláním. Ozveme se vám jen kvůli vaší zprávě, obchodní sdělení posíláme jen se souhlasem (viz 7a).",
     ],
   },
   {

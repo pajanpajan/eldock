@@ -30,7 +30,8 @@ const nextConfig: NextConfig = {
   outputFileTracingExcludes: { "*": ["storage/**", "src/**", "e2e/**", "*.db", "*.db-journal", "*.db-wal", "*.db-shm"] },
   // Fáze 92: nahrávač fotek řad zakóduje obrázek přes sharp – jeho nativní binárka i libvips (`@img/sharp-*`; v Linuxu
   // sdílená knihovna načítaná mimo `require`, trasování by ji mohlo minout) musí být ve standalone výstupu.
-  outputFileTracingIncludes: { "/api/catalog-images/upload": ["./node_modules/sharp/**/*", "./node_modules/@img/**/*"] },
+  // Fáze 107: printscreeny kontaktních zpráv znovu kóduje POST /api/contact – stejně tak sharp do jeho výstupu.
+  outputFileTracingIncludes: { "/api/catalog-images/upload": ["./node_modules/sharp/**/*", "./node_modules/@img/**/*"], "/api/contact": ["./node_modules/sharp/**/*", "./node_modules/@img/**/*"] },
   turbopack: {
     rules: {
       "*.css": {

@@ -28,9 +28,10 @@ test.describe("fáze 54 – veřejný web", () => {
     await page.goto("/");
     await page.getByTestId("landing-menu").click();
     const menu = page.getByRole("navigation", { name: "Sekce stránky (mobil)" });
-    await menu.getByRole("link", { name: "Kontakt" }).click();
+    // Fáze 107: položka „Kontakt & Spolupráce“ vede na samostatnou stránku /kontakt
+    await menu.getByRole("link", { name: "Kontakt & Spolupráce" }).click();
     await expect(menu).toBeHidden();
-    await expect(page).toHaveURL(/#kontakt$/);
+    await expect(page).toHaveURL(/\/kontakt$/);
 
     // Fáze 58: produktová karta Panel Builderu je v části Domovní elektroinstalace
     await page.goto("/domovni-elektroinstalace");

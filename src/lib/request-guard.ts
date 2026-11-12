@@ -25,6 +25,8 @@ export const RATE_LIMITS = {
   export: { limit: 15, windowMs: 60_000 },
   media: { limit: 600, windowMs: 60_000 },
   actions: { limit: 240, windowMs: 60_000 },
+  // Fáze 107: veřejné odeslání kontaktní zprávy s printscreeny
+  contact: { limit: 10, windowMs: 60_000 },
 } as const;
 
 export type RateBucket = keyof typeof RATE_LIMITS;
@@ -40,6 +42,7 @@ const API_PATH = /^\/api\/(catalog|panel-builder|qr-labels|ares)/;
 export function rateBucketOf(input: { pathname: string; method: string; action: boolean }): RateBucket | null {
   const { pathname } = input;
   if (EXPORT_PATH.test(pathname)) return "export";
+  if (pathname === "/api/contact" && input.method === "POST") return "contact";
   if (pathname.startsWith("/api/catalog-images/file/") || pathname.startsWith("/api/brand-logo/") || pathname.startsWith("/api/pool/preview/")) return "media";
   if (API_PATH.test(pathname)) return "api";
   if (input.action && input.method === "POST" && (pathname === "/panel-builder" || pathname.startsWith("/panel-builder/"))) return "actions";

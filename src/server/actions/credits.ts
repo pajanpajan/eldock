@@ -4,8 +4,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
-import { actionFailure, guardCompany, guardProject } from "@/server/panel-guards";
-import { createAiFeedback, createCreditOrder } from "@/server/services/credits";
+import { actionFailure, guardCompany } from "@/server/panel-guards";
+import { createCreditOrder } from "@/server/services/credits";
 
 import type { ActionResult } from "./workflow";
 
@@ -24,17 +24,4 @@ export async function createCreditOrderAction(packageCode: string): Promise<Acti
   }
 }
 
-const feedbackSchema = z.object({ projectId: z.string().min(1).max(64), message: z.string().trim().min(3).max(2000) });
-
-/** 🐛 Nahlásit chybu AI: poznámka testera + fotka a snímek lišt a prvků projektu. */
-export async function reportAiFeedbackAction(input: z.input<typeof feedbackSchema>): Promise<ActionResult> {
-  const parsed = feedbackSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Napište krátký popis chyby (aspoň 3 znaky)." };
-  try {
-    const company = await guardProject(parsed.data.projectId);
-    await createAiFeedback(prisma, company.id, parsed.data.projectId, parsed.data.message);
-    return { ok: true, data: undefined };
-  } catch (error) {
-    return actionFailure(error, "Hlášení se nepodařilo odeslat.");
-  }
-}
+// Fáze 107: hlášení chyby AI posílá kontaktní modal (POST /api/contact → createAiFeedback k projektu přihlášené firmy).

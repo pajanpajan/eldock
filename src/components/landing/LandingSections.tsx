@@ -126,6 +126,12 @@ export function ContactSection({ title, text }: { title: string; text: string })
                 <Mail data-icon="inline-start" aria-hidden /> Domluvit ukázku e-mailem
               </a>
             </Button>
+            {/* Fáze 107: formulář schůzky / online ukázky se 7 kategoriemi */}
+            <Button asChild variant="outline" className={anchorButton}>
+              <Link href="/kontakt?kategorie=MEETING" data-testid="landing-contact-meeting">
+                📅 Sjednat schůzku / online ukázku
+              </Link>
+            </Button>
           </div>
           <ul className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted-foreground">
             <li className="flex items-center gap-2">

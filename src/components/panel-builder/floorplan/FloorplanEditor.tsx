@@ -197,7 +197,8 @@ import { CompactCadBar, FloorplanWizardBar, HelpTip, PhaseNav, ToolbarPopover, U
 import { RoomBySizeForm } from "./RoomBySizeForm";
 import { useWizardStep } from "./useWizardStep";
 import { useFloorplanUiMode } from "./useFloorplanUiMode";
-import { stepForTutorialChapter, TUTORIAL_CHAPTER_EVENT, wizardStatus } from "@/lib/panel-builder/floorplan-wizard";
+import { stepForTutorialChapter, TUTORIAL_CHAPTER_EVENT, WIZARD_STEPS, wizardStatus } from "@/lib/panel-builder/floorplan-wizard";
+import { openContactModal, useContactPageContext } from "@/components/contact/contact-events";
 import { LAYER_FILTERS, assembliesVisible, roomsLocked, elementLook, filterLook, paletteGroupVisible, phaseOfGroup, routeVisible, defaultRightTab, tabSectionVisible, type FloorplanPhase, type LayerFilter, type PanelSectionId, type RightTab } from "@/lib/panel-builder/floorplan-phases";
 import { snapOpening } from "@/lib/panel-builder/architecture";
 import { addRoomBySize, snapRoomRect, type SnapGuide } from "@/lib/panel-builder/room-builder";
@@ -364,6 +365,9 @@ export function FloorplanEditor({
   // ukazuje ve výchozím stavu vše („Zobrazit vše“), jinak stejnou fázi jako průvodce. Fáze 5: rychlý filtr vrstev.
   const [showAll, setShowAll] = useState(true);
   const phase: FloorplanPhase | null = uiMode === "wizard" ? wizard : showAll ? null : wizard;
+  // Fáze 107: diagnostika kontaktní zprávy – id půdorysu a aktivní fáze průvodce (i z plovoucího tlačítka)
+  const contactContext = { module: "floorplan", projectId: sync.floorplanId ?? undefined, wizardPhase: phase ? WIZARD_STEPS.find((step) => step.id === phase)?.label : "Kompaktní lišta – zobrazit vše" };
+  useContactPageContext(contactContext);
   // Fáze 103: místnosti a stěny jen v kroku 1 – v krocích 2–5 zamčené proti posunutí, změně rozměrů a smazání
   const locked = roomsLocked(phase);
   const [layerFilter, setLayerFilter] = useState<LayerFilter>("all");
@@ -2664,6 +2668,10 @@ export function FloorplanEditor({
   const modeToggle = (
     <>
       <UiModeToggle mode={uiMode} onMode={setUiMode} />
+      {/* Fáze 107: hlášení chyby s printscreenem (Ctrl + V) – kontaktní modal s ID půdorysu a fází průvodce */}
+      <Button type="button" variant="outline" size="sm" className="h-8 gap-1 px-2 text-xs" onClick={() => openContactModal({ category: "BUG", context: contactContext })} title="Nahlásit chybu (+ Printscreen)" data-testid="floorplan-report-bug">
+        🐛 Nahlásit chybu
+      </Button>
       {/* Fáze 92: trvale vypnutý tahák zakázky jde zase zapnout */}
       {!sandbox && checklistMode === "off" ? (
         <Button type="button" variant="outline" size="sm" className="h-8 px-2 text-xs" onClick={() => setChecklistMode("open")} title="Zapnout tahák zakázky (Co teď udělat)" data-testid="live-checklist-on">

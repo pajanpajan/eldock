@@ -162,6 +162,10 @@ export function PitchDeck({ live }: { live: PitchLiveData }) {
             📄 One-Pager (Tisk A4)
           </button>
         </span>
+        {/* Fáze 107: kontakt, schůzka a spolupráce (plovoucí tlačítko na prezentaci není – překáželo by slidům na projektoru) */}
+        <Link href="/kontakt" className="rounded-lg border border-slate-600 px-3 py-1.5 text-sm font-semibold text-slate-200 hover:border-yellow-400 hover:text-white" data-testid="pitch-contact">
+          🤝 Kontakt & Spolupráce
+        </Link>
         <span className="ml-auto flex flex-wrap items-center gap-2">
           <Button type="button" size="sm" variant="ghost" className="gap-1.5 text-slate-400 hover:text-white" onClick={() => setEditing(true)} data-testid="pitch-edit">
             <Pencil className="size-3.5" aria-hidden /> ✏️ Upravit text / částku

@@ -99,7 +99,8 @@ describe("fáze 102 – ARES s obory CZ-NACE a kontakty z trenažéru", () => {
   });
 
   it("zásady ochrany osobních údajů popisují telemetrii, kontakty z trenažéru a ARES", () => {
-    expect(PRIVACY_VERSION).toMatch(/^1\.4/);
+    // Fáze 107: verze 1.5 doplnila kontaktní formulář a hlášení chyb (7c)
+    expect(PRIVACY_VERSION).toMatch(/^1\.[4-9]/);
     const text = PRIVACY_SECTIONS.map((section) => [...section.paragraphs, ...(section.list ?? [])].join(" ")).join(" ");
     for (const phrase of ["bez IP adresy", "ARES", "Microsoft Clarity", "Seznam Sklik", "Consent Mode v2", "§ 7 zákona č. 480/2004 Sb."]) expect(text).toContain(phrase);
     expect(PRIVACY_SECTIONS.some((section) => section.id === "kontakty")).toBe(true);

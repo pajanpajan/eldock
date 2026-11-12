@@ -41,10 +41,14 @@ test("🪙 objednávka kredity → QR platba + zálohová faktura, 🐛 hlášen
   // 🐛 Nahlásit chybu AI ve vzorovém projektu
   await page.goto("/panel-builder");
   await page.getByRole("link", { name: /PB-001/ }).click();
+  // Fáze 107: tlačítko otevře kontaktní modal s kategorií „Hlášení chyby“ a ID projektu (hlášení jde i do „Hlášení chyb AI“)
   await page.getByTestId("report-ai-error").click();
-  await page.getByLabel("Popis chyby").fill("E2E: špatně rozpoznaný stykač na 2. liště");
-  await page.getByRole("button", { name: "Odeslat hlášení" }).click();
-  await expect(page.getByText("Děkujeme! Hlášení jsme přijali")).toBeVisible({ timeout: 30_000 });
+  const contact = page.getByTestId("contact-modal");
+  await expect(contact.getByTestId("contact-form")).toHaveAttribute("data-category", "BUG", { timeout: 30_000 });
+  await contact.getByTestId("contact-message").fill("E2E: špatně rozpoznaný stykač na 2. liště");
+  await contact.getByTestId("contact-submit").click();
+  await expect(contact.getByTestId("contact-ticket")).toContainText("#EL-", { timeout: 30_000 });
+  await page.keyboard.press("Escape");
 
   // Velín bez přihlášení → login; heslo (lokálně přístupové heslo) → přehled
   await page.goto("/superadmin");

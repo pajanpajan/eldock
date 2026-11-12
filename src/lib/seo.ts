@@ -44,6 +44,8 @@ export const PUBLIC_PAGES = [
   // Fáze 58: dvě části webu – domovní elektroinstalace a průmysl
   { path: "/domovni-elektroinstalace", priority: 0.9, changeFrequency: "monthly" },
   { path: "/prumysl", priority: 0.9, changeFrequency: "monthly" },
+  // Fáze 107: kontakt, schůzka / ukázka, spolupráce a B2B poptávka
+  { path: "/kontakt", priority: 0.8, changeFrequency: "monthly" },
   { path: "/panel-builder/auth", priority: 0.8, changeFrequency: "monthly" },
   { path: "/register-plant", priority: 0.6, changeFrequency: "monthly" },
   // Fáze 54: právní stránky

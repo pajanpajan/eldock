@@ -2,6 +2,7 @@ import type { PrismaClient } from "@/generated/prisma/client";
 import type { MaintenanceTrigger } from "@/generated/prisma/enums";
 import { SYNC_POLICY } from "@/lib/sync";
 
+import { CONTACT_RETENTION_DAYS, pruneContactMessages } from "./contact";
 import { pruneSync, type SyncRetentionSummary } from "./sync";
 
 // Retence (fáze 68): jak dlouho se drží záznamy o přihlášení a údržbě. Běží denně se zálohou (plánovač v procesu
@@ -26,6 +27,8 @@ export const RETENTION_DAYS = {
   syncMutations: SYNC_POLICY.mutationDays,
   /** Odpojená a vypršelá zařízení aplikací (po odpojení / vypršení). */
   syncDevices: SYNC_POLICY.revokedDeviceDays,
+  /** Fáze 107: vyřízené zprávy kontaktního formuláře i s printscreeny (od vyřízení). */
+  contactMessages: CONTACT_RETENTION_DAYS,
 } as const;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -37,6 +40,7 @@ export interface RetentionSummary extends SyncRetentionSummary {
   maintenanceRuns: number;
   dataRequests: number;
   closedCompanies: number;
+  contactMessages: number;
 }
 
 /** Smaže záznamy starší než retence; vrací počty smazaných. */
@@ -52,7 +56,8 @@ export async function applyRetention(prisma: PrismaClient, now: Date = new Date(
     prisma.registeredCompany.deleteMany({ where: { closedAt: { lt: before(RETENTION_DAYS.closedCompanies) } } }),
   ]);
   const sync = await pruneSync(prisma, now);
-  return { securityEvents: securityEvents.count, sessions: sessions.count, authTokens: authTokens.count, maintenanceRuns: maintenanceRuns.count, dataRequests: dataRequests.count, closedCompanies: closedCompanies.count, ...sync };
+  const contactMessages = await pruneContactMessages(prisma, now);
+  return { securityEvents: securityEvents.count, sessions: sessions.count, authTokens: authTokens.count, maintenanceRuns: maintenanceRuns.count, dataRequests: dataRequests.count, closedCompanies: closedCompanies.count, contactMessages, ...sync };
 }
 
 /** Retence jako běh údržby (záznam `MaintenanceRun` kind RETENTION). */
