@@ -7,6 +7,7 @@ import { AlertTriangle, CheckCircle2, Loader2, Printer, Rocket } from "lucide-re
 import { QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
 
+import { useLeadGate } from "@/components/analytics/LeadCaptureModal";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { releaseDocumentationAction } from "@/server/actions/panel-builder";
@@ -31,8 +32,11 @@ export function DocumentationActions({
   blockers,
   targets,
   environmentConfirmed = true,
+  summary,
 }: {
   projectId: string;
+  /** Fáze 102: co návštěvník vytvořil (rozváděč, moduly) – do okna kontaktu u ukázkové firmy. */
+  summary?: string;
   released: { equipmentId: string; tag: string; name: string } | null;
   blockers: string[];
   targets: ReleaseTarget[];
@@ -40,6 +44,8 @@ export function DocumentationActions({
   environmentConfirmed?: boolean;
 }) {
   const router = useRouter();
+  // Fáze 102: tisk 6listového PDF elaborátu u ukázkové firmy přes okno kontaktu
+  const gate = useLeadGate();
   const [open, setOpen] = useState(false);
   const [equipmentId, setEquipmentId] = useState(released?.equipmentId ?? targets[0]?.id ?? "");
   const [pending, startTransition] = useTransition();
@@ -63,7 +69,7 @@ export function DocumentationActions({
         <span>✅ Potvrzuji, že jsem veškeré rozpoznané přístroje, schéma zapojení i výpočet oteplení odborně zkontroloval(a) a přebírám za dokumentaci plnou odpovědnost výrobce rozváděče.</span>
       </label>
       <div className="flex flex-wrap items-center gap-2">
-        <Button className="touch-target gap-2" onClick={() => window.print()} disabled={!confirmed || !environmentConfirmed} title={!environmentConfirmed ? "Nejdřív zvolte a potvrďte prostředí instalace" : confirmed ? undefined : "Nejdřív potvrďte odbornou kontrolu dokumentace"}>
+        <Button className="touch-target gap-2" onClick={() => gate({ kind: "panel", trigger: "pdf", summary: summary ?? "6listový PDF elaborát rozváděče" }, () => window.print())} disabled={!confirmed || !environmentConfirmed} title={!environmentConfirmed ? "Nejdřív zvolte a potvrďte prostředí instalace" : confirmed ? undefined : "Nejdřív potvrďte odbornou kontrolu dokumentace"}>
           <Printer className="size-4" aria-hidden /> Vytisknout / Exportovat kompletní PDF elaborát
         </Button>
         {targets.length || released ? (

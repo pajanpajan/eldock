@@ -17,13 +17,14 @@ import { CompanyFields, EMPTY_COMPANY, TermsConsent, type CompanyForm } from "./
 type Tab = "login" | "register";
 
 /** /panel-builder/auth: „Přihlášení“ (+ předvyplněný Tester účet) a „Registrace firmy (Tester)“. */
-export function PanelAuthForms({ next, initialTab = "login" }: { next?: string; initialTab?: Tab }) {
+export function PanelAuthForms({ next, initialTab = "login", lead = null }: { next?: string; initialTab?: Tab; lead?: { token: string; email: string; ico: string | null; companyName: string | null; dic: string | null } | null }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>(initialTab);
   const [pending, startTransition] = useTransition();
   const [login, setLogin] = useState({ email: "", password: "" });
-  const [company, setCompany] = useState<CompanyForm>(EMPTY_COMPANY);
-  const [account, setAccount] = useState({ email: "", password: "" });
+  // Fáze 102: registrace z odkazu kontaktu (okno v trenažéru) – předvyplněný e-mail, IČO a firma z ARES
+  const [company, setCompany] = useState<CompanyForm>(() => (lead ? { ...EMPTY_COMPANY, ico: lead.ico ?? "", companyName: lead.companyName ?? "", dic: lead.dic ?? "" } : EMPTY_COMPANY));
+  const [account, setAccount] = useState({ email: lead?.email ?? "", password: "" });
   const [terms, setTerms] = useState(false);
   const [error, setError] = useState<{ text: string; field?: string } | null>(null);
 
@@ -52,9 +53,9 @@ export function PanelAuthForms({ next, initialTab = "login" }: { next?: string; 
     setError(null);
     if (!terms) return setError({ text: "Bez souhlasu s podmínkami a přenesením odpovědnosti nelze registraci odeslat.", field: "termsAccepted" });
     startTransition(async () => {
-      const result = await registerPanelCompanyAction({ ...company, ...account, termsAccepted: terms }, next);
+      const result = await registerPanelCompanyAction({ ...company, ...account, termsAccepted: terms, ...(lead ? { leadToken: lead.token } : {}) }, next);
       if (!result.ok) return setError({ text: result.error, field: result.field });
-      toast.success(`Firma ${company.companyName} zaregistrována – máte 5 testovacích kreditů.`);
+      toast.success(`Firma ${company.companyName} zaregistrována – máte ${result.data.credits} testovacích kreditů.`);
       router.replace(result.data.href);
       router.refresh();
     });

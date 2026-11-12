@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { rightTab } from "./floorplan-phases";
+import { PUBLIC_STATE } from "./auth";
 
 // Fáze 99 / 101: „pre-flight check“ před prezentací (`npm run verify:demo`) – veřejná prezentace /prezentace s 8 věcnými
 // slidy a One-Pagerem A4, demo scénáře 2D půdorysu na 1 klik s fázemi 1–5 a přenosem do AI Panel Builderu, vzorový
@@ -31,7 +32,7 @@ async function open(page: Page, url: string, ready: (page: Page) => Promise<void
 }
 
 test.describe("veřejně bez přihlášení", () => {
-  test.use({ storageState: { cookies: [], origins: [] } });
+  test.use({ storageState: PUBLIC_STATE });
 
   test("📊 /prezentace: 200 OK, 8 věcných slidů na 1366 × 768 i 1920 × 1080, úprava textu / částky a One-Pager A4", async ({ page, request }) => {
     test.setTimeout(240_000);

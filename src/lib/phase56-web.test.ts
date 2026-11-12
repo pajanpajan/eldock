@@ -19,14 +19,15 @@ describe("fáze 56 – souhlas s cookies", () => {
     expect(parseConsent(null, now)).toBeNull();
   });
 
-  it("lišta jen když web používá volitelnou službu a volba chybí", () => {
-    expect(optionalCategories(consentServices({}))).toEqual([]);
+  it("lišta, když web používá volitelnou službu a volba chybí (fáze 102: vlastní produktová analytika vždy)", () => {
+    // Fáze 102: analytika i bez GA4 (produktová analytika ELDOCK s pseudonymním id), marketing podle zadání vždy
+    expect(optionalCategories(consentServices({}))).toEqual(["analytics", "marketing"]);
     expect(needsConsentPrompt(null, [])).toBe(false);
     const withGa = consentServices({ ga4Id: "G-ABC123XYZ" });
-    expect(optionalCategories(withGa)).toEqual(["analytics"]);
+    expect(withGa.some((service) => service.id === "ga4")).toBe(true);
     expect(needsConsentPrompt(null, ["analytics"])).toBe(true);
     expect(needsConsentPrompt(state, ["analytics"])).toBe(false);
-    expect(optionalCategories(consentServices({ ga4Id: "nesmysl" }))).toEqual([]);
+    expect(consentServices({ ga4Id: "nesmysl" }).some((service) => service.id === "ga4")).toBe(false);
     expect(isGa4Id(" G-ABC123XYZ ")).toBe(true);
   });
 

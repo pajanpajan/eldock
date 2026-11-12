@@ -57,6 +57,8 @@ export default async function PanelDocumentationPage({ params }: PageProps<"/pan
       <div className="flex flex-col gap-6">
         <DocumentationActions
           projectId={project.id}
+          // Fáze 102: co návštěvník vytvořil – do okna kontaktu u ukázkové firmy
+          summary={`Rozváděč ${project.code}${project.name ? ` „${project.name}“` : ""}: ${data.components.length} přístrojů, 6listový PDF elaborát`.slice(0, 200)}
           released={project.equipment && project.status === "COMPLETED" ? { equipmentId: project.equipment.id, tag: project.equipment.tag, name: project.equipment.name } : null}
           blockers={blockers}
           environmentConfirmed={environmentConfirmed}

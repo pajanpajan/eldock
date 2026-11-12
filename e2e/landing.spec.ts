@@ -1,7 +1,8 @@
 import { expect, test } from "@playwright/test";
+import { PUBLIC_STATE } from "./auth";
 
 test.describe("nepřihlášený návštěvník", () => {
-  test.use({ storageState: { cookies: [], origins: [] } });
+  test.use({ storageState: PUBLIC_STATE });
 
   test("úvodní stránka je veřejná a klientská zóna vede přes /login do /app", async ({ page }) => {
     await page.goto("/");

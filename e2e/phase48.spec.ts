@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { PUBLIC_STATE } from "./auth";
 
 // Fáze 48: správa projektů Panel Builderu (soupis místností, úprava hlavičky, mazání jednotlivě
 // i hromadně), stav kroků, záložky karty zařízení v jednom řádku, technické SEO a ukázka elaborátu.
@@ -92,7 +93,7 @@ test("karta zařízení: záložky v jednom řádku i na notebooku 1280 px", asy
 });
 
 test.describe("veřejná část bez přihlášení", () => {
-  test.use({ storageState: { cookies: [], origins: [] } });
+  test.use({ storageState: PUBLIC_STATE });
 
   test("SEO: robots.txt, sitemap.xml, náhled odkazu, metadata a JSON-LD", async ({ page, request }) => {
     const robotsTxt = await (await request.get("/robots.txt")).text();

@@ -6,6 +6,10 @@ import { demoDraft, demoScenario, isDemoScenarioId } from "@/lib/panel-builder/d
 import { prisma } from "@/lib/prisma";
 import { actionFailure, guardCompany } from "@/server/panel-guards";
 import { createFloorplan } from "@/server/services/floorplans";
+import { recordServerEvent } from "@/server/services/telemetry";
+
+/** Fáze 102: demo scénář → trenažér v telemetrii (zadání fáze 102). */
+const SANDBOX_OF = { "rd-4kk": "2D Půdorys 4+kk", ordinace: "Zdravotnictví", "oc-jednotka": "Obchodní centrum" } as const;
 
 import type { ActionResult } from "./workflow";
 
@@ -19,6 +23,7 @@ export async function createDemoFloorplanAction(scenario: string): Promise<Actio
     const company = await guardCompany();
     const info = demoScenario(scenario);
     const created = await createFloorplan(prisma, company.id, { meta: { name: info.name, customerName: info.customer, installationSite: info.site }, draft: demoDraft(scenario) });
+    await recordServerEvent(prisma, { type: "sandbox_started", path: "/panel-builder/floorplan", props: { sandbox: SANDBOX_OF[scenario], scenario } });
     revalidatePath("/panel-builder/floorplan");
     return { ok: true, data: { id: created.id, name: info.name } };
   } catch (error) {

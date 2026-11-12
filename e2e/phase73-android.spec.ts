@@ -6,6 +6,7 @@ import path from "node:path";
 import { _android as android, expect, test, type AndroidDevice, type AndroidWebView } from "@playwright/test";
 
 import { createSqlitePrisma } from "../src/lib/sqlite-adapter";
+import { PUBLIC_STATE } from "./auth";
 
 // Fáze 73: skutečná aplikace pro Android (ladicí APK) v emulátoru proti E2E serveru – spárování odkazem eldock://
 // z webu, token v Android Keystore, provizorium offline (režim letadlo), zrcadlo fronty v souborech aplikace,
@@ -45,7 +46,7 @@ async function appWebView(device: AndroidDevice, previous?: AndroidWebView): Pro
 }
 
 test.describe("aplikace Eldock pro Android (emulátor)", () => {
-  test.use({ storageState: { cookies: [], origins: [] } });
+  test.use({ storageState: PUBLIC_STATE });
   test.skip(!existsSync(APK), "APK aplikace pro Android není sestavené (npm --prefix apps/client run android:apk)");
 
   test("spárování odkazem, provizorium offline, obnova fronty po ztrátě dat WebView a odeslání", async ({ page }) => {

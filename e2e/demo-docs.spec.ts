@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { PUBLIC_STATE } from "./auth";
 
 test("reálný projekt PCSCHEMATIC v PDF: náhled, stažení originálu a porovnání s předchozí revizí", async ({ page }) => {
   const pdf = await page.request.get("/demo-docs/pohon-vrat-motor.pdf");
@@ -30,7 +31,7 @@ test("reálný projekt PCSCHEMATIC v PDF: náhled, stažení originálu a porovn
 });
 
 test("PDF dokumentace bez přihlášení není dostupná", async ({ browser }) => {
-  const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
+  const context = await browser.newContext({ storageState: PUBLIC_STATE });
   const response = await context.request.get("/demo-docs/pohon-vrat-motor.pdf", { maxRedirects: 0 });
   expect(response.status()).toBe(307);
   await context.close();

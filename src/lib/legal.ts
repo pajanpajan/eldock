@@ -1,11 +1,12 @@
 // Fáze 54: veřejné právní stránky – zásady zpracování osobních údajů (/ochrana-osobnich-udaju).
 // Obsah odpovídá tomu, co aplikace skutečně zpracovává (registrace firem a závodů, fotky a hlasové poznámky,
-// analýza fotek přes Google Gemini, e-mailová avíza, hosting Hetzner, jen nezbytné cookies). Čisté konstanty bez I/O.
+// analýza fotek přes Google Gemini, e-mailová avíza, hosting Hetzner, cookies podle souhlasu; fáze 102 telemetrie prvních
+// stran a kontakty z trenažéru s údaji z ARES). Čisté konstanty bez I/O.
 // Před ostrým prodejem nechat zkontrolovat právníkem (viz registr eldock-normovy-registr, INT-015).
 
 import { COMPANY_INFO } from "./company";
 
-export const PRIVACY_VERSION = "1.3 – 8. 11. 2026";
+export const PRIVACY_VERSION = "1.4 – 12. 11. 2026";
 
 /** Text souhlasu s newsletterem – ukládá se k odběrateli (verze níže), změna textu = nová verze. */
 export const NEWSLETTER_CONSENT_VERSION = "1";
@@ -38,7 +39,9 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
       "údaje o objednávkách kreditů a platbách (variabilní symbol, fakturační údaje),",
       "technické záznamy nutné pro bezpečný provoz: časy přihlášení a změn v auditní stopě, bezpečnostní deník firmy (přihlášení, neúspěšné pokusy, změny hesel a účtů – bez IP adresy, pro omezení pokusů jen její jednosměrný otisk) a přihlášená zařízení (typ prohlížeče a systému),",
       "spárované aplikace Eldock pro Windows, iOS a Android: název zařízení, platforma, verze aplikace, časy spárování, posledního spojení a synchronizace a evidence úprav odeslaných z aplikace (druh, výsledek a čas) – přístupový token zařízení ukládáme jen jako kryptografický otisk,",
-      "evidence žádostí o export a výmaz dat (firma, druh žádosti a čas – bez jmen).",
+      "evidence žádostí o export a výmaz dat (firma, druh žádosti a čas – bez jmen),",
+      "souhrnná statistika používání webu bez cookies: navštívená stránka (bez parametrů adresy), doména odkazu, ze kterého jste přišli, a parametry kampaně (utm), druh akce (spuštěný trenažér, zvolená designová řada, vygenerovaný rozváděč, pokus o export) – bez IP adresy, bez údajů o prohlížeči a bez identifikátoru; jen s vaším souhlasem s analytickými cookies k tomu náhodný identifikátor prohlížeče (navazující návštěvy),",
+      "kontakt z trenažéru a ukázkové firmy: e-mail, volitelně IČO a podle něj údaje firmy z veřejného registru ARES (název, sídlo, DIČ, obory činnosti CZ-NACE), zvolené zaměření (elektrikář, projektant, údržba), co jste v ukázce vytvořili (např. počet okruhů a metráž kabelů), zdroj návštěvy a volitelný souhlas s novinkami.",
     ],
   },
   {
@@ -50,7 +53,9 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
       "zabezpečení platformy, auditní stopa a obrana právních nároků (oprávněný zájem, čl. 6 odst. 1 písm. f) GDPR),",
       "e-mailová avíza o blížících se lhůtách revizí, pokud si je ve své firmě zapnete (plnění smlouvy),",
       "zasílání newsletteru s novinkami jen na základě vašeho souhlasu (čl. 6 odst. 1 písm. a) GDPR),",
-      "statistika návštěvnosti webu, jen pokud k ní dáte souhlas v liště cookies (čl. 6 odst. 1 písm. a) GDPR).",
+      "statistika návštěvnosti webu (Google Analytics 4, Microsoft Clarity, produktová analytika s identifikátorem) a měření kampaní a remarketing (Seznam Sklik, Google Ads, LinkedIn), jen pokud k nim dáte souhlas v liště cookies (čl. 6 odst. 1 písm. a) GDPR),",
+      "souhrnná statistika používání webu bez cookies a bez identifikátoru – zlepšování nástrojů a přehled o zájmu o ně (oprávněný zájem, čl. 6 odst. 1 písm. f) GDPR; proti tomu můžete vznést námitku),",
+      "kontakt z trenažéru: zaslání dokumentace, dokončení registrace a odpověď na váš zájem o platformu, včetně jednoho navazujícího obchodního kontaktu k vaší poptávce (oprávněný zájem, čl. 6 odst. 1 písm. f) GDPR); obchodní sdělení e-mailem jen s vaším souhlasem (čl. 6 odst. 1 písm. a) GDPR a § 7 zákona č. 480/2004 Sb.).",
     ],
   },
   {
@@ -60,13 +65,14 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
       "Hetzner Online GmbH (Německo) – hosting serveru a databáze v EU, případně úložiště záloh v EU (zálohy mimo server jsou šifrované, klíč má jen Eldock),",
       "Google (Gemini API) – rozpoznání přístrojů z fotografií rozváděčů a čtení technických listů; odesílá se jen fotografie nebo dokument určený k analýze, který jste nahráli,",
       "poskytovatel odesílání e-mailů – doručení avíz, systémových zpráv a newsletteru,",
-      "Google Ireland Ltd. (Google Analytics 4) – jen pokud je na webu zapnutá statistika návštěvnosti a dáte k ní souhlas.",
+      "Google Ireland Ltd. (Google Analytics 4, Google Ads), Microsoft Ireland Operations Ltd. (Clarity), Seznam.cz, a.s. (Sklik) a LinkedIn Ireland Unlimited Company (Insight Tag) – jen pokud je služba na webu zapnutá a dáte k ní souhlas v liště cookies,",
+      "Ministerstvo financí ČR (registr ARES) – podle zadaného IČO načteme veřejné údaje firmy; posíláme jen IČO.",
     ],
   },
   {
     title: "5. Předání mimo EU",
     paragraphs: [
-      "Google může údaje zpracovávat i mimo Evropskou unii. Takové předání probíhá jen se zárukami podle kapitoly V GDPR (např. rozhodnutí o odpovídající ochraně nebo standardní smluvní doložky).",
+      "Google, Microsoft a LinkedIn mohou údaje zpracovávat i mimo Evropskou unii. Takové předání probíhá jen se zárukami podle kapitoly V GDPR (např. rozhodnutí o odpovídající ochraně nebo standardní smluvní doložky).",
     ],
   },
   {
@@ -80,15 +86,17 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
       "spárované aplikace: do odpojení (odpojí je uživatel, správce firmy, změna hesla nebo blokace účtu; po 90 dnech bez spojení vyprší), pak 30 dní; evidence úprav z aplikací 90 dní; jednorázové kódy párování 1 den,",
       "evidence žádostí o export a výmaz dat: 3 roky,",
       "odebraný zaměstnanec: přihlášení, e-mail, telefon a dvoufázové ověření mažeme hned; jméno zůstává u záznamů, které ve firmě vytvořil (změny, revize), pokud ho firma nenechá anonymizovat,",
-      "zálohy: denní snímky databáze 7 dní na serveru, mimo server 14 denních a 6 měsíčních snímků; soubor smazaný v aplikaci zmizí ze zálohy mimo server po 30 dnech – smazaná data tak ze záloh zmizí nejpozději po 6 měsících.",
+      "zálohy: denní snímky databáze 7 dní na serveru, mimo server 14 denních a 6 měsíčních snímků; soubor smazaný v aplikaci zmizí ze zálohy mimo server po 30 dnech – smazaná data tak ze záloh zmizí nejpozději po 6 měsících,",
+      "souhrnná statistika používání webu: 14 měsíců; náhodný identifikátor prohlížeče (jen se souhlasem): 13 měsíců nebo do odvolání souhlasu,",
+      "kontakt z trenažéru: 2 roky od posledního kontaktu, s registrací firmy jako údaje účtu; námitkou nebo žádostí o výmaz ho smažeme hned.",
     ],
   },
   {
     id: "cookies",
     title: "7. Cookies a místní úložiště",
     paragraphs: [
-      "Technicky nezbytné cookies používáme bez souhlasu: podepsaný token relace pro přihlášení a cookie eldock_consent, která si pamatuje vaši volbu (platí 6 měsíců). Místní úložiště prohlížeče slouží k uložení rozpracovaného nákresu a nastavení zobrazení.",
-      "Volitelné cookies (analytické, případně marketingové) zapneme jen s vaším výslovným souhlasem v liště cookies. Odmítnutí je stejně snadné jako přijetí a volbu můžete kdykoli změnit odkazem „Nastavení cookies“ v patičce webu. Pokud web volitelné cookies nepoužívá, lišta se nezobrazuje.",
+      "Technicky nezbytné cookies používáme bez souhlasu: podepsaný token relace pro přihlášení a cookie eldock_consent, která si pamatuje vaši volbu (platí 6 měsíců; kopii volby s časem uloží i místní úložiště eldock_cookie_consent_v1). Místní úložiště prohlížeče slouží k uložení rozpracovaného nákresu a rozváděče a nastavení zobrazení.",
+      "Volitelné cookies zapneme jen s vaším výslovným souhlasem v liště „Nastavení soukromí a souborů cookies“: analytické a výkonnostní (produktová analytika ELDOCK s náhodným identifikátorem eldock_vid, Google Analytics 4, Microsoft Clarity) a marketingové a remarketingové (Seznam Sklik, Google Ads, LinkedIn) – služby třetích stran jen ty, které jsou na webu právě zapnuté (vypíše je podrobné nastavení). Google dostává signály Consent Mode v2: bez souhlasu se jeho služby vůbec nenačtou. Odmítnutí je stejně snadné jako přijetí a volbu můžete kdykoli změnit odkazem „Nastavení cookies“ v patičce webu.",
       "Volbu souhlasu evidujeme kvůli jeho prokázání (náhodný identifikátor, kategorie, verze a čas) – bez IP adresy a bez vazby na váš účet.",
     ],
   },
@@ -98,6 +106,14 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
     paragraphs: [
       "Pokud se přihlásíte k odběru novinek, zpracováváme váš e-mail, volitelně profesi (elektrikář, revizní technik, technický ředitel, údržba), text a čas udělení souhlasu a stav odběru. Odběr potvrzujete odkazem v e-mailu (dvojí potvrzení), bez potvrzení vám nic dalšího nepošleme a nepotvrzenou žádost po 30 dnech smažeme.",
       "Newsletter posíláme zhruba jednou měsíčně. Odhlásit se můžete jedním kliknutím v každém e-mailu; e-mail pak zůstane jen jako záznam odhlášení, abychom vám už nic neposlali.",
+    ],
+  },
+  {
+    id: "kontakty",
+    title: "7b. Kontakt z trenažéru a ukázkové firmy",
+    paragraphs: [
+      "Když si v ukázkové firmě (trenažér, demo scénáře) stáhnete kusovník, vytisknete elaborát nebo uložíte projekt, požádáme vás o e-mail, kam dokumentaci poslat. IČO je nepovinné: podle něj načteme z veřejného registru ARES název, sídlo, DIČ a obory činnosti firmy, abychom vám mohli předvyplnit razítko a registraci. Ke kontaktu si uložíme, co jste v ukázce vytvořili a odkud jste na web přišli.",
+      "Novinky a nabídky vám e-mailem pošleme jen se samostatným souhlasem (políčko v okně není předem zaškrtnuté) a po potvrzení odkazem v e-mailu; souhlas odvoláte jedním kliknutím v každém e-mailu. Kontakt nikomu neprodáváme ani nepředáváme.",
     ],
   },
   {

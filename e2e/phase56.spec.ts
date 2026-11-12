@@ -1,9 +1,12 @@
 import { expect, test } from "@playwright/test";
 
+import { PUBLIC_STATE } from "./auth";
+
 // Fáze 56: úvodní stránka pro čtyři cílové skupiny, newsletter s dvojím potvrzením a nastavení cookies.
 
 test.describe("fáze 56 – veřejný web", () => {
-  test.use({ storageState: { cookies: [], origins: [] } });
+  // Fáze 102: s uloženou volbou cookies (lišta by zakryla spodek stránky); lištu ověřuje vnořený blok níže
+  test.use({ storageState: PUBLIC_STATE });
 
   test("cílové skupiny: elektrikář v části Domovní elektroinstalace, ředitel, údržba a revizní technik v části Průmysl", async ({ page }) => {
     // Fáze 58: rozcestník „Jsem…“ nahradily dvě části webu
@@ -42,6 +45,11 @@ test.describe("fáze 56 – veřejný web", () => {
     await expect(page.getByText("Odkaz je neúplný")).toBeVisible();
   });
 
+});
+
+test.describe("fáze 56 / 102 – lišta cookies pro nového návštěvníka", () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
   test("s Google Analytics se ukáže lišta; „Odmítnout vše“ uloží volbu a analytiku nenačte", async ({ page }) => {
     // Konfigurace z /api/consent jako by byl nastavený ELDOCK_GA4_ID; Google se v testu nikdy nevolá
     await page.route("**/api/consent", (route) => (route.request().method() === "GET" ? route.fulfill({ json: { ga4Id: "G-TEST12345" } }) : route.continue()));
@@ -49,27 +57,30 @@ test.describe("fáze 56 – veřejný web", () => {
     await page.goto("/");
     const banner = page.getByTestId("consent-banner");
     await expect(banner).toBeVisible();
-    await expect(banner.getByRole("button", { name: "Přijmout vše" })).toBeVisible();
+    await expect(banner.getByRole("button", { name: "Rozumím a přijímám" })).toBeVisible();
     const saved = page.waitForResponse((response) => response.url().endsWith("/api/consent") && response.request().method() === "POST");
     await banner.getByRole("button", { name: "Odmítnout vše" }).click();
     expect((await saved).status()).toBe(201);
     await expect(banner).toHaveCount(0);
     const consent = (await page.context().cookies()).find((cookie) => cookie.name === "eldock_consent");
-    expect(consent?.value).toMatch(/^v1\.a0m0\./);
+    expect(consent?.value).toMatch(/^v2\.a0m0\./);
     await expect(page.locator('script[src*="googletagmanager"]')).toHaveCount(0);
     // po obnovení se lišta znovu neptá
     await page.reload();
     await expect(page.getByTestId("consent-banner")).toHaveCount(0);
   });
 
-  test("nastavení cookies z patičky: bez analytiky jen nezbytné, lišta se nezobrazuje", async ({ page }) => {
+  test("nastavení cookies z patičky: kategorie a služby, marketing bez nastavené služby jen s poznámkou", async ({ page }) => {
     await page.goto("/");
+    // Fáze 102: lišta se ukáže vždy (vlastní produktová analytika); odmítnutí ji zavře
+    await page.getByTestId("consent-banner").getByRole("button", { name: "Odmítnout vše" }).click();
     await expect(page.getByTestId("consent-banner")).toHaveCount(0);
     await page.getByRole("contentinfo").getByTestId("consent-settings-link").click();
     const dialog = page.getByTestId("consent-settings");
-    await expect(dialog).toContainText("Nezbytné");
+    await expect(dialog).toContainText("Nezbytné technické a funkční cookies");
     await expect(dialog).toContainText("eldock_consent");
-    await expect(dialog).toContainText("Volitelné cookies (analytické ani marketingové) web teď nepoužívá");
+    await expect(dialog).toContainText("Produktová analytika ELDOCK");
+    await expect(dialog).toContainText("Web teď žádnou službu této kategorie nepoužívá");
     await page.goto("/ochrana-osobnich-udaju#cookies");
     await expect(page.locator("section#cookies")).toContainText("Odmítnutí je stejně snadné jako přijetí");
   });

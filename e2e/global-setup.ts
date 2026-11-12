@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { AUTH_COOKIE, PANEL_AUTH_COOKIE, panelSubject, signAuthToken } from "../src/lib/auth";
 import { TESTER_COMPANY } from "../src/lib/registered-company";
-import { E2E_AUTH_SECRET, E2E_AUTH_STATE } from "./auth";
+import { E2E_AUTH_SECRET, E2E_AUTH_STATE, e2eConsentCookie, e2eLeadCookie } from "./auth";
 
 const UPLOAD_DIRS = ["photos", "revisions", "markups", "voice", "documents", "attachments", "software"].map((dir) => path.join("storage", "uploads", dir));
 
@@ -19,7 +19,8 @@ export default async function globalSetup(config: FullConfig) {
   const panelToken = await signAuthToken(panelSubject(TESTER_COMPANY.id), { secret: E2E_AUTH_SECRET, ttl: 60 * 60 * 6 });
   const cookie = (name: string, value: string) => ({ name, value, domain: "localhost", path: "/", expires: -1, httpOnly: true, secure: false, sameSite: "Lax" });
   mkdirSync(path.dirname(E2E_AUTH_STATE), { recursive: true });
-  writeFileSync(E2E_AUTH_STATE, JSON.stringify({ cookies: [cookie(AUTH_COOKIE, token), cookie(PANEL_AUTH_COOKIE, panelToken)], origins: [] }));
+  // Fáze 102: s uloženou volbou souhlasu (lišta nepřekáží) a zadaným kontaktem (exporty za firmu Tester bez okna)
+  writeFileSync(E2E_AUTH_STATE, JSON.stringify({ cookies: [cookie(AUTH_COOKIE, token), cookie(PANEL_AUTH_COOKIE, panelToken), e2eConsentCookie(), e2eLeadCookie()], origins: [] }));
   await warmUp(config);
   const startedAt = Date.now();
   return function globalTeardown() {

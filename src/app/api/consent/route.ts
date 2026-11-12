@@ -1,7 +1,6 @@
 import { z } from "zod";
 
-import { brandEnv } from "@/lib/auth";
-import { isGa4Id } from "@/lib/consent";
+import { consentConfigFromEnv } from "@/lib/consent";
 import { prisma } from "@/lib/prisma";
 
 const schema = z.object({
@@ -30,8 +29,10 @@ export async function POST(request: Request) {
   return Response.json({ ok: true }, { status: 201 });
 }
 
-/** Konfigurace volitelných služeb za běhu serveru (statické stránky by si ID z buildu „zapekly“). */
+/**
+ * Konfigurace volitelných služeb za běhu serveru (statické stránky by si ID z buildu „zapekly“) – fáze 102: GA4,
+ * Microsoft Clarity, Seznam Sklik, Google Ads a LinkedIn z `NEXT_PUBLIC_*` (i dřívější `ELDOCK_GA4_ID`).
+ */
 export async function GET() {
-  const ga4 = brandEnv("GA4_ID")?.trim() ?? "";
-  return Response.json({ ga4Id: isGa4Id(ga4) ? ga4 : null }, { headers: { "Cache-Control": "public, max-age=300" } });
+  return Response.json(consentConfigFromEnv(process.env), { headers: { "Cache-Control": "public, max-age=300" } });
 }

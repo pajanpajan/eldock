@@ -1,7 +1,8 @@
 import { expect, test } from "@playwright/test";
+import { PUBLIC_STATE } from "./auth";
 
 // Bez přihlašovací cookie ze `storageState` – test prochází bránou jako nový návštěvník.
-test.use({ storageState: { cookies: [], origins: [] } });
+test.use({ storageState: PUBLIC_STATE });
 
 test("bez přihlášení vede stránka na /login, API vrací 401; přihlášení a odhlášení (Zamknout)", async ({ page }) => {
   await page.goto("/equipment/eq-rm1");

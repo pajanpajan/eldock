@@ -22,7 +22,9 @@ describe("registr ARES", () => {
   });
 
   it("odpověď ARES → název, DIČ a sídlo (ulice s č. p. / č. o., město, PSČ)", () => {
-    expect(mapAresSubject(ARES_SAMPLE)).toEqual({ companyName: "Asseco Central Europe, a.s.", ico: "27074358", dic: "CZ27074358", street: "Budějovická 778/3a", city: "Praha", zip: "140 00" });
+    expect(mapAresSubject(ARES_SAMPLE)).toMatchObject({ companyName: "Asseco Central Europe, a.s.", ico: "27074358", dic: "CZ27074358", street: "Budějovická 778/3a", city: "Praha", zip: "140 00" });
+    // Fáze 102: obory CZ-NACE a zaměření firmy
+    expect(mapAresSubject(ARES_SAMPLE)).toHaveProperty("segment");
     // obec bez ulic: část obce + č. p.; bez DIČ
     expect(mapAresSubject({ ico: "12345679", obchodniJmeno: "Elektro Lhota", sidlo: { nazevObce: "Lhota", cisloDomovni: 12, psc: "46601" } })).toMatchObject({ street: "Lhota 12", dic: null, zip: "466 01" });
     expect(mapAresSubject({ chyba: "nenalezeno" })).toBeNull();

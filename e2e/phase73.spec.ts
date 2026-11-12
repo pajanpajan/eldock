@@ -6,6 +6,7 @@ import { devices, expect, test, type Page } from "@playwright/test";
 import sharp from "sharp";
 
 import { createSqlitePrisma } from "../src/lib/sqlite-adapter";
+import { PUBLIC_STATE } from "./auth";
 
 // Fáze 73: stejné rozhraní jako mobilní aplikace (apps/client/dist) v telefonním rozvržení (Pixel 7, dotyk) proti
 // E2E serveru – spárování kódem z webu, spodní lišta, skenování štítku (bez nativního skeneru záložní dialog
@@ -40,7 +41,7 @@ function serveDist(): Promise<Server> {
 const noHorizontalScroll = (phone: Page) => phone.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
 
 test.describe("aplikace Eldock v telefonu", () => {
-  test.use({ storageState: { cookies: [], origins: [] } });
+  test.use({ storageState: PUBLIC_STATE });
   test.skip(!existsSync(path.join(DIST, "index.html")), "Rozhraní aplikace není sestavené (npm --prefix apps/client run build)");
 
   test("spárování, spodní lišta, štítek, provizorium s fotkou offline a odeslání po připojení", async ({ page, browser }) => {
@@ -75,7 +76,7 @@ test.describe("aplikace Eldock v telefonu", () => {
     const code = (await card.getByTestId("pair-code").innerText()).trim();
 
     const server = await serveDist();
-    const phoneContext = await browser.newContext({ ...devices["Pixel 7"], locale: "cs-CZ", timezoneId: "Europe/Prague" });
+    const phoneContext = await browser.newContext({ ...devices["Pixel 7"], locale: "cs-CZ", timezoneId: "Europe/Prague", storageState: PUBLIC_STATE });
     try {
       const phone = await phoneContext.newPage();
       await phone.goto(APP_URL);

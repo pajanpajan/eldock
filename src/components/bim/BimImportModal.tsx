@@ -12,6 +12,7 @@ import { toPlantPayload } from "@/lib/bim/bim-payload";
 import { bimSummary, metres, type BimSummary } from "@/lib/bim/bim-summary";
 import { IfcError, parseIfc, type BimModel } from "@/lib/bim/ifc-parser";
 import { buildingHref, equipmentHref, floorHref } from "@/lib/routes";
+import { track } from "@/lib/telemetry-client";
 import { cn } from "@/lib/utils";
 import { createBimBoardProjectAction, importBimAction } from "@/server/actions/bim";
 
@@ -65,6 +66,8 @@ export function BimImportButtons({ plantId, canPanelBuilder, compact = false, au
   }
 
   function sample() {
+    // Fáze 102: vzorový BIM model haly = trenažér „Průmyslový BIM závod“
+    track("sandbox_started", { sandbox: "Průmyslový BIM závod" });
     void read("eldock-sample-plant.ifc", async () => {
       const response = await fetch(SAMPLE_IFC_URL);
       if (!response.ok) throw new Error("Vzorový soubor se nepodařilo stáhnout.");

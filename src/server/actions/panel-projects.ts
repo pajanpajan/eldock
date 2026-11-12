@@ -1,5 +1,6 @@
 "use server";
 
+import { TESTER_COMPANY } from "@/lib/registered-company";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -10,6 +11,7 @@ import { actionFailure, guardCompany, guardProject } from "@/server/panel-guards
 import { consumeCredit } from "@/server/services/companies";
 import { linkGeneratedProject } from "@/server/services/floorplans";
 import { createProjectFromFloorplan, createProjectFromSchedule, deletePanelProjects, updateProjectHeader, type DeleteResult } from "@/server/services/panel-projects";
+import { recordSwitchboard } from "@/server/services/telemetry";
 import { companyOwner } from "@/lib/file-ownership";
 import { removeOwnedFile } from "@/server/file-access";
 
@@ -97,6 +99,8 @@ export async function createScheduleProjectAction(input: z.input<typeof schedule
         companyId: company.id,
         manufacturerInfo: companyManufacturer(company),
       });
+      // Fáze 102: vygenerovaný rozváděč v telemetrii (moduly, výrobci přístrojů)
+      await recordSwitchboard(prisma, { projectId: result.id, companyId: company.id === TESTER_COMPANY.id ? null : company.id, source: "schedule" });
       revalidatePath("/panel-builder", "layout");
       return { ok: true, data: result };
     } catch (error) {
@@ -124,6 +128,9 @@ export async function createFloorplanProjectAction(input: z.input<typeof floorpl
       const result = await createProjectFromFloorplan(prisma, { ...project, companyId: company.id, manufacturerInfo: companyManufacturer(company) });
       // Fáze 64: uložený půdorys ukazuje na poslední vygenerovaný rozváděč; nákres jde do historie verzí (chyba vazby generování nezruší)
       if (floorplanId) await linkGeneratedProject(prisma, company.id, floorplanId, result.id, project.draft).catch((error: unknown) => console.error("Vazba půdorysu na rozváděč selhala", error));
+      // Fáze 102: vygenerovaný rozváděč v telemetrii (moduly, výrobci přístrojů, typ prostoru nákresu)
+      const occupancy = project.draft && typeof project.draft === "object" && "occupancy" in project.draft ? String((project.draft as { occupancy?: unknown }).occupancy ?? "") : null;
+      await recordSwitchboard(prisma, { projectId: result.id, companyId: company.id === TESTER_COMPANY.id ? null : company.id, source: "floorplan", occupancy });
       revalidatePath("/panel-builder", "layout");
       return { ok: true, data: result };
     } catch (error) {

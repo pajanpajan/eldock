@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { expect, test } from "@playwright/test";
 
 import { startAsAccount, toast } from "./helpers";
+import { PUBLIC_STATE } from "./auth";
 
 // Fáze 70: spárování aplikace v „Můj účet“ (kód + QR), API synchronizace s tokenem zařízení (relace, změny,
 // nahrání souboru s SHA-256, fronta úprav), přehled zařízení firmy a odpojení správcem; obchodní demo nepáruje.
@@ -12,7 +13,7 @@ const OWNER = { name: "Petra Technická", email: "petra@montaze-melnik.example",
 const DEVICE = "Samsung údržba hala A";
 
 test.describe("registrovaná firma Správy závodů", () => {
-  test.use({ storageState: { cookies: [], origins: [] } });
+  test.use({ storageState: PUBLIC_STATE });
 
   test("spárování aplikace, API s tokenem zařízení a odpojení správcem firmy", async ({ page }) => {
     // Informace o serveru jsou veřejné, relace bez tokenu ne

@@ -1545,6 +1545,63 @@ model ConsentRecord {
   @@index([consentId, createdAt])
 }
 
+/// Fáze 102: produktová telemetrie prvních stran (`POST /api/telemetry`) – bez IP adresy a user-agentu; pseudonymní
+/// `visitorId` jen se souhlasem s analytikou, `companyId` jen u přihlášené firmy.
+model TelemetryEvent {
+  id           String   @id @default(cuid())
+  /// page_view | sandbox_started | series_selected | switchboard_generated | export_clicked | lead_captured
+  type         String
+  path         String
+  /// google | seznam | facebook | linkedin | direct | other | internal
+  source       String
+  referrerHost String?
+  utmSource    String?
+  utmMedium    String?
+  utmCampaign  String?
+  /// Vstup na web (odkaz z jiného webu nebo přímý vstup), ne přechod mezi stránkami.
+  landing      Boolean  @default(false)
+  visitorId    String?
+  companyId    String?
+  /// JSON vlastností události (trenažér, řada, moduly, druh exportu …)
+  props        String   @default("{}")
+  createdAt    DateTime @default(now())
+
+  @@index([type, createdAt])
+  @@index([createdAt])
+}
+
+/// Fáze 102: kontakt zachycený v trenažéru / ukázkové firmě (e-mail, IČO, údaje z ARES, co testoval, odkud přišel).
+model Lead {
+  id                  String   @id @default(cuid())
+  email               String   @unique
+  ico                 String?
+  companyName         String?
+  dic                 String?
+  address             String?
+  /// JSON pole kódů CZ-NACE z ARES
+  nace                String   @default("[]")
+  /// electro | design | manufacturing | healthcare | facility | other
+  segment             String?
+  /// installer | designer | facility
+  role                String
+  /// JSON: kind, trigger, summary, circuits, boards, cableM (poslední zachycení)
+  context             String   @default("{}")
+  /// google | seznam | facebook | linkedin | direct | other
+  source              String   @default("direct")
+  utmCampaign         String?
+  marketingConsent    Boolean  @default(false)
+  consentText         String
+  consentVersion      String
+  /// Odkaz na dokončení registrace se 45 kredity (jednorázový)
+  token               String   @unique
+  registeredCompanyId String?
+  captures            Int      @default(1)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([createdAt])
+}
+
 /// Stav odběratele newsletteru (double opt-in).
 enum NewsletterStatus {
   PENDING

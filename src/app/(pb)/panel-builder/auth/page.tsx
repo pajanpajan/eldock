@@ -4,7 +4,11 @@ import { Flame, ShieldCheck, Zap } from "lucide-react";
 
 import { PanelAuthForms } from "@/components/companies/PanelAuthForms";
 import { safeNextPath } from "@/lib/auth";
+import { LEAD_BONUS_CREDITS } from "@/lib/leads";
+import { prisma } from "@/lib/prisma";
+import { TESTER_COMPANY } from "@/lib/registered-company";
 import { getPanelCompany } from "@/server/panel-session";
+import { leadPrefill } from "@/server/services/leads";
 
 export const metadata: Metadata = { title: "AI Panel Builder – přihlášení a registrace" };
 
@@ -12,7 +16,12 @@ export const metadata: Metadata = { title: "AI Panel Builder – přihlášení 
 export default async function PanelAuthPage({ searchParams }: PageProps<"/panel-builder/auth">) {
   const params = await searchParams;
   const next = safeNextPath(typeof params.next === "string" ? params.next : undefined);
-  if (await getPanelCompany()) redirect(next?.startsWith("/panel-builder") ? next : "/panel-builder");
+  // Fáze 102: z ukázkové firmy (trenažér) jde dokončit registraci – odkaz z okna kontaktu s 45 kredity
+  const token = typeof params.lead === "string" ? params.lead : null;
+  const lead = token ? await leadPrefill(prisma, token) : null;
+  const current = await getPanelCompany();
+  const registering = params.tab === "register" || Boolean(lead);
+  if (current && !(current.id === TESTER_COMPANY.id && registering)) redirect(next?.startsWith("/panel-builder") ? next : "/panel-builder");
 
   return (
     <div className="mx-auto grid w-full max-w-6xl gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
@@ -31,10 +40,10 @@ export default async function PanelAuthPage({ searchParams }: PageProps<"/panel-
           </li>
         </ul>
         <p className="rounded-lg border border-border bg-card/60 p-3 text-xs text-muted-foreground">
-          Registrace firmy je zdarma s 5 testovacími kredity (1 kredit = 1 nový rozváděč). Údaje firmy doplníme z registru ARES podle IČO.
+          {lead ? `Registrace z odkazu dokumentace: ${LEAD_BONUS_CREDITS} kreditů zdarma (1 kredit = 1 nový rozváděč). E-mail a IČO máte předvyplněné, sídlo doplní registr ARES.` : "Registrace firmy je zdarma s 5 testovacími kredity (1 kredit = 1 nový rozváděč). Údaje firmy doplníme z registru ARES podle IČO."}
         </p>
       </section>
-      <PanelAuthForms next={next} initialTab={params.tab === "register" ? "register" : "login"} />
+      <PanelAuthForms next={next} initialTab={registering ? "register" : "login"} lead={lead && token ? { token, email: lead.email, ico: lead.ico, companyName: lead.companyName, dic: lead.dic } : null} />
     </div>
   );
 }

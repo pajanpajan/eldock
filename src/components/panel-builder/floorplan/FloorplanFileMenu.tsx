@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { MAX_ELDOCK_FILE_BYTES, assetUrls, buildEldockFile, eldockFileName, isCadAsset, parseEldockFile, replaceBackgroundUrls, stripMissingAssets } from "@/lib/panel-builder/eldock-file";
 import type { FloorplanDraft } from "@/lib/panel-builder/floorplan-editor";
 import type { AssemblyTemplate } from "@/lib/panel-builder/floorplan-library";
+import { useLeadGate } from "@/components/analytics/LeadCaptureModal";
 import { uploadPanelFile } from "@/lib/upload-client";
 import { cn } from "@/lib/utils";
 import { createFloorplanAction, listFloorplansAction, type CloudFloorplanRow } from "@/server/actions/floorplans";
@@ -56,6 +57,9 @@ export function FloorplanFileMenu({
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState<"export" | "import" | null>(null);
   const [cloudOpen, setCloudOpen] = useState(false);
+
+  // Fáze 102: ukázková firma uloží projekt přes okno kontaktu
+  const gate = useLeadGate();
 
   async function exportFile() {
     setBusy("export");
@@ -120,7 +124,7 @@ export function FloorplanFileMenu({
       <Button type="button" variant="outline" size="sm" className="gap-1" onClick={() => setCloudOpen(true)} title="Moje uložené půdorysy (cloud)" data-testid="floorplan-cloud-list">
         <FolderOpen className="size-4" aria-hidden /> <span className="sr-only 2xl:not-sr-only">📂 Moje uložené půdorysy</span>
       </Button>
-      <Button type="button" variant="outline" size="sm" className="gap-1" onClick={() => void exportFile()} disabled={busy !== null} title="Celý projekt do jednoho souboru – podlaží, podklady, prvky, trasy, řady a barvy, šablony sestav" data-testid="floorplan-export">
+      <Button type="button" variant="outline" size="sm" className="gap-1" onClick={() => gate({ kind: "floorplan", trigger: "save", summary: `Projekt 2D půdorysu „${meta.name}“: ${draft.elements.length} prvků, ${draft.rooms.length} místností`.slice(0, 200) }, () => void exportFile())} disabled={busy !== null} title="Celý projekt do jednoho souboru – podlaží, podklady, prvky, trasy, řady a barvy, šablony sestav" data-testid="floorplan-export">
         {busy === "export" ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Download className="size-4" aria-hidden />} <span className="sr-only 2xl:not-sr-only">💾 Uložit do PC (.eldock)</span>
       </Button>
       <Button type="button" variant="outline" size="sm" className="gap-1" onClick={() => input.current?.click()} disabled={busy !== null} title="Otevře projekt ze souboru .eldock.json jako nový půdorys firmy" data-testid="floorplan-import">

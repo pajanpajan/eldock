@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { Bug, Building2, CircuitBoard, DatabaseBackup, Download, FolderLock, HardDrive, Mail, Receipt } from "lucide-react";
 
 import { KpiTile } from "@/components/common/KpiTile";
+import { MarketTab } from "@/components/superadmin/MarketTab";
 import { NewsletterComposer } from "@/components/superadmin/NewsletterComposer";
 import { BackupNowButton, ClosureControls, CreditControls, OrderActions, ResolveFeedback } from "@/components/superadmin/SuperadminControls";
 import { DATA_REQUESTER_LABELS, DATA_REQUEST_KIND_LABELS, DATA_REQUEST_STATUS_LABELS } from "@/lib/data-requests";
@@ -26,6 +27,8 @@ export const metadata: Metadata = { title: "Přehled" };
 
 const TABS = [
   { id: "companies", label: "Registrované firmy a kredity" },
+  // Fáze 102: trychtýř, kontakty z trenažéru s daty z ARES, tržní data a souhlasy s cookies
+  { id: "market", label: "📈 Návštěvnost, Leady & Tržní data" },
   { id: "orders", label: "Objednávky kreditů a fakturace" },
   { id: "feedback", label: "Hlášení chyb AI a fotky" },
   { id: "newsletter", label: "Newsletter" },
@@ -41,6 +44,8 @@ export default async function SuperadminPage({ searchParams }: PageProps<"/super
   if (!(await isSuperadmin())) notFound();
   const tabParam = (await searchParams).tab;
   const tab: TabId = TABS.some((item) => item.id === tabParam) ? (tabParam as TabId) : "companies";
+  const daysParam = Number((await searchParams).dni);
+  const days = [7, 30, 90, 365].includes(daysParam) ? daysParam : 30;
   const overview = await getSuperadminOverview();
 
   return (
@@ -59,7 +64,7 @@ export default async function SuperadminPage({ searchParams }: PageProps<"/super
           </Link>
         ))}
       </nav>
-      {tab === "companies" ? <CompaniesTab /> : tab === "orders" ? <OrdersTab /> : tab === "newsletter" ? <NewsletterTab /> : tab === "backups" ? <BackupsTab /> : <FeedbackTab />}
+      {tab === "companies" ? <CompaniesTab /> : tab === "market" ? <MarketTab days={days} /> : tab === "orders" ? <OrdersTab /> : tab === "newsletter" ? <NewsletterTab /> : tab === "backups" ? <BackupsTab /> : <FeedbackTab />}
     </div>
   );
 }

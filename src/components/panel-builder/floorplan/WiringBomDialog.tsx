@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { toCsv } from "@/lib/csv";
 import { BOX_TABLE_TITLE, bomBoxRows, bomMainRows, bomOrderLabel, bomTable, type WiringBomRow } from "@/lib/panel-builder/wiring-bom";
 import { buildXlsx } from "@/lib/xlsx";
+import { useLeadGate } from "@/components/analytics/LeadCaptureModal";
 import { cn } from "@/lib/utils";
 
 import { BoxPhoto } from "./BoxPhoto";
@@ -20,8 +21,13 @@ function download(name: string, data: BlobPart, type: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-/** Fáze 55: souhrn kusovníku domovní instalace v pravém panelu + modal s tabulkou, exportem CSV / XLSX a tiskem. */
-export function WiringBomDialog({ rows }: { rows: readonly WiringBomRow[] }) {
+/**
+ * Fáze 55: souhrn kusovníku domovní instalace v pravém panelu + modal s tabulkou, exportem CSV / XLSX a tiskem. Fáze 102:
+ * u ukázkové firmy export přes okno kontaktu (`useLeadGate`), `context` = co návštěvník vytvořil.
+ */
+export function WiringBomDialog({ rows, context }: { rows: readonly WiringBomRow[]; context?: { summary: string; circuits?: number; cableM?: number } }) {
+  const gate = useLeadGate();
+  const lead = (trigger: "csv" | "xlsx") => ({ kind: "floorplan" as const, trigger, summary: context?.summary ?? `Kusovník domovní instalace: ${rows.length} položek`, ...(context?.circuits !== undefined ? { circuits: context.circuits } : {}), ...(context?.cableM !== undefined ? { cableM: context.cableM } : {}) });
   const devices = rows.filter((row) => row.unit === "ks").reduce((sum, row) => sum + row.quantity, 0);
   const missing = rows.filter((row) => !row.mpn && row.unit === "ks").length;
   const unverified = rows.filter((row) => row.mpn && !row.verified).length;
@@ -49,10 +55,10 @@ export function WiringBomDialog({ rows }: { rows: readonly WiringBomRow[] }) {
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-wrap gap-2 print:hidden">
-            <Button type="button" variant="outline" className="gap-1.5" onClick={() => download("kusovnik-domovni-instalace.csv", toCsv(table), "text/csv;charset=utf-8")}>
+            <Button type="button" variant="outline" className="gap-1.5" onClick={() => gate(lead("csv"), () => download("kusovnik-domovni-instalace.csv", toCsv(table), "text/csv;charset=utf-8"))} data-testid="wiring-bom-csv">
               <FileText className="size-4" aria-hidden /> Export CSV
             </Button>
-            <Button type="button" variant="outline" className="gap-1.5" onClick={() => download("kusovnik-domovni-instalace.xlsx", buildXlsx("Kusovník", table) as BlobPart, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}>
+            <Button type="button" variant="outline" className="gap-1.5" onClick={() => gate(lead("xlsx"), () => download("kusovnik-domovni-instalace.xlsx", buildXlsx("Kusovník", table) as BlobPart, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))} data-testid="wiring-bom-xlsx">
               <FileSpreadsheet className="size-4" aria-hidden /> Export XLSX
             </Button>
             <Button type="button" variant="outline" className="gap-1.5" onClick={() => window.print()}>

@@ -4,6 +4,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { readZip } from "../src/server/services/test-zip";
 import { toast } from "./helpers";
+import { PUBLIC_STATE } from "./auth";
 
 // Fáze 69 (GDPR): export dat firmy (ZIP), vlastní údaje (JSON), odebrání zaměstnance, žádost o zrušení účtu firmy
 // s lhůtou a její zrušení; export firmy Panel Builderu a ochrana ukázkové firmy.
@@ -18,7 +19,7 @@ async function download(page: Page, click: () => Promise<void>) {
 }
 
 test.describe("registrovaná firma Správy závodů", () => {
-  test.use({ storageState: { cookies: [], origins: [] } });
+  test.use({ storageState: PUBLIC_STATE });
 
   test("export ZIP, vlastní údaje, odebrání zaměstnance a žádost o zrušení účtu s jejím zrušením", async ({ page }) => {
     await page.route("**/api/ares?ico=*", (route) => route.fulfill({ json: { ico: "12345679", companyName: "Lisovna Kolín s.r.o.", dic: "CZ12345679", street: "Průmyslová 5", city: "Kolín", zip: "280 02" } }));

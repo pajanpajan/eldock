@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { PUBLIC_STATE } from "./auth";
 
 // Fáze 87: video-návody – veřejná stránka /navody (bez přihlášení), přehrávače s kapitolami, stažení MP4, pozvánka
 // pro kolegu do schránky, odkaz z úvodní stránky a tlačítko „🎬 Video-návod“ v editoru půdorysu (Interactive Tour)
@@ -8,7 +9,7 @@ test.describe.configure({ mode: "serial" });
 const FILES = ["/tutorials/eldock-2d-pudorys-navod.mp4", "/tutorials/eldock-ai-panel-builder-navod.mp4"];
 
 test.describe("veřejně bez přihlášení", () => {
-  test.use({ storageState: { cookies: [], origins: [] } });
+  test.use({ storageState: PUBLIC_STATE });
 
   test("🎬 /navody: status 200, dva přehrávače s kapitolami, stažení MP4 a pozvánka do schránky", async ({ page, request, context }) => {
     test.setTimeout(240_000);

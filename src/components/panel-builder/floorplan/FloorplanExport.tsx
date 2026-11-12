@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { track } from "@/lib/telemetry-client";
 import { applianceSpecFor } from "@/lib/panel-builder/appliances";
 import { floorplanDxf } from "@/lib/panel-builder/dxf-export";
 import { isArchitecture } from "@/lib/panel-builder/fixtures";
@@ -283,7 +284,10 @@ export function FloorplanExport({ draft, analysis, company }: { draft: Floorplan
       <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => setOpen(true)} data-testid="export-pdf">
         <FileText className="size-4" aria-hidden /> 📄 Exportovat výkres do PDF (A3/A4)
       </Button>
-      <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={downloadDxf} data-testid="export-dxf">
+      <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => {
+          track("export_clicked", { kind: "dxf", context: "floorplan" });
+          downloadDxf();
+        }} data-testid="export-dxf">
         <FileDown className="size-4" aria-hidden /> 📐 Exportovat do CAD (DXF / DWG kompatibilní)
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>

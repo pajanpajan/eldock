@@ -1,10 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import { toast } from "./helpers";
+import { PUBLIC_STATE } from "./auth";
 
 // Fáze 41: AI Panel Builder a Správa závodů jako dva samostatné produkty – registrace firem přes ARES,
 // povinný souhlas s přenesením odpovědnosti, oddělené přihlášení a propis údajů firmy.
-test.use({ storageState: { cookies: [], origins: [] } });
+test.use({ storageState: PUBLIC_STATE });
 test.describe.configure({ mode: "serial" });
 
 /** ARES v E2E bez sítě: odpověď registru podle IČO. */

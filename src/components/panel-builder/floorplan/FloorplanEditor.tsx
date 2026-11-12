@@ -122,6 +122,7 @@ import {
 import { appearanceLabel, colorForSeries, designColor, frameColorForSeries, hasFrameChoice } from "@/lib/panel-builder/wiring-designs";
 import { renderPdfFile } from "@/lib/pdf-client";
 import { resizeImage, uploadPanelFile } from "@/lib/upload-client";
+import { track } from "@/lib/telemetry-client";
 import { cn } from "@/lib/utils";
 import { boxSummary, resolveBox } from "@/lib/panel-builder/mounting-boxes-catalog";
 import { compileFloorplanBom } from "@/lib/panel-builder/wiring-bom";
@@ -671,6 +672,10 @@ export function FloorplanEditor({
     return counts;
   }, [routes]);
   const bom = useMemo(() => compileFloorplanBom(deferred, { installation: deferred.installation, cables: analysis.ok ? analysis.summary.byCable : [], cableEnds }), [deferred, analysis, cableEnds]);
+  // Fáze 102: co návštěvník vytvořil – do okna kontaktu při exportu kusovníku (ukázková firma)
+  const bomCircuits = analysis.ok ? analysis.circuits.circuits.length : 0;
+  const bomCableM = analysis.ok ? Math.round(analysis.summary.totals[deferred.mode]) : 0;
+  const bomLeadContext = { summary: `2D půdorys „${meta.name}“: ${bomCircuits} okruhů, ${bomCableM} m kabelu, ${bom.length} položek kusovníku`.slice(0, 200), circuits: bomCircuits, cableM: bomCableM };
   // Fáze 61: chytrá domácnost (sběrnicová úroveň) a normový hlídač; fáze 91 – limit víceramečku a hloubka krabic
   const smartPlan = useMemo(() => smartPlanOf(deferred), [deferred]);
   const norms = useMemo(() => floorplanNorms(deferred, { cableEnds }), [deferred, cableEnds]);
@@ -743,6 +748,10 @@ export function FloorplanEditor({
   const checklist = generationChecklist(draft);
   // Fáze 92: trenažér (úkoly podle nákresu) a živý tahák vlastní zakázky
   const [sandboxGenerated, setSandboxGenerated] = useState(false);
+  // Fáze 102: spuštěný trenažér 2D půdorysu v telemetrii (jednou za otevření)
+  useEffect(() => {
+    if (sandbox) track("sandbox_started", { sandbox: "2D Půdorys – trenažér" });
+  }, [sandbox]);
   const trainer = sandbox ? sandboxProgress(draft, sandboxGenerated) : null;
   const trainerDimmer = useMemo(() => (sandbox ? bathDimmerOf(draft) : null), [sandbox, draft]);
   const [checklistMode, setChecklistMode] = useLiveChecklistMode();
@@ -2555,15 +2564,17 @@ export function FloorplanEditor({
         selectedRoom={selectedRoom?.name ?? null}
         supply={draft.supplySystem}
         onSupply={(supplySystem) => update((current) => ({ ...current, supplySystem }))}
-        onChange={(patch) =>
+        onChange={(patch) => {
+          // Fáze 102: oblíbenost designových řad (tržní data pro jednání s výrobci)
+          if (patch.series && patch.series !== draft.series) track("series_selected", { series: patch.series, manufacturer: patch.series.split("|")[0] ?? "", level: draft.installation });
           update((current) => {
             const nextSeries = patch.series ?? current.series;
             // Fáze 74: barva rámečku zvlášť – po změně řady jen barva, kterou nová řada má (jinak stejná jako klapka)
             const frame = patch.frameColor !== undefined ? patch.frameColor : current.frameColor;
             // Fáze 90: monobloky a Decento nemají barvu rámečku zvlášť
             return { ...current, series: nextSeries, color: colorForSeries(nextSeries, patch.color ?? current.color), frameColor: frame && hasFrameChoice(nextSeries) ? frameColorForSeries(nextSeries, frame) : null };
-          })
-        }
+          });
+        }}
         onApplyAll={() => {
           update((current) => applyAppearance(current));
           toast.success(`Vzhled ${appearanceLabel(draft.series, draft.color, draft.frameColor)} použit na celý dům.`);
@@ -3728,7 +3739,7 @@ export function FloorplanEditor({
           />
           ) : null}
           {/* Fáze 55: kusovník domovní instalace s objednacími čísly */}
-          {tab("bom") ? <WiringBomDialog rows={bom} /> : null}
+          {tab("bom") ? <WiringBomDialog rows={bom} context={bomLeadContext} /> : null}
           {tab("inventory") && inventory.length ? (
             <PanelSection id="inventory" title={`Soupis domovní instalace${floors.length > 1 ? ` (${floors.length} podlaží)` : ""}`} ariaLabel="Soupis domovní instalace" testId="wiring-inventory">
               <ul className="flex flex-col gap-0.5 text-xs">

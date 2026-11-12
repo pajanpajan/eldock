@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import { isTrainerPreset } from "@/lib/panel-builder/panel-trainer-presets";
 import { prisma } from "@/lib/prisma";
+import { recordServerEvent } from "@/server/services/telemetry";
 import { companyManufacturer } from "@/lib/registered-company";
 import { actionFailure, guardCompany } from "@/server/panel-guards";
 import { createSandboxProject, openTrainerProject } from "@/server/services/panel-trainer";
@@ -35,6 +36,8 @@ export async function openTrainerProjectAction(preset: string): Promise<ActionRe
   try {
     const company = await guardCompany();
     const result = await openTrainerProject(prisma, { companyId: company.id, preset, manufacturerInfo: companyManufacturer(company) });
+    // Fáze 102: tréninková zakázka AI Panel Builderu v telemetrii
+    await recordServerEvent(prisma, { type: "sandbox_started", path: "/panel-builder", props: { sandbox: "AI Panel Builder", preset } });
     if (result.created) revalidatePath("/panel-builder", "layout");
     return { ok: true, data: result };
   } catch (error) {

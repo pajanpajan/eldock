@@ -1,10 +1,11 @@
 import { expect, test } from "@playwright/test";
+import { PUBLIC_STATE } from "./auth";
 
 // Fáze 96: viditelnost ve vyhledávačích – nepřihlášený robot (Googlebot, bez cookies) dostane 200 bez přesměrování
 // na veřejných stránkách, vstupní stránce a katalogu AI Panel Builderu, 5 SEO stránkách, robots.txt, sitemap.xml
 // a klíči IndexNow; SEO stránka má H1, FAQ a JSON-LD, náhled oteplení počítá.
 test.describe.configure({ mode: "serial" });
-test.use({ storageState: { cookies: [], origins: [] }, userAgent: "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)" });
+test.use({ storageState: PUBLIC_STATE, userAgent: "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)" });
 
 const LANDINGS = ["/ai-panel-builder", "/2d-pudorys-elektroinstalace", "/vypocet-otepleni-rozvadece", "/kusova-zkouska-rozvadece", "/prumyslova-udrzba-a-revize"];
 const KEY = "691cb2cf48b1a728710c6a7aa654013e";

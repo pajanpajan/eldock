@@ -6,6 +6,7 @@ import { _electron as electron, expect, test } from "@playwright/test";
 import sharp from "sharp";
 
 import { createSqlitePrisma } from "../src/lib/sqlite-adapter";
+import { PUBLIC_STATE } from "./auth";
 
 // Fáze 71: aplikace Eldock pro Windows (Electron) proti E2E serveru – spárování kódem z webu, první
 // synchronizace, štítek ze čtečky čárových kódů, zadání změny s fotkou a odstranění závady offline, odeslání
@@ -21,7 +22,7 @@ const ICO = "27135799";
 const QR = "B4E2E71C0D";
 
 test.describe("aplikace Eldock pro Windows", () => {
-  test.use({ storageState: { cookies: [], origins: [] } });
+  test.use({ storageState: PUBLIC_STATE });
   test.skip(![ELECTRON, ...BUILT].every((file) => existsSync(file)), "Aplikace pro Windows není nainstalovaná a sestavená (apps/client)");
 
   test("spárování kódem z webu, synchronizace, štítek, úpravy offline a odeslání po připojení", async ({ page }) => {

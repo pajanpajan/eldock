@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
 import { BrokenImageGuard } from "@/components/common/BrokenImageGuard";
-import { ConsentManager } from "@/components/consent/ConsentManager";
+import { CONSENT_MODE_DEFAULT, ConsentManager } from "@/components/consent/ConsentManager";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { BRAND } from "@/lib/brand";
@@ -55,13 +55,15 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} dark h-full antialiased`}
     >
       <body className="bg-blueprint flex min-h-full flex-col">
+        {/* Fáze 102: Google Consent Mode v2 – výchozí „denied“ jako první skript stránky, služby až po souhlasu */}
+        <script id="consent-mode-default" dangerouslySetInnerHTML={{ __html: CONSENT_MODE_DEFAULT }} />
         {/* Fáze 96: strukturovaná data webu – Organization, WebSite a SoftwareApplication (schema.org) */}
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(siteJsonLd()) }} />
         <TooltipProvider delayDuration={200}>{children}</TooltipProvider>
         <Toaster position="top-center" />
         {/* Fáze 99: žádná ikona rozbitého obrázku (globální pojistka k vektorovým náhledům katalogu) */}
         <BrokenImageGuard />
-        {/* Fáze 56: souhlas s cookies – volitelné služby podle konfigurace serveru (ELDOCK_GA4_ID přes /api/consent) */}
+        {/* Fáze 56 / 102: lišta souhlasu s cookies a měření (GA4, Clarity, Sklik, Ads, LinkedIn podle /api/consent) */}
         <ConsentManager />
       </body>
     </html>

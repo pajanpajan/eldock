@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 
 import { AUTH_COOKIE, AUTH_TTL_SECONDS, PANEL_AUTH_COOKIE, PANEL_AUTH_TTL_SECONDS, brandEnv, panelSubject, safeNextPath, sessionSubject, signAuthToken } from "@/lib/auth";
 import { TESTER_COMPANY, companyDetailsSchema, companyLoginSchema, panelRegistrationSchema, plantRegistrationSchema } from "@/lib/registered-company";
+import { LEAD_BONUS_CREDITS } from "@/lib/leads";
 import { prisma } from "@/lib/prisma";
 import { PLANT_COOKIE } from "@/lib/roles";
 import { plantHref } from "@/lib/routes";
@@ -15,6 +16,7 @@ import { getPanelCompany } from "@/server/panel-session";
 import { requestMeta } from "@/server/request-meta";
 import { createUserSession, recordSecurityEvent } from "@/server/services/account-security";
 import { authenticateCompany, registerPanelCompany, registerPlantCompany, updateCompanyDetails } from "@/server/services/companies";
+import { applyLeadBonus } from "@/server/services/leads";
 
 import type { ActionResult } from "./workflow";
 
@@ -49,13 +51,16 @@ function invalid(issues: { message: string; path: PropertyKey[] }[]): { ok: fals
 }
 
 /** Registrace firmy (Tester) do AI Panel Builderu → přihlášení a přechod do Panel Builderu. */
-export async function registerPanelCompanyAction(input: unknown, next?: string): Promise<ActionResult<{ href: string }> & { field?: string }> {
+export async function registerPanelCompanyAction(input: unknown, next?: string): Promise<ActionResult<{ href: string; credits: number }> & { field?: string }> {
   const parsed = panelRegistrationSchema.safeParse(input);
   if (!parsed.success) return invalid(parsed.error.issues);
   try {
     const company = await registerPanelCompany(prisma, parsed.data);
+    // Fáze 102: registrace z odkazu kontaktu (trenažér) – 45 kreditů a propojení kontaktu s firmou (jen jednou)
+    const leadToken = typeof input === "object" && input && "leadToken" in input ? String((input as { leadToken: unknown }).leadToken ?? "") : null;
+    const bonus = await applyLeadBonus(prisma, leadToken, company.id).catch(() => false);
     await signInCompany(company.id);
-    return { ok: true, data: { href: panelNext(next) } };
+    return { ok: true, data: { href: panelNext(next), credits: bonus ? LEAD_BONUS_CREDITS : company.creditsRemaining } };
   } catch (error) {
     return failure(error, "Registraci se nepodařilo dokončit. Zkuste to prosím znovu.");
   }

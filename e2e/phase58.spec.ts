@@ -1,10 +1,11 @@
 import { expect, test } from "@playwright/test";
+import { PUBLIC_STATE } from "./auth";
 
 // Fáze 58: úvod „proč Eldock vznikl“ s rozcestníkem Domovní elektroinstalace / Průmysl a mapou webu; značky přístrojů
 // dle ČSN EN 60617 s legendou a náhledem datasheetu.
 
 test.describe("fáze 58 – veřejný web", () => {
-  test.use({ storageState: { cookies: [], origins: [] } });
+  test.use({ storageState: PUBLIC_STATE });
 
   test("úvod: proč Eldock vznikl, vlevo domovní elektroinstalace, vpravo průmysl, obě části s drobečkovou navigací a mapou webu", async ({ page, request }) => {
     await page.setViewportSize({ width: 1440, height: 1000 });

@@ -1,6 +1,7 @@
 import { expect, test, type APIRequestContext, type Browser, type BrowserContext } from "@playwright/test";
 
 import { toast } from "./helpers";
+import { PUBLIC_STATE } from "./auth";
 
 // Fáze 68: vlastník souborů – demo, firma Panel Builderu a registrovaná firma Správy závodů si navzájem nepřečtou
 // nahrané soubory; logo firmy jen v Panel Builderu se zobrazí (brána pustí soubory každému přihlášení); velín: ruční záloha.
@@ -20,7 +21,7 @@ async function upload(request: APIRequestContext, scope?: "panel") {
 const status = async (request: APIRequestContext, url: string) => (await request.get(url)).status();
 
 async function emptyContext(browser: Browser) {
-  return browser.newContext({ storageState: { cookies: [], origins: [] } });
+  return browser.newContext({ storageState: PUBLIC_STATE });
 }
 
 /** Jen přihlášení do AI Panel Builderu – ukázková firma Tester bez přihlášení do závodu. */

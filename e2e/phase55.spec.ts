@@ -1,10 +1,11 @@
 import { expect, test } from "@playwright/test";
 import { goPhase, phaseForPalette } from "./floorplan-phases";
+import { PUBLIC_STATE } from "./auth";
 
 // Fáze 55: vzorový elaborát se stromem a sběrnicemi PE / N, horní lišta půdorysu s řadami ABB 2026, značky a kusovník.
 
 test.describe("fáze 55 – veřejná ukázka", () => {
-  test.use({ storageState: { cookies: [], origins: [] } });
+  test.use({ storageState: PUBLIC_STATE });
 
   test("vzorový elaborát PB-001: úplné jednopólové schéma a sběrnice PE / N v kusovníku", async ({ page }) => {
     await page.goto("/ukazka-elaboratu");

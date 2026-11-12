@@ -1,8 +1,9 @@
 import { expect, test } from "@playwright/test";
+import { PUBLIC_STATE } from "./auth";
 
 // Fáze 54: opravy veřejného webu – 404 místo přihlášení, právní stránky, mobilní menu a tlačítka bez přetečení.
 test.describe("fáze 54 – veřejný web", () => {
-  test.use({ storageState: { cookies: [], origins: [] } });
+  test.use({ storageState: PUBLIC_STATE });
 
   test("neznámá adresa vrací 404 místo přesměrování, trasy aplikace dál vedou na přihlášení, právní stránky jsou veřejné", async ({ page, request }) => {
     expect((await request.get("/llms.txt", { maxRedirects: 0 })).status()).toBe(404);

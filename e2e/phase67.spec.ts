@@ -3,10 +3,11 @@ import { createHmac } from "node:crypto";
 import { expect, test, type Browser, type Page } from "@playwright/test";
 
 import { toast } from "./helpers";
+import { PUBLIC_STATE } from "./auth";
 
 // Fáze 67: účty zaměstnanců registrované firmy – pozvánka a vlastní heslo, limit pokusů, dvoufázové ověření,
 // blokace zaměstnance (zrušení relace) a obrana proti podvržené cookie přepínače účtů.
-test.use({ storageState: { cookies: [], origins: [] } });
+test.use({ storageState: PUBLIC_STATE });
 test.describe.configure({ mode: "serial" });
 
 const OWNER = { name: "Ing. Jana Ředitelová", email: "jana@kovovyroba-tabor.example", password: "Kovovyroba-Tabor-2026" };
@@ -49,7 +50,7 @@ async function login(page: Page, email: string, password: string) {
 const loginAlert = (page: Page) => page.locator("form [role=alert]");
 
 async function freshPage(browser: Browser) {
-  const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
+  const context = await browser.newContext({ storageState: PUBLIC_STATE });
   return context.newPage();
 }
 

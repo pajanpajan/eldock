@@ -6,6 +6,7 @@ import path from "node:path";
 import { _electron as electron, expect, test } from "@playwright/test";
 
 import { createSqlitePrisma } from "../src/lib/sqlite-adapter";
+import { PUBLIC_STATE } from "./auth";
 
 // Fáze 72: server závodu se skutečnými procesy – E2E cloud (port 3200) ↔ server závodu (Eldock.exe jako Node,
 // sestavený plant-server.cjs) ↔ aplikace pro Windows. Správce spáruje server kódem z Administrace → Zařízení přes
@@ -35,7 +36,7 @@ async function waitForPlant(child: ChildProcess) {
 }
 
 test.describe("server závodu", () => {
-  test.use({ storageState: { cookies: [], origins: [] } });
+  test.use({ storageState: PUBLIC_STATE });
   test.skip(![ELECTRON, ...BUILT].every((file) => existsSync(file)), "Aplikace pro Windows není nainstalovaná a sestavená (apps/client)");
 
   test("správce spáruje server závodu, tablet v hale přes něj zapíše provizorium a cloud ho provede", async ({ page, context }) => {
