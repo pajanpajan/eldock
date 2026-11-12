@@ -48,6 +48,7 @@
     "catalog:etim": "tsx scripts/import-abb-etim9.mjs",
     "catalog:discover": "node scripts/discover-and-download-etim.mjs",
     "catalog:parse": "node scripts/parse-etim-packages.mjs",
+    "catalog:universal": "node scripts/import-etim-universal.mjs",
     "bim:sample": "tsx scripts/bim-sample.ts",
     "seo:ping": "node scripts/seo-indexnow-ping.mjs"
   },

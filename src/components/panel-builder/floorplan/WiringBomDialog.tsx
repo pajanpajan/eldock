@@ -11,6 +11,7 @@ import { useLeadGate } from "@/components/analytics/LeadCaptureModal";
 import { cn } from "@/lib/utils";
 
 import { useCatalogEans } from "@/components/panel-builder/catalog-lookup";
+import { WholesalerExport } from "@/components/quoting/WholesalerExport";
 
 import { BoxPhoto } from "./BoxPhoto";
 
@@ -145,6 +146,8 @@ export function WiringBomDialog({ rows: computed, context }: { rows: readonly Wi
               </table>
             </section>
           ) : null}
+          {/* Fáze 105: poptávka / košík do velkoobchodu (EAN a objednací čísla kusovníku) */}
+          <WholesalerExport className="print:hidden" title={context?.summary?.split(":")[0] ?? "Kusovník domovní instalace"} lines={rows.map((row) => ({ code: row.mpn, ean: row.ean ?? null, name: row.appearance && row.unit === "ks" ? `${row.name} (${row.appearance})` : row.name, manufacturer: row.box?.maker ?? null, quantity: row.quantity, unit: row.unit }))} />
         </DialogContent>
       </Dialog>
     </section>

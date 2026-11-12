@@ -1,11 +1,13 @@
-// Generuje `node scripts/parse-etim-packages.mjs` z dat výrobců v data/etim/downloads (fáze 97) – needitujte ručně.
+// Generuje `node scripts/parse-etim-packages.mjs` z dat výrobců v data/etim/downloads (fáze 97) a doplňuje
+// `node scripts/import-etim-universal.mjs` z balíčků ve složce „ETIM data“ (fáze 105) – needitujte ručně.
 // Fotky DIN přístrojů podle objednacího čísla katalogu (slug) – jen pro serverové stránky (katalog AI Panel Builderu),
 // do klientského balíčku nepatří. Hodnota = [cesta v public/, index zdroje v DEVICE_PHOTO_SOURCES].
 
 export const DEVICE_PHOTO_SOURCES: readonly string[] = [
   "ABB – oficiální data ETIM 9.0 (ELSB_ETIM-9.0_2026-05, cdn.productimages.abb.com)",
   "Hager – oficiální data BMEcat ETIM 10 (Hager_BMEcat_ETIM10, assets.hager.com)",
-  "OEZ – katalog oez.cz (stránka výrobku)"
+  "OEZ – katalog oez.cz (stránka výrobku)",
+  "OEZ – oficiální data BMEcat ETIM 8.0 (OEZ-CZ - 10-2026, fotky v balíčku)"
 ];
 
 export const DEVICE_PHOTOS: Readonly<Record<string, readonly [string, number]>> = {
@@ -1264,6 +1266,126 @@ export const DEVICE_PHOTOS: Readonly<Record<string, readonly [string, number]>> 
  "kzn023": [
   "/catalog-images/hager/devices/kzn023.webp",
   1
+ ],
+ "lfe-25-2-030a": [
+  "/catalog-images/oez/devices/lfe-25-2-030a.webp",
+  3
+ ],
+ "lfe-63-4-030a": [
+  "/catalog-images/oez/devices/lfe-63-4-030a.webp",
+  3
+ ],
+ "ltn-10b-1": [
+  "/catalog-images/oez/devices/ltn-10b-1.webp",
+  3
+ ],
+ "ltn-10b-3": [
+  "/catalog-images/oez/devices/ltn-10b-3.webp",
+  3
+ ],
+ "ltn-10c-1": [
+  "/catalog-images/oez/devices/ltn-10c-1.webp",
+  3
+ ],
+ "ltn-10c-3": [
+  "/catalog-images/oez/devices/ltn-10c-3.webp",
+  3
+ ],
+ "ltn-13b-1": [
+  "/catalog-images/oez/devices/ltn-13b-1.webp",
+  3
+ ],
+ "ltn-13c-1": [
+  "/catalog-images/oez/devices/ltn-13c-1.webp",
+  3
+ ],
+ "ltn-16b-1": [
+  "/catalog-images/oez/devices/ltn-16b-1.webp",
+  3
+ ],
+ "ltn-16b-3": [
+  "/catalog-images/oez/devices/ltn-16b-3.webp",
+  3
+ ],
+ "ltn-16c-1": [
+  "/catalog-images/oez/devices/ltn-16c-1.webp",
+  3
+ ],
+ "ltn-16c-3": [
+  "/catalog-images/oez/devices/ltn-16c-3.webp",
+  3
+ ],
+ "ltn-20b-1": [
+  "/catalog-images/oez/devices/ltn-20b-1.webp",
+  3
+ ],
+ "ltn-20b-3": [
+  "/catalog-images/oez/devices/ltn-20b-3.webp",
+  3
+ ],
+ "ltn-20c-1": [
+  "/catalog-images/oez/devices/ltn-20c-1.webp",
+  3
+ ],
+ "ltn-20c-3": [
+  "/catalog-images/oez/devices/ltn-20c-3.webp",
+  3
+ ],
+ "ltn-25b-1": [
+  "/catalog-images/oez/devices/ltn-25b-1.webp",
+  3
+ ],
+ "ltn-25b-3": [
+  "/catalog-images/oez/devices/ltn-25b-3.webp",
+  3
+ ],
+ "ltn-25c-1": [
+  "/catalog-images/oez/devices/ltn-25c-1.webp",
+  3
+ ],
+ "ltn-25c-3": [
+  "/catalog-images/oez/devices/ltn-25c-3.webp",
+  3
+ ],
+ "ltn-32b-1": [
+  "/catalog-images/oez/devices/ltn-32b-1.webp",
+  3
+ ],
+ "ltn-32b-3": [
+  "/catalog-images/oez/devices/ltn-32b-3.webp",
+  3
+ ],
+ "ltn-32c-1": [
+  "/catalog-images/oez/devices/ltn-32c-1.webp",
+  3
+ ],
+ "ltn-32c-3": [
+  "/catalog-images/oez/devices/ltn-32c-3.webp",
+  3
+ ],
+ "ltn-6b-1": [
+  "/catalog-images/oez/devices/ltn-6b-1.webp",
+  3
+ ],
+ "ltn-6c-1": [
+  "/catalog-images/oez/devices/ltn-6c-1.webp",
+  3
+ ],
+ "msn-125-4": [
+  "/catalog-images/oez/devices/msn-125-4.webp",
+  3
+ ],
+ "msn-32-3": [
+  "/catalog-images/oez/devices/msn-32-3.webp",
+  3
+ ],
+ "msn-40-4": [
+  "/catalog-images/oez/devices/msn-40-4.webp",
+  3
+ ],
+ "msn-63-3": [
+  "/catalog-images/oez/devices/msn-63-3.webp",
+  3
  ],
  "oez-38292": [
   "/catalog-images/oez/devices/oez-38292.webp",
@@ -2636,6 +2758,30 @@ export const DEVICE_PHOTOS: Readonly<Record<string, readonly [string, number]>> 
  "oez-46803": [
   "/catalog-images/oez/devices/oez-46803.webp",
   2
+ ],
+ "oli-16b-1n-030a": [
+  "/catalog-images/oez/devices/oli-16b-1n-030a.webp",
+  3
+ ],
+ "oli-16c-1n-030a": [
+  "/catalog-images/oez/devices/oli-16c-1n-030a.webp",
+  3
+ ],
+ "rsi-20-20-a230": [
+  "/catalog-images/oez/devices/rsi-20-20-a230.webp",
+  3
+ ],
+ "rsi-25-40-a230": [
+  "/catalog-images/oez/devices/rsi-25-40-a230.webp",
+  3
+ ],
+ "rsi-40-40-a230": [
+  "/catalog-images/oez/devices/rsi-40-40-a230.webp",
+  3
+ ],
+ "rsi-63-40-a230": [
+  "/catalog-images/oez/devices/rsi-63-40-a230.webp",
+  3
  ],
  "sfb116": [
   "/catalog-images/hager/devices/sfb116.webp",

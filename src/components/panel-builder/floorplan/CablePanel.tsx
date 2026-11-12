@@ -1,6 +1,7 @@
 "use client";
 
 import { AlertTriangle, ArrowDown, ArrowUp, CheckCircle2, CircleAlert, Loader2, Zap } from "lucide-react";
+import { breakdownText, type LightingRole } from "@/engine/lighting-topology";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +25,9 @@ function protectionLabel(protection: Protection): string {
   const base = `${protection.curve}${protection.ratedA}${protection.poles === "3P" ? " 3P" : ""}`;
   return protection.device === "RCBO" ? `RCBO ${base} typ ${protection.rcd?.type ?? "A"} ${protection.rcd?.sensitivityMa ?? 30} mA` : base;
 }
+
+/** Fáze 105: úseky světelného okruhu v titulku rozpadu délky. */
+const PART_LABEL: Record<LightingRole, string> = { supply: "Přívod", traveller: "Propoj mezi vypínači", "switch-leg": "Svod vypínač → světla", branch: "Větev z rozváděče" };
 
 export function CablePanel({
   analysis,
@@ -132,6 +136,12 @@ export function CablePanel({
                       {circuit ? (
                         <span className={cn("block font-mono text-[10px]", circuit.loop.ok ? "text-muted-foreground" : "font-bold text-red-300")} data-testid="circuit-protection">
                           {protectionLabel(circuit.protection)} · Iz {circuit.izA.toLocaleString("cs-CZ")} A · Zs {circuit.loop.zsOhm.toLocaleString("cs-CZ")} Ω ≤ {circuit.loop.zsMaxOhm.toLocaleString("cs-CZ")} Ω
+                        </span>
+                      ) : null}
+                      {/* Fáze 105: průhledný rozpad délky světelného okruhu (vodorovně + svislé svody + rezerva = celkem) */}
+                      {row.breakdown ? (
+                        <span className="block text-[10px] leading-snug text-sky-200" data-testid="circuit-breakdown" title={(row.lightingParts ?? []).map((part) => `${PART_LABEL[part.role]} ${part.cable}: ${(part.totalMm / 1000).toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} m`).join(" · ")}>
+                          {breakdownText(row.breakdown)}
                         </span>
                       ) : null}
                     </td>

@@ -44,9 +44,11 @@ test("📐 2D půdorys: retrofit = CYKY-J k vypínači, světla na RCBO typ A, I
   await canvas.getByRole("button", { name: /^Stropní svítidlo/ }).click();
   await page.keyboard.press("Escape");
 
-  // Klasika: svod CYKY-O; světla B10 na RCBO typ A 30 mA s Iz a impedancí smyčky (fáze 100: záložka Okruhy & Trasy)
+  // Klasika: fáze 105 – přívod do krabice vypínače a svod ke světlu CYKY-J 3×1,5 (řazení 1, bez samostatného CYKY-O);
+  // světla B10 na RCBO typ A 30 mA s Iz a impedancí smyčky (fáze 100: záložka Okruhy & Trasy)
   await rightTab(page, "circuits");
-  await expect(page.getByTestId("cable-buy")).toContainText("CYKY-O 3×1,5");
+  await expect(page.getByTestId("cable-buy")).toContainText("CYKY-J 3×1,5");
+  await expect(page.getByTestId("cable-buy")).not.toContainText("CYKY-O");
   await expect(page.getByTestId("circuit-protection").first()).toContainText(
     "RCBO B10 typ A 30 mA · Iz 19,5 A · Zs",
   );

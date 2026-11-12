@@ -3,6 +3,7 @@
 // Čisté funkce – bezpečné pro klient i server.
 
 import { BLIND_CABLE, BLIND_DC_CABLE, DOUBLE_TWO_WAY_CABLE, HEAD_CABLE, MANHATTAN, SENSOR_CABLE, floorMetric, ledCableLabel, summarizeCabling, type CableSummary, type FloorLink, type RouteMetric, type RouteNode, type RoutePoint } from "@/engine/cable-routing";
+import type { SwitchNo } from "@/engine/lighting-topology";
 import { buildWallGraph, wallMetric, wallSegments } from "@/engine/wall-routing";
 import { isSocketGrouping, type SocketGrouping } from "@/engine/socket-zones";
 import {
@@ -1338,6 +1339,10 @@ export interface PlanBuild {
   panel: RoutePoint;
   routeNodes: RouteNode[];
   switchLinks: { switchId: string; lightId: string; cable?: string }[];
+  /** Fáze 105: řazení vypínačů pro topologii světelných okruhů (1 / 5 / 6 / 6+6 / 7). */
+  switchNos: Record<string, SwitchNo>;
+  /** Fáze 105: světla s pětižilovým přívodem (DALI, RGB / RGBW). */
+  fiveCoreLights: string[];
   /** Žaluziové ovladače a termostaty (fáze 51). */
   controlRuns: { id: string; kind: "blind" | "thermostat"; targetId: string | null }[];
   dataNodeIds: string[];
@@ -1589,7 +1594,24 @@ export function buildPlan(draft: FloorplanDraft): PlanBuild {
         return drawn ? [{ id: room.id, floor: room.floor, outline: roomPolygon(drawn) }] : [];
       })
     : [];
-  return { plan: { rooms, nodes, mode: draft.installation }, calibration, panel, routeNodes, switchLinks, controlRuns, dataNodeIds, coaxNodeIds, busNodeIds, elementOf, floors: links, metric, wallFloors: [...bases.keys()], boards, boardOf, perimeterRooms, starRuns };
+  // Fáze 105: řazení vypínačů (topologie světelných okruhů) a světla s pětižilovým přívodem (DALI, RGB / RGBW)
+  const switchNos: Record<string, SwitchNo> = {};
+  for (const link of switchLinks) {
+    if (switchNos[link.switchId]) continue;
+    const element = everything.find((candidate) => candidate.id === link.switchId);
+    if (!element) continue;
+    const no = effectiveSwitchNo(draft, element).replace(/S+o?$/, "");
+    switchNos[link.switchId] = no === "5" || no === "6" || no === "6+6" || no === "7" ? no : "1";
+  }
+  const fiveCoreLights = everything
+    .filter((element) => {
+      const item = paletteItem(element.item);
+      if (item?.kind !== "light") return false;
+      const control = lightControlOf(element, item);
+      return control === "dali" || (control !== "pwm" && Boolean(lightSpecOf(element).color));
+    })
+    .map((element) => element.id);
+  return { plan: { rooms, nodes, mode: draft.installation }, calibration, panel, routeNodes, switchLinks, switchNos, fiveCoreLights, controlRuns, dataNodeIds, coaxNodeIds, busNodeIds, elementOf, floors: links, metric, wallFloors: [...bases.keys()], boards, boardOf, perimeterRooms, starRuns };
 }
 
 /** Kalibrace na 2 kliky: úsečka v mm současného měřítka a skutečná délka → nové měřítko a přepočet prvků. */
@@ -1716,7 +1738,7 @@ export function analyzeDraft(draft: FloorplanDraft) {
   const panels = Object.fromEntries(build.boards.map((board) => [board.code, board.point]));
   // Fáze 76: obvodový router po stěnách (výchozí styl), u „Nejkratší v podlaze“ řetěz přímými trasami
   const treeRouter = draft.routeStyle !== "direct" ? createPerimeterRouter({ rooms: build.perimeterRooms, metric: build.metric }) : undefined;
-  const summary = summarizeCabling({ circuits: circuits.circuits, nodes: build.routeNodes, panel: build.panel, panels, profile: draft.profile, selected: draft.mode, switchLinks: build.switchLinks, controlRuns: build.controlRuns, dataNodeIds: build.dataNodeIds, coaxNodeIds: build.coaxNodeIds, busNodeIds: build.busNodeIds, installation: draft.installation, metric: build.metric, routeEdits: draft.routeEdits, treeRouter, starRuns: build.starRuns });
+  const summary = summarizeCabling({ circuits: circuits.circuits, nodes: build.routeNodes, panel: build.panel, panels, profile: draft.profile, selected: draft.mode, switchLinks: build.switchLinks, controlRuns: build.controlRuns, dataNodeIds: build.dataNodeIds, coaxNodeIds: build.coaxNodeIds, busNodeIds: build.busNodeIds, installation: draft.installation, metric: build.metric, routeEdits: draft.routeEdits, treeRouter, starRuns: build.starRuns, switchNos: build.switchNos, fiveCoreLights: build.fiveCoreLights });
   // Fáze 93: obchodní centrum (BD4) – všechny kabely okruhů, výkazu, tras a kusovníku v bezhalogenovém provedení B2ca
   const occupancy = draft.occupancy ?? DEFAULT_OCCUPANCY;
   if (!isCommercial(occupancy)) return { build, circuits, summary, occupancy };

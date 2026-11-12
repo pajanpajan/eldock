@@ -136,7 +136,7 @@ export async function seedVerifiedEnclosures(prisma: PrismaClient) {
  * IEC), vestavná hloubka [mm] a technický list (jen kde kus žádný nemá). Běží až po importu externí databáze, aby ho
  * nepřepsal. Vrací počet upravených kusů.
  */
-export async function applyEtimComponents(prisma: PrismaClient, data: Readonly<Record<string, EtimComponentData>> = ABB_ETIM_COMPONENTS) {
+export async function applyEtimComponents(prisma: PrismaClient, data: Readonly<Record<string, EtimComponentData & { listPriceCzk?: number; listPriceSource?: string }>> = ABB_ETIM_COMPONENTS) {
   const rows = await prisma.catalogComponent.findMany({ where: { articleNumber: { in: Object.keys(data) } }, select: { id: true, articleNumber: true, datasheetUrl: true } });
   const updates = rows.map((row) => {
     const etim = data[row.articleNumber];
@@ -147,6 +147,8 @@ export async function applyEtimComponents(prisma: PrismaClient, data: Readonly<R
         ...(etim.powerLossWatts ? { powerLossWatts: etim.powerLossWatts, dataSource: "SEED_CATALOG" as const } : {}),
         ...(etim.depthMm ? { depthMm: etim.depthMm } : {}),
         ...(etim.datasheetUrl && !row.datasheetUrl ? { datasheetUrl: etim.datasheetUrl } : {}),
+        // Fáze 105: ceníková cena výrobce (balíčky ETIM data) – základ cenové nabídky
+        ...(etim.listPriceCzk ? { listPriceCzk: etim.listPriceCzk, listPriceSource: etim.listPriceSource ?? null } : {}),
       },
     });
   });

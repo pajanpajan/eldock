@@ -10,6 +10,7 @@ import { ENCLOSURE_MANUFACTURERS, INSTALLATION_LABELS, fitsEnclosure, ipNumber, 
 import { cn } from "@/lib/utils";
 import { selectEnclosureAction } from "@/server/actions/panel-design";
 
+import { EnclosureVisual } from "./EnclosureVisual";
 import { ManufacturerLogo } from "./ManufacturerLogo";
 
 /** Doporučená rezerva modulů ve skříni (ČSN EN 61439-3 – projekční zásada, místo na doplnění). */
@@ -33,7 +34,7 @@ function FillPreview({ enclosure, used }: { enclosure: Pick<EnclosureLike, "rows
   const width = enclosure.modulesPerRow * 6 + 8;
   const height = enclosure.rows * 12 + 8;
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="h-16 w-full max-w-40" role="img" aria-label={`Zaplnění skříně ${rows.reduce((sum, value) => sum + value, 0)} z ${enclosure.rows * enclosure.modulesPerRow} modulů`}>
+    <svg viewBox={`0 0 ${width} ${height}`} className="h-16 w-32 shrink-0" role="img" data-testid="enclosure-fill" aria-label={`Zaplnění skříně ${rows.reduce((sum, value) => sum + value, 0)} z ${enclosure.rows * enclosure.modulesPerRow} modulů`}>
       <rect x={0.5} y={0.5} width={width - 1} height={height - 1} rx={3} fill="#18181b" stroke="#52525b" />
       {rows.map((filled, row) =>
         Array.from({ length: enclosure.modulesPerRow }, (_, module) => (
@@ -142,7 +143,9 @@ export function EnclosureWorkspace({
         <div className={cn("rounded-xl border p-4", !active ? "border-dashed border-amber-500/60 bg-amber-500/5" : state?.ok ? "border-emerald-500/60 bg-emerald-500/5" : "border-amber-500/60 bg-amber-500/5")} data-testid="enclosure-current">
           <h2 className="mb-2 font-bold">Vybraná skříň</h2>
           {active && state ? (
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3">
+              {/* Fáze 105: fotka / render skříně a vedle ní obsazenost modulů */}
+              <EnclosureVisual enclosure={active} />
               <FillPreview enclosure={active} used={railUsed} />
               <div className="flex min-w-0 flex-col gap-1 text-sm">
                 <b>
@@ -231,6 +234,8 @@ export function EnclosureWorkspace({
             return (
               <li key={row.id} className={cn("flex flex-col gap-2 rounded-xl border p-3", chosen ? "border-emerald-500 bg-emerald-500/10" : best ? "border-primary bg-primary/10" : "border-border bg-card")} data-testid="enclosure-card" data-recommended={best ? "true" : undefined}>
                 <div className="flex items-start gap-2">
+                  {/* Fáze 105: náhled skříně (fotka výrobce / render řady) a vedle něj žlutá mřížka obsazenosti */}
+                  <EnclosureVisual enclosure={row} className="h-20" />
                   <FillPreview enclosure={row} used={railUsed} />
                   <div className="min-w-0 flex-1 text-sm">
                     <b className="block">

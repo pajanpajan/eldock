@@ -4,11 +4,13 @@ import { notFound } from "next/navigation";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { panelBuilderGuard } from "@/components/panel-builder/access";
 import { ChosenEnclosureCard } from "@/components/panel-builder/documentation/ChosenEnclosureCard";
+import { QuoteWizardModal } from "@/components/quoting/QuoteWizardModal";
 import { DocumentationActions } from "@/components/panel-builder/documentation/DocumentationActions";
 import { DocumentationSheets } from "@/components/panel-builder/documentation/DocumentationSheets";
 import { NextStepBar, PanelSteps } from "@/components/panel-builder/PanelSteps";
 import { ProjectHeader } from "@/components/panel-builder/ProjectHeader";
 import { getPanelProject, getReleaseTargets } from "@/server/queries/panel-builder";
+import { projectQuoteSource } from "@/server/quote-sources";
 import { requestOrigin } from "@/server/request-url";
 import type { StandardEditionId } from "@/lib/legislation-2027";
 import { RoutineTestPanel, StandardEditionSelect } from "@/components/panel-builder/documentation/RoutineTestPanel";
@@ -36,6 +38,8 @@ export default async function PanelDocumentationPage({ params, searchParams }: P
   const [targets, origin, versions, query] = await Promise.all([getReleaseTargets(), requestOrigin(), projectVersions(project.id), searchParams]);
 
   const { data, blockers: baseBlockers, edition, routineTest, enclosureCard } = await buildDocumentationData(project, origin);
+  // Fáze 105: podklady cenové nabídky (přístroje, skříň, u rozváděče z 2D půdorysu i domovní instalace)
+  const quoteSource = await projectQuoteSource(project);
   // Fáze 57: bez výslovně zvoleného prostředí dle ČSN 33 2000-5-51 ed. 3 nelze tisknout ani propustit dokumentaci
   const environmentConfirmed = Boolean(project.environmentConfirmedAt);
   const blockers = environmentConfirmed ? baseBlockers : [ENVIRONMENT_BLOCKER, ...baseBlockers];
@@ -67,6 +71,11 @@ export default async function PanelDocumentationPage({ params, searchParams }: P
           environmentConfirmed={environmentConfirmed}
           targets={targets.map((target) => ({ id: target.id, tag: target.tag, label: `${target.name} · ${target.floor.building.plant.name}, ${target.floor.building.name}` }))}
         />
+        {/* Fáze 105: cenová nabídka (rozváděč / kompletní zakázka) a poptávka do velkoobchodu */}
+        <div className="no-print flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-3" data-testid="quote-entry">
+          <QuoteWizardModal source={quoteSource} company={{ name: project.company?.companyName ?? null, contact: project.company?.contactName ?? null, phone: project.company?.phone ?? null }} />
+          <p className="text-xs text-muted-foreground">Nabídka pro zákazníka z přístrojů rozváděče{project.floorplanJson ? " a domovní instalace z 2D půdorysu" : ""} – materiál, montáž, kompletace rozváděče a revize.</p>
+        </div>
         <div className="no-print">
           <EnvironmentConfirm projectId={project.id} environment={project.environment} confirmedAt={project.environmentConfirmedAt} />
         </div>

@@ -9149,6 +9149,306 @@
     {
       "kind": "device",
       "brand": "OEZ",
+      "mpn": "LFE-25-2-030A",
+      "file": "oez/devices/lfe-25-2-030a.webp",
+      "source": "OEZ – oficiální data BMEcat ETIM 8.0 (OEZ-CZ - 10-2026, fotky v balíčku)",
+      "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-12 (fáze 105)",
+      "retrievedAt": "2026-11-12",
+      "gtin": "8590125463955"
+    },
+    {
+      "kind": "device",
+      "brand": "OEZ",
+      "mpn": "LFE-63-4-030A",
+      "file": "oez/devices/lfe-63-4-030a.webp",
+      "source": "OEZ – oficiální data BMEcat ETIM 8.0 (OEZ-CZ - 10-2026, fotky v balíčku)",
+      "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-12 (fáze 105)",
+      "retrievedAt": "2026-11-12",
+      "gtin": "8590125464013"
+    },
+    {
+      "kind": "device",
+      "brand": "OEZ",
+      "mpn": "LTN-10B-1",
+      "file": "oez/devices/ltn-10b-1.webp",
+      "source": "OEZ – oficiální data BMEcat ETIM 8.0 (OEZ-CZ - 10-2026, fotky v balíčku)",
+      "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-12 (fáze 105)",
+      "retrievedAt": "2026-11-12",
+      "gtin": "8590125416388"
+    },
+    {
+      "kind": "device",
+      "brand": "OEZ",
+      "mpn": "LTN-10B-3",
+      "file": "oez/devices/ltn-10b-3.webp",
+      "source": "OEZ – oficiální data BMEcat ETIM 8.0 (OEZ-CZ - 10-2026, fotky v balíčku)",
+      "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-12 (fáze 105)",
+      "retrievedAt": "2026-11-12",
+      "gtin": "8590125417705"
+    },
+    {
+      "kind": "device",
+      "brand": "OEZ",
+      "mpn": "LTN-10C-1",
+      "file": "oez/devices/ltn-10c-1.webp",
+      "source": "OEZ – oficiální data BMEcat ETIM 8.0 (OEZ-CZ - 10-2026, fotky v balíčku)",
+      "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-12 (fáze 105)",
+      "retrievedAt": "2026-11-12",
+      "gtin": "8590125416555"
+    },
+    {
+      "kind": "device",
+      "brand": "OEZ",
+      "mpn": "LTN-10C-3",
+      "file": "oez/devices/ltn-10c-3.webp",
+      "source": "OEZ – oficiální data BMEcat ETIM 8.0 (OEZ-CZ - 10-2026, fotky v balíčku)",
+      "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-12 (fáze 105)",
+      "retrievedAt": "2026-11-12",
+      "gtin": "8590125417873"
+    },
+    {
+      "kind": "device",
+      "brand": "OEZ",
+      "mpn": "LTN-13B-1",
+      "file": "oez/devices/ltn-13b-1.webp",
+      "source": "OEZ – oficiální data BMEcat ETIM 8.0 (OEZ-CZ - 10-2026, fotky v balíčku)",
+      "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-12 (fáze 105)",
+      "retrievedAt": "2026-11-12",
+      "gtin": "8590125416395"
+    },
+    {
+      "kind": "device",
+      "brand": "OEZ",
+      "mpn": "LTN-13C-1",
+      "file": "oez/devices/ltn-13c-1.webp",
+      "source": "OEZ – oficiální data BMEcat ETIM 8.0 (OEZ-CZ - 10-2026, fotky v balíčku)",
+      "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-12 (fáze 105)",
+      "retrievedAt": "2026-11-12",
+      "gtin": "8590125416562"
+    },
+    {
+      "kind": "device",
+      "brand": "OEZ",
+      "mpn": "LTN-16B-1",
+      "file": "oez/devices/ltn-16b-1.webp",
+      "source": "OEZ – oficiální data BMEcat ETIM 8.0 (OEZ-CZ - 10-2026, fotky v balíčku)",
+      "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-12 (fáze 105)",
+      "retrievedAt": "2026-11-12",
+      "gtin": "8590125416401"
+    },
+    {
+      "kind": "device",
+      "brand": "OEZ",
+      "mpn": "LTN-16B-3",
+      "file": "oez/devices/ltn-16b-3.webp",
+      "source": "OEZ – oficiální data BMEcat ETIM 8.0 (OEZ-CZ - 10-2026, fotky v balíčku)",
+      "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-12 (fáze 105)",
+      "retrievedAt": "2026-11-12",
+      "gtin": "8590125417729"
+    },
+    {
+      "kind": "device",
+      "brand": "OEZ",
+      "mpn": "LTN-16C-1",
+      "file": "oez/devices/ltn-16c-1.webp",
+      "source": "OEZ – oficiální data BMEcat ETIM 8.0 (OEZ-CZ - 10-2026, fotky v balíčku)",
+      "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-12 (fáze 105)",
+      "retrievedAt": "2026-11-12",
+      "gtin": "8590125416579"
+    },
+    {
+      "kind": "device",
+      "brand": "OEZ",
+      "mpn": "LTN-16C-3",
+      "file": "oez/devices/ltn-16c-3.webp",
+      "source": "OEZ – oficiální data BMEcat ETIM 8.0 (OEZ-CZ - 10-2026, fotky v balíčku)",
+      "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-12 (fáze 105)",
+      "retrievedAt": "2026-11-12",
+      "gtin": "8590125417897"
+    },
+    {
+      "kind": "device",
+      "brand": "OEZ",
+      "mpn": "LTN-20B-1",
+      "file": "oez/devices/ltn-20b-1.webp",
+      "source": "OEZ – oficiální data BMEcat ETIM 8.0 (OEZ-CZ - 10-2026, fotky v balíčku)",
+      "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-12 (fáze 105)",
+      "retrievedAt": "2026-11-12",
+      "gtin": "8590125416418"
+    },
+    {
+      "kind": "device",
+      "brand": "OEZ",
+      "mpn": "LTN-20B-3",
+      "file": "oez/devices/ltn-20b-3.webp",
+      "source": "OEZ – oficiální data BMEcat ETIM 8.0 (OEZ-CZ - 10-2026, fotky v balíčku)",
+      "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-12 (fáze 105)",
+      "retrievedAt": "2026-11-12",
+      "gtin": "8590125417736"
+    },
+    {
+      "kind": "device",
+      "brand": "OEZ",
+      "mpn": "LTN-20C-1",
+      "file": "oez/devices/ltn-20c-1.webp",
+      "source": "OEZ – oficiální data BMEcat ETIM 8.0 (OEZ-CZ - 10-2026, fotky v balíčku)",
+      "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-12 (fáze 105)",
+      "retrievedAt": "2026-11-12",
+      "gtin": "8590125416586"
+    },
+    {
+      "kind": "device",
+      "brand": "OEZ",
+      "mpn": "LTN-20C-3",
+      "file": "oez/devices/ltn-20c-3.webp",
+      "source": "OEZ – oficiální data BMEcat ETIM 8.0 (OEZ-CZ - 10-2026, fotky v balíčku)",
+      "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-12 (fáze 105)",
+      "retrievedAt": "2026-11-12",
+      "gtin": "8590125417903"
+    },
+    {
+      "kind": "device",
+      "brand": "OEZ",
+      "mpn": "LTN-25B-1",
+      "file": "oez/devices/ltn-25b-1.webp",
+      "source": "OEZ – oficiální data BMEcat ETIM 8.0 (OEZ-CZ - 10-2026, fotky v balíčku)",
+      "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-12 (fáze 105)",
+      "retrievedAt": "2026-11-12",
+      "gtin": "8590125416425"
+    },
+    {
+      "kind": "device",
+      "brand": "OEZ",
+      "mpn": "LTN-25B-3",
+      "file": "oez/devices/ltn-25b-3.webp",
+      "source": "OEZ – oficiální data BMEcat ETIM 8.0 (OEZ-CZ - 10-2026, fotky v balíčku)",
+      "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-12 (fáze 105)",
+      "retrievedAt": "2026-11-12",
+      "gtin": "8590125417743"
+    },
+    {
+      "kind": "device",
+      "brand": "OEZ",
+      "mpn": "LTN-25C-1",
+      "file": "oez/devices/ltn-25c-1.webp",
+      "source": "OEZ – oficiální data BMEcat ETIM 8.0 (OEZ-CZ - 10-2026, fotky v balíčku)",
+      "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-12 (fáze 105)",
+      "retrievedAt": "2026-11-12",
+      "gtin": "8590125416593"
+    },
+    {
+      "kind": "device",
+      "brand": "OEZ",
+      "mpn": "LTN-25C-3",
+      "file": "oez/devices/ltn-25c-3.webp",
+      "source": "OEZ – oficiální data BMEcat ETIM 8.0 (OEZ-CZ - 10-2026, fotky v balíčku)",
+      "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-12 (fáze 105)",
+      "retrievedAt": "2026-11-12",
+      "gtin": "8590125417910"
+    },
+    {
+      "kind": "device",
+      "brand": "OEZ",
+      "mpn": "LTN-32B-1",
+      "file": "oez/devices/ltn-32b-1.webp",
+      "source": "OEZ – oficiální data BMEcat ETIM 8.0 (OEZ-CZ - 10-2026, fotky v balíčku)",
+      "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-12 (fáze 105)",
+      "retrievedAt": "2026-11-12",
+      "gtin": "8590125416432"
+    },
+    {
+      "kind": "device",
+      "brand": "OEZ",
+      "mpn": "LTN-32B-3",
+      "file": "oez/devices/ltn-32b-3.webp",
+      "source": "OEZ – oficiální data BMEcat ETIM 8.0 (OEZ-CZ - 10-2026, fotky v balíčku)",
+      "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-12 (fáze 105)",
+      "retrievedAt": "2026-11-12",
+      "gtin": "8590125417750"
+    },
+    {
+      "kind": "device",
+      "brand": "OEZ",
+      "mpn": "LTN-32C-1",
+      "file": "oez/devices/ltn-32c-1.webp",
+      "source": "OEZ – oficiální data BMEcat ETIM 8.0 (OEZ-CZ - 10-2026, fotky v balíčku)",
+      "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-12 (fáze 105)",
+      "retrievedAt": "2026-11-12",
+      "gtin": "8590125416609"
+    },
+    {
+      "kind": "device",
+      "brand": "OEZ",
+      "mpn": "LTN-32C-3",
+      "file": "oez/devices/ltn-32c-3.webp",
+      "source": "OEZ – oficiální data BMEcat ETIM 8.0 (OEZ-CZ - 10-2026, fotky v balíčku)",
+      "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-12 (fáze 105)",
+      "retrievedAt": "2026-11-12",
+      "gtin": "8590125417927"
+    },
+    {
+      "kind": "device",
+      "brand": "OEZ",
+      "mpn": "LTN-6B-1",
+      "file": "oez/devices/ltn-6b-1.webp",
+      "source": "OEZ – oficiální data BMEcat ETIM 8.0 (OEZ-CZ - 10-2026, fotky v balíčku)",
+      "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-12 (fáze 105)",
+      "retrievedAt": "2026-11-12",
+      "gtin": "8590125416364"
+    },
+    {
+      "kind": "device",
+      "brand": "OEZ",
+      "mpn": "LTN-6C-1",
+      "file": "oez/devices/ltn-6c-1.webp",
+      "source": "OEZ – oficiální data BMEcat ETIM 8.0 (OEZ-CZ - 10-2026, fotky v balíčku)",
+      "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-12 (fáze 105)",
+      "retrievedAt": "2026-11-12",
+      "gtin": "8590125416531"
+    },
+    {
+      "kind": "device",
+      "brand": "OEZ",
+      "mpn": "MSN-125-4",
+      "file": "oez/devices/msn-125-4.webp",
+      "source": "OEZ – oficiální data BMEcat ETIM 8.0 (OEZ-CZ - 10-2026, fotky v balíčku)",
+      "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-12 (fáze 105)",
+      "retrievedAt": "2026-11-12",
+      "gtin": "8590125443056"
+    },
+    {
+      "kind": "device",
+      "brand": "OEZ",
+      "mpn": "MSN-32-3",
+      "file": "oez/devices/msn-32-3.webp",
+      "source": "OEZ – oficiální data BMEcat ETIM 8.0 (OEZ-CZ - 10-2026, fotky v balíčku)",
+      "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-12 (fáze 105)",
+      "retrievedAt": "2026-11-12",
+      "gtin": "8590125442981"
+    },
+    {
+      "kind": "device",
+      "brand": "OEZ",
+      "mpn": "MSN-40-4",
+      "file": "oez/devices/msn-40-4.webp",
+      "source": "OEZ – oficiální data BMEcat ETIM 8.0 (OEZ-CZ - 10-2026, fotky v balíčku)",
+      "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-12 (fáze 105)",
+      "retrievedAt": "2026-11-12",
+      "gtin": "8590125443032"
+    },
+    {
+      "kind": "device",
+      "brand": "OEZ",
+      "mpn": "MSN-63-3",
+      "file": "oez/devices/msn-63-3.webp",
+      "source": "OEZ – oficiální data BMEcat ETIM 8.0 (OEZ-CZ - 10-2026, fotky v balíčku)",
+      "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-12 (fáze 105)",
+      "retrievedAt": "2026-11-12",
+      "gtin": "8590125443001"
+    },
+    {
+      "kind": "device",
+      "brand": "OEZ",
       "mpn": "OEZ:38292",
       "file": "oez/devices/oez-38292.webp",
       "source": "OEZ – katalog oez.cz (stránka výrobku)",
@@ -12918,6 +13218,66 @@
       "sourceUrl": "https://www.oez.cz/pic_zbozi/644006_OLI-40C-1N-030F-K.JPG",
       "retrievedAt": "2026-11-11",
       "gtin": "8590125468035"
+    },
+    {
+      "kind": "device",
+      "brand": "OEZ",
+      "mpn": "OLI-16B-1N-030A",
+      "file": "oez/devices/oli-16b-1n-030a.webp",
+      "source": "OEZ – oficiální data BMEcat ETIM 8.0 (OEZ-CZ - 10-2026, fotky v balíčku)",
+      "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-12 (fáze 105)",
+      "retrievedAt": "2026-11-12",
+      "gtin": "8590125382942"
+    },
+    {
+      "kind": "device",
+      "brand": "OEZ",
+      "mpn": "OLI-16C-1N-030A",
+      "file": "oez/devices/oli-16c-1n-030a.webp",
+      "source": "OEZ – oficiální data BMEcat ETIM 8.0 (OEZ-CZ - 10-2026, fotky v balíčku)",
+      "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-12 (fáze 105)",
+      "retrievedAt": "2026-11-12",
+      "gtin": "8590125383017"
+    },
+    {
+      "kind": "device",
+      "brand": "OEZ",
+      "mpn": "RSI-20-20-A230",
+      "file": "oez/devices/rsi-20-20-a230.webp",
+      "source": "OEZ – oficiální data BMEcat ETIM 8.0 (OEZ-CZ - 10-2026, fotky v balíčku)",
+      "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-12 (fáze 105)",
+      "retrievedAt": "2026-11-12",
+      "gtin": "8590125366102"
+    },
+    {
+      "kind": "device",
+      "brand": "OEZ",
+      "mpn": "RSI-25-40-A230",
+      "file": "oez/devices/rsi-25-40-a230.webp",
+      "source": "OEZ – oficiální data BMEcat ETIM 8.0 (OEZ-CZ - 10-2026, fotky v balíčku)",
+      "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-12 (fáze 105)",
+      "retrievedAt": "2026-11-12",
+      "gtin": "8590125366171"
+    },
+    {
+      "kind": "device",
+      "brand": "OEZ",
+      "mpn": "RSI-40-40-A230",
+      "file": "oez/devices/rsi-40-40-a230.webp",
+      "source": "OEZ – oficiální data BMEcat ETIM 8.0 (OEZ-CZ - 10-2026, fotky v balíčku)",
+      "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-12 (fáze 105)",
+      "retrievedAt": "2026-11-12",
+      "gtin": "8590125366256"
+    },
+    {
+      "kind": "device",
+      "brand": "OEZ",
+      "mpn": "RSI-63-40-A230",
+      "file": "oez/devices/rsi-63-40-a230.webp",
+      "source": "OEZ – oficiální data BMEcat ETIM 8.0 (OEZ-CZ - 10-2026, fotky v balíčku)",
+      "license": "fotka výrobce OEZ – užití v Eldocku (i ve veřejném repozitáři) zadal provozovatel 2026-11-12 (fáze 105)",
+      "retrievedAt": "2026-11-12",
+      "gtin": "8590125366331"
     },
     {
       "kind": "enclosure",

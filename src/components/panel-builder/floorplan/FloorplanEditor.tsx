@@ -155,6 +155,9 @@ import { WiringBomDialog } from "./WiringBomDialog";
 import { ApplianceEditor, useApplianceLibrary } from "./ApplianceEditor";
 import { FixtureShape } from "./FixtureShape";
 import { FloorplanExport } from "./FloorplanExport";
+import { FloorplanPseudo3DModal } from "./FloorplanPseudo3DModal";
+import { QuoteWizardModal, type QuoteSource } from "@/components/quoting/QuoteWizardModal";
+import { bomMaterials, circuitBomMaterials, floorplanQuoteWork, orderLinesOf } from "@/lib/quoting/quote-sources";
 import { PaletteAccordion, type PaletteSection } from "./PaletteAccordion";
 import { PaletteGlyph } from "./PaletteGlyph";
 import { ROUTE_COLORS, RouteLayer } from "./RouteLayer";
@@ -166,6 +169,7 @@ import { BoardSelect, CircuitListPanel, LayerChips, SubpanelInfo, type CircuitEn
 import { PanelSection, RightPanels, RightTabBar, type TabBadge } from "./RightPanels";
 import { CUSTOM_APPLIANCE_ITEM, applianceCatalog, applianceSpecFor, protectionLabel, storedSpecs, type ApplianceSpec } from "@/lib/panel-builder/appliances";
 import { FIXTURES, fixtureSpecOf, resizeFixture, turnBy, type FixtureHandle } from "@/lib/panel-builder/fixtures";
+import { setHeights } from "@/lib/panel-builder/pseudo3d";
 import { polygonArea, polygonBounds, pointInRoom, roomPolygon, snapAngle, validPolygon, wallLabel } from "@/lib/panel-builder/room-geometry";
 import { circuitEntries, displayRoutes, editedKeysOf, layerVisible, type CircuitLayer, type DisplayCircuit, type DisplayLeg } from "@/lib/panel-builder/route-display";
 import { MAIN_BOARD, SUBPANEL_ITEM, assignBoard, autoBoard, boardLabel, boardsOf, hasBoard, nextBoardCode, releaseBoard } from "@/lib/panel-builder/boards";
@@ -682,6 +686,15 @@ export function FloorplanEditor({
   const bomCircuits = analysis.ok ? analysis.circuits.circuits.length : 0;
   const bomCableM = analysis.ok ? Math.round(analysis.summary.totals[deferred.mode]) : 0;
   const bomLeadContext = { summary: `2D půdorys „${meta.name}“: ${bomCircuits} okruhů, ${bomCableM} m kabelu, ${bom.length} položek kusovníku`.slice(0, 200), circuits: bomCircuits, cableM: bomCableM };
+  // Fáze 105: podklady cenové nabídky – kusovník, výkaz kabeláže a okruhy (ceníkové ceny dohledá server)
+  const quoteSource = useMemo<QuoteSource | null>(() => {
+    if (!analysis.ok) return null;
+    const materials = [...bomMaterials(bom), ...circuitBomMaterials(analysis.circuits.bom)];
+    const elements = [...deferred.elements, ...deferred.otherFloors.flatMap((floor) => floor.elements)];
+    const smartModules = deferred.installation === "bus_loxone" ? Math.ceil((analysis.circuits.io.do + analysis.circuits.io.di) / 8) : 0;
+    const work = floorplanQuoteWork({ elements, bom, byCable: analysis.summary.byCable, circuits: analysis.circuits.circuits, smartModules });
+    return { title: `Elektroinstalace – ${meta.name}`, materials, work, defaultScope: "complete", orderLines: orderLinesOf(materials.filter((item) => item.section === "floorplan")) };
+  }, [analysis, bom, deferred, meta.name]);
   // Fáze 61: chytrá domácnost (sběrnicová úroveň) a normový hlídač; fáze 91 – limit víceramečku a hloubka krabic
   const smartPlan = useMemo(() => smartPlanOf(deferred), [deferred]);
   const norms = useMemo(() => floorplanNorms(deferred, { cableEnds }), [deferred, cableEnds]);
@@ -3379,19 +3392,22 @@ export function FloorplanEditor({
             </div>
             {/* Fáze 62: vrstva kabeláže – zobrazit / skrýt (K); při párování vypínačů se světly je ve výchozím stavu skrytá;
                 fáze 74: vedle ní vrstvy okruhů podle druhu (zásuvky, světla, spotřebiče, data) */}
-            <div className="absolute top-2 right-2 flex max-w-[78%] flex-wrap items-center justify-end gap-1">
+            {/* Fáze 105: prázdná plocha lišty propouští kliky do půdorysu (klikací jsou jen tlačítka) */}
+            <div className="pointer-events-none absolute top-2 right-2 flex max-w-[78%] flex-wrap items-center justify-end gap-1">
               {cablesShown && entries.length ? (
-                <div className="rounded-full border border-border bg-card/90 px-1 py-0.5 shadow">
+                <div className="pointer-events-auto rounded-full border border-border bg-card/90 px-1 py-0.5 shadow">
                   <LayerChips entries={entries} hidden={hiddenLayers} onToggle={toggleLayer} compact />
                 </div>
               ) : null}
+              {/* Fáze 105: Pseudo-3D náhled – izometrie a pohled na stěnu s kontrolou výšek */}
+              <FloorplanPseudo3DModal draft={draft} onHeights={(ids, heightMm) => update((current) => setHeights(current, ids, heightMm))} />
               <button
                 type="button"
                 aria-label="Zobrazit kabeláž v půdorysu"
                 aria-pressed={cablesShown}
                 onClick={toggleCables}
                 title={cablesShown ? "Skrýt trasy kabelů v půdorysu (K)" : "Zobrazit trasy kabelů v půdorysu (K)"}
-                className={cn("flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs font-semibold shadow", cablesShown ? "border-border bg-card/90 text-foreground hover:bg-muted" : "border-amber-400/70 bg-amber-950/90 text-amber-100 hover:bg-amber-900")}
+                className={cn("pointer-events-auto flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs font-semibold shadow", cablesShown ? "border-border bg-card/90 text-foreground hover:bg-muted" : "border-amber-400/70 bg-amber-950/90 text-amber-100 hover:bg-amber-900")}
                 data-testid="toggle-cables"
               >
                 {cablesShown ? <Eye className="size-3.5" aria-hidden /> : <EyeOff className="size-3.5" aria-hidden />}
@@ -3765,6 +3781,8 @@ export function FloorplanEditor({
           ) : null}
           {/* Fáze 55: kusovník domovní instalace s objednacími čísly */}
           {tab("bom") ? <WiringBomDialog rows={bom} context={bomLeadContext} /> : null}
+          {/* Fáze 105: cenová nabídka (materiál z ceníkových cen, práce z normohodin) a export do velkoobchodu */}
+          {tab("bom") && quoteSource && company && !sandbox ? <QuoteWizardModal source={quoteSource} company={{ name: company }} triggerClassName="w-full" /> : null}
           {tab("inventory") && inventory.length ? (
             <PanelSection id="inventory" title={`Soupis domovní instalace${floors.length > 1 ? ` (${floors.length} podlaží)` : ""}`} ariaLabel="Soupis domovní instalace" testId="wiring-inventory">
               <ul className="flex flex-col gap-0.5 text-xs">

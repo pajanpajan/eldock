@@ -48,7 +48,9 @@ test("📐 2D půdorys: osazení, párování, výkaz kabeláže Spodem / Vrchem
   const totals = page.getByTestId("cable-totals");
   await expect(totals.locator("[data-mode]")).toHaveCount(3);
   await expect(page.getByTestId("cable-buy")).toContainText("CYKY-J 3×2,5");
-  await expect(page.getByTestId("cable-buy")).toContainText("CYKY-O 3×1,5");
+  // Fáze 105: přívod světel do krabice vypínače a svod ke světlu (řazení 1) = CYKY-J 3×1,5 s rozpadem délky okruhu
+  await expect(page.getByTestId("cable-buy")).toContainText("CYKY-J 3×1,5");
+  await expect(page.getByTestId("circuit-breakdown").first()).toContainText("svislé svody k vypínačům a rozváděči");
   await expect(page.getByTestId("cable-route").first()).toBeVisible();
   // Fáze 98: směrování tras v levé paletě fáze 5
   await goPhase(page, 5);

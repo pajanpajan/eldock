@@ -25,6 +25,7 @@ import { ROUTINE_TEST_POINTS } from "../src/lib/legislation-2027";
 import { applyEnclosureFixes, applyEtimComponents, importExternalCatalog, importWiringDevices, seedStandardEnclosures, seedVerifiedEnclosures } from "../src/server/services/catalog-sync";
 import { readSnapshot, readWiringSnapshot } from "./external-catalog-source";
 import { BRAND_ETIM_COMPONENTS } from "../src/lib/panel-builder/brand-etim-components.generated";
+import { UNIVERSAL_COMPONENTS } from "../src/lib/panel-builder/etim-universal.generated";
 import { TESTER_COMPANY } from "../src/lib/registered-company";
 import { hashPassword } from "../src/server/password";
 
@@ -510,9 +511,11 @@ export async function seedPanelBuilder(prisma: PrismaClient, options: { external
   const etim = await step("data ABB ETIM 9.0", () => applyEtimComponents(prisma), 0);
   // Fáze 97: data výrobců Hager (BMEcat ETIM 10) a OEZ (stránky výrobků) – EAN, Pv, hloubka, technický list
   const brandEtim = await step("data výrobců Hager / OEZ", () => applyEtimComponents(prisma, BRAND_ETIM_COMPONENTS), 0);
+  // Fáze 105: balíčky ze složky „ETIM data“ (OEZ ETIM 8, Hager ETIM 10) – EAN, Pv, hloubka a ceníková cena
+  const universalEtim = await step("balíčky ETIM data (OEZ ETIM 8, Hager ETIM 10)", () => applyEtimComponents(prisma, UNIVERSAL_COMPONENTS), 0);
   // Fáze 97: řady × moduly rozvodnic podle dat výrobce (ETIM potvrzený popisem) – po importu externí databáze
   const enclosureFixes = await step("rozvodnice podle dat výrobce", () => applyEnclosureFixes(prisma), 0);
-  return { components, project, tester, enclosures, verifiedEnclosures, external, fans, etim, brandEtim, enclosureFixes, failures };
+  return { components, project, tester, enclosures, verifiedEnclosures, external, fans, etim, brandEtim, universalEtim, enclosureFixes, failures };
 }
 
 /** Filtrační ventilátory rozváděčů – upsert podle objednacího čísla. Vrací počet ventilátorů. */

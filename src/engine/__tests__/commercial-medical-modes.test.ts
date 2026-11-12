@@ -110,7 +110,9 @@ describe("fáze 93 – obchodní centrum BD4 (ČSN 33 2000-7-718)", () => {
     for (const circuit of analysis.circuits.circuits) expect(circuit.cable).toMatch(/^1-CHKE-R \(N2XH-J\) \d×[\d,]+ B2ca-s1,d1,a1$/);
     const cables = analysis.summary.byCable.map((row) => row.cable);
     expect(cables.some((cable) => /CYKY|UTP/.test(cable))).toBe(false);
-    expect(cables).toContain("1-CHKE-R (N2XH-O) 3×1,5 B2ca-s1,d1,a1");
+    // Fáze 105: svod z krabice vypínače ke světlům (řazení 1) je CYKY-J 3×1,5 → v BD4 bezhalogenový N2XH-J
+    expect(cables).toContain("1-CHKE-R (N2XH-J) 3×1,5 B2ca-s1,d1,a1");
+    expect(analysis.summary.circuits.some((circuit) => circuit.lightingParts?.some((part) => part.role === "switch-leg"))).toBe(true);
     expect(cables).toContain(HF_DATA_CABLE);
     expect(circuitEntries(analysis).find((entry) => entry.layer === "data")?.cable).toBe(HF_DATA_CABLE);
     // Stejný nákres jako bytová instalace zůstává na CYKY

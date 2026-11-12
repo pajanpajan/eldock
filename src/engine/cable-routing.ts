@@ -2,6 +2,7 @@
 // tři režimy vedení (spodem v podlaze, vrchem v podhledu, optimalizovaně po okruzích), rezervy,
 // rozpis metráže podle typu kabelu a úbytek napětí na nejdelší větvi. Čisté funkce bez UI.
 
+import { lightingTopology, routeBreakdown, type LightingBreakdown, type LightingPart, type SwitchNo } from "./lighting-topology";
 import { optimalOrder, pathCost } from "./route-order";
 import { polylineLength, reanchor } from "./route-geometry";
 import {
@@ -310,6 +311,10 @@ export interface CircuitCabling {
   limitPct: number;
   ok: boolean;
   route: CircuitRoute;
+  /** Fáze 105: světelný okruh – rozpad délky ve zvoleném režimu (vodorovně + svislé svody + rezerva = celkem). */
+  breakdown?: LightingBreakdown;
+  /** Fáze 105: úseky světelného okruhu podle kabelu (přívod, korespondence, svody ke světlům, větve hvězdy). */
+  lightingParts?: LightingPart[];
 }
 
 /** Fáze 74: datová zásuvka – samostatný UTP z jejího rozváděče (s lomenou čarou pro výkres). */
@@ -380,6 +385,14 @@ export interface CablingInput {
    * nebo od `targetId` (hlavice od termostatu místnosti). Délka po trase + svislé úseky jako u ovládacích vedení.
    */
   starRuns?: readonly { id: string; cable: string; targetId?: string | null }[];
+  /**
+   * Fáze 105: řazení vypínačů (1 / 5 / 6 / 6+6 / 7) – zadané = přesná topologie světelných okruhů (přívod do krabic
+   * vypínačů, korespondence, svody ke světlům; u sběrnice hvězda po skupinách světel), bez něj řetěz přes světla
+   * a samostatné svody k vypínačům jako dřív.
+   */
+  switchNos?: Readonly<Record<string, SwitchNo>>;
+  /** Fáze 105: světla s pětižilovým přívodem (DALI, RGB / RGBW) – u sběrnice větev CYKY-J 5×1,5. */
+  fiveCoreLights?: readonly string[];
 }
 
 /** Hvězdicová topologie: každý prvek samostatným kabelem do rozváděče, trasy sečtené do jedné. */
@@ -465,6 +478,9 @@ export function summarizeCabling(input: CablingInput): CableSummary {
     return routes;
   };
 
+  // Fáze 105: světla okruhů s přesnou topologií – svody k nim už nejsou samostatné kabely ze stropní krabice
+  const topologyLights = new Set<string>();
+  const fiveCore = new Set(input.fiveCoreLights ?? []);
   const circuits: CircuitCabling[] = input.circuits
     .map((circuit): CircuitCabling | null => {
       const nodes = circuit.nodeIds
@@ -476,12 +492,28 @@ export function summarizeCabling(input: CablingInput): CableSummary {
       // Fáze 74: okruh vede ze svého rozváděče (podružný rozváděč, přívod podružného rozváděče z hlavního)
       const origin = originOf(circuit.board);
       // Fáze 76: obvodový router (strom po stěnách), jinak řetěz
-      const tree = star ? null : (input.treeRouter?.(nodes, origin) ?? null);
-      const routes = withEdits(star ? starRoutes(nodes, origin, profile, metric) : tree ? treeRoutes(nodes, tree, origin, profile, metric) : circuitRoutes(nodes, origin, profile, metric), panelKey(circuit.board));
+      const chainRoutes = (chain: readonly RouteNode[]) => {
+        const legs = input.treeRouter?.(chain, origin) ?? null;
+        return legs ? treeRoutes(chain, legs, origin, profile, metric) : circuitRoutes(chain, origin, profile, metric);
+      };
+      // Fáze 105: světelný okruh s řazením vypínačů – přívod do krabic vypínačů, korespondence a svody ke světlům (klasika),
+      // hvězda po skupinách světel (sběrnice)
+      const topology =
+        circuit.kind === "lighting" && input.switchNos
+          ? lightingTopology({ installation: input.installation, circuitCable: cableLabel(circuit.cable), nodes, byId, switchLinks: input.switchLinks ?? [], switchNoOf: (id) => input.switchNos?.[id] ?? "1", fiveCore, origin, profile, metric, chainRoutes })
+          : null;
+      if (topology && !topology.star) for (const group of topology.groups) for (const light of group.lights) topologyLights.add(light.id);
+      const raw = topology ? topology.routes : star ? starRoutes(nodes, origin, profile, metric) : chainRoutes(nodes);
+      const planned = topology ? topology.routes[input.selected].totalMm : 0;
+      const routes = withEdits({ ...raw }, panelKey(circuit.board));
       for (const mode of ["BOTTOM", "TOP", "OPTIMIZED"] as const) totals[mode] += routes[mode].totalMm;
       const route = withPaths(routes[input.selected], byId, origin, metric);
-      const cable = star ? STAR_LIGHT_CABLE : cableLabel(circuit.cable);
-      add(cable, route.totalMm);
+      const cable = topology ? topology.supplyCable : star ? STAR_LIGHT_CABLE : cableLabel(circuit.cable);
+      if (topology) {
+        // Rozpis podle kabelů úseků; ruční úprava trasy (rozdíl délky) jde na kabel přívodu
+        for (const [name, mm] of topology.cableMm[input.selected]) add(name, mm);
+        add(cable, route.totalMm - planned);
+      } else add(cable, route.totalMm);
       const limitPct: number = circuit.kind === "lighting" ? VOLTAGE_DROP_LIMIT.lighting : VOLTAGE_DROP_LIMIT.other;
       // Fáze 74: u okruhu podružného rozváděče i úbytek na jeho přívodu
       const voltageDropPct = Math.round((voltageDropPercent({ lengthMm: route.longestMm, currentA: circuit.protection.ratedA, crossSectionMm2: circuit.crossSectionMm2, phases: circuit.phases }) + (circuit.upstreamDropPct ?? 0)) * 100) / 100;
@@ -497,6 +529,8 @@ export function summarizeCabling(input: CablingInput): CableSummary {
         limitPct,
         ok: voltageDropPct <= limitPct,
         route,
+        ...(circuit.kind === "lighting" ? { breakdown: routeBreakdown(route) } : {}),
+        ...(topology ? { lightingParts: topology.legs } : {}),
       };
     })
     .filter((row): row is CircuitCabling => row !== null);
@@ -520,6 +554,8 @@ export function summarizeCabling(input: CablingInput): CableSummary {
     const light = byId.get(link.lightId);
     const switchNode = byId.get(link.switchId);
     if (!light || !switchNode) continue;
+    // Fáze 105: svod je součástí topologie světelného okruhu (přívod do krabice vypínače, svod ke světlům)
+    if (topologyLights.has(link.lightId)) continue;
     if (input.installation === "bus_loxone") {
       if (busSwitches.has(link.switchId)) continue;
       busSwitches.add(link.switchId);

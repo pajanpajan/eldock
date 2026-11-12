@@ -921,6 +921,8 @@ model RegisteredCompany {
   applianceLibraryJson String?
   /// Fáze 78: knihovna 2D půdorysu firmy – šablony sestav ve víceramečku a oblíbené položky levého panelu (JSON `FloorplanLibrary`).
   floorplanLibraryJson String?
+  /// Fáze 105: nastavení cenových nabídek (JSON `QuoteSettings` – sazba, konstrukce, DPH, velkoobchod, kalibrace NH, číslování).
+  quoteSettingsJson    String?
   /// Fáze 69: zrušená firma – zůstávají jen fakturační údaje kvůli dokladům k objednávkám kreditů (bez kontaktu a přihlášení).
   closedAt             DateTime?
   createdAt            DateTime     @default(now())
@@ -1031,6 +1033,9 @@ model CatalogComponent {
   externalSource     String?
   /// Odkaz na datasheet / produktovou stránku výrobce (fáze 47).
   datasheetUrl       String?
+  /// Fáze 105: ceníková cena výrobce bez DPH [Kč / ks] a její zdroj (balíčky ETIM / ceníky – `npm run catalog:universal`).
+  listPriceCzk       Float?
+  listPriceSource    String?
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
 

@@ -173,8 +173,13 @@ describe("💡 paleta světel a vypínačů + kabeláž", () => {
     const { summary } = analyzeDraft(draft);
     const cables = summary.byCable.map((row) => row.cable);
     expect(cables).toEqual(expect.arrayContaining([DOUBLE_TWO_WAY_CABLE, BLIND_CABLE, THERMOSTAT_CABLE]));
-    // žaluzie: (strop 2600 − vypínač 1050 + 1000 do nadpraží) × 1,1 + 2 krabice = 3,1 m → 4 m k nákupu
-    expect(summary.byCable.find((row) => row.cable === BLIND_CABLE)?.meters).toBe(4);
+    // Fáze 105: dvojitý střídavý 6+6 – korespondence CYKY-O 5×1,5 mezi přepínači a od druhého ke světlům CYKY-J 5×1,5
+    const lighting = summary.circuits.find((circuit) => circuit.lightingParts?.length);
+    expect(lighting?.lightingParts?.map((part) => `${part.role}:${part.cable}`)).toEqual(expect.arrayContaining([`traveller:${DOUBLE_TWO_WAY_CABLE}`, "switch-leg:CYKY-J 5×1,5"]));
+    // žaluzie: (strop 2600 − vypínač 1050 + 1000 do nadpraží) × 1,1 + 2 krabice = 3,1 m → 4 m k nákupu (bez světel, ať se
+    // stejný kabel CYKY-J 5×1,5 svodu ke světlům nepřičte)
+    const blindOnly = analyzeDraft({ ...draft, elements: draft.elements.filter((element) => !["l1", "l2", "s1", "s2"].includes(element.id)) }).summary;
+    expect(blindOnly.byCable.find((row) => row.cable === BLIND_CABLE)?.meters).toBe(4);
   });
 });
 

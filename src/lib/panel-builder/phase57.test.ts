@@ -161,8 +161,12 @@ describe("fáze 57 – úroveň instalace mění ovládání, kabeláž i kusovn
     const cables = summary.byCable.map((row) => row.cable);
     expect(cables).toContain(BUS_LEG_CABLE);
     expect(cables.some((cable) => cable.startsWith("CYKY-O"))).toBe(false);
-    const classic = analyzeDraft(base()).summary.byCable.map((row) => row.cable);
-    expect(classic.some((cable) => cable.startsWith("CYKY-O"))).toBe(true);
+    // Fáze 105: klasika vede přívod do krabic vypínačů a svody ke světlům (řazení 1 = CYKY-J 3×1,5), sběrnice hvězdu
+    // z rozváděče po skupinách světel – žádné svody k vypínačům
+    const classic = analyzeDraft(base()).summary;
+    expect(classic.circuits.some((circuit) => circuit.lightingParts?.some((part) => part.role === "switch-leg"))).toBe(true);
+    expect(summary.circuits.some((circuit) => circuit.lightingParts?.some((part) => part.role === "branch"))).toBe(true);
+    expect(summary.circuits.every((circuit) => !circuit.lightingParts?.some((part) => part.role === "switch-leg" || part.role === "traveller"))).toBe(true);
     // bez seznamu sběrnicových prvků zůstává původní chování (svody ze světel)
     const legacy = summarizeCabling({ circuits: [], nodes: [{ id: "s", x: 0, y: 0, heightMm: 1050, room: "m" }, { id: "l", x: 1000, y: 0, heightMm: 2600, room: "m" }], panel: { x: 0, y: 0 }, selected: "OPTIMIZED", switchLinks: [{ switchId: "s", lightId: "l" }], installation: "bus_loxone" });
     expect(legacy.byCable.map((row) => row.cable)).toEqual([BUS_LEG_CABLE]);
