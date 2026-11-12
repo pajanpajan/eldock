@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { goPhaseForGroup } from "./floorplan-phases";
 
 // Fáze 93: obchodní centra (ČSN 33 2000-7-718, BD4) a zdravotnictví (ČSN 33 2000-7-710 ed. 2) – typ objektu v půdorysu
 // i v AI Panel Builderu, Elektro-linter s doplněním CENTRAL STOP a elektroměru MID jedním klikem, zálohování napájení
@@ -27,12 +28,14 @@ test("2D půdorys: typ objektu v kroku 2 i v kompaktní liště, paleta 🏥 Zdr
     "🏥 Zdravotnický prostor – Skupina 1: Ordinace, vyšetřovny a lůžka (ČSN 33 2000-7-710 ed. 2)",
   ]);
   const palette = page.getByRole("complementary", { name: "Paleta elektroinstalačních značek" });
+  await goPhaseForGroup(page, "medical");
   await expect(palette.locator('[data-group="medical"]')).toHaveCount(0);
 
   await select.selectOption("COMMERCIAL_BD4");
   await expect(page.getByTestId("occupancy-note")).toContainText("bezhalogenové B2ca-s1,d1,a1");
   await select.selectOption("MEDICAL_G1");
   await expect(page.getByTestId("occupancy-note")).toContainText("2 okruzích A / B");
+  await goPhaseForGroup(page, "medical");
   await expect(palette.locator('[data-group="medical"]')).toHaveCount(1);
   await expect(palette.getByRole("button", { name: /EKV – přípojka doplňujícího ochranného pospojování/ }).first()).toBeAttached();
 

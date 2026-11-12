@@ -57,7 +57,7 @@ export function EnclosureChoice({ value, onChange }: { value: EnclosureLike | nu
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-col">
           <span className="text-sm font-semibold">🗄️ Výběr konkrétní skříně / rozvodnice (Volitelné)</span>
-          <span className="text-xs text-muted-foreground">{open ? "Výrobce → řada → konkrétní model. Lišty návrhu se nastaví podle skříně." : "Bez volby se skříň vybere podle velikosti návrhu v kroku 3."}</span>
+          <span className="text-xs text-muted-foreground">{open ? "Výrobce → řada → konkrétní model. Lišty návrhu se nastaví podle skříně." : "Bez volby se skříň vybere podle velikosti návrhu v části 1b (Skříň rozváděče)."}</span>
         </div>
         <Button type="button" size="sm" variant={open ? "ghost" : "outline"} onClick={() => (open ? close() : setOpen(true))} data-testid="enclosure-choice-toggle">
           {open ? "Bez konkrétní skříně" : "Vybrat konkrétní skříň"}
@@ -135,7 +135,7 @@ export function EnclosureChoice({ value, onChange }: { value: EnclosureLike | nu
             Objednací číslo: {summary.mpn ? <b className="font-mono text-foreground">{summary.mpn}</b> : <span className="text-amber-300">ověřte v katalogu výrobce (orientační typ)</span>}
           </p>
           <p className="text-muted-foreground">
-            Návrh dostane {rails.length} {rails.length === 1 ? "DIN lištu" : rails.length < 5 ? "DIN lišty" : "DIN lišt"} po {rails[0]} M – další řady ani širší lišty skříň nepustí (omezení jde uvolnit v kroku 3 Skříň).
+            Návrh dostane {rails.length} {rails.length === 1 ? "DIN lištu" : rails.length < 5 ? "DIN lišty" : "DIN lišt"} po {rails[0]} M – další řady ani širší lišty skříň nepustí (omezení jde uvolnit v části 1b Skříň rozváděče).
           </p>
         </div>
       ) : null}

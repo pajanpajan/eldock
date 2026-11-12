@@ -133,7 +133,7 @@ export function ChosenEnclosureCard({
                 </a>
               </Button>
               <Button asChild variant="ghost">
-                <Link href={`/panel-builder/${projectId}/enclosure`}>Změnit skříň (krok 3)</Link>
+                <Link href={`/panel-builder/${projectId}/enclosure`}>Změnit skříň (část 1b)</Link>
               </Button>
             </div>
           </div>
@@ -150,7 +150,7 @@ export function ChosenEnclosureCard({
             )}
           </p>
           <Button asChild variant="outline">
-            <Link href={`/panel-builder/${projectId}/enclosure`}>🗄️ Vybrat skříň (krok 3)</Link>
+            <Link href={`/panel-builder/${projectId}/enclosure`}>🗄️ Vybrat skříň (část 1b)</Link>
           </Button>
         </div>
       )}

@@ -63,7 +63,8 @@ test.describe("veřejně bez přihlášení", () => {
     await page.goto("/");
     const card = page.getByTestId("segment-domov");
     await expect(card.getByTestId("tutorials-link")).toHaveAttribute("href", "/navody");
-    await expect(page.getByTestId("site-footer").getByRole("link", { name: "Video-návody" })).toHaveAttribute("href", "/navody");
+    // Od fáze 96 je odkaz v patičce dvakrát (mapa webu Domovní i „Nástroje a návody“)
+    await expect(page.getByTestId("site-footer").getByRole("link", { name: "Video-návody" }).first()).toHaveAttribute("href", "/navody");
   });
 });
 

@@ -216,7 +216,7 @@ describe("AI Panel Builder – strom zapojení", () => {
     await seedMinimal(prisma);
     const { project, nodes } = await pb001();
     await saveTree(prisma, project.id, assignments(nodes));
-    await expect(releaseDocumentation(prisma, project.id, "eq-R-LIS-01")).rejects.toThrow("Nepotvrzené přístroje (krok 1): -F4, -F7.");
+    await expect(releaseDocumentation(prisma, project.id, "eq-R-LIS-01")).rejects.toThrow("Nepotvrzené přístroje (fáze 1a): -F4, -F7.");
 
     for (const item of await prisma.panelBoardItem.findMany({ where: { projectId: project.id, recognitionStatus: { not: "VERIFIED" } } })) {
       const component = await prisma.catalogComponent.findUniqueOrThrow({ where: { articleNumber: item.designation === "-F4" ? "2CDS251001R0105" : "2CDS251001R1165" } });

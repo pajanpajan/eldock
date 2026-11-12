@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { goPhase } from "./floorplan-phases";
 
 // Fáze 77: stínící technika (vývody motorů žaluzií), čidla oken a vody, chytré termostaty a hlavice, pokročilé osvětlení
 // (stmívání, CCT, RGB / RGBW, DALI, 24 V PWM) se štítky u značky, rychlou lištou u světla a moduly do rozváděče.
@@ -78,6 +79,7 @@ async function openHouse(page: Page, draft: ReturnType<typeof house>, key: strin
     await page.goto("/panel-builder/floorplan/novy");
     await expect(page.getByTestId("floorplan-canvas")).toBeVisible({ timeout: 30_000 });
   }).toPass({ timeout: 240_000 });
+  await goPhase(page, 5);
   await expect(page.getByTestId("circuit-list")).toBeVisible({ timeout: 30_000 });
 }
 
@@ -102,8 +104,9 @@ async function clickAt(page: Page, x: number, y: number) {
 test("klasika: paleta stínění, štítky a volby svítidla, rychlá lišta, pohon motoru a párování hlavic", async ({ page }) => {
   await openHouse(page, house("classic"), "phase77-classic");
   const canvas = page.getByTestId("floorplan-canvas");
-  // Paleta: skupina stínící techniky, čidel a vytápění
+  // Paleta: skupina stínící techniky, čidel a vytápění (fáze 98: ve fázi 4 se světly a ovladači)
   // „Rozbalit vše“ je neaktivní, když je paleta už celá rozbalená (výchozí stav)
+  await goPhase(page, 4);
   const expand = page.getByTestId("palette-expand-all");
   if (await expand.isEnabled()) await expand.click();
   const shading = page.locator("#palette-shading");
@@ -115,7 +118,8 @@ test("klasika: paleta stínění, štítky a volby svítidla, rychlá lišta, po
   await expect(canvas.locator('[data-symbol="sensor"]')).toHaveCount(2);
   // LED pásek RGBW na 24 V PWM má štítky u značky
   await expect(canvas.locator('[data-element="led-strip"] [data-testid="light-badges"]')).toHaveAttribute("data-badges", "DIM RGBW 24V");
-  // Žaluziový okruh B10 v soupisu okruhů (jen motor 230 V; 24 V DC napájí zdroj systému)
+  // Žaluziový okruh B10 v soupisu okruhů (jen motor 230 V; 24 V DC napájí zdroj systému) – soupis okruhů ve fázi 5
+  await goPhase(page, 5);
   const list = page.getByTestId("circuit-list");
   await expect(list.locator('[data-testid="circuit-row"][data-layer="shading"]')).toContainText("Žaluzie – Obývák");
   await expect(list.locator('[data-testid="circuit-row"]').filter({ hasText: "Zdroj 24 V DC – LED osvětlení" })).toHaveCount(1);
@@ -157,6 +161,8 @@ test("klasika: paleta stínění, štítky a volby svítidla, rychlá lišta, po
 
 test("sběrnice: kanály 24 V PWM a binárních vstupů, zdroj LED s rezervou 20 % a moduly v chytré domácnosti", async ({ page }) => {
   await openHouse(page, house("bus_loxone"), "phase77-bus");
+  // Fáze 98: akční členy chytré domácnosti v pravém panelu fáze 4, soupis okruhů ve fázi 5
+  await goPhase(page, 4);
   const smart = page.getByTestId("smart-home");
   await expect(smart).toBeVisible();
   await expect(smart.getByTestId("smart-channels").locator('[data-role="pwm"]')).toBeVisible();
@@ -167,5 +173,6 @@ test("sběrnice: kanály 24 V PWM a binárních vstupů, zdroj LED s rezervou 20
   await expect(smart.getByTestId("smart-led-supply")).toContainText("48 W");
   await expect(smart.getByTestId("smart-modules")).toContainText("HDR-60-24");
   // Sběrnice: žaluziové aktory napájí jeden okruh B10 v rozváděči
+  await goPhase(page, 5);
   await expect(page.getByTestId("circuit-list").locator('[data-testid="circuit-row"][data-layer="shading"]')).toContainText("napájení žaluziových akčních členů");
 });

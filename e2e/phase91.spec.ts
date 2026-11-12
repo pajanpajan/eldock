@@ -1,5 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
+import { ensureActive, goPhase, goPhaseForGroup, phaseForPalette } from "./floorplan-phases";
+
 // Fáze 91: katalogový audit designových řad (víceramečky jen v rozsahu, který řada vyrábí – Time Arbo 4R, Decento bez
 // víceramečku; Busch-axcent s rámečkem ze skutečného materiálu a stejným krytem) a instalační krabičky (výrobce,
 // konstrukce stěn, potřebná hloubka u prvku, hlídač hloubky s opravou jedním klikem, tabulka krabic v kusovníku).
@@ -39,12 +41,18 @@ function tools(page: Page) {
   return {
     canvas,
     palette,
-    choose: (label: string) => palette.getByRole("button", { name: label, exact: false }).first().click(),
+    // Fáze 98: značka je v paletě své fáze (rozváděč a vybavení 2, zásuvky 3, světla a ovládání 4)
+    choose: async (label: string) => {
+      await phaseForPalette(page, label);
+      await palette.getByRole("button", { name: label, exact: false }).first().click();
+    },
     clickAt: async (x: number, y: number) => {
       const at = await screen(canvas, x, y);
       await page.mouse.click(at.x, at.y);
     },
     openSection: async (group: string) => {
+      // Fáze 98: skupina palety je jen ve své fázi průvodce
+      await goPhaseForGroup(page, group);
       const section = palette.locator(`[data-group="${group}"]`);
       if ((await section.getAttribute("data-open")) !== "true") await palette.getByTestId(`palette-toggle-${group}`).click();
       await expect(section).toHaveAttribute("data-open", "true");
@@ -53,7 +61,8 @@ function tools(page: Page) {
 }
 
 async function applySeries(page: Page, series: string) {
-  await page.getByTestId("wizard-step-2").click();
+  // Fáze 98: galerie řad je v kartě designu fáze 4
+  await goPhase(page, 4);
   await page.getByTestId("series-gallery-open").click();
   const gallery = page.getByTestId("series-gallery");
   await gallery.getByTestId(`gallery-series-${series}`).click();
@@ -66,13 +75,14 @@ test("📦 Krabičky: stmívač s mělkou krabicí → varování a oprava 1 kli
   await openNew(page);
   const { canvas, choose, clickAt, openSection } = tools(page);
   await roomBySize(page, "Obývací pokoj", "5", "4");
-  // Krok 2: výrobce krabic (výchozí KOPOS Kolín) a výchozí konstrukce stěn
-  await page.getByTestId("wizard-step-2").click();
+  // Výrobce krabic (výchozí KOPOS Kolín) a výchozí konstrukce stěn – fáze 98: nabídka 📦 Instalační krabice ve fázích 3 a 4
+  await goPhase(page, 3);
+  await page.getByTestId("wizard-boxes").click();
   await expect(page.getByTestId("box-settings")).toBeVisible();
   await expect(page.getByTestId("box-maker")).toHaveValue("kopos");
   await expect(page.getByTestId("box-wall")).toHaveValue("masonry");
+  await page.keyboard.press("Escape");
 
-  await page.getByTestId("wizard-step-3").click();
   await openSection("controls");
   await choose("Stmívač (otočný / tlačítkový LED)");
   await clickAt(2000, 1150);
@@ -82,7 +92,9 @@ test("📦 Krabičky: stmívač s mělkou krabicí → varování a oprava 1 kli
   await clickAt(4200, 1150);
   await page.getByTestId("mode-done").click();
 
-  // Detail stmívače: doporučená hluboká krabice KPR 68 (stmívač 230 V, WAGO svorky), min. 66 mm
+  // Detail stmívače: doporučená hluboká krabice KPR 68 (stmívač 230 V, WAGO svorky), min. 66 mm (fáze 98: ve fázi 4)
+  await goPhase(page, 4);
+  await ensureActive(page, canvas.locator('[data-element="dimmer"]'));
   await canvas.locator('[data-element="dimmer"]').click();
   const box = page.getByTestId("element-detail").getByTestId("element-box");
   await expect(box.getByTestId("element-box-summary")).toContainText("Hluboká 66 mm – KOPOS Kolín KPR 68");
@@ -99,9 +111,12 @@ test("📦 Krabičky: stmívač s mělkou krabicí → varování a oprava 1 kli
   await expect(page.locator('[data-check^="box-depth"]')).toHaveCount(0);
   await expect(box.getByTestId("element-box-choice")).toHaveValue("auto");
 
-  // Místnost ze sádrokartonu → krabice do dutých stěn
+  // Místnost ze sádrokartonu → krabice do dutých stěn (fáze 98: vlastnost místnosti ve fázi 1)
+  await goPhase(page, 1);
   await canvas.getByTestId("room-Obývací pokoj").click({ position: { x: 30, y: 30 } });
   await page.getByTestId("room-wall").selectOption("drywall");
+  await goPhase(page, 4);
+  await ensureActive(page, canvas.locator('[data-element="dimmer"]'));
   await canvas.locator('[data-element="dimmer"]').click();
   await expect(page.getByTestId("element-box-summary")).toContainText("KOPOS Kolín KPR 68/71L");
 
@@ -172,7 +187,8 @@ test("🔲 Víceramečky podle katalogu: 5R po změně na Time Arbo → štítek
 test("🎨 Busch-axcent: rámeček ze skutečného materiálu zvlášť, kryt beze změny; Decento jako samostatné kulaté přístroje", async ({ page }) => {
   test.setTimeout(240_000);
   await openNew(page);
-  await page.getByTestId("wizard-step-2").click();
+  // Fáze 98: galerie řad je v kartě designu fáze 4
+  await goPhase(page, 4);
   await page.getByTestId("series-gallery-open").click();
   const gallery = page.getByTestId("series-gallery");
   const preview = gallery.getByTestId("gallery-preview");

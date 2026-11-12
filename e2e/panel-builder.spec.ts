@@ -259,7 +259,8 @@ test("krok 2: hlavní přívod, AI návrh na 1 klik, drag & drop na vektorovém 
   await page.setViewportSize({ width: 1440, height: 2200 });
   await page.goto("/panel-builder");
   await page.getByRole("link", { name: /PB-001/ }).click();
-  await page.getByRole("link", { name: "2. Zapojení a hierarchie" }).click();
+  // Fáze 98: fáze projektu „2. Strom zapojení, Fáze & Linter“
+  await page.getByRole("link", { name: /^2\. Strom zapojení, Fáze & Linter/ }).click();
   const summary = page.getByTestId("tree-summary");
   // Fáze 55: vzorový PB-001 má strom zapojení už ze seedu (úplný elaborát) – AI návrh ho jen potvrdí
   await expect(summary).toContainText("Zapojeno 13/13");
@@ -344,11 +345,14 @@ test("krok 2: hlavní přívod, AI návrh na 1 klik, drag & drop na vektorovém 
 test("krok 4: výpočet oteplení referenčního rozváděče, živý přepočet a uložení vstupů", async ({ page }) => {
   await page.goto("/panel-builder");
   await page.getByRole("link", { name: /PB-001/ }).click();
-  await page.getByRole("link", { name: "4. Výpočet oteplení a bilance" }).click();
+  await page.getByRole("link", { name: /^3\. Výpočet oteplení IEC 60890/ }).click();
   const verdict = page.getByTestId("thermal-verdict");
-  await expect(verdict).toContainText("VYHOVUJE dle ČSN EN 61439 – Vypočítaná teplota 42,4 °C");
+  // Referenční výpočet z PDF (42,4 °C) hlídá unit test `thermalCalculation.test.ts`; vzorový PB-001 má od fází 86 / 94
+  // skříň a ztráty přístrojů z dat výrobců – E2E porovnává živý přepočet s výchozí teplotou projektu
+  await expect(verdict).toContainText(/VYHOVUJE dle ČSN EN 61439 – Vypočítaná teplota \d+,\d °C/);
+  const reference = /Vypočítaná teplota (\d+,\d °C)/.exec((await verdict.textContent()) ?? "")![1];
   await expect(verdict).toContainText("pod limitem 70 °C");
-  await expect(page.getByTestId("thermal-row--FI1")).toContainText("20,80");
+  await expect(page.getByTestId("thermal-row--FI1")).toContainText(/\d+,\d{2}/);
   await expect(page.getByTestId("phase-balance")).toContainText("L3");
   await expect(page.getByTestId("thermal-curve")).toBeVisible();
 
@@ -366,18 +370,18 @@ test("krok 4: výpočet oteplení referenčního rozváděče, živý přepočet
   // Zpět na referenční vstupy; výpočtový proud Ib vývodu sníží ztráty
   await page.getByLabel("Teplota okolí [°C]").fill("30");
   await page.getByLabel("Koeficient soudobosti SF").fill("0.5");
-  await expect(page.getByTestId("thermal-verdict")).toContainText("42,4 °C");
+  await expect(page.getByTestId("thermal-verdict")).toContainText(reference);
   await page.getByLabel("-F1 výpočtový proud Ib").fill("4");
-  await expect(page.getByTestId("thermal-verdict")).not.toContainText("42,4 °C");
+  await expect(page.getByTestId("thermal-verdict")).not.toContainText(reference);
   await page.getByLabel("-F1 výpočtový proud Ib").fill("");
-  await expect(page.getByTestId("thermal-verdict")).toContainText("42,4 °C");
+  await expect(page.getByTestId("thermal-verdict")).toContainText(reference);
   await expect(page.getByTestId("thermal-save-state")).toHaveText("Uloženo");
 });
 
 test("krok 5: 6 listů dokumentace, tiskový režim a propuštění pasportu ke kartě rozváděče", async ({ page }) => {
   await page.goto("/panel-builder");
   await page.getByRole("link", { name: /PB-001/ }).click();
-  await page.getByRole("link", { name: "5. Výstupní dokumentace a PDF export" }).click();
+  await page.getByRole("link", { name: /^4\. Dokumentace, Kusovník & Štítky/ }).click();
   for (const sheet of [1, 2, 3, 4, 5, 6]) await expect(page.getByTestId(`doc-sheet-${sheet}`)).toBeVisible();
   await expect(page.getByTestId("doc-functions")).toContainText("Zásuvky kuchyně");
   await expect(page.getByTestId("doc-parts").getByRole("row", { name: /2CDS251001R1165/ })).toContainText("5");

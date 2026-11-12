@@ -65,8 +65,9 @@ describe("fáze 89 – místnost zadáním rozměrů X × Y a přichytávání s
 
 describe("fáze 89 – průvodce 5 fázemi a kompaktní režim", () => {
   it("5 kroků se štítky a tlačítky na další krok, výchozí krok podle nákresu", () => {
-    expect(WIZARD_STEPS.map((step) => step.label)).toEqual(["1. Podklad a místnosti", "2. Systém, výrobce a design", "3. Osazení prvků a spotřebičů", "4. Trasy kabelů a výšky", "5. Kusovník, Export a Rozváděč"]);
-    expect(WIZARD_STEPS.map((step) => step.next)).toEqual(["Pokračovat na Výběr systému a designu →", "Pokračovat na Osazení prvků →", "Pokračovat na Trasy kabelů →", "Pokračovat na Kusovník a Rozváděč →", null]);
+    // Fáze 98: 5 fází průvodce
+    expect(WIZARD_STEPS.map((step) => step.label)).toEqual(["1. Půdorys a místnosti", "2. Rozváděč, okna, dveře a vybavení", "3. Zásuvkové okruhy a spotřebiče", "4. Světla, vypínače a chytrá domácnost", "5. Trasy kabelů, Kusovník a Rozváděč"]);
+    expect(WIZARD_STEPS.map((step) => step.next)).toEqual(["Další fáze: Rozváděč, okna, dveře a vybavení →", "Další fáze: Zásuvkové okruhy a spotřebiče →", "Další fáze: Světla, vypínače a chytrá domácnost →", "Další fáze: Trasy kabelů, Kusovník a Rozváděč →", null]);
     expect(nextStep(4)).toBe(5);
     expect(nextStep(5)).toBe(5);
     expect(initialStep(emptyDraft())).toBe(1);

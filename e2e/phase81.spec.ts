@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { goPhase } from "./floorplan-phases";
 
 // Fáze 81: dotykové panely a displejové ovladače chytré domácnosti (barvy, krabice, věrné náhledy) a akční členy na
 // DIN lištu – souhrn „V rozváděči“ v půdorysu, SysAP na DIN liště a kategorie 🏠 Chytrá domácnost v kaskádě Kroku 1
@@ -13,6 +14,9 @@ async function openNew(page: Page) {
   }).toPass({ timeout: 240_000 });
   await page.waitForLoadState("networkidle");
 }
+
+/** Od fáze 94 mají panely ABB v katalogu fotku výrobce (public/catalog-images), ostatní věrný vektorový náhled. */
+const preview = (card: Locator, panel: string) => card.getByTestId("device-photo").or(card.locator(`[data-testid="device-illustration"][data-panel="${panel}"]`)).first();
 
 async function clickAt(page: Page, canvas: Locator, x: number, y: number) {
   await canvas.scrollIntoViewIfNeeded();
@@ -29,7 +33,8 @@ test("🏠 Panely chytré domácnosti: barvy a krabice IP TOUCH, osazení, Loxon
   page.on("dialog", (dialog) => void dialog.accept());
   await openNew(page);
   const canvas = page.getByTestId("floorplan-canvas");
-  await page.getByTestId("wizard-step-2").click();
+  // Fáze 98: výrobce, řada, barva a úroveň instalace v kartě designu fáze 4
+  await goPhase(page, 4);
   const appearance = page.getByTestId("device-appearance");
   await appearance.getByTestId("abb-families").locator('[data-family="abb-fah"]').click();
   const catalog = appearance.getByTestId("smart-catalog");
@@ -40,7 +45,7 @@ test("🏠 Panely chytré domácnosti: barvy a krabice IP TOUCH, osazení, Loxon
   // Panely: IP TOUCH 10" ve 4 barvách, číslo a krabice podle barvy, věrný náhled
   await catalog.getByTestId("smart-tab-panels").click();
   const ipTouch = catalog.locator('[data-card="fah-ip-touch-10"]');
-  await expect(ipTouch.getByTestId("device-illustration")).toHaveAttribute("data-panel", "ip-touch");
+  await expect(preview(ipTouch, "ip-touch")).toBeVisible();
   await expect(ipTouch.getByTestId("device-variants").getByRole("radio")).toHaveCount(4);
   await ipTouch.getByRole("radio", { name: "Černá" }).click();
   await expect(ipTouch.getByTestId("device-mpn")).toHaveText("MPN 2TMA130050B0054");
@@ -52,6 +57,7 @@ test("🏠 Panely chytré domácnosti: barvy a krabice IP TOUCH, osazení, Loxon
   await ipTouch.locator('[data-product="fah-ip-touch-10"]').click();
   await clickAt(page, canvas, 5000, 5000);
   await page.keyboard.press("Escape");
+  // Fáze 98: katalog panelů i osazený panel jsou ve fázi 4 (detail prvku je ve všech fázích)
   await expect(canvas.locator('[data-element="bus-display"]')).toHaveCount(1);
   await expect(page.getByTestId("element-detail")).toContainText('IP TOUCH 10"');
   // Detail prvku: barva a krabice panelu s čísly do kusovníku (povrchová krabice v barvě panelu)
@@ -62,8 +68,8 @@ test("🏠 Panely chytré domácnosti: barvy a krabice IP TOUCH, osazení, Loxon
   await expect(choice.getByTestId("panel-bom")).toContainText("2TMA130161B0001");
   // Ovladače: RoomTouch 4" a Trevion 2,4"
   await catalog.getByTestId("smart-tab-controls").click();
-  await expect(catalog.locator('[data-card="fah-roomtouch-4"]').getByTestId("device-illustration")).toHaveAttribute("data-panel", "room-touch");
-  await expect(catalog.locator('[data-card="fah-trevion"]').getByTestId("device-illustration")).toHaveAttribute("data-panel", "trevion");
+  await expect(preview(catalog.locator('[data-card="fah-roomtouch-4"]'), "room-touch")).toBeVisible();
+  await expect(preview(catalog.locator('[data-card="fah-trevion"]'), "trevion")).toBeVisible();
 
   // DIN lišta: „V rozváděči: X ks (Y automaticky + Z ručně)“, SysAP s adaptérem nahradí nástěnný
   await catalog.getByTestId("smart-tab-din").click();
@@ -73,6 +79,7 @@ test("🏠 Panely chytré domácnosti: barvy a krabice IP TOUCH, osazení, Loxon
   await sapDin.getByTestId("din-add").click();
   await expect(sapDin.getByTestId("din-count")).toContainText("V rozváděči: 1 ks (0 automaticky z půdorysu + 1 ručně přidáno)");
   await expect(sap.getByTestId("din-total")).toHaveText("0 ks");
+  await goPhase(page, 4);
   await expect(page.getByTestId("smart-home").getByTestId("smart-modules")).toContainText("SAP.3 + SAP-A1.1");
 
   // Loxone Wall Display 10" a TapHome Ovladač s displejem (3 varianty, 4 barvy, oblíbený multizónový)

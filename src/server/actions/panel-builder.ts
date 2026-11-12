@@ -105,7 +105,7 @@ export async function createPanelProjectAction(input: z.input<typeof createSchem
     revalidatePath("/panel-builder", "layout");
     // Fáze 85: analýza našla víc DIN lišt, než má skříň zvolená při zakládání
     const fixed = rest.enclosureId ? await prisma.panelBoardProject.findUnique({ where: { id: project.id }, select: { dinRailsCount: true, enclosureFixed: true, enclosure: { select: { rows: true, model: true } } } }) : null;
-    const overRails = fixed?.enclosureFixed && fixed.enclosure && fixed.dinRailsCount > fixed.enclosure.rows ? `Analýza našla ${fixed.dinRailsCount} DIN lišt, zvolená skříň ${fixed.enclosure.model} má ${fixed.enclosure.rows} – zkontrolujte skříň v kroku 3.` : null;
+    const overRails = fixed?.enclosureFixed && fixed.enclosure && fixed.dinRailsCount > fixed.enclosure.rows ? `Analýza našla ${fixed.dinRailsCount} DIN lišt, zvolená skříň ${fixed.enclosure.model} má ${fixed.enclosure.rows} – zkontrolujte skříň v části 1b (Skříň rozváděče).` : null;
     const warning = [result.warning, ...(details?.warnings ?? []), overRails].filter(Boolean).join(" ") || undefined;
     return { ok: true, data: { id: project.id, mode: result.mode, warning, details: details?.analyzed ?? 0 } };
   } catch (error) {

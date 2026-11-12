@@ -35,6 +35,7 @@ export function DeviceAppearance({
   available,
   selectedRoom,
   supply,
+  showSupply = true,
   onChange,
   onSupply,
   onApplyAll,
@@ -59,6 +60,8 @@ export function DeviceAppearance({
   available: Map<string, number>;
   selectedRoom: string | null;
   supply: SupplySystem["id"];
+  /** Fáze 98: výběr přívodu (fáze 2 ho ukazuje samostatně). */
+  showSupply?: boolean;
   onChange: (patch: { series?: string; color?: string; frameColor?: string | null }) => void;
   onSupply: (supply: SupplySystem["id"]) => void;
   onApplyAll: () => void;
@@ -123,16 +126,8 @@ export function DeviceAppearance({
             </button>
           ))}
         </div>
-        <label className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
-          Přívod rozváděče:
-          <select value={supply} onChange={(event) => onSupply(event.target.value as SupplySystem["id"])} className="h-8 rounded-md border border-input bg-transparent px-1.5 text-sm text-foreground dark:bg-input/30" aria-label="Soustava a počet fází přívodu" data-testid="floorplan-supply">
-            {SUPPLY_SYSTEMS.map((option) => (
-              <option key={option.id} value={option.id} title={option.detail}>
-                {option.phases === 3 ? "3× 230/400 V" : "1× 230 V"} · {option.system}
-              </option>
-            ))}
-          </select>
-        </label>
+        {/* Fáze 98: přívod rozváděče patří do fáze 2 průvodce (karta rozváděče a typu prostoru) */}
+        {showSupply ? <SupplySelect supply={supply} onSupply={onSupply} className="ml-auto" /> : null}
       </div>
       {/* Fáze 65: segmentový přepínač rodin ABB s ikonami a podtitulky */}
       {!smartBrand && brand.manufacturer === "ABB" ? (
@@ -257,5 +252,21 @@ export function DeviceAppearance({
         </>
       )}
     </section>
+  );
+}
+
+/** Fáze 98: přívod rozváděče – soustava a počet fází (3× 230/400 V TN-S / TN-C-S, 1× 230 V …). */
+export function SupplySelect({ supply, onSupply, className }: { supply: SupplySystem["id"]; onSupply: (supply: SupplySystem["id"]) => void; className?: string }) {
+  return (
+    <label className={cn("flex items-center gap-1.5 text-xs text-muted-foreground", className)}>
+      Přívod rozváděče:
+      <select value={supply} onChange={(event) => onSupply(event.target.value as SupplySystem["id"])} className="h-8 rounded-md border border-input bg-transparent px-1.5 text-sm text-foreground dark:bg-input/30" aria-label="Soustava a počet fází přívodu" data-testid="floorplan-supply">
+        {SUPPLY_SYSTEMS.map((option) => (
+          <option key={option.id} value={option.id} title={option.detail}>
+            {option.phases === 3 ? "3× 230/400 V" : "1× 230 V"} · {option.system}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }

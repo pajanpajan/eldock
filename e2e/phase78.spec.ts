@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 
 import { expect, test, type Page } from "@playwright/test";
+import { goPhase, goPhaseForGroup } from "./floorplan-phases";
 
 // Fáze 78: šablony sestav ve víceramečku (firma + prohlížeč), hvězdičky oblíbených s řazením nahoru a návratem na
 // původní místo, kód půdorysu FP-…, „☁️ Uloženo v cloudu (HH:MM:SS)“, „📂 Moje uložené půdorysy“ a projekt do počítače
@@ -98,18 +99,22 @@ test("šablona sestavy z vlastní sestavy, vložení jedním klikem a ⭐ oblíb
   await page.keyboard.press("Escape");
   const canvas = page.getByTestId("floorplan-canvas");
   await expect(canvas.locator('[data-testid="frame-outline"][data-gangs="2"]')).toHaveCount(1);
+  await goPhase(page, 5);
   await expect(canvas.locator('[data-element="switch-1"]')).toHaveCount(2);
 
   // ⭐ Dvojzásuvka: nahoru na začátek zásuvek a do sekce Oblíbené; po odebrání zpět na druhé místo
+  await goPhaseForGroup(page, "sockets");
   const sockets = page.locator("#palette-sockets");
   const entryIds = () => sockets.locator("[data-entry]").evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-entry")));
   const before = await entryIds();
   expect(before.indexOf("double-socket")).toBeGreaterThan(0);
   await sockets.locator('[data-entry="double-socket"]').getByTestId("favorite-star").click();
   await expect.poll(entryIds).toEqual(["double-socket", ...before.filter((id) => id !== "double-socket")]);
+  await goPhaseForGroup(page, "favorites");
   await expect(page.locator("#palette-favorites")).toContainText("Dvojzásuvka");
   await sockets.locator('[data-entry="double-socket"]').getByTestId("favorite-star").click();
   await expect.poll(entryIds).toEqual(before);
+  await goPhaseForGroup(page, "favorites");
   await expect(page.locator("#palette-favorites")).toHaveCount(0);
   // ⭐ u hotové sestavy: přesune se na začátek hotových sestav, po odebrání zpět
   const presets = sets.getByTestId("assembly-presets");

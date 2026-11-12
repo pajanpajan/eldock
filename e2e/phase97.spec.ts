@@ -1,5 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
+import { ensureActive, goPhase, goPhaseForGroup, phaseForPalette } from "./floorplan-phases";
+
 // Fáze 97: reálné fotky z datových balíčků výrobců se zákazníkovi opravdu vykreslí – galerie „Designové řady a barvy“ pro
 // ABB, Schneider Electric, Legrand a Hager (img.complete && naturalWidth > 50 = soubor existuje a prohlížeč ho dekódoval),
 // fotka a EAN krabice KOPOS v kusovníku a fotky rozvodnic Hager / OEZ / Schneider ve výběru skříně AI Panel Builderu.
@@ -37,7 +39,8 @@ async function allLoaded(scope: Locator, minimum = 1) {
 test("🖼️ Galerie řad a barev: skutečné fotky ABB, Schneider Electric, Legrand a Hager se načtou", async ({ page }) => {
   test.setTimeout(300_000);
   await openNew(page);
-  await page.getByTestId("wizard-step-2").click();
+  // Fáze 98: design vypínačů (galerie řad, výrobce, barvy) je v kartě designu fáze 4
+  await goPhase(page, 4);
   await page.getByTestId("series-gallery-open").click();
   const gallery = page.getByTestId("series-gallery");
   const preview = gallery.getByTestId("gallery-preview");
@@ -65,13 +68,16 @@ test("📦 Kusovník: fotka a EAN krabice KOPOS ze stránky výrobce", async ({ 
   await form.getByTestId("room-size-y").fill("4");
   await form.getByTestId("room-size-create").click();
   await page.getByTestId("wizard-step-3").click();
+  await goPhaseForGroup(page, "sockets");
   const section = palette.locator('[data-group="sockets"]');
   if ((await section.getAttribute("data-open")) !== "true") await palette.getByTestId("palette-toggle-sockets").click();
+  await phaseForPalette(page, "Jednozásuvka");
   await palette.getByRole("button", { name: "Jednozásuvka", exact: false }).first().click();
   const at = await screen(canvas, 4200, 1150);
   await page.mouse.click(at.x, at.y);
   await page.getByTestId("mode-done").click();
   // Detail zásuvky: doporučená krabice KU 68-45_KA s fotkou výrobce a EAN
+  await ensureActive(page, canvas.locator('[data-element="socket"]'));
   await canvas.locator('[data-element="socket"]').click();
   const detailBox = page.getByTestId("element-detail").getByTestId("element-box");
   await allLoaded(detailBox, 1);

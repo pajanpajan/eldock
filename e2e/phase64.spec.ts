@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { goPhase, phaseForPalette } from "./floorplan-phases";
 
 // Fáze 64: 2D půdorys uložený na serveru – nový půdorys vznikne při první změně, Zpět / Znovu (tažení = jeden krok),
 // průběžné ukládání a reload, údaje půdorysu, historie verzí s obnovením, seznam s kopií a košem, souběh dvou oken
@@ -41,6 +42,7 @@ function editor(page: Page) {
     lights: canvas.locator('[data-element="ceiling-light"]'),
     /** Místnost tažením obdélníku. */
     room: async (x1: number, y1: number, x2: number, y2: number) => {
+      await goPhase(page, 1);
       await page.getByRole("button", { name: "Kreslit místnost (obdélník)" }).click();
       await canvas.evaluate((svg) => svg.scrollIntoView({ block: "center", behavior: "instant" }));
       const from = await screen(canvas, x1, y1);
@@ -56,6 +58,7 @@ function editor(page: Page) {
      * prvku (smazat, otočit …) by jinak u plochy 20 × 16 m (fáze 83) překryla místo dalšího kliknutí.
      */
     place: async (label: string, x: number, y: number) => {
+      await phaseForPalette(page, label);
       await palette.getByRole("button", { name: label }).first().click();
       await clickAt(x, y);
       await page.keyboard.press("Escape");
@@ -130,6 +133,8 @@ test("📐 Půdorys na serveru: vznik při první změně, Zpět / Znovu, reload
   await meta.getByLabel("Místo stavby").fill("Liberec");
   await meta.getByRole("button", { name: "Uložit údaje" }).click();
   await expect(page.getByTestId("floorplan-name")).toContainText("RD Novák – přízemí");
+  // Fáze 98: formulář rozváděče je v kartě kabeláže fáze 5
+  await goPhase(page, 5);
   await expect(page.locator("#fp-customer")).toHaveValue("Jan Novák");
   await expect(page.locator("#fp-site")).toHaveValue("Liberec");
 

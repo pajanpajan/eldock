@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { CheckCircle2, Circle, Minus, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import type { FloorplanPhase } from "@/lib/panel-builder/floorplan-phases";
 import { LIVE_CHECKLIST_KEY, isLiveChecklistMode, type LiveChecklist, type LiveChecklistMode } from "@/lib/panel-builder/floorplan-live-checklist";
 import { cn } from "@/lib/utils";
 
@@ -43,6 +44,8 @@ export function FloorplanLiveChecklist({
   onPickPanel,
   onOpenBom,
   onGenerate,
+  onPhase,
+  phase,
 }: {
   checklist: LiveChecklist;
   mode: LiveChecklistMode;
@@ -54,6 +57,10 @@ export function FloorplanLiveChecklist({
   onPickPanel: () => void;
   onOpenBom: () => void;
   onGenerate: () => void;
+  /** Fáze 98: klik na bod přepne editor do jeho fáze. */
+  onPhase?: (phase: FloorplanPhase) => void;
+  /** Aktivní fáze průvodce (zvýrazní bod). */
+  phase?: FloorplanPhase | null;
 }) {
   if (mode === "off") return null;
   const total = checklist.items.length;
@@ -101,18 +108,20 @@ export function FloorplanLiveChecklist({
       <ol className="flex flex-col gap-1 p-2">
         {checklist.items.map((item) => {
           const current = checklist.current === item.id;
+          const open = phase === item.phase;
           return (
-            <li key={item.id} className={cn("rounded-lg border px-2 py-1.5", current ? "border-primary/70 bg-primary/10" : item.ok ? "border-transparent" : "border-border/60")} data-testid={`live-checklist-${item.id}`} data-ok={item.ok ? "true" : "false"} data-current={current ? "true" : undefined}>
-              <p className="flex items-start gap-1.5 font-semibold">
+            <li key={item.id} className={cn("rounded-lg border px-2 py-1.5", open ? "border-yellow-400/80 bg-yellow-400/10" : current ? "border-primary/70 bg-primary/10" : item.ok ? "border-transparent" : "border-border/60")} data-testid={`live-checklist-${item.id}`} data-ok={item.ok ? "true" : "false"} data-current={current ? "true" : undefined} data-phase={item.phase} data-open={open ? "true" : undefined}>
+              {/* Fáze 98: bod = fáze průvodce – klik přepne editor do ní */}
+              <button type="button" onClick={() => onPhase?.(item.phase)} className="flex w-full items-start gap-1.5 text-left font-semibold hover:text-primary" disabled={!onPhase} aria-label={`${item.label} – přepnout editor do této fáze`} data-testid={`live-checklist-${item.id}-open`}>
                 {item.ok ? <CheckCircle2 className="mt-px size-3.5 shrink-0 text-emerald-400" aria-label="hotovo" /> : <Circle className={cn("mt-px size-3.5 shrink-0", current ? "text-primary" : "text-muted-foreground")} aria-label="zbývá" />}
                 <span className="sr-only">{item.ok ? "[✓]" : "[○]"}</span>
                 {item.label}
-              </p>
+              </button>
               <p className="mt-0.5 pl-5 text-[11px] leading-snug text-muted-foreground" data-testid={`live-checklist-${item.id}-detail`}>
                 {item.detail}
               </p>
               {item.id === "base" && !item.ok ? <div className="mt-1 pl-5">{action("Ukázat kde", onShowBase, "live-checklist-show-base")}</div> : null}
-              {item.id === "series" ? <div className="mt-1 pl-5">{action("Změnit řadu/barvu", onChangeSeries, "live-checklist-change-series")}</div> : null}
+              {item.id === "lights" ? <div className="mt-1 pl-5">{action("Změnit řadu/barvu", onChangeSeries, "live-checklist-change-series")}</div> : null}
               {item.id === "panel" && !item.ok ? <div className="mt-1 pl-5">{action("Vybrat rozváděč RH", onPickPanel, "live-checklist-pick-panel", current)}</div> : null}
               {item.id === "output" ? (
                 <div className="mt-1 flex flex-wrap gap-1 pl-5">

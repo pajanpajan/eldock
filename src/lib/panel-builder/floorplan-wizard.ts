@@ -5,6 +5,9 @@
 // Fáze 90: průvodce nikdy sám nepřepne krok – aktivní krok se pamatuje v relaci prohlížeče podle půdorysu (nový půdorys
 // po prvním uložení dostane id a editor se přemontuje), krokové karty nesou živý stav (počet místností, měřítko, prvky,
 // okruhy) a fajfku u hotových kroků.
+// Fáze 98: fázový průvodce – 1 půdorys a místnosti, 2 rozváděč, okna, dveře a vybavení, 3 zásuvkové okruhy
+// a spotřebiče, 4 světla, vypínače a chytrá domácnost, 5 trasy kabelů, kusovník a rozváděč; v každé fázi jen její
+// nástroje a vrstvy (`floorplan-phases.ts`).
 
 import type { FloorplanDraft } from "./floorplan-editor";
 
@@ -27,48 +30,52 @@ export interface WizardStepInfo {
 export const WIZARD_STEPS: readonly WizardStepInfo[] = [
   {
     id: 1,
-    label: "1. Podklad a místnosti",
-    short: "Podklad a místnosti",
-    hint: "Nahrajte podklad a zkalibrujte měřítko, nebo zadejte rozměry X × Y jednotlivých místností a poskládejte je myší k sobě.",
-    next: "Pokračovat na Výběr systému a designu →",
+    label: "1. Půdorys a místnosti",
+    short: "Půdorys a místnosti",
+    hint: "Nahrajte podklad (PDF / DXF / DWG / BIM .ifc / obrázek) a zkalibrujte měřítko, nebo vytvořte místnosti X × Y, nakreslete obdélník či šikmou stěnu a přidejte podlaží.",
+    next: "Další fáze: Rozváděč, okna, dveře a vybavení →",
   },
   {
     id: 2,
-    label: "2. Systém, výrobce a design",
-    short: "Systém a design",
-    hint: "Zvolte úroveň instalace, přívod rozváděče a výrobce, designovou řadu a barvy přístrojů – objednací čísla se přepočítají sama.",
-    next: "Pokračovat na Osazení prvků →",
+    label: "2. Rozváděč, okna, dveře a vybavení",
+    short: "Rozváděč a vybavení",
+    hint: "Umístěte hlavní rozváděč RH (podružný RP, stoupačku), do stěn okna a dveře, do koupelny vanu, sprchu, umyvadlo a WC (ochranné zóny ČSN 33 2000-7-701) a do pokojů nábytek.",
+    next: "Další fáze: Zásuvkové okruhy a spotřebiče →",
   },
   {
     id: 3,
-    label: "3. Osazení prvků a spotřebičů",
-    short: "Osazení prvků",
-    hint: "Nejprve umístěte rozváděč RH, v koupelně vyznačte vanu/sprchu/umyvadlo a poté z levého menu osazujte zásuvky, světla, vypínače a spotřebiče.",
-    next: "Pokračovat na Trasy kabelů →",
+    label: "3. Zásuvkové okruhy a spotřebiče",
+    short: "Zásuvky a spotřebiče",
+    hint: "Osaďte zásuvky (jednozásuvky, dvojzásuvky, IP44, RJ45, TV) a spotřebiče s vlastním jisticím okruhem – zásuvky se samy seskupí do okruhů po nejvýš 10 (ČSN 33 2130 ed. 4).",
+    next: "Další fáze: Světla, vypínače a chytrá domácnost →",
   },
   {
     id: 4,
-    label: "4. Trasy kabelů a výšky",
-    short: "Trasy a výšky",
-    hint: "Zkontrolujte automatické obvodové trasy. Kterýkoliv rovný úsek kabelu můžete chytit myší a posunout v ose X nebo Y.",
-    next: "Pokračovat na Kusovník a Rozváděč →",
+    label: "4. Světla, vypínače a chytrá domácnost",
+    short: "Světla a vypínače",
+    hint: "Zvolte úroveň instalace a design vypínačů, osaďte světla, vypínače a tlačítka, žaluzie, čidla a termostaty a spárujte vypínače se světly.",
+    next: "Další fáze: Trasy kabelů, Kusovník a Rozváděč →",
   },
   {
     id: 5,
-    label: "5. Kusovník, Export a Rozváděč",
-    short: "Kusovník a výstupy",
-    hint: "Zkontrolujte kusovník s objednacími čísly, vyexportujte výkres do PDF nebo CAD a jedním klikem vygenerujte rozváděč.",
+    label: "5. Trasy kabelů, Kusovník a Rozváděč",
+    short: "Trasy, kusovník a rozváděč",
+    hint: "Zkontrolujte obvodové trasy (rovný úsek posunete myší), kontrolu norem a kusovník s krabičkami KOPOS, vyexportujte PDF / DXF a jedním klikem vygenerujte rozváděč.",
     next: null,
   },
 ];
 
 export const wizardStep = (id: WizardStep) => WIZARD_STEPS[id - 1];
 
-/** Událost Interactive Tour video-návodu – kapitola 1–5 videa 2D půdorysu odpovídá kroku 1–5 průvodce. */
+/** Událost Interactive Tour video-návodu – kapitola videa 2D půdorysu přepne průvodce na fázi s jejími nástroji. */
 export const TUTORIAL_CHAPTER_EVENT = "eldock:tutorial-chapter";
-export const stepForTutorialChapter = (chapter: number): WizardStep => (Math.min(5, Math.max(1, Math.round(chapter) + 1)) as WizardStep);
+/** Fáze 98: kapitoly videa (podklad, design, osazení, trasy, kusovník) → fáze průvodce (1, 4, 3, 5, 5). */
+const CHAPTER_PHASES: readonly WizardStep[] = [1, 4, 3, 5, 5];
+export const stepForTutorialChapter = (chapter: number): WizardStep => CHAPTER_PHASES[Math.min(4, Math.max(0, Math.round(chapter)))];
 export const isWizardStep = (value: unknown): value is WizardStep => value === 1 || value === 2 || value === 3 || value === 4 || value === 5;
 export const nextStep = (id: WizardStep): WizardStep => (id < 5 ? ((id + 1) as WizardStep) : 5);
+/** Fáze 98: předchozí fáze (tlačítko „← Předchozí fáze“). */
+export const prevStep = (id: WizardStep): WizardStep => (id > 1 ? ((id - 1) as WizardStep) : 1);
 
 /** Fáze 90: klíč relace prohlížeče s aktivním krokem průvodce (+ „:<id půdorysu>“). */
 export const WIZARD_STEP_KEY = "eldock-floorplan-wizard-step";
@@ -88,7 +95,7 @@ export function initialStep(draft: Pick<FloorplanDraft, "rooms" | "elements" | "
   return 1;
 }
 
-/** Fáze 90: údaje nákresu pro krokové karty průvodce. */
+/** Fáze 90: údaje nákresu pro krokové karty průvodce (fáze 98: počty podle fází). */
 export interface WizardProgress {
   /** Místnosti aktivního podlaží. */
   rooms: number;
@@ -96,9 +103,14 @@ export interface WizardProgress {
   scale: "ok" | "missing";
   /** Zvolený design („ABB Levit · bílá“). */
   design: string;
-  /** Osazené elektrické prvky (bez zařizovacích předmětů a nábytku) a hlavní rozváděč RH. */
-  elements: number;
+  /** Hlavní rozváděč RH osazen. */
   panel: boolean;
+  /** Okna, dveře, nábytek a zařizovací předměty (fáze 2). */
+  fittings: number;
+  /** Zásuvky a spotřebiče s vlastním okruhem (fáze 3). */
+  sockets: number;
+  /** Světla, vypínače, stínění, čidla a termostaty (fáze 4). */
+  lights: number;
   circuits: number;
   /** Délka kabelů zvoleného způsobu vedení [m]. */
   cableM: number;
@@ -115,18 +127,18 @@ export interface WizardStepStatus {
 const plural = (count: number, one: string, few: string, many: string) => `${count} ${count === 1 ? one : count >= 2 && count <= 4 ? few : many}`;
 
 /**
- * Fáze 90: podtitul a fajfka krokových karet – krok 1 hotový s místností a v pořádku měřítkem, krok 2 po jeho opuštění
- * (nebo s osazenými prvky), krok 3 s prvky a rozváděčem RH, krok 4 s okruhy po jeho opuštění, krok 5 s rozváděčem.
+ * Fáze 90 / 98: podtitul a fajfka krokových karet – fáze 1 hotová s místností a v pořádku měřítkem, fáze 2 s rozváděčem RH,
+ * fáze 3 se zásuvkou nebo spotřebičem, fáze 4 se světlem nebo ovladačem, fáze 5 s vygenerovaným rozváděčem.
  */
 export function wizardStatus(progress: WizardProgress, active: WizardStep): WizardStepStatus[] {
-  const passed = (id: WizardStep) => active > id;
+  void active;
   const scale = progress.scale === "ok" ? "měřítko OK" : "měřítko nezkalibrováno";
   return [
     { id: 1, subtitle: progress.rooms ? `${plural(progress.rooms, "místnost", "místnosti", "místností")} · ${scale}` : progress.scale === "missing" ? "podklad · měřítko nezkalibrováno" : "zatím žádná místnost", done: progress.rooms > 0 && progress.scale === "ok" },
-    { id: 2, subtitle: progress.design, done: progress.rooms > 0 && (passed(2) || progress.elements > 0) },
-    { id: 3, subtitle: progress.elements ? `${plural(progress.elements, "prvek", "prvky", "prvků")} · ${progress.panel ? "RH osazen" : "bez rozváděče RH"}` : "zatím nic osazeno", done: progress.elements > 0 && progress.panel },
-    { id: 4, subtitle: progress.circuits ? `${plural(progress.circuits, "okruh", "okruhy", "okruhů")}${progress.cableM > 0 ? ` · ${Math.round(progress.cableM)} m kabelu` : ""}` : "trasy po osazení RH a prvků", done: progress.circuits > 0 && (passed(4) || progress.project) },
-    { id: 5, subtitle: progress.project ? "rozváděč vygenerován" : "PDF · DXF · rozváděč", done: progress.project },
+    { id: 2, subtitle: `${progress.panel ? "RH osazen" : "bez rozváděče RH"}${progress.fittings ? ` · ${plural(progress.fittings, "prvek vybavení", "prvky vybavení", "prvků vybavení")}` : ""}`, done: progress.panel },
+    { id: 3, subtitle: progress.sockets ? plural(progress.sockets, "zásuvka / spotřebič", "zásuvky / spotřebiče", "zásuvek / spotřebičů") : "zatím žádná zásuvka", done: progress.sockets > 0 },
+    { id: 4, subtitle: progress.lights ? `${plural(progress.lights, "světlo / ovladač", "světla / ovladače", "světel / ovladačů")} · ${progress.design}` : progress.design, done: progress.lights > 0 },
+    { id: 5, subtitle: progress.project ? "rozváděč vygenerován" : progress.circuits ? `${plural(progress.circuits, "okruh", "okruhy", "okruhů")}${progress.cableM > 0 ? ` · ${Math.round(progress.cableM)} m kabelu` : ""}` : "PDF · DXF · rozváděč", done: progress.project },
   ];
 }
 

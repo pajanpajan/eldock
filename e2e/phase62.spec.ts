@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { ensureActive, goPhase, phaseForPalette } from "./floorplan-phases";
 
 // Fáze 62: 2D půdorys – sestavy zásuvek a vypínačů ve víceramečku přímo z palety (hotové i vlastní), ▦+ přidání
 // přístroje do rámečku, skrytí kabeláže (při párování vypínačů se světly automaticky) a „Hotovo“ vždy v liště nad
@@ -20,13 +21,18 @@ test("2D půdorys: sestavy ve víceramečku, ▦+, skrytí kabeláže při páro
   await openFloorplan(page);
   const canvas = page.getByTestId("floorplan-canvas");
   const palette = page.getByRole("complementary", { name: "Paleta elektroinstalačních značek" });
-  const choose = (label: string) => palette.getByRole("button", { name: label, exact: false }).first().click();
+  // Fáze 98: značka je v paletě své fáze (rozváděč 2, zásuvky 3, světla a vypínače 4)
+  const choose = async (label: string) => {
+    await phaseForPalette(page, label);
+    await palette.getByRole("button", { name: label, exact: false }).first().click();
+  };
   const bar = page.getByTestId("mode-bar");
   const title = page.getByTestId("mode-bar-title");
   const done = page.getByTestId("mode-done");
   const detail = page.getByTestId("element-detail");
 
   // Místnost a rozváděč – každý krok má název a „Hotovo“ v liště nad půdorysem
+  await goPhase(page, 1);
   await page.getByRole("button", { name: "Kreslit místnost" }).click();
   await expect(bar).toHaveAttribute("data-tone", "draw");
   await canvas.scrollIntoViewIfNeeded();
@@ -42,6 +48,8 @@ test("2D půdorys: sestavy ve víceramečku, ▦+, skrytí kabeláže při páro
 
   // Hotová sestava 3× jednozásuvka (panel sestav nad paletou): náhled celé sestavy u kurzoru, jedním klikem
   // 3 zásuvky v rámečku 3R
+  // Fáze 98: sestavy ve víceramečku jsou v levém sloupci fází 3 a 4
+  await goPhase(page, 3);
   const sets = page.getByRole("region", { name: "Sestavy ve víceramečku" });
   await sets.locator('[data-assembly="set-3z"]').click();
   await expect(title).toContainText("Vkládání sestavy: 3× jednozásuvka (3R)");
@@ -71,6 +79,7 @@ test("2D půdorys: sestavy ve víceramečku, ▦+, skrytí kabeláže při páro
   await page.keyboard.press("Escape");
 
   // ▦+ v liště značky přidá stejný přístroj, „Přidat do rámečku“ v detailu jiný; plný rámeček (5R) další nepřijme
+  await ensureActive(page, canvas.locator('[data-element="socket"]').first());
   await canvas.locator('[data-element="socket"]').first().click();
   await canvas.getByTestId("element-toolbar").getByRole("button", { name: "Přidat stejný přístroj vedle do rámečku" }).click();
   await expect(canvas.locator('[data-testid="frame-outline"][data-gangs="4"]')).toHaveCount(1);
@@ -94,6 +103,8 @@ test("2D půdorys: sestavy ve víceramečku, ▦+, skrytí kabeláže při páro
   await choose("Stropní svítidlo");
   await canvas.click({ position: { x: 560, y: 460 } });
   await page.keyboard.press("Escape");
+  await goPhase(page, 5);
+  await ensureActive(page, canvas.locator('[data-element="switch-1"]').first());
   await canvas.locator('[data-element="switch-1"]').first().click();
   await canvas.getByTestId("element-toolbar").getByRole("button", { name: "Přiřadit vypínač ke světlu" }).click();
   await expect(bar).toHaveAttribute("data-tone", "pair");

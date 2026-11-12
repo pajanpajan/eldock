@@ -26,11 +26,12 @@ test("🏠 rozváděč ze soupisu místností, ✓ stav kroků, ✏️ hlavička
   await expect(page.getByTestId("symbol--Q1")).toBeVisible();
   await expect(page.getByText("📍 Jablonec, Mírové nám. 1")).toBeVisible();
 
-  // Kroky projektu se stavem: osazení je hotové, dokumentace rozpracovaná
+  // Kroky projektu se stavem: osazení (část 1a) je hotové, fáze 4 dokumentace rozpracovaná (fáze 98: 4 fáze projektu)
   const steps = page.getByRole("navigation", { name: "Kroky projektu" });
   await expect(steps.locator('[data-step="recognition"]')).toHaveAttribute("data-done", "true");
   await expect(steps.locator('[data-step="recognition"]')).toContainText("✓ Hotovo");
-  await expect(steps.locator('[data-step="documentation"]')).toContainText("Rozpracováno");
+  await expect(steps.getByTestId("panel-phase-4")).toHaveAttribute("data-done", "false");
+  await expect(steps.getByTestId("panel-phase-4-status")).toHaveText("PDF · kusovník · štítky");
 
   // Přehled: hledání + ✏️ úprava hlavičky
   await page.goto("/panel-builder");
@@ -95,8 +96,9 @@ test.describe("veřejná část bez přihlášení", () => {
 
   test("SEO: robots.txt, sitemap.xml, náhled odkazu, metadata a JSON-LD", async ({ page, request }) => {
     const robotsTxt = await (await request.get("/robots.txt")).text();
-    expect(robotsTxt).toContain("Disallow: /equipment/");
-    expect(robotsTxt).toContain("Allow: /panel-builder/auth");
+    // Od fáze 96: Allow / pro všechny roboty, zakázané jen /api/ a /superadmin (podrobně e2e/phase96.spec.ts)
+    expect(robotsTxt).toContain("Disallow: /api/");
+    expect(robotsTxt).toContain("Disallow: /superadmin");
     expect(robotsTxt).toContain("Sitemap: https://eldock.cz/sitemap.xml");
     expect(await (await request.get("/sitemap.xml")).text()).toContain("<loc>https://eldock.cz/ukazka-elaboratu</loc>");
     const og = await request.get("/opengraph-image");
@@ -107,8 +109,9 @@ test.describe("veřejná část bez přihlášení", () => {
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", "https://eldock.cz");
     await expect(page.locator('meta[property="og:image"]').first()).toHaveAttribute("content", /opengraph-image/);
     await expect(page.locator('meta[name="twitter:card"]')).toHaveAttribute("content", "summary_large_image");
-    const ld = JSON.parse((await page.locator('script[type="application/ld+json"]').textContent()) ?? "{}") as { "@graph": { "@type": string }[] };
-    expect(ld["@graph"].map((node) => node["@type"])).toEqual(["Organization", "SoftwareApplication"]);
+    // Od fáze 96 je JSON-LD webu (Organization, WebSite, SoftwareApplication) v layoutu – první skript stránky
+    const ld = JSON.parse((await page.locator('script[type="application/ld+json"]').first().textContent()) ?? "{}") as { "@graph": { "@type": string }[] };
+    expect(ld["@graph"].map((node) => node["@type"])).toEqual(["Organization", "WebSite", "SoftwareApplication"]);
   });
 
   test("📄 vzorový 6listový elaborát na úvodní stránce bez registrace", async ({ page }) => {

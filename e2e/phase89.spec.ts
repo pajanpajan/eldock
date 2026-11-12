@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 // Fáze 89: místnost zadáním rozměrů X × Y, přesun tažením s magnetickým přichycením ke stěně sousední místnosti,
-// průvodce 2D půdorysem v 5 krocích a trvalé přepnutí do kompaktní CAD lišty (localStorage).
+// průvodce 2D půdorysem v 5 krocích (fáze 98: fázový průvodce) a trvalé přepnutí do kompaktní CAD lišty (localStorage).
 test.describe.configure({ mode: "serial" });
 
 async function openNew(page: Page) {
@@ -78,21 +78,22 @@ test("🧭 Průvodce v 5 krocích a trvalý kompaktní režim bez průvodce (loc
   test.setTimeout(240_000);
   await openNew(page);
   const wizard = page.getByTestId("floorplan-wizard");
-  const steps: [string, string][] = [
-    ["2", "device-appearance"],
-    ["3", "symbol-scale"],
-    ["4", "cable-view-color"],
-    ["5", "wizard-generate"],
+  // Fáze 98: fáze 2 přívod a typ prostoru, 3 zásuvky (velikost značek), 4 design vypínačů, 5 trasy a rozváděč
+  const steps: [string, string[]][] = [
+    ["2", ["site-settings", "floorplan-supply"]],
+    ["3", ["symbol-scale", "wizard-boxes"]],
+    ["4", ["design-card", "device-appearance"]],
+    ["5", ["wizard-generate", "cable-view-color"]],
   ];
-  for (const [step, testId] of steps) {
+  for (const [step, testIds] of steps) {
     await page.getByTestId("wizard-next").click();
     await expect(wizard).toHaveAttribute("data-step", step);
-    await expect(page.getByTestId(testId)).toBeVisible();
+    for (const testId of testIds) await expect(page.getByTestId(testId).first()).toBeVisible();
   }
   await expect(page.getByTestId("wizard-next")).toHaveCount(0);
-  // Odznak zvoleného designu vrací na krok 2, krok jde vybrat i kliknutím
+  // Odznak zvoleného designu vrací na fázi 4 (design vypínačů), fáze jde vybrat i kliknutím
   await page.getByTestId("design-badge").click();
-  await expect(wizard).toHaveAttribute("data-step", "2");
+  await expect(wizard).toHaveAttribute("data-step", "4");
   await page.getByTestId("wizard-step-1").click();
   await expect(page.getByTestId("room-by-size")).toBeVisible();
 

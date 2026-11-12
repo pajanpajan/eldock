@@ -57,8 +57,20 @@ function readStored(): Stored {
   }
 }
 
-export function PaletteAccordion({ sections, focus = null }: { sections: PaletteSection[]; /** Fáze 92: položka trenažéru – její kategorie je rozbalená a položka pulzuje žlutě. */ focus?: string | null }) {
+export function PaletteAccordion({
+  sections,
+  focus = null,
+  autoOpen = false,
+}: {
+  sections: PaletteSection[];
+  /** Fáze 92: položka trenažéru – její kategorie je rozbalená a položka pulzuje žlutě. */
+  focus?: string | null;
+  /** Fáze 98: kategorie fáze průvodce automaticky rozbalené (sbalení platí jen do přepnutí fáze, neukládá se). */
+  autoOpen?: boolean;
+}) {
   const [state, setState] = useState<Stored>(readStored);
+  // Fáze 98: sbalené kategorie fáze (do přepnutí fáze); v režimu jedné kategorie zůstane rozbalená jen první
+  const [session, setSession] = useState<string[]>(() => (autoOpen && readStored().single ? sections.slice(1).map((section) => section.id) : []));
   useEffect(() => {
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -68,11 +80,13 @@ export function PaletteAccordion({ sections, focus = null }: { sections: Palette
   }, [state]);
   const ids = sections.map((section) => section.id);
   const focusSection = focus ? (sections.find((section) => section.entries.some((entry) => entry.id === focus))?.id ?? null) : null;
-  const open = (id: string) => id === focusSection || !state.closed.includes(id);
+  const open = (id: string) => id === focusSection || (autoOpen ? !session.includes(id) : !state.closed.includes(id));
   const allOpen = ids.every(open);
   const allClosed = ids.every((id) => !open(id));
   const toggle = (id: string) =>
-    setState((current) => {
+    autoOpen
+      ? setSession((current) => (current.includes(id) ? (state.single ? ids.filter((other) => other !== id) : current.filter((other) => other !== id)) : [...current, id]))
+      : setState((current) => {
       const isOpen = !current.closed.includes(id);
       if (isOpen) return { ...current, closed: [...current.closed, id] };
       // Režim jedné kategorie: otevřením se ostatní sbalí
@@ -82,13 +96,13 @@ export function PaletteAccordion({ sections, focus = null }: { sections: Palette
     <aside className="flex flex-col gap-1.5 rounded-xl border border-border bg-card p-2" aria-label="Paleta elektroinstalačních značek" data-testid="palette">
       <div className="flex items-center gap-1 px-1 pb-1 text-[11px]" role="group" aria-label="Sbalení kategorií palety">
         <span className="font-bold tracking-wide text-muted-foreground uppercase">Paleta</span>
-        <button type="button" onClick={() => setState((current) => ({ ...current, closed: ids }))} disabled={allClosed} className="ml-auto rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-35" title="Sbalit vše" aria-label="Sbalit vše" data-testid="palette-collapse-all">
+        <button type="button" onClick={() => (autoOpen ? setSession(ids) : setState((current) => ({ ...current, closed: ids })))} disabled={allClosed} className="ml-auto rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-35" title="Sbalit vše" aria-label="Sbalit vše" data-testid="palette-collapse-all">
           <ChevronsDownUp className="size-3.5" aria-hidden />
         </button>
         <button
           type="button"
-          onClick={() => setState((current) => ({ ...current, closed: current.single ? ids.slice(1) : [] }))}
-          disabled={!state.single && allOpen}
+          onClick={() => (autoOpen ? setSession(state.single ? ids.slice(1) : []) : setState((current) => ({ ...current, closed: current.single ? ids.slice(1) : [] })))}
+          disabled={(autoOpen || !state.single) && allOpen}
           className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-35"
           aria-label="Rozbalit vše"
           title={state.single ? "V režimu jedné kategorie se rozbalí první kategorie" : "Rozbalit vše"}
@@ -104,6 +118,10 @@ export function PaletteAccordion({ sections, focus = null }: { sections: Palette
             onChange={(event) => {
               const single = event.target.checked;
               // Zapnutí: zůstane rozbalená jen první otevřená kategorie
+              if (single && autoOpen) {
+                const keep = ids.find((id) => !session.includes(id)) ?? ids[0];
+                setSession(ids.filter((id) => id !== keep));
+              }
               setState((current) => {
                 if (!single) return { ...current, single };
                 const keep = ids.find((id) => !current.closed.includes(id)) ?? ids[0];

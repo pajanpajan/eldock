@@ -59,11 +59,11 @@ export const TRAINER_JOBS: readonly TrainerJob[] = [
     pitch: "Rozváděč má záměrně jednu normovou chybu – najděte ji v Elektro-linteru a opravte jedním klikem.",
     defect: "Wallbox je za proudovým chráničem typu A – dle ČSN 33 2130 ed. 4 musí být okruh s výkonovou elektronikou (EV, FVE, TČ) za chráničem typu B nebo F.",
     steps: [
-      { key: "recognition", text: "Klikněte v kroku 1 v Elektro-linteru na [Opravit 1 klikem] – chránič wallboxu musí být typ B." },
+      { key: "recognition", text: "Klikněte v části 1a v Elektro-linteru na [Opravit 1 klikem] – chránič wallboxu musí být typ B." },
       { key: "tree", text: "Projděte zapojení a hierarchii – FVE, wallbox a TČ mají vlastní chrániče." },
       { key: "enclosure", text: "Zkontrolujte skříň rozváděče a rezervu modulů." },
-      { key: "thermal", text: "Zkontrolujte oteplení skříně v kroku 4." },
-      { key: "documentation", text: "Vytiskněte PDF elaborát v kroku 5." },
+      { key: "thermal", text: "Zkontrolujte oteplení skříně ve fázi 3." },
+      { key: "documentation", text: "Vytiskněte PDF elaborát ve fázi 4." },
     ],
   },
   {

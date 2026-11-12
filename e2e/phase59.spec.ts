@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { ensureActive, goPhase, phaseForPalette } from "./floorplan-phases";
 
 // Fáze 59: Panel Builder – vložený přístroj nezůstane vybraný, úprava a přesun přístroje na liště; 2D půdorys –
 // natočení další značky podle předchozí, víceramček s přisazením, přiřazení vypínače ke světlu, zakreslení změn
@@ -69,10 +70,15 @@ test("2D půdorys: natočení podle předchozí značky, víceramček, vypínač
   await openFloorplan(page);
   const canvas = page.getByTestId("floorplan-canvas");
   const palette = page.getByRole("complementary", { name: "Paleta elektroinstalačních značek" });
-  const choose = (label: string) => palette.getByRole("button", { name: label, exact: false }).first().click();
+  // Fáze 98: značka je v paletě své fáze (rozváděč 2, zásuvky 3, světla a vypínače 4)
+  const choose = async (label: string) => {
+    await phaseForPalette(page, label);
+    await palette.getByRole("button", { name: label, exact: false }).first().click();
+  };
   const detail = page.getByTestId("element-detail");
 
   // Místnost, rozváděč
+  await goPhase(page, 1);
   await page.getByRole("button", { name: "Kreslit místnost" }).click();
   await canvas.scrollIntoViewIfNeeded();
   const box = (await canvas.boundingBox())!;
@@ -104,8 +110,12 @@ test("2D půdorys: natočení podle předchozí značky, víceramček, vypínač
   await canvas.click({ position: { x: 360, y: 150 } });
   await page.keyboard.press("Escape");
   const sockets = canvas.locator('[data-element="socket"]');
+  await ensureActive(page, sockets.nth(2));
   await sockets.nth(2).click();
+  await ensureActive(page, sockets.nth(3));
   await sockets.nth(3).click({ modifiers: ["Shift"] });
+  await goPhase(page, 5);
+  await ensureActive(page, canvas.locator('[data-element="switch-1"]').first());
   await canvas.locator('[data-element="switch-1"]').first().click({ modifiers: ["Shift"] });
   const selection = page.getByTestId("selection-panel");
   await expect(selection).toContainText("Vybráno 3 prvků");
@@ -117,7 +127,9 @@ test("2D půdorys: natočení podle předchozí značky, víceramček, vypínač
   await choose("Stropní svítidlo");
   await canvas.click({ position: { x: 450, y: 300 } });
   await page.keyboard.press("Escape");
+  await goPhase(page, 5);
   await expect(page.getByTestId("plan-checks")).toContainText("svítidlo bez vypínače");
+  await ensureActive(page, canvas.locator('[data-element="switch-1"]').first());
   await canvas.locator('[data-element="switch-1"]').first().click();
   await canvas.getByTestId("element-toolbar").getByRole("button", { name: "Přiřadit vypínač ke světlu" }).click();
   // Fáze 62: krok párování a jeho „Hotovo“ jsou v liště nad půdorysem, ne v bočním panelu
@@ -131,11 +143,14 @@ test("2D půdorys: natočení podle předchozí značky, víceramček, vypínač
   await choose("Stropní svítidlo");
   await canvas.click({ position: { x: 600, y: 450 } });
   await page.keyboard.press("Escape");
+  await goPhase(page, 5);
   await page.getByTestId("check-fix-lights-unpaired").click();
   await expect(page.getByTestId("plan-checks")).toHaveCount(0);
 
   // Úprava PDF → nová příčka v modré barvě s křížovou šrafou, textové pole
   const pdfMenu = async (name: RegExp) => {
+    // Fáze 98: úpravy podkladu (příčky, texty) jsou v levém sloupci fáze 1
+    await goPhase(page, 1);
     await expect(page.getByRole("menu")).toHaveCount(0);
     await page.getByTestId("pdf-edit-menu").click();
     await page.getByRole("menuitem", { name }).click();
@@ -166,8 +181,9 @@ test("2D půdorys: natočení podle předchozí značky, víceramček, vypínač
   await page.getByTestId("floorplan-canvas").screenshot({ path: "test-results/phase59-floor1.png" });
 
   // Druhé podlaží: přidat, stoupací vedení a zásuvky; výpočet zahrne obě podlaží
-  // Fáze 89: správa podlaží je v kroku 1 průvodce pod tlačítkem „🏢 Podlaží“
-  await page.getByTestId("wizard-floors").click();
+  // Fáze 89 / 98: správa podlaží je v levém sloupci fáze 1 (blok „🏢 Podlaží“)
+  await goPhase(page, 1);
+  await expect(page.getByTestId("wizard-floors")).toBeVisible();
   await page.getByTestId("floor-add").click();
   await page.getByTestId("floor-add-form").getByLabel("Název nového podlaží").fill("2. NP");
   await page.getByTestId("floor-add-confirm").click();
@@ -179,6 +195,7 @@ test("2D půdorys: natočení podle předchozí značky, víceramček, vypínač
   await canvas.click({ position: { x: 500, y: 300 } });
   await canvas.click({ position: { x: 560, y: 300 } });
   await page.keyboard.press("Escape");
+  await goPhase(page, 5);
   await expect(page.getByTestId("cable-circuits")).toContainText("(2. NP)");
   await expect(canvas.getByTestId("cable-route").first()).toBeAttached();
   // Fáze 89: přepínač podlaží v řádku průvodce (ve všech krocích)

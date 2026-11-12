@@ -44,7 +44,7 @@ export function partsList(items: readonly DocItem[], enclosure: DocComponent | n
       articleNumber: component?.articleNumber ?? "–",
       typeCode: component?.typeCode ?? "nerozpoznaný přístroj",
       manufacturer: component?.manufacturer ?? "–",
-      description: component?.description ?? "doplnit v kroku 1",
+      description: component?.description ?? "doplnit ve fázi 1a (osazení)",
       quantity: 0,
     };
     row.quantity++;
@@ -133,8 +133,8 @@ export function releaseBlockers(input: { items: readonly (DocItem & { recognitio
   const blockers: string[] = [];
   const unresolved = input.items.filter((item) => item.recognitionStatus !== "VERIFIED" || !item.component);
   if (!input.items.length) blockers.push("Rozváděč nemá žádné přístroje.");
-  if (unresolved.length) blockers.push(`Nepotvrzené přístroje (krok 1): ${unresolved.map((item) => item.designation).join(", ")}.`);
-  if (!input.connected) blockers.push("Strom zapojení není kompletní (krok 2).");
-  if (!input.thermalOk) blockers.push("Výpočet oteplení nevyhovuje (krok 4).");
+  if (unresolved.length) blockers.push(`Nepotvrzené přístroje (fáze 1a): ${unresolved.map((item) => item.designation).join(", ")}.`);
+  if (!input.connected) blockers.push("Strom zapojení není kompletní (fáze 2).");
+  if (!input.thermalOk) blockers.push("Výpočet oteplení nevyhovuje (fáze 3).");
   return blockers;
 }

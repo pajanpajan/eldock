@@ -89,17 +89,20 @@ describe("fáze 90 – průvodce: krok 1 bez automatického přeskoku, krokové 
     expect(resumeStep("4", draft)).toBe(2);
   });
 
-  it("krokové karty: živý podtitul a fajfka u hotových kroků", () => {
-    const base: WizardProgress = { rooms: 3, scale: "ok", design: "ABB Levit · bílá", elements: 0, panel: false, circuits: 0, cableM: 0, project: false };
+  it("krokové karty: živý podtitul a fajfka u hotových fází (fáze 98: rozváděč, zásuvky, světla)", () => {
+    const base: WizardProgress = { rooms: 3, scale: "ok", design: "ABB Levit · bílá", panel: false, fittings: 0, sockets: 0, lights: 0, circuits: 0, cableM: 0, project: false };
     const first = wizardStatus(base, 1);
     expect(first[0]).toEqual({ id: 1, subtitle: "3 místnosti · měřítko OK", done: true });
-    expect(first[1]).toEqual({ id: 2, subtitle: "ABB Levit · bílá", done: false });
+    expect(first[1]).toEqual({ id: 2, subtitle: "bez rozváděče RH", done: false });
+    expect(first[3]).toEqual({ id: 4, subtitle: "ABB Levit · bílá", done: false });
     expect(wizardStatus({ ...base, rooms: 1, scale: "missing" }, 1)[0]).toEqual({ id: 1, subtitle: "1 místnost · měřítko nezkalibrováno", done: false });
     expect(wizardStatus({ ...base, rooms: 5 }, 1)[0].subtitle).toBe("5 místností · měřítko OK");
-    const later = wizardStatus({ ...base, elements: 12, panel: true, circuits: 6, cableM: 84.4 }, 5);
+    const later = wizardStatus({ ...base, panel: true, fittings: 3, sockets: 12, lights: 7, circuits: 6, cableM: 84.4 }, 5);
     expect(later.map((step) => step.done)).toEqual([true, true, true, true, false]);
-    expect(later[2].subtitle).toBe("12 prvků · RH osazen");
-    expect(later[3].subtitle).toBe("6 okruhů · 84 m kabelu");
+    expect(later[1].subtitle).toBe("RH osazen · 3 prvky vybavení");
+    expect(later[2].subtitle).toBe("12 zásuvek / spotřebičů");
+    expect(later[3].subtitle).toBe("7 světel / ovladačů · ABB Levit · bílá");
+    expect(later[4].subtitle).toBe("6 okruhů · 84 m kabelu");
     expect(wizardStatus({ ...base, project: true }, 5)[4]).toEqual({ id: 5, subtitle: "rozváděč vygenerován", done: true });
   });
 

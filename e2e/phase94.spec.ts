@@ -1,5 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
+import { ensureActive, goPhase, goPhaseForGroup, phaseForPalette } from "./floorplan-phases";
+
 // Fáze 94: oficiální data ABB ETIM 9.0 – skutečné fotky v galerii řad (díly s objednacím číslem, dlaždice barvy
 // rámečku, rámečky 1R–5R z dat výrobce), vestavná hloubka přístroje v detailu krabičky, EAN v kusovníku a fotky
 // rozvodnic (nový projekt, výběr skříně, dokumentace).
@@ -32,7 +34,8 @@ async function loaded(image: Locator) {
 test("🖼️ Galerie řad: skutečné fotky ABB s objednacím číslem, fotky rámečků v barvách a rámečky 1R–5R z dat výrobce", async ({ page }) => {
   test.setTimeout(300_000);
   await openNew(page);
-  await page.getByTestId("wizard-step-2").click();
+  // Fáze 98: design vypínačů (galerie řad, výrobce, barvy) je v kartě designu fáze 4
+  await goPhase(page, 4);
   await page.getByTestId("series-gallery-open").click();
   const gallery = page.getByTestId("series-gallery");
   await gallery.getByTestId("gallery-series-Tango").click();
@@ -75,7 +78,8 @@ test("📦 Hloubka přístroje z ETIM v detailu krabičky a EAN v kusovníku", a
   await form.getByTestId("room-size-y").fill("4");
   await form.getByTestId("room-size-create").click();
   // Řada Tango bílá (B): zásuvka 6619A-A06357 B s EAN z dat výrobce
-  await page.getByTestId("wizard-step-2").click();
+  // Fáze 98: design vypínačů (galerie řad, výrobce, barvy) je v kartě designu fáze 4
+  await goPhase(page, 4);
   await page.getByTestId("series-gallery-open").click();
   const gallery = page.getByTestId("series-gallery");
   await gallery.getByTestId("gallery-series-Tango").click();
@@ -83,13 +87,16 @@ test("📦 Hloubka přístroje z ETIM v detailu krabičky a EAN v kusovníku", a
   await gallery.getByTestId("gallery-apply").click();
   await page.getByRole("button", { name: "Použít na celý půdorys" }).click();
   await page.getByTestId("wizard-step-3").click();
+  await goPhaseForGroup(page, "sockets");
   const section = palette.locator('[data-group="sockets"]');
   if ((await section.getAttribute("data-open")) !== "true") await palette.getByTestId("palette-toggle-sockets").click();
+  await phaseForPalette(page, "Jednozásuvka");
   await palette.getByRole("button", { name: "Jednozásuvka", exact: false }).first().click();
   const at = await screen(canvas, 4200, 1150);
   await page.mouse.click(at.x, at.y);
   await page.getByTestId("mode-done").click();
   // Zásuvka Tango 6619A-A06357 B má podle ETIM 40 mm → v KU 68-45 zbývá 5 mm
+  await ensureActive(page, canvas.locator('[data-element="socket"]'));
   await canvas.locator('[data-element="socket"]').click();
   const device = page.getByTestId("element-detail").getByTestId("element-box-device");
   await expect(device).toContainText("40 mm");

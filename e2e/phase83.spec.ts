@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { goPhase } from "./floorplan-phases";
 
 // Fáze 83: nastavitelná plocha 2D půdorysu – výchozí 20 × 16 m, předvolby a vlastní rozměr (5–100 m), rozšíření o 5 m
 // u okraje (jeden krok Zpět s úpravou), „⛶ Přizpůsobit pohled“, jemná mřížka a plocha v razítku PDF i v DXF.
@@ -53,6 +54,7 @@ test("📐 Plocha půdorysu: předvolby, vlastní rozměr, rozšíření u okraj
   await expect(canvas).toHaveAttribute("viewBox", "0 0 20000 16000");
 
   // Místnost nakreslená k pravému okraji → plocha 25 × 16 m
+  await goPhase(page, 1);
   await page.getByRole("button", { name: "Kreslit místnost (obdélník)" }).click();
   await canvas.scrollIntoViewIfNeeded();
   const from = await screen(canvas, 14_000, 2000);

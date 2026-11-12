@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
+import { goPhase, goPhaseForGroup, phaseForPalette } from "./floorplan-phases";
+
 // Fáze 90: krok 1 průvodce bez automatického přeskoku na krok 2 (místnosti jedna za druhou s předvolbou další
 // místnosti, i po prvním uložení a obnovení stránky), krokové karty se živým stavem, okna / dveře / nábytek s žlutým
 // rohem a přichycením ke stěně (PDF i DXF), koupelnové zóny bez falešného poplachu u ZAL_M a MAG, umyvadlový prostor
@@ -42,12 +44,18 @@ function tools(page: Page) {
   return {
     canvas,
     palette,
-    choose: (label: string) => palette.getByRole("button", { name: label, exact: false }).first().click(),
+    // Fáze 98: značka je v paletě své fáze (rozváděč a vybavení 2, zásuvky 3, světla a ovládání 4)
+    choose: async (label: string) => {
+      await phaseForPalette(page, label);
+      await palette.getByRole("button", { name: label, exact: false }).first().click();
+    },
     clickAt: async (x: number, y: number) => {
       const at = await screen(canvas, x, y);
       await page.mouse.click(at.x, at.y);
     },
     openSection: async (group: string) => {
+      // Fáze 98: skupina palety je jen ve své fázi průvodce
+      await goPhaseForGroup(page, group);
       const section = palette.locator(`[data-group="${group}"]`);
       if ((await section.getAttribute("data-open")) !== "true") await palette.getByTestId(`palette-toggle-${group}`).click();
       await expect(section).toHaveAttribute("data-open", "true");
@@ -101,7 +109,9 @@ test("🧭 Krok 1: místnosti jedna za druhou bez přeskoku na krok 2, předvolb
   await expect(page.getByTestId("wizard-step-1")).toHaveAttribute("data-done", "true");
   await expect(page.getByTestId("wizard-step-1")).toContainText("✓");
   await expect(page.getByTestId("wizard-step-2")).toHaveAttribute("aria-current", "step");
-  await expect(page.getByTestId("wizard-step-2-status")).toContainText("ABB");
+  // Fáze 98: fáze 2 hlásí rozváděč a vybavení, zvolený design je u fáze 4 (světla a vypínače)
+  await expect(page.getByTestId("wizard-step-2-status")).toHaveText("bez rozváděče RH");
+  await expect(page.getByTestId("wizard-step-4-status")).toContainText("ABB");
 
   // Názvy krokových karet se nezkracují v běžných šířkách okna a karty se vejdou bez posuvníku
   // (při 1920 px odznak designu a přepínač režimu v řádku karet dřív zkrátily „Podklad a místnosti“)
@@ -128,7 +138,6 @@ test("🛋️ Okna, dveře a nábytek: přichycení ke stěně, levé / pravé o
   // Ložnice 4 × 4 m na volném místě (x 1–5 m, y 1–5 m)
   await roomBySize(page, "Ložnice", "4", "4");
   await expect(canvas.getByTestId("room-Ložnice")).toHaveAttribute("x", "1000");
-  await page.getByTestId("wizard-step-3").click();
   await openSection("architecture");
 
   // Dveře u horní stěny: zárubeň na stěně, křídlo do místnosti (střed 0,4 m od stěny), natočení 0°
@@ -206,7 +215,6 @@ test("🛁 Koupelna: ZAL_M a MAG u vany bez falešné chyby zóny, zásuvka s p�
   const { canvas, choose, clickAt, openSection } = tools(page);
   // Koupelna 3 × 2,5 m (x 1–4 m, y 1–3,5 m), vana pod oknem u horní stěny (hrana vany y 1125–1875 mm)
   await roomBySize(page, "Koupelna", "3", "2,5");
-  await page.getByTestId("wizard-step-3").click();
   await openSection("fixtures");
   await choose("Vana (1700 × 750 mm)");
   await clickAt(2000, 1500);
@@ -222,7 +230,8 @@ test("🛁 Koupelna: ZAL_M a MAG u vany bez falešné chyby zóny, zásuvka s p�
   await choose("Vývod pro motor žaluzie / rolety (u okna)");
   await clickAt(2300, 1060);
   await page.getByTestId("mode-done").click();
-  // Panel kontrol se ukáže jen se zjištěním – chyba zóny 0–2 žádná
+  // Panel kontrol se ukáže jen se zjištěním – chyba zóny 0–2 žádná (fáze 98: varování zón jsou v pravém panelu fáze 3)
+  await goPhase(page, 3);
   await expect(canvas.locator('[data-element="window-contact"]')).toHaveCount(1);
   await expect(canvas.locator('[data-element="blind-motor"]')).toHaveCount(1);
   await expect(page.locator('[data-check^="bath-zone"]')).toHaveCount(0);
@@ -255,7 +264,8 @@ test("🛁 Koupelna: ZAL_M a MAG u vany bez falešné chyby zóny, zásuvka s p�
 test("🎨 Řady ABB: Garant / Variant+ / Praktik bez rámečku se zásuvkou pod víčkem, Decento jako samostatné kulaté přístroje", async ({ page }) => {
   test.setTimeout(240_000);
   await openNew(page);
-  await page.getByTestId("wizard-step-2").click();
+  // Fáze 98: galerie řad je v kartě designu fáze 4
+  await goPhase(page, 4);
   await page.getByTestId("series-gallery-open").click();
   const gallery = page.getByTestId("series-gallery");
   const preview = gallery.getByTestId("gallery-preview");
@@ -285,7 +295,8 @@ test("🎨 Řady ABB: Garant / Variant+ / Praktik bez rámečku se zásuvkou pod
   await expect(gallery.getByTestId("gallery-color")).toHaveCount(4);
   await expect(gallery.getByTestId("gallery-frame-none")).toContainText("pevná dvojice porcelánového středu");
   await expect(preview.locator('[data-outline="decento"]')).toHaveCount(1);
-  await expect(preview.getByTestId("mockup-screw")).toHaveCount(3);
+  // Od fáze 94 mají vypínač a zásuvka Decento fotku výrobce – středový šroubek kreslí jen vektorové náhledy (sestava)
+  await expect(preview.getByTestId("mockup-screw").first()).toBeAttached();
   await gallery.getByTestId("gallery-color").filter({ hasText: "Bílá / třešeň" }).click();
   await page.screenshot({ path: "test-results/phase90-decento.png" });
   await gallery.getByTestId("gallery-apply").click();

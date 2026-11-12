@@ -81,7 +81,7 @@ describe("kusovník a seznam komponent (referenční PDF)", () => {
     const ready = docItems.map((item) => ({ ...item, recognitionStatus: "VERIFIED" }));
     expect(releaseBlockers({ items: ready, connected: true, thermalOk: true })).toEqual([]);
     const blockers = releaseBlockers({ items: ready.map((item, i) => (i === 6 ? { ...item, recognitionStatus: "UNRECOGNIZED", component: null } : item)), connected: false, thermalOk: false });
-    expect(blockers).toEqual(["Nepotvrzené přístroje (krok 1): -F4.", "Strom zapojení není kompletní (krok 2).", "Výpočet oteplení nevyhovuje (krok 4)."]);
+    expect(blockers).toEqual(["Nepotvrzené přístroje (fáze 1a): -F4.", "Strom zapojení není kompletní (fáze 2).", "Výpočet oteplení nevyhovuje (fáze 3)."]);
   });
 });
 

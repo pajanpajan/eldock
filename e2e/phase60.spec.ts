@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { goPhase, phaseForPalette } from "./floorplan-phases";
 
 // Fáze 60: trasy podél stěn, pořadí zásuvek nezávislé na kreslení, rozváděč z půdorysu podle hierarchie od jednoho
 // výrobce a převod hotového rozváděče na jiného výrobce.
@@ -15,7 +16,11 @@ test("půdorys → trasy podél stěn a optimální pořadí → rozváděč Eat
   await page.waitForLoadState("networkidle");
   const canvas = page.getByTestId("floorplan-canvas");
   const palette = page.getByRole("complementary", { name: "Paleta elektroinstalačních značek" });
-  const choose = (label: string) => palette.getByRole("button", { name: label, exact: false }).first().click();
+  // Fáze 98: značka je v paletě své fáze (rozváděč 2, zásuvky 3, světla a vypínače 4)
+  const choose = async (label: string) => {
+    await phaseForPalette(page, label);
+    await palette.getByRole("button", { name: label, exact: false }).first().click();
+  };
 
   // Bez místností trasy pravoúhle (upozornění), po zakreslení místnosti podél stěn
   await choose("Hlavní domovní / bytový rozváděč");
@@ -24,7 +29,9 @@ test("půdorys → trasy podél stěn a optimální pořadí → rozváděč Eat
   // Zásuvky „na přeskáčku“ u horní stěny budoucí místnosti
   for (const x of [520, 200, 600, 280, 420]) await canvas.click({ position: { x, y: 104 } });
   await page.keyboard.press("Escape");
+  await goPhase(page, 5);
   await expect(page.getByTestId("cable-walls")).toContainText("Trasy zatím pravoúhle");
+  await goPhase(page, 1);
   await page.getByRole("button", { name: "Kreslit místnost" }).click();
   await canvas.scrollIntoViewIfNeeded();
   const box = (await canvas.boundingBox())!;
@@ -32,6 +39,8 @@ test("půdorys → trasy podél stěn a optimální pořadí → rozváděč Eat
   await page.mouse.down();
   await page.mouse.move(box.x + 700, box.y + 560, { steps: 6 });
   await page.mouse.up();
+  // Fáze 98: výkaz kabeláže a generování rozváděče jsou v pravém panelu fáze 5
+  await goPhase(page, 5);
   await expect(page.getByTestId("cable-walls")).toContainText("podél stěn");
   await expect(page.getByTestId("cable-walls")).toContainText("kratší než v pořadí kreslení");
   await page.getByTestId("floorplan-canvas").screenshot({ path: "test-results/phase60-walls.png" });

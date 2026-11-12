@@ -3,6 +3,8 @@ import path from "node:path";
 
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
+import { goPhase, phaseForPalette } from "./floorplan-phases";
+
 // Fáze 92: onboarding bez čtecích bublin a dva oddělené světy – trenažér 2D půdorysu (rozdělaný bungalov, 3 úkoly,
 // rozváděč bez kreditu), živý tahák zakázky a rozváděče, tréninkové zakázky AI Panel Builderu, průvodce výrobním
 // závodem (založení haly a stroje, mise noční poruchy) a reálné fotky řad přes Ctrl+V (velín).
@@ -88,9 +90,12 @@ test("živý tahák vlastní zakázky: odškrtává se sám, tlačítka vedou na
   test.setTimeout(300_000);
   await openEditor(page, "/panel-builder/floorplan/novy");
   const list = page.getByTestId("live-checklist");
+  const wizard = page.getByTestId("floorplan-wizard");
   await expect(list).toHaveAttribute("data-current", "base");
+  // Fáze 98: 5 bodů taháku = 5 fází průvodce, bod aktivní fáze je zvýrazněný; řada a barva u fáze 4 (světla a vypínače)
+  await expect(page.getByTestId("live-checklist-base")).toHaveAttribute("data-open", "true");
   await expect(page.getByTestId("live-checklist-change-series")).toBeVisible();
-  await expect(page.getByTestId("live-checklist-series-detail")).toContainText("ABB");
+  await expect(page.getByTestId("live-checklist-lights-detail")).toContainText("ABB");
 
   // 1) místnost X × Y
   const form = page.getByTestId("room-by-size");
@@ -101,28 +106,44 @@ test("živý tahák vlastní zakázky: odškrtává se sám, tlačítka vedou na
   await expect(page.getByTestId("live-checklist-base")).toHaveAttribute("data-ok", "true");
   await expect(list).toHaveAttribute("data-current", "panel");
 
-  // 3) [Vybrat rozváděč RH] rovnou aktivuje pokládku rozváděče
+  // 2) [Vybrat rozváděč RH] přepne do fáze 2 a rovnou aktivuje pokládku rozváděče
   const room = await page.locator('[data-room="Obývací pokoj"]').first().evaluate((node) => {
     const box = (node as SVGGraphicsElement).getBBox();
     return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
   });
   await page.getByTestId("live-checklist-pick-panel").click();
+  await expect(wizard).toHaveAttribute("data-step", "2");
+  await expect(page.getByTestId("live-checklist-panel")).toHaveAttribute("data-open", "true");
   await clickAt(page, room.x - 1200, room.y);
   await expect(page.getByTestId("live-checklist-panel")).toHaveAttribute("data-ok", "true");
+  await expect(list).toHaveAttribute("data-current", "sockets");
+  await page.keyboard.press("Escape");
 
-  // 4) zásuvka a světlo – živé počty
+  // 3) zásuvka – klik na bod taháku přepne do fáze 3, živé počty
   const palette = page.getByRole("complementary", { name: "Paleta elektroinstalačních značek" });
+  await page.getByTestId("live-checklist-sockets-open").click();
+  await expect(wizard).toHaveAttribute("data-step", "3");
+  await phaseForPalette(page, "Dvojzásuvka");
   await palette.getByRole("button", { name: "Dvojzásuvka", exact: false }).first().click();
   await clickAt(page, room.x + 800, room.y);
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("live-checklist-sockets")).toHaveAttribute("data-ok", "true");
+  await expect(page.getByTestId("live-checklist-sockets-detail")).toHaveText("1 zásuvka · 0 spotřebičů");
+  await expect(list).toHaveAttribute("data-current", "lights");
+
+  // 4) světlo ve fázi 4
+  await page.getByTestId("live-checklist-lights-open").click();
+  await expect(wizard).toHaveAttribute("data-step", "4");
+  await phaseForPalette(page, "Stropní svítidlo");
   await palette.getByRole("button", { name: "Stropní svítidlo", exact: false }).first().click();
   await clickAt(page, room.x, room.y + 600);
   await page.keyboard.press("Escape");
-  await expect(page.getByTestId("live-checklist-devices")).toHaveAttribute("data-ok", "true");
-  await expect(page.getByTestId("live-checklist-devices-detail")).toHaveText("1 zásuvka · 1 světlo · 0 spotřebičů");
+  await expect(page.getByTestId("live-checklist-lights")).toHaveAttribute("data-ok", "true");
+  await expect(page.getByTestId("live-checklist-lights-detail")).toContainText("1 světlo · 0 ovladačů");
   await expect(list).toHaveAttribute("data-current", "output");
   await expect(page.getByTestId("live-checklist-bom")).toContainText("KOPOS");
 
-  // 2) [Změnit řadu/barvu] otevře galerii řad
+  // [Změnit řadu/barvu] otevře galerii řad (fáze 4)
   await page.getByTestId("live-checklist-change-series").click();
   await expect(page.getByTestId("series-gallery")).toBeVisible();
   await page.keyboard.press("Escape");
@@ -292,7 +313,8 @@ test("reálné fotky řad: velín vloží fotku přes Ctrl+V, uloží se trvale 
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("SuperAdmin velín", { timeout: 60_000 });
 
     await openEditor(page, "/panel-builder/floorplan/novy");
-    await page.getByTestId("wizard-step-2").click();
+    // Fáze 98: galerie řad je v kartě designu fáze 4
+    await goPhase(page, 4);
     await page.getByTestId("series-gallery-open").click();
     const gallery = page.getByTestId("series-gallery");
     await gallery.getByTestId("gallery-series-Tango").click();
@@ -324,7 +346,7 @@ test("reálné fotky řad: velín vloží fotku přes Ctrl+V, uloží se trvale 
     const other = await browser.newContext({ storageState: "e2e/.auth/state.json" });
     const view = await other.newPage();
     await openEditor(view, "/panel-builder/floorplan/novy");
-    await view.getByTestId("wizard-step-2").click();
+    await goPhase(view, 4);
     await view.getByTestId("series-gallery-open").click();
     const otherGallery = view.getByTestId("series-gallery");
     await otherGallery.getByTestId("gallery-series-Tango").click();

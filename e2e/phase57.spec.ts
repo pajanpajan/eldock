@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { ensureActive, goPhase, phaseForPalette } from "./floorplan-phases";
 
 // Fáze 57: 2D půdorys – úprava PDF podkladu (otočení, zoom, ořez, kalibrace s ověřením), značky dle ČSN EN 60617-11,
 // rezerva kabeláže, prostředí dle ČSN 33 2000-5-51 před generováním a ovládání podle úrovně instalace.
@@ -73,12 +74,13 @@ test("PDF podklad se zobrazí hned po nahrání (bez obnovení stránky)", async
   // Ořez tažením a jeho zrušení
   const canvas = page.getByTestId("floorplan-canvas");
   await menu(/Oříznout podklad/);
-  // Souřadnice až po otevření menu (klik na tlačítko může posunout stránku)
+  // Souřadnice až po otevření menu (klik na tlačítko může posunout stránku); fáze 98: plátno vyplní sloupec na výšku
+  // okna a výkres je v něm vystředěný – souřadnice podle obrázku podkladu, ne podle rámečku plátna
   await canvas.scrollIntoViewIfNeeded();
-  const box = (await canvas.boundingBox())!;
-  await page.mouse.move(box.x + box.width * 0.02, box.y + box.height * 0.02);
+  const sheet = (await background.boundingBox())!;
+  await page.mouse.move(sheet.x + sheet.width * 0.02, sheet.y + sheet.height * 0.02);
   await page.mouse.down();
-  await page.mouse.move(box.x + box.width * 0.52, box.y + box.height * 0.52, { steps: 5 });
+  await page.mouse.move(sheet.x + sheet.width * 0.52, sheet.y + sheet.height * 0.52, { steps: 5 });
   await page.mouse.up();
   await expect(page.getByTestId("floorplan-scale")).toContainText("7,5 × 5,3 m");
   await menu(/Zrušit ořez/);
@@ -87,9 +89,11 @@ test("PDF podklad se zobrazí hned po nahrání (bez obnovení stránky)", async
   // Kalibrace: horní stěna 742 pt = 261,8 mm × 50 = 13,09 m, kontrola proti měřítku výkresu 1 : 50
   await expect(page.getByTestId("calibration-state")).toHaveText("Měřítko nekalibrováno");
   await menu(/Kalibrovat měřítko/);
-  const at = (xPt: number, yPt: number) => ({ x: (xPt / 842) * box.width, y: (yPt / 595) * box.height });
-  await canvas.click({ position: at(50, 50) });
-  await canvas.click({ position: at(792, 50) });
+  const box = (await background.boundingBox())!;
+  const at = (xPt: number, yPt: number) => ({ x: box.x + (xPt / 842) * box.width, y: box.y + (yPt / 595) * box.height });
+  const click = (point: { x: number; y: number }) => page.mouse.click(point.x, point.y);
+  await click(at(50, 50));
+  await click(at(792, 50));
   const dialog = page.getByTestId("calibration-dialog");
   await dialog.getByLabel("Skutečná délka kóty").fill("13088 mm");
   await dialog.getByLabel("Měřítko výkresu").selectOption("50");
@@ -99,8 +103,8 @@ test("PDF podklad se zobrazí hned po nahrání (bez obnovení stránky)", async
   await expect(page.getByTestId("calibration-state")).toHaveText("Měřítko neověřeno");
 
   // Ověření druhou (kolmou) kótou: pravá stěna 495 pt = 8,73 m; s odchylkou nad 2 % potvrdit nejde
-  await canvas.click({ position: at(792, 50) });
-  await canvas.click({ position: at(792, 545) });
+  await click(at(792, 50));
+  await click(at(792, 545));
   const verify = page.getByTestId("calibration-verify");
   await verify.getByLabel("Délka ověřovací kóty").fill("9,5 m");
   await expect(verify.getByTestId("verify-result")).toContainText("větší než ±2 %");
@@ -109,6 +113,8 @@ test("PDF podklad se zobrazí hned po nahrání (bez obnovení stránky)", async
   await expect(verify.getByTestId("verify-result")).toContainText("Měřítko sedí");
   await verify.getByTestId("verify-confirm").click();
   await expect(page.getByTestId("calibration-state")).toHaveText("✓ Měřítko ověřeno");
+  // Fáze 98: kontrola před generováním je v kartě kabeláže fáze 5
+  await goPhase(page, 5);
   await expect(page.getByTestId("generation-checklist")).toContainText("Měřítko ověřeno");
   await page.getByTestId("floorplan-canvas").screenshot({ path: "test-results/phase57-pdf.png" });
 });
@@ -124,9 +130,14 @@ test("značky dle ČSN EN 60617-11, přesun / otočení / mazání, úroveň ins
   await page.waitForLoadState("networkidle");
   const canvas = page.getByTestId("floorplan-canvas");
   const palette = page.getByRole("complementary", { name: "Paleta elektroinstalačních značek" });
-  const choose = (label: string) => palette.getByRole("button", { name: label, exact: false }).first().click();
+  // Fáze 98: značka je v paletě své fáze (rozváděč 2, zásuvky 3, světla a vypínače 4)
+  const choose = async (label: string) => {
+    await phaseForPalette(page, label);
+    await palette.getByRole("button", { name: label, exact: false }).first().click();
+  };
 
   // Místnost a rozváděč
+  await goPhase(page, 1);
   await page.getByRole("button", { name: "Kreslit místnost" }).click();
   await canvas.scrollIntoViewIfNeeded();
   const box = (await canvas.boundingBox())!;
@@ -184,25 +195,29 @@ test("značky dle ČSN EN 60617-11, přesun / otočení / mazání, úroveň ins
   await canvas.click({ position: { x: 420, y: 200 } });
   await page.keyboard.press("Escape");
   for (const index of [0, 1]) {
+    await ensureActive(page, canvas.locator('[data-element="switch-1"]').nth(index));
     await canvas.locator('[data-element="switch-1"]').nth(index).click();
     await page.getByRole("button", { name: "🔗 Přiřadit ke světlu" }).click();
     await canvas.getByRole("button", { name: /^Stropní svítidlo/ }).click();
     await page.keyboard.press("Escape");
   }
+  await ensureActive(page, canvas.locator('[data-element="switch-1"]').first());
   await canvas.locator('[data-element="switch-1"]').first().click();
   await expect(page.getByTestId("switch-number")).toContainText("řazení č. 6");
+  // Fáze 98: výkaz kabeláže a rezerva v pravém panelu / levé paletě fáze 5
+  await goPhase(page, 5);
   await expect(page.getByTestId("cable-buy")).toContainText("CYKY-O");
 
   // Rezerva kabeláže v %
   const optimized = page.getByTestId("cable-totals").locator('[data-mode="OPTIMIZED"]');
   const length10 = await optimized.textContent();
-  await page.getByTestId("wizard-step-4").click();
   await page.getByLabel("Rezerva kabeláže [%]").fill("25");
   await expect(optimized).not.toHaveText(length10 ?? "");
   await expect(page.getByTestId("cable-panel")).toContainText("rezervy 25 %");
 
   // Úroveň instalace „sběrnice“: převod vypínačů na sběrnicová tlačítka, nová paleta, sběrnicová linka místo CYKY-O
-  await page.getByTestId("wizard-step-2").click();
+  // Fáze 98: úroveň instalace v kartě designu fáze 4
+  await goPhase(page, 4);
   await page.getByTestId("install-methodology").getByLabel("Úroveň instalace").selectOption("bus_loxone");
   const conversion = page.getByTestId("level-conversion");
   await expect(conversion).toContainText("Sběrnicové tlačítko 1násobné");
@@ -212,6 +227,7 @@ test("značky dle ČSN EN 60617-11, přesun / otočení / mazání, úroveň ins
   await expect(palette.getByRole("button", { name: /Sběrnicové tlačítko 4násobné/ })).toBeVisible();
   await expect(palette.getByRole("button", { name: /Vypínač č\. 1/ })).toHaveCount(0);
   await expect(page.getByTestId("level-note")).toContainText("sběrnicové lince");
+  await goPhase(page, 5);
   await expect(page.getByTestId("cable-buy")).toContainText("KNX");
   await expect(page.getByTestId("cable-buy")).not.toContainText("CYKY-O");
   await expect(canvas.getByTestId("bus-line")).toBeAttached();

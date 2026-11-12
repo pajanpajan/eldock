@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { goPhase, phaseForPalette } from "./floorplan-phases";
 
 // Fáze 74: soupis okruhů s vrstvami a výběrem okruhu (úprava trasy jen u něj), plovoucí nabídka okruhu u zásuvky,
 // podružný rozváděč s přiřazením okruhů a generováním propojených rozváděčů, ochranná zóna umyvadla, barva rámečku
@@ -78,6 +79,7 @@ async function openHouse(page: Page) {
     await page.goto("/panel-builder/floorplan/novy");
     await expect(page.getByTestId("floorplan-canvas")).toBeVisible({ timeout: 30_000 });
   }).toPass({ timeout: 240_000 });
+  await goPhase(page, 5);
   await expect(page.getByTestId("circuit-list")).toBeVisible({ timeout: 30_000 });
 }
 
@@ -162,6 +164,7 @@ test("soupis okruhů, vrstvy, výběr okruhu a úprava trasy jen u něj; podruž
 
   // Nový podružný rozváděč z palety dostane kód RP2
   const palette = page.getByRole("complementary", { name: "Paleta elektroinstalačních značek" });
+  await phaseForPalette(page, /Podružný rozváděč \(RP\)/);
   await palette.getByRole("button", { name: /Podružný rozváděč \(RP\)/ }).click();
   const at = await screen(page, 2000, 9000);
   await page.mouse.click(at.x, at.y);
@@ -181,9 +184,11 @@ test("umyvadlo s ochrannou zónou, barva rámečku zvlášť, rozváděč RH + R
   await page.keyboard.press("Escape");
 
   // Barva rámečku jiná než klapka → vzhled v soupisu domovní instalace
-  await page.getByTestId("wizard-step-2").click();
+  // Fáze 98: výrobce, řada, barva a úroveň instalace v kartě designu fáze 4
+  await goPhase(page, 4);
   await page.getByTestId("frame-colors").getByTestId("frame-color").filter({ hasText: "Bílá (B)" }).click();
   await page.getByRole("button", { name: /Použít na celý půdorys/ }).click();
+  await goPhase(page, 5);
   await expect(page.getByTestId("wiring-inventory")).toContainText("rámeček Bílá (B) · klapka Černá (N)");
 
   // Generování: hlavní rozváděč s přívodem a propojený podružný rozváděč RP1 (1 kredit)

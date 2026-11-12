@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { panelBuilderGuard } from "@/components/panel-builder/access";
 import { LabelSheet } from "@/components/panel-builder/LabelSheet";
-import { PanelSteps } from "@/components/panel-builder/PanelSteps";
+import { NextStepBar, PanelSteps } from "@/components/panel-builder/PanelSteps";
 import { ProjectHeader } from "@/components/panel-builder/ProjectHeader";
 import { railCapacities } from "@/lib/panel-builder/rails";
 import { vectorDeviceFrom } from "@/lib/panel-builder/vector-symbols";
@@ -35,7 +35,8 @@ export default async function PanelLabelsPage({ params }: PageProps<"/panel-buil
       `}</style>
       <div className="no-print">
         <ProjectHeader project={project} />
-        <PanelSteps project={project} current="documentation" />
+        {/* Fáze 98: štítky = část 4b fáze „4. Dokumentace, Kusovník & Štítky“ */}
+        <PanelSteps project={project} current="labels" />
       </div>
       <LabelSheet
         code={project.code}
@@ -43,6 +44,7 @@ export default async function PanelLabelsPage({ params }: PageProps<"/panel-buil
         capacities={railCapacities(project)}
         devices={project.items.map((item) => ({ ...vectorDeviceFrom(item), phaseAssignment: item.phaseAssignment, parentItemId: item.parentItemId }))}
       />
+      <NextStepBar project={project} current="labels" />
     </PageTransition>
   );
 }

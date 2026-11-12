@@ -1,27 +1,31 @@
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, CheckCircle2, CircleDashed } from "lucide-react";
 
+import { PhaseLinkCards } from "@/components/phases/PhaseLinkCards";
 import { fitsEnclosure, enclosureNeed } from "@/lib/panel-builder/enclosures";
-import { stepProgress, type StepKey } from "@/lib/panel-builder/project";
+import {
+  PANEL_PHASES,
+  nextPanelPage,
+  panelPageCode,
+  panelPageDone,
+  panelPageHref,
+  panelPageLabel,
+  panelPhase,
+  panelPhaseOf,
+  panelPhaseStatus,
+  panelStepLabel,
+  prevPanelPage,
+  type PanelPage,
+} from "@/lib/panel-builder/panel-phases";
+import { stepProgress } from "@/lib/panel-builder/project";
 import { railCapacities } from "@/lib/panel-builder/rails";
 import { cn } from "@/lib/utils";
 import type { PanelProjectDetail } from "@/server/queries/panel-builder";
 import { documentationState } from "@/server/services/panel-builder";
 
-export type PanelStep = StepKey;
+export type PanelStep = PanelPage;
 
-/** Fáze 75: kroky projektu – nový krok 3 „Skříň rozváděče“ mezi zapojením a oteplením (skříň je vstup oteplení). */
-const STEPS: { key: PanelStep; label: string; short: string; href: (id: string) => string }[] = [
-  { key: "recognition", label: "1. Analýza fotky", short: "Analýza fotky", href: (id) => `/panel-builder/${id}` },
-  { key: "tree", label: "2. Zapojení a hierarchie", short: "Zapojení a hierarchie", href: (id) => `/panel-builder/${id}/tree` },
-  { key: "enclosure", label: "3. Skříň rozváděče", short: "Skříň rozváděče", href: (id) => `/panel-builder/${id}/enclosure` },
-  { key: "thermal", label: "4. Výpočet oteplení a bilance", short: "Výpočet oteplení a bilance", href: (id) => `/panel-builder/${id}/thermal` },
-  { key: "documentation", label: "5. Výstupní dokumentace a PDF export", short: "Dokumentace a PDF", href: (id) => `/panel-builder/${id}/documentation` },
-];
-
-const labelOf = (step: (typeof STEPS)[number], design: boolean) => (design && step.key === "recognition" ? "1. Návrh a osazení" : step.label);
-
-/** Stav kroků projektu (✓ Hotovo / Rozpracováno) – vybraná skříň, do které se návrh vejde = krok 3 hotový. */
+/** Stav kroků projektu (✓ Hotovo / Rozpracováno) – vybraná skříň, do které se návrh vejde = skříň hotová. */
 function progressOf(project: PanelProjectDetail) {
   const { connected, thermal } = documentationState(project);
   const need = enclosureNeed(railCapacities(project), project.items);
@@ -29,73 +33,106 @@ function progressOf(project: PanelProjectDetail) {
   return stepProgress({ items: project.items, status: project.status, connected, thermalOk: thermal.ok, enclosure });
 }
 
-/** Kroky pracovní plochy projektu rozváděče se stavem ✓ Hotovo / Rozpracováno (fáze 48) a tlačítkem Další krok (fáze 75). */
+/**
+ * Fáze 48 / 75 / 98: fázový průvodce projektu rozváděče – 4 krokové karty ve stejném stylu jako 2D půdorys (žlutá
+ * aktivní fáze, zelená ✓ hotová), u fází se dvěma částmi přepínač 1a / 1b (4a / 4b), nápověda fáze a Předchozí / Další.
+ * Na stránce je vždy jen agenda aktivní části – volný přechod tam i zpět.
+ */
 export function PanelSteps({ project, current }: { project: PanelProjectDetail; current: PanelStep }) {
-  const done = progressOf(project);
+  const progress = progressOf(project);
   const design = project.designMode === "DESIGN";
-  const index = STEPS.findIndex((step) => step.key === current);
-  const next = STEPS[index + 1] ?? null;
+  const phase = panelPhaseOf(current);
+  const info = panelPhase(phase);
+  const status = panelPhaseStatus(progress);
+  const previous = prevPanelPage(current);
+  const next = nextPanelPage(current);
   return (
-    <nav aria-label="Kroky projektu" className="mb-6 flex flex-wrap items-center gap-2 border-b border-border pb-3">
-      {STEPS.map((step) => (
-        <Link
-          key={step.key}
-          href={step.href(project.id)}
-          aria-current={step.key === current ? "page" : undefined}
-          data-step={step.key}
-          data-done={done[step.key] ? "true" : "false"}
-          className={cn(
-            "touch-target flex items-center gap-2 rounded-md px-3 text-sm transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-            step.key === current ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground",
-          )}
-        >
-          {labelOf(step, design)}
-          <span
-            className={cn(
-              "flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-semibold",
-              done[step.key] ? (step.key === current ? "bg-primary-foreground/20" : "bg-emerald-500/15 text-emerald-300") : step.key === current ? "bg-primary-foreground/15" : "bg-muted text-muted-foreground",
-            )}
-          >
-            {done[step.key] ? <CheckCircle2 className="size-3" aria-hidden /> : <CircleDashed className="size-3" aria-hidden />}
-            {done[step.key] ? "✓ Hotovo" : "Rozpracováno"}
+    <nav aria-label="Kroky projektu" className="no-print mb-6 flex flex-col gap-1.5 rounded-xl border border-border bg-card p-1.5 print:hidden" data-testid="panel-phase-stepper" data-phase={phase} data-page={current}>
+      <PhaseLinkCards
+        label="Fáze projektu rozváděče"
+        testId="panel-phase-cards"
+        active={phase}
+        items={PANEL_PHASES.map((item) => {
+          const state = status[item.id - 1];
+          return { id: item.id, title: item.label, subtitle: state.subtitle, hint: item.hint, href: panelPageHref(item.pages[0], project.id), done: state.done, testId: `panel-phase-${item.id}` };
+        })}
+      />
+      <div className="flex flex-wrap items-center gap-2 px-0.5">
+        {info.pages.length > 1 ? (
+          <span className="flex flex-wrap items-center gap-1" role="group" aria-label={`Části fáze ${info.label}`} data-testid="panel-subpages">
+            {info.pages.map((page) => {
+              const active = page === current;
+              const done = panelPageDone(page, progress);
+              return (
+                <Link
+                  key={page}
+                  href={panelPageHref(page, project.id)}
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "touch-target flex items-center gap-1.5 rounded-md border px-2.5 text-sm transition-colors",
+                    active ? "border-yellow-400 bg-yellow-400/15 font-semibold text-foreground" : "border-border text-muted-foreground hover:border-primary/60 hover:text-foreground",
+                  )}
+                  data-step={page}
+                  data-done={done === null ? undefined : done ? "true" : "false"}
+                  data-testid={`panel-page-${page}`}
+                >
+                  <span className="font-mono text-xs font-bold">{panelPageCode(page)}</span> {panelPageLabel(page, design)}
+                  {done === null ? null : (
+                    <span className={cn("flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-semibold", done ? "bg-emerald-500/15 text-emerald-300" : "bg-muted text-muted-foreground")}>
+                      {done ? <CheckCircle2 className="size-3" aria-hidden /> : <CircleDashed className="size-3" aria-hidden />}
+                      {done ? "✓ Hotovo" : "Rozpracováno"}
+                    </span>
+                  )}
+                </Link>
+              );
+            })}
           </span>
-        </Link>
-      ))}
-      {/* Fáze 75: jasně viditelný další krok vpravo v liště kroků */}
-      {next ? (
-        <Link
-          href={next.href(project.id)}
-          aria-label="Pokračovat na další krok"
-          className="touch-target ml-auto flex items-center gap-2 rounded-md bg-emerald-500 px-4 text-sm font-bold text-zinc-950 shadow-lg shadow-emerald-500/20 transition-colors hover:bg-emerald-400 focus-visible:ring-3 focus-visible:ring-emerald-300/60"
-          data-testid="next-step"
-        >
-          Další krok: {next.short}
-          <ArrowRight className="size-4" aria-hidden />
-        </Link>
-      ) : null}
+        ) : null}
+        <span className="min-w-[14rem] flex-1 text-[11px] leading-tight text-muted-foreground" data-testid="panel-phase-hint">
+          💡 {info.hint}
+        </span>
+        {previous ? (
+          <Link href={panelPageHref(previous, project.id)} className="touch-target flex items-center gap-1.5 rounded-md border border-border px-3 text-sm text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Zpět na předchozí krok (nahoře)" data-testid="prev-step">
+            <ArrowLeft className="size-4" aria-hidden /> {panelStepLabel(current, previous, design)}
+          </Link>
+        ) : null}
+        {next ? (
+          <Link
+            href={panelPageHref(next, project.id)}
+            aria-label="Pokračovat na další krok"
+            className="touch-target flex items-center gap-2 rounded-md bg-emerald-500 px-4 text-sm font-bold text-zinc-950 shadow-lg shadow-emerald-500/20 transition-colors hover:bg-emerald-400 focus-visible:ring-3 focus-visible:ring-emerald-300/60"
+            data-testid="next-step"
+          >
+            Další: {panelStepLabel(current, next, design)}
+            <ArrowRight className="size-4" aria-hidden />
+          </Link>
+        ) : null}
+      </div>
     </nav>
   );
 }
 
-/** Fáze 75: lišta dole na stránce kroku – předchozí krok a výrazný další krok (bez hledání v horní liště). */
+/** Fáze 75 / 98: lišta dole na stránce – předchozí a výrazný další krok průvodce (bez hledání v horní liště). */
 export function NextStepBar({ project, current }: { project: PanelProjectDetail; current: PanelStep }) {
-  const index = STEPS.findIndex((step) => step.key === current);
-  const previous = STEPS[index - 1] ?? null;
-  const next = STEPS[index + 1] ?? null;
-  const done = progressOf(project);
+  const previous = prevPanelPage(current);
+  const next = nextPanelPage(current);
+  const progress = progressOf(project);
+  const done = panelPageDone(current, progress);
   const design = project.designMode === "DESIGN";
   if (!previous && !next) return null;
   return (
-    <div className="no-print sticky bottom-3 z-30 mt-8 flex print:hidden flex-wrap items-center gap-2 rounded-xl border border-border bg-card/95 p-2 shadow-2xl backdrop-blur" role="navigation" aria-label="Přechod mezi kroky" data-testid="next-step-bar">
+    <div className="no-print sticky bottom-3 z-30 mt-8 flex print:hidden flex-wrap items-center gap-2 rounded-xl border border-border bg-card/95 p-2 shadow-2xl backdrop-blur" role="navigation" aria-label="Přechod mezi kroky" data-testid="next-step-bar" data-page={current}>
       {previous ? (
-        <Link href={previous.href(project.id)} className="touch-target flex items-center gap-1.5 rounded-md px-3 text-sm text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Zpět na předchozí krok">
-          <ArrowLeft className="size-4" aria-hidden /> {labelOf(previous, design)}
+        <Link href={panelPageHref(previous, project.id)} className="touch-target flex items-center gap-1.5 rounded-md px-3 text-sm text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Zpět na předchozí krok">
+          <ArrowLeft className="size-4" aria-hidden /> {panelStepLabel(current, previous, design)}
         </Link>
       ) : null}
-      <span className={cn("text-xs", done[current] ? "text-emerald-300" : "text-muted-foreground")}>{done[current] ? "✓ Tento krok je hotový" : "Krok je rozpracovaný – pokračovat můžete i tak"}</span>
+      <span className={cn("text-xs", done ? "text-emerald-300" : "text-muted-foreground")}>
+        Fáze {panelPhaseOf(current)} ze 4 · {done === null ? "štítky vytisknete kdykoli" : done ? "✓ Tento krok je hotový" : "Krok je rozpracovaný – pokračovat můžete i tak"}
+      </span>
       {next ? (
-        <Link href={next.href(project.id)} aria-label="Pokračovat na další krok (dole)" className="touch-target ml-auto flex items-center gap-2 rounded-md bg-emerald-500 px-5 text-sm font-bold text-zinc-950 shadow-lg shadow-emerald-500/20 hover:bg-emerald-400" data-testid="next-step-bottom">
-          Další krok: {labelOf(next, design)} <ArrowRight className="size-4" aria-hidden />
+        <Link href={panelPageHref(next, project.id)} aria-label="Pokračovat na další krok (dole)" className="touch-target ml-auto flex items-center gap-2 rounded-md bg-emerald-500 px-5 text-sm font-bold text-zinc-950 shadow-lg shadow-emerald-500/20 hover:bg-emerald-400" data-testid="next-step-bottom">
+          Další: {panelStepLabel(current, next, design)} <ArrowRight className="size-4" aria-hidden />
         </Link>
       ) : null}
     </div>

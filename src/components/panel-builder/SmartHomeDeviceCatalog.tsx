@@ -207,7 +207,8 @@ export function SmartHomeDeviceCatalog(props: SmartCatalogProps) {
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-border bg-card/60 p-2" data-testid="smart-catalog" data-family={family.id}>
       <div className="flex flex-wrap items-center gap-2">
-        <p className="min-w-0 flex-1 text-xs text-muted-foreground">{family.description}</p>
+        {/* Fáze 98: v úzké kartě designu se tlačítka zalomí pod popis (popis nejde zúžit pod 12rem) */}
+        <p className="min-w-[12rem] flex-1 text-xs text-muted-foreground">{family.description}</p>
         {setup ? (
           <Button type="button" size="sm" variant={chosen ? "default" : "outline"} className="text-xs" onClick={() => props.onSystem(setup.id)} data-testid="smart-catalog-system" aria-pressed={chosen}>
             {chosen ? "✓ " : ""}Systém: {setup.label}
@@ -257,10 +258,14 @@ export function SmartHomeDeviceCatalog(props: SmartCatalogProps) {
           );
         })}
       </div>
-      <div role="tabpanel" className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4" data-testid={current === "din" ? "smart-catalog-din" : `smart-panel-${current}`}>
+      {/* Fáze 98: sloupce karet podle šířky místa (container query) – v kartě designu pravého panelu fáze 4 pod sebou,
+          v širokém menu kompaktní lišty vedle sebe */}
+      <div className="@container">
+      <div role="tabpanel" className="grid gap-2 @lg:grid-cols-2 @3xl:grid-cols-3 @5xl:grid-cols-4" data-testid={current === "din" ? "smart-catalog-din" : `smart-panel-${current}`}>
         {products.map((product) => (
           <DeviceCard key={product.id} product={product} system={system} props={props} />
         ))}
+      </div>
       </div>
       {current === "din" ? <p className="text-[11px] text-emerald-200">Počty a kanály dopočítá výpočet chytré domácnosti do rozváděče; ručně přidané kusy se přičtou (rezerva, rozšíření) a vloží se při generování rozváděče.</p> : null}
     </div>

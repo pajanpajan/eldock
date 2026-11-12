@@ -23,7 +23,8 @@ test.describe("fáze 58 – veřejný web", () => {
     await expect(page.getByTestId("breadcrumbs")).toContainText("Domovní elektroinstalace");
     await expect(page.getByTestId("product-panel-builder")).toBeVisible();
     await expect(page.getByTestId("segment-floorplan")).toContainText("ČSN EN 60617-11");
-    const ld = await page.locator('script[type="application/ld+json"]').first().textContent();
+    // Od fáze 96 je první JSON-LD skript stránky graf webu z layoutu – drobečková navigace je ve vlastním skriptu stránky
+    const ld = (await page.locator('script[type="application/ld+json"]').allTextContents()).join(" ");
     expect(ld).toContain("BreadcrumbList");
 
     await page.getByTestId("cross-link-prumysl").click();
@@ -52,7 +53,7 @@ test("značky přístrojů: knihovna ČSN EN 60617, legenda na Listu 3 a náhled
 
   await page.goto("/panel-builder");
   await page.getByRole("link", { name: /PB-001/ }).click();
-  await page.getByRole("link", { name: /5\. Výstupní dokumentace/ }).click();
+  await page.getByRole("link", { name: /^4\. Dokumentace, Kusovník & Štítky/ }).click();
   const list = page.getByTestId("symbol-datasheets");
   await expect(list.getByTestId("symbol-row").first()).toBeVisible();
   // vzorový rozváděč: hlavní vypínač = odpínač, jističe, chrániče a přepěťová ochrana

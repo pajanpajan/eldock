@@ -23,8 +23,10 @@ test("úvodní stránka: dva produkty; nepřihlášený do Panel Builderu → re
   await expect(page.getByTestId("product-plant")).toContainText("ELDOCK Průmyslový dok – Správa výrobních závodů, dokumentace a revizí");
   await expect(page.getByTestId("product-plant").getByRole("link", { name: "Registrovat výrobní závod" })).toHaveAttribute("href", "/register-plant");
 
-  // Přímý vstup bez přihlášení firmy → /panel-builder/auth
+  // Přímý vstup bez přihlášení firmy: od fáze 96 veřejná vstupní stránka s ukázkou – registrace / přihlášení tlačítkem
   await page.goto("/panel-builder");
+  await expect(page).toHaveURL(/\/panel-builder$/);
+  await page.getByTestId("panel-builder-public-register").click();
   await expect(page).toHaveURL(/\/panel-builder\/auth/);
   await page.goto("/domovni-elektroinstalace");
   await page.getByRole("link", { name: /Spustit AI Panel Builder/ }).click();

@@ -84,12 +84,13 @@ export interface PanelChecklistRow {
   task: string | null;
 }
 
+// Fáze 98: body taháku nesou čísla 4 fází projektu (1a osazení, 1b skříň, 2 strom, 3 oteplení, 4 dokumentace)
 const STEP_LABEL: Record<PanelChecklistKey, string> = {
-  recognition: "1. Návrh a osazení – Elektro-linter",
-  tree: "2. Zapojení a hierarchie",
-  enclosure: "3. Skříň rozváděče",
-  thermal: "4. Oteplení a bilance",
-  documentation: "5. Dokumentace a PDF elaborát",
+  recognition: "1a. Osazení DIN lišt – Elektro-linter",
+  tree: "2. Strom zapojení a fáze",
+  enclosure: "1b. Skříň rozváděče",
+  thermal: "3. Výpočet oteplení IEC 60890",
+  documentation: "4. Dokumentace, kusovník a PDF elaborát",
 };
 
 /** Body taháku s živým stavem; první nehotový je aktuální krok. */
@@ -104,10 +105,10 @@ export function panelChecklist(state: PanelChecklistState, visits: PanelChecklis
       key: "thermal",
       label: STEP_LABEL.thermal,
       ok: state.thermalOk && Boolean(visits.thermal),
-      detail: !state.thermalOk ? "Oteplení nevyhovuje – upravte skříň nebo ztráty" : visits.thermal ? `Vyhovuje${state.thermalTempC !== null ? ` (${state.thermalTempC.toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} °C ve skříni)` : ""}` : "Spočteno – otevřete krok 4 a zkontrolujte výsledek",
+      detail: !state.thermalOk ? "Oteplení nevyhovuje – upravte skříň nebo ztráty" : visits.thermal ? `Vyhovuje${state.thermalTempC !== null ? ` (${state.thermalTempC.toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} °C ve skříni)` : ""}` : "Spočteno – otevřete fázi 3 a zkontrolujte výsledek",
       task: task("thermal"),
     },
-    { key: "documentation", label: STEP_LABEL.documentation, ok: Boolean(visits.printed), detail: visits.printed ? "PDF elaborát vytištěn" : "Otevřete krok 5 a vytiskněte elaborát (Tisk / PDF)", task: task("documentation") },
+    { key: "documentation", label: STEP_LABEL.documentation, ok: Boolean(visits.printed), detail: visits.printed ? "PDF elaborát vytištěn" : "Otevřete fázi 4 a vytiskněte elaborát (Tisk / PDF)", task: task("documentation") },
   ];
 }
 

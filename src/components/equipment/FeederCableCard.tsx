@@ -199,7 +199,7 @@ export function FeederCableCard({
         />
       ) : null}
 
-      <Simulator equipmentId={equipmentId} nodes={nodes} />
+      <LoadSimulator equipmentId={equipmentId} nodes={nodes} />
     </section>
   );
 }
@@ -247,8 +247,11 @@ function Metric({
   );
 }
 
-/** 🧪 Simulátor: přírůstek proudu nového stroje kaskádou přívod → hlavní rozváděč → transformátor. */
-function Simulator({
+/**
+ * 🧪 Simulátor: přírůstek proudu nového stroje kaskádou přívod → hlavní rozváděč → transformátor (fáze 98: i v agendě
+ * „4. Kniha revizí, Legislativa & Simulátor“ závodu nad zvoleným rozváděčem).
+ */
+export function LoadSimulator({
   equipmentId,
   nodes,
 }: {

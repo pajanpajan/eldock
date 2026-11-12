@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { goPhase, phaseForPalette } from "./floorplan-phases";
 
 // Fáze 79: import výkresu DXF do 2D půdorysu – hladiny s barvou a počtem objektů, jednotky z hlavičky (měřítko 1 : 1 bez
 // kalibrace), vyčištění architektonického balastu, ztlumení do šedé s krytím, přichytávání zásuvky k čáře stěny a DWG
@@ -71,12 +72,14 @@ test("DXF: hladiny, jednotky 1 : 1, vyčištění balastu, ztlumení s krytím a
   await expect(canvas.getByTestId("cad-underlay")).toHaveAttribute("opacity", "0.4");
 
   // Přichycení: zásuvka kousek od spodní stěny výkresu (okraj 1 m → stěna y = 1000 + 4000 mm) skončí přesně na čáře
+  await phaseForPalette(page, "Jednozásuvka");
   await page.getByRole("complementary", { name: "Paleta elektroinstalačních značek" }).getByRole("button", { name: "Jednozásuvka" }).first().click();
   const near = await screen(page, 3500, 5000 - 60);
   await page.mouse.move(near.x, near.y);
   await expect(canvas.getByTestId("cad-snap-marker")).toBeVisible();
   await page.mouse.click(near.x, near.y);
   await page.keyboard.press("Escape");
+  await goPhase(page, 5);
   await expect(canvas.locator('[data-element="socket"]')).toHaveCount(1);
   const position = await canvas.locator('[data-element="socket"]').getAttribute("transform");
   expect(position).toMatch(/translate\(3\d{3}(\.\d+)? 5000\)/);

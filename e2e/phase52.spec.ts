@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { goPhase, phaseForPalette } from "./floorplan-phases";
 
 // Fáze 52: metodika ČSN 33 2130 ed. 4 – úroveň instalace a uložení kabelů v 2D půdorysu, světla na RCBO
 // typ A, CYKY-J ke každému vypínači v retrofitu, soupis místností s úrovní instalace a legislativní
@@ -20,6 +21,8 @@ test("📐 2D půdorys: retrofit = CYKY-J k vypínači, světla na RCBO typ A, I
     name: "Paleta elektroinstalačních značek",
   });
   const place = async (label: string, ...points: [number, number][]) => {
+    // Fáze 98: značka je v paletě své fáze
+    await phaseForPalette(page, label);
     await palette
       .getByRole("button", { name: label, exact: false })
       .first()
@@ -27,12 +30,15 @@ test("📐 2D půdorys: retrofit = CYKY-J k vypínači, světla na RCBO typ A, I
     for (const [x, y] of points) await canvas.click({ position: { x, y } });
     await page.keyboard.press("Escape");
   };
+  await goPhase(page, 4);
   await expect(
     palette.getByRole("button", { name: /ABB řazení 1SSo/ }),
   ).toBeVisible();
   await place("Hlavní domovní / bytový rozváděč", [40, 40]);
   await place("Stropní svítidlo", [300, 260]);
   await place("Vypínač č. 1", [160, 220]);
+  // Fáze 98: párování a výkaz kabeláže ve fázi 5 (všechny prvky aktivní)
+  await goPhase(page, 5);
   await canvas.getByRole("button", { name: /^Vypínač č\. 1/ }).click();
   await page.getByRole("button", { name: "🔗 Přiřadit ke světlu" }).click();
   await canvas.getByRole("button", { name: /^Stropní svítidlo/ }).click();
@@ -45,16 +51,18 @@ test("📐 2D půdorys: retrofit = CYKY-J k vypínači, světla na RCBO typ A, I
   );
 
   // Retrofit: v každé krabici vypínače N → CYKY-J, žádné CYKY-O
-  await page.getByTestId("wizard-step-2").click();
+  // Fáze 98: úroveň instalace je v kartě designu fáze 4
+  await goPhase(page, 4);
   const methodology = page.getByTestId("install-methodology");
   await methodology
     .getByLabel("Úroveň instalace")
     .selectOption("smart_retrofit");
+  await goPhase(page, 5);
   await expect(page.getByTestId("cable-buy")).not.toContainText("CYKY-O");
   await expect(page.getByTestId("cable-buy")).toContainText("CYKY-J 3×1,5");
 
   // Uložení A2 (tepelná izolace) → Iz 1,5 mm² = 14 A
-  await page.getByTestId("wizard-step-4").click();
+  await goPhase(page, 5);
   await page.getByTestId("install-cables").getByLabel("Způsob uložení kabelů").selectOption("A2");
   await expect(page.getByTestId("circuit-protection").first()).toContainText(
     "Iz 14 A",

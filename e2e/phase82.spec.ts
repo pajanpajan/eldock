@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { goPhase, phaseForPalette } from "./floorplan-phases";
 
 // Fáze 82: zásuvka na světelném okruhu své místnosti – volba v plovoucí nabídce i v detailu zásuvky, jištění okruhu
 // 10 / 13 A pro celý půdorys, soupis okruhů „Světla + zásuvky“, normový hlídač a sloupec v soupisu místností.
@@ -34,11 +35,13 @@ test("💡 Zásuvka na světelném okruhu: volba u zásuvky, jištění 10 / 13 
     await page.mouse.click(at.x, at.y);
   };
   const place = async (label: string, points: [number, number][]) => {
+    await phaseForPalette(page, label);
     await palette.getByRole("button", { name: label }).first().click();
     for (const [x, y] of points) await clickAt(x, y);
     await page.keyboard.press("Escape");
   };
   // Místnost se světlem, rozváděčem a dvěma zásuvkami
+  await goPhase(page, 1);
   await page.getByRole("button", { name: "Kreslit místnost (obdélník)" }).click();
   const from = await screen(canvas, 1000, 1000);
   const to = await screen(canvas, 7000, 5000);
@@ -50,6 +53,7 @@ test("💡 Zásuvka na světelném okruhu: volba u zásuvky, jištění 10 / 13 
   await place("Hlavní domovní / bytový rozváděč", [[1300, 3000]]);
   await place("Stropní svítidlo", [[4000, 3000]]);
   await place("Jednozásuvka", [[3000, 1300], [6000, 4700]]);
+  await goPhase(page, 5);
   await expect(canvas.locator('[data-element="socket"]')).toHaveCount(2);
 
   // Plovoucí nabídka u zásuvky: 💡 Světelný okruh
@@ -62,11 +66,14 @@ test("💡 Zásuvka na světelném okruhu: volba u zásuvky, jištění 10 / 13 
   await expect(picker.getByTestId("socket-circuit-select")).toHaveValue("lighting");
   await expect(picker.getByTestId("socket-circuit-current")).toContainText("Světla + zásuvky");
   await expect(picker.getByTestId("socket-circuit-current")).toContainText("jistič B10");
+  await goPhase(page, 5);
   await expect(page.getByTestId("circuit-list")).toContainText("Světla + zásuvky");
 
   // Jištění 13 A pro celý půdorys → přehled smíšených okruhů a normový hlídač
   await picker.getByTestId("lighting-socket-rating").getByRole("radio", { name: "B13" }).click();
   await expect(picker.getByTestId("socket-circuit-current")).toContainText("jistič B13");
+  // Fáze 98: přehled zásuvek na světelném okruhu je v kartě zásuvkových okruhů fáze 3
+  await goPhase(page, 3);
   const mixed = page.getByTestId("lighting-socket-circuits");
   await expect(mixed.getByTestId("lighting-socket-row")).toHaveCount(1);
   await expect(mixed.getByTestId("lighting-socket-row")).toContainText("B13");
@@ -75,6 +82,7 @@ test("💡 Zásuvka na světelném okruhu: volba u zásuvky, jištění 10 / 13 
   // Zpět na zásuvkový okruh (automaticky)
   await picker.getByTestId("socket-circuit-select").selectOption("auto");
   await expect(mixed).toHaveCount(0);
+  await goPhase(page, 5);
   await expect(page.getByTestId("circuit-list")).not.toContainText("Světla + zásuvky");
   await page.screenshot({ path: "test-results/phase82-floorplan.png" });
 });

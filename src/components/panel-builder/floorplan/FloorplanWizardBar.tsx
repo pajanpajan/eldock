@@ -3,8 +3,9 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 
+import { phaseArrowClass, phaseBubbleClass, phaseCardClass, phaseSubtitleClass, phaseTitleClass } from "@/components/phases/phase-style";
 import { Button } from "@/components/ui/button";
-import { WIZARD_STEPS, nextStep, wizardStep, type FloorplanUiMode, type WizardStep, type WizardStepStatus } from "@/lib/panel-builder/floorplan-wizard";
+import { WIZARD_STEPS, nextStep, prevStep, wizardStep, type FloorplanUiMode, type WizardStep, type WizardStepStatus } from "@/lib/panel-builder/floorplan-wizard";
 import { cn } from "@/lib/utils";
 
 /**
@@ -67,7 +68,9 @@ export function FloorplanWizardBar({
     <section className="flex flex-col gap-1.5 rounded-xl border border-border bg-card p-1.5" aria-label="Průvodce 2D půdorysem" data-testid="floorplan-wizard" data-step={step}>
       <div className="flex flex-wrap items-center gap-1.5">
         {/* Krokové karty mají přednost – odznak designu a přepínač režimu se při nedostatku místa zalomí pod ně */}
-        <nav className="flex min-w-0 flex-[1_1_62rem] items-stretch gap-0.5 overflow-x-auto" aria-label="Kroky průvodce" data-testid="wizard-stepper">
+        {/* Fáze 98: základ šířky = šířka karet s názvy fází (~71rem) – pravá část lišty se raději zalomí, než aby karty
+            dostaly posuvník */}
+        <nav className="flex min-w-0 flex-[1_1_72rem] items-stretch gap-0.5 overflow-x-auto" aria-label="Kroky průvodce" data-testid="wizard-stepper">
           {WIZARD_STEPS.map((item, index) => {
             const active = item.id === step;
             const state = status?.find((entry) => entry.id === item.id);
@@ -75,7 +78,7 @@ export function FloorplanWizardBar({
             return (
               <Fragment key={item.id}>
                 {index > 0 ? (
-                  <span className={cn("flex shrink-0 items-center px-0.5 text-base font-black", item.id <= step ? "text-yellow-400" : "text-muted-foreground/60")} aria-hidden>
+                  <span className={phaseArrowClass(item.id <= step)} aria-hidden>
                     →
                   </span>
                 ) : null}
@@ -84,32 +87,20 @@ export function FloorplanWizardBar({
                   onClick={() => onStep(item.id)}
                   aria-current={active ? "step" : undefined}
                   aria-label={`${item.label}${state ? ` – ${state.subtitle}` : ""}${done ? " (hotovo)" : ""}`}
-                  className={cn(
-                    "relative flex flex-1 items-center gap-2 rounded-lg border-2 px-2 py-1 text-left transition-colors",
-                    active
-                      ? "border-yellow-400 bg-yellow-400/15 text-foreground shadow-[inset_0_3px_0_0_#facc15,inset_0_-3px_0_0_#facc15,0_0_14px_rgba(250,204,21,0.25)]"
-                      : done
-                        ? "border-emerald-500/60 bg-emerald-500/10 text-foreground hover:border-emerald-400"
-                        : "border-border bg-background/40 text-muted-foreground hover:border-primary/60 hover:text-foreground",
-                  )}
+                  // Fáze 98: stejný vzhled krokových karet jako AI Panel Builder a ELDOCK Průmysl (`phase-style.ts`)
+                  className={phaseCardClass(active, done)}
                   title={item.hint}
                   data-testid={`wizard-step-${item.id}`}
                   data-done={done ? "true" : undefined}
                 >
-                  <span
-                    className={cn(
-                      "flex size-8 shrink-0 items-center justify-center rounded-full border-2 text-sm font-black",
-                      active ? "border-yellow-200 bg-yellow-400 text-zinc-950" : done ? "border-emerald-300 bg-emerald-500 text-white" : "border-zinc-500 bg-zinc-900/40 text-zinc-200",
-                    )}
-                    aria-hidden
-                  >
+                  <span className={phaseBubbleClass(active, done)} aria-hidden>
                     {done ? "✓" : item.id}
                   </span>
                   {/* Název kroku se nezkracuje – určuje nejmenší šířku karty (při nedostatku místa se karty posouvají);
                       podtitulek do šířky karty nepřispívá (w-0 + min-w-full), vyplní ji a dlouhý dostane trojtečku */}
                   <span className="flex-1">
-                    <b className={cn("block whitespace-nowrap text-[13px] font-extrabold leading-tight", active && "text-yellow-100")}>{item.short}</b>
-                    <span className={cn("block w-0 min-w-full truncate text-[11px] leading-tight", active ? "text-yellow-200/90" : "text-muted-foreground")} title={state?.subtitle} data-testid={`wizard-step-${item.id}-status`}>
+                    <b className={phaseTitleClass(active, true)}>{item.short}</b>
+                    <span className={phaseSubtitleClass(active)} title={state?.subtitle} data-testid={`wizard-step-${item.id}-status`}>
                       {state?.subtitle ?? item.label}
                     </span>
                   </span>
@@ -130,6 +121,12 @@ export function FloorplanWizardBar({
           <span className="min-w-0 flex-1 text-right text-[11px] leading-tight text-muted-foreground" data-testid="wizard-hint">
             💡 {info.hint}
           </span>
+          {/* Fáze 98: volný přechod tam i zpět mezi fázemi (data nákresu se nemění) */}
+          {step > 1 ? (
+            <Button type="button" size="sm" variant="outline" className="h-7 shrink-0 gap-1" onClick={() => onStep(prevStep(step))} data-testid="wizard-prev">
+              ← Předchozí fáze
+            </Button>
+          ) : null}
           {info.next ? (
             <Button type="button" size="sm" className="h-7 shrink-0 gap-1" onClick={() => onStep(nextStep(step))} data-testid="wizard-next">
               {info.next}
@@ -138,6 +135,32 @@ export function FloorplanWizardBar({
         </span>
       </div>
     </section>
+  );
+}
+
+/** Fáze 98: navigace fází pod plátnem – „← Předchozí fáze“, pořadí fáze a „Další fáze: … →“. */
+export function PhaseNav({ step, onStep, placement }: { step: WizardStep; onStep: (step: WizardStep) => void; placement: "top" | "bottom" }) {
+  const info = wizardStep(step);
+  return (
+    <nav className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-card px-2 py-1.5" aria-label="Navigace fází průvodce" data-testid={`phase-nav-${placement}`}>
+      {step > 1 ? (
+        <Button type="button" size="sm" variant="outline" className="h-8 gap-1" onClick={() => onStep(prevStep(step))} data-testid={`wizard-prev-${placement}`}>
+          ← Předchozí fáze: {wizardStep(prevStep(step)).short}
+        </Button>
+      ) : (
+        <span />
+      )}
+      <span className="text-xs text-muted-foreground">
+        Fáze {step} z 5 · <b className="text-foreground">{info.short}</b>
+      </span>
+      {info.next ? (
+        <Button type="button" size="sm" className="h-8 gap-1" onClick={() => onStep(nextStep(step))} data-testid={`wizard-next-${placement}`}>
+          {info.next}
+        </Button>
+      ) : (
+        <span />
+      )}
+    </nav>
   );
 }
 

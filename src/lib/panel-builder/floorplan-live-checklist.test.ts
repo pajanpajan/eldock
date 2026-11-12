@@ -10,29 +10,31 @@ import { trainerJob } from "./panel-trainer-presets";
 const el = (id: string, item: string, patch: Partial<EditorElement> = {}): EditorElement => ({ id, item, x: 1500, y: 1500, room: "Pokoj", mountHeightMm: null, frameUnits: 1, series: null, color: null, controls: [], rotation: 0, scale: null, ...patch });
 const check = (draft: FloorplanDraft, generated = false) => liveChecklist(draft, { seriesLabel: "ABB Levit M · Bílá", generated, boxMaker: "KOPOS" });
 
-describe("fáze 92 – tahák zakázky ve 2D půdorysu", () => {
-  it("nový půdorys: jen řada je výchozí, aktuální krok je podklad nebo místnosti", () => {
+describe("fáze 92 / 98 – tahák zakázky ve 2D půdorysu (5 fází průvodce)", () => {
+  it("nový půdorys: body = fáze 1–5, aktuální je půdorys a místnosti", () => {
     const result = check(emptyDraft());
-    expect(result.items.map((item) => [item.id, item.ok])).toEqual([
-      ["base", false],
-      ["series", true],
-      ["panel", false],
-      ["devices", false],
-      ["output", false],
+    expect(result.items.map((item) => [item.id, item.phase, item.ok])).toEqual([
+      ["base", 1, false],
+      ["panel", 2, false],
+      ["sockets", 3, false],
+      ["lights", 4, false],
+      ["output", 5, false],
     ]);
-    expect(result).toMatchObject({ done: 1, current: "base" });
+    expect(result.items.map((item) => item.label)).toEqual(["1. Půdorys a místnosti", "2. Rozváděč, okna, dveře a nábytek", "3. Zásuvkové okruhy a spotřebiče", "4. Světla, vypínače a Smart Home", "5. Kontrola, Kusovník a Rozváděč"]);
+    expect(result).toMatchObject({ done: 0, current: "base" });
   });
 
-  it("odškrtává se samo: místnost nebo zkalibrovaný podklad, rozváděč RH, živé počty prvků, vygenerovaný rozváděč", () => {
+  it("odškrtává se samo: místnost nebo zkalibrovaný podklad, rozváděč RH, zásuvky a spotřebiče, světla s řadou, vygenerovaný rozváděč", () => {
     const rooms = { ...emptyDraft(), rooms: [{ id: "r1", name: "Pokoj", x: 1000, y: 1000, w: 4000, h: 3000 }] };
-    expect(check(rooms)).toMatchObject({ done: 2, current: "panel" });
+    expect(check(rooms)).toMatchObject({ done: 1, current: "panel" });
     const underlay = { ...emptyDraft(), background: { src: "/x.png" } as never, calibration: { ...emptyDraft().calibration, state: "set" as const } };
     expect(check(underlay).items[0].ok).toBe(true);
     expect(check({ ...emptyDraft(), background: { src: "/x.png" } as never }).items[0].ok).toBe(false);
     const full = { ...rooms, elements: [el("rh", "panel"), el("z1", "double-socket"), el("z2", "socket"), el("l1", "ceiling-light"), el("tr", "oven")] };
     const result = check(full);
     expect(result).toMatchObject({ done: 4, current: "output" });
-    expect(result.items.find((item) => item.id === "devices")?.detail).toBe("2 zásuvky · 1 světlo · 1 spotřebič");
+    expect(result.items.find((item) => item.id === "sockets")?.detail).toBe("2 zásuvky · 1 spotřebič");
+    expect(result.items.find((item) => item.id === "lights")?.detail).toBe("ABB Levit M · Bílá · 1 světlo · 0 ovladačů");
     expect(check(full, true)).toMatchObject({ done: 5, current: null });
     expect(deviceCounts(full)).toMatchObject({ sockets: 2, lights: 1, appliances: 1, rooms: 1, panel: true });
     expect(plural(14, "zásuvka", "zásuvky", "zásuvek")).toBe("14 zásuvek");

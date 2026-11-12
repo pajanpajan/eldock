@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { goPhase, goPhaseForGroup, phaseForPalette } from "./floorplan-phases";
 
 // Fáze 63: 2D půdorys – akordeon palety, zařizovací předměty ve skutečném rozměru (žlutý roh, kóty, 45°, pás u
 // umyvadla), knihovna samostatných spotřebičů, ruční posun tras v osách X / Y s resetem na automat, polygonální
@@ -32,7 +33,11 @@ test("2D půdorys: akordeon palety, předměty X × Y, spotřebiče, úprava tra
   await openFloorplan(page);
   const canvas = page.getByTestId("floorplan-canvas");
   const palette = page.getByRole("complementary", { name: "Paleta elektroinstalačních značek" });
-  const choose = (label: string) => palette.getByRole("button", { name: label, exact: false }).first().click();
+  // Fáze 98: značka je v paletě své fáze (rozváděč 2, zásuvky 3, světla a vypínače 4)
+  const choose = async (label: string) => {
+    await phaseForPalette(page, label);
+    await palette.getByRole("button", { name: label, exact: false }).first().click();
+  };
   const clickAt = async (x: number, y: number, options: { button?: "left" | "right"; clickCount?: number } = {}) => {
     await canvas.scrollIntoViewIfNeeded();
     const at = await screen(canvas, x, y);
@@ -41,6 +46,7 @@ test("2D půdorys: akordeon palety, předměty X × Y, spotřebiče, úprava tra
   const title = page.getByTestId("mode-bar-title");
 
   // Místnost 8 × 6 m a rozváděč
+  await goPhase(page, 1);
   await page.getByRole("button", { name: "Kreslit místnost (obdélník)" }).click();
   await canvas.scrollIntoViewIfNeeded();
   const from = await screen(canvas, 1000, 1000);
@@ -52,17 +58,22 @@ test("2D půdorys: akordeon palety, předměty X × Y, spotřebiče, úprava tra
   await choose("Hlavní domovní / bytový rozváděč");
   await clickAt(1500, 6500);
 
-  // 1) Akordeon: počet osazených prvků, sbalit / rozbalit vše, režim jedné kategorie
+  // 1) Akordeon: počet osazených prvků, sbalit / rozbalit vše, režim jedné kategorie (fáze 98: jen kategorie fáze –
+  //    rozváděč ve fázi 2, zásuvky a spotřebiče ve fázi 3; kategorie fáze jsou po přepnutí rozbalené)
   await expect(palette.getByTestId("palette-count-panel")).toHaveText("1");
+  await goPhase(page, 3);
+  await expect(palette.locator('[data-group][data-open="false"]')).toHaveCount(0);
   await palette.getByTestId("palette-collapse-all").click();
+  await goPhaseForGroup(page, "sockets");
   await expect(palette.getByTestId("palette-toggle-sockets")).toHaveAttribute("aria-expanded", "false");
   await expect(palette.getByRole("button", { name: "Jednozásuvka" })).toHaveCount(0);
   await palette.getByTestId("palette-toggle-sockets").click();
   await expect(palette.getByRole("button", { name: "Jednozásuvka" }).first()).toBeVisible();
   await palette.getByTestId("palette-single").check();
-  await palette.getByTestId("palette-toggle-fixtures").click();
+  await goPhaseForGroup(page, "appliances");
+  await palette.getByTestId("palette-toggle-appliances").click();
   await expect(palette.locator('[data-group][data-open="true"]')).toHaveCount(1);
-  await expect(palette.locator('[data-group="fixtures"]')).toHaveAttribute("data-open", "true");
+  await expect(palette.locator('[data-group="appliances"]')).toHaveAttribute("data-open", "true");
   await palette.getByTestId("palette-single").uncheck();
   await palette.getByTestId("palette-expand-all").click();
   await expect(palette.locator('[data-group][data-open="false"]')).toHaveCount(0);
@@ -82,6 +93,7 @@ test("2D půdorys: akordeon palety, předměty X × Y, spotřebiče, úprava tra
   await clickAt(6500, 1600);
   await page.keyboard.press("Escape");
   // Fáze 90: hláška jmenuje přístroj a výšku, pás 0,2 m hlídá jen přístroje bez krytí IP44
+  await goPhase(page, 5);
   await expect(page.getByTestId("plan-checks")).toContainText("Jednozásuvka (výška 300 mm) – níž než 1,2 m blíž než 20 cm od hrany umyvadlového prostoru");
   await clickAt(6500, 1600);
   const placedBath = canvas.locator('[data-element="bath"]');
@@ -105,7 +117,8 @@ test("2D půdorys: akordeon palety, předměty X × Y, spotřebiče, úprava tra
   await page.screenshot({ path: "test-results/phase63-fixtures.png" });
   await page.getByTestId("mode-done").click();
 
-  // 3) Spotřebiče: přejmenování trouby a vlastní klimatizace ze šablony (prohlížeč + profil firmy)
+  // 3) Spotřebiče: přejmenování trouby a vlastní klimatizace ze šablony (prohlížeč + profil firmy) – fáze 3
+  await goPhase(page, 3);
   await palette.getByTestId("appliance-edit").click();
   const editor = page.getByTestId("appliance-editor");
   await editor.getByLabel("Název spotřebiče 2").fill("Pečicí a parní trouba");
@@ -126,6 +139,8 @@ test("2D půdorys: akordeon palety, předměty X × Y, spotřebiče, úprava tra
   await page.getByTestId("mode-done").click();
   // Fáze 74: úchyty úseků má jen vybraný okruh – okruh se vybere v soupisu okruhů (nebo klikem na trasu)
   await expect(canvas.getByTestId("route-segment")).toHaveCount(0);
+  // Fáze 98: soupis okruhů a úprava tras jsou ve fázi 5
+  await goPhase(page, 5);
   await page.locator('[data-testid="circuit-row"][data-layer="sockets"]').first().click();
   await expect(canvas.getByTestId("route-layer")).toHaveAttribute("data-focus", /.+/);
   const longest = async (axis: string, scope = "") =>
@@ -152,10 +167,12 @@ test("2D půdorys: akordeon palety, předměty X × Y, spotřebiče, úprava tra
   const again = (await longest("horizontal"))!;
   await page.mouse.dblclick(again.x, again.y);
   await expect(edited).toBeVisible();
+  await goPhase(page, 5);
   await edited.getByTestId("route-reset").first().click();
   await expect(edited).toHaveCount(0);
 
-  // 5) Polygonální místnost se šikmou stěnou 45° (přichycení úhlu) a zásuvka u šikmé stěny
+  // 5) Polygonální místnost se šikmou stěnou 45° (přichycení úhlu) a zásuvka u šikmé stěny – kreslení ve fázi 1
+  await goPhase(page, 1);
   await page.getByRole("button", { name: "Kreslit šikmou stěnu / polygonální místnost" }).click();
   for (const [x, y] of [
     [10000, 1000],
@@ -177,7 +194,8 @@ test("2D půdorys: akordeon palety, předměty X × Y, spotřebiče, úprava tra
   await expect(canvas.locator('[data-room="Místnost 2"]')).toHaveCount(1);
 
   // 6) Normové CAD značení: rysky počtu žil a štítky okruhů
-  await page.getByTestId("wizard-step-4").click();
+  // Fáze 98: trasy kabelů v levé paletě fáze 5
+  await goPhase(page, 5);
   await page.getByTestId("cable-view-cad").click();
   await expect(canvas.locator('[data-testid="route-layer"][data-view="cad"]')).toBeAttached();
   await expect(canvas.getByTestId("cable-tick").first()).toBeAttached();
@@ -204,7 +222,8 @@ test("2D půdorys: akordeon palety, předměty X × Y, spotřebiče, úprava tra
   await expect.poll(() => page.evaluate(() => (window as unknown as { printed: number }).printed)).toBe(1);
 
   // 8) Galerie řad: věrný náhled Levit (podložka v druhé barvě) a proklik na web výrobce
-  await page.getByTestId("wizard-step-2").click();
+  // Fáze 98: výrobce, řada, barva a úroveň instalace v kartě designu fáze 4
+  await goPhase(page, 4);
   const appearance = page.getByTestId("device-appearance");
   await expect(appearance.getByTestId("series-web")).toHaveAttribute("href", /nizke-napeti\.cz\.abb\.com/);
   await appearance.getByTestId("series-gallery-open").click();
@@ -227,11 +246,14 @@ test("2D půdorys: akordeon palety, předměty X × Y, spotřebiče, úprava tra
   await expect(catalog.getByTestId("smart-catalog-level")).toHaveCount(0);
   // Fáze 65: obrázkový katalog po záložkách – DIN lišta zvlášť, výrobky k osazení v záložce ovladačů
   await catalog.getByTestId("smart-tab-din").click();
-  await expect(catalog.getByTestId("smart-catalog-din")).toContainText("SA-M-4.16.2.2");
+  // Spínací akční člen SA-M-4.16.2.2 – karta katalogu od fáze 81 ukazuje český název a objednací číslo (MPN)
+  await expect(catalog.getByTestId("smart-catalog-din")).toContainText("Člen akční spínací 4násobný, 16 A");
+  await expect(catalog.getByTestId("smart-catalog-din")).toContainText("2CDG510025R0011");
   await catalog.getByTestId("smart-tab-controls").click();
   await catalog.locator('[data-product="fah-sensor-2"]').click();
   await expect(title).toContainText("Senzor / tlačítko 2násobné free@home");
   await clickAt(5000, 5000);
+  await goPhase(page, 5);
   await expect(canvas.locator('[data-element="bus-2"]')).toHaveCount(1);
   await expect(page.getByTestId("element-detail")).toContainText("Senzor / tlačítko 2násobné free@home");
   await page.screenshot({ path: "test-results/phase63-smart.png" });

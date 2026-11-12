@@ -1,3 +1,4 @@
+import { goPhase, phaseForPalette } from "./floorplan-phases";
 import { expect, test } from "@playwright/test";
 
 // Fáze 49: 2D půdorys elektroinstalace – osazení značek, párování vypínače se světlem, výkaz kabeláže
@@ -17,10 +18,14 @@ test("📐 2D půdorys: osazení, párování, výkaz kabeláže Spodem / Vrchem
   const canvas = page.getByTestId("floorplan-canvas");
   const palette = page.getByRole("complementary", { name: "Paleta elektroinstalačních značek" });
   const place = async (label: string, ...points: [number, number][]) => {
+    // Fáze 98: značka je v paletě své fáze (rozváděč 2, zásuvky 3, světla a vypínače 4)
+    await phaseForPalette(page, label);
     await palette.getByRole("button", { name: label, exact: false }).first().click();
     for (const [x, y] of points) await canvas.click({ position: { x, y } });
     await page.keyboard.press("Escape");
   };
+  // Fáze 98: výkaz kabeláže je v pravém panelu fáze 5
+  await goPhase(page, 5);
   await expect(page.getByTestId("cable-empty")).toContainText("rozváděč");
   await place("Hlavní domovní / bytový rozváděč", [40, 40]);
   await place("Dvojzásuvka", [260, 80], [360, 80]);
@@ -28,7 +33,8 @@ test("📐 2D půdorys: osazení, párování, výkaz kabeláže Spodem / Vrchem
   await place("Vypínač č. 1", [160, 220]);
   await place("Trouba", [500, 420]);
 
-  // Párování vypínače se světlem (čárkovaná ovládací vazba + řazení)
+  // Párování vypínače se světlem (čárkovaná ovládací vazba + řazení) – fáze 98: ve fázi 5 jsou aktivní všechny prvky
+  await goPhase(page, 5);
   await canvas.getByRole("button", { name: /^Vypínač č\. 1/ }).click();
   await page.getByRole("button", { name: "🔗 Přiřadit ke světlu" }).click();
   await canvas.getByRole("button", { name: /^Stropní svítidlo/ }).click();
@@ -42,7 +48,8 @@ test("📐 2D půdorys: osazení, párování, výkaz kabeláže Spodem / Vrchem
   await expect(page.getByTestId("cable-buy")).toContainText("CYKY-J 3×2,5");
   await expect(page.getByTestId("cable-buy")).toContainText("CYKY-O 3×1,5");
   await expect(page.getByTestId("cable-route").first()).toBeVisible();
-  await page.getByTestId("wizard-step-4").click();
+  // Fáze 98: směrování tras v levé paletě fáze 5
+  await goPhase(page, 5);
   await page.getByRole("radio", { name: /Spodem \(v podlaze\)/ }).click();
   await expect(totals.locator('[data-mode="BOTTOM"]')).toHaveClass(/border-primary/);
   await page.getByRole("radio", { name: /Optimalizovaně \(Auto\)/ }).click();

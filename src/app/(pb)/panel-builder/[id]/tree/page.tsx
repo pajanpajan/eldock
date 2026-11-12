@@ -6,6 +6,9 @@ import { panelBuilderGuard } from "@/components/panel-builder/access";
 import { NextStepBar, PanelSteps } from "@/components/panel-builder/PanelSteps";
 import { ProjectHeader } from "@/components/panel-builder/ProjectHeader";
 import { TreeEditor } from "@/components/panel-builder/TreeEditor";
+import { TreeLinterSummary } from "@/components/panel-builder/TreeLinterSummary";
+import { projectLintIssues } from "@/lib/panel-builder/panel-live-checklist";
+import { panelPageHref } from "@/lib/panel-builder/panel-phases";
 import { treeNodeFrom } from "@/lib/panel-builder/tree";
 import { isIncomerFrom } from "@/lib/panel-builder/vector-layout";
 import { vectorDeviceFrom } from "@/lib/panel-builder/vector-symbols";
@@ -18,6 +21,7 @@ export async function generateMetadata({ params }: PageProps<"/panel-builder/[id
 }
 
 // Krok 2: zapojení a hierarchie přímo nad 2D vektorovým rozváděčem (drag & drop, hlavní přívod, modré spojnice).
+// Fáze 98: fáze „2. Strom zapojení, Fáze & Linter“ – nad stromem souhrn Elektro-linteru z uloženého projektu.
 export default async function PanelTreePage({ params }: PageProps<"/panel-builder/[id]/tree">) {
   const guard = await panelBuilderGuard();
   if (guard) return guard;
@@ -28,6 +32,7 @@ export default async function PanelTreePage({ params }: PageProps<"/panel-builde
     <PageTransition>
       <ProjectHeader project={project} />
       <PanelSteps project={project} current="tree" />
+      <TreeLinterSummary issues={projectLintIssues(project, project.enclosure?.totalModules ?? null)} fixHref={panelPageHref("recognition", project.id)} />
       <TreeEditor
         projectId={project.id}
         initial={project.items.map(treeNodeFrom)}

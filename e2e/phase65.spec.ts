@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { goPhase, phaseForPalette } from "./floorplan-phases";
 
 // Fáze 65: zásuvkové okruhy v kompaktních zónách s volbou rozdělení, optimalizací a ručním okruhem; obrázkový katalog
 // chytré domácnosti (segmentový přepínač ABB, záložky, karty s náhledem a akcemi), ruční moduly na DIN lištu a technický
@@ -38,6 +39,7 @@ function editor(page: Page) {
     palette,
     clickAt,
     room: async (x1: number, y1: number, x2: number, y2: number) => {
+      await goPhase(page, 1);
       await page.getByRole("button", { name: "Kreslit místnost (obdélník)" }).click();
       await canvas.evaluate((svg) => svg.scrollIntoView({ block: "center", behavior: "instant" }));
       const from = await screen(canvas, x1, y1);
@@ -56,6 +58,7 @@ function editor(page: Page) {
     },
     /** Značka z palety na více místech; Esc ukončí vkládání. */
     place: async (label: string, points: [number, number][]) => {
+      await phaseForPalette(page, label);
       await palette.getByRole("button", { name: label }).first().click();
       for (const [x, y] of points) await clickAt(x, y);
       await page.keyboard.press("Escape");
@@ -75,8 +78,11 @@ test("🔌 Zásuvkové okruhy: kompaktní zóny, volba rozdělení, optimalizace
   for (const x of [2000, 4000, 6000, 8000, 10_000, 12_000]) sockets.push([x, 1300], [x, 8700]);
   sockets.push([1300, 5000], [12_700, 5000]);
   await fp.place("Jednozásuvka", sockets);
+  await goPhase(page, 5);
   await expect(fp.canvas.locator('[data-element="socket"]')).toHaveCount(14);
 
+  // Fáze 98: zásuvkové okruhy jsou v pravém panelu fáze 3
+  await goPhase(page, 3);
   const panel = page.getByTestId("socket-circuits");
   const rows = panel.getByTestId("socket-circuit-row");
   await expect(panel.getByTestId("socket-grouping-compact")).toHaveAttribute("aria-checked", "true");
@@ -123,7 +129,8 @@ test("🏠 Chytrá domácnost: segmentový přepínač ABB, obrázkový katalog,
   page.on("dialog", (dialog) => void dialog.accept());
   await openNew(page);
   const fp = editor(page);
-  await page.getByTestId("wizard-step-2").click();
+  // Fáze 98: výrobce, řada, barva a úroveň instalace v kartě designu fáze 4
+  await goPhase(page, 4);
   const appearance = page.getByTestId("device-appearance");
 
   // Segmentový přepínač rodin ABB s podtitulky
@@ -148,11 +155,14 @@ test("🏠 Chytrá domácnost: segmentový přepínač ABB, obrázkový katalog,
   await sensor.locator('[data-product="fah-sensor-2"]').click();
   await fp.clickAt(5000, 5000);
   await page.keyboard.press("Escape");
+  // Fáze 98: katalog chytré domácnosti i osazený ovladač jsou ve fázi 4 (počet značek se ověří bez přepnutí)
   await expect(fp.canvas.locator('[data-element="bus-2"]')).toHaveCount(1);
   await expect(sensor.getByTestId("placed-count")).toHaveText("Osazeno: 1 ks");
   // Prvky do krabičky: akční člen se svorkovnicí
   await catalog.getByTestId("smart-tab-inbox").click();
-  await expect(catalog.locator('[data-card="fah-wl-act-1"]').getByTestId("device-illustration")).toHaveAttribute("data-kind", "inbox");
+  // Od fáze 94 má akční člen ABB do krabičky fotku výrobce, jinak vektorový náhled se svorkovnicí
+  const inbox = catalog.locator('[data-card="fah-wl-act-1"]');
+  await expect(inbox.getByTestId("device-photo").or(inbox.locator('[data-testid="device-illustration"][data-kind="inbox"]')).first()).toBeVisible();
 
   // DIN lišta: automatický počet a ruční navýšení (přičte se do přehledu akčních členů); fáze 81 – „V rozváděči: X ks
   // (Y automaticky z půdorysu + Z ručně přidáno)“
@@ -165,6 +175,7 @@ test("🏠 Chytrá domácnost: segmentový přepínač ABB, obrázkový katalog,
   await sa8.getByTestId("din-add").click();
   await expect(sa8.getByTestId("din-manual")).toHaveText("1");
   await expect(sa8.getByTestId("din-count")).toContainText("V rozváděči: 1 ks (0 automaticky z půdorysu + 1 ručně přidáno)");
+  await goPhase(page, 4);
   const smart = page.getByTestId("smart-home");
   await expect(smart.getByTestId("smart-modules")).toContainText("SA-M-8.16.2.2");
   await expect(smart.getByTestId("smart-modules")).toContainText("ručně");

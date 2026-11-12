@@ -1,0 +1,5 @@
+# Deník fáze 96 (přesunuto z `docs/PLAN.md`, sekce C)
+
+| Fáze | Datum | Poznámky |
+|---|---|---|
+| 96 | 2026-11-11 | Zadání z chatu → `docs/archiv/ZADANI-faze-96.md` (i rozhodnutí a odchylky). **Brána:** `src/proxy.ts` (`PUBLIC_PATHS` + `/panel-builder`, `/panel-builder/catalog` a 5 SEO stránek, průchod `/api/seo/ping`). **Obsah:** `src/lib/seo-landings.ts` (5 stránek: H1, sekce, tabulka, FAQ, související), `SeoLandingPage` + `seoLandingMetadata`, `ThermalPreview` (nad `calculateThermal`), `PanelBuilderPublicLanding`, katalog bez firmy jen ke čtení, patička „Nástroje a návody“ (`footerSections`). **SEO:** `seo.ts` (`PUBLIC_PAGES` s prioritami, `PRIVATE_PATHS` = /api/ a /superadmin, `SEARCH_BOTS`, `siteJsonLd`, `faqJsonLd`), `robots.ts` (pravidlo pro každého robota), layout (JSON-LD webu, `verification` z `GOOGLE_SITE_VERIFICATION` / `SEZNAM_WMT_VERIFICATION`). **IndexNow:** `src/lib/indexnow.ts`, `scripts/seo-indexnow-ping.mjs` (`npm run seo:ping`), `POST /api/seo/ping` (Bearer `ELDOCK_CRON_SECRET` nebo velín). **Testy:** `src/lib/phase96.test.ts` (8), upravený `phase48.test.ts`; E2E `e2e/phase96.spec.ts` (2). |

@@ -1,6 +1,7 @@
 import path from "node:path";
 
 import { expect, test } from "@playwright/test";
+import { goPhase, phaseForPalette } from "./floorplan-phases";
 
 // Fáze 51: loga výrobců z public/brands, vyčištěný rozcestník katalogu, nový dialog projektu (2×2 dlaždice,
 // více fotek), kaskáda výrobce → řada → barva v 2D půdorysu a úpravy místností (kóty, rozměr, smazání).
@@ -58,11 +59,13 @@ test("🎨 2D půdorys: kaskáda výrobce → řada → barva, živé kóty a ú
     await expect(page.getByTestId("floorplan-canvas")).toBeVisible({ timeout: 5_000 });
   }).toPass({ timeout: 90_000 });
   const palette = page.getByRole("complementary", { name: "Paleta elektroinstalačních značek" });
+  // Fáze 98: vypínače a termostaty jsou v paletě fáze 4
+  await goPhase(page, 4);
   await expect(palette.getByRole("button", { name: /Dvojitý střídavý přepínač č\. 6\+6/ })).toBeVisible();
   await expect(palette.getByRole("button", { name: /Pokojový termostat/ })).toBeVisible();
 
-  // Kaskáda: Schneider Electric → Asfora → černá
-  await page.getByTestId("wizard-step-2").click();
+  // Kaskáda: Schneider Electric → Asfora → černá (fáze 98: karta designu ve fázi 4)
+  await goPhase(page, 4);
   const appearance = page.getByTestId("device-appearance");
   await appearance.getByRole("radio", { name: "Schneider Electric" }).click();
   await appearance.getByRole("radio", { name: "Asfora" }).click();
@@ -72,6 +75,7 @@ test("🎨 2D půdorys: kaskáda výrobce → řada → barva, živé kóty a ú
   // Kreslení místnosti s živými kótami
   const canvas = page.getByTestId("floorplan-canvas");
   await page.getByTestId("wizard-step-1").click();
+  await goPhase(page, 1);
   await page.getByRole("button", { name: "Kreslit místnost" }).click();
   // Fáze 74: nad plátnem přibyla řada barev rámečku – plátno nejdřív doprostřed okna (kreslí se od jeho horního rohu)
   await canvas.evaluate((element) => element.scrollIntoView({ block: "center" }));
@@ -95,10 +99,14 @@ test("🎨 2D půdorys: kaskáda výrobce → řada → barva, živé kóty a ú
   await expect(page.getByTestId("room-handle")).toBeVisible();
 
   // Zásuvka v místnosti dostane zvolenou řadu a barvu
+  await goPhase(page, 3);
+  await phaseForPalette(page, "Jednozásuvka");
   await palette.getByRole("button", { name: "Jednozásuvka" }).click();
   await canvas.click({ position: { x: 180, y: 180 } });
   await page.keyboard.press("Escape");
   await expect(page.getByTestId("element-appearance")).toHaveText("Schneider Electric Asfora · Černá matná / Antracit");
+  // Fáze 98: soupis domovní instalace je v pravém panelu fáze 5
+  await goPhase(page, 5);
   await expect(page.getByTestId("wiring-inventory")).toContainText("Jednozásuvka – Schneider Electric Asfora · Černá matná / Antracit");
 
   // Smazání místnosti (tlačítko v detailu)
