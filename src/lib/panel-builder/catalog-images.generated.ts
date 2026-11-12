@@ -1,4 +1,6 @@
 // Generuje `npm run catalog:images` z public/catalog-images/ – needitujte ručně.
+// Fáze 104: celý import dat výrobců jen na serveru (do klientského bundlu nesmí – viz src/server/catalog-data.ts)
+import "server-only";
 import type { CatalogImage } from "./catalog-images";
 
 export const CATALOG_IMAGES: readonly CatalogImage[] = [

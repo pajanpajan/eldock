@@ -40,7 +40,7 @@ describe("AI Panel Builder – registrace firmy", () => {
     const company = await registerPanelCompany(prisma, panelRegistrationSchema.parse(base), new Date("2026-11-03T10:00:00Z"));
     expect(company.creditsRemaining).toBe(5);
     const row = await prisma.registeredCompany.findUniqueOrThrow({ where: { id: company.id } });
-    expect(row).toMatchObject({ productScope: "PANEL_BUILDER", termsVersion: "1.0-2026-11", authorizationNumber: "E-0815/2021", dic: null });
+    expect(row).toMatchObject({ productScope: "PANEL_BUILDER", termsVersion: "1.1-2026-11", authorizationNumber: "E-0815/2021", dic: null });
     expect(row.passwordHash).toMatch(/^scrypt\$/);
     expect(row.passwordHash).not.toContain("tajneheslo");
     expect(await verifyPassword("tajneheslo", row.passwordHash)).toBe(true);

@@ -43,9 +43,10 @@ describe("fáze 96 – SEO vstupní stránky a mapa webu", () => {
 
   it("robots.txt: Allow / pro všechny klíčové roboty vč. AI vyhledávačů, Disallow jen /api/ a /superadmin, sitemap a host", () => {
     const result = robots();
-    const rules = result.rules as { userAgent: string; allow: string; disallow: string[] }[];
+    // Fáze 104: za vyhledávači následují kopírovací roboti s Disallow / (vrstva 3 ochrany know-how)
+    const rules = (result.rules as { userAgent: string; allow?: string; disallow: string | string[] }[]).slice(0, SEARCH_BOTS.length);
     expect(rules.map((rule) => rule.userAgent)).toEqual(["*", "Googlebot", "SeznamBot", "bingbot", "OAI-SearchBot", "GPTBot", "PerplexityBot", "ClaudeBot"]);
-    expect(rules.every((rule) => rule.allow === "/" && rule.disallow.join() === "/api/,/superadmin")).toBe(true);
+    expect(rules.every((rule) => rule.allow === "/" && [rule.disallow].flat().join() === "/api/,/superadmin")).toBe(true);
     expect(result).toMatchObject({ sitemap: "https://eldock.cz/sitemap.xml", host: "https://eldock.cz" });
     expect(SEARCH_BOTS).toHaveLength(8);
   });

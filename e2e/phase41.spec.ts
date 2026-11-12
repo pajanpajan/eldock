@@ -67,7 +67,7 @@ test("úvodní stránka: dva produkty; nepřihlášený do Panel Builderu → re
 
   // Firemní údaje a razítko: úprava odpovědné osoby
   await page.getByRole("link", { name: "Firemní údaje a razítko" }).click();
-  await expect(page.getByTestId("terms-accepted")).toContainText("1.0-2026-11");
+  await expect(page.getByTestId("terms-accepted")).toContainText("1.1-2026-11");
   await page.getByLabel("Jméno a příjmení odpovědné osoby / projektanta").fill("Ing. Petra Nová");
   await page.getByRole("button", { name: "Uložit firemní údaje" }).click();
   await expect(toast(page)).toContainText("Firemní údaje uloženy");

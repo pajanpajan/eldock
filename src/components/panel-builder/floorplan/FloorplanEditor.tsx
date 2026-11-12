@@ -446,6 +446,8 @@ export function FloorplanEditor({
   const [datasheet, setDatasheet] = useState<(CatalogProduct & { family: string }) | null>(null);
   /** Fáze 63: dvojklik na úsek trasy = dva stisky na stejném úseku do 400 ms (plátno při stisku přebírá ukazatel). */
   const lastRouteTap = useRef<{ key: string; index: number; at: number } | null>(null);
+  // Fáze 104: čas vložení odskoku – následná událost dblclick (po posunu úseku míří na prázdnou plochu) místnost nevybere
+  const routeJogAt = useRef(0);
   const [pending, startTransition] = useTransition();
   const lastRoom = useRef("Místnost 1");
 
@@ -1260,6 +1262,7 @@ export function FloorplanEditor({
 
   /** Fáze 63: ortogonální odskok kolem překážky v místě dvojkliku. */
   function insertRouteJog(leg: DisplayLeg, index: number, at: { x: number; y: number }) {
+    routeJogAt.current = Date.now();
     update((current) => ({ ...current, routeEdits: { ...current.routeEdits, [leg.key]: insertJog(leg.points, index, at) } }));
     toast.info("Odskok vložen – táhněte prostřední úsek kolem překážky. Pravé tlačítko na trase ji vrátí na automat.");
   }
@@ -3074,6 +3077,8 @@ export function FloorplanEditor({
                 // na úsek trasy (odskok) nebo trasu okruhu místnost nevybere
                 if (tool.kind !== "select") return;
                 if (event.target instanceof Element && event.target.closest('[data-testid="route-handles"], [data-testid="route-pick"], [data-testid="route-layer"]')) return;
+                // Fáze 104: dvojklik, který právě vložil odskok trasy (úsek se posunul a událost dblclick dopadla vedle)
+                if (Date.now() - routeJogAt.current < 800) return;
                 const point = toPlan(event);
                 if (draft.elements.some((element) => Math.hypot(element.x - point.x, element.y - point.y) < ui)) return;
                 const room = roomAt(draft.rooms, point.x, point.y);

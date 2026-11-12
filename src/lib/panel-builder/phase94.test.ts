@@ -4,8 +4,10 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { ETIM_DEVICE_DEPTHS, ETIM_FRAMES, ETIM_GTIN, ETIM_SMART } from "./abb-etim.generated";
+import { ETIM_FRAMES, ETIM_GTIN, ETIM_SMART } from "./abb-etim.generated";
 import { ABB_ETIM_COMPONENTS } from "./abb-etim-components.generated";
+import { KOPOS_BOX_DATA } from "./brand-etim.generated";
+import { DEVICE_DEPTHS } from "./catalog-public.generated";
 import { enclosureImage, productImage } from "./catalog-images";
 import { CATALOG_IMAGES } from "./catalog-images.generated";
 import { parsePhotoManifest } from "./catalog-photos";
@@ -13,11 +15,13 @@ import { INSTALLATION_LABELS, type EnclosureInstallation } from "./enclosures";
 import { etimEnclosures, etimSeriesName } from "./etim-enclosures";
 import { emptyDraft, type EditorElement, type FloorplanDraft } from "./floorplan-editor";
 import { floorplanNorms } from "./floorplan-norms";
-import { boxNeed, deviceDepthOf, koposBoxData, resolveBox } from "./mounting-boxes-catalog";
+import { boxNeed, deviceDepthOf, resolveBox } from "./mounting-boxes-catalog";
 import { seriesPhoto } from "./series-photos";
 import { VERIFIED_ENCLOSURES } from "./verified-enclosures";
 import { bomTable, compileFloorplanBom } from "./wiring-bom";
 import { DESIGN_BRANDS } from "./wiring-designs";
+
+import { ALL_SERIES_PHOTOS, catalogEan } from "@/server/catalog-data";
 
 // Fáze 94: oficiální data ABB ETIM 9.0 (ELSB_ETIM-9.0_2026-05) – skutečné fotky v manifestu, rámečky 1R–5R s EAN,
 // vestavné hloubky přístrojů v hlídači krabic, EAN v kusovníku a rozvodnice ABB navíc k ověřenému seznamu.
@@ -62,8 +66,8 @@ describe("fáze 94 – manifest se skutečnými fotkami ABB (ETIM 9.0)", () => {
     const missing = abb.series.map((series) => `ABB|${series.name}`).filter((key) => !ETIM_PHOTOS.some((photo) => photo.series === key && (photo.part === "switch" || photo.part === "socket")));
     expect(missing).toEqual(["ABB|Time Arbo"]);
     // Galerie: reálná fotka (manifest → catalog-images.generated) s objednacím číslem vyfoceného dílu
-    expect(seriesPhoto("ABB|Classic", "abb-classic-b1", "switch")).toMatchObject({ photo: true, mpn: "3553-01289 B1", src: "/catalog-images/abb/classic/abb-classic-b1-switch.webp" });
-    expect(seriesPhoto("ABB|Tango", "abb-tango-b", "frame")).toMatchObject({ photo: true, mpn: "3901A-B10 B" });
+    expect(seriesPhoto("ABB|Classic", "abb-classic-b1", "switch", ALL_SERIES_PHOTOS)).toMatchObject({ photo: true, mpn: "3553-01289 B1", src: "/catalog-images/abb/classic/abb-classic-b1-switch.webp" });
+    expect(seriesPhoto("ABB|Tango", "abb-tango-b", "frame", ALL_SERIES_PHOTOS)).toMatchObject({ photo: true, mpn: "3901A-B10 B" });
     expect(CATALOG_IMAGES.filter((image) => image.photo && image.mpn).length).toBeGreaterThanOrEqual(ETIM_PHOTOS.length);
   });
 
@@ -99,12 +103,14 @@ describe("fáze 94 – rámečky 1R–5R a EAN z dat výrobce", () => {
   });
 
   it("kusovník: číslo v datech ETIM má EAN a je ověřené, CSV / XLSX má sloupec EAN (GTIN)", () => {
-    const bom = compileFloorplanBom(drawing([el("s", "switch-1"), el("z", "socket")], { series: "ABB|Tango", color: "abb-tango-b" }), { installation: "classic" });
+    const bom = compileFloorplanBom(drawing([el("s", "switch-1"), el("z", "socket")], { series: "ABB|Tango", color: "abb-tango-b" }), { installation: "classic", ean: catalogEan });
     expect(bom.find((row) => row.mpn === "6619A-A06357 B")).toMatchObject({ category: "Zásuvky", verified: true, ean: "8592624446804" });
     expect(bom.find((row) => row.mpn === "3559-A01345")?.ean).toBe(ETIM_GTIN["3559-A01345"]);
     expect(bom.find((row) => row.category === "Rámečky")?.ean).toBe("8595017208782");
     // Krabice jiných výrobců EAN z dat ABB nedostanou – fáze 97: jen vlastní EAN výrobce krabice (KOPOS, stránka výrobku)
-    expect(bom.filter((row) => row.box).every((row) => !row.ean || row.ean === koposBoxData(row.mpn)?.ean)).toBe(true);
+    expect(bom.filter((row) => row.box).every((row) => !row.ean || row.ean === KOPOS_BOX_DATA[row.mpn!]?.ean)).toBe(true);
+    // Fáze 104: bez serverového resolveru (prohlížeč) kusovník EAN nemá – doplní je serverová akce
+    expect(compileFloorplanBom(drawing([el("z", "socket")], { series: "ABB|Tango", color: "abb-tango-b" }), { installation: "classic" }).some((row) => row.ean)).toBe(false);
     const table = bomTable(bom);
     expect(table[0]).toEqual(["Kategorie", "Objednací číslo (MPN)", "EAN (GTIN)", "Název a specifikace", "Řada a barva", "Počet", "Jednotka", "Ověření"]);
     expect(table.find((row) => row[1] === "6619A-A06357 B")).toEqual(expect.arrayContaining(["8592624446804", "data výrobce ETIM 9.0"]));
@@ -129,9 +135,10 @@ describe("fáze 94 – vestavná hloubka přístroje v hlídači krabic KOPOS", 
 
   it("přístroj hlubší než 40 mm chce hlubokou krabici; ručně zvolená mělká, do které se nevejde, = varování s hodnotou výrobce", () => {
     const key = "ABB|Tango|socket";
-    const original = ETIM_DEVICE_DEPTHS[key];
+    // Fáze 104: hlídač krabic čte veřejnou část dat (hloubky bez EAN a cen)
+    const original = DEVICE_DEPTHS[key];
     try {
-      ETIM_DEVICE_DEPTHS[key] = { mpn: "TEST-50", depthMm: 50 };
+      DEVICE_DEPTHS[key] = { mpn: "TEST-50", depthMm: 50, source: "ABB ETIM 9.0" };
       const auto = drawing([el("z", "socket")], { series: "ABB|Tango", color: "abb-tango-b" });
       expect(boxNeed(auto, auto.elements[0])).toMatchObject({ kind: "deep", minDepthMm: 66 });
       expect(boxNeed(auto, auto.elements[0]).reasons).toContain("vestavná hloubka přístroje 50 mm (ABB ETIM 9.0) – víc než 40 mm mělké krabice");
@@ -142,7 +149,8 @@ describe("fáze 94 – vestavná hloubka přístroje v hlídači krabic KOPOS", 
       expect(issue?.text).toContain("Vestavná hloubka přístroje TEST-50 je podle ABB ETIM 9.0 50 mm – do zvolené krabice se nevejde (chybí 5 mm).");
       expect(issue?.source).toContain("data výrobce ABB ETIM 9.0");
     } finally {
-      ETIM_DEVICE_DEPTHS[key] = original;
+      if (original) DEVICE_DEPTHS[key] = original;
+      else delete DEVICE_DEPTHS[key];
     }
   });
 });

@@ -12,6 +12,7 @@ import type { ThermalResult } from "@/lib/thermalCalculation";
 import { ROUTINE_TEST_POINTS, minInsulationMOhm, routineTestVerdict, type RoutineTest, type StandardEdition } from "@/lib/legislation-2027";
 import { type WiringBomRow, BOX_TABLE_TITLE, bomOrderLabel } from "@/lib/panel-builder/wiring-bom";
 import { czDate, versionBadge, type DocVersionMark, type InspectionBlock } from "@/lib/switchboard-versions";
+import { IP_NOTICE } from "@/lib/legal";
 import type { HotspotSink } from "@/lib/panel-builder/drawings";
 import type { FloorplanDraft } from "@/lib/panel-builder/floorplan-editor";
 import type { DisplayCircuit } from "@/lib/panel-builder/route-display";
@@ -188,7 +189,17 @@ function Sheet({ data, number, children }: { data: DocumentationData; number: nu
           </tr>
         </tbody>
       </table>
+      <IpNotice />
     </section>
+  );
+}
+
+/** Fáze 104: doložka ochrany databáze a autorských práv v zápatí každého listu PDF výstupu. */
+function IpNotice() {
+  return (
+    <p className="mt-1 text-[5.5pt] leading-tight text-zinc-500" data-testid="doc-ip-notice">
+      {IP_NOTICE}
+    </p>
   );
 }
 
@@ -848,6 +859,7 @@ export function FloorplanAnnex({ data, sheet, letter, title }: { data: Documenta
         </tbody>
       </table>
       <p className="mt-1 text-[7pt] text-zinc-600">Trasy v normovém značení (rysky = počet žil). Klik na trasu nebo označení okruhu přejde do rozcestníku obvodů rozváděče.</p>
+      <IpNotice />
     </section>
   );
 }
@@ -910,6 +922,7 @@ export function FloorplanVersionSheets({ data, plan }: { data: DocumentationData
             </table>
           </>
         ) : null}
+        <IpNotice />
       </section>
     </div>
   );

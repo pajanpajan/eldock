@@ -14,6 +14,7 @@ import { analyzeDraft, floorsOf, parseCableReport, parseDraft, switchFloor, type
 import { planScaleFor } from "@/lib/panel-builder/plan-sheet";
 import { displayRoutes } from "@/lib/panel-builder/route-display";
 import { compileFloorplanBom } from "@/lib/panel-builder/wiring-bom";
+import { catalogEan } from "@/server/catalog-data";
 import { parseManufacturerInfo } from "@/lib/panel-builder/project";
 import { companyManufacturer } from "@/lib/registered-company";
 import { isConnected, proposeTree, readingOrder, treeNodeFrom } from "@/lib/panel-builder/tree";
@@ -92,7 +93,8 @@ export async function buildDocumentationData(project: PanelProjectDetail, origin
   // Fáze 55: kusovník domovní instalace z uloženého nákresu 2D půdorysu (projekt z půdorysu)
   const cableReport = parseCableReport(project.cableReportJson);
   const draft = project.floorplanJson ? parseDraft(safeJson(project.floorplanJson)) : null;
-  const homeBom = draft ? compileFloorplanBom(draft, { installation: draft.installation, cables: cableReport?.byCable ?? [] }) : [];
+  // Fáze 104: EAN z celých importů ETIM / KOPOS jen na serveru
+  const homeBom = draft ? compileFloorplanBom(draft, { installation: draft.installation, cables: cableReport?.byCable ?? [], ean: catalogEan }) : [];
   const edition = standardEditionOf(project.standardEdition);
   const routineTest = parseRoutineTest(project.routineTestJson);
   // Fáze 75: chytré PDF – klikací přístroje ve výkresech, příloha s půdorysem a propojené rozváděče
@@ -217,7 +219,7 @@ export function floorplanDocument(json: string): FloorplanDocument | null {
       const routes = displayRoutes(onFloor, analysis);
       return { floorId: floor.id, floorName: floor.name, scale: planScaleFor(onFloor, 190, 175), draft: onFloor, routes: { circuits: routes.circuits, bus: routes.bus } };
     });
-    const bom = compileFloorplanBom(draft, { installation: draft.installation, cables: analysis.summary.byCable, cableEnds: {} });
+    const bom = compileFloorplanBom(draft, { installation: draft.installation, cables: analysis.summary.byCable, cableEnds: {}, ean: catalogEan });
     return { sheets, bom, cables: analysis.summary.byCable.map((row) => ({ cable: row.cable, meters: Math.round(row.meters * 10) / 10 })) };
   } catch {
     return null;

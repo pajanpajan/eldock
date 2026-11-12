@@ -11,6 +11,7 @@ import { VAT_RATE, creditPackage, formatCzk, spdPayload } from "@/lib/credits";
 import { formatDate } from "@/lib/format";
 import { getCreditOrder } from "@/server/queries/panel-builder";
 import { bankAccount } from "@/server/services/credits";
+import { IP_NOTICE } from "@/lib/legal";
 
 export const metadata: Metadata = { title: "Zálohová faktura" };
 
@@ -132,6 +133,10 @@ export default async function InvoicePage({ params }: PageProps<"/panel-builder/
 
         <footer className="mt-8 border-t border-zinc-300 pt-2 text-[8pt] text-zinc-600">
           Zálohová faktura slouží jako výzva k platbě. Daňový doklad k přijaté platbě vystavíme po připsání úhrady na účet; kredity se připíší automaticky po potvrzení platby.
+          {/* Fáze 104: ochrana databáze a autorských práv */}
+          <span className="mt-1 block text-[6.5pt] text-zinc-500" data-testid="doc-ip-notice">
+            {IP_NOTICE}
+          </span>
         </footer>
       </article>
     </div>

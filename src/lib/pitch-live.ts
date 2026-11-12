@@ -8,6 +8,7 @@ import { demoDraft } from "@/lib/panel-builder/demo-scenarios";
 import { analyzeDraft } from "@/lib/panel-builder/floorplan-editor";
 import { DOCUMENT_SHEETS } from "@/lib/panel-builder/documentation";
 import { compileFloorplanBom } from "@/lib/panel-builder/wiring-bom";
+import { catalogEan } from "@/server/catalog-data";
 import { POWER_BACKUP_TIERS } from "@/lib/power-backup";
 
 export interface PitchLiveData {
@@ -24,7 +25,7 @@ export interface PitchLiveData {
 export function pitchLiveData(): PitchLiveData {
   const draft = demoDraft("rd-4kk");
   const analysis = analyzeDraft(draft);
-  const rows = compileFloorplanBom(draft, { installation: draft.installation, cables: analysis.summary.byCable, cableEnds: {} });
+  const rows = compileFloorplanBom(draft, { installation: draft.installation, cables: analysis.summary.byCable, cableEnds: {}, ean: catalogEan });
   const devices = rows.filter((row) => row.mpn && row.ean && row.unit === "ks" && row.category !== "Instalační krabice");
   // Pestrý výběr: zásuvka, vypínač, rámeček, termostat… – z každé kategorie nejvýš jeden řádek
   const seen = new Set<string>();

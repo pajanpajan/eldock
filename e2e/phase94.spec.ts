@@ -152,7 +152,8 @@ test("🗄️ Fotky rozvodnic ABB: nový projekt, dokumentace a výběr skřín�
   await page.getByRole("group", { name: "Výrobce skříně" }).getByRole("button", { name: "ABB" }).click();
   const list = page.getByTestId("enclosure-list");
   await expect(list).toBeVisible({ timeout: 30_000 });
-  expect(await list.getByTestId("enclosure-photo").count()).toBeGreaterThan(0);
+  // Fáze 104: fotky skříní dohledá server (index fotek do prohlížeče nesmí) – načtou se po vykreslení seznamu
+  await expect.poll(() => list.getByTestId("enclosure-photo").count(), { timeout: 30_000 }).toBeGreaterThan(0);
   await loaded(list.getByTestId("enclosure-photo").first().locator("img"));
   await page.screenshot({ path: "test-results/phase94-enclosure-picker.png" });
 });

@@ -13,6 +13,11 @@ const nextConfig: NextConfig = {
   output: "standalone",
   // Fáze 100: komprese odpovědí serveru Next (gzip) – výchozí, uvedeno výslovně; na produkci komprimuje i Caddy (zstd / gzip).
   compress: true,
+  // Fáze 104: ochrana know-how – produkční bundle bez source map (DevTools → Sources ukáže jen minifikovaný kód bez
+  // původních souborů TypeScriptu a komentářů; minifikace produkčního kódu je v Next.js vždy zapnutá) a bez hlavičky
+  // X-Powered-By (neprozrazuje framework). Katalogová data ETIM a index fotek jdou jen ze serveru (`server-only`).
+  productionBrowserSourceMaps: false,
+  poweredByHeader: false,
   // Fáze 100: katalogové fotky výrobců se mezi nasazeními nemění na místě (nová fotka = nový soubor, viz
   // public/catalog-images/README.md) – prohlížeč je drží rok bez dotazu na server (dřív max-age=0 a revalidace ETagem).
   async headers() {

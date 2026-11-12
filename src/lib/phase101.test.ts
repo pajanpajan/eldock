@@ -8,6 +8,7 @@ import { bomOrderLabel, bomTable, compileFloorplanBom, type WiringBomRow } from 
 import { assembliesFor, assemblyGangs, dissolveFrame, frameNeighbors, frameOf, joinNeighbors, placeAssembly, resizeFrame, setFrameOrientation, setFrameSlot } from "./panel-builder/floorplan-frames";
 import { DEFAULT_PITCH_CONFIG, PITCH_PLAN, PITCH_SLIDE_COUNT, parsePitchConfig, planText } from "./pitch";
 import { pitchLiveData } from "./pitch-live";
+import { catalogEan } from "@/server/catalog-data";
 
 /** Kontrolní číslice EAN-13 (GS1): váhy 1 / 3 zleva, 13. číslice doplní součet na násobek 10. */
 export function validEan13(value: string): boolean {
@@ -21,7 +22,7 @@ const el = (id: string, item: string, extra: Partial<EditorElement> = {}): Edito
 
 const bomOf = (draft: ReturnType<typeof demoDraft>) => {
   const analysis = analyzeDraft(draft);
-  return compileFloorplanBom(draft, { installation: draft.installation, cables: analysis.summary.byCable, cableEnds: {} });
+  return compileFloorplanBom(draft, { installation: draft.installation, cables: analysis.summary.byCable, cableEnds: {}, ean: catalogEan });
 };
 
 const texts = (rows: readonly WiringBomRow[]) => [...rows.flatMap((row) => [row.name, row.appearance, bomOrderLabel(row)]), ...bomTable(rows).flat().map(String)];

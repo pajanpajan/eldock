@@ -5,7 +5,8 @@
 // a 548); Schneider Electric, Legrand a Hager podle zadání fáze 91. Barva rámečku řady s vlastními objednacími čísly
 // (Busch-Jaeger) rozsah zúží: rámeček bez objednacího čísla v té barvě neexistuje. Čisté funkce.
 
-import { ETIM_FRAME_LIMITS } from "./brand-etim.generated";
+// Fáze 104: limity rámečků z veřejné části dat ETIM (celý import je jen na serveru)
+import { FRAME_LIMITS as ETIM_FRAME_LIMITS } from "./catalog-public.generated";
 import { designSeriesOf, resolveFrameColor } from "./wiring-designs";
 
 export type FrameOrientation = "horizontal" | "vertical";

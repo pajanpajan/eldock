@@ -6,8 +6,7 @@ import { ExternalLink, FileText, Minus, Plus, Target } from "lucide-react";
 import { FallbackImg } from "@/components/common/FallbackImg";
 import { Button } from "@/components/ui/button";
 import type { InstallLevel } from "@/engine/floorplan-bridge";
-import { productImage } from "@/lib/panel-builder/catalog-images";
-import { CATALOG_IMAGES } from "@/lib/panel-builder/catalog-images.generated";
+import { useCatalogImage } from "@/components/panel-builder/catalog-lookup";
 import { familyLink } from "@/lib/panel-builder/series-links";
 import { DEVICE_TABS, productsOfTab, type CatalogProduct, type DeviceTab, type ProductFamily } from "@/lib/panel-builder/smart-catalog";
 import { moduleOf, mpnOf, productBadges } from "@/lib/panel-builder/smart-datasheet";
@@ -67,7 +66,8 @@ function DeviceCard({ product, system, props }: { product: CatalogProduct; syste
   const mpn = mpnOf(shown);
   const total = auto + extra;
   // Fáze 78: oficiální náhled výrobce z public/catalog-images (se zdrojem a licencí), jinak vektorový náhled
-  const photo = productImage(product.id, CATALOG_IMAGES);
+  // Fáze 104: náhled výrobce ze serveru (index fotek s objednacími čísly je jen na serveru)
+  const photo = useCatalogImage("product", product.id);
   return (
     <article className={cn("flex flex-col gap-2 rounded-lg border bg-background/40 p-2", active ? "border-primary ring-1 ring-primary" : "border-border")} data-testid="device-card" data-card={product.id}>
       <div className="flex gap-2">

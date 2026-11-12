@@ -168,7 +168,20 @@ test("2D půdorys: akordeon palety, předměty X × Y, spotřebiče, úprava tra
   const moved = (await longest("horizontal", '[data-edited="true"]'))!;
   await page.mouse.click(moved.x, moved.y, { button: "right" });
   await expect(edited).toHaveCount(0);
-  const again = (await longest("horizontal"))!;
+  // Trasa po resetu přepočítá odložený výpočet – dvojklik až na ustálenou polohu úseku (jinak první klik trefí úsek
+  // a druhý už trasu po přepočtu)
+  let again = (await longest("horizontal"))!;
+  await expect
+    .poll(
+      async () => {
+        const now = await longest("horizontal");
+        const stable = Boolean(now && Math.abs(now.x - again.x) < 1 && Math.abs(now.y - again.y) < 1 && now.leg === again.leg);
+        if (now) again = now;
+        return stable;
+      },
+      { intervals: [500, 500, 1000], timeout: 15_000 },
+    )
+    .toBe(true);
   await page.mouse.dblclick(again.x, again.y);
   await expect(edited).toBeVisible();
   await goPhase(page, 5);

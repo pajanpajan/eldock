@@ -9,6 +9,7 @@ import { CatalogSearch } from "@/components/panel-builder/CatalogSearch";
 import { DatasheetImport } from "@/components/panel-builder/DatasheetImport";
 import { DevicePhoto } from "@/components/panel-builder/DevicePhoto";
 import { EnclosurePhoto } from "@/components/panel-builder/EnclosurePhoto";
+import { lookupCatalogImage } from "@/server/catalog-data";
 import { ManufacturerLogo } from "@/components/panel-builder/ManufacturerLogo";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -222,7 +223,8 @@ export default async function CatalogPage({ searchParams }: PageProps<"/panel-bu
                       <TableCell className="font-medium">
                         {/* Fáze 97: fotka rozvodnice výrobce */}
                         <span className="flex items-center gap-2">
-                          <EnclosurePhoto articleNumber={row.articleNumber} label={row.model} size="sm" />
+                          {/* Fáze 104: veřejný katalog – fotku dohledá server (index fotek do prohlížeče nesmí) */}
+                          <EnclosurePhoto articleNumber={row.articleNumber} label={row.model} size="sm" image={row.articleNumber ? lookupCatalogImage("enclosure", row.articleNumber) : null} />
                           {row.model}
                         </span>
                       </TableCell>

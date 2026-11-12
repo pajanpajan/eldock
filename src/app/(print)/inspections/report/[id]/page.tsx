@@ -11,6 +11,7 @@ import { INSTALLATION_KIND_LABELS, USAGE_GROUP_LABELS, legalDeadline, ruleInputF
 import { getFeatures } from "@/server/modules";
 import { getInspectionProtocol } from "@/server/queries/inspections";
 import { getCurrentAccount } from "@/server/session";
+import { IP_NOTICE } from "@/lib/legal";
 
 type Props = PageProps<"/inspections/report/[id]">;
 
@@ -231,6 +232,10 @@ export default async function InspectionReportPage({ params }: Props) {
 
         <footer className="border-t border-zinc-400 pt-1.5 text-[7.5pt] text-zinc-600">
           Vystaveno v systému {BRAND.name} ({BRAND.domain}) · zařízení {equipment.tag} · zpráva {record.reportNumber}. Originál revizní zprávy uchovává provozovatel po dobu životnosti zařízení. Elektronicky předaná zpráva musí být podepsána uznávaným elektronickým podpisem (NV 190/2022 Sb., § 10 odst. 1 písm. d).
+          {/* Fáze 104: ochrana databáze a autorských práv */}
+          <span className="mt-1 block text-[6.5pt] text-zinc-500" data-testid="doc-ip-notice">
+            {IP_NOTICE}
+          </span>
         </footer>
       </article>
     </div>

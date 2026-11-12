@@ -1,8 +1,7 @@
 "use client";
 
 import { FallbackImg } from "@/components/common/FallbackImg";
-import { enclosureImage } from "@/lib/panel-builder/catalog-images";
-import { CATALOG_IMAGES } from "@/lib/panel-builder/catalog-images.generated";
+import { useCatalogImage } from "@/components/panel-builder/catalog-lookup";
 import { cn } from "@/lib/utils";
 
 /**
@@ -10,8 +9,10 @@ import { cn } from "@/lib/utils";
  * fáze 97 i Hager (ETIM 10), OEZ a Schneider Electric (stránky výrobků) – `<výrobce>/enclosures/<objednací číslo>.webp`.
  * Bez fotky nic – zůstane kresba čela s DIN lištami. Malá varianta (`sm`) je jen `span` + `img` (smí být v tlačítku).
  */
-export function EnclosurePhoto({ articleNumber, label, className, size = "md" }: { articleNumber: string | null | undefined; label?: string; className?: string; size?: "sm" | "md" }) {
-  const image = enclosureImage(articleNumber, CATALOG_IMAGES);
+// Fáze 104: index fotek je jen na serveru – serverová stránka fotku předá (`image`), jinak se dohledá podle objednacího čísla
+export function EnclosurePhoto({ articleNumber, label, className, size = "md", image: given }: { articleNumber: string | null | undefined; label?: string; className?: string; size?: "sm" | "md"; image?: { src: string; source: string; license: string } | null }) {
+  const found = useCatalogImage("enclosure", given === undefined ? articleNumber : null);
+  const image = given === undefined ? found : given;
   if (!image) return null;
   const alt = `Fotka rozvodnice ${label ?? articleNumber}`;
   if (size === "sm") {

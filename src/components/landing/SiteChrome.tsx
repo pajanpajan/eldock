@@ -9,6 +9,7 @@ import { BRAND } from "@/lib/brand";
 import { COMPANY_INFO } from "@/lib/company";
 import { footerSections, siteNav, type SiteLink } from "@/lib/site-map";
 import { cn } from "@/lib/utils";
+import { IP_NOTICE } from "@/lib/legal";
 
 /**
  * Fáze 58: společná hlavička a patička veřejného webu – stejná navigace (Domovní elektroinstalace / Průmysl / Ukázka
@@ -93,8 +94,9 @@ export function SiteFooter({ clientZone, showcase }: { clientZone: SiteLink; sho
           </nav>
         ))}
       </div>
-      <p className="mx-auto w-full max-w-6xl px-4 pb-8 text-xs text-muted-foreground sm:px-6">
-        © {new Date().getFullYear()} {BRAND.name}
+      {/* Fáze 104: ochrana databáze prvků a autorských práv (zák. č. 121/2000 Sb.) */}
+      <p className="mx-auto w-full max-w-6xl px-4 pb-8 text-xs text-muted-foreground sm:px-6" data-testid="ip-notice">
+        {IP_NOTICE}
       </p>
     </footer>
   );

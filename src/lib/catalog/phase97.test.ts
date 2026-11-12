@@ -13,6 +13,7 @@ import { frameRulesOf } from "../panel-builder/residential-series-catalog";
 import { DESIGN_BRANDS } from "../panel-builder/wiring-designs";
 import { detectColumns, findHeaderRow, imageFormat, imageProblem, millimetres, oezSlug, packageKind, parseKoposProductPage, parseOezProductPage, parseRobots, robotsAllows, validGtin, zipEntryEncrypted } from "./manufacturer-data";
 import { wiringPhotoPicks, type WiringRecord } from "./series-photo-targets";
+import { catalogEan } from "@/server/catalog-data";
 
 // Fáze 97: vyhledání a stažení datových balíčků výrobců, univerzální parser a promítnutí dat do katalogů Eldocku.
 
@@ -180,7 +181,9 @@ describe("fáze 97 – data výrobců v katalozích Eldocku", () => {
       expect(codes.has(code), code).toBe(true);
       if (data.ean) expect(validGtin(data.ean), code).toBe(true);
       const own = MOUNTING_BOXES.find((entry) => entry.code === code)!;
-      if (data.ean) expect(own.ean).toBe(data.ean);
+      // Fáze 104: EAN krabice jen na serveru (veřejný katalog krabic EAN nemá)
+      if (data.ean) expect(catalogEan(code, "box")).toBe(data.ean);
+      expect("ean" in own).toBe(false);
       if (data.depthMm && ["shallow", "deep", "electronics"].includes(own.role)) expect(own.depthMm).toBe(data.depthMm);
       if (existsSync(path.join(ROOT, "public", "catalog-images", "kopos", "boxes"))) expect(boxImage(code, CATALOG_IMAGES), code).not.toBeNull();
     }

@@ -6,7 +6,8 @@ import { isValidIco, normalizeIco } from "./ares";
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, passwordIssues } from "./password-policy";
 import type { ManufacturerInfo } from "./panel-builder/project";
 
-export const TERMS_VERSION = "1.0-2026-11";
+// Fáze 104: 1.1 – sekce 7 o ochraně databáze prvků, algoritmů a zákazu vytěžování
+export const TERMS_VERSION = "1.1-2026-11";
 
 /** Povinný souhlas pod registrací (doslovně podle zadání). */
 export const TERMS_CONSENT =
@@ -24,6 +25,7 @@ export const TERMS_SECTIONS: { title: string; text: string }[] = [
   { title: "4. Vyloučení odpovědnosti provozovatele", text: "Provozovatel platformy neodpovídá za škody vzniklé použitím výstupů platformy bez odborné kontroly, za chyby rozpoznání AI ani za nesprávně zadané údaje. Odpovědnost provozovatele je v nejvyšší míře připuštěné právními předpisy vyloučena." },
   { title: "5. Kredity a testovací provoz", text: "Testovací registrace obsahuje omezený počet kreditů (1 kredit = 1 nový projekt rozváděče). Provozovatel může testovací provoz kdykoli upravit nebo ukončit." },
   { title: "6. Osobní údaje", text: "Údaje firmy a odpovědné osoby se zpracovávají za účelem plnění smlouvy a propisují se do dokumentace, kterou firma vytvoří. Údaje firmy jsou předvyplněny z veřejného registru ARES. Podrobnosti jsou v Zásadách zpracování osobních údajů na eldock.cz/ochrana-osobnich-udaju." },
+  { title: "7. Ochrana databáze, autorských práv a zákaz vytěžování", text: "Databáze prvků a katalogových údajů (objednací čísla, EAN, technické parametry, fotografie a jejich přiřazení), výpočtové algoritmy (oteplení, dimenzování a trasy kabelů, kontrola norem) a struktura generované dokumentace jsou chráněny autorským právem a zvláštním právem pořizovatele databáze podle zákona č. 121/2000 Sb. (autorský zákon). Uživatel smí výstupy platformy (dokumentaci, kusovníky a výkresy vlastních zakázek) používat pro svou činnost a předat je svému zákazníkovi. Zakázáno je soustavné nebo podstatné vytěžování databáze ručně i automatizovanými nástroji (scraping, roboti, hromadné stahování), kopírování výpočtových algoritmů, reverzní inženýrství klientského kódu a obcházení technických ochran platformy (limity požadavků, přístupová práva). Porušení je důvodem k okamžitému zrušení účtu bez náhrady kreditů a zakládá nárok provozovatele na náhradu škody a vydání bezdůvodného obohacení." },
 ];
 
 const text = (min: number, max: number, message: string) => z.string().trim().min(min, message).max(max);

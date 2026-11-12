@@ -23,6 +23,7 @@ import { AnnotationShape, HatchPatterns } from "./AnnotationLayer";
 import { FixtureShape } from "./FixtureShape";
 import { FloorSymbol, PanelSymbol } from "./FloorSymbol";
 import { RouteLayer } from "./RouteLayer";
+import { IP_NOTICE } from "@/lib/legal";
 
 /**
  * Fáze 63: export výkresu elektroinstalace aktivního podlaží. PDF = tiskový list A3 / A4 na šířku ve skutečném
@@ -230,6 +231,10 @@ function PlanSheet({ draft, analysis, paper, fields }: { draft: FloorplanDraft; 
             <tr>
               <td colSpan={2} style={{ padding: "0.6mm 1mm", fontSize: "2mm", color: "#4b5563" }}>
                 ELDOCK · značky ČSN EN 60617-11 · koupelnové zóny ČSN 33 2000-7-701 ed. 2 · okruhy ČSN 33 2130 ed. 4
+                {/* Fáze 104: ochrana databáze a autorských práv */}
+                <span style={{ display: "block", marginTop: "0.4mm", fontSize: "1.6mm" }} data-testid="doc-ip-notice">
+                  {IP_NOTICE}
+                </span>
               </td>
             </tr>
           </tbody>

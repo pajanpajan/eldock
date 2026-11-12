@@ -10,6 +10,8 @@ import { buildXlsx } from "@/lib/xlsx";
 import { useLeadGate } from "@/components/analytics/LeadCaptureModal";
 import { cn } from "@/lib/utils";
 
+import { useCatalogEans } from "@/components/panel-builder/catalog-lookup";
+
 import { BoxPhoto } from "./BoxPhoto";
 
 function download(name: string, data: BlobPart, type: string) {
@@ -25,7 +27,9 @@ function download(name: string, data: BlobPart, type: string) {
  * Fáze 55: souhrn kusovníku domovní instalace v pravém panelu + modal s tabulkou, exportem CSV / XLSX a tiskem. Fáze 102:
  * u ukázkové firmy export přes okno kontaktu (`useLeadGate`), `context` = co návštěvník vytvořil.
  */
-export function WiringBomDialog({ rows, context }: { rows: readonly WiringBomRow[]; context?: { summary: string; circuits?: number; cableM?: number } }) {
+export function WiringBomDialog({ rows: computed, context }: { rows: readonly WiringBomRow[]; context?: { summary: string; circuits?: number; cableM?: number } }) {
+  // Fáze 104: EAN objednacích čísel ze serveru (celý import ETIM a data KOPOS do klientského bundlu nesmí)
+  const rows = useCatalogEans(computed);
   const gate = useLeadGate();
   const lead = (trigger: "csv" | "xlsx") => ({ kind: "floorplan" as const, trigger, summary: context?.summary ?? `Kusovník domovní instalace: ${rows.length} položek`, ...(context?.circuits !== undefined ? { circuits: context.circuits } : {}), ...(context?.cableM !== undefined ? { cableM: context.cableM } : {}) });
   const devices = rows.filter((row) => row.unit === "ks").reduce((sum, row) => sum + row.quantity, 0);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import { Camera, ExternalLink, Palette } from "lucide-react";
 import { toast } from "sonner";
 
@@ -8,11 +8,11 @@ import { FallbackImg } from "@/components/common/FallbackImg";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import type { SeriesMaterial, SeriesShape } from "@/lib/panel-builder/abb-catalog-2026";
-import { ETIM_FRAMES } from "@/lib/panel-builder/abb-etim.generated";
+import { useEtimFrames } from "@/components/panel-builder/catalog-lookup";
 import { lookOf, mockStyle, type LookColor } from "@/lib/panel-builder/series-look";
 import { renderDeviceSvg, type RenderGang } from "@/lib/panel-builder/series-render";
 import { seriesLink } from "@/lib/panel-builder/series-links";
-import { seriesPhoto, withUploadedPhotos, type SeriesPhoto, type SeriesPhotoPart } from "@/lib/panel-builder/series-photos";
+import { seriesPhoto, type SeriesPhoto, type SeriesPhotoPart } from "@/lib/panel-builder/series-photos";
 import { DESIGN_BRANDS, designSeriesOf, hasFrameChoice, isMonoblockSeries, resolveFrameColor, seriesColors, seriesFrameColors, type DesignSeries } from "@/lib/panel-builder/wiring-designs";
 
 export { lookOf, mockStyle };
@@ -62,7 +62,9 @@ export function combineLook(insert: LookColor | null | undefined, frame?: LookCo
  * kreslený náhled. Obrázek je dekorativní (název má tlačítko), okraj studiového pozadí se ořízne.
  */
 export function SeriesThumb({ seriesKey, colorId, fallback, className, photos }: { seriesKey: string; colorId: string | null | undefined; fallback: ReactNode; className?: string; /** Fáze 92: i nahrané fotky. */ photos?: readonly SeriesPhoto[] }) {
-  const photo = colorId ? seriesPhoto(seriesKey, colorId, "switch", photos) : null;
+  // Fáze 104: bez předaných fotek sdílené fotky řad ze serveru (manifest pro přihlášené)
+  const shared = useCatalogPhotos(!photos).photos;
+  const photo = colorId ? seriesPhoto(seriesKey, colorId, "switch", photos ?? shared) : null;
   if (!photo || (photo.color && photo.color !== colorId)) return <>{fallback}</>;
   return (
     <span className={cn("block shrink-0 overflow-hidden", className)} data-testid="series-thumb-photo" data-src={photo.src}>
@@ -77,7 +79,7 @@ export function SeriesGallery({ seriesKey, color, frameColor = null, available, 
   const [pick, setPick] = useState<{ series: string; color: string; frameColor: string | null }>({ series: seriesKey ?? "ABB|Zoni", color, frameColor });
   // Fáze 92: reálné fotky – nahrané ve velínu (úložiště) mají přednost před staženými a před rendery
   const catalog = useCatalogPhotos(open);
-  const photos = useMemo(() => withUploadedPhotos(catalog.photos), [catalog.photos]);
+  const photos = catalog.photos;
   const [uploadMode, setUploadMode] = useState(false);
   const [slot, setSlot] = useState<PhotoSlot | null>(null);
   const [busy, setBusy] = useState(false);
@@ -106,7 +108,8 @@ export function SeriesGallery({ seriesKey, color, frameColor = null, available, 
   const colorId = chosen?.id ?? pick.color;
   const sourceText = photoSource.trim() || `${brand.label} – web / katalog výrobce`;
   // Fáze 94: rámečky 1R–5R barvy (rámečku) podle oficiálních dat ABB ETIM 9.0 – objednací číslo, EAN, v datech výrobce
-  const etimFrames = ETIM_FRAMES[`${seriesKeyOf}|${pick.frameColor ?? colorId}`] ?? null;
+  // Fáze 104: celý import ETIM je jen na serveru – rámečky zvolené barvy se načtou serverovou akcí
+  const etimFrames = useEtimFrames(open ? `${seriesKeyOf}|${pick.frameColor ?? colorId}` : null);
   const setPhoto = !pick.frameColor ? seriesPhoto(seriesKeyOf, colorId, "set", photos) : null;
 
   /** Fáze 92: fotka do slotu (velín) – hned v galerii a pro všechny uživatele. */

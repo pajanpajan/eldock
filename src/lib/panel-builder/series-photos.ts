@@ -5,7 +5,6 @@
 // Čisté funkce. Fáze 78: i oficiální náhledy z `public/catalog-images/` (`catalog-images.ts`).
 
 import type { CatalogImage } from "./catalog-images";
-import { CATALOG_IMAGES } from "./catalog-images.generated";
 
 /** Fáze 94: „frame“ = rámeček 1R v barvě (dlaždice barvy rámečku). */
 export type SeriesPhotoPart = "switch" | "socket" | "set" | "frame";
@@ -35,22 +34,22 @@ export interface SeriesPhoto {
 export const SERIES_PHOTOS: readonly SeriesPhoto[] = [];
 
 /**
- * Fáze 78: fotky z `public/catalog-images/<výrobce>/<řada>/` (manifest `npm run catalog:images`, zdroj a licence ze
- * `zdroj.json` složky) – spolu s ručním seznamem `SERIES_PHOTOS`; ruční položka má přednost.
+ * Fáze 78: fotky dílů řad z indexu `public/catalog-images/<výrobce>/<řada>/` (manifest `npm run catalog:images`, zdroj
+ * a licence ze `zdroj.json` složky); fáze 92: reálné fotky před rendery stejného dílu a barvy. Fáze 104: index je jen na
+ * serveru (`ALL_SERIES_PHOTOS` v `src/server/catalog-data.ts`), galerie ho dostane přihlášená z API manifestu.
  */
-export const ALL_SERIES_PHOTOS: readonly SeriesPhoto[] = [
-  ...SERIES_PHOTOS,
-  // Fáze 92: reálné fotky (`manifest.json`) před rendery stejného dílu a barvy
-  ...CATALOG_IMAGES.filter((image): image is CatalogImage & { part: SeriesPhotoPart } => image.part !== "product")
+export function catalogSeriesPhotos(images: readonly CatalogImage[]): SeriesPhoto[] {
+  return images
+    .filter((image): image is CatalogImage & { part: SeriesPhotoPart } => image.part !== "product")
     .map((image) => ({ series: image.series, ...(image.color ? { color: image.color } : {}), part: image.part, src: image.src, source: image.source, license: image.license, ...(image.photo ? { photo: true } : {}), ...(image.mpn ? { mpn: image.mpn } : {}) }))
-    .sort((a, b) => Number(Boolean(b.photo)) - Number(Boolean(a.photo))),
-];
+    .sort((a, b) => Number(Boolean(b.photo)) - Number(Boolean(a.photo)));
+}
 
 /** Fáze 92: nahrané fotky (velín, trvalé úložiště) mají přednost před staženými fotkami a rendery z repozitáře. */
-export const withUploadedPhotos = (uploaded: readonly SeriesPhoto[], photos: readonly SeriesPhoto[] = ALL_SERIES_PHOTOS): readonly SeriesPhoto[] => (uploaded.length ? [...uploaded.map((photo) => ({ ...photo, photo: true })), ...photos] : photos);
+export const withUploadedPhotos = (uploaded: readonly SeriesPhoto[], photos: readonly SeriesPhoto[] = SERIES_PHOTOS): readonly SeriesPhoto[] => (uploaded.length ? [...uploaded.map((photo) => ({ ...photo, photo: true })), ...photos] : photos);
 
 /** Fotka dílu řady v barvě (přesná barva, jinak fotka řady bez barvy); null = vektorový náhled. */
-export function seriesPhoto(series: string | null | undefined, color: string | null | undefined, part: SeriesPhotoPart, photos: readonly SeriesPhoto[] = ALL_SERIES_PHOTOS): SeriesPhoto | null {
+export function seriesPhoto(series: string | null | undefined, color: string | null | undefined, part: SeriesPhotoPart, photos: readonly SeriesPhoto[] = SERIES_PHOTOS): SeriesPhoto | null {
   if (!series) return null;
   const own = photos.filter((photo) => photo.series === series && photo.part === part);
   return own.find((photo) => photo.color === color) ?? own.find((photo) => !photo.color) ?? null;

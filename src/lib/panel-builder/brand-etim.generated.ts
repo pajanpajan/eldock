@@ -2,6 +2,8 @@
 // Vestavné hloubky přístrojů řad Hager (ETIM 10: EF012278 / EF000218), nejvyšší vícenásobný rámeček řady podle ETIM
 // (EF000074) a instalační krabice KOPOS ze stránek výrobků e-shopu kopos.cz a ceníku XLSX (EAN, hloubka, průměr,
 // bezhalogenovost, technický list, ceníková cena bez DPH za kus).
+// Fáze 104: celý import dat výrobců jen na serveru (do klientského bundlu nesmí – viz src/server/catalog-data.ts)
+import "server-only";
 
 export interface BrandDeviceDepth {
   mpn: string;

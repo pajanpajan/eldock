@@ -1,7 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { AUTH_COOKIE, PANEL_AUTH_COOKIE, SUPERADMIN_COOKIE, companyIdOf, isAuthBypassed, isSuperadminToken, verifyAuthToken } from "@/lib/auth";
+import { SCRAPER_BLOCKED_TEXT, clientIpOf, createRateLimiter, isScraperAgent, isSeoPath, rateBucketOf } from "@/lib/request-guard";
 import { APP_HOME, isPlantRoute } from "@/lib/routes";
+import { PUBLIC_PAGES } from "@/lib/seo";
 
 /**
  * Přihlašovací brána se dvěma oddělenými produkty (fáze 41):
@@ -41,9 +43,25 @@ function redirectTo(request: NextRequest, pathname: string, next?: string) {
   return redirect;
 }
 
+// Fáze 104: ochrana proti scrapingu – veřejné SEO stránky (kopírovací roboti na nich neblokujeme) a limity podle IP
+const SEO_PATHS = new Set<string>(PUBLIC_PAGES.map((page) => page.path));
+const limiter = createRateLimiter();
+
 export async function proxy(request: NextRequest) {
-  if (isAuthBypassed()) return NextResponse.next();
   const { pathname, search } = request.nextUrl;
+  // Fáze 104: programy na kopírování webů a skriptovací klienti (HTTrack, WebCopier, Teleport, SiteSnagger, Offline
+  // Explorer, python-requests …) mimo veřejné SEO stránky → 403; katalogová, výpočtová a exportní rozhraní s limitem
+  // požadavků na IP adresu (za Caddy) → 429 Too Many Requests
+  if (isScraperAgent(request.headers.get("user-agent")) && !isSeoPath(pathname, SEO_PATHS)) {
+    return new NextResponse(SCRAPER_BLOCKED_TEXT, { status: 403, headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" } });
+  }
+  const bucket = rateBucketOf({ pathname, method: request.method, action: request.headers.has("next-action") });
+  const ip = bucket ? clientIpOf(request.headers) : null;
+  const retryAfter = bucket && ip ? limiter.hit(bucket, ip) : null;
+  if (retryAfter) {
+    return NextResponse.json({ error: "Příliš mnoho požadavků – automatizované stahování katalogu a výpočtů ELDOCK je omezené. Zkuste to za chvíli." }, { status: 429, headers: { "Retry-After": String(retryAfter), "Cache-Control": "no-store" } });
+  }
+  if (isAuthBypassed()) return NextResponse.next();
   // Loga výrobců (fáze 51) nejsou tajná – soubory public/brands a /api/brand-logo bez přihlášení
   if (PUBLIC_PATHS.has(pathname) || PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix))) return NextResponse.next();
   // Cron (avízo lhůt revizí) se ověřuje vlastním tajným tokenem v Route Handleru.
@@ -77,7 +95,8 @@ export async function proxy(request: NextRequest) {
     // (registr `StoredFile` v GET /api/files): firma Panel Builderu tak vidí i své logo a razítko, velín vše.
     // Fáze 69: export dat firmy (Panel Builder a velín) – oprávnění ověří route handler
     // Fáze 92: nahrání fotky do katalogu řad – oprávnění velínu ověří route handler
-    const fileApi = pathname === "/api/uploads" || pathname.startsWith("/api/files/") || pathname === "/api/data-export" || pathname === "/api/catalog-images/upload";
+    // Fáze 104: fotky konkrétních výrobků z indexu katalogu – jen přihlášeným (route handler ověří relaci znovu)
+    const fileApi = pathname === "/api/uploads" || pathname.startsWith("/api/files/") || pathname === "/api/data-export" || pathname === "/api/catalog-images/upload" || pathname === "/api/catalog-images/lookup";
     if (plant || ((company || superadmin) && fileApi)) return NextResponse.next();
     // Fáze 103: registr QR štítků ELDOCK – API jen pro velín (route handler ověří cookie velínu znovu)
     if (superadmin && pathname === "/api/qr-labels") return NextResponse.next();

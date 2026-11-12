@@ -1,12 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Loader2, Upload } from "lucide-react";
 
 import { FallbackImg } from "@/components/common/FallbackImg";
 
 import type { PhotoPart } from "@/lib/panel-builder/catalog-photos";
-import type { SeriesPhoto } from "@/lib/panel-builder/series-photos";
+import { withUploadedPhotos, type SeriesPhoto } from "@/lib/panel-builder/series-photos";
 import { cn } from "@/lib/utils";
 
 /** Slot galerie, do kterého jde fotka (díl + barva řady; bez barvy fotka celé řady). */
@@ -19,25 +19,51 @@ export const sameSlot = (a: PhotoSlot | null, b: PhotoSlot) => Boolean(a && a.pa
 
 /**
  * Fáze 92: nahrané reálné fotky řad z trvalého úložiště (`GET /api/catalog-images/manifest`) – načtou se při otevření
- * galerie; `canUpload` = přihlášený velín. Nová fotka se přidá hned (bez nového načtení).
+ * galerie; `canUpload` = přihlášený velín. Nová fotka se přidá hned (bez nového načtení). Fáze 104: manifest vrací
+ * přihlášeným i fotky dílů řad z indexu katalogu (index do klientského bundlu nesmí) – jeden sdílený stav pro galerii
+ * i náhledy řad v detailu, načte se jednou za otevření stránky.
  */
+type CatalogPhotosState = { uploaded: readonly SeriesPhoto[]; catalog: readonly SeriesPhoto[]; canUpload: boolean };
+const EMPTY_PHOTOS: CatalogPhotosState = { uploaded: [], catalog: [], canUpload: false };
+let photosState: CatalogPhotosState = EMPTY_PHOTOS;
+let photosRequested = false;
+const photoListeners = new Set<() => void>();
+const setPhotosState = (next: CatalogPhotosState) => {
+  photosState = next;
+  for (const listener of photoListeners) listener();
+};
+const subscribePhotos = (listener: () => void) => {
+  photoListeners.add(listener);
+  return () => void photoListeners.delete(listener);
+};
+
+function loadCatalogPhotos() {
+  if (photosRequested) return;
+  photosRequested = true;
+  fetch("/api/catalog-images/manifest", { cache: "no-store" })
+    .then((response) => (response.ok ? response.json() : null))
+    .then((data: { photos?: SeriesPhoto[]; catalog?: SeriesPhoto[]; canUpload?: boolean } | null) => {
+      if (data) setPhotosState({ uploaded: Array.isArray(data.photos) ? data.photos : [], catalog: Array.isArray(data.catalog) ? data.catalog : [], canUpload: data.canUpload === true });
+      else photosRequested = false;
+    })
+    .catch(() => {
+      photosRequested = false;
+    });
+}
+
+/** Nově nahraná fotka (velín) hned v galerii i v náhledech. */
+function addCatalogPhoto(photo: SeriesPhoto) {
+  setPhotosState({ ...photosState, uploaded: [photo, ...photosState.uploaded.filter((entry) => !(entry.series === photo.series && entry.part === photo.part && (entry.color ?? null) === (photo.color ?? null)))] });
+}
+
 export function useCatalogPhotos(active: boolean) {
-  const [state, setState] = useState<{ photos: SeriesPhoto[]; canUpload: boolean }>({ photos: [], canUpload: false });
   useEffect(() => {
-    if (!active) return;
-    let alive = true;
-    fetch("/api/catalog-images/manifest", { cache: "no-store" })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((data: { photos?: SeriesPhoto[]; canUpload?: boolean } | null) => {
-        if (alive && data) setState({ photos: Array.isArray(data.photos) ? data.photos : [], canUpload: data.canUpload === true });
-      })
-      .catch(() => undefined);
-    return () => {
-      alive = false;
-    };
+    if (active) loadCatalogPhotos();
   }, [active]);
-  const add = useCallback((photo: SeriesPhoto) => setState((current) => ({ ...current, photos: [photo, ...current.photos.filter((entry) => !(entry.series === photo.series && entry.part === photo.part && (entry.color ?? null) === (photo.color ?? null)))] })), []);
-  return { ...state, add };
+  const state = useSyncExternalStore(subscribePhotos, () => photosState, () => EMPTY_PHOTOS);
+  // Nahrané fotky (velín) mají přednost před fotkami z indexu a rendery
+  const photos = useMemo(() => withUploadedPhotos(state.uploaded, state.catalog), [state]);
+  return { photos, canUpload: state.canUpload, add: addCatalogPhoto };
 }
 
 /** Nahrání fotky do slotu (velín); vrací fotku galerie nebo text chyby. */

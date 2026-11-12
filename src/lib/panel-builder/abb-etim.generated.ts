@@ -1,6 +1,8 @@
 // Generuje `node scripts/import-abb-etim9.mjs` z oficiálních dat ABB ETIM 9.0 (ELSB_ETIM-9.0_2026-05) – needitujte ručně.
 // Rámečky 1R–5R z kusovníku s ověřením v ETIM (počet násobků EF000074), vestavné hloubky přístrojů řad (EF012278 /
 // EF000218 v mm), GTIN / EAN objednacích čísel a výrobky chytré domácnosti (technický list).
+// Fáze 104: celý import dat výrobců jen na serveru (do klientského bundlu nesmí – viz src/server/catalog-data.ts)
+import "server-only";
 
 export interface EtimFrame {
   gangs: number;

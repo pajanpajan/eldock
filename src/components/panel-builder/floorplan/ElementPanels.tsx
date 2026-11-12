@@ -33,7 +33,7 @@ import { cn } from "@/lib/utils";
 
 import { AddToFrameControl, SaveTemplateControl } from "./FrameAssemblyPalette";
 import { FrameSection, type FrameSectionActions } from "./FrameSection";
-import { BoxPhoto } from "./BoxPhoto";
+import { BoxEan, BoxPhoto } from "./BoxPhoto";
 import { DeviceControls, LightOptions } from "./LightOptions";
 import { FixtureControls } from "./FixtureShape";
 import type { BasinZone } from "@/lib/panel-builder/fixtures";
@@ -256,7 +256,7 @@ export function ElementDetail({
             <BoxPhoto code={box.resolved.box?.code} label={box.resolved.box?.type} className="size-10" />
             <p>
               <span className="font-semibold">📦 Instalační krabička:</span> <span data-testid="element-box-summary">{box.summary}</span>
-              {box.resolved.box?.ean ? <span className="block text-[10px] text-muted-foreground" data-testid="element-box-ean">EAN {box.resolved.box.ean}</span> : null}
+              <BoxEan code={box.resolved.box?.code} />
             </p>
           </div>
           {box.resolved.need.kind === "shallow" || box.resolved.need.kind === "deep" || box.resolved.need.kind === "electronics" ? (

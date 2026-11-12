@@ -8,7 +8,10 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { readCatalogPhotoFile, readStoredPhotos, storeCatalogPhoto, uploadedSeriesPhotos } from "@/server/services/catalog-photo-store";
 
 import { parsePhotoManifest, photoTarget, renderPhotoManifest, upsertPhoto, type ManifestPhoto } from "./catalog-photos";
-import { ALL_SERIES_PHOTOS, seriesPhoto, withUploadedPhotos } from "./series-photos";
+// Fáze 104: fotky dílů řad z indexu katalogu jsou jen na serveru
+import { ALL_SERIES_PHOTOS } from "@/server/catalog-data";
+
+import { seriesPhoto, withUploadedPhotos } from "./series-photos";
 
 // Fáze 92: reálné fotky designových řad – manifest harvesteru, nahrávač Ctrl+V (velín) a přednost fotky před renderem
 
@@ -42,7 +45,7 @@ describe("fáze 92 – manifest fotek řad", () => {
     const merged = withUploadedPhotos([uploaded]);
     expect(seriesPhoto("ABB|Tango", "abb-tango-b", "switch", merged)).toMatchObject({ src: uploaded.src, photo: true });
     // Bez nahrané fotky render z public/catalog-images
-    expect(seriesPhoto("ABB|Tango", "abb-tango-b", "switch")?.src).toMatch(/^\/catalog-images\/abb\/tango\//);
+    expect(seriesPhoto("ABB|Tango", "abb-tango-b", "switch", ALL_SERIES_PHOTOS)?.src).toMatch(/^\/catalog-images\/abb\/tango\//);
   });
 });
 

@@ -13,7 +13,6 @@
 // v samostatné tabulce. Čisté funkce.
 // Fáze 94: objednací číslo, které je v oficiálních datech výrobce ABB ETIM 9.0, má EAN (GTIN) a platí za ověřené.
 
-import { ETIM_GTIN } from "./abb-etim.generated";
 import { allElements, effectiveSwitchNo, floorsOf, frameColorOf, isWiredSwitch, paletteItem, type EditorElement, type FloorplanDraft, type FrameGroup } from "./floorplan-editor";
 import { gangsOf } from "./floorplan-frames";
 import { productById } from "./smart-catalog";
@@ -59,7 +58,6 @@ export function bomOrderLabel(row: Pick<WiringBomRow, "category" | "mpn">): stri
 }
 
 /** Fáze 94: EAN objednacího čísla z dat ABB ETIM 9.0 (null = číslo v datech výrobce není nebo nemá EAN). */
-export const eanOf = (mpn: string | null | undefined): string | null => (mpn ? (ETIM_GTIN[mpn] ?? null) : null);
 
 export interface BomBoxInfo {
   maker: string;
@@ -180,6 +178,11 @@ export interface BomOptions {
   cables?: readonly { cable: string; meters: number }[];
   /** Fáze 91: počet kabelů v krabici prvku (úseky tras) – rozbočovací zásuvka dostane hlubokou krabici. */
   cableEnds?: Readonly<Record<string, number>>;
+  /**
+   * Fáze 104: EAN objednacího čísla (přístroje ABB ETIM 9.0, krabice KOPOS) – předá jen server (`catalogEan`); prohlížeč
+   * kusovník počítá bez EAN a doplní je serverovou akcí (`useCatalogEans`).
+   */
+  ean?: (code: string, kind: "device" | "box") => string | null;
 }
 
 /** Objednací číslo rámečku NR: řady Busch-Jaeger mají číslo pro každou barvu (`frameMpn`), ostatní matice + kód barvy rámečku. */
@@ -198,9 +201,10 @@ export function compileFloorplanBom(draft: FloorplanDraft, options: BomOptions =
     const current = rows.get(key);
     if (current) current.quantity = Math.round((current.quantity + quantity) * 10) / 10;
     else {
-      // Fáze 94: číslo v datech výrobce (ETIM 9.0) = ověřené, s EAN pro objednávku u velkoobchodu
-      const ean = row.box ? null : eanOf(row.mpn);
-      rows.set(key, { ...row, ...(ean ? { ean, verified: true } : {}), quantity });
+      // Fáze 94: číslo v datech výrobce (ETIM 9.0) = ověřené, s EAN pro objednávku u velkoobchodu; fáze 97: EAN krabice
+      // KOPOS ze stránky výrobku; fáze 104: EAN jen přes resolver serveru
+      const ean = row.mpn && options.ean ? options.ean(row.mpn, row.box ? "box" : "device") : null;
+      rows.set(key, { ...row, ...(ean ? { ean, ...(row.box ? {} : { verified: true }) } : {}), quantity });
     }
   };
   // Fáze 59: víceramečky všech podlaží – člen rámečku nemá vlastní rámeček, za skupinu jeden rámeček NR
@@ -416,8 +420,6 @@ export function compileFloorplanBom(draft: FloorplanDraft, options: BomOptions =
         appearance: line.box ? boxMakerLabel(line.box.maker) : maker,
         unit: "ks",
         box: { maker: line.box ? boxMakerLabel(line.box.maker) : maker, type: line.box?.type ?? "–", depthMm: line.box?.depthMm ?? null, purpose: line.box ? line.box.purpose : `${line.missing ?? "Instalační krabice"} (${wall})` },
-        // Fáze 97: EAN krabice ze stránky výrobku (KOPOS)
-        ...(line.box?.ean ? { ean: line.box.ean } : {}),
       },
       line.quantity,
     );

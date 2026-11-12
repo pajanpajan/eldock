@@ -7,6 +7,7 @@ import { colorForSeries, seriesColors } from "./wiring-designs";
 import { compileFloorplanBom } from "./wiring-bom";
 import { SUPPLY_SYSTEMS, supplyById, supplyOf } from "./supply";
 import { proposeTree, type TreeNode } from "./tree";
+import { catalogEan } from "@/server/catalog-data";
 
 // Fáze 55: soustava přívodu 1f / 3f a sběrnice PE / N.
 
@@ -131,7 +132,7 @@ describe("kusovník domovní instalace", () => {
   });
 
   it("Tango: dělený kryt je odvozený (ověřit), řada bez matice a dvoubarevný kód bez vymyšleného čísla", () => {
-    const tango = compileFloorplanBom({ ...emptyDraft(), series: "ABB|Tango", color: seriesColors("ABB|Tango")[0].id, elements: [el("s", "switch-6-6")] });
+    const tango = compileFloorplanBom({ ...emptyDraft(), series: "ABB|Tango", color: seriesColors("ABB|Tango")[0].id, elements: [el("s", "switch-6-6")] }, { ean: catalogEan });
     // Fáze 94: odvozený dělený kryt potvrzují oficiální data výrobce ABB ETIM 9.0 → ověřený, s EAN
     expect(tango.find((row) => row.category === "Kryty spínačů")).toMatchObject({ mpn: "3558A-A652 B", verified: true, ean: "8595017208188" });
     // Řada bez matice objednacích čísel (Classic) – číslo se nevymýšlí; fáze 91 – Decento má kompletní přístroje z katalogu

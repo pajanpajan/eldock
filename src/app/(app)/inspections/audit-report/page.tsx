@@ -25,6 +25,7 @@ import { getAuditReport } from "@/server/queries/inspections";
 import { getPlants } from "@/server/queries/plant";
 import { getFeatures } from "@/server/modules";
 import { getCurrentAccount, getRememberedPlantId } from "@/server/session";
+import { IP_NOTICE } from "@/lib/legal";
 
 export const metadata: Metadata = { title: "Auditní report revizí" };
 
@@ -277,6 +278,10 @@ export default async function AuditReportPage({ searchParams }: PageProps<"/insp
             </Table>
           </div>
           <p className="hidden pt-6 text-sm print:block">Kontroloval: ____________________ · Datum: ____________ · Podpis: ____________</p>
+          {/* Fáze 104: ochrana databáze a autorských práv v tisku Knihy revizí */}
+          <p className="hidden pt-2 text-[7pt] text-zinc-500 print:block" data-testid="doc-ip-notice">
+            {IP_NOTICE}
+          </p>
         </section>
       </div>
     </PageTransition>

@@ -8,6 +8,14 @@ import { COMPANY_INFO } from "./company";
 
 export const PRIVACY_VERSION = "1.4 – 12. 11. 2026";
 
+/**
+ * Fáze 104: doložka ochrany databáze a autorských práv (patička webu, obchodní podmínky, zápatí PDF výstupů) – databáze
+ * prvků jako databáze s vlastním právem pořizovatele (§ 88–94 zák. č. 121/2000 Sb.), algoritmy a struktura dokumentace
+ * jako autorské dílo / software.
+ */
+export const IP_NOTICE =
+  "© 2026 ELDOCK.cz – Všechna práva vyhrazena. Databáze prvků, výpočtové algoritmy a struktura dokumentace jsou chráněny autorským právem a zvláštním právem pořizovatele databáze dle zák. č. 121/2000 Sb. Automatizované vytěžování (scraping) a reverzní inženýrství je zakázáno.";
+
 /** Text souhlasu s newsletterem – ukládá se k odběrateli (verze níže), změna textu = nová verze. */
 export const NEWSLETTER_CONSENT_VERSION = "1";
 export const NEWSLETTER_CONSENT_TEXT =

@@ -7,6 +7,7 @@ import { CATALOG_IMAGES } from "../src/lib/panel-builder/catalog-images.generate
 import { RENDER_SERIES, renderPlan, renderSeriesSvg } from "../src/lib/panel-builder/series-render";
 import { seriesPhoto } from "../src/lib/panel-builder/series-photos";
 import { designSeriesOf } from "../src/lib/panel-builder/wiring-designs";
+import { ALL_SERIES_PHOTOS } from "../src/server/catalog-data";
 import { CATALOG_IMAGES_DIR } from "./catalog-images";
 import { MAKER_DIRS } from "./catalog-renders";
 
@@ -25,7 +26,7 @@ describe("fáze 80 – produktové náhledy řad ABB (public/catalog-images)", (
     // Každá barva šesti klíčových řad má v manifestu spínač, zásuvku i víceramček 3R
     for (const key of RENDER_SERIES) {
       for (const color of designSeriesOf(key)!.series.colors ?? []) {
-        for (const part of ["switch", "socket", "set"] as const) expect(seriesPhoto(key, color.id, part)?.src, `${key} ${color.id} ${part}`).toMatch(/^\/catalog-images\/abb\//);
+        for (const part of ["switch", "socket", "set"] as const) expect(seriesPhoto(key, color.id, part, ALL_SERIES_PHOTOS)?.src, `${key} ${color.id} ${part}`).toMatch(/^\/catalog-images\/abb\//);
       }
     }
     // Fáze 94: vedle vlastních renderů Eldocku i fotky výrobce z dat ABB ETIM 9.0 (manifest a fotky rozvodnic)

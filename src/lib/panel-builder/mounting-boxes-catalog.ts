@@ -6,8 +6,9 @@
 // Fáze 94: vestavná hloubka přístroje z oficiálních dat výrobce (ABB ETIM 9.0, EF012278 / EF000218) – přístroj hlubší, než
 // zaručuje mělká krabice (40 mm), chce hlubokou; u zvolené krabice se počítá volné místo za přístrojem.
 
-import { ETIM_DEVICE_DEPTHS } from "./abb-etim.generated";
-import { BRAND_DEVICE_DEPTHS, KOPOS_BOX_DATA, KOPOS_DATA_SOURCE, type KoposBoxData } from "./brand-etim.generated";
+// Fáze 104: jen veřejná část katalogových dat (hloubky, rozměry krabic) – EAN a ceny KOPOS doplní server
+import type { PublicBoxData } from "./catalog-public";
+import { DEVICE_DEPTHS, KOPOS_BOXES, KOPOS_DATA_SOURCE } from "./catalog-public.generated";
 import { BOX_MAKERS, DEFAULT_BOX_MAKER, DEFAULT_WALL_TYPE, WALL_TYPES, type BoxChoice, type BoxDepthClass, type BoxMaker, type WallType } from "./box-options";
 import { allElements, floorsOf, paletteItem, type EditorElement, type EditorRoom, type FloorplanDraft } from "./floorplan-editor";
 import { gangsOf } from "./floorplan-frames";
@@ -41,8 +42,6 @@ export interface MountingBox {
   /** Určení podle výrobce. */
   purpose: string;
   source: string;
-  /** Fáze 97: EAN (GTIN) podle dat výrobce (KOPOS – stránka výrobku a ceník). */
-  ean?: string;
   /** Fáze 97: technický (datový) list výrobce. */
   datasheet?: string;
 }
@@ -56,10 +55,10 @@ const OBO = "https://www.obo.de/de-de/produkte/";
  * a přesná hloubka (u krabic do zateplení zůstává tloušťka izolace, ne hloubka krabice).
  */
 const box = (entry: MountingBox): MountingBox => {
-  const data = entry.maker === "kopos" && entry.code ? KOPOS_BOX_DATA[entry.code] : undefined;
+  const data = entry.maker === "kopos" && entry.code ? KOPOS_BOXES[entry.code] : undefined;
   if (!data) return entry;
   const exactDepth = data.depthMm && (entry.role === "shallow" || entry.role === "deep" || entry.role === "electronics") ? { depthMm: data.depthMm } : {};
-  return { ...entry, ...exactDepth, ...(data.ean ? { ean: data.ean } : {}), ...(data.datasheet ? { datasheet: data.datasheet } : {}), ...(data.halogenFree ? { halogenFree: true } : {}) };
+  return { ...entry, ...exactDepth, ...(data.datasheet ? { datasheet: data.datasheet } : {}), ...(data.halogenFree ? { halogenFree: true } : {}) };
 };
 const MASONRY: readonly WallType[] = ["masonry"];
 const HOLLOW: readonly WallType[] = ["drywall"];
@@ -141,13 +140,12 @@ export const DEVICE_DEPTH_SOURCE = "ABB ETIM 9.0";
  */
 export function deviceDepthOf(series: string | null | undefined, item: string): DeviceDepth | null {
   if (!series) return null;
-  const abb = ETIM_DEVICE_DEPTHS[`${series}|${item}`];
-  if (abb) return { ...abb, source: DEVICE_DEPTH_SOURCE };
-  return BRAND_DEVICE_DEPTHS[`${series}|${item}`] ?? null;
+  // Fáze 104: ABB ETIM 9.0 má přednost před ostatními výrobci (`npm run catalog:public`)
+  return DEVICE_DEPTHS[`${series}|${item}`] ?? null;
 }
 
-/** Fáze 97: krabice KOPOS ze stránky výrobku (EAN, hloubka, průměr, bezhalogenovost, technický list, ceník). */
-export const koposBoxData = (code: string | null | undefined): KoposBoxData | null => (code ? (KOPOS_BOX_DATA[code] ?? null) : null);
+/** Fáze 97: krabice KOPOS ze stránky výrobku (hloubka, průměr, bezhalogenovost, technický list); fáze 104: EAN a ceník jen na serveru. */
+export const koposBoxData = (code: string | null | undefined): PublicBoxData | null => (code ? (KOPOS_BOXES[code] ?? null) : null);
 export { KOPOS_DATA_SOURCE };
 
 /** Milimetry s desetinnou čárkou („24,6“). */
