@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ShieldCheck } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -55,10 +55,27 @@ export function CookieConsentBanner() {
   // Do načtení konfigurace a cookie v prohlížeči se lišta nekreslí (server vykreslí stránku bez ní)
   const showBanner = config !== null && state !== undefined && needsConsentPrompt(state, categories) && !settingsOpen;
 
+  // Fáze 107: výška lišty do proměnné CSS – plovoucí tlačítko „💬 Nápověda, Chyby & Kontakt“ se zvedne nad lištu (lištu
+  // ani její tlačítka nepřekrývá a zůstane po ruce i před volbou cookies)
+  const bannerRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const root = document.documentElement;
+    const banner = bannerRef.current;
+    if (!showBanner || !banner) return;
+    const publish = () => root.style.setProperty("--consent-banner-h", `${Math.ceil(banner.getBoundingClientRect().height)}px`);
+    publish();
+    const observer = typeof ResizeObserver === "function" ? new ResizeObserver(publish) : null;
+    observer?.observe(banner);
+    return () => {
+      observer?.disconnect();
+      root.style.removeProperty("--consent-banner-h");
+    };
+  }, [showBanner]);
+
   return (
     <>
       {showBanner ? (
-        <section role="region" aria-label="Nastavení soukromí a souborů cookies" data-testid="consent-banner" className="fixed inset-x-0 bottom-0 z-[60] border-t border-primary/40 bg-background/95 shadow-2xl shadow-black/60 backdrop-blur">
+        <section ref={bannerRef} role="region" aria-label="Nastavení soukromí a souborů cookies" data-testid="consent-banner" className="fixed inset-x-0 bottom-0 z-[60] border-t border-primary/40 bg-background/95 shadow-2xl shadow-black/60 backdrop-blur">
           <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-4 md:flex-row md:items-start md:gap-6">
             <div className="flex min-w-0 flex-1 flex-col gap-2 text-sm">
               <p className="text-base font-semibold">🍪 Nastavení soukromí a souborů cookies</p>

@@ -134,6 +134,29 @@ test("📱 Mobil: kulaté tlačítko 💬 nad spodními lištami, klepnutí uká
   await context.close();
 });
 
+test("🍪 Před volbou cookies je plovoucí tlačítko nad lištou cookies – lištu nepřekrývá a jde použít", async ({ browser }) => {
+  test.setTimeout(120_000);
+  const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
+  const page = await context.newPage();
+  await page.goto("/navody");
+  const banner = page.getByTestId("consent-banner");
+  await expect(banner).toBeVisible({ timeout: 60_000 });
+  const fab = page.getByTestId("contact-fab");
+  await expect.poll(async () => {
+    const [fabBox, bannerBox] = [await fab.boundingBox(), await banner.boundingBox()];
+    return fabBox && bannerBox ? Math.round(bannerBox.y - (fabBox.y + fabBox.height)) : -1;
+  }, { timeout: 10_000 }).toBeGreaterThanOrEqual(8);
+  await fab.hover();
+  await page.getByTestId("contact-quick-IDEA").click();
+  await expect(page.getByTestId("contact-modal").getByTestId("contact-form")).toHaveAttribute("data-category", "IDEA");
+  await page.keyboard.press("Escape");
+  // Tlačítka lišty zůstávají volná; po volbě se tlačítko vrátí dolů
+  await banner.getByRole("button", { name: "Odmítnout vše" }).click();
+  await expect(banner).toHaveCount(0);
+  await expect.poll(async () => Math.round(900 - ((await fab.boundingBox())!.y + (await fab.boundingBox())!.height)), { timeout: 10_000 }).toBeLessThanOrEqual(30);
+  await context.close();
+});
+
 test("🐛 „Nahlásit chybu“ v AI Panel Builderu a 2D půdorysu otevře modal s ID projektu a krokem průvodce", async ({ page }) => {
   test.setTimeout(240_000);
   await page.goto("/panel-builder");

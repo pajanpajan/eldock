@@ -120,7 +120,10 @@ v `src/server/services/contact.ts`.
   - najetí myší ukáže 4 rychlé akce a „Otevřít formulář“, klik otevře hlavní formulář (dotykem: 1. klepnutí nabídka);
   - v editorech (2D půdorys, kroky rozváděče) kompaktní pilulka 💬 nad lištou „Další krok“;
   - na mobilu kulaté 💬 nad pevnými spodními lištami (žádanka o změnu, hromadná revize), klepnutí ukáže nabídku –
-    najetí se počítá jen myší (dotyk vyvolá i „mouseenter“).
+    najetí se počítá jen myší (dotyk vyvolá i „mouseenter“);
+  - dokud je vidět lišta cookies, tlačítko je nad ní (výška lišty v proměnné CSS `--consent-banner-h`
+    z `CookieConsentBanner`) – lištu ani její tlačítka nepřekrývá (doplněno po nasazení, na produkci lišta tlačítko
+    zakrývala).
 - Modal se otevírá i událostí okna (`openContactModal` v `contact-events.ts`) – bez sdíleného kontextu Reactu.
 - „🐛 Nahlásit chybu AI“ v hlavičce rozváděče otevře modal s kategorií Hlášení chyby a ID projektu. Hlášení
   přihlášené firmy k vlastnímu projektu jde i do „Hlášení chyb AI a fotky“ (fáze 50, snímek lišt). Starou akci
@@ -209,10 +212,11 @@ v `src/server/services/contact.ts`.
   - hlášení chyby AI k projektu firmy;
   - notifikace SMTP / Resend / webhook i selhání;
   - velín GET / PATCH a retence 2 roky.
-- E2E `e2e/phase107.spec.ts` (5):
+- E2E `e2e/phase107.spec.ts` (6):
   - `/kontakt` 200 bez přihlášení s Ctrl + V na stránce a schůzkou;
   - plovoucí tlačítko → rychlá akce → Ctrl + V v modalu + 2 soubory, zmenšení na 1600 px, × a tiket;
   - mobil 375 px: kulaté tlačítko nad spodními lištami, klepnutí → nabídka → schůzka;
+  - nový návštěvník: tlačítko nad lištou cookies, rychlá akce funguje, „Odmítnout vše“ volné;
   - „Nahlásit chybu AI“ a „🐛 Nahlásit chybu“ v 2D půdorysu s ID projektu a krokem;
   - velín s odznakem, lightboxem, stavem a poznámkou.
 - Upravené E2E `phase50` (hlášení chyby AI přes modal) a `phase54` (menu → `/kontakt`).

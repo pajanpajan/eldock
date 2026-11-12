@@ -68,8 +68,9 @@ export function GlobalContactWidget() {
       {hidden ? null : (
         <div
           ref={wrapper}
-          // Na mobilu nad pevnými spodními lištami (žádanka o změnu, hromadná revize, schválení) – od šířky sm vpravo dole
-          className={cn("no-print fixed right-3 z-40 flex flex-col items-end gap-2 print:hidden", compact ? "bottom-24" : "bottom-20 sm:right-5 sm:bottom-5")}
+          // Na mobilu nad pevnými spodními lištami (žádanka o změnu, hromadná revize, schválení) – od šířky sm vpravo dole;
+          // dokud je vidět lišta cookies, nad ní (proměnná --consent-banner-h z CookieConsentBanner)
+          className={cn("no-print fixed right-3 z-40 flex flex-col items-end gap-2 print:hidden", compact ? "bottom-[calc(var(--consent-banner-h,0px)_+_6rem)]" : "bottom-[calc(var(--consent-banner-h,0px)_+_5rem)] sm:right-5 sm:bottom-[calc(var(--consent-banner-h,0px)_+_1.25rem)]")}
           // Najetí jen myší – klepnutí prstem vyvolá i „mouseenter“ a nabídka by se přeskočila rovnou na formulář
           onPointerEnter={(event) => {
             if (event.pointerType === "mouse") setMenu(true);
