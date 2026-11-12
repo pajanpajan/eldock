@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { APP_HOME } from "@/lib/routes";
 import { OG_IMAGE, SITE_URL, absoluteUrl, jsonLdScript } from "@/lib/seo";
 import { breadcrumbJsonLd } from "@/lib/site-map";
-import { TUTORIALS, chapterText, formatClock, formatMegabytes, posterOf } from "@/lib/tutorials";
+import { TUTORIALS, chapterLabel, chapterText, formatClock, formatMegabytes, posterOf } from "@/lib/tutorials";
 import { TUTORIAL_GENERATED_AT, TUTORIAL_MEDIA } from "@/lib/tutorials.generated";
 import { hasShowcaseProject } from "@/server/queries/panel-builder";
 import { getAuthSession } from "@/server/session";
@@ -111,7 +111,7 @@ export default async function TutorialsPage() {
                   {tutorial.chapters.map((chapter, chapterIndex) => (
                     <li key={chapter.id}>
                       <p className="font-semibold">
-                        {chapterIndex + 1}. {chapter.title}
+                        {chapterLabel(tutorial, chapterIndex)}
                         {media ? <span className="ml-2 font-mono text-xs font-normal text-muted-foreground">{formatClock(media.chapters[chapterIndex] ?? 0)}</span> : null}
                       </p>
                       <p className="text-muted-foreground">{chapterText(chapter)}</p>

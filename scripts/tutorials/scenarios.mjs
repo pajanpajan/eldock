@@ -280,6 +280,16 @@ async function insertDone(card) {
   }
 }
 
+/**
+ * Fáze 98: projekt rozváděče má 4 fáze (`PANEL_PHASES`) – kapitola přejde na svou fázi kliknutím na krokovou kartu
+ * (`panel-phase-N`) nebo na část fáze (`panel-page-enclosure` = 1b, `panel-page-labels` = 4b) a počká na její stránku.
+ */
+async function openPanelPage(d, testId, url) {
+  const { page } = d;
+  await d.click(page.getByTestId(testId).first(), { after: 200 });
+  await page.waitForURL(url, { timeout: 120_000 });
+}
+
 const panelBuilder = {
   async prepare(d) {
     const { page } = d;
@@ -289,8 +299,8 @@ const panelBuilder = {
     await d.glide(1100, 520, 400);
   },
   chapters: [
-    // 1. Založení projektu (fotka / půdorys / od nuly), soustava 1f / 3f a volitelná rozvodnice
-    async (d, ch, shared) => {
+    // Úvod – založení projektu (fotka / půdorys / od nuly), soustava 1f / 3f, volitelná rozvodnice a 4 fáze projektu
+    async (d, ch) => {
       const { page } = d;
       await d.click(page.getByRole("button", { name: "Nový projekt rozváděče" }), { after: 500 });
       const name = page.getByLabel("Název rozváděče");
@@ -321,10 +331,12 @@ const panelBuilder = {
       await d.click(page.getByRole("button", { name: /Založit návrh rozváděče/ }), { after: 200 });
       await page.waitForURL(/\/panel-builder\/[^/]+$/, { timeout: 120_000 });
       await page.getByTestId("vector-panel").waitFor({ timeout: 120_000 });
-      shared.projectUrl = page.url();
       await d.idle(4000);
+      // „ve čtyřech fázích“ – kurzor přejede krokové karty fází 1 → 4 nad plátnem
+      await ch.until({ word: "čtyřech", cue: 3 }, 400);
+      for (const phase of [1, 2, 3, 4]) await d.point(page.getByTestId(`panel-phase-${phase}`), { hold: phase === 1 ? 500 : 320 });
     },
-    // 2. Krok 1 – osazení DIN lišt z kaskádového katalogu, chytrá domácnost a Elektro-linter s opravou 1 klikem
+    // Fáze 1 – 1a osazení DIN lišt z kaskádového katalogu, chytrá domácnost a Elektro-linter s opravou 1 klikem, 1b skříň
     async (d, ch) => {
       const { page } = d;
       const menu = page.getByRole("region", { name: "Konfigurátor prvku" });
@@ -359,11 +371,19 @@ const panelBuilder = {
         }
       }
       await d.press("Escape", 150);
+      // část 1b – skříň zvolená při zakládání (Mistral65 3 × 18 M): zaplnění, krytí a rezerva
+      await ch.until({ cue: 4 }, 500);
+      await openPanelPage(d, "panel-page-enclosure", /\/enclosure$/);
+      await page.getByTestId("enclosure-current").waitFor({ timeout: 120_000 });
+      await d.idle(4000);
+      const lock = page.getByTestId("enclosure-lock");
+      if (await lock.isVisible().catch(() => false)) await d.point(lock, { hold: 450 });
+      await d.point(page.getByTestId("enclosure-current"), { hold: 700, position: { x: 260, y: 90 } });
     },
-    // 3. Krok 2 – AI strom zapojení, fáze L1–L3, sběrnice PE, bod rozdělení PEN a nulové můstky
+    // Fáze 2 – AI strom zapojení, fáze L1–L3, sběrnice PE, bod rozdělení PEN, nulové můstky a souhrn Elektro-linteru
     async (d, ch) => {
       const { page } = d;
-      await d.click(page.getByRole("link", { name: /2\. Zapojení a hierarchie/ }).first(), { after: 200 });
+      await openPanelPage(d, "panel-phase-2", /\/tree$/);
       const propose = page.getByRole("button", { name: "AI návrh zapojení na 1 klik" });
       await propose.waitFor({ timeout: 120_000 });
       await d.idle(4000);
@@ -386,32 +406,28 @@ const panelBuilder = {
       await d.point(strip.locator('[data-testid^="busbar-N"]').last(), { hold: 400 });
       await d.click(strip, { after: 1300 });
       await d.press("Escape", 200);
+      // souhrn Elektro-linteru nad stromem (nálezy uloženého projektu, oprava 1 klikem vede do části 1a)
+      await ch.until({ cue: 4 }, 500);
+      const linter = page.getByTestId("tree-linter");
+      if (await linter.isVisible().catch(() => false)) await d.point(linter, { hold: 900, position: { x: 260, y: 18 } });
     },
-    // 4. Krok 3 – skříň, krok 4 – výpočet oteplení (ztráty, teplota nahoře, verdikt)
+    // Fáze 3 – výpočet oteplení (ztráty, teplota nahoře, verdikt)
     async (d, ch) => {
       const { page } = d;
-      await d.click(page.getByRole("link", { name: /3\. Skříň rozváděče/ }).first(), { after: 200 });
-      await page.waitForURL(/\/enclosure$/, { timeout: 120_000 });
-      await d.idle(4000);
-      const lock = page.getByTestId("enclosure-lock");
-      if (await lock.isVisible().catch(() => false)) await d.point(lock, { hold: 600 });
-      await ch.until({ cue: 1 }, 300);
-      await d.click(page.getByRole("link", { name: /4\. Výpočet oteplení/ }).first(), { after: 200 });
-      await page.waitForURL(/\/thermal$/, { timeout: 120_000 });
+      await openPanelPage(d, "panel-phase-3", /\/thermal$/);
       await page.getByTestId("thermal-verdict").waitFor({ timeout: 120_000 });
       await d.idle(4000);
       await d.point(page.getByTestId("thermal-curve"), { hold: 700 });
-      await ch.until({ cue: 2 }, 400);
+      await ch.until({ cue: 1 }, 400);
       await d.point(page.getByTestId("thermal-table"), { hold: 700, position: { x: 220, y: 70 } });
       await d.point(page.getByTestId("thermal-curve"), { hold: 500 });
-      await ch.until({ cue: 3 }, 400);
+      await ch.until({ cue: 2 }, 400);
       await d.point(page.getByTestId("thermal-verdict"), { hold: 700 });
     },
-    // 5. Krok 5 – 6listový elaborát (osazení, 1P schéma, kusovník, kusová zkouška, vnější vlivy, prohlášení, CE) a popisky 1:1
-    async (d, ch, shared) => {
+    // Fáze 4 – 4a 6listový elaborát (osazení, 1P schéma, kusovník, kusová zkouška, vnější vlivy, prohlášení, CE), 4b popisky 1:1
+    async (d, ch) => {
       const { page } = d;
-      await d.click(page.getByRole("link", { name: /5\. Výstupní dokumentace/ }).first(), { after: 200 });
-      await page.waitForURL(/\/documentation$/, { timeout: 120_000 });
+      await openPanelPage(d, "panel-phase-4", /\/documentation$/);
       await page.getByTestId("documentation").waitFor({ timeout: 120_000 });
       await d.idle(4000);
       const print = page.getByRole("button", { name: /Vytisknout \/ Exportovat/ }).first();
@@ -427,8 +443,9 @@ const panelBuilder = {
       for (const id of ["doc-parts", "doc-routine-test", "doc-influences"]) await show(id, "start");
       await ch.until({ cue: 2 }, 300);
       for (const id of ["doc-declaration", "ce-label"]) await show(id, "center");
-      await ch.until({ word: "popisky", cue: 2 }, 900);
-      await page.goto(`${shared.projectUrl}/labels`);
+      // část 4b – štítky: kurzor se vrátí k přepínači částí fáze nahoře
+      await ch.until({ cue: 3 }, 900);
+      await openPanelPage(d, "panel-page-labels", /\/labels$/);
       await page.getByTestId("label-sheet").waitFor({ timeout: 120_000 });
       await d.idle(3000);
       await d.point(page.getByTestId("label-sheet"), { hold: 700, position: { x: 300, y: 200 } });

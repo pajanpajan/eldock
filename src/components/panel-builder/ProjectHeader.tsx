@@ -65,8 +65,8 @@ export function ProjectHeader({ project }: { project: PanelProjectDetail }) {
         .join(" · ")}
       actions={
         <>
-          {/* Fáze 87: video-návod AI Panel Builderu (kroky 1–5) s kapitolami */}
-          <TutorialVideoButton tutorialId="panel-builder" size="default" className="touch-target" />
+          {/* Fáze 87 / 98: video-návod AI Panel Builderu (úvod + 4 fáze) s kapitolami a Interactive Tour nad krokovými kartami fází */}
+          <TutorialVideoButton tutorialId="panel-builder" tour size="default" className="touch-target" />
           {/* Fáze 64: rozváděč z 2D půdorysu → zpět do editoru půdorysu (uložený půdorys, případně založený z kopie v projektu) */}
           {project.floorplanJson ? <OpenFloorplanButton projectId={project.id} /> : null}
           <Link

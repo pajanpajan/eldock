@@ -36,16 +36,27 @@ test.describe("veřejně bez přihlášení", () => {
       await expect(page.getByTestId(`tutorial-${id}`).getByTestId("tutorial-chapter")).toHaveCount(5);
     }
 
-    // klik na kapitolu 3 přetočí video na její začátek
-    const video = page.getByTestId("tutorial-video-pudorys");
-    await expect.poll(() => video.evaluate((element: HTMLVideoElement) => element.readyState), { timeout: 30_000 }).toBeGreaterThanOrEqual(1);
-    const chapter = page.getByTestId("tutorial-pudorys").getByTestId("tutorial-chapter").nth(2);
-    const start = Number(await chapter.getAttribute("data-start"));
-    expect(start).toBeGreaterThan(10);
-    await chapter.click();
-    await expect.poll(() => video.evaluate((element: HTMLVideoElement) => element.currentTime)).toBeGreaterThanOrEqual(start - 0.3);
-    await expect(chapter).toHaveAttribute("aria-current", "step");
-    await video.evaluate((element: HTMLVideoElement) => element.pause());
+    // klik na kapitolu 3 přetočí video na její začátek (video 2: kapitola 3 = fáze 2 projektu rozváděče)
+    for (const id of ["pudorys", "panel-builder"]) {
+      const video = page.getByTestId(`tutorial-video-${id}`);
+      await expect.poll(() => video.evaluate((element: HTMLVideoElement) => element.readyState), { timeout: 30_000 }).toBeGreaterThanOrEqual(1);
+      const chapter = page.getByTestId(`tutorial-${id}`).getByTestId("tutorial-chapter").nth(2);
+      const start = Number(await chapter.getAttribute("data-start"));
+      expect(start).toBeGreaterThan(10);
+      await chapter.click();
+      await expect.poll(() => video.evaluate((element: HTMLVideoElement) => element.currentTime)).toBeGreaterThanOrEqual(start - 0.3);
+      await expect(chapter).toHaveAttribute("aria-current", "step");
+      await video.evaluate((element: HTMLVideoElement) => element.pause());
+    }
+    // Fáze 98: kapitoly videa 2 = úvod (▶) + 4 fáze projektu s čísly a názvy krokových karet
+    const phases = page.getByTestId("tutorial-panel-builder").getByTestId("tutorial-chapter");
+    await expect(phases.nth(0)).toContainText("▶");
+    await expect(phases.nth(0)).not.toHaveAttribute("data-phase");
+    for (const [index, title] of ["Osazení DIN lišt & Skříň", "Strom zapojení, Fáze & Linter", "Výpočet oteplení IEC 60890", "Dokumentace, Kusovník & Štítky"].entries()) {
+      await expect(phases.nth(index + 1)).toHaveAttribute("data-phase", String(index + 1));
+      await expect(phases.nth(index + 1)).toContainText(`${index + 1}${title}`);
+    }
+    await expect(page.getByTestId("tutorial-section-panel-builder").locator("details")).toContainText("2. Strom zapojení, Fáze & Linter");
 
     // stažení pro WhatsApp a vyzkoušení
     await expect(page.getByTestId("tutorial-download-pudorys")).toHaveAttribute("href", FILES[0]);
@@ -109,4 +120,28 @@ test("🎬 Video-návod v editoru půdorysu (kapitoly, Interactive Tour) a v AI 
   await page.keyboard.press("Escape");
   await page.getByRole("link", { name: /PB-001/ }).first().click();
   await expect(page.getByTestId("tutorial-open")).toBeVisible({ timeout: 60_000 });
+
+  // Fáze 98: Interactive Tour v projektu rozváděče – kapitola zvýrazní krokovou kartu své fáze (u fáze 1 i části 1a / 1b)
+  await expect(page.getByTestId("panel-phase-stepper")).toHaveAttribute("data-phase", "1", { timeout: 60_000 });
+  await page.getByTestId("tutorial-open").click();
+  const projectDialog = page.getByTestId("tutorial-dialog");
+  await expect(projectDialog.getByTestId("tutorial-chapter")).toHaveCount(5);
+  await projectDialog.getByTestId("tutorial-tour-toggle").getByRole("switch").check();
+  const panelDock = page.getByTestId("tutorial-tour");
+  await expect(panelDock).toBeVisible();
+  await panelDock.getByTestId("tutorial-chapter").nth(2).click();
+  const phaseRing = page.getByTestId("tutorial-highlight").first();
+  await expect(phaseRing).toContainText("2. Strom zapojení, Fáze & Linter");
+  await expect(async () => {
+    const target = (await page.getByTestId("panel-phase-2").boundingBox())!;
+    const box = (await phaseRing.boundingBox())!;
+    expect(Math.abs(box.x - (target.x - 6))).toBeLessThan(4);
+    expect(Math.abs(box.width - (target.width + 12))).toBeLessThan(4);
+  }).toPass({ timeout: 10_000 });
+  await panelDock.getByTestId("tutorial-chapter").nth(1).click();
+  await expect(page.getByTestId("tutorial-highlight")).toHaveCount(3);
+  await expect(page.getByTestId("tutorial-highlight").first()).toContainText("1. Osazení DIN lišt & Skříň");
+  await panelDock.getByTestId("tutorial-tour-close").click();
+  await expect(panelDock).toHaveCount(0);
+  await expect(page.getByTestId("tutorial-highlight")).toHaveCount(0);
 });

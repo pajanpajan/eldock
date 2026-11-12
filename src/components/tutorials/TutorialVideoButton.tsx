@@ -7,7 +7,7 @@ import { Download, ExternalLink, Sparkles, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { tutorialById, type Tutorial, type TutorialId } from "@/lib/tutorials";
+import { chapterLabel, tutorialById, type Tutorial, type TutorialId } from "@/lib/tutorials";
 import { TUTORIAL_MEDIA } from "@/lib/tutorials.generated";
 import { cn } from "@/lib/utils";
 
@@ -18,8 +18,9 @@ const NO_TARGETS: readonly string[] = [];
 
 /**
  * Fáze 87: tlačítko „🎬 Video-návod“ v horní liště editoru půdorysu a AI Panel Builderu. Otevře dialog s přehrávačem
- * a kapitolami; u editoru půdorysu (`tour`) navíc přepínač Interactive Tour – přehrávač se přesune do rohu obrazovky
- * a prvky, o kterých kapitola mluví (`TutorialChapter.targets`), se na skutečné obrazovce živě zvýrazní.
+ * a kapitolami; u editoru půdorysu a v projektu rozváděče (`tour`, fáze 98) navíc přepínač Interactive Tour – přehrávač
+ * se přesune do rohu obrazovky a prvky, o kterých kapitola mluví (`TutorialChapter.targets`), se na skutečné obrazovce
+ * živě zvýrazní (v projektu rozváděče kroková karta fáze kapitoly).
  */
 export function TutorialVideoButton({ tutorialId, tour = false, size = "sm", className }: { tutorialId: TutorialId; tour?: boolean; size?: "sm" | "default"; className?: string }) {
   const tutorial = tutorialById(tutorialId);
@@ -115,7 +116,7 @@ function TourDock({
   const targets = tutorial.chapters[chapter]?.targets ?? NO_TARGETS;
   return (
     <>
-      <TourHighlights key={chapter} targets={targets} label={`${chapter + 1}. ${tutorial.chapters[chapter]?.title ?? ""}`} />
+      <TourHighlights key={chapter} targets={targets} label={tutorial.chapters[chapter] ? chapterLabel(tutorial, chapter) : ""} />
       <aside className="fixed right-3 bottom-3 z-[60] flex w-[min(440px,calc(100vw-1.5rem))] flex-col gap-2 rounded-2xl border border-primary/50 bg-zinc-950/95 p-3 shadow-2xl backdrop-blur" aria-label="Interactive Tour video-návodu" data-testid="tutorial-tour">
         <div className="flex items-center gap-2 text-sm font-semibold">
           <Sparkles className="size-4 text-primary" aria-hidden /> Interactive Tour

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { formatClock, posterOf, type Tutorial } from "@/lib/tutorials";
+import { chapterMark, formatClock, posterOf, type Tutorial } from "@/lib/tutorials";
 import type { TutorialMedia } from "@/lib/tutorials.generated";
 import { cn } from "@/lib/utils";
 
@@ -107,8 +107,10 @@ export function TutorialPlayer({
               )}
               data-testid="tutorial-chapter"
               data-start={starts[index] ?? 0}
+              data-phase={chapter.phase}
             >
-              <span className={cn("flex size-5 shrink-0 items-center justify-center rounded-full font-mono text-[11px] font-bold", current === index ? "bg-primary text-primary-foreground" : "bg-muted text-foreground")}>{index + 1}</span>
+              {/* Fáze 98: ve videu AI Panel Builderu kolečko = číslo fáze projektu (▶ = úvod), jako krokové karty v aplikaci */}
+              <span className={cn("flex size-5 shrink-0 items-center justify-center rounded-full font-mono text-[11px] font-bold", current === index ? "bg-primary text-primary-foreground" : "bg-muted text-foreground")}>{chapterMark(tutorial, index)}</span>
               <span className="min-w-0 flex-1 leading-snug">
                 <span className="block font-semibold text-foreground">{chapter.title}</span>
                 <span className="font-mono text-[11px]">{formatClock(starts[index] ?? 0)}</span>

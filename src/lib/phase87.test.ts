@@ -6,9 +6,10 @@ import { describe, expect, it } from "vitest";
 
 import sitemap from "@/app/sitemap";
 import { proxy } from "@/proxy";
+import { PANEL_PHASES } from "@/lib/panel-builder/panel-phases";
 import { PUBLIC_PAGES } from "@/lib/seo";
 import { footerSections } from "@/lib/site-map";
-import { TUTORIALS, chapterBadge, chapterText, formatClock, formatMegabytes, inviteMessage, posterOf, tutorialById } from "@/lib/tutorials";
+import { TUTORIALS, chapterBadge, chapterLabel, chapterMark, chapterText, formatClock, formatMegabytes, inviteMessage, posterOf, tutorialById } from "@/lib/tutorials";
 import { TUTORIAL_MEDIA } from "@/lib/tutorials.generated";
 
 const PUBLIC_DIR = path.join(process.cwd(), "public");
@@ -28,15 +29,42 @@ describe("fáze 87 – video-návody", () => {
         expect(chapterText(chapter)).toBe(chapter.cues.map((cue) => cue.text).join(" "));
       }
     }
-    expect(chapterBadge(tutorialById("pudorys"), 1)).toBe("KROK 2 / 5 · Výrobci, designové řady a barvy");
-    // scénář videa 2 odpovídá skutečným krokům aplikace (3. Skříň, 4. Oteplení, 5. Dokumentace)
-    expect(tutorialById("panel-builder").chapters.map((chapter) => chapter.title)).toEqual([
-      "Založení projektu, soustava a rozvodnice",
-      "1. Návrh a osazení – DIN lišty a Elektro-linter",
-      "2. Zapojení – strom, fáze L1–L3 a sběrnice PE / N",
-      "3. Skříň a 4. výpočet oteplení",
-      "5. Elaborát PDF, štítek CE a popisky 1:1",
+    const pudorys = tutorialById("pudorys");
+    expect(chapterBadge(pudorys, 1)).toBe("KROK 2 / 5 · Výrobci, designové řady a barvy");
+    expect(chapterLabel(pudorys, 1)).toBe("2. Výrobci, designové řady a barvy");
+    expect(pudorys.chapters.map((_, index) => chapterMark(pudorys, index))).toEqual(["1", "2", "3", "4", "5"]);
+  });
+
+  it("fáze 98: video 2 = úvod + 4 fáze projektu rozváděče se stejnými názvy a čísly jako krokové karty", () => {
+    const panel = tutorialById("panel-builder");
+    expect(panel.chapters.map((chapter) => chapter.phase ?? null)).toEqual([null, 1, 2, 3, 4]);
+    expect(panel.chapters.slice(1).map((_, index) => chapterLabel(panel, index + 1))).toEqual(PANEL_PHASES.map((phase) => phase.label));
+    expect(panel.chapters.map((_, index) => chapterBadge(panel, index))).toEqual([
+      "ÚVOD · Založení projektu, soustava a rozvodnice",
+      "FÁZE 1 / 4 · Osazení DIN lišt & Skříň",
+      "FÁZE 2 / 4 · Strom zapojení, Fáze & Linter",
+      "FÁZE 3 / 4 · Výpočet oteplení IEC 60890",
+      "FÁZE 4 / 4 · Dokumentace, Kusovník & Štítky",
     ]);
+    expect(panel.chapters.map((_, index) => chapterMark(panel, index))).toEqual(["▶", "1", "2", "3", "4"]);
+    expect(chapterLabel(panel, 0)).toBe("Úvod · Založení projektu, soustava a rozvodnice");
+    const ordinals = ["první", "druhé", "třetí", "čtvrté"];
+    for (const chapter of panel.chapters) {
+      const spoken = chapter.cues.map((cue) => cue.say ?? cue.text).join(" ");
+      // komentář mluví o fázích – starý „krok“ z fáze 75 (5 kroků) v titulcích ani v hlase není
+      expect(`${chapterText(chapter)} ${spoken}`).not.toMatch(/krok/i);
+      if (!chapter.phase) continue;
+      const phase = PANEL_PHASES[chapter.phase - 1];
+      expect(spoken).toContain(`${chapter.phase === 1 ? "V" : "Ve"} ${ordinals[chapter.phase - 1]} fázi`);
+      // části fází 1 a 4: titulek „1a / 1b“, hlas „jedna á / jedna bé“
+      if (phase.pages.length > 1) {
+        expect(chapterText(chapter)).toMatch(new RegExp(`${phase.id}a[\\s\\S]*${phase.id}b`));
+        expect(spoken).not.toMatch(/\d[ab]\b/);
+      }
+      // Interactive Tour v projektu: kroková karta fáze a u fází 1 a 4 přepínač částí (`PanelSteps`)
+      expect(chapter.targets).toEqual([`[data-testid="panel-phase-${phase.id}"]`, ...(phase.pages.length > 1 ? phase.pages.map((page) => `[data-testid="panel-page-${page}"]`) : [])]);
+    }
+    expect(panel.chapters[0].targets).toEqual(['[data-testid="panel-phase-cards"]']);
   });
 
   it("vygenerovaná MP4 existují, sedí velikostí na metadata a mají obraz H.264 i český zvuk AAC", () => {
