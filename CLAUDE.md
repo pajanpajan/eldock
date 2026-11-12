@@ -5,7 +5,7 @@ revize VTZ, změny skutečného provedení mezi údržbou v hale a externími CA
 rozváděčů. Pracovní název byl Digitry, od fáze 20 je to **ELDOCK**. Produkce běží na https://eldock.cz.
 Původní zadání MVP je v `docs/archiv/SPECIFIKACE-MVP.md`, celá historie fází 0–35 v `docs/archiv/PLAN-faze-00-35.md`, celý archiv v jednom souboru `docs/archiv/ARCHIV-KOMPLET.md`.
 
-## 1. Milníky (fáze 0–106 nasazené; 107 čeká na nasazení)
+## 1. Milníky (fáze 0–107 nasazené)
 
 | Fáze | Milník |
 |---|---|
@@ -287,7 +287,7 @@ Když uživatel řekne **„nasaď to na produkci“** nebo **„deploy“**:
 
 **Výroba na klíč (fáze 106):** migrace `phase106_turnkey_manufacturing` (nové tabulky `PanelManufacturer`, `ManufacturingOrder`) → před nasazením záloha databáze (výše). Výrobce zasmluvní velín (záložka „🏭 Výrobci rozváděčů“, přístupový kód se ukáže jednou); e-maily výrobcům a zákazníkům jdou jen s `ELDOCK_SMTP_URL`. Na serveru nic dalšího. Nasazeno 2026-11-12 (commit `0f37f8e`) po záloze databáze – verify:demo 12 / 12.
 
-**Kontaktní hub (fáze 107):** migrace `phase107_contact_messages` (nová tabulka `ContactMessage`) → před nasazením záloha databáze (výše). Printscreeny v `storage/uploads/feedback` (svazek se soubory, zálohuje se). Notifikace o nové zprávě jen s `ELDOCK_SMTP_URL`, `ELDOCK_RESEND_API_KEY` nebo `ELDOCK_CONTACT_WEBHOOK_URL` (příjemce `ELDOCK_CONTACT_NOTIFY_EMAIL`, jinak e-mail z patičky) – bez nich zprávy ukáže jen velín. Na serveru nic dalšího.
+**Kontaktní hub (fáze 107):** migrace `phase107_contact_messages` (nová tabulka `ContactMessage`) → před nasazením záloha databáze (výše). Printscreeny v `storage/uploads/feedback` (svazek se soubory, zálohuje se). Notifikace o nové zprávě jen s `ELDOCK_SMTP_URL`, `ELDOCK_RESEND_API_KEY` nebo `ELDOCK_CONTACT_WEBHOOK_URL` (příjemce `ELDOCK_CONTACT_NOTIFY_EMAIL`, jinak e-mail z patičky) – bez nich zprávy ukáže jen velín. Na serveru nic dalšího. Nasazeno 2026-11-12 (commit `07825fc`, oprava `b9fd180`) po záloze databáze – verify:demo 12 / 12.
 
 **Katalog ABB pro ČR (fáze 88):** bez migrace. Rozvodnice Mistral / ComfortLine CU, přístroje a příslušenství ABB i vazby příslušenství zapíše přírůstkový seed `db:panel-builder` při startu kontejneru (upsert, orientační řádek téhož typu dostane objednací číslo, nic se nemaže); ověřené rozvodnice převezmou řádky exportu se stejným objednacím číslem (MISTRAL65, CU24R / CU25R). Na serveru nic dalšího. Nasazeno 2026-11-10 (commit `1aacfdb`; seed „katalog 838 prvků aktualizován“, 163 ověřených skříní, kontejner `healthy`).
 
