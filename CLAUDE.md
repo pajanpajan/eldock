@@ -5,7 +5,7 @@ revize VTZ, změny skutečného provedení mezi údržbou v hale a externími CA
 rozváděčů. Pracovní název byl Digitry, od fáze 20 je to **ELDOCK**. Produkce běží na https://eldock.cz.
 Původní zadání MVP je v `docs/archiv/SPECIFIKACE-MVP.md`, celá historie fází 0–35 v `docs/archiv/PLAN-faze-00-35.md`, celý archiv v jednom souboru `docs/archiv/ARCHIV-KOMPLET.md`.
 
-## 1. Milníky (fáze 0–104 nasazené; 105 čeká na nasazení)
+## 1. Milníky (fáze 0–105 nasazené)
 
 | Fáze | Milník |
 |---|---|
@@ -279,7 +279,7 @@ Když uživatel řekne **„nasaď to na produkci“** nebo **„deploy“**:
 
 **Ochrana know-how (fáze 104):** bez migrace a bez nových proměnných. Limit požadavků čte IP z `X-Forwarded-For` od Caddy (bez hlavičky se neomezuje); po nasazení ověřit, že odpověď nemá `X-Powered-By`, že User-Agent HTTrack dostane na `/panel-builder/floorplan` 403 a `robots.txt` kopírovací roboty zakazuje. Na serveru nic dalšího. Nasazeno 2026-11-12 (commit `0838fd3`) – ověřeno bez X-Powered-By, HTTrack 403, robots.txt a limit 429 za Caddy.
 
-**Cenová nabídka a ceníky (fáze 105):** migrace `phase105_quotes_list_prices` (sloupce `CatalogComponent.listPriceCzk` a `listPriceSource`, `RegisteredCompany.quoteSettingsJson`) → před nasazením záloha databáze (výše). Data OEZ ETIM 8 / Hager ETIM 10 a ceníkové ceny zapíše `db:panel-builder` při startu (`applyEtimComponents`). Na serveru nic dalšího.
+**Cenová nabídka a ceníky (fáze 105):** migrace `phase105_quotes_list_prices` (sloupce `CatalogComponent.listPriceCzk` a `listPriceSource`, `RegisteredCompany.quoteSettingsJson`) → před nasazením záloha databáze (výše). Data OEZ ETIM 8 / Hager ETIM 10 a ceníkové ceny zapíše `db:panel-builder` při startu (`applyEtimComponents`). Na serveru nic dalšího. Nasazeno 2026-11-12 (commit `01fa97b`) po záloze databáze – verify:demo 12 / 12.
 
 **Katalog ABB pro ČR (fáze 88):** bez migrace. Rozvodnice Mistral / ComfortLine CU, přístroje a příslušenství ABB i vazby příslušenství zapíše přírůstkový seed `db:panel-builder` při startu kontejneru (upsert, orientační řádek téhož typu dostane objednací číslo, nic se nemaže); ověřené rozvodnice převezmou řádky exportu se stejným objednacím číslem (MISTRAL65, CU24R / CU25R). Na serveru nic dalšího. Nasazeno 2026-11-10 (commit `1aacfdb`; seed „katalog 838 prvků aktualizován“, 163 ověřených skříní, kontejner `healthy`).
 
