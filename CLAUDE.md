@@ -5,7 +5,7 @@ revize VTZ, změny skutečného provedení mezi údržbou v hale a externími CA
 rozváděčů. Pracovní název byl Digitry, od fáze 20 je to **ELDOCK**. Produkce běží na https://eldock.cz.
 Původní zadání MVP je v `docs/archiv/SPECIFIKACE-MVP.md`, celá historie fází 0–35 v `docs/archiv/PLAN-faze-00-35.md`, celý archiv v jednom souboru `docs/archiv/ARCHIV-KOMPLET.md`.
 
-## 1. Milníky (fáze 0–103 nasazené; 104 čeká na nasazení)
+## 1. Milníky (fáze 0–104 nasazené)
 
 | Fáze | Milník |
 |---|---|
@@ -275,7 +275,7 @@ Když uživatel řekne **„nasaď to na produkci“** nebo **„deploy“**:
 
 **Verze dokumentace, Červenky a QR štítky (fáze 103):** migrace `phase103_versions_qr_redlines` (nové tabulky `SwitchboardVersion`, `QrLabelCounter`, `QrLabelBatch`, `QrLabelItem`, `PoolDesigner`, `RedlineTask`; přestavba `PanelBoardProject` o `docState` a `qrSerial` se všemi daty, sloupce projektanta v `Plant`) → před nasazením záloha databáze (výše). Projektanty ELDOCK Poolu schvaluje velín (záložka „🌐 ELDOCK Pool projektantů“, přístupový kód se ukáže jednou); e-maily firemním projektantům jdou jen s `ELDOCK_SMTP_URL`. Na serveru nic dalšího. Nasazeno 2026-11-12 (commit `3301786`; záloha před migrací v pořádku, kontejner `healthy`, `verify:demo` na produkci 12 / 12).
 
-**Ochrana know-how (fáze 104):** bez migrace a bez nových proměnných. Limit požadavků čte IP z `X-Forwarded-For` od Caddy (bez hlavičky se neomezuje); po nasazení ověřit, že odpověď nemá `X-Powered-By`, že User-Agent HTTrack dostane na `/panel-builder/floorplan` 403 a `robots.txt` kopírovací roboty zakazuje. Na serveru nic dalšího.
+**Ochrana know-how (fáze 104):** bez migrace a bez nových proměnných. Limit požadavků čte IP z `X-Forwarded-For` od Caddy (bez hlavičky se neomezuje); po nasazení ověřit, že odpověď nemá `X-Powered-By`, že User-Agent HTTrack dostane na `/panel-builder/floorplan` 403 a `robots.txt` kopírovací roboty zakazuje. Na serveru nic dalšího. Nasazeno 2026-11-12 (commit `0838fd3`) – ověřeno bez X-Powered-By, HTTrack 403, robots.txt a limit 429 za Caddy.
 
 **Katalog ABB pro ČR (fáze 88):** bez migrace. Rozvodnice Mistral / ComfortLine CU, přístroje a příslušenství ABB i vazby příslušenství zapíše přírůstkový seed `db:panel-builder` při startu kontejneru (upsert, orientační řádek téhož typu dostane objednací číslo, nic se nemaže); ověřené rozvodnice převezmou řádky exportu se stejným objednacím číslem (MISTRAL65, CU24R / CU25R). Na serveru nic dalšího. Nasazeno 2026-11-10 (commit `1aacfdb`; seed „katalog 838 prvků aktualizován“, 163 ověřených skříní, kontejner `healthy`).
 
