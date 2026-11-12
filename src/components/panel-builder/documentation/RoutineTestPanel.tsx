@@ -51,13 +51,15 @@ const VERDICT = {
  * Interaktivní protokol o kusové zkoušce rozváděče (čl. 11 ČSN EN IEC 61439-1 ed. 3): 8 bodů
  * vyhovuje / nevyhovuje, izolační odpor R_iso, zkoušející a datum. Ukládá se průběžně a tiskne do Listu 6.
  */
-export function RoutineTestPanel({ projectId, initial }: { projectId: string; initial: RoutineTest }) {
+export function RoutineTestPanel({ projectId, initial, readOnly = false }: { projectId: string; initial: RoutineTest; readOnly?: boolean }) {
   const [test, setTest] = useState(initial);
   const [saving, setSaving] = useState<"idle" | "saving" | "saved">("idle");
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const evaluation = routineTestVerdict(test);
 
   function update(next: RoutineTest) {
+    // Fáze 103: uzamčená vydaná verze – protokol jen pro čtení (změna = odemknout a nová revize)
+    if (readOnly) return;
     setTest(next);
     setSaving("saving");
     if (timer.current) clearTimeout(timer.current);
@@ -73,7 +75,7 @@ export function RoutineTestPanel({ projectId, initial }: { projectId: string; in
   const setPoint = (id: (typeof ROUTINE_TEST_POINTS)[number]["id"], value: RoutineResult) => update({ ...test, points: { ...test.points, [id]: value } });
 
   return (
-    <section aria-label="Protokol o kusové zkoušce" className="no-print space-y-3 rounded-xl border border-border bg-card p-4" data-testid="routine-test">
+    <section aria-label="Protokol o kusové zkoušce" className={cn("no-print space-y-3 rounded-xl border border-border bg-card p-4", readOnly && "opacity-80")} data-testid="routine-test" data-readonly={readOnly || undefined}>
       <div className="flex flex-wrap items-center gap-2">
         <h2 className="font-semibold">Protokol o kusové zkoušce rozváděče (čl. 11 ČSN EN IEC 61439-1 ed. 3)</h2>
         <span className={cn("rounded-full border px-2.5 py-0.5 text-xs font-bold", VERDICT[evaluation.verdict].className)} data-testid="routine-verdict">
@@ -102,6 +104,7 @@ export function RoutineTestPanel({ projectId, initial }: { projectId: string; in
                   key={value}
                   type="button"
                   aria-pressed={test.points[point.id] === value}
+                  disabled={readOnly}
                   onClick={() => setPoint(point.id, test.points[point.id] === value ? null : value)}
                   className={cn("min-h-8 rounded-md border px-2 text-xs font-semibold", test.points[point.id] === value ? active : "border-border text-muted-foreground hover:text-foreground")}
                 >
@@ -122,17 +125,18 @@ export function RoutineTestPanel({ projectId, initial }: { projectId: string; in
             step={0.1}
             value={test.insulationMOhm ?? ""}
             aria-label="Izolační odpor R_iso"
+            disabled={readOnly}
             onChange={(event) => update({ ...test, insulationMOhm: event.target.value === "" ? null : Number(event.target.value.replace(",", ".")) })}
             className={cn("h-10 font-mono", evaluation.insulationOk === false && "border-red-500")}
           />
         </label>
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
           Zkoušku provedl
-          <Input value={test.testedBy} maxLength={120} aria-label="Zkoušku provedl" onChange={(event) => update({ ...test, testedBy: event.target.value })} className="h-10" />
+          <Input value={test.testedBy} maxLength={120} aria-label="Zkoušku provedl" disabled={readOnly} onChange={(event) => update({ ...test, testedBy: event.target.value })} className="h-10" />
         </label>
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
           Datum zkoušky
-          <Input type="date" value={test.testedAt ?? ""} aria-label="Datum zkoušky" onChange={(event) => update({ ...test, testedAt: event.target.value || null })} className="h-10" />
+          <Input type="date" value={test.testedAt ?? ""} aria-label="Datum zkoušky" disabled={readOnly} onChange={(event) => update({ ...test, testedAt: event.target.value || null })} className="h-10" />
         </label>
       </div>
       {evaluation.missing.length ? <p className="text-xs text-amber-200">Chybí: {evaluation.missing.join(", ")}.</p> : null}

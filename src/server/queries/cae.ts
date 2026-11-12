@@ -58,6 +58,8 @@ async function loadTicketDetail(id: string) {
       reporter: { select: { id: true, name: true, company: true } },
       assignee: { select: { id: true, name: true } },
       baseRevision: { select: { id: true, version: true, schematicUrl: true, schematicFormat: true, status: true } },
+      // Fáze 103: předání Červenky k překreslení (firemní projektant / ELDOCK Pool)
+      redlineTask: { select: { mode: true, status: true, internalName: true, format: true, rewardCzk: true, dueAt: true, resultCadUrl: true, claimedBy: { select: { name: true } } } },
       attachments: { orderBy: { createdAt: "asc" }, include: { uploadedBy: { select: { name: true } } } },
       softwareBackups: { orderBy: { createdAt: "desc" }, select: { id: true, targetUnit: true, major: true, minor: true, safetyChecksum: true, isSafetyRelated: true } },
       resolvingRevisions: {

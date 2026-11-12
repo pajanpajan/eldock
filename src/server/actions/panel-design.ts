@@ -6,7 +6,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import type { ItemConfig } from "@/lib/panel-builder/configurator";
 import { MAX_RAIL_MODULES, MAX_RAILS, MIN_RAIL_MODULES } from "@/lib/panel-builder/rails";
-import { actionFailure, guardCompany, guardItem, guardProject } from "@/server/panel-guards";
+import { actionFailure, guardCompany, guardEditableItem, guardEditableProject } from "@/server/panel-guards";
 import { analyzeRailDetail, insertNextTo, moveItem } from "@/server/services/panel-design";
 import { analyzeRailPhoto } from "@/server/services/geminiPanelService";
 import { addItemWiring, searchWiringDevices, setItemWiringQuantity, setProjectFan, type WiringHit } from "@/server/services/panel-wiring";
@@ -56,7 +56,7 @@ export async function setRailCapacityAction(projectId: string, railIndex: number
     return { ok: false, error: `Šířka lišty musí být ${MIN_RAIL_MODULES}–${MAX_RAIL_MODULES} modulů.` };
   }
   try {
-    await guardProject(projectId);
+    await guardEditableProject(projectId);
     const result = await setRailCapacity(prisma, projectId, railIndex, modules);
     revalidatePath(`/panel-builder/${projectId}`, "layout");
     return { ok: true, data: { overflow: result.overflow } };
@@ -69,7 +69,7 @@ export async function setRailCapacityAction(projectId: string, railIndex: number
 export async function moveRailAction(projectId: string, railIndex: number, direction: -1 | 1): Promise<ActionResult<{ rail: number }>> {
   if (!id.safeParse(projectId).success || !rail.safeParse(railIndex).success || (direction !== -1 && direction !== 1)) return { ok: false, error: "Neplatný přesun lišty." };
   try {
-    await guardProject(projectId);
+    await guardEditableProject(projectId);
     const result = await moveRail(prisma, projectId, railIndex, direction);
     revalidatePath(`/panel-builder/${projectId}`, "layout");
     return { ok: true, data: result };
@@ -92,7 +92,7 @@ export async function placeComponentsAction(input: z.input<typeof placeSchema>):
   const parsed = placeSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Neplatné osazení přístroje." };
   try {
-    await guardProject(parsed.data.projectId);
+    await guardEditableProject(parsed.data.projectId);
     const { projectId, ...rest } = parsed.data;
     const result = await placeComponents(prisma, projectId, { ...rest, config: rest.config as ItemConfig });
     revalidatePath(`/panel-builder/${projectId}`, "layout");
@@ -109,7 +109,7 @@ export async function placeLintDevicesAction(input: z.input<typeof lintDevicesSc
   const parsed = lintDevicesSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Neplatná oprava rozváděče." };
   try {
-    await guardProject(parsed.data.projectId);
+    await guardEditableProject(parsed.data.projectId);
     const placed = await placeLintDevices(prisma, parsed.data.projectId, parsed.data.devices.map((device) => ({ config: device.config as ItemConfig, label: device.label.slice(0, 80) })));
     revalidatePath(`/panel-builder/${parsed.data.projectId}`, "layout");
     return { ok: true, data: { placed: placed.length } };
@@ -145,7 +145,7 @@ export async function listEnclosuresAction(manufacturer: string): Promise<Action
 export async function selectEnclosureAction(projectId: string, enclosureId: string): Promise<ActionResult<{ enclosureModel: string }>> {
   if (!id.safeParse(projectId).success || !id.safeParse(enclosureId).success) return { ok: false, error: "Neplatná skříň." };
   try {
-    await guardProject(projectId);
+    await guardEditableProject(projectId);
     const project = await selectEnclosure(prisma, projectId, enclosureId);
     revalidatePath(`/panel-builder/${projectId}`, "layout");
     return { ok: true, data: { enclosureModel: project.enclosureModel } };
@@ -158,7 +158,7 @@ export async function selectEnclosureAction(projectId: string, enclosureId: stri
 export async function releaseEnclosureLimitAction(projectId: string): Promise<ActionResult<{ released: true }>> {
   if (!id.safeParse(projectId).success) return { ok: false, error: "Neplatný projekt." };
   try {
-    await guardProject(projectId);
+    await guardEditableProject(projectId);
     await releaseEnclosureLimit(prisma, projectId);
     revalidatePath(`/panel-builder/${projectId}`, "layout");
     return { ok: true, data: { released: true } };
@@ -193,7 +193,7 @@ export async function setCompanyBrandingAction(input: { logoUrl?: string | null;
 export async function setEnvironmentAction(projectId: string, environment: string): Promise<ActionResult<{ ambientTempC: number }>> {
   if (!id.safeParse(projectId).success || !z.string().max(20).safeParse(environment).success) return { ok: false, error: "Neplatné prostředí." };
   try {
-    await guardProject(projectId);
+    await guardEditableProject(projectId);
     const result = await setEnvironment(prisma, projectId, environment);
     revalidatePath(`/panel-builder/${projectId}`, "layout");
     return { ok: true, data: { ambientTempC: result.ambientTempC } };
@@ -255,7 +255,7 @@ export async function saveCircuitChipsAction(input: z.input<typeof chipSchema>):
 export async function setStandardEditionAction(projectId: string, edition: string): Promise<ActionResult> {
   if (!id.safeParse(projectId).success || !z.string().max(30).safeParse(edition).success) return { ok: false, error: "Neplatná norma." };
   try {
-    await guardProject(projectId);
+    await guardEditableProject(projectId);
     await setStandardEdition(prisma, projectId, edition);
     revalidatePath(`/panel-builder/${projectId}`, "layout");
     return { ok: true, data: undefined };
@@ -278,7 +278,7 @@ export async function saveRoutineTestAction(projectId: string, test: z.input<typ
   const parsed = routineSchema.safeParse(test);
   if (!id.safeParse(projectId).success || !parsed.success) return { ok: false, error: "Neplatný protokol kusové zkoušky." };
   try {
-    await guardProject(projectId);
+    await guardEditableProject(projectId, { allowPending: true });
     const saved = await saveRoutineTest(prisma, projectId, parsed.data);
     revalidatePath(`/panel-builder/${projectId}/documentation`);
     return { ok: true, data: { verdict: saved.verdict, missing: saved.missing } };
@@ -291,7 +291,7 @@ export async function saveRoutineTestAction(projectId: string, test: z.input<typ
 export async function insertNextToAction(itemId: string, mode: "blank" | "duplicate"): Promise<ActionResult<{ id: string }>> {
   if (!id.safeParse(itemId).success || (mode !== "blank" && mode !== "duplicate")) return { ok: false, error: "Neplatný prvek." };
   try {
-    await guardItem(itemId);
+    await guardEditableItem(itemId);
     const result = await insertNextTo(prisma, itemId, mode);
     revalidatePath(`/panel-builder/${result.projectId}`, "layout");
     return { ok: true, data: { id: result.id } };
@@ -305,7 +305,7 @@ export async function moveItemAction(itemId: string, target: { rail: number; pos
   const parsed = z.object({ rail, position: z.number().int().min(1).max(200) }).safeParse(target);
   if (!id.safeParse(itemId).success || !parsed.success) return { ok: false, error: "Neplatný přesun přístroje." };
   try {
-    await guardItem(itemId);
+    await guardEditableItem(itemId);
     const result = await moveItem(prisma, itemId, parsed.data.rail, parsed.data.position);
     revalidatePath(`/panel-builder/${result.projectId}`, "layout");
     return { ok: true, data: { rail: result.rail, position: result.position } };
@@ -320,7 +320,7 @@ const photoUrl = z.string().max(300).regex(/^\/api\/files\/photos\/[\w./-]+$/);
 export async function analyzeRailDetailAction(projectId: string, railIndex: number, url: string): Promise<ActionResult<{ mode: string; total: number; unresolved: number; warning?: string }>> {
   if (!id.safeParse(projectId).success || !rail.safeParse(railIndex).success || !photoUrl.safeParse(url).success) return { ok: false, error: "Neplatná fotka lišty." };
   try {
-    const company = await guardProject(projectId);
+    const company = await guardEditableProject(projectId);
     await assertPanelFiles(company.id, [url]);
     const result = await analyzeRailDetail(prisma, projectId, railIndex, url, { analyze: analyzeRailPhoto, readPhoto: readStoredFile });
     revalidatePath(`/panel-builder/${projectId}`, "layout");
@@ -352,7 +352,7 @@ export async function addItemWiringAction(itemId: string, input: z.input<typeof 
   const parsed = wiringSchema.safeParse(input);
   if (!id.safeParse(itemId).success || !parsed.success) return { ok: false, error: "Neplatný přístroj domovní instalace." };
   try {
-    await guardItem(itemId);
+    await guardEditableItem(itemId);
     await addItemWiring(prisma, itemId, parsed.data);
     revalidatePath("/panel-builder", "layout");
     return { ok: true, data: undefined };
@@ -365,7 +365,7 @@ export async function addItemWiringAction(itemId: string, input: z.input<typeof 
 export async function setItemWiringQuantityAction(itemId: string, wiringId: string, quantity: number): Promise<ActionResult> {
   if (!id.safeParse(itemId).success || !id.safeParse(wiringId).success || !z.number().int().min(0).max(200).safeParse(quantity).success) return { ok: false, error: "Neplatný počet." };
   try {
-    await guardItem(itemId);
+    await guardEditableItem(itemId);
     await setItemWiringQuantity(prisma, itemId, wiringId, quantity);
     revalidatePath("/panel-builder", "layout");
     return { ok: true, data: undefined };
@@ -378,7 +378,7 @@ export async function setItemWiringQuantityAction(itemId: string, wiringId: stri
 export async function setProjectFanAction(projectId: string, fanId: string | null, count: number): Promise<ActionResult<{ fanId: string | null; fanCount: number }>> {
   if (!id.safeParse(projectId).success || (fanId !== null && !id.safeParse(fanId).success) || !z.number().int().min(1).max(6).safeParse(count).success) return { ok: false, error: "Neplatný ventilátor." };
   try {
-    await guardProject(projectId);
+    await guardEditableProject(projectId);
     const data = await setProjectFan(prisma, projectId, fanId, count);
     revalidatePath(`/panel-builder/${projectId}`, "layout");
     return { ok: true, data };

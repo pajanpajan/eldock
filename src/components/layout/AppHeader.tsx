@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Blocks, CalendarCheck, CalendarRange, FileCheck2, Inbox, PencilRuler, ScanLine, UserRoundCog, UsersRound, type LucideIcon } from "lucide-react";
+import { Blocks, CalendarCheck, CalendarRange, FileCheck2, Globe2, Inbox, PencilRuler, ScanLine, UserRoundCog, UsersRound, type LucideIcon } from "lucide-react";
 
 import { isAccountSwitcherLocked } from "@/lib/auth";
 import type { Permission } from "@/lib/accounts";
@@ -21,6 +21,8 @@ import { PlantSwitcher } from "./PlantSwitcher";
 
 const NAV: { href: string; label: string; srLabel: string; icon: LucideIcon; permission: Permission; feature?: FeatureKey; hideInFieldView?: boolean }[] = [
   { href: "/cae", label: "Back-Office", srLabel: "CAE Back-Office", icon: Inbox, permission: "caeOffice", feature: "cae.ticketing" },
+  // Fáze 103: portál externích projektantů ELDOCK Poolu (fronta Červenek k překreslení)
+  { href: "/portal-projektantu", label: "Pool projektantů", srLabel: "Portál projektantů ELDOCK Pool", icon: Globe2, permission: "submitChange", hideInFieldView: true },
   { href: inspectionsHref, label: "Revize", srLabel: "Přehled revizí", icon: CalendarCheck, permission: "inspections", hideInFieldView: true },
   { href: plannerHref, label: "Plánovač", srLabel: "Plánovač revizí", icon: CalendarRange, permission: "planner", feature: "inspections.planner" },
   { href: rapidInspectionHref, label: "Rychlá revize", srLabel: "Rychlá revize", icon: ScanLine, permission: "rapid", feature: "inspections.planner" },

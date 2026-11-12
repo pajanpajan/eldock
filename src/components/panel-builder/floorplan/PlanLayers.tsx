@@ -128,7 +128,7 @@ export const PlanBackdrop = memo(function PlanBackdrop({
 });
 
 /** Místnosti podlaží (obrys, popisek, u vybrané úchyty stěn / rohů, kóty a plovoucí lišta). */
-export const RoomsLayer = memo(function RoomsLayer({ rooms, selectedRoomId, unit: ui, stroke, onPaper, selecting, handlers }: { rooms: readonly EditorRoom[]; selectedRoomId: string | null; unit: number; stroke: number; onPaper: boolean; selecting: boolean; handlers: PlanHandlers }) {
+export const RoomsLayer = memo(function RoomsLayer({ rooms, selectedRoomId, unit: ui, stroke, onPaper, selecting, locked = false, handlers }: { rooms: readonly EditorRoom[]; selectedRoomId: string | null; unit: number; stroke: number; onPaper: boolean; selecting: boolean; /** Fáze 103: kroky 2–5 – bez úchytů rozměru a rohů, kurzor bez posunu. */ locked?: boolean; handlers: PlanHandlers }) {
   useLayerCount("rooms");
   return rooms.map((room) => {
     const active = room.id === selectedRoomId;
@@ -141,7 +141,7 @@ export const RoomsLayer = memo(function RoomsLayer({ rooms, selectedRoomId, unit
       fill: active ? "rgba(250,204,21,0.10)" : "rgba(250,204,21,0.04)",
       stroke: active ? "#facc15" : "#a1a1aa",
       strokeWidth: stroke * (active ? 4 : 2.5),
-      className: selecting ? (active ? "cursor-move" : "cursor-pointer") : undefined,
+      className: selecting ? (active && !locked ? "cursor-move" : "cursor-pointer") : undefined,
       onPointerDown: (event: ReactPointerEvent) => handlers.roomDown(event, room, "move"),
       "data-testid": `room-${room.name}`,
     };
@@ -156,7 +156,7 @@ export const RoomsLayer = memo(function RoomsLayer({ rooms, selectedRoomId, unit
             </tspan>
           ))}
         </text>
-        {active && polygon ? (
+        {active && polygon && !locked ? (
           <g data-testid="polygon-handles">
             {corners.map((corner, index) => {
               const next = corners[(index + 1) % corners.length];
@@ -171,7 +171,7 @@ export const RoomsLayer = memo(function RoomsLayer({ rooms, selectedRoomId, unit
             })}
           </g>
         ) : null}
-        {active && !polygon ? (
+        {active && !polygon && !locked ? (
           <>
             {/* Stěny: tažením změna rozměru */}
             <rect x={room.x} y={room.y - edge / 2} width={room.w} height={edge} fill="transparent" className="cursor-ns-resize" onPointerDown={(event) => handlers.roomDown(event, room, "n")} data-handle="n" />

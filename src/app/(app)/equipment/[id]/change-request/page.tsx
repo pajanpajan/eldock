@@ -74,6 +74,7 @@ export default async function ChangeRequestPage({ params }: Props) {
         annotatePhotos={modules.on("cae.canvas_annotation") ? true : modules.upsell ? "locked" : false}
         canManageModules={account.can("manageModules")}
         openChange={openChange ? { id: openChange.id, number: openChange.number } : null}
+        designer={{ name: floor.building.plant.designerName, email: floor.building.plant.designerEmail }}
       />
     </>
   );

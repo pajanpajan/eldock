@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { panelBuilderGuard } from "@/components/panel-builder/access";
 import { LabelSheet } from "@/components/panel-builder/LabelSheet";
+import { ProjectQrLabelCard } from "@/components/qr/ProjectQrLabelCard";
 import { NextStepBar, PanelSteps } from "@/components/panel-builder/PanelSteps";
 import { ProjectHeader } from "@/components/panel-builder/ProjectHeader";
 import { railCapacities } from "@/lib/panel-builder/rails";
@@ -38,6 +39,8 @@ export default async function PanelLabelsPage({ params }: PageProps<"/panel-buil
         {/* Fáze 98: štítky = část 4b fáze „4. Dokumentace, Kusovník & Štítky“ */}
         <PanelSteps project={project} current="labels" />
       </div>
+      {/* Fáze 103: globálně unikátní QR štítek ELDOCK rozváděče (karta /q/EL-… s uzamčenou dokumentací) */}
+      <ProjectQrLabelCard projectId={project.id} serial={project.qrSerial} companyName={project.company?.companyName ?? null} />
       <LabelSheet
         code={project.code}
         name={project.name}

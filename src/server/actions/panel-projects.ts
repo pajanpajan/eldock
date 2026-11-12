@@ -7,7 +7,7 @@ import { z } from "zod";
 import { SCHEDULE_APPLIANCES } from "@/engine/room-schedule";
 import { prisma } from "@/lib/prisma";
 import { companyManufacturer } from "@/lib/registered-company";
-import { actionFailure, guardCompany, guardProject } from "@/server/panel-guards";
+import { actionFailure, guardCompany, guardEditableProject } from "@/server/panel-guards";
 import { consumeCredit } from "@/server/services/companies";
 import { linkGeneratedProject } from "@/server/services/floorplans";
 import { createProjectFromFloorplan, createProjectFromSchedule, deletePanelProjects, updateProjectHeader, type DeleteResult } from "@/server/services/panel-projects";
@@ -47,7 +47,7 @@ export async function updateProjectHeaderAction(projectId: string, input: z.inpu
   const parsed = headerSchema.safeParse(input);
   if (!id.safeParse(projectId).success || !parsed.success) return { ok: false, error: "Zadejte název rozváděče (nejvýš 120 znaků)." };
   try {
-    await guardProject(projectId);
+    await guardEditableProject(projectId);
     await updateProjectHeader(prisma, projectId, parsed.data);
     revalidatePath("/panel-builder", "layout");
     return { ok: true, data: undefined };

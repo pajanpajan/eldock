@@ -38,6 +38,16 @@ export function ProjectHeader({ project }: { project: PanelProjectDetail }) {
         <>
           <span className={cn("rounded-full border px-2 py-0.5 text-xs", status.badge)}>{status.label}</span>
           {project.designMode === "DESIGN" ? <span className="rounded-full border border-sky-500/60 px-2 py-0.5 text-xs text-sky-200">📐 Návrh od nuly</span> : null}
+          {/* Fáze 103: zamčené úpravy – předáno ke kusové zkoušce nebo uzamčená vydaná verze pod QR štítkem */}
+          {project.docState !== "DRAFT" ? (
+            <Link
+              href={`/panel-builder/${project.id}/documentation#revizni-technik`}
+              className={cn("rounded-full border px-2 py-0.5 text-xs", project.docState === "LOCKED_PUBLISHED" ? "border-emerald-500/60 text-emerald-200" : "border-amber-400/60 text-amber-200")}
+              data-testid="project-doc-state"
+            >
+              {project.docState === "LOCKED_PUBLISHED" ? `🔒 Uzamčená schválená verze${project.qrSerial ? ` · ${project.qrSerial}` : ""} – úpravy po odemknutí` : "⏳ Čeká na kusovou zkoušku – úpravy zamčené"}
+            </Link>
+          ) : null}
           {/* Fáze 93: typ objektu (obchodní centrum BD4 / zdravotnictví) – linter a protokol vnějších vlivů podle něj */}
           {project.occupancy !== "RESIDENTIAL" ? (
             <span className="rounded-full border border-amber-400/60 px-2 py-0.5 text-xs text-amber-200" data-testid="project-occupancy" title={occupancyOf(project.occupancy).label}>

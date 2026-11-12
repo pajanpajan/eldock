@@ -264,6 +264,8 @@ export async function assignChangeRequest(prisma: PrismaClient, actor: Actor, in
       data: { status: to, assigneeId: actor.id, assignedAt: new Date() },
     });
     await addEvent(tx, { changeRequestId: changeRequest.id, type: "ASSIGNED", actorId: actor.id, from: changeRequest.status, to });
+    // Fáze 103: Červenka předaná firemnímu projektantovi → „Překresluje se“
+    await tx.redlineTask.updateMany({ where: { changeRequestId: changeRequest.id, mode: "INTERNAL_DESIGNER", status: "OPEN" }, data: { status: "CLAIMED", claimedAt: new Date() } });
     await syncEquipment(tx, changeRequest.equipmentId);
     return updated;
   });
@@ -368,6 +370,8 @@ export async function uploadRevision(prisma: PrismaClient, actor: Actor, input: 
       where: { id: changeRequest.id },
       data: { status: to, resolvedAt: now, engineerSummary: summary },
     });
+    // Fáze 103: předání k překreslení – nová revize odevzdána (čeká na schválení údržbou)
+    await tx.redlineTask.updateMany({ where: { changeRequestId: changeRequest.id, status: { in: ["OPEN", "CLAIMED"] } }, data: { status: "SUBMITTED", submittedAt: now, revisionId: revision.id } });
     await addEvent(tx, {
       changeRequestId: changeRequest.id,
       type: "REVISION_UPLOADED",
@@ -392,6 +396,7 @@ export async function cancelChangeRequest(
     const changeRequest = await loadChangeRequest(tx, input.changeRequestId);
     const to = assertCanPerform("cancel", actor.role, changeRequest.status)!;
     const updated = await tx.changeRequest.update({ where: { id: changeRequest.id }, data: { status: to, closedAt: new Date() } });
+    await tx.redlineTask.updateMany({ where: { changeRequestId: changeRequest.id, status: { not: "DONE" } }, data: { status: "CANCELLED" } });
     await addEvent(tx, {
       changeRequestId: changeRequest.id,
       type: "CANCELLED",
@@ -439,6 +444,8 @@ export async function approveRevision(
       data: { status: "ACTIVE", approverId: actor.id, approvedAt: now },
     });
     await tx.changeRequest.update({ where: { id: changeRequest.id }, data: { status: to, closedAt: now } });
+    // Fáze 103: schválená nová revize = Červenka zapracovaná do dokumentace
+    await tx.redlineTask.updateMany({ where: { changeRequestId: changeRequest.id, status: { in: ["OPEN", "CLAIMED", "SUBMITTED"] } }, data: { status: "DONE", revisionId: revision.id } });
     await addEvent(tx, {
       changeRequestId: changeRequest.id,
       type: "APPROVED",
@@ -474,6 +481,7 @@ export async function rejectRevision(
       data: { status: "REJECTED", rejectionComment: comment, approverId: actor.id, approvedAt: now },
     });
     await tx.changeRequest.update({ where: { id: changeRequest.id }, data: { status: to, resolvedAt: null } });
+    await tx.redlineTask.updateMany({ where: { changeRequestId: changeRequest.id, status: "SUBMITTED" }, data: { status: "CLAIMED", submittedAt: null } });
     await addEvent(tx, {
       changeRequestId: changeRequest.id,
       type: "REJECTED",

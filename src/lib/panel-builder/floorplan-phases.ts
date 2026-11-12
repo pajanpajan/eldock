@@ -38,6 +38,13 @@ export const paletteGroupVisible = (phase: FloorplanPhase | null, group: Palette
 /** Sestavy ve vícerámečku (zásuvky / vypínače) – fáze 3 a 4. */
 export const assembliesVisible = (phase: FloorplanPhase | null) => phase === null || phase === 3 || phase === 4;
 
+/**
+ * Fáze 103: místnosti a obvodové stěny jdou posouvat, měnit rozměry a mazat jen v kroku 1 průvodce (kompaktní lišta bez
+ * kroku – vždy). V krocích 2–5 jsou zamčené proti nechtěnému posunutí při osazování prvků.
+ */
+export const roomsLocked = (phase: FloorplanPhase | null) => phase !== null && phase !== 1;
+export const ROOMS_LOCKED_TEXT = "🔒 Rozvržení místností je v této fázi uzamčeno proti nechtěnému posunutí.";
+
 /** Sekce pravého panelu (fáze 100: `generate` = velké tlačítko fáze 5, `generate-form` = karta Založit rozváděč). */
 export type PanelSectionId = "rooms" | "detail" | "site" | "socket-circuits" | "zone-checks" | "design" | "smart" | "generate" | "generate-form" | "checks" | "circuits" | "cables" | "edited" | "bom" | "inventory" | "cad";
 

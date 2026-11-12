@@ -25,6 +25,7 @@ import {
   type PaletteItem,
 } from "@/lib/panel-builder/floorplan-editor";
 import { frameGangs, frameLimitOf, frameOf, isFrameable } from "@/lib/panel-builder/floorplan-frames";
+import { ROOMS_LOCKED_TEXT } from "@/lib/panel-builder/floorplan-phases";
 import { BOX_CHOICES, WALL_TYPES, type BoxChoice, type WallType } from "@/lib/panel-builder/box-options";
 import { formatMm, type ResolvedBox } from "@/lib/panel-builder/mounting-boxes-catalog";
 import { DESIGN_BRANDS, appearanceLabel, colorForSeries, designSeriesOf, hasFrameChoice, seriesColors, seriesFrameColors } from "@/lib/panel-builder/wiring-designs";
@@ -535,11 +536,20 @@ export function Dimensions({ x, y, w, h, symbol }: { x: number; y: number; w: nu
 }
 
 /** Detail vybrané místnosti: název s rychlými štítky, rozměr X × Y v metrech a smazání. */
-export function RoomDetail({ room, onChange, onDelete, defaultWall }: { room: EditorRoom; onChange: (patch: Partial<Pick<EditorRoom, "name" | "w" | "h" | "wallType">>) => void; onDelete: () => void; defaultWall?: WallType }) {
+export function RoomDetail({ room, onChange, onDelete, defaultWall, onUnlock }: { room: EditorRoom; onChange: (patch: Partial<Pick<EditorRoom, "name" | "w" | "h" | "wallType">>) => void; onDelete: () => void; defaultWall?: WallType; /** Fáze 103: kroky 2–5 – místnost zamčená, tlačítko vrátí průvodce do kroku 1. */ onUnlock?: () => void }) {
   const toM = (mm: number) => Math.round(mm) / 1000;
+  const locked = Boolean(onUnlock);
   return (
-    <section className="flex flex-col gap-2 rounded-xl border-2 border-yellow-400/60 bg-card p-3 text-sm" aria-label="Detail vybrané místnosti" data-testid="room-detail">
-      <h3 className="font-semibold">🏠 Místnost</h3>
+    <section className="flex flex-col gap-2 rounded-xl border-2 border-yellow-400/60 bg-card p-3 text-sm" aria-label="Detail vybrané místnosti" data-testid="room-detail" data-locked={locked ? "true" : undefined}>
+      <h3 className="font-semibold">🏠 Místnost{locked ? " 🔒" : ""}</h3>
+      {locked ? (
+        <div className="flex flex-col gap-1.5 rounded-lg border border-amber-500/50 bg-amber-500/10 p-2 text-xs" data-testid="room-locked">
+          <p className="text-amber-100">{ROOMS_LOCKED_TEXT}</p>
+          <Button type="button" size="sm" variant="outline" className="h-auto min-h-8 justify-start py-1 text-left text-xs whitespace-normal" onClick={onUnlock} data-testid="room-unlock">
+            ✏️ Přepnout do Fáze 1 a upravit místnosti
+          </Button>
+        </div>
+      ) : null}
       <label className="flex flex-col gap-1 text-xs text-muted-foreground">
         Název místnosti
         <Input value={room.name} maxLength={40} onChange={(event) => onChange({ name: event.target.value })} aria-label="Název místnosti" className="h-8" />
@@ -551,7 +561,7 @@ export function RoomDetail({ room, onChange, onDelete, defaultWall }: { room: Ed
           </button>
         ))}
       </div>
-      <div className="grid grid-cols-2 gap-2">
+      <fieldset disabled={locked} className="grid grid-cols-2 gap-2 disabled:opacity-60" data-testid="room-dimensions">
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
           Šířka X [m]
           <Input type="number" min={0.5} max={200} step={0.05} defaultValue={toM(room.w)} key={`w${room.w}`} onBlur={(event) => Number(event.target.value) > 0 && onChange({ w: Math.round(Number(event.target.value) * 1000) })} onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()} aria-label="Šířka X [m]" className="h-8" />
@@ -560,7 +570,7 @@ export function RoomDetail({ room, onChange, onDelete, defaultWall }: { room: Ed
           Hloubka Y [m]
           <Input type="number" min={0.5} max={200} step={0.05} defaultValue={toM(room.h)} key={`h${room.h}`} onBlur={(event) => Number(event.target.value) > 0 && onChange({ h: Math.round(Number(event.target.value) * 1000) })} onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()} aria-label="Hloubka Y [m]" className="h-8" />
         </label>
-      </div>
+      </fieldset>
       <p className="text-xs text-muted-foreground" data-testid="room-area">
         {roomDimensions(room.w, room.h).label}
       </p>
@@ -582,9 +592,11 @@ export function RoomDetail({ room, onChange, onDelete, defaultWall }: { room: Ed
           ))}
         </select>
       </label>
-      <Button type="button" variant="destructive" size="sm" className="gap-1.5" onClick={onDelete}>
-        <Trash2 className="size-4" aria-hidden /> 🗑️ Smazat místnost
-      </Button>
+      {locked ? null : (
+        <Button type="button" variant="destructive" size="sm" className="gap-1.5" onClick={onDelete}>
+          <Trash2 className="size-4" aria-hidden /> 🗑️ Smazat místnost
+        </Button>
+      )}
     </section>
   );
 }

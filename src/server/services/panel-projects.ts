@@ -50,8 +50,11 @@ export async function deletePanelProjects(
 ): Promise<DeleteResult> {
   const unique = [...new Set(ids)];
   if (!unique.length) throw new WorkflowError("VALIDATION", "Vyberte alespoň jeden projekt.");
-  const found = await prisma.panelBoardProject.findMany({ where: { id: { in: unique }, companyId }, select: { id: true, code: true, status: true, photoUrl: true, railPhotosJson: true } });
+  const found = await prisma.panelBoardProject.findMany({ where: { id: { in: unique }, companyId }, select: { id: true, code: true, status: true, photoUrl: true, railPhotosJson: true, qrSerial: true, _count: { select: { versions: true } } } });
   if (found.length !== unique.length) throw new WorkflowError("NOT_FOUND", "Projekt nebyl nalezen.");
+  // Fáze 103: vydaná dokumentace pod QR štítkem v terénu se nemaže (karta /q/EL-… musí dál fungovat)
+  const published = found.filter((project) => project._count.versions > 0);
+  if (published.length) throw new WorkflowError("VALIDATION", `Rozváděč ${published.map((project) => `${project.code}${project.qrSerial ? ` (štítek ${project.qrSerial})` : ""}`).join(", ")} má vydanou dokumentaci pod QR štítkem – smazat ho nelze, karta v terénu musí dál fungovat.`);
   const skipped = options.protectSample ? found.filter(isSampleProject).map((project) => project.code) : [];
   const targets = found.filter((project) => !skipped.includes(project.code));
   if (!targets.length) return { deleted: 0, refunded: 0, skipped, removedFiles: 0 };

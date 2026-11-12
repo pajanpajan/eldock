@@ -23,6 +23,7 @@ import { REVISION_STATUS, SLA_LEVEL } from "@/lib/status";
 import { cn } from "@/lib/utils";
 import { canPerform } from "@/lib/workflow/state-machine";
 import { getTicketDetail } from "@/server/queries/cae";
+import { cadFormatLabel, redlineStatusLabel } from "@/lib/redline-marketplace";
 import { ModuleDisabled } from "@/components/common/ModuleDisabled";
 import { getFeatures } from "@/server/modules";
 import { getCurrentAccount, getCurrentRole, getCurrentUser } from "@/server/session";
@@ -75,6 +76,12 @@ export default async function TicketDetailPage({ params }: Props) {
         <>
           <StatusBadge kind="changeRequest" status={ticket.status} />
           <StatusBadge kind="priority" status={ticket.priority} />
+          {ticket.redlineTask ? (
+            <span className="rounded-full border border-sky-500/60 px-2 py-0.5 text-xs font-semibold text-sky-200" data-testid="ticket-redline-task" title={ticket.redlineTask.mode === "POOL" ? `ELDOCK Pool · ${cadFormatLabel(ticket.redlineTask.format)}${ticket.redlineTask.rewardCzk ? ` · ${ticket.redlineTask.rewardCzk} Kč` : ""}` : "Firemní projektant závodu"}>
+              {ticket.redlineTask.mode === "POOL" ? "🌐 ELDOCK Pool: " : `🏢 ${ticket.redlineTask.internalName ?? "Firemní projektant"}: `}
+              {redlineStatusLabel(ticket.redlineTask.mode, ticket.redlineTask.status, ticket.redlineTask.claimedBy?.name)}
+            </span>
+          ) : null}
           {ticket.safetyImpact !== "NONE_1_TO_1" ? (
             <span
               className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${ticket.safetyImpact === "SUBSTANTIAL_SAFETY_MOD" ? "border-red-500 bg-red-500/15 text-red-200" : "border-amber-400 bg-amber-400/10 text-amber-200"}`}

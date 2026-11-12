@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
-import { actionFailure, guardProject } from "@/server/panel-guards";
+import { actionFailure, guardEditableProject } from "@/server/panel-guards";
 import { transferManufacturer, type TransferResult } from "@/server/services/panel-transfer";
 
 import type { ActionResult } from "./workflow";
@@ -16,7 +16,7 @@ export async function transferManufacturerAction(raw: z.input<typeof input>): Pr
   const parsed = input.safeParse(raw);
   if (!parsed.success) return { ok: false, error: "Neplatný převod výrobce." };
   try {
-    await guardProject(parsed.data.projectId);
+    await guardEditableProject(parsed.data.projectId);
     const result = await transferManufacturer(prisma, parsed.data.projectId, parsed.data.manufacturer, { apply: parsed.data.apply });
     if (result.applied) revalidatePath(`/panel-builder/${parsed.data.projectId}`, "layout");
     return { ok: true, data: result };

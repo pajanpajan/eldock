@@ -36,6 +36,9 @@ export const CONTENT_TYPES: Record<string, string> = {
   ".par": "application/octet-stream",
   ".bin": "application/octet-stream",
   ".hex": "application/octet-stream",
+  // Fáze 103: zdrojové CAD výkresy překreslených Červenek z ELDOCK Poolu
+  ".dwg": "application/acad",
+  ".dxf": "image/vnd.dxf",
 };
 
 /**

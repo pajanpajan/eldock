@@ -71,6 +71,9 @@ const WARM_ROUTES = [
   "/admin/data",
   // Fáze 70: zařízení firmy (aplikace Windows, iOS, Android)
   "/admin/devices",
+  // Fáze 103: portál projektantů ELDOCK Poolu a karta QR štítku
+  "/portal-projektantu",
+  "/q/EL-000001",
 ];
 
 /**

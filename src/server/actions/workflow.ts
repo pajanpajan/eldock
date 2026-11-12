@@ -7,6 +7,9 @@ import { prisma } from "@/lib/prisma";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 import { generateRevisionSchematic } from "@/server/services/schematic";
 import * as workflow from "@/server/services/workflow";
+import { smtpTransportFromEnv } from "@/server/mailer";
+import { requestOrigin } from "@/server/request-url";
+import { notifyInternalDesigner, routeChangeRequest } from "@/server/services/redlines";
 import { assertFeature } from "@/server/modules";
 import { assertPermission } from "@/server/permissions";
 import { storePlantFile } from "@/server/file-access";
@@ -56,6 +59,20 @@ const submitSchema = z.object({
       safetyChecksum: text(60),
     })
     .nullable()
+    .optional(),
+  // Fáze 103: předání Červenky k překreslení – firemní projektant (A) / ELDOCK Pool (B)
+  routing: z
+    .discriminatedUnion("mode", [
+      z.object({ mode: z.literal("INTERNAL_DESIGNER"), description: text(1000), dueAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }),
+      z.object({
+        mode: z.literal("POOL"),
+        format: z.enum(["PDF", "PC_SCHEMATIC", "EPLAN", "DWG"]),
+        sheets: z.number().int().min(1).max(100),
+        rewardCzk: z.number().int().min(100, "Odměna za úkol je aspoň 100 Kč.").max(100_000),
+        description: text(1000),
+        dueAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      }),
+    ])
     .optional(),
 });
 
@@ -116,7 +133,13 @@ async function run<S extends z.ZodType, T>(
 export async function submitChangeRequestAction(input: z.input<typeof submitSchema>) {
   return run(submitSchema, input, async (actor, data) => {
     await assertPermission("submitChange");
-    const changeRequest = await workflow.submitChangeRequest(prisma, actor, data);
+    const { routing, ...input } = data;
+    const changeRequest = await workflow.submitChangeRequest(prisma, actor, input);
+    if (routing) {
+      const task = await routeChangeRequest(prisma, { ...routing, description: routing.description ?? undefined, changeRequestId: changeRequest.id });
+      // E-mail firemnímu projektantovi jen s nastaveným SMTP a u závodu registrované firmy (ne ve sdíleném demu)
+      if (routing.mode === "INTERNAL_DESIGNER") await notifyInternalDesigner(prisma, task.id, { origin: await requestOrigin(), send: smtpTransportFromEnv() }).catch((error) => console.error(error));
+    }
     return { id: changeRequest.id, number: changeRequest.number, equipmentId: changeRequest.equipmentId };
   });
 }

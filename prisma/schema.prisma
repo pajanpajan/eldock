@@ -339,6 +339,9 @@ model Plant {
 
   // Podklad mapy areálu (SVG generované v aplikaci nebo nahraný obrázek)
   campusMapUrl   String?
+  /// Fáze 103: firemní (interní nebo smluvní) projektant závodu pro překreslení Červenek
+  designerName   String?
+  designerEmail  String?
   campusViewBoxW Int     @default(1000)
   campusViewBoxH Int     @default(700)
   // Skutečný rozměr pozemku v metrech (převod rozměru budovy ve Studiu na mapu)
@@ -702,6 +705,8 @@ model ChangeRequest {
   attachments        Attachment[]
   events             ChangeRequestEvent[]
   temporaryMods      TemporaryModification[]
+  /// Fáze 103: předání k překreslení (firemní projektant / ELDOCK Pool)
+  redlineTask        RedlineTask?
   softwareBackups    SoftwareBackup[]
 
   @@index([equipmentId, status])
@@ -1049,6 +1054,10 @@ model PanelBoardProject {
   installationSite     String?
   manufacturerInfoJson String             @default("{}") // výrobce rozváděče: { name, address, city, phone }
   status               PanelProjectStatus @default(DRAFT)
+  /// Fáze 103: zamykání dokumentace (rozpracováno / čeká na kusovou zkoušku / uzamčená schválená verze)
+  docState             SwitchboardDocState @default(DRAFT)
+  /// Fáze 103: QR štítek rozváděče z registru (EL-000001) – karta https://eldock.cz/q/EL-000001
+  qrSerial             String?            @unique
 
   enclosureType          EnclosureType     @default(WALL_MOUNTED)
   enclosureMaterial      EnclosureMaterial @default(PLASTIC)
@@ -1128,6 +1137,8 @@ model PanelBoardProject {
   enclosure  PanelEnclosure?    @relation(fields: [enclosureId], references: [id], onDelete: SetNull)
   fan        EnclosureFan?      @relation(fields: [fanId], references: [id], onDelete: SetNull)
   items      PanelBoardItem[]
+  /// Fáze 103: vydané verze dokumentace (1.0, 1.1 … – neaktuální zůstávají v archivu)
+  versions   SwitchboardVersion[]
   feedback   AiFeedbackReport[]
   /// Fáze 64: půdorysy, ze kterých byl rozváděč naposledy vygenerován.
   floorplans Floorplan[]
@@ -1907,4 +1918,133 @@ model SyncCounter {
   id        Int @id
   value     Int @default(0)
   prunedSeq Int @default(0)
+}
+
+/// Fáze 103: stav dokumentace rozváděče AI Panel Builderu (zamykání a verzování pod QR štítkem).
+enum SwitchboardDocState {
+  DRAFT // rozpracováno / odemčeno k editaci
+  PENDING_INSPECTION // konstrukce hotová, čeká na kusovou zkoušku a potvrzení revizního technika
+  LOCKED_PUBLISHED // uzamčená schválená verze (read-only) – karta /q/[kód]
+}
+
+/// Fáze 103: neměnný snímek vydané verze rozváděče (dokumentace + kusová zkouška + navázaný 2D půdorys).
+model SwitchboardVersion {
+  id                 String   @id @default(cuid())
+  projectId          String
+  major              Int
+  minor              Int
+  /// „1.0“, „1.1“ …
+  version            String
+  /// LOCKED_PUBLISHED (aktuální) | SUPERSEDED (neaktuální – nahrazeno novější verzí)
+  status             String   @default("LOCKED_PUBLISHED")
+  inspectorName      String
+  inspectorCert      String
+  measuredAt         DateTime
+  /// JSON naměřených hodnot (Riso, PE, Zs / Ik, RCD IΔ / tA, mechanická zkouška, verdikt, poznámka)
+  measurementsJson   String
+  /// JSON neměnných dat 6listového elaborátu (DocumentationData v okamžiku vydání)
+  documentationJson  String
+  /// JSON navázaného 2D půdorysu (nákres + kusovník) – null bez půdorysu
+  floorplanJson      String?
+  floorplanName      String?
+  publishedAt        DateTime @default(now())
+  supersededAt       DateTime?
+  supersededByVersion String?
+  createdAt          DateTime @default(now())
+
+  project PanelBoardProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, major, minor])
+  @@index([projectId, status])
+}
+
+/// Fáze 103: atomické počítadlo registru QR štítků (jediný řádek id = 1).
+model QrLabelCounter {
+  id                 Int @id @default(1)
+  lastSequenceNumber Int @default(0)
+}
+
+/// Fáze 103: série QR štítků ELDOCK vydaná firmě.
+model QrLabelBatch {
+  id                  String   @id @default(cuid())
+  companyName         String
+  ico                 String?
+  email               String?
+  /// Registrovaná firma AI Panel Builderu (vazba podle IČO / e-mailu), null = zatím neregistrovaná
+  registeredCompanyId String?
+  /// APPLIANCE | SWITCHBOARD | MACHINE
+  purpose             String
+  firstSequence       Int
+  lastSequence        Int
+  count               Int
+  note                String?
+  createdAt           DateTime @default(now())
+  printedAt           DateTime?
+
+  items QrLabelItem[]
+
+  @@index([registeredCompanyId])
+  @@index([createdAt])
+}
+
+/// Fáze 103: jeden fyzický QR štítek – globálně unikátní sériové číslo EL-000001 (nikdy se neopakuje).
+model QrLabelItem {
+  id          String    @id @default(cuid())
+  sequence    Int       @unique
+  serialCode  String    @unique
+  batchId     String
+  /// PANEL_PROJECT | EQUIPMENT | null (nespárovaný)
+  targetType  String?
+  targetId    String?
+  activatedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  batch QrLabelBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([batchId])
+  @@index([targetType, targetId])
+}
+
+/// Fáze 103: schválený externí projektant ELDOCK Poolu (přístup do portálu e-mailem + přístupovým kódem).
+model PoolDesigner {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  /// scrypt otisk přístupového kódu (kód vidí jen velín při vydání)
+  accessHash   String
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  tasks RedlineTask[]
+}
+
+/// Fáze 103: předání Červenky k překreslení – firemní projektant (A) nebo ELDOCK Pool (B, kdo první přijme).
+model RedlineTask {
+  id               String    @id @default(cuid())
+  changeRequestId  String    @unique
+  /// INTERNAL_DESIGNER | POOL
+  mode             String
+  /// OPEN | CLAIMED | SUBMITTED | DONE | CANCELLED
+  status           String    @default("OPEN")
+  /// PDF | PC_SCHEMATIC | EPLAN | DWG
+  format           String    @default("PDF")
+  sheets           Int       @default(1)
+  rewardCzk        Int?
+  dueAt            DateTime?
+  description      String?
+  internalName     String?
+  internalEmail    String?
+  claimedById      String?
+  claimedAt        DateTime?
+  resultPdfUrl     String?
+  resultCadUrl     String?
+  submittedAt      DateTime?
+  revisionId       String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  changeRequest ChangeRequest @relation(fields: [changeRequestId], references: [id], onDelete: Cascade)
+  claimedBy     PoolDesigner? @relation(fields: [claimedById], references: [id], onDelete: SetNull)
+
+  @@index([mode, status])
 }

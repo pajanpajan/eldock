@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { addCommentAction, submitChangeRequestAction } from "@/server/actions/workflow";
 
 import { PhotoStep } from "./PhotoStep";
+import { RedlineRoutingChoice, initialRouting, routingInput, type RoutingState } from "./RedlineRoutingChoice";
 import { SafetyClassification } from "./SafetyClassification";
 import { VoiceNote } from "./VoiceNote";
 import {
@@ -43,16 +44,20 @@ interface Props {
   openChange: { id: string; number: string } | null;
   /** Řídicí uzly stroje se zálohou SW (našeptávač v klasifikaci zásahu). */
   softwareUnits?: string[];
+  /** Fáze 103: firemní projektant závodu (předání Červenky – cesta A). */
+  designer?: { name: string | null; email: string | null } | null;
 }
 
 /** Průvodce „Zadat změnu“: Zákres → Fotky → Poznámka → Souhrn (u otevřené změny bez zákresu). */
-export function ChangeRequestWizard({ equipment, schematic, openChange, annotatePhotos = true, canManageModules = false, softwareUnits = [] }: Props) {
+export function ChangeRequestWizard({ equipment, schematic, openChange, annotatePhotos = true, canManageModules = false, softwareUnits = [], designer = null }: Props) {
   const router = useRouter();
   const mode = openChange ? "comment" : "new";
   const steps = stepsFor(mode).filter((step) => step !== "markup" || schematic);
   const [state, dispatch] = useReducer(wizardReducer, initialWizardState);
   const [submitting, startSubmit] = useTransition();
   const [restored, setRestored] = useState(false);
+  // Fáze 103: předání k překreslení – firemní projektant (A) nebo ELDOCK Pool (B)
+  const [routing, setRouting] = useState<RoutingState>(initialRouting);
   const submitted = useRef(false);
   const key = draftKey(equipment.id, mode);
 
@@ -121,6 +126,7 @@ export function ChangeRequestWizard({ equipment, schematic, openChange, annotate
             attachments,
             safetyImpact: state.safetyImpact,
             requiresSoftwareUpdate: state.softwareChanged,
+            routing: routingInput(routing),
             softwareBackup: state.softwareBackup
               ? {
                   targetUnit: state.softwareBackup.targetUnit,
@@ -144,7 +150,7 @@ export function ChangeRequestWizard({ equipment, schematic, openChange, annotate
         // viz výše
       }
       toast.success(
-        openChange ? `Doplněno k ${result.data.number}.` : `Změna ${result.data.number} odeslána do CAE.`,
+        openChange ? `Doplněno k ${result.data.number}.` : routing.mode === "POOL" ? `Změna ${result.data.number} odeslána do ELDOCK Poolu projektantů.` : `Změna ${result.data.number} odeslána do CAE.`,
         { description: openChange ? undefined : "Zařízení je označeno jako „Čeká na aktualizaci“." },
       );
       router.push(equipmentHref(equipment.id));
@@ -267,6 +273,7 @@ export function ChangeRequestWizard({ equipment, schematic, openChange, annotate
                 ) : null}
               </div>
             </div>
+            {!openChange ? <RedlineRoutingChoice value={routing} onChange={setRouting} designer={designer} canConfigure={canManageModules} /> : null}
             {!validation.ok ? (
               <p role="alert" className="rounded-xl border border-orange-500/50 bg-orange-500/10 p-3 text-sm text-orange-200">
                 {validation.reason}
@@ -292,7 +299,7 @@ export function ChangeRequestWizard({ equipment, schematic, openChange, annotate
           {step === "summary" ? (
             <Button type="button" className="h-14 flex-[2] gap-2 text-base font-semibold sm:ml-auto sm:flex-none sm:px-10" onClick={submit} disabled={submitting || !validation.ok}>
               {submitting ? <Loader2 className="size-5 animate-spin" /> : <Send className="size-5" />}
-              {openChange ? "Doplnit ke změně" : "Odeslat do CAE"}
+              {openChange ? "Doplnit ke změně" : routing.mode === "POOL" ? "🚀 Odeslat do ELDOCK Poolu projektantů" : "Odeslat do CAE"}
             </Button>
           ) : (
             <Button type="button" className="h-14 flex-[2] gap-2 text-base font-semibold sm:ml-auto sm:flex-none sm:px-10" onClick={() => goto(stepIndex + 1)}>

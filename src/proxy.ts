@@ -22,7 +22,9 @@ import { APP_HOME, isPlantRoute } from "@/lib/routes";
 // vyhledávačů (přihlášení vyžaduje až uložení vlastního projektu, tisk s razítkem a další stránky Panel Builderu)
 const PUBLIC_PATHS = new Set(["/", "/login", "/register-plant", "/panel-builder", "/panel-builder/auth", "/panel-builder/catalog", "/api/ares", "/ukazka-elaboratu", "/navody", "/ai-panel-builder", "/2d-pudorys-elektroinstalace", "/vypocet-otepleni-rozvadece", "/kusova-zkouska-rozvadece", "/prumyslova-udrzba-a-revize", "/ochrana-osobnich-udaju", "/obchodni-podminky", "/sitemap.xml", "/robots.txt", "/superadmin/login", "/api/consent", "/api/telemetry", "/newsletter/potvrzeni", "/newsletter/odhlaseni", "/api/newsletter/unsubscribe", "/zapomenute-heslo", "/api/catalog-images/manifest", "/prezentace"]);
 // Fáze 92: nahrané produktové fotky řad a jejich manifest nejsou tajné (galerie řad všem uživatelům)
-const PUBLIC_PREFIXES = ["/opengraph-image", "/brands/", "/api/brand-logo/", "/nastavit-heslo/", "/tutorials/", "/api/catalog-images/file/"];
+// Fáze 103: karta QR štítku /q/EL-… (technik u rozváděče bez přihlášení) a portál projektantů ELDOCK Poolu (vlastní
+// přihlášení e-mailem a přístupovým kódem; odevzdání souborů ověřuje /api/pool/ samo)
+const PUBLIC_PREFIXES = ["/opengraph-image", "/brands/", "/api/brand-logo/", "/nastavit-heslo/", "/tutorials/", "/api/catalog-images/file/", "/q/", "/portal-projektantu", "/api/pool/"];
 const SUPERADMIN_PREFIX = "/superadmin";
 const PANEL_PREFIX = "/panel-builder";
 
@@ -77,6 +79,8 @@ export async function proxy(request: NextRequest) {
     // Fáze 92: nahrání fotky do katalogu řad – oprávnění velínu ověří route handler
     const fileApi = pathname === "/api/uploads" || pathname.startsWith("/api/files/") || pathname === "/api/data-export" || pathname === "/api/catalog-images/upload";
     if (plant || ((company || superadmin) && fileApi)) return NextResponse.next();
+    // Fáze 103: registr QR štítků ELDOCK – API jen pro velín (route handler ověří cookie velínu znovu)
+    if (superadmin && pathname === "/api/qr-labels") return NextResponse.next();
     return NextResponse.json({ error: "Nepřihlášeno – přihlaste se na /login." }, { status: 401, headers: { "Cache-Control": "no-store" } });
   }
 

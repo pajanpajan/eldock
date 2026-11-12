@@ -25,7 +25,8 @@ const secure = () => process.env.NODE_ENV === "production" && brandEnv("INSECURE
 /** Bezpečný cíl uvnitř AI Panel Builderu po přihlášení (jinak přehled projektů). */
 const panelNext = (next: unknown) => {
   const target = typeof next === "string" ? safeNextPath(next) : undefined;
-  return target && target.startsWith("/panel-builder") && !target.startsWith("/panel-builder/auth") ? target : "/panel-builder";
+  // Fáze 103: i karta QR štítku /q/EL-… (spárování předtištěného štítku firmy s rozváděčem po přihlášení)
+  return target && ((target.startsWith("/panel-builder") && !target.startsWith("/panel-builder/auth")) || /^\/q\/EL-\d{6,9}$/.test(target)) ? target : "/panel-builder";
 };
 
 async function signInCompany(companyId: string) {

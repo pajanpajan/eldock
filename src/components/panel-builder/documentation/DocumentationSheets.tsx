@@ -11,6 +11,7 @@ import type { ManufacturerInfo } from "@/lib/panel-builder/project";
 import type { ThermalResult } from "@/lib/thermalCalculation";
 import { ROUTINE_TEST_POINTS, minInsulationMOhm, routineTestVerdict, type RoutineTest, type StandardEdition } from "@/lib/legislation-2027";
 import { type WiringBomRow, BOX_TABLE_TITLE, bomOrderLabel } from "@/lib/panel-builder/wiring-bom";
+import { czDate, versionBadge, type DocVersionMark, type InspectionBlock } from "@/lib/switchboard-versions";
 import type { HotspotSink } from "@/lib/panel-builder/drawings";
 import type { FloorplanDraft } from "@/lib/panel-builder/floorplan-editor";
 import type { DisplayCircuit } from "@/lib/panel-builder/route-display";
@@ -67,6 +68,10 @@ export interface DocumentationData {
   sldHotspots?: HotspotSink;
   /** Fáze 75: příloha – půdorys elektroinstalace po podlažích s trasami okruhů tohoto rozváděče. */
   floorplanSheets?: { floorId: string; floorName: string; scale: number; draft: FloorplanDraft; routes: { circuits: DisplayCircuit[]; bus: DisplayCircuit | null } }[];
+  /** Fáze 103: část revizního technika ve vydané verzi (naměřené hodnoty, verdikt, elektronické potvrzení). */
+  inspection?: InspectionBlock;
+  /** Fáze 103: verze zobrazovaného snímku z cloudu (hlavička listů, vodoznak NEAKTUÁLNÍ) – jen při zobrazení. */
+  docVersion?: DocVersionMark;
   /** Fáze 75: propojené rozváděče z jednoho půdorysu – nadřazený (přívod) a podružné. */
   boards?: { code: string; parent: { code: string; projectCode: string; url: string; feeder: FeederInfo | null } | null; children: { code: string; projectCode: string; name: string; url: string; feeder: FeederInfo | null }[] };
 }
@@ -95,9 +100,36 @@ function SignatureStamp({ url }: { url: string | null }) {
   return <img src={url} alt="Razítko a podpis odpovědné osoby výrobce" className="pointer-events-none absolute -top-[22mm] left-1/2 h-[26mm] max-w-[60mm] -translate-x-1/2 object-contain" data-testid="doc-stamp" />;
 }
 
+/** Fáze 103: verze snímku z cloudu v hlavičce listu – aktuální, nebo výrazně červeně NEAKTUÁLNÍ. */
+function VersionMark({ data }: { data: DocumentationData }) {
+  const mark = data.docVersion;
+  if (!mark) return null;
+  return mark.current ? (
+    <span className="rounded border border-black px-1 font-sans text-[7.5pt] font-bold" data-testid="doc-version-badge">
+      Verze {mark.version} – AKTUÁLNÍ
+    </span>
+  ) : (
+    <span className="rounded bg-red-600 px-1.5 py-0.5 font-sans text-[8pt] font-black text-white" data-testid="doc-version-badge" data-superseded="true">
+      {versionBadge(mark.version, "SUPERSEDED", mark.supersededBy)}
+    </span>
+  );
+}
+
+/** Fáze 103: vodoznak přes celý list neaktuální verze (tiskne se i do PDF). */
+function SupersededWatermark({ data }: { data: DocumentationData }) {
+  const mark = data.docVersion;
+  if (!mark || mark.current) return null;
+  return (
+    <div aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden" data-testid="doc-watermark">
+      <span className="-rotate-[35deg] whitespace-nowrap text-[40pt] font-black tracking-wider text-red-600/25">NEAKTUÁLNÍ VERZE {mark.version}</span>
+    </div>
+  );
+}
+
 function Sheet({ data, number, children }: { data: DocumentationData; number: number; children: ReactNode }) {
   return (
-    <section id={`list-${number}`} className="doc-sheet mx-auto flex w-full max-w-[210mm] flex-col bg-white p-[10mm] text-[9pt] leading-snug text-black shadow-2xl shadow-black/50 sm:min-h-[297mm]" data-testid={`doc-sheet-${number}`} aria-label={`List ${number}: ${DOCUMENT_SHEETS[number - 1]}`}>
+    <section id={`list-${number}`} className="doc-sheet relative mx-auto flex w-full max-w-[210mm] flex-col bg-white p-[10mm] text-[9pt] leading-snug text-black shadow-2xl shadow-black/50 sm:min-h-[297mm]" data-testid={`doc-sheet-${number}`} aria-label={`List ${number}: ${DOCUMENT_SHEETS[number - 1]}`}>
+      <SupersededWatermark data={data} />
       <header className="mb-3 flex items-baseline justify-between border-b-2 border-black pb-1.5">
         <h2 className="text-[13pt] font-bold">{DOCUMENT_SHEETS[number - 1]}</h2>
         <span className="flex items-baseline gap-3 font-mono text-[8pt]">
@@ -112,6 +144,7 @@ function Sheet({ data, number, children }: { data: DocumentationData; number: nu
               ↩ obvody
             </a>
           ) : null}
+          <VersionMark data={data} />
           {data.code} · list {number}/{DOCUMENT_SHEETS.length}
         </span>
       </header>
@@ -206,6 +239,33 @@ function RoutineTestSheet({ data }: { data: DocumentationData }) {
           {m.authorizationNumber ? ` (oprávnění ${m.authorizationNumber})` : ""}
         </div>
       </div>
+      {data.inspection ? <InspectorSection block={data.inspection} /> : null}
+    </div>
+  );
+}
+
+/** Fáze 103: část pro revizního technika – výstupní kusová zkouška potvrzená při uzamčení verze v cloudu. */
+function InspectorSection({ block }: { block: InspectionBlock }) {
+  return (
+    <div className="mt-3 border-t border-black pt-2" data-testid="doc-inspection">
+      <h4 className="text-[9pt] font-bold">Část pro revizního technika – výstupní kusová zkouška a měření (verze {block.version})</h4>
+      <table className="mt-1 w-full border-collapse">
+        <tbody>
+          {block.rows.map((row) => (
+            <tr key={row.label}>
+              <td className="border border-zinc-400 px-1 py-0.5">{row.label}</td>
+              <td className="border border-zinc-400 px-1 py-0.5 font-semibold">{row.value}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="mt-1 text-[10pt] font-black" data-testid="doc-inspection-verdict">
+        {block.verdict}
+      </p>
+      {block.note ? <p className="mt-0.5">Poznámka revizního technika: {block.note}</p> : null}
+      <p className="mt-1 text-zinc-700" data-testid="doc-inspection-signature">
+        Měřil a potvrdil: <strong>{block.inspectorName}</strong>, osvědčení / oprávnění TIČR {block.inspectorCert}, měření dne {czDate(block.measuredAt)} · elektronicky potvrzeno a uzamčeno v cloudu ELDOCK {block.confirmedAt}
+      </p>
     </div>
   );
 }
@@ -739,7 +799,7 @@ function LinkedBoards({ boards }: { boards: NonNullable<DocumentationData["board
 }
 
 /** Fáze 75: příloha – půdorys podlaží s trasami okruhů rozváděče (trasy a řádky okruhů odkazují do rozcestníku). */
-function FloorplanAnnex({ data, sheet, letter }: { data: DocumentationData; sheet: NonNullable<DocumentationData["floorplanSheets"]>[number]; letter: string }) {
+export function FloorplanAnnex({ data, sheet, letter, title }: { data: DocumentationData; sheet: NonNullable<DocumentationData["floorplanSheets"]>[number]; letter: string; title?: string }) {
   const links = Object.fromEntries(
     sheet.routes.circuits.flatMap((circuit) => {
       const designation = plainDesignation(circuit.designation);
@@ -747,11 +807,10 @@ function FloorplanAnnex({ data, sheet, letter }: { data: DocumentationData; shee
     }),
   );
   return (
-    <section id={`priloha-${sheet.floorId}`} className="doc-sheet mx-auto flex w-full max-w-[210mm] flex-col bg-white p-[10mm] text-[9pt] leading-snug text-black shadow-2xl shadow-black/50 sm:min-h-[297mm]" data-testid="doc-annex" aria-label={`Příloha ${letter}: půdorys elektroinstalace ${sheet.floorName}`}>
+    <section id={`priloha-${sheet.floorId}`} className="doc-sheet relative mx-auto flex w-full max-w-[210mm] flex-col bg-white p-[10mm] text-[9pt] leading-snug text-black shadow-2xl shadow-black/50 sm:min-h-[297mm]" data-testid="doc-annex" aria-label={`Příloha ${letter}: půdorys elektroinstalace ${sheet.floorName}`}>
+      <SupersededWatermark data={data} />
       <header className="mb-3 flex items-baseline justify-between border-b-2 border-black pb-1.5">
-        <h2 className="text-[13pt] font-bold">
-          Příloha {letter} – půdorys elektroinstalace {sheet.floorName}
-        </h2>
+        <h2 className="text-[13pt] font-bold">{title ?? `Příloha ${letter} – půdorys elektroinstalace ${sheet.floorName}`}</h2>
         <span className="flex items-baseline gap-3 font-mono text-[8pt]">
           <a href="#list-1" className="text-zinc-500 underline decoration-dotted">
             ↩ obsah
@@ -759,6 +818,7 @@ function FloorplanAnnex({ data, sheet, letter }: { data: DocumentationData; shee
           <a href="#doc-hub" className="text-zinc-500 underline decoration-dotted">
             ↩ obvody
           </a>
+          <VersionMark data={data} />
           {data.code} · 1 : {sheet.scale}
         </span>
       </header>
@@ -789,6 +849,69 @@ function FloorplanAnnex({ data, sheet, letter }: { data: DocumentationData; shee
       </table>
       <p className="mt-1 text-[7pt] text-zinc-600">Trasy v normovém značení (rysky = počet žil). Klik na trasu nebo označení okruhu přejde do rozcestníku obvodů rozváděče.</p>
     </section>
+  );
+}
+
+/**
+ * Fáze 103: druhý dokument vydané verze – „📐 Prováděcí 2D půdorys a kabelové trasy“ navázaného 2D půdorysu: podlaží
+ * se všemi okruhy, kusovník domovní instalace a metry kabelů (stejné listy A4, verze v hlavičce, vodoznak NEAKTUÁLNÍ).
+ */
+export function FloorplanVersionSheets({ data, plan }: { data: DocumentationData; plan: { name: string; sheets: NonNullable<DocumentationData["floorplanSheets"]>; bom: WiringBomRow[]; cables: { cable: string; meters: number }[] } }) {
+  return (
+    <div className="doc-sheets flex flex-col gap-6" data-testid="floorplan-document">
+      {plan.sheets.map((sheet, index) => (
+        <FloorplanAnnex key={sheet.floorId} data={data} sheet={sheet} letter={String.fromCharCode(65 + index)} title={`Půdorys ${sheet.floorName} – prováděcí výkres a kabelové trasy`} />
+      ))}
+      <section className="doc-sheet relative mx-auto flex w-full max-w-[210mm] flex-col bg-white p-[10mm] text-[9pt] leading-snug text-black shadow-2xl shadow-black/50 sm:min-h-[297mm]" data-testid="floorplan-document-bom">
+        <SupersededWatermark data={data} />
+        <header className="mb-3 flex items-baseline justify-between border-b-2 border-black pb-1.5">
+          <h2 className="text-[13pt] font-bold">Kusovník a kabeláž – {plan.name}</h2>
+          <span className="flex items-baseline gap-3 font-mono text-[8pt]">
+            <VersionMark data={data} />
+            {data.code}
+          </span>
+        </header>
+        <table className="w-full border-collapse text-[8pt]" data-testid="floorplan-document-bom-table">
+          <thead>
+            <tr>
+              <th className={cell}>Kategorie</th>
+              <th className={cell}>Objednací číslo</th>
+              <th className={cell}>Název a specifikace</th>
+              <th className={cell}>Řada a barva</th>
+              <th className={`${cell} text-right`}>Počet</th>
+            </tr>
+          </thead>
+          <tbody>
+            {plan.bom.filter((row) => !row.box).map((row) => (
+              <tr key={`${row.category}-${row.mpn ?? row.name}-${row.appearance}`}>
+                <td className={cell}>{row.category}</td>
+                <td className={`${cell} font-mono`}>{row.mpn ? `${row.mpn}${row.verified ? "" : " (ověřit)"}` : <span className="font-sans italic">{bomOrderLabel(row)}</span>}</td>
+                <td className={cell}>{row.name}</td>
+                <td className={cell}>{row.appearance}</td>
+                <td className={`${cell} text-right font-mono`}>
+                  {row.quantity} {row.unit}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {plan.cables.length ? (
+          <>
+            <h3 className="mt-3 font-bold">Kabely podle typu (délky tras z půdorysu)</h3>
+            <table className="w-full border-collapse text-[8pt]">
+              <tbody>
+                {plan.cables.map((row) => (
+                  <tr key={row.cable}>
+                    <td className={`${cell} font-mono`}>{row.cable}</td>
+                    <td className={`${cell} text-right font-mono`}>{String(row.meters).replace(".", ",")} m</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        ) : null}
+      </section>
+    </div>
   );
 }
 

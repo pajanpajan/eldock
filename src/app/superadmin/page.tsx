@@ -5,6 +5,8 @@ import { Bug, Building2, CircuitBoard, DatabaseBackup, Download, FolderLock, Har
 
 import { KpiTile } from "@/components/common/KpiTile";
 import { MarketTab } from "@/components/superadmin/MarketTab";
+import { PoolTab } from "@/components/superadmin/PoolTab";
+import { QrLabelsTab } from "@/components/superadmin/QrLabelsTab";
 import { NewsletterComposer } from "@/components/superadmin/NewsletterComposer";
 import { BackupNowButton, ClosureControls, CreditControls, OrderActions, ResolveFeedback } from "@/components/superadmin/SuperadminControls";
 import { DATA_REQUESTER_LABELS, DATA_REQUEST_KIND_LABELS, DATA_REQUEST_STATUS_LABELS } from "@/lib/data-requests";
@@ -29,6 +31,10 @@ const TABS = [
   { id: "companies", label: "Registrované firmy a kredity" },
   // Fáze 102: trychtýř, kontakty z trenažéru s daty z ARES, tržní data a souhlasy s cookies
   { id: "market", label: "📈 Návštěvnost, Leady & Tržní data" },
+  // Fáze 103: registr globálně unikátních QR štítků EL-xxxxxx, série pro firmy, tisk Zebra ZD421t / A4 / ZPL
+  { id: "qr", label: "🏷️ Generátor QR štítků ELDOCK" },
+  // Fáze 103: externí projektanti (přístupové kódy do /portal-projektantu) a předané Červenky
+  { id: "pool", label: "🌐 ELDOCK Pool projektantů" },
   { id: "orders", label: "Objednávky kreditů a fakturace" },
   { id: "feedback", label: "Hlášení chyb AI a fotky" },
   { id: "newsletter", label: "Newsletter" },
@@ -64,7 +70,7 @@ export default async function SuperadminPage({ searchParams }: PageProps<"/super
           </Link>
         ))}
       </nav>
-      {tab === "companies" ? <CompaniesTab /> : tab === "market" ? <MarketTab days={days} /> : tab === "orders" ? <OrdersTab /> : tab === "newsletter" ? <NewsletterTab /> : tab === "backups" ? <BackupsTab /> : <FeedbackTab />}
+      {tab === "companies" ? <CompaniesTab /> : tab === "market" ? <MarketTab days={days} /> : tab === "qr" ? <QrLabelsTab /> : tab === "pool" ? <PoolTab /> : tab === "orders" ? <OrdersTab /> : tab === "newsletter" ? <NewsletterTab /> : tab === "backups" ? <BackupsTab /> : <FeedbackTab />}
     </div>
   );
 }

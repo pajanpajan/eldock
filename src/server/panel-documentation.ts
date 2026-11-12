@@ -156,7 +156,8 @@ export async function buildDocumentationData(project: PanelProjectDetail, origin
     },
     logoUrl: project.company?.logoUrl ?? null,
     stampUrl: project.company?.stampUrl ?? null,
-    qrUrl: project.equipmentId ? `${origin}${equipmentHref(project.equipmentId)}` : `${origin}/panel-builder/${project.id}/documentation`,
+    // Fáze 103: rozváděč se štítkem z registru → karta https://eldock.cz/q/EL-… (aktuální uzamčená verze v cloudu)
+    qrUrl: project.qrSerial ? `${origin}/q/${project.qrSerial}` : project.equipmentId ? `${origin}${equipmentHref(project.equipmentId)}` : `${origin}/panel-builder/${project.id}/documentation`,
   };
 
   if (options.showcase) {
@@ -200,6 +201,33 @@ function floorplanAnnex(draft: FloorplanDraft, boardCode: string | null): NonNul
   } catch {
     return [];
   }
+}
+
+/**
+ * Fáze 103: samostatný dokument vydané verze „Prováděcí 2D půdorys a kabelové trasy“ z uloženého nákresu – všechna
+ * podlaží se všemi okruhy (bez filtru rozváděče), kusovník domovní instalace a metry kabelů podle typu. Chybný nákres → null.
+ */
+export function floorplanDocument(json: string): FloorplanDocument | null {
+  const draft = parseDraft(safeJson(json));
+  if (!draft) return null;
+  try {
+    const analysis = analyzeDraft(draft);
+    const sheets = floorsOf(draft).map((floor) => {
+      const onFloor = switchFloor(draft, floor.id);
+      const routes = displayRoutes(onFloor, analysis);
+      return { floorId: floor.id, floorName: floor.name, scale: planScaleFor(onFloor, 190, 175), draft: onFloor, routes: { circuits: routes.circuits, bus: routes.bus } };
+    });
+    const bom = compileFloorplanBom(draft, { installation: draft.installation, cables: analysis.summary.byCable, cableEnds: {} });
+    return { sheets, bom, cables: analysis.summary.byCable.map((row) => ({ cable: row.cable, meters: Math.round(row.meters * 10) / 10 })) };
+  } catch {
+    return null;
+  }
+}
+
+export interface FloorplanDocument {
+  sheets: NonNullable<DocumentationData["floorplanSheets"]>;
+  bom: ReturnType<typeof compileFloorplanBom>;
+  cables: { cable: string; meters: number }[];
 }
 
 /** Fáze 74: propojené rozváděče z jednoho půdorysu pro titulní list (odkazy na jejich dokumentaci). */

@@ -18,6 +18,9 @@ import { SymbolDatasheetList } from "@/components/panel-builder/documentation/Sy
 import { symbolKindOf } from "@/lib/panel-builder/iec-symbols";
 import { readingOrder } from "@/lib/panel-builder/tree";
 import { ENVIRONMENT_BLOCKER } from "@/lib/panel-builder/environments";
+import { InspectorLockPanel } from "@/components/panel-builder/documentation/InspectorLockPanel";
+import { nextVersion } from "@/lib/switchboard-versions";
+import { projectVersions } from "@/server/queries/switchboard-versions";
 
 export async function generateMetadata({ params }: PageProps<"/panel-builder/[id]/documentation">): Promise<Metadata> {
   const project = await getPanelProject((await params).id);
@@ -25,12 +28,12 @@ export async function generateMetadata({ params }: PageProps<"/panel-builder/[id
 }
 
 // Krok 5: kompletní elaborát rozváděče (6 listů A4) k tisku / PDF a propuštění do provozu.
-export default async function PanelDocumentationPage({ params }: PageProps<"/panel-builder/[id]/documentation">) {
+export default async function PanelDocumentationPage({ params, searchParams }: PageProps<"/panel-builder/[id]/documentation">) {
   const guard = await panelBuilderGuard();
   if (guard) return guard;
   const project = await getPanelProject((await params).id);
   if (!project) notFound();
-  const [targets, origin] = await Promise.all([getReleaseTargets(), requestOrigin()]);
+  const [targets, origin, versions, query] = await Promise.all([getReleaseTargets(), requestOrigin(), projectVersions(project.id), searchParams]);
 
   const { data, blockers: baseBlockers, edition, routineTest, enclosureCard } = await buildDocumentationData(project, origin);
   // Fáze 57: bez výslovně zvoleného prostředí dle ČSN 33 2000-5-51 ed. 3 nelze tisknout ani propustit dokumentaci
@@ -82,8 +85,22 @@ export default async function PanelDocumentationPage({ params }: PageProps<"/pan
             <StandardEditionSelect projectId={project.id} value={edition.id as StandardEditionId} />
             <p className="mt-2 text-xs text-muted-foreground">Propisuje se do Listu 5 (oteplení) a Listu 6 (EU prohlášení o shodě, štítek CE).</p>
           </div>
-          <RoutineTestPanel projectId={project.id} initial={routineTest} />
+          {/* Fáze 103: po uzamčení / odemknutí se protokol načte znovu (klíč podle stavu a počtu verzí) */}
+          <RoutineTestPanel key={`${project.docState}-${versions.length}`} projectId={project.id} initial={routineTest} readOnly={project.docState === "LOCKED_PUBLISHED"} />
         </div>
+        {/* Fáze 103: část pro revizního technika – měření, uzamčení do cloudu a verze pod QR štítkem */}
+        <InspectorLockPanel
+          key={`${project.docState}-${versions.length}`}
+          projectId={project.id}
+          docState={project.docState}
+          nextVersion={nextVersion(versions).version}
+          serial={project.qrSerial}
+          versions={versions}
+          routineTest={routineTest}
+          blockers={blockers}
+          prefill={{ inspectorName: routineTest.testedBy.split(",")[0]?.trim() || project.company?.contactName || "", measuredAt: routineTest.testedAt ?? new Date().toISOString().slice(0, 10) }}
+          highlight={query.revize === "1"}
+        />
         {/* Fáze 58: značka každého přístroje dle ČSN EN 60617 a náhled datasheetu */}
         <SymbolDatasheetList
           rows={readingOrder(project.items).map((item) => ({

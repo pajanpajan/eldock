@@ -194,7 +194,7 @@ import { RoomBySizeForm } from "./RoomBySizeForm";
 import { useWizardStep } from "./useWizardStep";
 import { useFloorplanUiMode } from "./useFloorplanUiMode";
 import { stepForTutorialChapter, TUTORIAL_CHAPTER_EVENT, wizardStatus } from "@/lib/panel-builder/floorplan-wizard";
-import { LAYER_FILTERS, assembliesVisible, elementLook, filterLook, paletteGroupVisible, phaseOfGroup, routeVisible, defaultRightTab, tabSectionVisible, type FloorplanPhase, type LayerFilter, type PanelSectionId, type RightTab } from "@/lib/panel-builder/floorplan-phases";
+import { LAYER_FILTERS, assembliesVisible, roomsLocked, elementLook, filterLook, paletteGroupVisible, phaseOfGroup, routeVisible, defaultRightTab, tabSectionVisible, type FloorplanPhase, type LayerFilter, type PanelSectionId, type RightTab } from "@/lib/panel-builder/floorplan-phases";
 import { snapOpening } from "@/lib/panel-builder/architecture";
 import { addRoomBySize, snapRoomRect, type SnapGuide } from "@/lib/panel-builder/room-builder";
 import { contentView, growPlane, meters, resizePlane } from "@/lib/panel-builder/floorplan-plane";
@@ -360,6 +360,8 @@ export function FloorplanEditor({
   // ukazuje ve výchozím stavu vše („Zobrazit vše“), jinak stejnou fázi jako průvodce. Fáze 5: rychlý filtr vrstev.
   const [showAll, setShowAll] = useState(true);
   const phase: FloorplanPhase | null = uiMode === "wizard" ? wizard : showAll ? null : wizard;
+  // Fáze 103: místnosti a stěny jen v kroku 1 – v krocích 2–5 zamčené proti posunutí, změně rozměrů a smazání
+  const locked = roomsLocked(phase);
   const [layerFilter, setLayerFilter] = useState<LayerFilter>("all");
   // Fáze 100: záložka pravého panelu – přepnutím fáze výchozí záložka fáze, ruční volba platí do dalšího přepnutí fáze,
   // klik na prvek / místnost na plátně = Detail (odvozený stav: při změně fáze se nastaví hned během vykreslení)
@@ -404,7 +406,9 @@ export function FloorplanEditor({
   const [roomDrag, setRoomDrag] = useState<{ id: string; handle: RoomHandle | "move"; start: { x: number; y: number }; origin: Pick<EditorRoom, "x" | "y" | "w" | "h"> } | null>(null);
   /** Tažený obdélník – nová místnost nebo ořez podkladu. */
   const [roomDraft, setRoomDraft] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
-  const [marquee, setMarquee] = useState<{ x: number; y: number; w: number; h: number; additive: boolean } | null>(null);
+  // Fáze 103: `sx` / `sy` = místo stisku na obrazovce, `moved` = ukazatel se opravdu pohnul (víc než 4 px) – jen pak je to
+  // výběr obdélníkem. Plátno se po výběru místnosti posune (lišta kroku), čekající poloha by z kliknutí udělala tah.
+  const [marquee, setMarquee] = useState<{ x: number; y: number; w: number; h: number; additive: boolean; sx: number; sy: number; moved: boolean } | null>(null);
   const [calibration, setCalibration] = useState<{ x: number; y: number }[]>([]);
   const [calibrationDialog, setCalibrationDialog] = useState<{ mode: "calibrate" | "verify"; segmentMm: number } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -963,7 +967,7 @@ export function FloorplanEditor({
       } else if ((event.key === "Delete" || event.key === "Backspace") && selectedNoteId) {
         update((current) => removeAnnotation(current, selectedNoteId));
         setSelectedNoteId(null);
-      } else if ((event.key === "Delete" || event.key === "Backspace") && selectedRoomId) {
+      } else if ((event.key === "Delete" || event.key === "Backspace") && selectedRoomId && !locked) {
         update((current) => deleteRoom(current, selectedRoomId));
         setSelectedRoomId(null);
       } else if (event.key === "r" || event.key === "R") {
@@ -1128,7 +1132,7 @@ export function FloorplanEditor({
     }
     if (!event.shiftKey) clearSelection();
     capture(svg.current, event.pointerId);
-    setMarquee({ x: point.x, y: point.y, w: 0, h: 0, additive: event.shiftKey });
+    setMarquee({ x: point.x, y: point.y, w: 0, h: 0, additive: event.shiftKey, sx: event.clientX, sy: event.clientY, moved: false });
   }
 
   /** Klik do místnosti v režimu Výběr = výběr místnosti a přesun tažením (prvky uvnitř jdou s ní). */
@@ -1136,6 +1140,14 @@ export function FloorplanEditor({
     if (tool.kind !== "select" || event.button !== 0) return;
     event.stopPropagation();
     if (event.shiftKey && handle === "move") return onCanvasDown(event as unknown as ReactPointerEvent<SVGSVGElement>);
+    // Fáze 103: v krocích 2–5 je místnost zamčená – klik ji jen vybere (detail se zámkem a návratem do kroku 1),
+    // tažení po ploše místnosti vybírá prvky obdélníkem, místnost se nikdy nepohne
+    if (locked) {
+      onCanvasDown(event as unknown as ReactPointerEvent<SVGSVGElement>);
+      setSelectedRoomId(room.id);
+      showDetail();
+      return;
+    }
     setSelection([]);
     setSelectedNoteId(null);
     setSelectedRoomId(room.id);
@@ -1216,7 +1228,7 @@ export function FloorplanEditor({
 
   /** Fáze 63: posun rohu polygonální místnosti. */
   function onVertexDown(event: ReactPointerEvent, room: EditorRoom, index: number) {
-    if (event.button !== 0) return;
+    if (event.button !== 0 || locked) return;
     event.stopPropagation();
     capture(svg.current, event.pointerId);
     setVertexDrag({ roomId: room.id, index });
@@ -1380,7 +1392,7 @@ export function FloorplanEditor({
       const corner = crop ? point : snapPlan(point);
       setRoomDraft({ ...roomDraft, w: corner.x - roomDraft.x, h: corner.y - roomDraft.y });
     }
-    if (marquee) setMarquee({ ...marquee, w: point.x - marquee.x, h: point.y - marquee.y });
+    if (marquee) setMarquee({ ...marquee, w: point.x - marquee.x, h: point.y - marquee.y, moved: marquee.moved || Math.hypot(event.clientX - marquee.sx, event.clientY - marquee.sy) > 4 });
     if (noteDraft) {
       const to = { x: snap(point.x), y: snap(point.y) };
       setNoteDraft({ ...noteDraft, to: noteDraft.mode === "zone" || event.shiftKey ? to : orthogonal(noteDraft.from, to) });
@@ -1506,7 +1518,7 @@ export function FloorplanEditor({
     if (marquee) {
       const rect = { x: Math.min(marquee.x, marquee.x + marquee.w), y: Math.min(marquee.y, marquee.y + marquee.h), w: Math.abs(marquee.w), h: Math.abs(marquee.h) };
       setMarquee(null);
-      if (rect.w > ui * 0.4 || rect.h > ui * 0.4) {
+      if (marquee.moved && (rect.w > ui * 0.4 || rect.h > ui * 0.4)) {
         const inside = draft.elements.filter((element) => element.x >= rect.x && element.x <= rect.x + rect.w && element.y >= rect.y && element.y <= rect.y + rect.h).map((element) => element.id);
         setSelection((current) => (marquee.additive ? [...new Set([...current, ...inside])] : inside));
         setSelectedRoomId(null);
@@ -2022,7 +2034,10 @@ export function FloorplanEditor({
                       ? "T Klikněte do půdorysu, kam se má vložit textové pole."
                       : `✏️ ${ANNOTATION_LABEL[tool.mode]}: táhněte myší${tool.mode === "zone" ? " obdélník" : " (Shift = libovolný úhel)"}. Esc = konec kreslení.`
                     : selectedRoom
-                      ? "Místnost: tažením za vnitřek přesun (i s prvky), za stěnu nebo žlutý roh změna rozměru, Delete = smazat."
+                      ? locked
+                        ? // Fáze 103: v krocích 2–5 je místnost zamčená – nápověda nesmí slibovat přesun ani smazání
+                          "🔒 Místnost je v této fázi uzamčená proti posunutí, změně rozměrů a smazání – upravíte ji v kroku 1 (✏️ Přepnout do Fáze 1 v detailu)."
+                        : "Místnost: tažením za vnitřek přesun (i s prvky), za stěnu nebo žlutý roh změna rozměru, Delete = smazat."
                       : selection.length > 1
                         ? "Vybráno víc prvků: tažením přesun všech, R = otočit, Delete = smazat, vpravo „Vložit do víceramečku“."
                         : selected
@@ -3043,6 +3058,9 @@ export function FloorplanEditor({
               data-floor={draft.floorName}
               onPointerDownCapture={() => {
                 gestureStart.current = draft;
+                // Fáze 103: poloha čekající z doby před stiskem k gestu nepatří – po rychlém kliknutí (stisk a puštění v jednom
+                // snímku) by ji puštění zpracovalo až po překreslení a posunu plátna a místnost nebo prvek by poskočily
+                mover.cancel();
               }}
               onPointerDown={onCanvasDown}
               onPointerMove={onMove}
@@ -3089,7 +3107,7 @@ export function FloorplanEditor({
               </defs>
               {/* Fáze 100: statický podklad a místnosti jako memoizované vrstvy (při pohybu myší se nepřekreslují) */}
               <PlanBackdrop widthMm={draft.widthMm} heightMm={draft.heightMm} background={draft.background} mmPerPx={draft.mmPerPx} look={bgLook} fineGrid={fineGrid} fineGridOn={viewMm.w <= 20_000} cad={draft.cad} cadGeometry={cadReady} onPaper={onPaper} unit={ui} />
-              <RoomsLayer rooms={draft.rooms} selectedRoomId={selectedRoomId} unit={ui} stroke={stroke} onPaper={onPaper} selecting={tool.kind === "select"} handlers={handlers} />
+              <RoomsLayer rooms={draft.rooms} selectedRoomId={selectedRoomId} unit={ui} stroke={stroke} onPaper={onPaper} selecting={tool.kind === "select"} locked={locked} handlers={handlers} />
 
               {/* Fáze 59: zakreslené změny (příčky, bourání, šrafy, texty) */}
               <g data-testid="annotation-layer">
@@ -3476,8 +3494,10 @@ export function FloorplanEditor({
               key={selectedRoom.id}
               room={selectedRoom}
               onChange={(patch) => update((current) => updateRoom(current, selectedRoom.id, patch))}
-              onDelete={() => removeRoom(selectedRoom.id)}
+              onDelete={() => (locked ? undefined : removeRoom(selectedRoom.id))}
               defaultWall={draft.wallType}
+              // Fáze 103: v krocích 2–5 zamčeno – návrat do kroku 1 jedním klikem
+              {...(locked ? { onUnlock: () => setWizard(1) } : {})}
             />
           ) : null}
           {selectedNote ? (

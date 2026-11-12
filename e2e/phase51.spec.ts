@@ -111,7 +111,8 @@ test("🎨 2D půdorys: kaskáda výrobce → řada → barva, živé kóty a ú
   await goPhase(page, 5);
   await expect(page.getByTestId("wiring-inventory")).toContainText("Jednozásuvka – Schneider Electric Asfora · Černá matná / Antracit");
 
-  // Smazání místnosti (tlačítko v detailu)
+  // Smazání místnosti (tlačítko v detailu) – fáze 103: místnosti a stěny se mění a mažou jen v kroku 1 průvodce
+  await goPhase(page, 1);
   await canvas.locator('[data-testid="room-Kuchyně"]').dispatchEvent("pointerdown");
   await expect(detail).toBeVisible();
   await detail.getByRole("button", { name: /Smazat místnost/ }).click();

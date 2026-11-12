@@ -9,7 +9,7 @@ import { WorkflowError } from "@/lib/workflow/state-machine";
 import { analyzePanelPhoto, analyzeRailPhoto, extractDatasheetComponents, lookupComponent, type AiMode, type AnalysisMode } from "@/server/services/geminiPanelService";
 import { PHASE_OPTIONS, type TreeIssue } from "@/lib/panel-builder/tree";
 import { analyzeProject, assignCatalogComponent, createPanelProject, importDatasheet, addModule, addRail, configureItem, deleteItem, deleteRail, lookupComponentForItem, mergeItems, releaseDocumentation, saveThermalInputs, saveTree, searchCatalog, setIncomer, splitItem, updateItemText, type CatalogHit, type ImportedComponent } from "@/server/services/panel-builder";
-import { actionFailure, guardCompany, guardItem, guardProject } from "@/server/panel-guards";
+import { actionFailure, guardCompany, guardEditableItem, guardEditableProject, guardProject } from "@/server/panel-guards";
 import { consumeCredit } from "@/server/services/companies";
 import { companyManufacturer } from "@/lib/registered-company";
 import { assertPanelFiles } from "@/server/file-access";
@@ -117,7 +117,7 @@ export async function createPanelProjectAction(input: z.input<typeof createSchem
 export async function analyzePanelProjectAction(projectId: string, mode: AnalysisMode = "AUTO"): Promise<ActionResult<{ mode: AiMode; total: number; unresolved: number; warning?: string }>> {
   if (!id.safeParse(projectId).success || !["AUTO", "UNCOVERED", "COVERED"].includes(mode)) return { ok: false, error: "Neplatný projekt." };
   try {
-    await guardProject(projectId);
+    await guardEditableProject(projectId);
     const result = await analyzeProject(prisma, projectId, { analyze: analyzePanelPhoto, readPhoto, mode });
     revalidatePath(`/panel-builder/${projectId}`);
     return { ok: true, data: result };
@@ -130,7 +130,7 @@ export async function analyzePanelProjectAction(projectId: string, mode: Analysi
 export async function assignComponentAction(itemId: string, componentId: string): Promise<ActionResult> {
   if (!id.safeParse(itemId).success || !id.safeParse(componentId).success) return { ok: false, error: "Neplatný výběr." };
   try {
-    await guardItem(itemId);
+    await guardEditableItem(itemId);
     const item = await assignCatalogComponent(prisma, itemId, componentId);
     revalidatePath(`/panel-builder/${item.projectId}`);
     return { ok: true, data: undefined };
@@ -156,7 +156,7 @@ export async function lookupComponentAction(input: z.input<typeof lookupSchema>)
   const parsed = lookupSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Opište alespoň část typového označení z čela přístroje." };
   try {
-    await guardItem(parsed.data.itemId);
+    await guardEditableItem(parsed.data.itemId);
     const result = await lookupComponentForItem(prisma, parsed.data, lookupComponent);
     if (result.component?.status === "created") revalidatePath("/panel-builder", "layout");
     return { ok: true, data: result };
@@ -186,7 +186,7 @@ export async function saveTreeAction(input: z.input<typeof treeSchema>): Promise
   const parsed = treeSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Neplatná data stromu zapojení." };
   try {
-    await guardProject(parsed.data.projectId);
+    await guardEditableProject(parsed.data.projectId);
     const result = await saveTree(prisma, parsed.data.projectId, parsed.data.assignments);
     revalidatePath(`/panel-builder/${parsed.data.projectId}`, "layout");
     return { ok: true, data: result };
@@ -214,7 +214,7 @@ export async function saveThermalInputsAction(input: z.input<typeof thermalSchem
   const parsed = thermalSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Zkontrolujte parametry skříně (rozměry, teplota, soudobost 0–1)." };
   try {
-    await guardProject(parsed.data.projectId);
+    await guardEditableProject(parsed.data.projectId);
     const { projectId, ...inputs } = parsed.data;
     await saveThermalInputs(prisma, projectId, inputs);
     revalidatePath(`/panel-builder/${projectId}`, "layout");
@@ -272,7 +272,7 @@ export async function configureItemAction(itemId: string, config: z.input<typeof
   const parsed = configSchema.safeParse(config);
   if (!id.safeParse(itemId).success || !parsed.success) return { ok: false, error: "Neplatná konfigurace prvku." };
   try {
-    await guardItem(itemId);
+    await guardEditableItem(itemId);
     const result = await configureItem(prisma, itemId, parsed.data, { mergeNeighbors });
     revalidatePath(`/panel-builder/${result.projectId}`, "layout");
     return { ok: true, data: { typeCode: result.component.typeCode, estimated: result.estimated } };
@@ -285,7 +285,7 @@ export async function configureItemAction(itemId: string, config: z.input<typeof
 export async function mergeItemsAction(itemId: string, count: number): Promise<ActionResult<{ width: number }>> {
   if (!id.safeParse(itemId).success || ![2, 3, 4].includes(count)) return { ok: false, error: "Neplatné sloučení." };
   try {
-    await guardItem(itemId);
+    await guardEditableItem(itemId);
     const result = await mergeItems(prisma, itemId, count);
     revalidatePath(`/panel-builder/${result.projectId}`, "layout");
     return { ok: true, data: { width: result.width } };
@@ -298,7 +298,7 @@ export async function mergeItemsAction(itemId: string, count: number): Promise<A
 export async function splitItemAction(itemId: string): Promise<ActionResult<{ parts: number }>> {
   if (!id.safeParse(itemId).success) return { ok: false, error: "Neplatný prvek." };
   try {
-    await guardItem(itemId);
+    await guardEditableItem(itemId);
     const result = await splitItem(prisma, itemId);
     revalidatePath(`/panel-builder/${result.projectId}`, "layout");
     return { ok: true, data: { parts: result.parts } };
@@ -312,7 +312,7 @@ export async function updateItemTextAction(itemId: string, input: { customTypeCo
   const parsed = z.object({ customTypeCode: z.string().max(80).nullable(), circuitLabel: z.string().max(80), designation: z.string().max(8).nullable().optional() }).safeParse(input);
   if (!id.safeParse(itemId).success || !parsed.success) return { ok: false, error: "Neplatné údaje přístroje." };
   try {
-    await guardItem(itemId);
+    await guardEditableItem(itemId);
     const item = await updateItemText(prisma, itemId, parsed.data);
     revalidatePath(`/panel-builder/${item.projectId}`, "layout");
     return { ok: true, data: undefined };
@@ -344,7 +344,7 @@ export async function searchCatalogAction(input: z.input<typeof catalogSearchSch
 export async function setIncomerAction(projectId: string, incomerFrom: "TOP" | "BOTTOM"): Promise<ActionResult> {
   if (!id.safeParse(projectId).success || !z.enum(["TOP", "BOTTOM"]).safeParse(incomerFrom).success) return { ok: false, error: "Neplatný směr přívodu." };
   try {
-    await guardProject(projectId);
+    await guardEditableProject(projectId);
     await setIncomer(prisma, projectId, incomerFrom);
     revalidatePath(`/panel-builder/${projectId}`, "layout");
     return { ok: true, data: undefined };
@@ -359,7 +359,7 @@ const rail = z.number().int().min(1).max(12);
 export async function addModuleAction(projectId: string, railIndex: number): Promise<ActionResult<{ id: string }>> {
   if (!id.safeParse(projectId).success || !rail.safeParse(railIndex).success) return { ok: false, error: "Neplatná DIN lišta." };
   try {
-    await guardProject(projectId);
+    await guardEditableProject(projectId);
     const item = await addModule(prisma, projectId, railIndex);
     revalidatePath(`/panel-builder/${projectId}`, "layout");
     return { ok: true, data: { id: item.id } };
@@ -372,7 +372,7 @@ export async function addModuleAction(projectId: string, railIndex: number): Pro
 export async function deleteItemAction(itemId: string): Promise<ActionResult> {
   if (!id.safeParse(itemId).success) return { ok: false, error: "Neplatný prvek." };
   try {
-    await guardItem(itemId);
+    await guardEditableItem(itemId);
     const result = await deleteItem(prisma, itemId);
     revalidatePath(`/panel-builder/${result.projectId}`, "layout");
     return { ok: true, data: undefined };
@@ -385,7 +385,7 @@ export async function deleteItemAction(itemId: string): Promise<ActionResult> {
 export async function deleteRailAction(projectId: string, railIndex: number): Promise<ActionResult<{ removed: number }>> {
   if (!id.safeParse(projectId).success || !rail.safeParse(railIndex).success) return { ok: false, error: "Neplatná DIN lišta." };
   try {
-    await guardProject(projectId);
+    await guardEditableProject(projectId);
     const result = await deleteRail(prisma, projectId, railIndex);
     revalidatePath(`/panel-builder/${projectId}`, "layout");
     return { ok: true, data: result };
@@ -398,7 +398,7 @@ export async function deleteRailAction(projectId: string, railIndex: number): Pr
 export async function addRailAction(projectId: string): Promise<ActionResult<{ dinRailsCount: number }>> {
   if (!id.safeParse(projectId).success) return { ok: false, error: "Neplatný projekt." };
   try {
-    await guardProject(projectId);
+    await guardEditableProject(projectId);
     const result = await addRail(prisma, projectId);
     revalidatePath(`/panel-builder/${projectId}`, "layout");
     return { ok: true, data: result };

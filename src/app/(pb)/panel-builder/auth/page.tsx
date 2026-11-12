@@ -21,7 +21,7 @@ export default async function PanelAuthPage({ searchParams }: PageProps<"/panel-
   const lead = token ? await leadPrefill(prisma, token) : null;
   const current = await getPanelCompany();
   const registering = params.tab === "register" || Boolean(lead);
-  if (current && !(current.id === TESTER_COMPANY.id && registering)) redirect(next?.startsWith("/panel-builder") ? next : "/panel-builder");
+  if (current && !(current.id === TESTER_COMPANY.id && registering)) redirect(next?.startsWith("/panel-builder") || (next && /^\/q\/EL-\d{6,9}$/.test(next)) ? next : "/panel-builder");
 
   return (
     <div className="mx-auto grid w-full max-w-6xl gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
