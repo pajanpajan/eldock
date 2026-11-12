@@ -5,7 +5,7 @@ revize VTZ, změny skutečného provedení mezi údržbou v hale a externími CA
 rozváděčů. Pracovní název byl Digitry, od fáze 20 je to **ELDOCK**. Produkce běží na https://eldock.cz.
 Původní zadání MVP je v `docs/archiv/SPECIFIKACE-MVP.md`, celá historie fází 0–35 v `docs/archiv/PLAN-faze-00-35.md`, celý archiv v jednom souboru `docs/archiv/ARCHIV-KOMPLET.md`.
 
-## 1. Milníky (fáze 0–99 nasazené; 100 čeká na nasazení)
+## 1. Milníky (fáze 0–100 nasazené)
 
 | Fáze | Milník |
 |---|---|
@@ -259,7 +259,7 @@ Když uživatel řekne **„nasaď to na produkci“** nebo **„deploy“**:
 
 **Prezentace a živá ukázka (fáze 99):** bez migrace (demo půdorysy vznikají až kliknutím přihlášené firmy, prezentace je stránka bez dat); po nasazení `npm run verify:demo -- --only-prod` (veřejné stránky, prezentace, fotky katalogu). Nasazeno 2026-11-12 (commit 3812b13 spolu s 2c028d8): kontejner healthy, `verify:demo -- --only-prod` 11 / 11, prezentace noindex a mimo sitemap, editor půdorysu (i s `?demo=`) a závod za přihlášením (307), úklid 1,41 GB.
 
-**Vzhled a výkon 2D půdorysu (fáze 100):** bez migrace (vzhled podkladu je v JSON nákresu); po nasazení `npm run verify:demo -- --only-prod` (hlídá i hlavičku `Cache-Control` fotek katalogu).
+**Vzhled a výkon 2D půdorysu (fáze 100):** bez migrace (vzhled podkladu je v JSON nákresu); po nasazení `npm run verify:demo -- --only-prod` (hlídá i hlavičku `Cache-Control` fotek katalogu). Nasazeno 2026-11-12 (commit `676189a`, bez migrace, kontejner healthy, `verify:demo -- --only-prod` 12/12).
 
 **Katalog ABB pro ČR (fáze 88):** bez migrace. Rozvodnice Mistral / ComfortLine CU, přístroje a příslušenství ABB i vazby příslušenství zapíše přírůstkový seed `db:panel-builder` při startu kontejneru (upsert, orientační řádek téhož typu dostane objednací číslo, nic se nemaže); ověřené rozvodnice převezmou řádky exportu se stejným objednacím číslem (MISTRAL65, CU24R / CU25R). Na serveru nic dalšího. Nasazeno 2026-11-10 (commit `1aacfdb`; seed „katalog 838 prvků aktualizován“, 163 ověřených skříní, kontejner `healthy`).
 
