@@ -1,7 +1,7 @@
 import path from "node:path";
 
 import { expect, test } from "@playwright/test";
-import { goPhase, phaseForPalette } from "./floorplan-phases";
+import { goPhase, phaseForPalette, rightTab } from "./floorplan-phases";
 
 // Fáze 51: loga výrobců z public/brands, vyčištěný rozcestník katalogu, nový dialog projektu (2×2 dlaždice,
 // více fotek), kaskáda výrobce → řada → barva v 2D půdorysu a úpravy místností (kóty, rozměr, smazání).
@@ -104,6 +104,8 @@ test("🎨 2D půdorys: kaskáda výrobce → řada → barva, živé kóty a ú
   await palette.getByRole("button", { name: "Jednozásuvka" }).click();
   await canvas.click({ position: { x: 180, y: 180 } });
   await page.keyboard.press("Escape");
+  // Fáze 100: fáze 3 otevře záložku 🔌 Okruhy & Trasy, detail vložené zásuvky je v záložce 🎯 Detail
+  await rightTab(page, "detail");
   await expect(page.getByTestId("element-appearance")).toHaveText("Schneider Electric Asfora · Černá matná / Antracit");
   // Fáze 98: soupis domovní instalace je v pravém panelu fáze 5
   await goPhase(page, 5);

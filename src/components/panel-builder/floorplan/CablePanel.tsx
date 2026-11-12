@@ -40,6 +40,7 @@ export function CablePanel({
   defaults,
   boards = [],
   routeStyle = "walls",
+  part = "both",
 }: {
   analysis: Analysis;
   mode: CableRoutingMode;
@@ -61,11 +62,14 @@ export function CablePanel({
   boards?: readonly string[];
   /** Fáze 76: styl tras (po stěnách / nejkratší v podlaze). */
   routeStyle?: RouteStyle;
+  /** Fáze 100: výkaz kabeláže (záložka Okruhy & Trasy), karta Založit rozváděč (záložka Kusovník & Rozváděč), nebo obojí. */
+  part?: "report" | "generate" | "both";
 }) {
   const circuitById = new Map(analysis.ok ? analysis.circuits.circuits.map((circuit) => [circuit.id, circuit]) : []);
   // Fáze 76: dvě sbalovací karty pravého sloupce – výkaz kabeláže a založení rozváděče
   return (
     <>
+    {part !== "generate" ? (
     <PanelSection id="cables" title="Výkaz kabeláže a okruhů (ČSN 33 2130 ed. 4)" ariaLabel="Výkaz kabeláže a okruhů" testId="cable-panel" badge={analysis.ok ? <span className="font-mono text-[11px] font-normal text-muted-foreground">{m(analysis.summary.totals[mode])}</span> : null}>
       {!analysis.ok ? (
         <p className="rounded-md border border-dashed border-border p-3 text-xs text-muted-foreground" data-testid="cable-empty">
@@ -150,6 +154,8 @@ export function CablePanel({
         </>
       )}
     </PanelSection>
+    ) : null}
+    {part !== "report" ? (
     <PanelSection id="generate" title="Založit rozváděč" testId="generate-panel" icon={<Zap className="size-4 text-primary" aria-hidden />}>
       <form action={onGenerate} className="flex flex-col gap-2" key={`${defaults?.customer ?? ""}|${defaults?.site ?? ""}`}>
         <div className="flex flex-col gap-1">
@@ -217,6 +223,7 @@ export function CablePanel({
         ) : null}
       </form>
     </PanelSection>
+    ) : null}
     </>
   );
 }

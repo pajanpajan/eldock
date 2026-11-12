@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { goPhase } from "./floorplan-phases";
+import { goPhase, rightTab } from "./floorplan-phases";
 
 // Fáze 77: stínící technika (vývody motorů žaluzií), čidla oken a vody, chytré termostaty a hlavice, pokročilé osvětlení
 // (stmívání, CCT, RGB / RGBW, DALI, 24 V PWM) se štítky u značky, rychlou lištou u světla a moduly do rozváděče.
@@ -80,6 +80,8 @@ async function openHouse(page: Page, draft: ReturnType<typeof house>, key: strin
     await expect(page.getByTestId("floorplan-canvas")).toBeVisible({ timeout: 30_000 });
   }).toPass({ timeout: 240_000 });
   await goPhase(page, 5);
+  // Fáze 100: soupis okruhů je v záložce 🔌 Okruhy & Trasy
+  await rightTab(page, "circuits");
   await expect(page.getByTestId("circuit-list")).toBeVisible({ timeout: 30_000 });
 }
 
@@ -120,6 +122,7 @@ test("klasika: paleta stínění, štítky a volby svítidla, rychlá lišta, po
   await expect(canvas.locator('[data-element="led-strip"] [data-testid="light-badges"]')).toHaveAttribute("data-badges", "DIM RGBW 24V");
   // Žaluziový okruh B10 v soupisu okruhů (jen motor 230 V; 24 V DC napájí zdroj systému) – soupis okruhů ve fázi 5
   await goPhase(page, 5);
+  await rightTab(page, "circuits");
   const list = page.getByTestId("circuit-list");
   await expect(list.locator('[data-testid="circuit-row"][data-layer="shading"]')).toContainText("Žaluzie – Obývák");
   await expect(list.locator('[data-testid="circuit-row"]').filter({ hasText: "Zdroj 24 V DC – LED osvětlení" })).toHaveCount(1);
@@ -136,6 +139,7 @@ test("klasika: paleta stínění, štítky a volby svítidla, rychlá lišta, po
   // Rychlá lišta u světla: 🌈 zapne RGBW
   await page.getByTestId("quick-color").click();
   await expect(badges).toHaveAttribute("data-badges", "DIM CCT RGBW DALI");
+  await rightTab(page, "circuits");
   await expect(list.locator('[data-testid="circuit-row"]').filter({ hasText: "(DALI)" })).toHaveCount(1);
   await page.keyboard.press("Escape");
 
@@ -145,6 +149,8 @@ test("klasika: paleta stínění, štítky a volby svítidla, rychlá lišta, po
   await expect(device).toContainText("Ovladač: ZAL (Obývák)");
   await device.getByTestId("blind-drive").selectOption("dc24");
   await expect(device).toContainText("SYKFY / CAT7");
+  await rightTab(page, "circuits");
+  await expect(list.locator('[data-testid="circuit-row"]').first()).toBeVisible();
   await expect(list.locator('[data-testid="circuit-row"][data-layer="shading"]')).toHaveCount(0);
   await page.keyboard.press("Escape");
 
@@ -174,5 +180,6 @@ test("sběrnice: kanály 24 V PWM a binárních vstupů, zdroj LED s rezervou 20
   await expect(smart.getByTestId("smart-modules")).toContainText("HDR-60-24");
   // Sběrnice: žaluziové aktory napájí jeden okruh B10 v rozváděči
   await goPhase(page, 5);
+  await rightTab(page, "circuits");
   await expect(page.getByTestId("circuit-list").locator('[data-testid="circuit-row"][data-layer="shading"]')).toContainText("napájení žaluziových akčních členů");
 });

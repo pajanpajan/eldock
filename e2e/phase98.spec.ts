@@ -178,8 +178,11 @@ test("🔌💡 Chytrý filtr vrstev a volný přechod mezi fázemi bez ztráty d
   await page.screenshot({ path: "test-results/phase98-back-to-2.png" });
 
   // „⚡ Vygenerovat rozváděč“ z taháku v jiné fázi přepne do fáze 5 – ke kontrole před generováním a formuláři rozváděče
+  // (fáze 100: tahák zakázky je v záložce 🛡️ Normy (Linter), formulář v záložce ⚡ Kusovník & Rozváděč)
+  await page.getByTestId("right-tab-norms").click();
   await page.getByTestId("live-checklist-generate").click();
   await expect(page.getByTestId("floorplan-wizard")).toHaveAttribute("data-step", "5");
+  await expect(page.getByTestId("right-tab-bom")).toHaveAttribute("aria-selected", "true");
   await expect(page.getByTestId("generation-checklist")).toBeVisible();
   await expect(page.getByTestId("generate-from-floorplan")).toBeVisible();
 });
@@ -272,7 +275,10 @@ test("🏭 ELDOCK Průmysl: přepínač 4 agend závodu – vždy jen jedna agen
   await expect(page.getByTestId("plant-phase-switcher")).toHaveAttribute("data-phase", "2");
   await expect(page.getByRole("group", { name: "Mapa areálu" })).toHaveCount(0);
   await expect(page.getByTestId("plant-equipment-boards")).toBeVisible();
-  const rm1 = page.locator('[data-testid="plant-equipment-card"][data-tag="RM1"]');
+  // Fáze 100: vzorový BIM model haly (demo-ready, fáze 95 – dřívější testy téže databáze) má vlastní podružný RM1
+  // v Hale H1; hlavní rozváděč nn vzorového závodu je v Energetice
+  const rm1 = page.locator('[data-testid="plant-equipment-card"][data-tag="RM1"]').filter({ hasText: "Energetika" });
+  await expect(rm1).toHaveCount(1);
   await expect(rm1).toContainText("Hlavní rozváděč");
   await expect(rm1.getByTestId("plant-equipment-qr")).toHaveAttribute("href", /\/equipment\/[^/]+\/label$/);
 

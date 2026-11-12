@@ -20,6 +20,13 @@ public/catalog-images/
 Složky výrobce a řady jsou názvy bez diakritiky a mezer (`ABB` → `abb`, `Time Arbo` → `time-arbo`,
 `Nová Unica` → `nova-unica`). Formáty WebP, PNG, JPG, AVIF nebo SVG, nejvýš 3 MB na soubor.
 
+## Mezipaměť prohlížeče (fáze 100)
+
+Soubory z `public/catalog-images/` se servírují s `Cache-Control: public, max-age=31536000, immutable` (`next.config.ts`) –
+prohlížeč je rok nenačítá znovu. Opravenou fotku proto ulož pod **novým názvem souboru** (a přegeneruj manifest), jinak
+ji uživatelé, kteří starou už viděli, dlouho neuvidí. Fotky nahrané ve velínu jdou přes `/api/catalog-images/file/…?v=`
+a pravidlo se jich netýká.
+
 ## Aktualizace
 
 1. Nahrajte soubory do složek (nebo je doplňte do `zdroje.json` jako `{ "url": "https://…", "target": "abb/tango/rada-switch.webp" }`

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { goPhase, goPhaseForGroup, phaseForPalette } from "./floorplan-phases";
+import { goPhase, goPhaseForGroup, phaseForPalette, rightTab } from "./floorplan-phases";
 
 // Fáze 63: 2D půdorys – akordeon palety, zařizovací předměty ve skutečném rozměru (žlutý roh, kóty, 45°, pás u
 // umyvadla), knihovna samostatných spotřebičů, ruční posun tras v osách X / Y s resetem na automat, polygonální
@@ -94,6 +94,8 @@ test("2D půdorys: akordeon palety, předměty X × Y, spotřebiče, úprava tra
   await page.keyboard.press("Escape");
   // Fáze 90: hláška jmenuje přístroj a výšku, pás 0,2 m hlídá jen přístroje bez krytí IP44
   await goPhase(page, 5);
+  // Fáze 100: kontrola norem je v záložce 🛡️ Normy (Linter)
+  await rightTab(page, "norms");
   await expect(page.getByTestId("plan-checks")).toContainText("Jednozásuvka (výška 300 mm) – níž než 1,2 m blíž než 20 cm od hrany umyvadlového prostoru");
   await clickAt(6500, 1600);
   const placedBath = canvas.locator('[data-element="bath"]');
@@ -141,6 +143,8 @@ test("2D půdorys: akordeon palety, předměty X × Y, spotřebiče, úprava tra
   await expect(canvas.getByTestId("route-segment")).toHaveCount(0);
   // Fáze 98: soupis okruhů a úprava tras jsou ve fázi 5
   await goPhase(page, 5);
+  // Fáze 100: soupis okruhů a ručně upravené trasy jsou v záložce 🔌 Okruhy & Trasy
+  await rightTab(page, "circuits");
   await page.locator('[data-testid="circuit-row"][data-layer="sockets"]').first().click();
   await expect(canvas.getByTestId("route-layer")).toHaveAttribute("data-focus", /.+/);
   const longest = async (axis: string, scope = "") =>
@@ -255,6 +259,8 @@ test("2D půdorys: akordeon palety, předměty X × Y, spotřebiče, úprava tra
   await clickAt(5000, 5000);
   await goPhase(page, 5);
   await expect(canvas.locator('[data-element="bus-2"]')).toHaveCount(1);
+  // Fáze 100: detail vloženého prvku je v záložce 🎯 Detail
+  await rightTab(page, "detail");
   await expect(page.getByTestId("element-detail")).toContainText("Senzor / tlačítko 2násobné free@home");
   await page.screenshot({ path: "test-results/phase63-smart.png" });
   await page.getByTestId("mode-done").click();

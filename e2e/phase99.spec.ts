@@ -25,6 +25,8 @@ async function inViewport(page: Page, locator: Locator, label: string) {
 }
 
 async function open(page: Page, url: string, ready: Locator) {
+  // Fáze 100: průvodce fází i když jiný test téže databáze přepnul firmě kompaktní lištu (volba prohlížeče má přednost)
+  await page.addInitScript(() => window.localStorage.setItem("eldock-floorplan-ui-mode", "wizard"));
   await expect(async () => {
     await page.goto(url);
     await expect(ready).toBeVisible({ timeout: 15_000 });

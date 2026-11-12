@@ -1,6 +1,6 @@
 "use client";
 
-import type { PointerEvent as ReactPointerEvent } from "react";
+import { memo, type PointerEvent as ReactPointerEvent } from "react";
 
 import { coresOf, labelPlacement, longestStretch, stretchSlot, tickMarks } from "@/lib/panel-builder/cad-notation";
 import type { DisplayCircuit, DisplayLeg } from "@/lib/panel-builder/route-display";
@@ -11,7 +11,12 @@ import { segmentAxis, type PlanPoint } from "@/lib/panel-builder/route-edit";
  * normové CAD značení: plná čára se šikmými ryskami počtu žil, ovládací a sběrnicové kabely čárkovaně, podél větve
  * štítek „Okr. -F4 · CYKY-J 3×2,5 · 14,2 m“. V režimu výběru má každý rovný úsek úchyt: vodorovný se táhne jen v ose Y
  * (↕), svislý jen v ose X (↔), šikmý kolmo ke stěně; dvojklik vloží odskok, pravé tlačítko vrátí trasu na automat.
+ * Fáze 100: na plátně mají štítky tras podkladový štítek (světlé písmo s tmavým obrysem `paint-order: stroke`, ≈ 4 px) –
+ * nesplývají s čarou stěny ani s bílým podkladem; vrstva se při pohybu myší nepřekresluje (React.memo).
  */
+
+/** Fáze 100: podkladový štítek textu na plátně (tmavý obrys pod písmem). */
+export const PLATE_STROKE = "rgba(15,23,42,0.88)";
 
 export const ROUTE_COLORS = ["#38bdf8", "#f472b6", "#a3e635", "#fb923c", "#c084fc", "#facc15", "#2dd4bf", "#f87171", "#818cf8", "#4ade80"];
 
@@ -25,7 +30,7 @@ export interface RouteDrag {
   points: PlanPoint[];
 }
 
-export function RouteLayer({
+export const RouteLayer = memo(function RouteLayer({
   circuits,
   bus,
   view,
@@ -41,6 +46,7 @@ export function RouteLayer({
   hoverId = null,
   onPick,
   links,
+  plate = false,
 }: {
   circuits: DisplayCircuit[];
   bus: DisplayCircuit | null;
@@ -63,6 +69,8 @@ export function RouteLayer({
   onPick?: (circuit: DisplayCircuit) => void;
   /** Fáze 75: odkaz okruhu (chytré PDF – trasa i štítek odkazují na řádek okruhu v rozcestníku dokumentace). */
   links?: Readonly<Record<string, string>>;
+  /** Fáze 100: podkladové štítky popisků (plátno editoru; tiskový výkres je nemá). */
+  plate?: boolean;
 }) {
   const cad = view === "cad";
   const ink = onPaper ? "#111827" : "#e4e4e7";
@@ -107,7 +115,21 @@ export function RouteLayer({
                   {(() => {
                     const label = labelPlacement(stretch.a, stretch.b, unit * 0.55, stretchSlot(index));
                     return (
-                      <text x={label.x} y={label.y} fontSize={unit * 0.42} fontWeight={700} textAnchor="middle" fill={ink} stroke={halo} strokeWidth={unit * 0.09} paintOrder="stroke" transform={`rotate(${label.angle} ${label.x} ${label.y})`} data-testid="cable-tag">
+                      <text
+                        x={label.x}
+                        y={label.y}
+                        fontSize={unit * 0.42}
+                        fontWeight={700}
+                        textAnchor="middle"
+                        fill={plate ? "#f8fafc" : ink}
+                        stroke={plate ? PLATE_STROKE : halo}
+                        strokeWidth={plate ? unit * 0.24 : unit * 0.09}
+                        strokeLinejoin="round"
+                        paintOrder="stroke"
+                        transform={`rotate(${label.angle} ${label.x} ${label.y})`}
+                        data-testid="cable-tag"
+                        data-plate={plate ? "true" : undefined}
+                      >
                         {circuit.tag}
                         {circuit.edited ? " ✎" : ""}
                       </text>
@@ -116,7 +138,7 @@ export function RouteLayer({
                 </>
               ) : null}
               {!cad && last && !isBus ? (
-                <text x={last.x + unit * 0.6} y={last.y - unit * 0.6} fontSize={unit * 0.62} fill={color} fontWeight={700}>
+                <text x={last.x + unit * 0.6} y={last.y - unit * 0.6} fontSize={unit * 0.62} fill={color} fontWeight={700} {...(plate ? { stroke: PLATE_STROKE, strokeWidth: unit * 0.24, strokeLinejoin: "round" as const, paintOrder: "stroke" } : {})} data-testid="route-length">
                   {circuit.lengthM.toLocaleString("cs-CZ")} m{circuit.edited ? " ✎" : ""}
                 </text>
               ) : null}
@@ -199,4 +221,4 @@ export function RouteLayer({
       })}
     </g>
   );
-}
+});

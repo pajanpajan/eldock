@@ -1,4 +1,4 @@
-import { goPhase, phaseForPalette } from "./floorplan-phases";
+import { goPhase, phaseForPalette, rightTab } from "./floorplan-phases";
 import { expect, test } from "@playwright/test";
 
 // Fáze 49: 2D půdorys elektroinstalace – osazení značek, párování vypínače se světlem, výkaz kabeláže
@@ -24,8 +24,9 @@ test("📐 2D půdorys: osazení, párování, výkaz kabeláže Spodem / Vrchem
     for (const [x, y] of points) await canvas.click({ position: { x, y } });
     await page.keyboard.press("Escape");
   };
-  // Fáze 98: výkaz kabeláže je v pravém panelu fáze 5
+  // Fáze 98: výkaz kabeláže je v pravém panelu fáze 5; fáze 100 – v záložce 🔌 Okruhy & Trasy
   await goPhase(page, 5);
+  await rightTab(page, "circuits");
   await expect(page.getByTestId("cable-empty")).toContainText("rozváděč");
   await place("Hlavní domovní / bytový rozváděč", [40, 40]);
   await place("Dvojzásuvka", [260, 80], [360, 80]);
@@ -43,6 +44,7 @@ test("📐 2D půdorys: osazení, párování, výkaz kabeláže Spodem / Vrchem
   await page.keyboard.press("Escape");
 
   // Výkaz kabeláže: 3 režimy, rozpis kabelů a trasy nad půdorysem
+  await rightTab(page, "circuits");
   const totals = page.getByTestId("cable-totals");
   await expect(totals.locator("[data-mode]")).toHaveCount(3);
   await expect(page.getByTestId("cable-buy")).toContainText("CYKY-J 3×2,5");
@@ -50,6 +52,7 @@ test("📐 2D půdorys: osazení, párování, výkaz kabeláže Spodem / Vrchem
   await expect(page.getByTestId("cable-route").first()).toBeVisible();
   // Fáze 98: směrování tras v levé paletě fáze 5
   await goPhase(page, 5);
+  await rightTab(page, "circuits");
   await page.getByRole("radio", { name: /Spodem \(v podlaze\)/ }).click();
   await expect(totals.locator('[data-mode="BOTTOM"]')).toHaveClass(/border-primary/);
   await page.getByRole("radio", { name: /Optimalizovaně \(Auto\)/ }).click();
@@ -59,10 +62,13 @@ test("📐 2D půdorys: osazení, párování, výkaz kabeláže Spodem / Vrchem
   const before = await bottom.textContent();
   await canvas.getByRole("button", { name: /^Dvojzásuvka/ }).first().click();
   await page.getByLabel("Montážní výška [mm]").fill("1150");
+  // Fáze 100: klik na zásuvku otevřel záložku Detail – výkaz je v záložce Okruhy & Trasy
+  await rightTab(page, "circuits");
   await expect(bottom).not.toHaveText(before ?? "");
   await page.screenshot({ path: "test-results/phase49-floorplan.png", fullPage: true });
 
-  // ⚡ Rozváděč z půdorysu → projekt s výkazem kabeláže v dokumentaci
+  // ⚡ Rozváděč z půdorysu → projekt s výkazem kabeláže v dokumentaci (fáze 100: záložka ⚡ Kusovník & Rozváděč)
+  await rightTab(page, "bom");
   await page.getByLabel("Název rozváděče").fill("RD49 z půdorysu");
   // Fáze 57: bez prostředí dle ČSN 33 2000-5-51 ed. 3 nelze generovat
   await expect(page.getByTestId("generate-from-floorplan")).toBeDisabled();

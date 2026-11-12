@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { goPhase, phaseForPalette } from "./floorplan-phases";
+import { goPhase, phaseForPalette, rightTab } from "./floorplan-phases";
 
 // Fáze 82: zásuvka na světelném okruhu své místnosti – volba v plovoucí nabídce i v detailu zásuvky, jištění okruhu
 // 10 / 13 A pro celý půdorys, soupis okruhů „Světla + zásuvky“, normový hlídač a sloupec v soupisu místností.
@@ -67,9 +67,12 @@ test("💡 Zásuvka na světelném okruhu: volba u zásuvky, jištění 10 / 13 
   await expect(picker.getByTestId("socket-circuit-current")).toContainText("Světla + zásuvky");
   await expect(picker.getByTestId("socket-circuit-current")).toContainText("jistič B10");
   await goPhase(page, 5);
+  // Fáze 100: soupis okruhů v záložce 🔌 Okruhy & Trasy, výběr okruhu zásuvky v záložce 🎯 Detail
+  await rightTab(page, "circuits");
   await expect(page.getByTestId("circuit-list")).toContainText("Světla + zásuvky");
 
   // Jištění 13 A pro celý půdorys → přehled smíšených okruhů a normový hlídač
+  await rightTab(page, "detail");
   await picker.getByTestId("lighting-socket-rating").getByRole("radio", { name: "B13" }).click();
   await expect(picker.getByTestId("socket-circuit-current")).toContainText("jistič B13");
   // Fáze 98: přehled zásuvek na světelném okruhu je v kartě zásuvkových okruhů fáze 3
@@ -77,12 +80,18 @@ test("💡 Zásuvka na světelném okruhu: volba u zásuvky, jištění 10 / 13 
   const mixed = page.getByTestId("lighting-socket-circuits");
   await expect(mixed.getByTestId("lighting-socket-row")).toHaveCount(1);
   await expect(mixed.getByTestId("lighting-socket-row")).toContainText("B13");
+  // Fáze 100: normový hlídač je v záložce 🛡️ Normy (Linter)
+  await rightTab(page, "norms");
   await expect(page.getByText(/1× zásuvka na světelném okruhu – okruh jistí jistič 13 A \(nikdy 16 A\)/)).toBeVisible();
 
   // Zpět na zásuvkový okruh (automaticky)
+  await rightTab(page, "detail");
   await picker.getByTestId("socket-circuit-select").selectOption("auto");
+  await rightTab(page, "circuits");
+  await expect(page.getByTestId("socket-circuits")).toBeVisible();
   await expect(mixed).toHaveCount(0);
   await goPhase(page, 5);
+  await rightTab(page, "circuits");
   await expect(page.getByTestId("circuit-list")).not.toContainText("Světla + zásuvky");
   await page.screenshot({ path: "test-results/phase82-floorplan.png" });
 });

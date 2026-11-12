@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { ensureActive, goPhase, phaseForPalette } from "./floorplan-phases";
+import { ensureActive, goPhase, phaseForPalette, rightTab } from "./floorplan-phases";
 
 // Fáze 62: 2D půdorys – sestavy zásuvek a vypínačů ve víceramečku přímo z palety (hotové i vlastní), ▦+ přidání
 // přístroje do rámečku, skrytí kabeláže (při párování vypínačů se světly automaticky) a „Hotovo“ vždy v liště nad
@@ -74,6 +74,8 @@ test("2D půdorys: sestavy ve víceramečku, ▦+, skrytí kabeláže při páro
   await canvas.click({ position: { x: 380, y: 330 } });
   await expect(canvas.getByTestId("frame-outline")).toHaveCount(2);
   await expect(canvas.locator('[data-element="switch-1"]')).toHaveCount(1);
+  // Fáze 100: fáze 3 otevře záložku 🔌 Okruhy & Trasy – detail vložené sestavy je v záložce 🎯 Detail
+  await rightTab(page, "detail");
   await expect(detail.getByTestId("frame-detail")).toContainText("Víceramček 3R");
   await page.screenshot({ path: "test-results/phase62-sets.png" });
   await page.keyboard.press("Escape");

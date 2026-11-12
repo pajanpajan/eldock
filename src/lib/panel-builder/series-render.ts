@@ -379,10 +379,12 @@ export interface RenderInput {
   label?: string;
   /** Živý náhled roztažený na šířku rodiče (bez pevné velikosti). */
   fluid?: boolean;
+  /** Fáze 100: vlastní studiové pozadí renderu (false = průhledné – galerie kreslí studio sama a stín pod přístrojem). */
+  studio?: boolean;
 }
 
 /** SVG náhledu přístroje / rámečku řady v libovolné kombinaci krytu a rámečku. */
-export function renderDeviceSvg({ seriesKey, shape, look, items, id = "", label, fluid = false }: RenderInput): string {
+export function renderDeviceSvg({ seriesKey, shape, look, items, id = "", label, fluid = false, studio = true }: RenderInput): string {
   const style = mockStyle(seriesKey, shape);
   const ctx: Ctx = { p: id, look, style };
   const width = items.length * GANG + MARGIN * 2;
@@ -395,7 +397,8 @@ export function renderDeviceSvg({ seriesKey, shape, look, items, id = "", label,
   if (look.frameMaterial) attrs.push(`data-frame-material="${look.frameMaterial}"`);
   if (look.texture) attrs.push(`data-texture="${look.texture}"`);
   const body = style.monoblock ? monoblock(ctx, items, ip) : style.round ? decento(ctx, items) : framed(ctx, items);
-  return [`<svg xmlns="http://www.w3.org/2000/svg" ${attrs.join(" ")}>`, defs(ctx), `<rect width="${width}" height="${HEIGHT}" fill="${url(ctx, "bg")}"/>`, `<rect width="${width}" height="${HEIGHT}" fill="${url(ctx, "spot")}"/>`, body, "</svg>"].join("\n");
+  const backdrop = studio ? [`<rect width="${width}" height="${HEIGHT}" fill="${url(ctx, "bg")}"/>`, `<rect width="${width}" height="${HEIGHT}" fill="${url(ctx, "spot")}"/>`] : [];
+  return [`<svg xmlns="http://www.w3.org/2000/svg" ${attrs.join(" ")}>`, defs(ctx), ...backdrop, body, "</svg>"].join("\n");
 }
 
 /** Díly náhledu: spínač 1R, zásuvka 1R, sestava (víceramček 3R; nástěnné řady dvojzásuvka pod víčky). */

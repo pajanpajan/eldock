@@ -28,6 +28,7 @@ export function FloorSymbol({
   level = "classic",
   lem,
   hitSlot = null,
+  plate = false,
 }: {
   item: PaletteItem;
   size: number;
@@ -45,22 +46,29 @@ export function FloorSymbol({
   level?: InstallLevel;
   /** Barva domovních přístrojů (fáze 51) – tečka u popisku. */
   lem?: string | null;
+  /**
+   * Fáze 100: podkladový štítek na plátně – silnější obrys značky v barvě podkladu (zakryje čáru stěny pod značkou,
+   * kroužky vyplní) a popisek světle na tmavém obrysu (`paint-order: stroke`). Tiskový výkres ho nemá.
+   */
+  plate?: boolean;
 }) {
   const parts = symbolParts(item, size, { switchNo, level });
   // Fáze 93: nouzové únikové svítidlo zelenou kresbou
   const ink = parts.color ?? (onPaper ? "#111827" : "#f4f4f5");
-  const halo = active ? "#facc15" : onPaper ? "rgba(255,255,255,0.9)" : "rgba(9,9,11,0.85)";
+  const halo = active ? "#facc15" : onPaper ? "rgba(255,255,255,0.9)" : plate ? "rgba(15,23,42,0.88)" : "rgba(9,9,11,0.85)";
   const w = size / 22;
-  const draw = (stroke: string, width: number, key: string) => (
+  const draw = (stroke: string, width: number, key: string, wipe = false) => (
     <g key={key} fill="none" stroke={stroke} strokeWidth={width} strokeLinecap="round" strokeLinejoin="round">
       {parts.paths.map((d, index) => (
         <path key={index} d={d} />
       ))}
       {parts.circles.map((circle, index) => (
-        <circle key={`c${index}`} cx={circle.cx} cy={circle.cy} r={circle.r} fill={circle.fill ? stroke : "none"} />
+        <circle key={`c${index}`} cx={circle.cx} cy={circle.cy} r={circle.r} fill={circle.fill || wipe ? stroke : "none"} />
       ))}
     </g>
   );
+  // Fáze 100: štítek pod značkou – obrys 4,5× (vybraná 5,5×) tloušťky čáry, vnitřek kroužků zakrytý
+  const haloWidth = w * (plate ? (active ? 5.5 : 4.5) : active ? 4.5 : 3.2);
   const labelText = parts.label;
   const font = size * 0.3;
   const spec = item.kind === "fixture" ? (FIXTURES[item.id] ?? null) : null;
@@ -81,7 +89,7 @@ export function FloorSymbol({
         <circle cx={0} cy={0} r={size * 0.75} fill="transparent" />
       )}
       <g transform={rotation ? `rotate(${rotation})` : undefined} pointerEvents={hitSlot ? "none" : undefined}>
-        {draw(halo, w * (active ? 4.5 : 3.2), "halo")}
+        {draw(halo, haloWidth, "halo", plate && !active)}
         {parts.fills.map((fill, index) => (
           <path key={`F${index}`} d={fill} fill={ink} stroke="none" />
         ))}
@@ -94,7 +102,18 @@ export function FloorSymbol({
       </g>
       {labelText ? (
         <g pointerEvents="none">
-          <text x={size * 0.62} y={-size * 0.5} fontSize={font} fontWeight={800} fill={ink} stroke={onPaper ? "#fff" : "#09090b"} strokeWidth={w * 1.4} paintOrder="stroke">
+          <text
+            x={size * 0.62}
+            y={-size * 0.5}
+            fontSize={font}
+            fontWeight={800}
+            fill={plate ? "#f8fafc" : ink}
+            stroke={plate ? "rgba(15,23,42,0.88)" : onPaper ? "#fff" : "#09090b"}
+            strokeWidth={plate ? font * 0.32 : w * 1.4}
+            strokeLinejoin="round"
+            paintOrder="stroke"
+            data-testid={plate ? "symbol-label" : undefined}
+          >
             {labelText}
           </text>
           {lem ? <circle cx={size * 0.5} cy={-size * 0.6} r={size * 0.07} fill={lem} stroke={ink} strokeWidth={w * 0.5} /> : null}

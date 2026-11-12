@@ -47,6 +47,7 @@ import { DEFAULT_SUPPLY, supplyById, type SupplySystem } from "./supply";
 import { isEnvironmentId, type EnvironmentId } from "./environments";
 import { DEFAULT_OCCUPANCY, halogenFreeBomItem, halogenFreeCable, isCommercial, isOccupancyId, type OccupancyId } from "./occupancy";
 import { CALIBRATION_TOLERANCE_PCT, emptyCalibration, isRotation, planExtent, rotatedSize, type CalibrationRecord, type FloorplanBackground, type Rotation } from "./floorplan-pdf";
+import { isBackgroundLook } from "./background-look";
 
 export type PaletteGroup = "panel" | "sockets" | "lights" | "controls" | "shading" | "appliances" | "fixtures" | "architecture" | "medical";
 
@@ -107,27 +108,30 @@ export interface PaletteItem {
   occupancies?: readonly OccupancyId[];
 }
 
-/** Fáze 74: kategorie palety – ikona, krátký název a podtitul (norma, rozsah) pro přehledný levý panel. */
+/**
+ * Fáze 74: kategorie palety – ikona, krátký název a podtitul (norma, rozsah) pro přehledný levý panel.
+ * Fáze 100: krátké názvy, které se v paletě nikdy neořezávají („⚡ Rozváděče“ … „🛋️ Okna, dveře a nábytek“).
+ */
 export const PALETTE_GROUPS: { id: PaletteGroup; icon: string; label: string; hint: string }[] = [
   { id: "panel", icon: "⚡", label: "Rozváděče", hint: "hlavní, podružný, stoupací vedení" },
   { id: "sockets", icon: "🔌", label: "Zásuvky", hint: "jednozásuvky, dvojzásuvky, IP44, RJ45" },
   { id: "lights", icon: "💡", label: "Světla", hint: "stropní a nástěnná svítidla" },
-  { id: "controls", icon: "🎛️", label: "Ovládání", hint: "vypínače a ovladače" },
+  { id: "controls", icon: "🔘", label: "Vypínače 230 V", hint: "vypínače a ovladače" },
   // Fáze 77: stínící technika, čidla oken a vody, termostaty a hlavice (moduly do rozváděče podle počtu)
-  { id: "shading", icon: "🪟", label: "Stínící technika, čidla a vytápění", hint: "žaluzie, okna, voda, termostaty, hlavice" },
-  { id: "appliances", icon: "🔥", label: "Spotřebiče", hint: "vlastní jisticí okruh" },
-  { id: "fixtures", icon: "🛁", label: "Zařizovací předměty", hint: "zóny ČSN 33 2000-7-701, umývací prostor" },
+  { id: "shading", icon: "🪟", label: "Stínění, čidla a topení", hint: "žaluzie, okna, voda, termostaty, hlavice" },
+  { id: "appliances", icon: "🔥", label: "Samostatné spotřebiče", hint: "vlastní jisticí okruh" },
+  { id: "fixtures", icon: "🛁", label: "Koupelna (zóny ČSN)", hint: "zóny ČSN 33 2000-7-701, umývací prostor" },
   // Fáze 90: orientační architektonické prvky – nevytváří okruhy, kreslí se na plátně, v PDF i v DXF (ARCHITEKTURA_NABYTEK)
   { id: "architecture", icon: "🛋️", label: "Okna, dveře a nábytek", hint: "orientační – rozměr X × Y, bez okruhů" },
   // Fáze 93: zdravotnický prostor Skupiny 1 – jen v režimu 🏥 (ČSN 33 2000-7-710 ed. 2)
   { id: "medical", icon: "🏥", label: "Zdravotnictví (Skupina 1)", hint: "EKV, lůžková rampa LUZ, lehátko – ČSN 33 2000-7-710 ed. 2" },
 ];
 
-/** Nadpis a podtitul skupiny ovládání podle úrovně instalace (fáze 57, fáze 74 krátce). */
-export const CONTROLS_LABEL: Record<InstallLevel, { label: string; hint: string }> = {
-  classic: { label: "Vypínače 230 V", hint: "řazení dle ČSN, stmívače, čidla" },
-  bus_loxone: { label: "Sběrnicové ovládání", hint: "24 V DC – KNX / Loxone Tree / free@home" },
-  smart_retrofit: { label: "Chytré vypínače", hint: "moduly pod vypínač, bezdrátová tlačítka" },
+/** Nadpis a podtitul skupiny ovládání podle úrovně instalace (fáze 57, fáze 74 krátce, fáze 100 s ikonou). */
+export const CONTROLS_LABEL: Record<InstallLevel, { icon: string; label: string; hint: string }> = {
+  classic: { icon: "🔘", label: "Vypínače 230 V", hint: "řazení dle ČSN, stmívače, čidla" },
+  bus_loxone: { icon: "🎛️", label: "Sběrnicové ovládání", hint: "24 V DC – KNX / Loxone Tree / free@home" },
+  smart_retrofit: { icon: "📲", label: "Chytré vypínače", hint: "moduly pod vypínač, bezdrátová tlačítka" },
 };
 
 const CLASSIC: readonly InstallLevel[] = ["classic", "smart_retrofit"];
@@ -993,6 +997,8 @@ function parseBackground(value: unknown, num: Num): FloorplanBackground | null {
     rotation: isRotation(raw.rotation) ? raw.rotation : 0,
     crop: null,
     pagePt: raw.pagePt && typeof raw.pagePt === "object" ? { width: num(raw.pagePt.width, 0, 1, 20_000), height: num(raw.pagePt.height, 0, 1, 20_000) } : null,
+    // Fáze 100: vzhled podkladu na plátně (bez údaje = doporučených 60 %)
+    ...(isBackgroundLook(raw.look) ? { look: raw.look } : {}),
   };
   if (background.pagePt && (!background.pagePt.width || !background.pagePt.height)) background.pagePt = null;
   const size = rotatedSize(background);

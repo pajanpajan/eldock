@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { ensureActive, goPhase, phaseForPalette } from "./floorplan-phases";
+import { ensureActive, goPhase, phaseForPalette, rightTab } from "./floorplan-phases";
 
 // Fáze 61: chytrá domácnost (systém a výrobce, spínací / stmívací akční členy podle zátěží, moduly do rozváděče),
 // normový hlídač půdorysu (koupelnové zóny, IP44) a galerie designových řad ABB podle katalogu 2026.
@@ -61,6 +61,8 @@ test("chytrá domácnost: akční členy ABB-free@home / KNX podle svítidel, no
   await choose("Jednozásuvka");
   await canvas.click({ position: { x: 300, y: Math.round(300 - (375 + 300) / mmPerPx) } });
   await page.keyboard.press("Escape");
+  // Fáze 100: varování zón jsou v celé kontrole norem v záložce 🛡️ Normy (Linter)
+  await rightTab(page, "norms");
   const checks = page.getByTestId("plan-checks");
   await expect(checks.locator('[data-check^="bath-zone"]')).toContainText("zóně 0–2");
   await checks.locator('[data-check^="wet-ip"]').getByRole("button", { name: /na zásuvku IP44/ }).click();

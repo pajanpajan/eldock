@@ -1,6 +1,7 @@
 "use client";
 
-import { useDeferredValue, useEffect, useMemo, useRef, useState, useTransition, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Eye, EyeOff, FileUp, Grid3x3, Loader2, Maximize2, Minus, MousePointer2, Plus, RotateCw, Ruler, Square, Trash2 } from "lucide-react";
@@ -47,8 +48,6 @@ import {
   pairsWith,
   roomAt,
   roomDimensions,
-  roomLabelDetails,
-  roomLabelLines,
   snapToWall,
   switchFloor,
   symbolSizeOf,
@@ -100,7 +99,6 @@ import {
 } from "@/lib/panel-builder/floorplan-frames";
 import {
   ZOOM_STEP,
-  backgroundTransform,
   clampView,
   cropDraft,
   cropImpact,
@@ -136,7 +134,7 @@ import { CablePanel } from "./CablePanel";
 import { CalibrationDialog, type CalibrationResult } from "./CalibrationDialog";
 import { DeviceAppearance, SupplySelect } from "./DeviceAppearance";
 import { FloorBar } from "./FloorBar";
-import { FloorSymbol, LightBadges, PanelSymbol } from "./FloorSymbol";
+import { FloorSymbol } from "./FloorSymbol";
 import { FrameAssemblyPalette } from "./FrameAssemblyPalette";
 import { MountingBoxSettings } from "./MountingBoxSettings";
 import { ModeBar, type ModeTone } from "../ModeBar";
@@ -146,19 +144,23 @@ import { SmartHomePanel } from "./SmartHomePanel";
 import { applyNormFix, ekvHeightAt, floorplanNorms } from "@/lib/panel-builder/floorplan-norms";
 import { OCCUPANCIES, isMedical, occupancyBadge, occupancyOf, type OccupancyId } from "@/lib/panel-builder/occupancy";
 import { smartPlanOf } from "@/lib/panel-builder/smart-home-plan";
-import { lightBadges } from "@/lib/panel-builder/field-devices";
 import { isSmartSystem, type SmartSystemId } from "@/lib/panel-builder/smart-home";
 import { WiringBomDialog } from "./WiringBomDialog";
 import { ApplianceEditor, useApplianceLibrary } from "./ApplianceEditor";
 import { FixtureShape } from "./FixtureShape";
 import { FloorplanExport } from "./FloorplanExport";
 import { PaletteAccordion, type PaletteSection } from "./PaletteAccordion";
+import { PaletteGlyph } from "./PaletteGlyph";
 import { ROUTE_COLORS, RouteLayer } from "./RouteLayer";
+import { BackgroundFilters, NotesLayer, PlanBackdrop, PlanElement, RoomsLayer, type PlanHandlers } from "./PlanLayers";
+import { BackgroundLookSwitch } from "./BackgroundLookSwitch";
+import { DEFAULT_BACKGROUND_LOOK, backgroundLookOf, backgroundStyle, type BackgroundLook } from "@/lib/panel-builder/background-look";
+import { frameThrottle } from "@/lib/panel-builder/frame-throttle";
 import { BoardSelect, CircuitListPanel, LayerChips, SubpanelInfo, type CircuitEntry } from "./CircuitListPanel";
-import { PanelSection, RightPanels } from "./RightPanels";
+import { PanelSection, RightPanels, RightTabBar, type TabBadge } from "./RightPanels";
 import { CUSTOM_APPLIANCE_ITEM, applianceCatalog, applianceSpecFor, protectionLabel, storedSpecs, type ApplianceSpec } from "@/lib/panel-builder/appliances";
-import { fixtureSpecOf, resizeFixture, turnBy, type FixtureHandle } from "@/lib/panel-builder/fixtures";
-import { isPolygonRoom, polygonArea, polygonBounds, pointInRoom, roomPolygon, snapAngle, validPolygon, wallLabel } from "@/lib/panel-builder/room-geometry";
+import { FIXTURES, fixtureSpecOf, resizeFixture, turnBy, type FixtureHandle } from "@/lib/panel-builder/fixtures";
+import { polygonArea, polygonBounds, pointInRoom, roomPolygon, snapAngle, validPolygon, wallLabel } from "@/lib/panel-builder/room-geometry";
 import { circuitEntries, displayRoutes, editedKeysOf, layerVisible, type CircuitLayer, type DisplayCircuit, type DisplayLeg } from "@/lib/panel-builder/route-display";
 import { MAIN_BOARD, SUBPANEL_ITEM, assignBoard, autoBoard, boardLabel, boardsOf, hasBoard, nextBoardCode, releaseBoard } from "@/lib/panel-builder/boards";
 import { cleanPolyline, dragSegment, insertJog, segmentShift } from "@/lib/panel-builder/route-edit";
@@ -172,7 +174,6 @@ import { useDraftHistory } from "./useDraftHistory";
 import { useFloorplanSync, type FloorplanMetaState } from "./useFloorplanSync";
 import { useFloorplanLibrary } from "./useFloorplanLibrary";
 import { CadLayersPanel } from "./CadLayersPanel";
-import { CadUnderlayLayer } from "./CadUnderlayLayer";
 import { DWG_MESSAGE, DxfError, parseDxf } from "@/lib/panel-builder/dxf-import";
 import { bimToFloorplan } from "@/lib/bim/bim-floorplan";
 import { IfcError, parseIfc } from "@/lib/bim/ifc-parser";
@@ -186,7 +187,7 @@ import { RoomBySizeForm } from "./RoomBySizeForm";
 import { useWizardStep } from "./useWizardStep";
 import { useFloorplanUiMode } from "./useFloorplanUiMode";
 import { stepForTutorialChapter, TUTORIAL_CHAPTER_EVENT, wizardStatus } from "@/lib/panel-builder/floorplan-wizard";
-import { LAYER_FILTERS, assembliesVisible, elementLook, filterLook, panelVisible, paletteGroupVisible, phaseOfGroup, routeVisible, type FloorplanPhase, type LayerFilter, type PanelSectionId } from "@/lib/panel-builder/floorplan-phases";
+import { LAYER_FILTERS, assembliesVisible, elementLook, filterLook, paletteGroupVisible, phaseOfGroup, routeVisible, defaultRightTab, tabSectionVisible, type FloorplanPhase, type LayerFilter, type PanelSectionId, type RightTab } from "@/lib/panel-builder/floorplan-phases";
 import { snapOpening } from "@/lib/panel-builder/architecture";
 import { addRoomBySize, snapRoomRect, type SnapGuide } from "@/lib/panel-builder/room-builder";
 import { contentView, growPlane, meters, resizePlane } from "@/lib/panel-builder/floorplan-plane";
@@ -230,9 +231,8 @@ const HEIGHTS: { key: keyof ElevationProfile; label: string }[] = [
 const MODE_BUTTONS: Record<CableRoutingMode, string> = { BOTTOM: "⬇ Spodem (v podlaze)", TOP: "⬆ Vrchem (stropem/podhledem)", OPTIMIZED: "✨ Optimalizovaně (Auto)" };
 /** Fáze 76: sbalovací karty pravého sloupce (pro Sbalit / Rozbalit vše). */
 const RIGHT_PANEL_IDS = ["rooms", "site", "design", "detail", "cad", "circuits", "smart", "checks", "sockets", "edited", "cables", "generate", "inventory"] as const;
-/** Fáze 98: kontroly zásuvek a koupelnových zón (pravý panel fáze 3). */
-// Fáze 98: varování fází osazování 3 a 4 (zóny koupelny, krytí, krabičky, víceramečky mimo katalog řady)
-const ZONE_CHECK = /^(bath-zone|basin-|fixture-missing|wet-ip|outdoor-ip|lighting-socket|medical-socket|box-depth|frame-limit)/;
+/** Fáze 100: záložka každé sbalovací karty pravého sloupce (Sbalit / Rozbalit vše platí pro karty aktivní záložky). */
+const RIGHT_PANEL_TABS: Record<(typeof RIGHT_PANEL_IDS)[number], RightTab> = { rooms: "detail", site: "detail", design: "detail", detail: "detail", cad: "detail", smart: "detail", circuits: "circuits", sockets: "circuits", cables: "circuits", edited: "circuits", checks: "norms", generate: "bom", inventory: "bom" };
 
 /** Co úroveň instalace v nákresu znamená (fáze 57). */
 const LEVEL_NOTES: Record<InstallLevel, string> = {
@@ -269,11 +269,33 @@ const newId = (prefix: string) => `${prefix}${Date.now().toString(36)}${(sequenc
 const turn = (rotation: number) => turnBy(rotation, 90);
 /** Český tvar podle počtu: 1 svítidlo, 2–4 svítidla, 5 a víc svítidel. */
 const plural = (count: number, one: string, few: string, many: string) => (count === 1 ? one : count >= 2 && count <= 4 ? few : many);
+/** Fáze 100: rozměr v metrech na dlaždici palety („1,7“, „0,75“). */
+const metersLabel = (mm: number) => (mm / 1000).toLocaleString("cs-CZ", { maximumFractionDigits: 2 });
 
 export interface SeriesOption {
   count?: number;
   key: string;
   label: string;
+}
+
+/** Fáze 100: poloha ukazatele zpracovaná v příštím snímku (requestAnimationFrame). */
+interface MoveSample {
+  clientX: number;
+  clientY: number;
+  shiftKey: boolean;
+  altKey: boolean;
+}
+
+/** Fáze 63: zobrazovaná položka – spotřebič z knihovny (název, zkratka), výrobek z lišty výrobců (popis, bezdrátově). */
+function displayItemOf(appliances: FloorplanDraft["appliances"], element: Pick<EditorElement, "item" | "appliance" | "product">) {
+  const item = paletteItem(element.item);
+  if (!item) return null;
+  if (item.kind === "appliance") {
+    const spec = applianceSpecFor(appliances, element);
+    return spec ? { ...item, label: spec.label, symbol: spec.symbol } : item;
+  }
+  const product = productById(element.product);
+  return product ? { ...item, label: product.label, ...(product.noBus ? { wireless: true } : {}) } : item;
 }
 
 /** Výřez pohledu jako zlomek výkresu – přežije kalibraci (změnu mm) bez přepočtu. */
@@ -332,7 +354,17 @@ export function FloorplanEditor({
   const [showAll, setShowAll] = useState(true);
   const phase: FloorplanPhase | null = uiMode === "wizard" ? wizard : showAll ? null : wizard;
   const [layerFilter, setLayerFilter] = useState<LayerFilter>("all");
-  const show = (section: PanelSectionId) => panelVisible(phase, section);
+  // Fáze 100: záložka pravého panelu – přepnutím fáze výchozí záložka fáze, ruční volba platí do dalšího přepnutí fáze,
+  // klik na prvek / místnost na plátně = Detail (odvozený stav: při změně fáze se nastaví hned během vykreslení)
+  const [tabState, setTabState] = useState<{ phase: FloorplanPhase | null; tab: RightTab; manual: boolean }>(() => ({ phase, tab: defaultRightTab(phase), manual: false }));
+  if (tabState.phase !== phase) setTabState({ phase, tab: defaultRightTab(phase), manual: false });
+  const rightTab: RightTab = tabState.phase === phase ? tabState.tab : defaultRightTab(phase);
+  /** Ruční volba (lišta záložek, tahák, kusovník) – vložení dalšího prvku pak záložku nezmění. */
+  const tabManual = tabState.phase === phase && tabState.manual;
+  const openTab = (next: RightTab, manual = true) => setTabState({ phase, tab: next, manual });
+  /** Výběr na plátně (klik, vložení, „Zobrazit“ u nálezu) – vlastnosti sledují výběr v záložce 🎯 Detail. */
+  const showDetail = () => openTab("detail", false);
+  const tab = (section: PanelSectionId) => tabSectionVisible(phase, rightTab, section);
   const [snapGuides, setSnapGuides] = useState<SnapGuide[]>([]);
   // Fáze 89: Interactive Tour video-návodu přepíná kroky průvodce podle kapitol (5 kapitol = 5 kroků)
   useEffect(() => {
@@ -430,6 +462,50 @@ export function FloorplanEditor({
       const next = change(current);
       return next === current ? current : { ...next, updatedAt: Date.now() };
     });
+
+  // Fáze 100: stabilní obsluha memoizovaných vrstev plátna – volá vždy aktuální funkce editoru (`live` po každém vykreslení)
+  const live = useRef<
+    | (PlanHandlers & {
+        move: (sample: MoveSample) => void;
+        up: () => void;
+        routeDown: (event: ReactPointerEvent, circuit: DisplayCircuit, leg: DisplayLeg, index: number) => void;
+        resetRoute: (circuit: DisplayCircuit) => void;
+        pickRoute: (circuit: DisplayCircuit) => void;
+      })
+    | null
+  >(null);
+  useLayoutEffect(() => {
+    live.current = {
+      roomDown: onRoomDown,
+      vertexDown: onVertexDown,
+      removeRoom,
+      elementDown: onElementDown,
+      fixtureHandle: onFixtureHandle,
+      noteDown: onNoteDown,
+      noteHandle: onNoteHandle,
+      move: handleMove,
+      up: handleUp,
+      routeDown: onRouteDown,
+      resetRoute,
+      pickRoute,
+    };
+  });
+  const [handlers] = useState<PlanHandlers>(() => ({
+    roomDown: (event, room, handle) => live.current?.roomDown(event, room, handle),
+    vertexDown: (event, room, index) => live.current?.vertexDown(event, room, index),
+    removeRoom: (id) => live.current?.removeRoom(id),
+    elementDown: (event, element) => live.current?.elementDown(event, element),
+    fixtureHandle: (event, element, handle) => live.current?.fixtureHandle(event, element, handle),
+    noteDown: (event, note) => live.current?.noteDown(event, note),
+    noteHandle: (event, note, handle) => live.current?.noteHandle(event, note, handle),
+  }));
+  const [routeHandlers] = useState(() => ({
+    segmentDown: (event: ReactPointerEvent, circuit: DisplayCircuit, leg: DisplayLeg, index: number) => live.current?.routeDown(event, circuit, leg, index),
+    reset: (circuit: DisplayCircuit) => live.current?.resetRoute(circuit),
+    pick: (circuit: DisplayCircuit) => live.current?.pickRoute(circuit),
+  }));
+  const [mover] = useState(() => frameThrottle<MoveSample>((sample) => live.current?.move(sample)));
+  useEffect(() => () => mover.cancel(), [mover]);
 
   /** Fáze 64: krok Zpět / Znovu – výběr se zruší (vybraný prvek po kroku nemusí existovat). */
   function stepHistory(direction: "undo" | "redo") {
@@ -538,6 +614,9 @@ export function FloorplanEditor({
   /** Fáze 83: krok jemné mřížky – 0,5 m, ve výřezu do 8 m šířky 0,25 m (kreslí se ve výřezu do 20 m). */
   const fineGrid = viewMm.w <= 8_000 ? 250 : 500;
   const stroke = ui / 16;
+  // Fáze 100: vzhled podkladu (🌗 100 / 60 / 35 % / tmavý CAD) – kresba nad bílým podkladem tmavá, nad tmavým CADem světlá
+  const bgLook = backgroundLookOf(draft.background);
+  const onPaper = Boolean(draft.background) && backgroundStyle(bgLook).paper;
   // Fáze 79: geometrie podkladu CAD (načtená ze souboru) a přichytávání k viditelným nezamčeným hladinám
   const cadReady = draft.cad && cadGeometry?.url === draft.cad.url ? cadGeometry.geometry : null;
   const snapIndex = useMemo(() => (cadReady && draft.cad ? buildSnapIndex(cadReady, draft.cad) : null), [cadReady, draft.cad]);
@@ -604,11 +683,16 @@ export function FloorplanEditor({
     const edited = new Set(routes?.circuits.filter((circuit) => circuit.edited).map((circuit) => circuit.id) ?? []);
     return circuitEntries(analysis).map((entry, index) => ({ ...entry, color: ROUTE_COLORS[index % ROUTE_COLORS.length], edited: edited.has(entry.id), onFloor: onFloor.has(entry.id) }));
   }, [analysis, routes]);
-  const colorOf = (id: string, index = 0) => entries.find((entry) => entry.id === id)?.color ?? ROUTE_COLORS[index % ROUTE_COLORS.length];
+  // Fáze 100: stabilní funkce barvy okruhu (memoizovaná vrstva tras se pak při pohybu myši nepřekresluje)
+  const colorOf = useCallback((id: string, index = 0) => entries.find((entry) => entry.id === id)?.color ?? ROUTE_COLORS[index % ROUTE_COLORS.length], [entries]);
   const focused = entries.find((entry) => entry.id === focusCircuit) ?? null;
+  const focusedId = focused?.id ?? null;
   // Fáze 76: oko u okruhu – skrytý okruh (ani jeho vrstva) se na plátně nekreslí, vybraný okruh vždy
   // Fáze 98: trasy jen vrstev aktivní fáze (fáze 3 zásuvky a spotřebiče, fáze 4 světla, stínění a sběrnice, fáze 5 filtr)
-  const shownRoutes = routes ? { circuits: routes.circuits.filter((circuit) => routeVisible(phase, circuit.layer, layerFilter) && ((layerVisible(circuit.layer, hiddenLayers) && !hiddenCircuits.has(circuit.id)) || circuit.id === focused?.id)), bus: routeVisible(phase, "bus", layerFilter) ? routes.bus : null } : null;
+  const shownRoutes = useMemo(
+    () => (routes ? { circuits: routes.circuits.filter((circuit) => routeVisible(phase, circuit.layer, layerFilter) && ((layerVisible(circuit.layer, hiddenLayers) && !hiddenCircuits.has(circuit.id)) || circuit.id === focusedId)), bus: routeVisible(phase, "bus", layerFilter) ? routes.bus : null } : null),
+    [routes, phase, layerFilter, hiddenLayers, hiddenCircuits, focusedId],
+  );
   const boardInfos = boardsOf(draft);
   const boardOptions = boardInfos.map((board) => ({ code: board.code, label: boardLabel(board) }));
   const hovered = entries.find((entry) => entry.id === hoverCircuit && !hiddenCircuits.has(entry.id)) ?? null;
@@ -667,7 +751,7 @@ export function FloorplanEditor({
   // zásuvku), zóny koupelny ořízne obrys místnosti předmětu; názvy místností pro předvolbu další místnosti v kroku 1
   const isFixtureElement = (element: EditorElement) => paletteItem(element.item)?.kind === "fixture";
   const layeredElements = [...draft.elements.filter(isFixtureElement), ...draft.elements.filter((element) => !isFixtureElement(element))];
-  const roomPolygons = new Map(draft.rooms.map((room) => [room.name, roomPolygon(room)] as const));
+  const roomPolygons = useMemo(() => new Map(draft.rooms.map((room) => [room.name, roomPolygon(room)] as const)), [draft.rooms]);
   const roomNames = draft.rooms.map((room) => room.name);
   const panelFloorId = floors.find((floor) => floor.elements.some((element) => element.item === "panel"))?.id ?? null;
   const selected = draft.elements.find((element) => element.id === selectedId) ?? null;
@@ -681,19 +765,26 @@ export function FloorplanEditor({
   const palette = paletteFor(draft.installation, draft.occupancy);
   const selectionFrame = selection.length >= 2 ? createFrame(draft, selection) : null;
   const pairing = tool.kind === "pair" || tool.kind === "pair-light";
+  // Párování: ovladač a cíl (zvýraznění prvků, na které jde kliknout); fáze 100 – jednou za vykreslení, ne u každého prvku
+  const pairSwitch = tool.kind === "pair" ? (draft.elements.find((other) => other.id === tool.switchId) ?? null) : null;
+  const pairController = paletteItem(pairSwitch?.item ?? "");
+  const pairTargetItem = paletteItem(tool.kind === "pair-light" ? (draft.elements.find((other) => other.id === tool.lightId)?.item ?? "") : "");
+  // Fáze 100: tažený úsek trasy – stejný objekt mezi snímky bez tažení (memoizovaná vrstva tras)
+  const routeDragView = useMemo(() => (routeDrag ? { key: routeDrag.key, points: routeDrag.points } : null), [routeDrag]);
   const cablesShown = pairing ? pairCables : showCables;
   const toggleCables = () => (pairing ? setPairCables((value) => !value) : setShowCables((value) => !value));
-  /** Fáze 63: zobrazovaná položka – spotřebič z knihovny (název, zkratka), výrobek z lišty výrobců (popis, bezdrátově). */
-  const displayItem = (element: Pick<EditorElement, "item" | "appliance" | "product">) => {
-    const item = paletteItem(element.item);
-    if (!item) return null;
-    if (item.kind === "appliance") {
-      const spec = applianceSpecFor(draft.appliances, element);
-      return spec ? { ...item, label: spec.label, symbol: spec.symbol } : item;
+  const displayItem = (element: Pick<EditorElement, "item" | "appliance" | "product">) => displayItemOf(draft.appliances, element);
+  // Fáze 100: zobrazované položky prvků podlaží se stejnou identitou mezi snímky (memoizované prvky plátna)
+  const displayKeys = JSON.stringify([...new Set(draft.elements.map((element) => JSON.stringify([element.item, element.appliance ?? null, element.product ?? null])))]);
+  const displayItems = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof displayItemOf>>();
+    for (const key of JSON.parse(displayKeys) as string[]) {
+      const [item, appliance, product] = JSON.parse(key) as [string, string | null, string | null];
+      map.set(key, displayItemOf(draft.appliances, { item, appliance: appliance ?? undefined, product: product ?? undefined }));
     }
-    const product = productById(element.product);
-    return product ? { ...item, label: product.label, ...(product.noBus ? { wireless: true } : {}) } : item;
-  };
+    return map;
+  }, [displayKeys, draft.appliances]);
+  const shownItem = (element: EditorElement) => displayItems.get(JSON.stringify([element.item, element.appliance ?? null, element.product ?? null])) ?? displayItem(element);
   /** Úseky tras jdou táhnout ve výběru (vybraná místnost / poznámka má přednost – úchyty stěn). */
   const routesEditable = tool.kind === "select" && !selectedRoomId && !selectedNoteId;
 
@@ -906,6 +997,8 @@ export function FloorplanEditor({
       });
       setSelection([element.id]);
       setSelectedNoteId(null);
+      // Fáze 100: vložený prvek je vybraný – vlastnosti sledují výběr (záložka 🎯 Detail), ručně zvolená záložka zůstane
+      if (!tabManual) showDetail();
       if (single) setTool({ kind: "select" });
       return;
     }
@@ -926,6 +1019,7 @@ export function FloorplanEditor({
       setSelection([ids[0]]);
       setSelectedRoomId(null);
       setSelectedNoteId(null);
+      if (!tabManual) showDetail();
       return;
     }
     if (tool.kind === "annotate") {
@@ -990,6 +1084,8 @@ export function FloorplanEditor({
     setSelection([]);
     setSelectedNoteId(null);
     setSelectedRoomId(room.id);
+    // Fáze 100: klik na místnost otevře záložku 🎯 Detail
+    showDetail();
     capture(svg.current, event.pointerId);
     setRoomDrag({ id: room.id, handle, start: toPlan(event), origin: { x: room.x, y: room.y, w: room.w, h: room.h } });
   }
@@ -1013,6 +1109,8 @@ export function FloorplanEditor({
       return;
     }
     if (tool.kind === "room" || tool.kind === "polygon" || tool.kind === "crop" || tool.kind === "calibrate" || tool.kind === "verify" || tool.kind === "annotate") return onCanvasDown(event as unknown as ReactPointerEvent<SVGSVGElement>);
+    // Fáze 100: klik na prvek na plátně otevře záložku 🎯 Detail
+    showDetail();
     // Shift + klik = přidat / odebrat z výběru
     if (event.shiftKey) {
       setSelectedRoomId(null);
@@ -1036,6 +1134,7 @@ export function FloorplanEditor({
     setSelection([]);
     setSelectedRoomId(null);
     setSelectedNoteId(note.id);
+    showDetail();
     capture(svg.current, event.pointerId);
     setNoteDrag({ id: note.id, handle: "move", start: toPlan(event), origin: note });
   }
@@ -1129,7 +1228,33 @@ export function FloorplanEditor({
     toast.success(`Spotřebiče uloženy v nákresu, v prohlížeči i v profilu firmy.${restored ? ` ${restored}× vlastní spotřebič zůstal, protože je osazený v půdorysu.` : ""}`);
   }
 
+  /** Fáze 74: klik na trasu okruhu vybere okruh (vybraný okruh má úchyty úseků). */
+  function pickRoute(circuit: DisplayCircuit) {
+    setFocusCircuit(circuit.id);
+    setSelection([]);
+  }
+
+  /** Fáze 100: 🌗 vzhled podkladu aktivního podlaží (ukládá se s půdorysem). */
+  function setBackgroundLook(look: BackgroundLook) {
+    if (!draft.background || backgroundLookOf(draft.background) === look) return;
+    update((current) => (current.background ? { ...current, background: { ...current.background, look } } : current));
+  }
+
+  // Fáze 100: pohyb myši nejvýš jednou za snímek – z dávky událostí platí poslední poloha
   function onMove(event: ReactPointerEvent<SVGSVGElement>) {
+    mover.push({ clientX: event.clientX, clientY: event.clientY, shiftKey: event.shiftKey, altKey: event.altKey });
+  }
+
+  /** Puštění: čekající polohu zpracovat hned (flushSync) – konec gesta pak vyhodnotí obsluha s čerstvým stavem. */
+  function onUp() {
+    if (!mover.pending()) return handleUp();
+    flushSync(() => {
+      mover.flush();
+    });
+    live.current?.up();
+  }
+
+  function handleMove(event: MoveSample) {
     if (pan) {
       const perPx = mmPerPx(pan.view.w);
       setViewMm({ ...pan.view, x: pan.view.x - (event.clientX - pan.clientX) * perPx, y: pan.view.y - (event.clientY - pan.clientY) * perPx });
@@ -1223,7 +1348,7 @@ export function FloorplanEditor({
    * Fáze 83: po puštění ukazatele (nakreslení či přesun místnosti, prvku, poznámky) se plocha rozšíří o 5 m, když nákres
    * došel k pravému nebo dolnímu okraji – ve stejném kroku Zpět jako úprava (gesto historie ještě běží).
    */
-  function onUp() {
+  function handleUp() {
     const before = gestureStart.current;
     gestureStart.current = null;
     const changes: DraftChange[] = [];
@@ -1258,7 +1383,7 @@ export function FloorplanEditor({
     if (zoomed) setView({ x: viewMm.x / next.widthMm, y: viewMm.y / next.heightMm, w: viewMm.w / next.widthMm });
   }
 
-  /** Konec gesta – úpravy nákresu jdou přes `apply` (z nich `onUp` pozná, zda nákres došel k okraji plochy). */
+  /** Konec gesta – úpravy nákresu jdou přes `apply` (z nich `handleUp` pozná, zda nákres došel k okraji plochy). */
   function finishPointer(apply: (change: DraftChange) => void) {
     if (pan) return void setPan(null);
     if (fixtureDrag) {
@@ -1394,6 +1519,8 @@ export function FloorplanEditor({
       };
       return void window.setTimeout(whenReady, 60);
     }
+    // Fáze 100: kontrola před generováním a formulář jsou v záložce ⚡ Kusovník & Rozváděč (tahák je v záložce Normy)
+    if (rightTab !== "bom") flushSync(() => openTab("bom"));
     submitGeneration();
   }
 
@@ -1504,7 +1631,8 @@ export function FloorplanEditor({
       await preloadImage(uploaded.url);
       // Výchozí odhad měřítka: šířka podkladu ≈ 15 m – přesně ho nastaví kalibrace
       const mmPerPx = 15_000 / widthPx;
-      const background: FloorplanBackground = { url: uploaded.url, widthPx, heightPx, rotation: 0, crop: null, pagePt };
+      // Fáze 100: po nahrání podklad na doporučených 60 % (jemně potlačený kontrast) – okruhy, trasy a značky vyniknou
+      const background: FloorplanBackground = { url: uploaded.url, widthPx, heightPx, rotation: 0, crop: null, pagePt, look: DEFAULT_BACKGROUND_LOOK };
       update((current) => ({ ...current, background, cad: null, mmPerPx, ...planExtent(background, mmPerPx), calibration: emptyCalibration() }));
       setView(FIT);
       setCalibration([]);
@@ -1676,7 +1804,7 @@ export function FloorplanEditor({
 
   /** Fáze 92: tahák – „Ukázat kde“ (vložení místnosti X × Y a nahrání PDF / DXF v kroku 1). */
   function showBase() {
-    if (uiMode === "wizard" || !showAll) setWizard(1);
+    if (uiMode === "wizard" || !showAll) followChecklist(1);
     else clickTestId("compact-room");
     window.setTimeout(() => {
       const room = flash('[data-testid="room-by-size"]');
@@ -1687,12 +1815,29 @@ export function FloorplanEditor({
 
   /** Fáze 92: tahák – „Změnit řadu/barvu“ otevře galerii designových řad (fáze 98: karta designu ve fázi 4). */
   function openSeriesGallery() {
-    if (uiMode === "wizard") setWizard(4);
-    else if (showAll) clickTestId("compact-design");
-    else setWizard(4);
+    // Fáze 100: karta designu je ve fázi 4 v záložce 🎯 Detail
+    if (uiMode === "wizard" || !showAll) {
+      setWizard(4);
+      setTabState({ phase: 4, tab: "detail", manual: false });
+    } else clickTestId("compact-design");
     window.setTimeout(() => {
       if (!clickTestId("series-gallery-open")) toast.info("Výrobce, řadu a barvu zvolíte ve fázi 4 – Světla, vypínače a chytrá domácnost.");
     }, 80);
+  }
+
+  /**
+   * Fáze 100: přechod do fáze z taháku zakázky – tahák (záložka 🛡️ Normy) zůstane otevřený, aby šlo pokračovat dalším
+   * bodem; přepnutí fáze jinde (lišta průvodce) otevře výchozí záložku fáze.
+   */
+  function followChecklist(next: FloorplanPhase) {
+    goToPhase(next);
+    setTabState({ phase: next, tab: "norms", manual: true });
+  }
+
+  /** Fáze 100: kusovník je v záložce ⚡ Kusovník & Rozváděč – přepnout na ni (hned vykreslit) a otevřít dialog. */
+  function openBom() {
+    flushSync(() => openTab("bom"));
+    if (!clickTestId("wiring-bom-open")) toast.info("Kusovník bude k dispozici, jakmile v půdorysu osadíte první prvky.");
   }
 
   /**
@@ -1752,10 +1897,27 @@ export function FloorplanEditor({
       action: issue.fix
         ? { label: issue.fix.label, onClick: () => (update((current) => applyNormFix(current, issue)), toast.success(`Opraveno: ${issue.fix!.label}.`)) }
         : here
-          ? { label: "Zobrazit", onClick: () => setSelection(issue.elementIds.filter((id) => draft.elements.some((element) => element.id === id))) }
+          ? {
+              label: "Zobrazit",
+              // Fáze 100: zjištění z kontroly vybere prvek a otevře jeho detail (oprava výšky, krytí, krabice)
+              onClick: () => {
+                setSelection(issue.elementIds.filter((id) => draft.elements.some((element) => element.id === id)));
+                showDetail();
+              },
+            }
           : undefined,
     });
   }
+
+  // Fáze 100: odznaky záložek pravého panelu – výběr, počet okruhů, nálezy kontroly norem (červeně / zeleně ✓), kusovník
+  const findings = checks.filter((check) => check.level === "error" || check.level === "warning").length;
+  const picked = selection.length + (selectedRoomId ? 1 : 0) + (selectedNoteId ? 1 : 0);
+  const tabBadges: Partial<Record<RightTab, TabBadge>> = {
+    ...(picked ? { detail: { value: picked, tone: "neutral" as const, title: `Vybráno na plátně: ${picked}` } } : {}),
+    ...(entries.length ? { circuits: { value: entries.length, tone: "neutral" as const, title: `${entries.length} ${plural(entries.length, "okruh", "okruhy", "okruhů")} v soupisu` } } : {}),
+    norms: findings ? { value: findings, tone: "danger", title: `${findings} ${plural(findings, "nález", "nálezy", "nálezů")} kontroly půdorysu a norem` } : { value: "✓", tone: "ok", title: "Kontrola půdorysu a norem bez chyb a varování" },
+    ...(bom.length ? { bom: { value: bom.length, tone: "neutral" as const, title: `${bom.length} ${plural(bom.length, "položka", "položky", "položek")} kusovníku` } } : {}),
+  };
 
   const riserHere = analysis.ok ? analysis.build.floors.find((floor) => floor.id === draft.floorId) : null;
   const ghostItem = tool.kind === "place" ? paletteItem(tool.item) : null;
@@ -1931,6 +2093,9 @@ export function FloorplanEditor({
             label: spec.label,
             symbol: spec.symbol,
             title: `${spec.label} – ${spec.powerW.toLocaleString("cs-CZ")} W · ${protectionLabel(spec)}`,
+            // Fáze 100: dlaždice se značkou vývodu a zkratkou / příkonem
+            glyph: <PaletteGlyph itemId={itemId} symbol={spec.symbol} level={draft.installation} />,
+            meta: `${spec.symbol} · ${(spec.powerW / 1000).toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} kW`,
             active,
             onPick: () => {
               setTool(active ? { kind: "select" } : { kind: "place", item: itemId, ...(spec.custom ? { appliance: spec.id } : {}) });
@@ -1946,7 +2111,7 @@ export function FloorplanEditor({
     return {
       id: group.id,
       label: group.id === "controls" ? CONTROLS_LABEL[draft.installation].label : group.label,
-      icon: group.icon,
+      icon: group.id === "controls" ? CONTROLS_LABEL[draft.installation].icon : group.icon,
       hint: group.id === "controls" ? CONTROLS_LABEL[draft.installation].hint : group.hint,
       count: groupCounts.get(group.id) ?? 0,
       entries: palette
@@ -1956,11 +2121,15 @@ export function FloorplanEditor({
           const active = tool.kind === "place" && tool.item === item.id && !tool.product;
           // Fáze 61: zařizovací předmět nemá výšku montáže – v titulku jen rozměr
           const height = item.kind === "fixture" ? null : item.kind === "panel" || item.kind === "riser" ? draft.profile.switchboardHeightMm : (item.heightMm ?? mountHeight({ kind: heightKindOf(item.kind), variant: item.variant, tag: item.tag }, draft.profile));
+          const fixture = item.kind === "fixture" ? FIXTURES[item.id] : null;
           return {
             id: item.id,
             label: item.label,
             symbol: item.symbol,
             title: height === null ? item.label : `${item.label} (${height} mm)`,
+            // Fáze 100: dlaždice s CAD značkou a rozměrem X × Y (předměty, okna, dveře, nábytek) nebo zkratkou a výškou
+            glyph: <PaletteGlyph itemId={item.id} level={draft.installation} />,
+            meta: fixture ? `${metersLabel(fixture.w)} × ${metersLabel(fixture.d)} m` : height === null ? item.symbol : `${item.symbol} · ${height} mm`,
             active,
             onPick: () => {
               setTool(active ? { kind: "select" } : { kind: "place", item: item.id });
@@ -2440,6 +2609,8 @@ export function FloorplanEditor({
       onClick={() => {
         const here = frameLimitWarnings[0].elementIds.filter((id) => draft.elements.some((element) => element.id === id));
         if (here.length) setSelection(here);
+        // Fáze 100: varování s opravou jedním klikem je v záložce 🛡️ Normy (Linter)
+        openTab("norms");
         toast.warning(frameLimitWarnings[0].text);
       }}
       title={frameLimitWarnings.map((issue) => issue.text).join("\n")}
@@ -2452,7 +2623,7 @@ export function FloorplanEditor({
 
   const outputActions = (
     <>
-      <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => clickTestId("wiring-bom-open")} disabled={!bom.length} data-testid="wizard-bom">
+      <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={openBom} disabled={!bom.length} data-testid="wizard-bom">
         📋 Kompletní kusovník (BOM)
       </Button>
       {exportButtons}
@@ -2469,7 +2640,7 @@ export function FloorplanEditor({
   // v pravém panelu
   const exportActions = (
     <>
-      <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => clickTestId("wiring-bom-open")} disabled={!bom.length} data-testid="wizard-bom">
+      <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={openBom} disabled={!bom.length} data-testid="wizard-bom">
         📋 Kompletní kusovník (BOM)
       </Button>
       {exportButtons}
@@ -2786,7 +2957,8 @@ export function FloorplanEditor({
         {/* Plátno půdorysu */}
         <div className="flex min-h-0 min-w-0 flex-col gap-1.5">
           {/* Fáze 62: probíhající krok (párování, vkládání, kreslení, úprava) a „Hotovo“ vždy nad půdorysem */}
-          <ModeBar tone={step.tone} title={step.title} hint={hint} onDone={step.onDone} doneLabel={step.doneLabel}>
+          {/* Fáze 100: rychlý přepínač 🌗 Podklad ve vlastním řádku horní lišty plátna (jen s nahraným podkladem) */}
+          <ModeBar tone={step.tone} title={step.title} hint={hint} onDone={step.onDone} doneLabel={step.doneLabel} below={draft.background ? <BackgroundLookSwitch value={bgLook} onChange={setBackgroundLook} /> : null}>
             {step.extra}
           </ModeBar>
           {/* Fáze 98: plátno vyplní volnou výšku sloupce (celé vidět, bez natahování stránky) */}
@@ -2809,10 +2981,15 @@ export function FloorplanEditor({
               onPointerDown={onCanvasDown}
               onPointerMove={onMove}
               onPointerUp={onUp}
-              onPointerLeave={() => setHover(null)}
+              onPointerLeave={() => {
+                mover.cancel();
+                setHover(null);
+              }}
               onDoubleClick={(event) => {
-                // Fáze 89: dvojklik na místnost (kótu) = přepis Šířky X / Hloubky Y v detailu místnosti
+                // Fáze 89: dvojklik na místnost (kótu) = přepis Šířky X / Hloubky Y v detailu místnosti; fáze 100 – dvojklik
+                // na úsek trasy (odskok) nebo trasu okruhu místnost nevybere
                 if (tool.kind !== "select") return;
+                if (event.target instanceof Element && event.target.closest('[data-testid="route-handles"], [data-testid="route-pick"], [data-testid="route-layer"]')) return;
                 const point = toPlan(event);
                 if (draft.elements.some((element) => Math.hypot(element.x - point.x, element.y - point.y) < ui)) return;
                 const room = roomAt(draft.rooms, point.x, point.y);
@@ -2820,6 +2997,7 @@ export function FloorplanEditor({
                 setSelection([]);
                 setSelectedNoteId(null);
                 setSelectedRoomId(room.id);
+                showDetail();
                 window.requestAnimationFrame(() => document.querySelector<HTMLInputElement>('[data-testid="room-detail"] input[aria-label="Šířka X [m]"]')?.select());
               }}
               onContextMenu={(event) => {
@@ -2840,111 +3018,16 @@ export function FloorplanEditor({
                   <path d="M 1000 0 L 0 0 0 1000" fill="none" stroke="#27272a" strokeWidth={Math.max(stroke, viewMm.w / 1400)} />
                 </pattern>
                 <HatchPatterns notes={draft.annotations} extra={tool.kind === "annotate" ? [noteStyles[tool.mode]] : []} />
+                {/* Fáze 100: vzhled podkladu – ztlumení s potlačeným kontrastem a invertovaný tmavý CAD */}
+                {draft.background ? <BackgroundFilters /> : null}
               </defs>
-              {!draft.background && viewMm.w <= 20_000 ? <rect width={draft.widthMm} height={draft.heightMm} fill="url(#fp-grid-fine)" data-testid="grid-fine" data-step={fineGrid} /> : null}
-              <rect width={draft.widthMm} height={draft.heightMm} fill={draft.background ? "#fff" : "url(#fp-grid)"} />
-              {draft.background ? (
-                <g transform={backgroundTransform(draft.background, draft.mmPerPx)} pointerEvents="none">
-                  <image key={draft.background.url} href={draft.background.url} width={draft.background.widthPx} height={draft.background.heightPx} preserveAspectRatio="none" opacity={0.9} data-testid="floorplan-background" />
-                </g>
-              ) : null}
-              {/* Fáze 79: podklad CAD (DXF) po hladinách */}
-              {draft.cad && cadReady ? <CadUnderlayLayer geometry={cadReady} cad={draft.cad} onPaper={Boolean(draft.background)} unit={ui} /> : null}
-              {draft.rooms.map((room) => {
-                const active = room.id === selectedRoomId;
-                const handle = ui * 0.45;
-                const edge = ui * 0.35;
-                // Fáze 63: polygonální místnost se šikmými stěnami
-                const polygon = isPolygonRoom(room);
-                const corners = roomPolygon(room);
-                const shape = {
-                  fill: active ? "rgba(250,204,21,0.10)" : "rgba(250,204,21,0.04)",
-                  stroke: active ? "#facc15" : "#a1a1aa",
-                  strokeWidth: stroke * (active ? 4 : 2.5),
-                  className: tool.kind === "select" ? (active ? "cursor-move" : "cursor-pointer") : undefined,
-                  onPointerDown: (event: ReactPointerEvent) => onRoomDown(event, room, "move"),
-                  "data-testid": `room-${room.name}`,
-                };
-                return (
-                  <g key={room.id} data-room={room.name} aria-label={`Místnost ${room.name}`}>
-                    {polygon ? <polygon points={corners.map((corner) => `${corner.x},${corner.y}`).join(" ")} strokeLinejoin="round" data-polygon="true" {...shape} /> : <rect x={room.x} y={room.y} width={room.w} height={room.h} {...shape} />}
-                    <text x={room.x + ui * 0.4} y={room.y + ui * 1.1} fontSize={ui * 0.8} fill={draft.background ? "#52525b" : "#d4d4d8"} pointerEvents="none" data-testid="room-label">
-                      {roomLabelLines(room.name, roomLabelDetails(room), room, ui * 0.8).map((line, index) => (
-                        <tspan key={index} x={room.x + ui * 0.4} dy={index ? ui * 0.95 : 0}>
-                          {line}
-                        </tspan>
-                      ))}
-                    </text>
-                    {active && polygon ? (
-                      <g data-testid="polygon-handles">
-                        {corners.map((corner, index) => {
-                          const next = corners[(index + 1) % corners.length];
-                          return (
-                            <g key={index}>
-                              <text x={(corner.x + next.x) / 2} y={(corner.y + next.y) / 2 - ui * 0.3} fontSize={ui * 0.5} fontWeight={700} textAnchor="middle" fill="#facc15" stroke="#09090b" strokeWidth={ui * 0.05} paintOrder="stroke" pointerEvents="none">
-                                {wallLabel(corner, next)}
-                              </text>
-                              <rect x={corner.x - ui * 0.3} y={corner.y - ui * 0.3} width={ui * 0.6} height={ui * 0.6} rx={ui * 0.1} fill="#facc15" stroke="#09090b" strokeWidth={stroke * 2} className="cursor-move" onPointerDown={(event) => onVertexDown(event, room, index)} data-testid="polygon-vertex" />
-                            </g>
-                          );
-                        })}
-                      </g>
-                    ) : null}
-                    {active && !polygon ? (
-                      <>
-                        {/* Stěny: tažením změna rozměru */}
-                        <rect x={room.x} y={room.y - edge / 2} width={room.w} height={edge} fill="transparent" className="cursor-ns-resize" onPointerDown={(event) => onRoomDown(event, room, "n")} data-handle="n" />
-                        <rect x={room.x} y={room.y + room.h - edge / 2} width={room.w} height={edge} fill="transparent" className="cursor-ns-resize" onPointerDown={(event) => onRoomDown(event, room, "s")} data-handle="s" />
-                        <rect x={room.x - edge / 2} y={room.y} width={edge} height={room.h} fill="transparent" className="cursor-ew-resize" onPointerDown={(event) => onRoomDown(event, room, "w")} data-handle="w" />
-                        <rect x={room.x + room.w - edge / 2} y={room.y} width={edge} height={room.h} fill="transparent" className="cursor-ew-resize" onPointerDown={(event) => onRoomDown(event, room, "e")} data-handle="e" />
-                        {/* Aktivní roh vpravo dole */}
-                        <rect
-                          x={room.x + room.w - handle / 2}
-                          y={room.y + room.h - handle / 2}
-                          width={handle}
-                          height={handle}
-                          rx={handle * 0.15}
-                          fill="#facc15"
-                          stroke="#09090b"
-                          strokeWidth={stroke * 2}
-                          className="cursor-nwse-resize"
-                          onPointerDown={(event) => onRoomDown(event, room, "se")}
-                          data-testid="room-handle"
-                        />
-                        <Dimensions x={room.x} y={room.y} w={room.w} h={room.h} symbol={ui} />
-                        {/* Plovoucí lišta nad místností */}
-                        <g transform={`translate(${room.x} ${room.y - ui * 1.5})`}>
-                          <rect width={ui * 7.5} height={ui * 1.1} rx={ui * 0.2} fill="#18181b" stroke="#facc15" strokeWidth={stroke * 1.5} />
-                          <text x={ui * 0.3} y={ui * 0.75} fontSize={ui * 0.6} fill="#fafafa" pointerEvents="none">
-                            {room.name.slice(0, 18)}
-                          </text>
-                          <g
-                            transform={`translate(${ui * 6.3} 0)`}
-                            className="cursor-pointer"
-                            role="button"
-                            aria-label="Smazat místnost (plovoucí lišta)"
-                            onPointerDown={(event) => {
-                              event.stopPropagation();
-                              removeRoom(room.id);
-                            }}
-                          >
-                            <rect width={ui * 1.1} height={ui * 1.1} rx={ui * 0.2} fill="#dc2626" />
-                            <text x={ui * 0.55} y={ui * 0.78} fontSize={ui * 0.6} textAnchor="middle" pointerEvents="none">
-                              🗑
-                            </text>
-                          </g>
-                        </g>
-                      </>
-                    ) : null}
-                  </g>
-                );
-              })}
+              {/* Fáze 100: statický podklad a místnosti jako memoizované vrstvy (při pohybu myší se nepřekreslují) */}
+              <PlanBackdrop widthMm={draft.widthMm} heightMm={draft.heightMm} background={draft.background} mmPerPx={draft.mmPerPx} look={bgLook} fineGrid={fineGrid} fineGridOn={viewMm.w <= 20_000} cad={draft.cad} cadGeometry={cadReady} onPaper={onPaper} unit={ui} />
+              <RoomsLayer rooms={draft.rooms} selectedRoomId={selectedRoomId} unit={ui} stroke={stroke} onPaper={onPaper} selecting={tool.kind === "select"} handlers={handlers} />
 
               {/* Fáze 59: zakreslené změny (příčky, bourání, šrafy, texty) */}
               <g data-testid="annotation-layer">
-                {draft.annotations.map((note) => (
-                  <AnnotationShape key={note.id} note={note} unit={ui} selected={note.id === selectedNoteId} interactive={tool.kind === "select"} onDown={onNoteDown} onHandle={onNoteHandle} />
-                ))}
+                <NotesLayer notes={draft.annotations} unit={ui} selectedNoteId={selectedNoteId} interactive={tool.kind === "select"} handlers={handlers} />
                 {noteDraft ? <AnnotationShape note={{ ...newAnnotation(noteDraft.mode, noteDraft.from, noteDraft.to), ...noteStyles[noteDraft.mode], id: "draft" }} unit={ui} selected={false} interactive={false} /> : null}
               </g>
 
@@ -2996,24 +3079,18 @@ export function FloorplanEditor({
                   circuits={shownRoutes.circuits}
                   bus={shownRoutes.bus}
                   view={draft.cableView}
-                  onPaper={Boolean(draft.background)}
+                  onPaper={onPaper}
                   unit={ui}
                   stroke={stroke}
                   editable={routesEditable}
-                  drag={routeDrag ? { key: routeDrag.key, points: routeDrag.points } : null}
-                  onSegmentDown={onRouteDown}
-                  onReset={resetRoute}
+                  drag={routeDragView}
+                  onSegmentDown={routeHandlers.segmentDown}
+                  onReset={routeHandlers.reset}
                   colorOf={colorOf}
-                  focusId={focused?.id ?? null}
+                  focusId={focusedId}
                   hoverId={hoverCircuit}
-                  onPick={
-                    routesEditable
-                      ? (circuit) => {
-                          setFocusCircuit(circuit.id);
-                          setSelection([]);
-                        }
-                      : undefined
-                  }
+                  onPick={routesEditable ? routeHandlers.pick : undefined}
+                  plate
                 />
               ) : null}
               {/* Fáze 59: průchod stoupacího vedení bez značky (výchozí nad / pod rozváděčem) */}
@@ -3030,7 +3107,7 @@ export function FloorplanEditor({
               {(routeVisible(phase, "lighting", layerFilter) ? draft.elements : []).flatMap((element) =>
                 element.controls.map((lightId) => {
                   const light = draft.elements.find((candidate) => candidate.id === lightId);
-                  return light ? <line key={`${element.id}-${lightId}`} x1={element.x} y1={element.y} x2={light.x} y2={light.y} stroke={draft.background ? "#71717a" : "#e4e4e7"} strokeWidth={stroke * 1.5} strokeDasharray={`${ui / 4} ${ui / 4}`} data-testid="switch-link" pointerEvents="none" /> : null;
+                  return light ? <line key={`${element.id}-${lightId}`} x1={element.x} y1={element.y} x2={light.x} y2={light.y} stroke={onPaper ? "#71717a" : "#e4e4e7"} strokeWidth={stroke * 1.5} strokeDasharray={`${ui / 4} ${ui / 4}`} data-testid="switch-link" pointerEvents="none" /> : null;
                 }),
               )}
 
@@ -3053,59 +3130,56 @@ export function FloorplanEditor({
                 );
               })}
 
+              {/* Fáze 100: každý prvek jako memoizovaná komponenta – při tažení se překreslí jen tažené prvky */}
               {layeredElements.map((element) => {
-                const item = displayItem(element);
+                const item = shownItem(element);
                 if (!item) return null;
-                const size = symbolSizeOf(draft, element);
+                const fixture = item.kind === "fixture";
                 const active = selection.includes(element.id) || (tool.kind === "pair" && tool.switchId === element.id) || (tool.kind === "pair-light" && tool.lightId === element.id);
                 // Fáze 98: prvky mimo aktivní fázi jsou potlačené (25–45 %) a neklikatelné; fáze 5 podle filtru vrstev
                 const group = paletteItem(element.item)?.group;
                 const look = phase === 5 ? filterLook(layerFilter, group) : elementLook(phase, group);
-                const lookProps = look.view === "active" ? { "data-view": "active" } : { opacity: look.opacity, pointerEvents: "none" as const, "data-view": look.view };
-                // Fáze 63: zařizovací předmět ve skutečném rozměru se zónami, posuvnými stranami a žlutým rohem
-                if (item.kind === "fixture") {
-                  return (
-                    <g key={element.id} data-element={item.id} data-selected={active ? "true" : undefined} aria-label={`${item.label} – ${element.room}`} role="button" {...lookProps}>
-                      <FixtureShape element={element} active={active} onPaper={Boolean(draft.background)} unit={ui} interactive={tool.kind === "select" || tool.kind === "place"} onBodyDown={(event) => onElementDown(event, element)} onHandleDown={(event, handle) => onFixtureHandle(event, element, handle)} basinZone={draft.basinZone} clip={roomPolygons.get(element.room) ?? null} />
-                    </g>
-                  );
-                }
-                // Při párování zvýraznit, na co jde kliknout
-                // Fáze 77: i motory žaluzií ke žaluziovému spínači a hlavice k termostatu
-                const candidate = (tool.kind === "pair" && pairsWith(paletteItem(draft.elements.find((other) => other.id === tool.switchId)?.item ?? ""), item)) || (tool.kind === "pair-light" && pairsWith(item, paletteItem(draft.elements.find((other) => other.id === tool.lightId)?.item ?? "")));
-                const linked = tool.kind === "pair" ? draft.elements.find((other) => other.id === tool.switchId)?.controls.includes(element.id) : tool.kind === "pair-light" ? element.controls.includes(tool.lightId) : false;
+                // Při párování zvýraznit, na co jde kliknout; fáze 77: i motory žaluzií ke žaluziovému spínači a hlavice k termostatu
+                const candidate = !fixture && ((tool.kind === "pair" && pairsWith(pairController, item)) || (tool.kind === "pair-light" && pairsWith(item, pairTargetItem)));
+                const linked = !fixture && (tool.kind === "pair" ? Boolean(pairSwitch?.controls.includes(element.id)) : tool.kind === "pair-light" ? element.controls.includes(tool.lightId) : false);
                 // Fáze 62: ve víceramečku klikací plocha jen na pozici přístroje (sousedé v rozteči 0,78 značky se jinak překrývají)
-                const hitSlot = frameOf(draft, element.id) ? { length: gangsOf(element) * framePitch(draft, element), horizontal: frameAxis(element.rotation).x === 1 } : null;
+                const framed = !fixture && Boolean(frameOf(draft, element.id));
                 return (
-                  <g key={element.id} transform={`translate(${element.x} ${element.y})`} onPointerDown={(event) => onElementDown(event, element)} className={tool.kind === "select" || tool.kind === "place" ? "cursor-move" : "cursor-pointer"} data-element={item.id} data-selected={active ? "true" : undefined} aria-label={`${item.label} – ${element.room}`} role="button" {...lookProps}>
-                    {candidate ? <circle r={size * 0.62} fill={linked ? "rgba(34,197,94,0.18)" : "rgba(56,189,248,0.12)"} stroke={linked ? "#22c55e" : "#38bdf8"} strokeWidth={stroke * 2} strokeDasharray={linked ? undefined : `${ui / 5} ${ui / 7}`} pointerEvents="none" data-testid="pair-candidate" /> : null}
-                    {/* Fáze 74: prvky vybraného / zvýrazněného okruhu */}
-                    {highlighted.has(element.id) && highlightEntry ? <circle r={size * 0.78} fill="none" stroke={highlightEntry.color} strokeWidth={stroke * 3.5} pointerEvents="none" data-testid="circuit-halo" /> : null}
-                    {item.kind === "panel" ? (
-                      <PanelSymbol size={size * 1.3} active={active} onPaper={Boolean(draft.background)} label={element.boardCode ?? item.symbol} />
-                    ) : (
-                      // Fáze 57: značka dle ČSN EN 60617-11, řazení vypínače z párování, natočení ke stěně
-                      <FloorSymbol item={item} size={size} active={active} onPaper={Boolean(draft.background)} rotation={element.rotation} switchNo={isWiredSwitch(item) && (item.control ?? "light") === "light" ? effectiveSwitchNo(draft, element) : undefined} level={draft.installation} lem={designColor(element.color ?? draft.color)?.swatch ?? null} hitSlot={hitSlot} />
-                    )}
-                    {element.frameUnits > 1 ? (
-                      <text x={size * 0.6} y={size * 0.75} fontSize={size * 0.3} fill="#ca8a04" fontWeight={700}>
-                        {element.frameUnits}R
-                      </text>
-                    ) : null}
-                    {/* Fáze 77: štítky svítidla – DIM / CCT / RGB(W) a technologie DALI / 24V u značky */}
-                    {item.kind === "light" ? <LightBadges badges={lightBadges(element, paletteItem(element.item))} size={size} /> : null}
-                  </g>
+                  <PlanElement
+                    key={element.id}
+                    element={element}
+                    item={item}
+                    size={symbolSizeOf(draft, element)}
+                    active={active}
+                    view={look.view}
+                    opacity={look.opacity}
+                    candidate={candidate}
+                    linked={linked}
+                    halo={!fixture && highlightEntry && highlighted.has(element.id) ? highlightEntry.color : null}
+                    switchNo={!fixture && isWiredSwitch(item) && (item.control ?? "light") === "light" ? effectiveSwitchNo(draft, element) : undefined}
+                    lem={fixture ? null : (designColor(element.color ?? draft.color)?.swatch ?? null)}
+                    hitLength={framed ? gangsOf(element) * framePitch(draft, element) : null}
+                    hitHorizontal={framed && frameAxis(element.rotation).x === 1}
+                    onPaper={onPaper}
+                    level={draft.installation}
+                    movable={tool.kind === "select" || tool.kind === "place"}
+                    basinZone={draft.basinZone}
+                    clip={fixture ? (roomPolygons.get(element.room) ?? null) : null}
+                    unit={ui}
+                    stroke={stroke}
+                    handlers={handlers}
+                  />
                 );
               })}
 
               {/* Fáze 59: náhled vkládané značky u kurzoru s natočením (R = otočit) */}
               {ghostItem && ghost && ghostItem.kind === "fixture" ? (
                 <g opacity={0.55} pointerEvents="none" data-testid="place-ghost" data-rotation={ghost.rotation}>
-                  <FixtureShape element={{ id: "ghost", item: ghostItem.id, x: ghost.position.x, y: ghost.position.y, room: "", mountHeightMm: null, frameUnits: 1, series: null, color: null, controls: [], rotation: ghost.rotation, scale: null }} active={false} onPaper={Boolean(draft.background)} unit={ui} interactive={false} />
+                  <FixtureShape element={{ id: "ghost", item: ghostItem.id, x: ghost.position.x, y: ghost.position.y, room: "", mountHeightMm: null, frameUnits: 1, series: null, color: null, controls: [], rotation: ghost.rotation, scale: null }} active={false} onPaper={onPaper} unit={ui} interactive={false} />
                 </g>
               ) : ghostItem && ghost && ghostItem.kind !== "panel" ? (
                 <g transform={`translate(${ghost.position.x} ${ghost.position.y})`} opacity={0.55} pointerEvents="none" data-testid="place-ghost" data-rotation={ghost.rotation}>
-                  <FloorSymbol item={ghostItem} size={symbolSizeOf(draft, { scale: null })} active={false} onPaper={Boolean(draft.background)} rotation={ghost.rotation} level={draft.installation} />
+                  <FloorSymbol item={ghostItem} size={symbolSizeOf(draft, { scale: null })} active={false} onPaper={onPaper} rotation={ghost.rotation} level={draft.installation} />
                 </g>
               ) : null}
               {/* Fáze 62: náhled celé sestavy ve víceramečku */}
@@ -3116,7 +3190,7 @@ export function FloorplanEditor({
                     const item = paletteItem(member.item);
                     return item ? (
                       <g key={member.id} transform={`translate(${member.x} ${member.y})`}>
-                        <FloorSymbol item={item} size={symbolSizeOf(draft, { scale: null })} active={false} onPaper={Boolean(draft.background)} rotation={setGhost.rotation} level={draft.installation} />
+                        <FloorSymbol item={item} size={symbolSizeOf(draft, { scale: null })} active={false} onPaper={onPaper} rotation={setGhost.rotation} level={draft.installation} />
                       </g>
                     ) : null;
                   })}
@@ -3262,45 +3336,18 @@ export function FloorplanEditor({
         </div>
 
         {/* Detail prvku + výkaz kabeláže */}
-        {/* Fáze 76: pravý sloupec ze sbalovacích karet se Sbalit / Rozbalit vše; fáze 98: jen karty aktivní fáze a vlastní
-            posuvník v rozvržení na výšku okna */}
-        <div className="min-h-0 xl:overflow-y-auto xl:pr-1" data-testid="floorplan-right" data-phase={phase ?? "all"}>
-        <RightPanels label="Detail a výkaz kabeláže" ids={RIGHT_PANEL_IDS}>
-          {/* Fáze 98: fáze 5 – hlavní žluté tlačítko na vygenerování rozváděče nahoře na očích */}
-          {show("generate") ? (
-            <Button type="button" className="h-auto min-h-11 w-full gap-2 whitespace-normal bg-yellow-400 py-2 text-left font-bold text-zinc-950 hover:bg-yellow-300" onClick={generateFromBar} disabled={pending} data-testid="wizard-generate">
-              ⚡ Založit / Vygenerovat rozváděč z tohoto půdorysu
-            </Button>
-          ) : null}
+        {/* Fáze 76: pravý sloupec ze sbalovacích karet se Sbalit / Rozbalit vše; fáze 98: vlastní posuvník v rozvržení na
+            výšku okna; fáze 100: 4 záložky (🎯 Detail · 🔌 Okruhy & Trasy · 🛡️ Normy (Linter) · ⚡ Kusovník & Rozváděč) –
+            záložka se přepne podle fáze, ručně kdykoli, klik na prvek / místnost na plátně otevře Detail */}
+        <div className="min-h-0 xl:overflow-y-auto xl:pr-1" data-testid="floorplan-right" data-phase={phase ?? "all"} data-tab={rightTab}>
+        <RightPanels label="Detail a výkaz kabeláže" ids={RIGHT_PANEL_IDS.filter((id) => RIGHT_PANEL_TABS[id] === rightTab)} tabs={<RightTabBar active={rightTab} onSelect={openTab} badges={tabBadges} />}>
           {/* Fáze 92: první půdorys firmy – volba trenažér / prázdný půdorys; živý tahák vlastní zakázky nahoře v pravém sloupci
               (sbalitelný do pilulky, trvale vypnutelný) – nic neposouvá plátno; fáze 98: bod taháku = fáze průvodce */}
           {startChoice && !sandbox ? <FloorplanStartChoice /> : null}
-          {taskList ? (
-            <FloorplanLiveChecklist
-              checklist={taskList}
-              mode={checklistMode}
-              onMode={setChecklistMode}
-              boxMaker={boxMakerLabel}
-              pending={pending}
-              onShowBase={showBase}
-              onChangeSeries={openSeriesGallery}
-              onPickPanel={() => {
-                goToPhase(2);
-                pickPaletteTool("panel");
-              }}
-              onOpenBom={() => {
-                goToPhase(5);
-                window.setTimeout(() => {
-                  if (!clickTestId("wiring-bom-open")) toast.info("Kusovník bude k dispozici, jakmile v půdorysu osadíte první prvky.");
-                }, 80);
-              }}
-              onGenerate={generateFromBar}
-              onPhase={goToPhase}
-              phase={phase}
-            />
-          ) : null}
+          <div className="flex flex-col gap-3" role="tabpanel" id="right-tabpanel" aria-labelledby={`right-tab-${rightTab}`} data-testid="right-tabpanel" data-tab={rightTab}>
+          {/* 🎯 Detail: místnosti (fáze 1), přívod a typ prostoru (2), systém a design (4), detail výběru, hladiny CAD, chytrá domácnost */}
           {/* Fáze 98: fáze 1 – seznam místností a podlaží (klik vybere místnost a otevře její detail) */}
-          {show("rooms") ? (
+          {tab("rooms") ? (
             <PanelSection id="rooms" title="🏠 Místnosti a podlaží" testId="rooms-overview" badge={<span className="rounded bg-muted px-1.5 font-mono text-[10px]">{draft.rooms.length}</span>}>
               <p className="text-xs text-muted-foreground">
                 Podlaží: <b className="text-foreground">{draft.floorName}</b>
@@ -3328,7 +3375,7 @@ export function FloorplanEditor({
             </PanelSection>
           ) : null}
           {/* Fáze 98: fáze 2 – přívod rozváděče a typ prostoru (Byt / Obchodní centrum BD4 / Zdravotnictví Skupina 1) */}
-          {show("site") ? (
+          {tab("site") ? (
             <PanelSection id="site" title="⚡ Rozváděč, přívod a typ prostoru" testId="site-settings">
               <div className="flex flex-col gap-1.5 text-xs" data-testid="site-settings-fields">
                 <SupplySelect supply={draft.supplySystem} onSupply={(supplySystem) => update((current) => ({ ...current, supplySystem }))} />
@@ -3342,7 +3389,7 @@ export function FloorplanEditor({
             </PanelSection>
           ) : null}
           {/* Fáze 98: fáze 4 – zvolený systém a design vypínačů (úroveň instalace, výrobce, řada, barva a galerie) */}
-          {show("design") ? (
+          {tab("design") ? (
             <PanelSection id="design" title="🎨 Zvolený systém a design vypínačů" testId="design-card">
               <div className="flex flex-col gap-1.5 text-xs" data-testid="install-methodology">
                 <div className="flex flex-wrap items-center gap-2">{levelField}</div>
@@ -3351,7 +3398,8 @@ export function FloorplanEditor({
               </div>
             </PanelSection>
           ) : null}
-          {/* Fáze 98: detail výběru je ve všech fázích (PHASE_PANELS) */}
+          {/* Fáze 98: detail výběru je ve všech fázích; fáze 100 – v záložce 🎯 Detail */}
+          {tab("detail") ? (
           <PanelSection id="detail" title="Detail vybraného prvku / místnosti" testId="right-detail" bare>
           {!selectedRoom && !selectedNote && selection.length <= 1 && !selected ? <p className="px-2 pb-2 text-xs text-muted-foreground">Vyberte na plátně prvek nebo místnost – zobrazí se tu jejich vlastnosti.</p> : null}
           {selectedRoom ? (
@@ -3453,14 +3501,17 @@ export function FloorplanEditor({
             />
           ) : null}
           </PanelSection>
+          ) : null}
           {/* Fáze 79: hladiny podkladu CAD */}
-          {draft.cad && show("cad") ? (
+          {draft.cad && tab("cad") ? (
             <PanelSection id="cad" title="🗂️ Vrstvy CAD výkresu (Hladiny)" ariaLabel="Vrstvy CAD výkresu" testId="cad-panel" badge={<span className="rounded bg-muted px-1.5 font-mono text-[10px]">{draft.cad.layers.filter((layer) => layer.visible).length}/{draft.cad.layers.length}</span>}>
               <CadLayersPanel cad={draft.cad} onChange={(cad) => update((current) => ({ ...current, cad }))} onRemove={() => update((current) => ({ ...current, cad: null }))} />
             </PanelSection>
           ) : null}
+          {smartPlan && tab("smart") ? <SmartHomePanel plan={smartPlan} onDatasheet={(moduleId) => setDatasheet(productOfModule(smartPlan.system.id, moduleId))} onSystem={(smartSystem) => isSmartSystem(smartSystem) && update((current) => ({ ...current, smartSystem }))} /> : null}
+          {/* 🔌 Okruhy & Trasy: soupis okruhů s okem 👁️, zásuvkové okruhy, výkaz kabeláže, ručně upravené trasy */}
           {/* Fáze 74: soupis okruhů – vrstvy, zvýraznění, výběr okruhu (úprava trasy jen u něj) a rozváděč okruhu */}
-          {analysis.ok && show("circuits") ? (
+          {analysis.ok && tab("circuits") ? (
             <CircuitListPanel
               entries={entries}
               hidden={hiddenLayers}
@@ -3490,12 +3541,8 @@ export function FloorplanEditor({
               }}
             />
           ) : null}
-          {smartPlan && show("smart") ? <SmartHomePanel plan={smartPlan} onDatasheet={(moduleId) => setDatasheet(productOfModule(smartPlan.system.id, moduleId))} onSystem={(smartSystem) => isSmartSystem(smartSystem) && update((current) => ({ ...current, smartSystem }))} /> : null}
-          {show("checks") ? <PlanChecks checks={checks} title="⚠️ Kontrola půdorysu a norem (ČSN 33 2130 ed. 4 / ČSN 33 2000-7-701)" /> : null}
-          {/* Fáze 98: fáze 3 – jen varování koupelnových zón a zásuvek */}
-          {show("zone-checks") ? <PlanChecks checks={checks.filter((check) => ZONE_CHECK.test(check.id))} title={phase === 4 ? "⚠️ Varování zón, krytí a krabiček" : "⚠️ Varování zón a zásuvek"} /> : null}
           {/* Fáze 65: zásuvkové okruhy – rozdělení, optimalizace a ruční změna */}
-          {show("socket-circuits") && (socketRows.length || draft.elements.some(isSocketElement)) ? (
+          {tab("socket-circuits") && (socketRows.length || draft.elements.some(isSocketElement)) ? (
             <SocketCircuitsPanel
               grouping={draft.socketGrouping}
               rows={socketRows}
@@ -3506,8 +3553,27 @@ export function FloorplanEditor({
               lighting={{ rows: lightingRows, ratedA: draft.lightingSocketA, onRatedA: changeLightingSocketA, onSelect: (row) => selectSocketCircuit({ ...row, lengthM: 0, manual: null }) }}
             />
           ) : null}
+          {tab("cables") ? (
+          <CablePanel
+            part="report"
+            analysis={analysis}
+            mode={draft.mode}
+            pending={pending}
+            onGenerate={generate}
+            slackPercent={draft.profile.slackPercent}
+            environment={draft.environment}
+            onEnvironment={(environment) => update((current) => ({ ...current, environment }))}
+            checklist={checklist}
+            manufacturers={manufacturers}
+            defaults={{ customer: meta.customerName, site: meta.installationSite, name: meta.name }}
+            wallFloors={analysis.ok ? analysis.build.wallFloors.length : 0}
+            floorCount={floors.length}
+            boards={analysis.ok ? analysis.build.boards.map((board) => board.code) : []}
+            routeStyle={draft.routeStyle}
+          />
+          ) : null}
           {/* Fáze 63: ručně upravené trasy – návrat na automat */}
-          {show("edited") && routes && routes.circuits.some((circuit) => circuit.edited) ? (
+          {tab("edited") && routes && routes.circuits.some((circuit) => circuit.edited) ? (
             <PanelSection id="edited" title="✎ Ručně upravené trasy" ariaLabel="Ručně upravené trasy" testId="edited-routes" className="border-amber-500/40">
               <ul className="flex flex-col gap-1 text-xs">
                 {routes.circuits
@@ -3527,8 +3593,48 @@ export function FloorplanEditor({
               <p className="text-xs text-muted-foreground">Délka kabelu se počítá z upravené trasy. Pravé tlačítko na trase vrátí okruh na automat.</p>
             </PanelSection>
           ) : null}
-          {show("cables") ? (
+          {/* 🛡️ Normy (Linter): kontrola půdorysu a norem + živý tahák zakázky */}
+          {tab("checks") ? (
+            checks.length ? (
+              <PlanChecks checks={checks} title="⚠️ Kontrola půdorysu a norem (ČSN 33 2130 ed. 4 / ČSN 33 2000-7-701)" />
+            ) : (
+              <p className="flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100" data-testid="plan-checks-ok">
+                ✅ Kontrola půdorysu a norem bez nálezů (ČSN 33 2130 ed. 4 / ČSN 33 2000-7-701).
+              </p>
+            )
+          ) : null}
+          {rightTab === "norms" && taskList ? (
+            <FloorplanLiveChecklist
+              checklist={taskList}
+              mode={checklistMode}
+              onMode={setChecklistMode}
+              boxMaker={boxMakerLabel}
+              pending={pending}
+              onShowBase={showBase}
+              onChangeSeries={openSeriesGallery}
+              onPickPanel={() => {
+                followChecklist(2);
+                pickPaletteTool("panel");
+              }}
+              onOpenBom={() => {
+                goToPhase(5);
+                window.setTimeout(openBom, 80);
+              }}
+              onGenerate={generateFromBar}
+              onPhase={followChecklist}
+              phase={phase}
+            />
+          ) : null}
+          {/* ⚡ Kusovník & Rozváděč: velké tlačítko (fáze 5), založení rozváděče, kusovník BOM s krabicemi KOPOS, soupis */}
+          {/* Fáze 98: fáze 5 – hlavní žluté tlačítko na vygenerování rozváděče nahoře na očích */}
+          {tab("generate") ? (
+            <Button type="button" className="h-auto min-h-11 w-full gap-2 whitespace-normal bg-yellow-400 py-2 text-left font-bold text-zinc-950 hover:bg-yellow-300" onClick={generateFromBar} disabled={pending} data-testid="wizard-generate">
+              ⚡ Založit / Vygenerovat rozváděč z tohoto půdorysu
+            </Button>
+          ) : null}
+          {tab("generate-form") ? (
           <CablePanel
+            part="generate"
             analysis={analysis}
             mode={draft.mode}
             pending={pending}
@@ -3546,8 +3652,8 @@ export function FloorplanEditor({
           />
           ) : null}
           {/* Fáze 55: kusovník domovní instalace s objednacími čísly */}
-          {show("bom") ? <WiringBomDialog rows={bom} /> : null}
-          {show("inventory") && inventory.length ? (
+          {tab("bom") ? <WiringBomDialog rows={bom} /> : null}
+          {tab("inventory") && inventory.length ? (
             <PanelSection id="inventory" title={`Soupis domovní instalace${floors.length > 1 ? ` (${floors.length} podlaží)` : ""}`} ariaLabel="Soupis domovní instalace" testId="wiring-inventory">
               <ul className="flex flex-col gap-0.5 text-xs">
                 {inventory.map((row) => (
@@ -3561,6 +3667,7 @@ export function FloorplanEditor({
               </ul>
             </PanelSection>
           ) : null}
+          </div>
         </RightPanels>
         </div>
       </div>

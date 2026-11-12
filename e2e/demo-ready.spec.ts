@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { rightTab } from "./floorplan-phases";
 
 // Fáze 99: „pre-flight check“ před prezentací (`npm run verify:demo`) – veřejná prezentace /prezentace s 10 slidy
 // a One-Pagerem A4, demo scénáře 2D půdorysu na 1 klik s fázemi 1–5 a přenosem do AI Panel Builderu, vzorový
@@ -21,6 +22,8 @@ function watchErrors(page: Page) {
 }
 
 async function open(page: Page, url: string, ready: (page: Page) => Promise<void>) {
+  // Fáze 100: průvodce fází i když jiný test téže databáze přepnul firmě kompaktní lištu (volba prohlížeče má přednost)
+  await page.addInitScript(() => window.localStorage.setItem("eldock-floorplan-ui-mode", "wizard"));
   await expect(async () => {
     await page.goto(url);
     await ready(page);
@@ -128,8 +131,10 @@ test("🎯 2D půdorys: 3 demo scénáře na 1 klik, fáze 1–5, kusovník KOPO
       await page.getByTestId(`wizard-step-${step}`).click();
       await expect(wizard).toHaveAttribute("data-step", String(step));
     }
-    await expect(page.getByTestId("circuit-list")).toBeVisible();
+    // Fáze 100: fáze 5 otevře záložku ⚡ Kusovník & Rozváděč, soupis okruhů je v záložce 🔌 Okruhy & Trasy
     await expect(page.getByTestId("wizard-generate")).toBeVisible();
+    await rightTab(page, "circuits");
+    await expect(page.getByTestId("circuit-list")).toBeVisible();
   }
   // Rodinný dům: hluboké krabice KOPOS KPR 68 v kusovníku
   await page.getByTestId("wizard-bom").click();
@@ -138,6 +143,7 @@ test("🎯 2D půdorys: 3 demo scénáře na 1 klik, fáze 1–5, kusovník KOPO
   await page.screenshot({ path: "test-results/demo-floorplan-rd.png" });
 
   // ⚡ Vygenerovat rozváděč z tohoto půdorysu → AI Panel Builder (3f rozváděč se vším z půdorysu)
+  await rightTab(page, "bom");
   const started = Date.now();
   await page.getByTestId("wizard-generate").click();
   await expect(page).toHaveURL(/\/panel-builder\/(?!floorplan)[^/]+$/, { timeout: 90_000 });

@@ -1,8 +1,9 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
 import { ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown } from "lucide-react";
 
+import { RIGHT_TABS, type RightTab } from "@/lib/panel-builder/floorplan-phases";
 import { cn } from "@/lib/utils";
 
 /**
@@ -30,8 +31,8 @@ function readClosed(): string[] {
   }
 }
 
-/** Pravý sloupec s lištou Sbalit / Rozbalit vše (`ids` = všechny karty sloupce); karty si stav berou odsud. */
-export function RightPanels({ children, label, ids }: { children: ReactNode; label: string; ids: readonly string[] }) {
+/** Pravý sloupec s lištou Sbalit / Rozbalit vše (`ids` = karty aktivní záložky); karty si stav berou odsud. */
+export function RightPanels({ children, label, ids, tabs = null }: { children: ReactNode; label: string; ids: readonly string[]; /** Fáze 100: lišta záložek nad kartami. */ tabs?: ReactNode }) {
   const [closed, setClosed] = useState<string[]>(readClosed);
   useEffect(() => {
     try {
@@ -51,12 +52,13 @@ export function RightPanels({ children, label, ids }: { children: ReactNode; lab
   const allOpen = ids.every((id) => !closed.includes(id));
   return (
     <aside className="flex flex-col gap-3" aria-label={label}>
+      {tabs}
       <div className="flex items-center gap-1 rounded-lg border border-border bg-card px-2 py-1 text-[11px]" role="group" aria-label="Sbalení karet pravého sloupce">
         <span className="font-bold tracking-wide text-muted-foreground uppercase">Panely</span>
-        <button type="button" onClick={() => setClosed([...ids])} disabled={allClosed} className="ml-auto flex items-center gap-1 rounded-md px-1.5 py-0.5 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-35" data-testid="right-collapse-all">
+        <button type="button" onClick={() => setClosed((current) => [...new Set([...current, ...ids])])} disabled={allClosed} className="ml-auto flex items-center gap-1 rounded-md px-1.5 py-0.5 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-35" data-testid="right-collapse-all">
           <ChevronsDownUp className="size-3.5" aria-hidden /> Sbalit vše
         </button>
-        <button type="button" onClick={() => setClosed([])} disabled={allOpen} className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-35" data-testid="right-expand-all">
+        <button type="button" onClick={() => setClosed((current) => current.filter((id) => !ids.includes(id)))} disabled={allOpen} className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-35" data-testid="right-expand-all">
           <ChevronsUpDown className="size-3.5" aria-hidden /> Rozbalit vše
         </button>
       </div>
@@ -108,5 +110,67 @@ export function PanelSection({
       </button>
       {open ? <div className={cn("flex flex-col gap-2", bare ? "px-1 pb-1" : "px-3 pb-3")}>{children}</div> : null}
     </section>
+  );
+}
+
+export interface TabBadge {
+  value: ReactNode;
+  tone: "neutral" | "danger" | "ok";
+  title?: string;
+}
+
+const BADGE_TONE: Record<TabBadge["tone"], string> = {
+  neutral: "bg-muted text-foreground",
+  danger: "bg-red-500 text-white",
+  ok: "bg-emerald-500/90 text-emerald-950",
+};
+
+/**
+ * Fáze 100: 4 záložky pravého panelu 2D půdorysu (🎯 Detail · 🔌 Okruhy & Trasy · 🛡️ Normy (Linter) · ⚡ Kusovník &
+ * Rozváděč) s odznakem počtu položek / nálezů; šipky ← → přepínají záložky z klávesnice. Lišta drží nahoře sloupce.
+ */
+export function RightTabBar({ active, onSelect, badges }: { active: RightTab; onSelect: (tab: RightTab) => void; badges: Partial<Record<RightTab, TabBadge>> }) {
+  const onKey = (event: KeyboardEvent) => {
+    if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+    event.preventDefault();
+    const index = RIGHT_TABS.findIndex((tab) => tab.id === active);
+    const next = RIGHT_TABS[(index + (event.key === "ArrowRight" ? 1 : RIGHT_TABS.length - 1)) % RIGHT_TABS.length];
+    onSelect(next.id);
+    document.getElementById(`right-tab-${next.id}`)?.focus();
+  };
+  return (
+    <div className="sticky top-0 z-10 grid grid-cols-4 gap-1 rounded-xl border border-border bg-card/95 p-1 shadow-sm backdrop-blur" role="tablist" aria-label="Záložky pravého panelu" onKeyDown={onKey} data-testid="right-tabs" data-active={active}>
+      {RIGHT_TABS.map((tab) => {
+        const selected = tab.id === active;
+        const badge = badges[tab.id];
+        return (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            id={`right-tab-${tab.id}`}
+            aria-selected={selected}
+            aria-controls="right-tabpanel"
+            tabIndex={selected ? 0 : -1}
+            onClick={() => onSelect(tab.id)}
+            className={cn(
+              "relative flex min-h-12 min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg px-1 pt-1.5 pb-1 text-center text-[11px] leading-tight font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
+              selected ? "bg-primary/15 text-foreground ring-1 ring-primary/60" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+            )}
+            data-testid={`right-tab-${tab.id}`}
+          >
+            <span className="text-[15px] leading-none" aria-hidden>
+              {tab.icon}
+            </span>
+            <span className="text-balance">{tab.label}</span>
+            {badge ? (
+              <span className={cn("absolute top-0.5 right-0.5 min-w-4 rounded-full px-1 text-center font-mono text-[10px] leading-4 font-bold tabular-nums", BADGE_TONE[badge.tone])} title={badge.title} data-testid={`right-tab-badge-${tab.id}`} data-tone={badge.tone}>
+                {badge.value}
+              </span>
+            ) : null}
+          </button>
+        );
+      })}
+    </div>
   );
 }

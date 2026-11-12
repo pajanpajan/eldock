@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { goPhase, phaseForPalette } from "./floorplan-phases";
+import { goPhase, phaseForPalette, rightTab } from "./floorplan-phases";
 
 // Fáze 65: zásuvkové okruhy v kompaktních zónách s volbou rozdělení, optimalizací a ručním okruhem; obrázkový katalog
 // chytré domácnosti (segmentový přepínač ABB, záložky, karty s náhledem a akcemi), ruční moduly na DIN lištu a technický
@@ -104,6 +104,8 @@ test("🔌 Zásuvkové okruhy: kompaktní zóny, volba rozdělení, optimalizace
   await expect(picker.getByTestId("socket-circuit-current")).toContainText("automaticky");
   await picker.getByTestId("socket-circuit-select").selectOption("new");
   await expect(picker.getByTestId("socket-circuit-current")).toContainText("ruční okruh Z1");
+  // Fáze 100: klik na zásuvku otevřel záložku 🎯 Detail, zásuvkové okruhy jsou v záložce 🔌 Okruhy & Trasy
+  await rightTab(page, "circuits");
   await expect(panel.getByText("ruční Z1")).toBeVisible();
   await page.keyboard.press("Escape");
   await page.keyboard.press("Control+z");
@@ -115,11 +117,13 @@ test("🔌 Zásuvkové okruhy: kompaktní zóny, volba rozdělení, optimalizace
   const selection = page.getByTestId("selection-sockets");
   await expect(selection).toContainText("Zásuvek ve výběru: 2");
   await selection.getByTestId("join-sockets").click();
+  await rightTab(page, "circuits");
   await expect(panel.getByText("ruční Z1")).toBeVisible();
   await expect(rows).toHaveCount(3);
   // Klik na okruh v panelu vybere jeho zásuvky na plátně
   await page.keyboard.press("Escape");
   await rows.filter({ hasText: "ruční Z1" }).click();
+  await rightTab(page, "detail");
   await expect(page.getByTestId("selection-panel")).toContainText("Vybráno 2 prvků");
   await page.screenshot({ path: "test-results/phase65-sockets.png" });
 });

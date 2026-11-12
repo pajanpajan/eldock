@@ -1,6 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
-import { ensureActive, goPhase, goPhaseForGroup, phaseForPalette } from "./floorplan-phases";
+import { ensureActive, goPhase, goPhaseForGroup, phaseForPalette, rightTab } from "./floorplan-phases";
 
 // Fáze 91: katalogový audit designových řad (víceramečky jen v rozsahu, který řada vyrábí – Time Arbo 4R, Decento bez
 // víceramečku; Busch-axcent s rámečkem ze skutečného materiálu a stejným krytem) a instalační krabičky (výrobce,
@@ -103,12 +103,15 @@ test("📦 Krabičky: stmívač s mělkou krabicí → varování a oprava 1 kli
   // Ruční mělká krabice → hlídač hloubky v Kontrole půdorysu a norem s opravou jedním klikem
   await box.getByTestId("element-box-choice").selectOption("shallow");
   await expect(box.getByTestId("element-box-warning")).toBeVisible();
+  // Fáze 100: kontrola norem je v záložce 🛡️ Normy (Linter)
+  await rightTab(page, "norms");
   const check = page.locator('[data-check^="box-depth"]');
   await expect(check).toContainText("Nedostatečná hloubka krabičky u Stmívač v místnosti Obývací pokoj: zvolena krabice 45 mm (KOPOS Kolín KU 68-45)");
   await expect(check).toContainText("vyžaduje min. 66 mm!");
   await page.screenshot({ path: "test-results/phase91-box-check.png" });
   await check.getByRole("button", { name: "Opravit na hlubokou krabici (1 klik)" }).click();
   await expect(page.locator('[data-check^="box-depth"]')).toHaveCount(0);
+  await rightTab(page, "detail");
   await expect(box.getByTestId("element-box-choice")).toHaveValue("auto");
 
   // Místnost ze sádrokartonu → krabice do dutých stěn (fáze 98: vlastnost místnosti ve fázi 1)
@@ -162,6 +165,8 @@ test("🔲 Víceramečky podle katalogu: 5R po změně na Time Arbo → štítek
   // Řada Time Arbo (dřevěné rámečky jen 1R–4R) na celý půdorys → štítek v horní liště a varování s rozdělením
   await applySeries(page, "Time Arbo");
   await expect(page.getByTestId("frame-limit-chip")).toContainText("Víceramček mimo katalog řady (1)");
+  // Fáze 100: varování víceramečku je v kontrole norem (záložka 🛡️ Normy)
+  await rightTab(page, "norms");
   const limit = page.locator('[data-check^="frame-limit"]');
   await expect(limit).toContainText("víceramček 5R");
   await expect(limit).toContainText("Řada ABB Time Arbo se vyrábí nejvýš ve čtyřrámečku (1R–4R)");
@@ -179,6 +184,7 @@ test("🔲 Víceramečky podle katalogu: 5R po změně na Time Arbo → štítek
   await expect(sets.getByTestId("assembly-limit")).toContainText("nejdou do vícenásobných rámečků");
   await expect(sets.getByTestId("assembly-presets")).toHaveCount(0);
   await expect(sets.getByTestId("assembly-custom-toggle")).toHaveCount(0);
+  await rightTab(page, "norms");
   await page.locator('[data-check^="frame-limit"]').getByRole("button", { name: "Rozdělit na samostatné přístroje" }).click();
   await expect(canvas.getByTestId("frame-outline")).toHaveCount(0);
   await expect(page.getByTestId("frame-limit-chip")).toHaveCount(0);

@@ -85,10 +85,18 @@ export function SeriesPreviewIllustration({
     </span>
   ) : null;
   // Fáze 99: fotka, která se nenačte, se hned nahradí vektorovým studiovým náhledem dílu
-  const body = photo ? (
-    <FallbackImg src={photo.src} fallback={mockup} alt={`${caption} – ${photo.photo ? "fotka" : "náhled"} řady`} className="h-28 w-auto max-w-full rounded-lg object-contain shadow-sm" data-testid="gallery-photo" data-real={photo.photo ? "true" : "false"} />
-  ) : (
-    mockup
+  // Fáze 100: místo oslňující bílé plochy jemné studio (slate-100 → slate-200) s vnitřním rámečkem a stínem pod přístrojem –
+  // bílé řady (Zoni, Levit, Decento, Garant) mají jasné kontury a hloubku; bílé pozadí fotky se do studia vpije (multiply)
+  const body = (
+    <span className="flex h-32 w-full items-center justify-center rounded-xl bg-gradient-to-b from-slate-100 to-slate-200/90 p-2 shadow-inner ring-1 ring-slate-900/10 ring-inset" data-testid="gallery-studio">
+      {photo ? (
+        <FallbackImg src={photo.src} fallback={<span className="block drop-shadow-md">{mockup}</span>} alt={`${caption} – ${photo.photo ? "fotka" : "náhled"} řady`} className="h-28 w-auto max-w-full object-contain mix-blend-multiply" data-testid="gallery-photo" data-real={photo.photo ? "true" : "false"} />
+      ) : (
+        <span className="block drop-shadow-md" data-testid="gallery-mockup">
+          {mockup}
+        </span>
+      )}
+    </span>
   );
   if (!upload) {
     return (

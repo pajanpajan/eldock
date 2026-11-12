@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { ensureActive, goPhase, phaseForPalette } from "./floorplan-phases";
+import { ensureActive, goPhase, phaseForPalette, rightTab } from "./floorplan-phases";
 
 // Fáze 57: 2D půdorys – úprava PDF podkladu (otočení, zoom, ořez, kalibrace s ověřením), značky dle ČSN EN 60617-11,
 // rezerva kabeláže, prostředí dle ČSN 33 2000-5-51 před generováním a ovládání podle úrovně instalace.
@@ -204,8 +204,9 @@ test("značky dle ČSN EN 60617-11, přesun / otočení / mazání, úroveň ins
   await ensureActive(page, canvas.locator('[data-element="switch-1"]').first());
   await canvas.locator('[data-element="switch-1"]').first().click();
   await expect(page.getByTestId("switch-number")).toContainText("řazení č. 6");
-  // Fáze 98: výkaz kabeláže a rezerva v pravém panelu / levé paletě fáze 5
+  // Fáze 98: výkaz kabeláže a rezerva v pravém panelu / levé paletě fáze 5; fáze 100 – záložka Okruhy & Trasy
   await goPhase(page, 5);
+  await rightTab(page, "circuits");
   await expect(page.getByTestId("cable-buy")).toContainText("CYKY-O");
 
   // Rezerva kabeláže v %
@@ -228,12 +229,14 @@ test("značky dle ČSN EN 60617-11, přesun / otočení / mazání, úroveň ins
   await expect(palette.getByRole("button", { name: /Vypínač č\. 1/ })).toHaveCount(0);
   await expect(page.getByTestId("level-note")).toContainText("sběrnicové lince");
   await goPhase(page, 5);
+  await rightTab(page, "circuits");
   await expect(page.getByTestId("cable-buy")).toContainText("KNX");
   await expect(page.getByTestId("cable-buy")).not.toContainText("CYKY-O");
   await expect(canvas.getByTestId("bus-line")).toBeAttached();
   await page.getByTestId("floorplan-canvas").screenshot({ path: "test-results/phase57-bus.png" });
 
-  // Prostředí dle ČSN 33 2000-5-51 ed. 3 je povinné před generováním
+  // Prostředí dle ČSN 33 2000-5-51 ed. 3 je povinné před generováním (fáze 100: záložka Kusovník & Rozváděč)
+  await rightTab(page, "bom");
   const generate = page.getByTestId("generate-from-floorplan");
   await expect(page.getByTestId("generation-checklist")).toContainText("Zvolte prostředí instalace");
   await expect(generate).toBeDisabled();

@@ -38,8 +38,8 @@ export const paletteGroupVisible = (phase: FloorplanPhase | null, group: Palette
 /** Sestavy ve vícerámečku (zásuvky / vypínače) – fáze 3 a 4. */
 export const assembliesVisible = (phase: FloorplanPhase | null) => phase === null || phase === 3 || phase === 4;
 
-/** Sekce pravého panelu. */
-export type PanelSectionId = "rooms" | "detail" | "site" | "socket-circuits" | "zone-checks" | "design" | "smart" | "generate" | "checks" | "circuits" | "cables" | "edited" | "bom" | "inventory" | "cad";
+/** Sekce pravého panelu (fáze 100: `generate` = velké tlačítko fáze 5, `generate-form` = karta Založit rozváděč). */
+export type PanelSectionId = "rooms" | "detail" | "site" | "socket-circuits" | "zone-checks" | "design" | "smart" | "generate" | "generate-form" | "checks" | "circuits" | "cables" | "edited" | "bom" | "inventory" | "cad";
 
 /**
  * Sekce pravého panelu podle fáze (pořadí = pořadí v panelu). Detail vybraného prvku / místnosti je ve všech fázích;
@@ -58,6 +58,58 @@ export const PHASE_PANELS: Readonly<Record<FloorplanPhase, readonly PanelSection
 export function panelVisible(phase: FloorplanPhase | null, section: PanelSectionId): boolean {
   if (phase === null) return section !== "rooms" && section !== "zone-checks" && section !== "site" && section !== "design" && section !== "generate";
   return PHASE_PANELS[phase].includes(section);
+}
+
+/**
+ * Fáze 100: pravý panel ve 4 záložkách (místo až 10 karet pod sebou) – záložka se přepne sama podle fáze průvodce
+ * (fáze 1, 2 a 4 Detail, fáze 3 Okruhy & Trasy, fáze 5 Kusovník & Rozváděč), uživatel ji může kdykoli přepnout ručně
+ * a klik na prvek / místnost na plátně otevře Detail. V záložce jsou její karty ve všech fázích; jen pomocné karty fáze
+ * (místnosti 1, přívod a typ prostoru 2, systém a design 4, velké tlačítko generování 5, chytrá domácnost a hladiny
+ * CAD) se řídí fází jako dřív. Varování zón (výřez kontroly pro fáze 3 a 4) nahrazuje celá kontrola v záložce Normy.
+ */
+export type RightTab = "detail" | "circuits" | "norms" | "bom";
+
+export const RIGHT_TABS: readonly { id: RightTab; icon: string; label: string }[] = [
+  { id: "detail", icon: "🎯", label: "Detail" },
+  { id: "circuits", icon: "🔌", label: "Okruhy & Trasy" },
+  { id: "norms", icon: "🛡️", label: "Normy (Linter)" },
+  { id: "bom", icon: "⚡", label: "Kusovník & Rozváděč" },
+];
+
+export const isRightTab = (value: unknown): value is RightTab => RIGHT_TABS.some((tab) => tab.id === value);
+
+/** Výchozí záložka fáze (kompaktní lišta „Zobrazit vše“ = Detail). */
+export const PHASE_TAB: Readonly<Record<FloorplanPhase, RightTab>> = { 1: "detail", 2: "detail", 3: "circuits", 4: "detail", 5: "bom" };
+
+export const defaultRightTab = (phase: FloorplanPhase | null): RightTab => (phase === null ? "detail" : PHASE_TAB[phase]);
+
+/** Záložka každé karty pravého panelu. */
+export const TAB_OF_SECTION: Readonly<Record<PanelSectionId, RightTab>> = {
+  rooms: "detail",
+  site: "detail",
+  design: "detail",
+  detail: "detail",
+  smart: "detail",
+  cad: "detail",
+  circuits: "circuits",
+  "socket-circuits": "circuits",
+  cables: "circuits",
+  edited: "circuits",
+  checks: "norms",
+  "zone-checks": "norms",
+  generate: "bom",
+  "generate-form": "bom",
+  bom: "bom",
+  inventory: "bom",
+};
+
+/** Karty záložky vidět ve všech fázích (ostatní karty záložky jen ve své fázi – `panelVisible`). */
+const TAB_CORE: readonly PanelSectionId[] = ["detail", "circuits", "socket-circuits", "cables", "edited", "checks", "generate-form", "bom", "inventory"];
+
+/** Karta je v aktivní záložce pravého panelu vidět. */
+export function tabSectionVisible(phase: FloorplanPhase | null, tab: RightTab, section: PanelSectionId): boolean {
+  if (TAB_OF_SECTION[section] !== tab || section === "zone-checks") return false;
+  return TAB_CORE.includes(section) || panelVisible(phase, section);
 }
 
 /**

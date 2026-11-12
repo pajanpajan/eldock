@@ -53,6 +53,7 @@ export function ModeBar({
   title,
   hint,
   children,
+  below = null,
   onDone,
   doneLabel = "Hotovo",
   testId = "mode-bar",
@@ -62,6 +63,11 @@ export function ModeBar({
   title: ReactNode;
   hint?: ReactNode;
   children?: ReactNode;
+  /**
+   * Fáze 100: vlastní řádek pod krokem (rychlý přepínač 🌗 Podklad 2D půdorysu) – nemění zalomení nápovědy, je vždy
+   * vidět s lištou a nezakrývá výkres.
+   */
+  below?: ReactNode;
   onDone?: () => void;
   doneLabel?: string;
   testId?: string;
@@ -95,6 +101,7 @@ export function ModeBar({
           <Check className="size-4" aria-hidden /> {doneLabel}
         </Button>
       ) : null}
+      {below ? <div className="flex basis-full flex-wrap items-center gap-2 border-t border-border/60 pt-1.5">{below}</div> : null}
     </section>
   );
 }

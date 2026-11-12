@@ -213,7 +213,7 @@ export function floorplanNorms(draft: FloorplanDraft, context: { cableEnds?: Rea
     // Koupelna bez vany / sprchy v nákresu: zóny nejdou ověřit
     const wetRooms = [...new Set(floor.elements.filter((element) => WET.test(element.room) && (isSocket(element) || isSwitch(element))).map((element) => element.room))];
     for (const room of wetRooms.filter((name) => !fixtures.some((fixture) => fixture.element.room === name && fixture.geometry.zone !== "none"))) {
-      issues.push({ id: `fixture-missing:${floor.id}:${room}`, rule: "fixture-missing", level: "info", text: `${room}: vložte vanu, sprchový kout nebo umyvadlo (paleta Zařizovací předměty) – pak se ověří zóny 0–2 a pás u umyvadla.`, source: "ČSN 33 2000-7-701 ed. 2", elementIds: [] });
+      issues.push({ id: `fixture-missing:${floor.id}:${room}`, rule: "fixture-missing", level: "info", text: `${room}: vložte vanu, sprchový kout nebo umyvadlo (paleta 🛁 Koupelna (zóny ČSN), fáze 2) – pak se ověří zóny 0–2 a pás u umyvadla.`, source: "ČSN 33 2000-7-701 ed. 2", elementIds: [] });
     }
     // Krytí: zásuvky v koupelně a venku IP44
     const wetSockets = floor.elements.filter((element) => isSocket(element) && WET.test(element.room) && paletteItem(element.item)?.variant !== "ip44");

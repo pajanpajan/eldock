@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { goPhase, phaseForPalette } from "./floorplan-phases";
+import { goPhase, phaseForPalette, rightTab } from "./floorplan-phases";
 
 // Fáze 52: metodika ČSN 33 2130 ed. 4 – úroveň instalace a uložení kabelů v 2D půdorysu, světla na RCBO
 // typ A, CYKY-J ke každému vypínači v retrofitu, soupis místností s úrovní instalace a legislativní
@@ -44,7 +44,8 @@ test("📐 2D půdorys: retrofit = CYKY-J k vypínači, světla na RCBO typ A, I
   await canvas.getByRole("button", { name: /^Stropní svítidlo/ }).click();
   await page.keyboard.press("Escape");
 
-  // Klasika: svod CYKY-O; světla B10 na RCBO typ A 30 mA s Iz a impedancí smyčky
+  // Klasika: svod CYKY-O; světla B10 na RCBO typ A 30 mA s Iz a impedancí smyčky (fáze 100: záložka Okruhy & Trasy)
+  await rightTab(page, "circuits");
   await expect(page.getByTestId("cable-buy")).toContainText("CYKY-O 3×1,5");
   await expect(page.getByTestId("circuit-protection").first()).toContainText(
     "RCBO B10 typ A 30 mA · Iz 19,5 A · Zs",
@@ -58,11 +59,13 @@ test("📐 2D půdorys: retrofit = CYKY-J k vypínači, světla na RCBO typ A, I
     .getByLabel("Úroveň instalace")
     .selectOption("smart_retrofit");
   await goPhase(page, 5);
+  await rightTab(page, "circuits");
   await expect(page.getByTestId("cable-buy")).not.toContainText("CYKY-O");
   await expect(page.getByTestId("cable-buy")).toContainText("CYKY-J 3×1,5");
 
   // Uložení A2 (tepelná izolace) → Iz 1,5 mm² = 14 A
   await goPhase(page, 5);
+  await rightTab(page, "circuits");
   await page.getByTestId("install-cables").getByLabel("Způsob uložení kabelů").selectOption("A2");
   await expect(page.getByTestId("circuit-protection").first()).toContainText(
     "Iz 14 A",

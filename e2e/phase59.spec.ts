@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { ensureActive, goPhase, phaseForPalette } from "./floorplan-phases";
+import { ensureActive, goPhase, phaseForPalette, rightTab } from "./floorplan-phases";
 
 // Fáze 59: Panel Builder – vložený přístroj nezůstane vybraný, úprava a přesun přístroje na liště; 2D půdorys –
 // natočení další značky podle předchozí, víceramček s přisazením, přiřazení vypínače ke světlu, zakreslení změn
@@ -128,6 +128,8 @@ test("2D půdorys: natočení podle předchozí značky, víceramček, vypínač
   await canvas.click({ position: { x: 450, y: 300 } });
   await page.keyboard.press("Escape");
   await goPhase(page, 5);
+  // Fáze 100: kontrola půdorysu je v záložce 🛡️ Normy (Linter)
+  await rightTab(page, "norms");
   await expect(page.getByTestId("plan-checks")).toContainText("svítidlo bez vypínače");
   await ensureActive(page, canvas.locator('[data-element="switch-1"]').first());
   await canvas.locator('[data-element="switch-1"]').first().click();
@@ -138,13 +140,17 @@ test("2D půdorys: natočení podle předchozí značky, víceramček, vypínač
   await canvas.getByRole("button", { name: /^Stropní svítidlo/ }).click();
   await page.getByTestId("mode-done").click();
   await expect(detail.getByTestId("switch-controls")).toContainText("Stropní svítidlo");
+  await rightTab(page, "norms");
+  await expect(page.getByTestId("plan-checks-ok")).toBeVisible();
   await expect(page.getByTestId("plan-checks")).toHaveCount(0);
   // Druhé světlo bez vypínače → automatické přiřazení k nejbližšímu vypínači v místnosti
   await choose("Stropní svítidlo");
   await canvas.click({ position: { x: 600, y: 450 } });
   await page.keyboard.press("Escape");
   await goPhase(page, 5);
+  await rightTab(page, "norms");
   await page.getByTestId("check-fix-lights-unpaired").click();
+  await expect(page.getByTestId("plan-checks-ok")).toBeVisible();
   await expect(page.getByTestId("plan-checks")).toHaveCount(0);
 
   // Úprava PDF → nová příčka v modré barvě s křížovou šrafou, textové pole
@@ -196,12 +202,15 @@ test("2D půdorys: natočení podle předchozí značky, víceramček, vypínač
   await canvas.click({ position: { x: 560, y: 300 } });
   await page.keyboard.press("Escape");
   await goPhase(page, 5);
+  await rightTab(page, "circuits");
   await expect(page.getByTestId("cable-circuits")).toContainText("(2. NP)");
   await expect(canvas.getByTestId("cable-route").first()).toBeAttached();
   // Fáze 89: přepínač podlaží v řádku průvodce (ve všech krocích)
   await page.getByTestId("floor-switch").selectOption({ label: "1. NP" });
   await expect(page.getByTestId("active-floor")).toContainText("1. NP");
   await expect(canvas.locator('[data-element="socket"]')).toHaveCount(4);
+  // Fáze 100: soupis domovní instalace je v záložce ⚡ Kusovník & Rozváděč
+  await rightTab(page, "bom");
   await expect(page.getByTestId("wiring-inventory")).toContainText("2 podlaží");
   await page.screenshot({ path: "test-results/phase59-editor.png", fullPage: true });
 });

@@ -12,7 +12,7 @@ import { SUPPLY_SYSTEMS, type SupplySystem } from "@/lib/panel-builder/supply";
 import { DESIGN_BRANDS, colorForSeries, designBrand, designSeriesOf, hasFrameChoice, hasSeparateFrames, isMonoblockSeries, seriesColors, seriesFrameColors } from "@/lib/panel-builder/wiring-designs";
 import { cn } from "@/lib/utils";
 
-import { ManufacturerLogo } from "../ManufacturerLogo";
+import { ManufacturerLogo, brandCardClass } from "../ManufacturerLogo";
 import { DeviceMockup, SeriesGallery, SeriesThumb, combineLook } from "./SeriesGallery";
 import { SmartHomeDeviceCatalog, type SmartCatalogProps, type ProductChoice } from "../SmartHomeDeviceCatalog";
 
@@ -105,9 +105,10 @@ export function DeviceAppearance({
                 setSmartBrand(null);
                 if (option.manufacturer !== brand.manufacturer) onChange({ series: `${option.manufacturer}|${option.series[0].name}` });
               }}
-              className={cn("flex h-10 w-24 items-center justify-center overflow-hidden rounded-md border p-1", !smartBrand && brand.manufacturer === option.manufacturer ? "border-primary ring-2 ring-primary" : "border-border hover:border-primary/60")}
+              className={brandCardClass(!smartBrand && brand.manufacturer === option.manufacturer)}
+              data-testid={`brand-card-${option.manufacturer}`}
             >
-              <ManufacturerLogo manufacturer={option.manufacturer} className="h-7 w-full" />
+              <ManufacturerLogo manufacturer={option.manufacturer} className="h-7 w-full" bare />
             </button>
           ))}
           {/* Fáze 63: výrobci chytré automatizace */}
@@ -119,10 +120,10 @@ export function DeviceAppearance({
               aria-checked={smartBrand === name}
               aria-label={name}
               onClick={() => setSmartBrand(name)}
-              className={cn("flex h-10 w-24 items-center justify-center overflow-hidden rounded-md border p-1", smartBrand === name ? "border-emerald-500 ring-2 ring-emerald-500" : "border-border hover:border-emerald-500/60")}
+              className={brandCardClass(smartBrand === name)}
               data-testid={`smart-brand-${name}`}
             >
-              <ManufacturerLogo manufacturer={name} className="h-7 w-full" />
+              <ManufacturerLogo manufacturer={name} className="h-7 w-full" bare />
             </button>
           ))}
         </div>

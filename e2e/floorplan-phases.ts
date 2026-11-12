@@ -28,10 +28,24 @@ export async function phaseForPalette(page: Page, label: string | RegExp) {
   }
 }
 
-/** Karty pravého panelu podle fáze (výkaz kabeláže, kontrola norem, kusovník = 5; zásuvkové okruhy = 3; design = 4). */
+/**
+ * Fáze 100: pravý panel ve 4 záložkách (🎯 Detail · 🔌 Okruhy & Trasy · 🛡️ Normy (Linter) · ⚡ Kusovník & Rozváděč) –
+ * vidět jsou jen karty aktivní záložky. Záložka se přepne sama podle fáze (1, 2, 4 Detail, 3 Okruhy & Trasy, 5 Kusovník
+ * & Rozváděč) a klikem na prvek / místnost na plátně (Detail); test před kartou jiné záložky přepne ručně.
+ */
+export type RightTab = "detail" | "circuits" | "norms" | "bom";
+
+export async function rightTab(page: Page, tab: RightTab) {
+  const button = page.getByTestId(`right-tab-${tab}`);
+  if ((await button.getAttribute("aria-selected")) !== "true") await button.click();
+  await expect(button).toHaveAttribute("aria-selected", "true");
+}
+
+/** Karty pravého panelu podle fáze a záložky (výkaz kabeláže, soupis okruhů = 5 + Okruhy, kontrola norem = 5 + Normy …). */
 export async function phaseForPanel(page: Page, section: "cables" | "checks" | "bom" | "circuits" | "sockets" | "design" | "site" | "rooms") {
   const phase: Phase = section === "sockets" ? 3 : section === "design" ? 4 : section === "site" ? 2 : section === "rooms" ? 1 : 5;
   await goPhase(page, phase);
+  await rightTab(page, section === "checks" ? "norms" : section === "bom" ? "bom" : section === "cables" || section === "circuits" || section === "sockets" ? "circuits" : "detail");
 }
 
 /** Skupiny palety podle fáze (`PHASE_PALETTE` v src/lib/panel-builder/floorplan-phases.ts). */

@@ -6,8 +6,10 @@ import { useEffect, useRef, useState, type ImgHTMLAttributes, type ReactNode } f
  * Fáze 99: obrázek s náhradou – když se fotka nenačte (404, poškozený soubor), místo ikony rozbitého obrázku se hned
  * vykreslí `fallback` (vektorový studiový náhled, kresba čela, nebo nic). Pozná i obrázek, který selhal ještě před
  * hydratací stránky (vykreslený na serveru).
+ * Fáze 100: katalogové fotky (`public/catalog-images/`) se načítají líně a dekódují mimo hlavní vlákno – výchozí
+ * `loading="lazy"` a `decoding="async"` (jde přepsat).
  */
-export function FallbackImg({ fallback = null, src, alt, onError, ...props }: ImgHTMLAttributes<HTMLImageElement> & { src: string; fallback?: ReactNode }) {
+export function FallbackImg({ fallback = null, src, alt, onError, loading = "lazy", decoding = "async", ...props }: ImgHTMLAttributes<HTMLImageElement> & { src: string; fallback?: ReactNode }) {
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const ref = useRef<HTMLImageElement>(null);
   useEffect(() => {
@@ -21,6 +23,8 @@ export function FallbackImg({ fallback = null, src, alt, onError, ...props }: Im
       ref={ref}
       src={src}
       alt={alt ?? ""}
+      loading={loading}
+      decoding={decoding}
       {...props}
       onError={(event) => {
         setFailedSrc(src);

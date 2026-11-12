@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { goPhase, phaseForPalette } from "./floorplan-phases";
+import { goPhase, phaseForPalette, rightTab } from "./floorplan-phases";
 
 // Fáze 74: soupis okruhů s vrstvami a výběrem okruhu (úprava trasy jen u něj), plovoucí nabídka okruhu u zásuvky,
 // podružný rozváděč s přiřazením okruhů a generováním propojených rozváděčů, ochranná zóna umyvadla, barva rámečku
@@ -80,6 +80,8 @@ async function openHouse(page: Page) {
     await expect(page.getByTestId("floorplan-canvas")).toBeVisible({ timeout: 30_000 });
   }).toPass({ timeout: 240_000 });
   await goPhase(page, 5);
+  // Fáze 100: soupis okruhů je v záložce 🔌 Okruhy & Trasy
+  await rightTab(page, "circuits");
   await expect(page.getByTestId("circuit-list")).toBeVisible({ timeout: 30_000 });
 }
 
@@ -158,6 +160,7 @@ test("soupis okruhů, vrstvy, výběr okruhu a úprava trasy jen u něj; podruž
 
   // Rozváděč prvku: zásuvka obýváku do RP1 → přejde mezi okruhy RP1
   await page.getByTestId("element-board").getByTestId("board-select").selectOption("RP1");
+  await rightTab(page, "circuits");
   await expect(list.locator('[data-testid="circuit-row"][data-board="RP1"][data-layer="sockets"]').first()).toBeVisible();
   await expect.poll(async () => list.locator('[data-testid="circuit-row"][data-board="RP1"][data-layer="sockets"]').count()).toBeGreaterThanOrEqual(1);
   await page.keyboard.press("Escape");

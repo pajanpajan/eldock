@@ -12,6 +12,9 @@ import { FavoriteStar } from "./FrameAssemblyPalette";
  * „Sbalit vše“ / „Rozbalit vše“ a režim „jen jedna kategorie“. Stav si pamatuje prohlížeč (výchozí: vše rozbalené).
  * Fáze 74: přehlednější řádky – ikona, krátký název, podtitul (norma / poznámka) a počet v jedné ose, šipka vpravo;
  * tlačítko kategorie (✎ knihovna spotřebičů) v jejím těle; prvky jako seznam se značkou v jednotné šířce.
+ * Fáze 100: krátké názvy kategorií, které se nikdy neořezávají třemi tečkami (zalomí se), počet osazených u ikony;
+ * prvky jako kompaktní mřížka 2 sloupců dlaždic (`grid-cols-2 gap-1.5`) – čistá vektorová CAD značka, srozumitelný
+ * název a rozměr / zkratka, ⭐ oblíbené a technický list v rozích dlaždice.
  */
 
 export interface PaletteEntry {
@@ -26,6 +29,9 @@ export interface PaletteEntry {
   /** Fáze 78: oblíbená položka (⭐) – oblíbené jsou na začátku kategorie. */
   favorite?: boolean;
   onFavorite?: () => void;
+  /** Fáze 100: vektorová CAD značka dlaždice a rozměr / zkratka pod názvem. */
+  glyph?: ReactNode;
+  meta?: string;
 }
 
 export interface PaletteSection {
@@ -142,44 +148,56 @@ export function PaletteAccordion({
               aria-expanded={expanded}
               aria-controls={`palette-${section.id}`}
               onClick={() => toggle(section.id)}
-              className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-muted/60"
+              className="flex w-full items-center gap-1.5 rounded-lg px-1.5 py-1.5 text-left hover:bg-muted/60"
               data-testid={`palette-toggle-${section.id}`}
             >
-              <span className="w-5 shrink-0 text-center text-base leading-none" aria-hidden>
+              <span className="relative w-6 shrink-0 self-start pt-0.5 text-center text-base leading-none" aria-hidden>
                 {section.icon ?? "•"}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[13px] leading-tight font-semibold text-foreground">{section.label}</span>
-                {section.hint ? <span className="block truncate text-[10.5px] leading-tight text-muted-foreground" title={section.hint}>{section.hint}</span> : null}
+                <span className="block text-[12.5px] leading-tight font-semibold text-balance break-words text-foreground" data-testid={`palette-label-${section.id}`}>
+                  {section.label}
+                </span>
+                {section.hint ? <span className="block text-[10px] leading-tight break-words text-muted-foreground">{section.hint}</span> : null}
               </span>
-              <span className={cn("shrink-0 rounded-full px-1.5 font-mono text-[10px] leading-4 tabular-nums", section.count ? "bg-primary/20 text-foreground" : "bg-muted text-muted-foreground")} title="Osazeno na aktivním podlaží" data-testid={`palette-count-${section.id}`}>
+              <span className={cn("shrink-0 self-start rounded-full px-1.5 font-mono text-[10px] leading-4 tabular-nums", section.count ? "bg-primary/20 text-foreground" : "bg-muted text-muted-foreground")} title="Osazeno na aktivním podlaží" data-testid={`palette-count-${section.id}`}>
                 {section.count}
               </span>
               {expanded ? <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" aria-hidden /> : <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />}
             </button>
             {expanded ? (
-              <div id={`palette-${section.id}`} className="flex flex-col gap-0.5 px-1 pb-1.5">
-                {section.action ? <div className="flex justify-end px-1 pb-0.5">{section.action}</div> : null}
-                {section.entries.map((entry) => (
-                  <div key={entry.id} className="flex items-stretch gap-0.5" data-entry={entry.id} data-favorite={entry.favorite ? "true" : undefined} data-trainer-focus={focus === entry.id ? "true" : undefined}>
-                    <button
-                      type="button"
-                      aria-pressed={entry.active}
-                      onClick={entry.onPick}
-                      title={entry.title ?? entry.label}
-                      className={cn("flex min-w-0 flex-1 items-center gap-1.5 rounded-md border px-1.5 py-1 text-left text-xs leading-tight", entry.active ? "border-primary bg-primary/20 text-foreground" : "border-transparent text-muted-foreground hover:border-border hover:bg-muted/50 hover:text-foreground", focus === entry.id && !entry.active && "trainer-pulse border-yellow-400 text-yellow-100")}
-                    >
-                      <span className="w-11 shrink-0 truncate rounded bg-muted px-1 py-0.5 text-center font-mono text-[10px] font-bold text-foreground">{entry.symbol}</span>
-                      <span className="min-w-0 flex-1 line-clamp-2">{entry.label}</span>
-                    </button>
-                    {entry.onFavorite ? <FavoriteStar on={Boolean(entry.favorite)} label={entry.label} onToggle={entry.onFavorite} className="self-center" /> : null}
-                    {entry.onInfo ? (
-                      <button type="button" onClick={entry.onInfo} className="rounded-md border border-transparent px-1 text-muted-foreground hover:border-border hover:text-foreground" aria-label={`Technický list ${entry.symbol}`} title={`Technický list: ${entry.label}`} data-testid="palette-datasheet">
-                        <FileText className="size-3.5" aria-hidden />
+              <div id={`palette-${section.id}`} className="flex flex-col gap-1.5 px-1 pb-1.5">
+                {section.action ? <div className="flex justify-end px-1">{section.action}</div> : null}
+                <div className="grid grid-cols-2 gap-1.5" data-testid={`palette-grid-${section.id}`}>
+                  {section.entries.map((entry) => (
+                    <div key={entry.id} className="relative min-w-0" data-entry={entry.id} data-favorite={entry.favorite ? "true" : undefined} data-trainer-focus={focus === entry.id ? "true" : undefined}>
+                      <button
+                        type="button"
+                        aria-pressed={entry.active}
+                        onClick={entry.onPick}
+                        title={entry.title ?? entry.label}
+                        className={cn(
+                          "flex h-full w-full min-w-0 flex-col items-center gap-0.5 rounded-lg border px-1 pt-1.5 pb-1 text-center text-[10.5px] leading-tight",
+                          entry.active ? "border-primary bg-primary/20 text-foreground" : "border-border/70 bg-background/50 text-muted-foreground hover:border-primary/50 hover:bg-muted/50 hover:text-foreground",
+                          focus === entry.id && !entry.active && "trainer-pulse border-yellow-400 text-yellow-100",
+                        )}
+                        data-testid="palette-tile"
+                      >
+                        <span className={cn("flex h-9 w-full items-center justify-center px-4", entry.active ? "text-primary" : "text-zinc-200")} aria-hidden>
+                          {entry.glyph ?? <span className="rounded bg-muted px-1 py-0.5 font-mono text-[10px] font-bold text-foreground">{entry.symbol}</span>}
+                        </span>
+                        <span className="w-full font-semibold break-words text-foreground/90">{entry.label}</span>
+                        {entry.meta ? <span className="w-full font-mono text-[9.5px] break-words text-muted-foreground">{entry.meta}</span> : null}
                       </button>
-                    ) : null}
-                  </div>
-                ))}
+                      {entry.onFavorite ? <FavoriteStar on={Boolean(entry.favorite)} label={entry.label} onToggle={entry.onFavorite} className="absolute top-0.5 right-0.5" /> : null}
+                      {entry.onInfo ? (
+                        <button type="button" onClick={entry.onInfo} className="absolute top-0.5 left-0.5 rounded-md border border-transparent p-0.5 text-muted-foreground hover:border-border hover:text-foreground" aria-label={`Technický list ${entry.symbol}`} title={`Technický list: ${entry.label}`} data-testid="palette-datasheet">
+                          <FileText className="size-3.5" aria-hidden />
+                        </button>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
               </div>
             ) : null}
           </section>

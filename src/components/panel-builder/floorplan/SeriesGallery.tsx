@@ -18,7 +18,7 @@ import { DESIGN_BRANDS, designSeriesOf, hasFrameChoice, isMonoblockSeries, resol
 export { lookOf, mockStyle };
 import { cn } from "@/lib/utils";
 
-import { ManufacturerLogo } from "../ManufacturerLogo";
+import { ManufacturerLogo, brandCardClass } from "../ManufacturerLogo";
 import { SeriesPreviewIllustration, sameSlot, uploadSeriesPhoto, useCatalogPhotos, type PhotoSlot } from "./SeriesPreviewIllustration";
 
 /**
@@ -38,9 +38,9 @@ export type MockupItem = RenderGang;
  * Fáze 91: náhled přístroje / rámečku řady – stejný studiový engine jako produktové rendery v `public/catalog-images/`
  * (`renderDeviceSvg`), id s předponou náhledu (víc náhledů na stránce), libovolná kombinace krytu a rámečku.
  */
-export function DeviceMockup({ shape, color, items, className, label, seriesKey }: { shape: SeriesShape; color: LookColor | null; items: readonly MockupItem[]; className?: string; label?: string; seriesKey?: string | null }) {
+export function DeviceMockup({ shape, color, items, className, label, seriesKey, studio = true }: { shape: SeriesShape; color: LookColor | null; items: readonly MockupItem[]; className?: string; label?: string; seriesKey?: string | null; /** Fáze 100: bez vlastního studiového pozadí (náhledy v galerii). */ studio?: boolean }) {
   const id = `m${useId().replace(/[^a-zA-Z0-9]/g, "")}-`;
-  const svg = renderDeviceSvg({ seriesKey: seriesKey ?? null, shape, look: lookOf(color, shape), items, id, label, fluid: true });
+  const svg = renderDeviceSvg({ seriesKey: seriesKey ?? null, shape, look: lookOf(color, shape), items, id, label, fluid: true, studio });
   // Vlastní SVG z čisté funkce (bez vstupu uživatele kromě barev a popisku, popisek je escapovaný)
   return <span className={cn("block", className)} data-testid="device-mockup" dangerouslySetInnerHTML={{ __html: svg }} />;
 }
@@ -185,8 +185,8 @@ export function SeriesGallery({ seriesKey, color, frameColor = null, available, 
         ) : null}
         <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Výrobce">
           {DESIGN_BRANDS.map((option) => (
-            <button key={option.manufacturer} type="button" role="radio" aria-checked={brand.manufacturer === option.manufacturer} aria-label={option.label} onClick={() => setPick({ series: `${option.manufacturer}|${option.series[0].name}`, color: seriesColors(`${option.manufacturer}|${option.series[0].name}`)[0].id, frameColor: null })} className={cn("flex h-10 w-24 items-center justify-center rounded-md border bg-white p-1", brand.manufacturer === option.manufacturer ? "border-primary ring-2 ring-primary" : "border-border")}>
-              <ManufacturerLogo manufacturer={option.manufacturer} className="h-7 w-full" />
+            <button key={option.manufacturer} type="button" role="radio" aria-checked={brand.manufacturer === option.manufacturer} aria-label={option.label} onClick={() => setPick({ series: `${option.manufacturer}|${option.series[0].name}`, color: seriesColors(`${option.manufacturer}|${option.series[0].name}`)[0].id, frameColor: null })} className={brandCardClass(brand.manufacturer === option.manufacturer)}>
+              <ManufacturerLogo manufacturer={option.manufacturer} className="h-7 w-full" bare />
             </button>
           ))}
         </div>
@@ -222,14 +222,14 @@ export function SeriesGallery({ seriesKey, color, frameColor = null, available, 
             <div className="grid gap-3 sm:grid-cols-[1fr_1fr_2fr]" data-testid="gallery-preview">
               {/* Fáze 74: schválená fotka výrobce (zdroj a licence pod fotkou), jinak kreslený náhled */}
               {/* Fáze 92: reálná fotka (nahraná / stažená) před renderem; v režimu nahrávání sloty pro Ctrl+V */}
-              <SeriesPreviewIllustration photo={!pick.frameColor ? seriesPhoto(seriesKeyOf, colorId, "switch", photos) : null} slot={{ part: "switch", color: colorId }} upload={uploadFor("switch")} caption="Spínač 1R" mockup={<DeviceMockup seriesKey={seriesKeyOf} shape={shape} color={look} items={["switch"]} className="h-28 w-28 rounded-lg" label={`Spínač ${series.name}`} />} />
-              <SeriesPreviewIllustration photo={!pick.frameColor ? seriesPhoto(seriesKeyOf, colorId, "socket", photos) : null} slot={{ part: "socket", color: colorId }} upload={uploadFor("socket")} caption="Zásuvka 1R" mockup={<DeviceMockup seriesKey={seriesKeyOf} shape={shape} color={look} items={["socket"]} className="h-28 w-28 rounded-lg" label={`Zásuvka ${series.name}`} />} />
+              <SeriesPreviewIllustration photo={!pick.frameColor ? seriesPhoto(seriesKeyOf, colorId, "switch", photos) : null} slot={{ part: "switch", color: colorId }} upload={uploadFor("switch")} caption="Spínač 1R" mockup={<DeviceMockup studio={false} seriesKey={seriesKeyOf} shape={shape} color={look} items={["switch"]} className="h-28 w-28 rounded-lg" label={`Spínač ${series.name}`} />} />
+              <SeriesPreviewIllustration photo={!pick.frameColor ? seriesPhoto(seriesKeyOf, colorId, "socket", photos) : null} slot={{ part: "socket", color: colorId }} upload={uploadFor("socket")} caption="Zásuvka 1R" mockup={<DeviceMockup studio={false} seriesKey={seriesKeyOf} shape={shape} color={look} items={["socket"]} className="h-28 w-28 rounded-lg" label={`Zásuvka ${series.name}`} />} />
               {monoblock ? (
                 // Fáze 90: monobloky nemají víceramček – nástěnná dvojzásuvka pod odklápěcími víčky
-                <SeriesPreviewIllustration photo={seriesPhoto(seriesKeyOf, colorId, "set", photos)} slot={{ part: "set", color: colorId }} upload={uploadFor("set")} caption={`Dvojzásuvka ${series.ip ?? "IP44"} s odklápěcím víčkem (nástěnná)`} mockup={<DeviceMockup seriesKey={seriesKeyOf} shape={shape} color={look} items={["socket", "socket"]} className="h-28 w-full max-w-60 rounded-lg" label={`Dvojzásuvka ${series.name} s víčkem`} />} />
+                <SeriesPreviewIllustration photo={seriesPhoto(seriesKeyOf, colorId, "set", photos)} slot={{ part: "set", color: colorId }} upload={uploadFor("set")} caption={`Dvojzásuvka ${series.ip ?? "IP44"} s odklápěcím víčkem (nástěnná)`} mockup={<DeviceMockup studio={false} seriesKey={seriesKeyOf} shape={shape} color={look} items={["socket", "socket"]} className="h-28 w-full max-w-60 rounded-lg" label={`Dvojzásuvka ${series.name} s víčkem`} />} />
               ) : (
                 // Fáze 94: fotka z dat ETIM = prázdný rámeček 2R (víceramček), render = sestava 3R
-                <SeriesPreviewIllustration photo={setPhoto} slot={{ part: "set", color: colorId }} upload={uploadFor("set")} caption={series.fixedPairs ? "3 samostatné přístroje · rozteč 91 mm" : setPhoto?.mpn ? "Víceramček – rámeček 2R" : "Víceramček 3R – vypínač + 2 zásuvky"} mockup={<DeviceMockup seriesKey={seriesKeyOf} shape={shape} color={look} items={["switch", "socket", "socket"]} className="h-28 w-full max-w-80 rounded-lg" label={`Víceramček 3R ${series.name}`} />} />
+                <SeriesPreviewIllustration photo={setPhoto} slot={{ part: "set", color: colorId }} upload={uploadFor("set")} caption={series.fixedPairs ? "3 samostatné přístroje · rozteč 91 mm" : setPhoto?.mpn ? "Víceramček – rámeček 2R" : "Víceramček 3R – vypínač + 2 zásuvky"} mockup={<DeviceMockup studio={false} seriesKey={seriesKeyOf} shape={shape} color={look} items={["switch", "socket", "socket"]} className="h-28 w-full max-w-80 rounded-lg" label={`Víceramček 3R ${series.name}`} />} />
               )}
             </div>
             {/* Fáze 80: zdroj a podmínky užití náhledů jednou pod řádkem náhledů */}

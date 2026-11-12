@@ -175,6 +175,30 @@
   html {
     color-scheme: dark;
   }
+  /* Fáze 100: tenké tmavé posuvníky místo tlustých šedých systémových (soupis okruhů, výkaz kabeláže, pravý panel …).
+     Firefox: scrollbar-width / scrollbar-color; Chromium a Safari: ::-webkit-scrollbar 6 px – Chromium od verze 121
+     vlastní posuvník ignoruje, když má prvek nastavené scrollbar-width, proto standardní vlastnosti jen bez WebKitu. */
+  @supports not selector(::-webkit-scrollbar) {
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: #3f3f46 transparent;
+    }
+  }
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: #3f3f46;
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: #52525b;
+  }
   /* Rozbalené menu <select> na Windows: bez tohoto má světlé pozadí se světlým textem (nečitelné). */
   select,
   option,

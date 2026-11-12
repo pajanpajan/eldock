@@ -3,9 +3,11 @@
 //
 //   npm run verify:demo            → Playwright proti vlastnímu E2E serveru (čistá databáze e2e.db, port 3200):
 //                                    e2e/demo-ready.spec.ts (prezentace, demo scénáře, vzorový rozváděč, průmyslový
-//                                    závod – bez chyb v konzoli) a e2e/phase99.spec.ts (rozlišení 1366 × 768 a 1536 × 864)
+//                                    závod – bez chyb v konzoli), e2e/phase99.spec.ts (rozlišení 1366 × 768 a 1536 × 864)
+//                                    a e2e/phase100.spec.ts (🌗 podklad, paleta, 4 záložky, výkon plátna, galerie řad)
 //   npm run verify:demo -- --prod  → navíc rychlá kontrola produkce https://eldock.cz (veřejné stránky, /prezentace
-//                                    s 10 slidy a One-Pagerem, fotky katalogu) – bez přihlášení, nic se nezapisuje
+//                                    s 10 slidy a One-Pagerem, fotky katalogu a jejich mezipaměť) – bez přihlášení, nic se
+//                                    nezapisuje
 //   npm run verify:demo -- --only-prod → jen kontrola produkce (po nasazení, bez lokálního E2E serveru)
 //   --keep-cache                   → nemazat build E2E serveru (.next-e2e) – rychlejší opakovaný běh bez změn kódu
 import { existsSync, readFileSync, rmSync } from "node:fs";
@@ -43,6 +45,10 @@ async function productionCheck() {
     if (!response || response.status !== 200 || !(response.headers.get("content-type") ?? "").startsWith("image/")) broken += 1;
   }
   step("produkce – fotky katalogu", broken === 0, `${sample.length - broken} / ${sample.length} složek výrobců vrací image/*`);
+  // Fáze 100: statické fotky katalogu rok v mezipaměti prohlížeče (next.config.ts headers)
+  const cached = sample.length ? await fetch(`${PROD_URL}/catalog-images/${sample[0]}`, { method: "HEAD" }).catch(() => null) : null;
+  const cacheControl = cached?.headers.get("cache-control") ?? "";
+  step("produkce – mezipaměť fotek katalogu", cacheControl.includes("max-age=31536000") && cacheControl.includes("immutable"), cacheControl || "bez hlavičky Cache-Control");
 
   const browser = await chromium.launch({ channel: process.env.E2E_BROWSER_CHANNEL || "msedge" }).catch(() => chromium.launch());
   try {
@@ -67,9 +73,9 @@ function localCheck() {
     rmSync(path.join(ROOT, ".next-e2e"), { recursive: true, force: true });
     console.log("🧹 Smazán build E2E serveru (.next-e2e) – server se přeloží z aktuálního kódu.");
   }
-  console.log("▶ Playwright: e2e/demo-ready.spec.ts + e2e/phase99.spec.ts (E2E server na portu 3200, čistá databáze e2e.db)\n");
-  const run = spawnSync("npx", ["playwright", "test", "e2e/demo-ready.spec.ts", "e2e/phase99.spec.ts", "--reporter=list"], { cwd: ROOT, stdio: "inherit", shell: process.platform === "win32" });
-  step("lokální E2E kontrola živé ukázky", run.status === 0, run.status === 0 ? "prezentace, demo scénáře, rozváděč, závod a rozlišení" : `Playwright skončil kódem ${run.status}`);
+  console.log("▶ Playwright: e2e/demo-ready.spec.ts + e2e/phase99.spec.ts + e2e/phase100.spec.ts (E2E server na portu 3200, čistá databáze e2e.db)\n");
+  const run = spawnSync("npx", ["playwright", "test", "e2e/demo-ready.spec.ts", "e2e/phase99.spec.ts", "e2e/phase100.spec.ts", "--reporter=list"], { cwd: ROOT, stdio: "inherit", shell: process.platform === "win32" });
+  step("lokální E2E kontrola živé ukázky", run.status === 0, run.status === 0 ? "prezentace, demo scénáře, rozváděč, závod, rozlišení a vzhled 2D půdorysu" : `Playwright skončil kódem ${run.status}`);
 }
 
 console.log("🎯 ELDOCK – kontrola připravenosti živé ukázky a prezentace\n");

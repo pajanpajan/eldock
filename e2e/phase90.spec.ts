@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
-import { goPhase, goPhaseForGroup, phaseForPalette } from "./floorplan-phases";
+import { goPhase, goPhaseForGroup, phaseForPalette, rightTab } from "./floorplan-phases";
 
 // Fáze 90: krok 1 průvodce bez automatického přeskoku na krok 2 (místnosti jedna za druhou s předvolbou další
 // místnosti, i po prvním uložení a obnovení stránky), krokové karty se živým stavem, okna / dveře / nábytek s žlutým
@@ -230,8 +230,10 @@ test("🛁 Koupelna: ZAL_M a MAG u vany bez falešné chyby zóny, zásuvka s p�
   await choose("Vývod pro motor žaluzie / rolety (u okna)");
   await clickAt(2300, 1060);
   await page.getByTestId("mode-done").click();
-  // Panel kontrol se ukáže jen se zjištěním – chyba zóny 0–2 žádná (fáze 98: varování zón jsou v pravém panelu fáze 3)
+  // Panel kontrol se ukáže jen se zjištěním – chyba zóny 0–2 žádná (fáze 100: celá kontrola v záložce 🛡️ Normy)
   await goPhase(page, 3);
+  await rightTab(page, "norms");
+  await expect(page.getByTestId("right-tabpanel")).toHaveAttribute("data-tab", "norms");
   await expect(canvas.locator('[data-element="window-contact"]')).toHaveCount(1);
   await expect(canvas.locator('[data-element="blind-motor"]')).toHaveCount(1);
   await expect(page.locator('[data-check^="bath-zone"]')).toHaveCount(0);
@@ -242,6 +244,8 @@ test("🛁 Koupelna: ZAL_M a MAG u vany bez falešné chyby zóny, zásuvka s p�
   await choose("Jednozásuvka");
   await clickAt(3280, 1400);
   await page.getByTestId("mode-done").click();
+  // Fáze 100: vložená zásuvka je vybraná a otevřela záložku 🎯 Detail – zpět ke kontrole norem
+  await rightTab(page, "norms");
   const zone = checks.locator('[data-check^="bath-zone"]');
   await expect(zone).toHaveCount(1);
   await expect(zone).toContainText(/1\. NP: Jednozásuvka \(výška 300 mm\) zasahuje do zóny 2 koupelny \(\d+ cm od vany, min\. 60 cm\)/);

@@ -3,6 +3,7 @@
 // nic znovu nenahrává, kvalita neklesá a měřítko (mm / px) zůstává platné. Čisté funkce.
 
 import type { Annotation, EditorElement, EditorRoom, FloorplanDraft } from "./floorplan-editor";
+import type { BackgroundLook } from "./background-look";
 
 export type Rotation = 0 | 90 | 180 | 270;
 export const isRotation = (value: unknown): value is Rotation => value === 0 || value === 90 || value === 180 || value === 270;
@@ -26,6 +27,8 @@ export interface FloorplanBackground {
   crop: CropRect | null;
   /** PDF: velikost stránky [pt] – ověření měřítka podle razítka výkresu (1 : 50, 1 : 100 …). */
   pagePt: { width: number; height: number } | null;
+  /** Fáze 100: vzhled na plátně (🌗 Podklad: 100 % / 60 % / 35 % / tmavý CAD); bez údaje doporučených 60 %. */
+  look?: BackgroundLook;
 }
 
 /** Nejmenší ořez [px] – menší výřez je spíš omyl než záměr. */

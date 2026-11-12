@@ -11,6 +11,13 @@ const nextConfig: NextConfig = {
   experimental: { mcpServer: process.env.NEXT_DIST_DIR !== ".next-e2e" && process.env.NEXT_DIST_DIR !== ".next-tutorials" },
   // Produkční Docker obraz (viz Dockerfile): `.next/standalone` obsahuje server.js a jen nutné node_modules.
   output: "standalone",
+  // Fáze 100: komprese odpovědí serveru Next (gzip) – výchozí, uvedeno výslovně; na produkci komprimuje i Caddy (zstd / gzip).
+  compress: true,
+  // Fáze 100: katalogové fotky výrobců se mezi nasazeními nemění na místě (nová fotka = nový soubor, viz
+  // public/catalog-images/README.md) – prohlížeč je drží rok bez dotazu na server (dřív max-age=0 a revalidace ETagem).
+  async headers() {
+    return [{ source: "/catalog-images/:path*", headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }] }];
+  },
   // Nahrané soubory a zdrojáky (trasované kvůli cestám přes process.cwd()) do obrazu nepatří – data jsou ve svazku.
   // Docker build na serveru (2 GB RAM) kontrolu typů vynechává – padala na nedostatek paměti. Typy hlídá
   // `npm run verify` (typecheck) před každým nasazením; lokální `next build` je kontroluje dál.

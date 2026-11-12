@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
-import { goPhase, phaseForPalette } from "./floorplan-phases";
+import { goPhase, phaseForPalette, rightTab } from "./floorplan-phases";
 
 // Fáze 92: onboarding bez čtecích bublin a dva oddělené světy – trenažér 2D půdorysu (rozdělaný bungalov, 3 úkoly,
 // rozváděč bez kreditu), živý tahák zakázky a rozváděče, tréninkové zakázky AI Panel Builderu, průvodce výrobním
@@ -89,6 +89,8 @@ test("trenažér 2D půdorysu: rozdělaný bungalov, 3 úkoly se samoodškrtáv�
 test("živý tahák vlastní zakázky: odškrtává se sám, tlačítka vedou na správné místo, pilulka a vypnutí", async ({ page }) => {
   test.setTimeout(300_000);
   await openEditor(page, "/panel-builder/floorplan/novy");
+  // Fáze 100: tahák zakázky je v záložce 🛡️ Normy (Linter) pravého panelu – přechody z taháku ji nechají otevřenou
+  await rightTab(page, "norms");
   const list = page.getByTestId("live-checklist");
   const wizard = page.getByTestId("floorplan-wizard");
   await expect(list).toHaveAttribute("data-current", "base");
@@ -147,6 +149,8 @@ test("živý tahák vlastní zakázky: odškrtává se sám, tlačítka vedou na
   await page.getByTestId("live-checklist-change-series").click();
   await expect(page.getByTestId("series-gallery")).toBeVisible();
   await page.keyboard.press("Escape");
+  // Galerie je v kartě designu (záložka Detail) – zpět k taháku
+  await rightTab(page, "norms");
 
   // Pilulka „🧭 Tahák (4/5 hotovo)“ a zpět; trvalé vypnutí a zapnutí v liště
   await page.getByTestId("live-checklist-minimize").click();
