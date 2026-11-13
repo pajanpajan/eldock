@@ -256,10 +256,15 @@ export interface PlanElementProps {
   unit: number;
   stroke: number;
   handlers: PlanHandlers;
+  /** Fáze 109: barva značky (🎨 Barva značek) a zda jde o jednotnou kontrolní barvu. */
+  ink: string | null;
+  uniform: boolean;
+  /** Fáze 109: mm plánu na 1 px obrazovky (minimální tloušťka čar značek). */
+  mmPerPx: number;
 }
 
 /** Jeden prvek půdorysu (značka, rozváděč nebo zařizovací předmět) – překreslí se jen při změně svých vlastností. */
-export const PlanElement = memo(function PlanElement({ element, item, size, active, view, opacity, candidate, linked, halo, switchNo, lem, hitLength, hitHorizontal, onPaper, level, movable, basinZone, clip, unit: ui, stroke, handlers }: PlanElementProps) {
+export const PlanElement = memo(function PlanElement({ element, item, size, active, view, opacity, candidate, linked, halo, switchNo, lem, hitLength, hitHorizontal, onPaper, level, movable, basinZone, clip, unit: ui, stroke, handlers, ink, uniform, mmPerPx }: PlanElementProps) {
   useLayerCount("element");
   const lookProps = view === "active" ? { "data-view": "active" } : { opacity, pointerEvents: "none" as const, "data-view": view };
   // Fáze 63: zařizovací předmět ve skutečném rozměru se zónami, posuvnými stranami a žlutým rohem
@@ -276,10 +281,10 @@ export const PlanElement = memo(function PlanElement({ element, item, size, acti
       {/* Fáze 74: prvky vybraného / zvýrazněného okruhu */}
       {halo ? <circle r={size * 0.78} fill="none" stroke={halo} strokeWidth={stroke * 3.5} pointerEvents="none" data-testid="circuit-halo" /> : null}
       {item.kind === "panel" ? (
-        <PanelSymbol size={size * 1.3} active={active} onPaper={onPaper} label={element.boardCode ?? item.symbol} />
+        <PanelSymbol size={size * 1.3} active={active} onPaper={onPaper} label={element.boardCode ?? item.symbol} ink={ink} />
       ) : (
         // Fáze 57: značka dle ČSN EN 60617-11, řazení vypínače z párování, natočení ke stěně; fáze 100: podkladový štítek
-        <FloorSymbol item={item} size={size} active={active} onPaper={onPaper} rotation={element.rotation} switchNo={switchNo} level={level} lem={lem} hitSlot={hitLength === null ? null : { length: hitLength, horizontal: hitHorizontal }} plate />
+        <FloorSymbol item={item} size={size} active={active} onPaper={onPaper} rotation={element.rotation} switchNo={switchNo} level={level} lem={lem} hitSlot={hitLength === null ? null : { length: hitLength, horizontal: hitHorizontal }} plate ink={ink} uniform={uniform} mmPerPx={mmPerPx} />
       )}
       {element.frameUnits > 1 ? (
         <text x={size * 0.6} y={size * 0.75} fontSize={size * 0.3} fill="#ca8a04" fontWeight={700} stroke="rgba(15,23,42,0.88)" strokeWidth={size * 0.07} strokeLinejoin="round" paintOrder="stroke">

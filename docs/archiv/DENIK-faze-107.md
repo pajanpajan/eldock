@@ -1,0 +1,5 @@
+# Deník fáze 107 (přesunuto z `docs/PLAN.md`, sekce C)
+
+| Fáze | Datum | Poznámky |
+|---|---|---|
+| 107 | 2026-11-12 | Zadání z chatu → `docs/archiv/ZADANI-faze-107.md` (i rozhodnutí a odchylky). **Migrace** `phase107_contact_messages` (`ContactMessage`). **Kód:** `src/lib/contact.ts`, `src/server/services/contact.ts` (tiket, filtry, stav, retence 2 roky), `src/server/contact-intake.ts` (sharp → WebP do `storage/uploads/feedback`, registr jen pro velín, notifikace), `/api/contact` (POST / GET / PATCH), `src/components/contact/` (`GlobalContactWidget`, `ContactFeedbackModal`, `contact-events`, `image-compress`), `src/app/kontakt/page.tsx`, velín `ContactMessagesTab` + `ContactMessageControls`, `ReportAiErrorButton` a „🐛 Nahlásit chybu“ v 2D půdorysu, odkazy v navigaci / patičce / `/prezentace`, limit `contact` v proxy, zásady 1.5 (7c). **Testy:** `src/lib/phase107.test.ts` (6), `src/server/services/phase107.test.ts` (5), E2E `e2e/phase107.spec.ts` (6), upravené `phase50` a `phase54`; po nasazení plovoucí tlačítko nad lištou cookies (`--consent-banner-h`). |

@@ -341,12 +341,24 @@ function OneTouchArt({ swatch }: { swatch: string }) {
   );
 }
 
-/** ABB RoomTouch® 4": čtvercový panel místnosti – název, teplota a dlaždice světla, žaluzie, scény a topení. */
+/**
+ * ABB RoomTouch® 4": štíhlý skleněný panel místnosti (HD kapacitní displej s tenkým rámečkem) – název, teplota 22,5 °C
+ * a dlaždice osvětlení, žaluzií, scén a topení. Fáze 109: černá = černé sklo s tmavým rozhraním, bílá = bílé sklo se
+ * světlým rámečkem; lesk skla.
+ */
 function RoomTouchArt({ swatch }: { swatch: string }) {
+  const black = dark(swatch);
   return (
-    <svg viewBox="0 0 120 120" data-panel="room-touch">
-      <rect x={8} y={8} width={104} height={104} rx={9} fill={swatch} stroke={bodyStroke(swatch)} strokeWidth={1.2} />
-      <rect x={16} y={16} width={88} height={88} rx={4} fill={SCREEN} />
+    <svg viewBox="0 0 120 120" data-panel="room-touch" data-tone={black ? "black" : "white"}>
+      <defs>
+        <linearGradient id="roomtouch-glass" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#ffffff" stopOpacity={black ? 0.16 : 0.5} />
+          <stop offset="45%" stopColor="#ffffff" stopOpacity={0} />
+        </linearGradient>
+      </defs>
+      <rect x={8} y={8} width={104} height={104} rx={7} fill={black ? "#0a0a0b" : "#f8fafc"} stroke={black ? "#3f3f46" : "#cbd5e1"} strokeWidth={1.2} />
+      <rect x={12} y={12} width={96} height={96} rx={4} fill={SCREEN} />
+      <rect x={8} y={8} width={104} height={104} rx={7} fill="url(#roomtouch-glass)" pointerEvents="none" />
       <text x={22} y={29} fontSize={7.5} fontWeight={700} fill={TEXT} fontFamily="Arial, sans-serif">
         Obývák
       </text>
@@ -369,20 +381,34 @@ function RoomTouchArt({ swatch }: { swatch: string }) {
   );
 }
 
-/** ABB Trevion® 2,4": displej 55 × 55 mm v rámečku zvolené řady (teplota, symboly, dotykový kroužek). */
-function TrevionArt({ swatch, tone }: { swatch: string; tone: DeviceTone }) {
+/**
+ * ABB Trevion® 2,4": barevný displej 55 × 55 mm pod rámeček řady – teplota místnosti, ikony světel a scén a kapacitní
+ * lišta. Fáze 109: rámeček a displej v barvě zvolené varianty (černý v černém, bílý v bílém), rozsvícený displej.
+ */
+function TrevionArt({ swatch }: { swatch: string; tone: DeviceTone }) {
+  const black = dark(swatch);
+  const frame = black ? "#111113" : "#f4f4f5";
   return (
-    <svg viewBox="0 0 120 120" data-panel="trevion">
-      <rect x={8} y={8} width={104} height={104} rx={10} fill={tone.frame} stroke={dark(tone.frame) ? "#3f3f46" : "#a1a1aa"} strokeWidth={1.2} />
-      <rect x={24} y={24} width={72} height={72} rx={5} fill={swatch} stroke={bodyStroke(swatch)} strokeWidth={0.8} />
-      <rect x={34} y={32} width={52} height={46} rx={3} fill={SCREEN} />
-      <text x={60} y={58} textAnchor="middle" fontSize={13} fontWeight={700} fill={TEXT} fontFamily="Arial, sans-serif">
-        21,5°
+    <svg viewBox="0 0 120 120" data-panel="trevion" data-tone={black ? "black" : "white"}>
+      <rect x={8} y={8} width={104} height={104} rx={10} fill={frame} stroke={black ? "#3f3f46" : "#a1a1aa"} strokeWidth={1.2} />
+      <rect x={24} y={24} width={72} height={72} rx={5} fill={black ? "#18181b" : "#ffffff"} stroke={black ? "#52525b" : "#d4d4d8"} strokeWidth={0.8} />
+      <rect x={31} y={29} width={58} height={50} rx={3} fill={SCREEN} />
+      <text x={60} y={48} textAnchor="middle" fontSize={12} fontWeight={700} fill={TEXT} fontFamily="Arial, sans-serif">
+        21,5 °C
       </text>
-      <Bulb x={42} y={70} s={0.55} color="#facc15" />
-      <BlindArrows x={60} y={71} s={0.45} color="#e2e8f0" />
-      <Flame x={78} y={70.5} s={0.5} />
-      <circle cx={60} cy={87} r={3} fill="none" stroke={dark(swatch) ? "#a1a1aa" : "#71717a"} strokeWidth={0.8} />
+      <text x={60} y={56} textAnchor="middle" fontSize={4.5} fill={MUTED} fontFamily="Arial, sans-serif">
+        Obývák · scéna Večer
+      </text>
+      <circle cx={40} cy={68} r={5} fill="#facc15" fillOpacity={0.18} />
+      <Bulb x={40} y={68} s={0.5} color="#facc15" />
+      <circle cx={53} cy={68} r={5} fill="#a78bfa" fillOpacity={0.18} />
+      <Star x={53} y={68} s={0.5} color="#a78bfa" />
+      <circle cx={66} cy={68} r={5} fill="#38bdf8" fillOpacity={0.18} />
+      <BlindArrows x={66} y={69} s={0.4} color="#e2e8f0" />
+      <circle cx={79} cy={68} r={5} fill="#fb923c" fillOpacity={0.18} />
+      <Flame x={79} y={68.5} s={0.45} />
+      {/* Kapacitní lišta pod displejem */}
+      <rect x={36} y={84} width={48} height={4} rx={2} fill={black ? "#3f3f46" : "#e4e4e7"} stroke={black ? "#71717a" : "#a1a1aa"} strokeWidth={0.5} data-testid="trevion-touch-bar" />
     </svg>
   );
 }

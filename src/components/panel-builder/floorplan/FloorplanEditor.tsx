@@ -35,6 +35,7 @@ import {
   levelLabel,
   moveRoom,
   paletteFor,
+  placesOnce,
   heightKindOf,
   paletteItem,
   recalibrate,
@@ -197,8 +198,14 @@ import { CompactCadBar, FloorplanWizardBar, HelpTip, PhaseNav, ToolbarPopover, U
 import { RoomBySizeForm } from "./RoomBySizeForm";
 import { useWizardStep } from "./useWizardStep";
 import { useFloorplanUiMode } from "./useFloorplanUiMode";
+import { useSymbolColor } from "./useSymbolColor";
+import { ConvertInstallationModal } from "./ConvertInstallationModal";
+import { ProjectVariantBar } from "./ProjectVariantBar";
+import { removeProjectVariant, switchProjectVariant } from "@/lib/panel-builder/installation-mode-converter";
+import { SYMBOL_COLOR_MODES, UNDERLAY_DIM_OPACITY, dimsUnderlay, symbolInk, uniformColor } from "@/lib/panel-builder/symbol-colors";
 import { stepForTutorialChapter, TUTORIAL_CHAPTER_EVENT, WIZARD_STEPS, wizardStatus } from "@/lib/panel-builder/floorplan-wizard";
 import { openContactModal, useContactPageContext } from "@/components/contact/contact-events";
+import { COUNTER_RAISED_TEXT, ELEMENT_RAISED_TEXT, applyCounterHeights } from "@/lib/panel-builder/counter-heights";
 import { LAYER_FILTERS, assembliesVisible, roomsLocked, elementLook, filterLook, paletteGroupVisible, phaseOfGroup, routeVisible, defaultRightTab, tabSectionVisible, type FloorplanPhase, type LayerFilter, type PanelSectionId, type RightTab } from "@/lib/panel-builder/floorplan-phases";
 import { snapOpening } from "@/lib/panel-builder/architecture";
 import { addRoomBySize, snapRoomRect, type SnapGuide } from "@/lib/panel-builder/room-builder";
@@ -423,6 +430,8 @@ export function FloorplanEditor({
   const [view, setView] = useState<ViewFraction>(FIT);
   const [pan, setPan] = useState<{ clientX: number; clientY: number; view: PlanView } | null>(null);
   const [levelPrompt, setLevelPrompt] = useState<({ level: InstallLevel } & ReturnType<typeof levelConversionPreview>) | null>(null);
+  // Fáze 109: 🔄 převod návrhu Klasická 230 V ⇄ Chytrá domácnost se zachováním obou verzí
+  const [convertOpen, setConvertOpen] = useState(false);
   /** Fáze 59: natočení další vkládané značky = natočení předchozí (R při vkládání otočí náhled). */
   const [placeRotation, setPlaceRotation] = useState<number>(0);
   const [hover, setHover] = useState<{ x: number; y: number; shift?: boolean } | null>(null);
@@ -719,6 +728,11 @@ export function FloorplanEditor({
   }, [analysis, routes]);
   // Fáze 100: stabilní funkce barvy okruhu (memoizovaná vrstva tras se pak při pohybu myši nepřekresluje)
   const colorOf = useCallback((id: string, index = 0) => entries.find((entry) => entry.id === id)?.color ?? ROUTE_COLORS[index % ROUTE_COLORS.length], [entries]);
+  // Fáze 109: 🎨 Barva značek – kontrolní barva přebarví i trasy a vazby, červená ztlumí podklad
+  const [symbolColor, setSymbolColor] = useSymbolColor();
+  const uniformInk = uniformColor(symbolColor);
+  const uniformRouteColor = useCallback(() => uniformInk ?? "#ff2e2e", [uniformInk]);
+  const dimUnderlay = dimsUnderlay(symbolColor);
   const focused = entries.find((entry) => entry.id === focusCircuit) ?? null;
   const focusedId = focused?.id ?? null;
   // Fáze 76: oko u okruhu – skrytý okruh (ani jeho vrstva) se na plátně nekreslí, vybraný okruh vždy
@@ -1065,8 +1079,12 @@ export function FloorplanEditor({
       // Fáze 90: natočení okna / dveří podle stěny si další vkládaný prvek (postel, linka) nepamatuje
       if (!single && !("onWall" in target)) setPlaceRotation(target.rotation);
       if (code) toast.success(`Podružný rozváděč ${code} – prvky na podlaží bez hlavního rozváděče k němu patří samy, jinak ho přiřaďte v soupisu okruhů nebo v detailu prvku.`);
+      // Fáze 109: zásuvka / vypínač u linky, ostrůvku nebo umyvadla rovnou ve výšce 1150 mm (vložená linka zvedne zásuvky nad sebou)
+      const heights = applyCounterHeights({ ...draft, elements: [...draft.elements, element] }, [element.id]);
+      if (heights.raised.length) toast.info(heights.byCounter ? COUNTER_RAISED_TEXT : ELEMENT_RAISED_TEXT);
       update((current) => {
         if (sub) return { ...current, elements: [...current.elements, element] };
+        if (heights.raised.length) return applyCounterHeights({ ...current, elements: [...current.elements, element] }, [element.id]).draft;
         // Hlavní rozváděč je v domě jen jeden (i přes podlaží), stoupací vedení jedno na podlaží
         if (item.kind === "panel") return { ...current, elements: [...current.elements.filter((other) => other.item !== "panel"), element], otherFloors: current.otherFloors.map((floor) => ({ ...floor, elements: floor.elements.filter((other) => other.item !== "panel") })) };
         if (item.kind === "riser") return { ...current, elements: [...current.elements.filter((other) => other.item !== "riser"), element] };
@@ -1076,7 +1094,8 @@ export function FloorplanEditor({
       setSelectedNoteId(null);
       // Fáze 100: vložený prvek je vybraný – vlastnosti sledují výběr (záložka 🎯 Detail), ručně zvolená záložka zůstane
       if (!tabManual) showDetail();
-      if (single) setTool({ kind: "select" });
+      // Fáze 109: nábytek, okna, dveře, koupelna a rozváděče po jednom kuse – nástroj zpět na Výběr, vložený kus vybraný
+      if (single || placesOnce(item)) setTool({ kind: "select" });
       return;
     }
     if (tool.kind === "place-set") {
@@ -1506,7 +1525,16 @@ export function FloorplanEditor({
     }
     if (drag) {
       const ids = drag.ids;
-      apply((current) => {
+      // Fáze 109: přesun zásuvky k lince / linky pod zásuvky – výška nad pracovní desku (náhled jen kvůli upozornění)
+      // (jen skutečně posunuté prvky – klik na značku bez posunu výšku nemění)
+      const movedIds = ids.filter((id) => {
+        const element = draft.elements.find((candidate) => candidate.id === id);
+        const origin = drag.origin[id];
+        return Boolean(element && origin && (element.x !== origin.x || element.y !== origin.y));
+      });
+      const heights = applyCounterHeights(draft, movedIds);
+      if (heights.raised.length) toast.info(heights.byCounter ? COUNTER_RAISED_TEXT : ELEMENT_RAISED_TEXT);
+      const movedDraft = (current: FloorplanDraft): FloorplanDraft => {
         const frame = frameOf(current, ids[0]);
         // Celý rámeček: kotva se přicvakne ke stěně a natočí, ostatní přístroje se k ní znovu přisadí
         if (frame && ids.length === frame.members.length && frame.members.every((id) => ids.includes(id))) {
@@ -1532,7 +1560,8 @@ export function FloorplanEditor({
             return { ...element, room: room.name, x: Math.round(position.x), y: Math.round(position.y), rotation: atWall ? wallRotation(room, element.x, element.y) : element.rotation };
           }),
         };
-      });
+      };
+      apply((current) => (movedIds.length ? applyCounterHeights(movedDraft(current), movedIds).draft : movedDraft(current)));
       setDrag(null);
     }
     if (marquee) {
@@ -2477,6 +2506,38 @@ export function FloorplanEditor({
           </label>
     </>
   );
+  // Fáze 109: přepínač barvy značek vedle velikosti (plátno editoru; výkres k tisku zůstává podle ČSN)
+  const symbolColorField = (
+    <div className="flex items-center gap-1 text-muted-foreground" role="radiogroup" aria-label="Barva značek" data-testid="symbol-color" data-mode={symbolColor.mode}>
+      <span>🎨 Barva značek:</span>
+      {SYMBOL_COLOR_MODES.map((mode) => (
+        <button
+          key={mode.id}
+          type="button"
+          role="radio"
+          aria-checked={symbolColor.mode === mode.id}
+          title={mode.label}
+          aria-label={mode.label}
+          onClick={() => setSymbolColor({ ...symbolColor, mode: mode.id })}
+          className={cn("rounded-md border px-1.5 py-0.5 text-sm leading-none", symbolColor.mode === mode.id ? "border-primary bg-primary/15 text-foreground" : "border-transparent hover:border-border")}
+          data-testid={`symbol-color-${mode.id}`}
+        >
+          {mode.emoji}
+        </button>
+      ))}
+      {symbolColor.mode === "custom" ? (
+        <input
+          type="color"
+          value={symbolColor.custom}
+          onChange={(event) => setSymbolColor({ mode: "custom", custom: event.target.value })}
+          className="h-6 w-8 cursor-pointer rounded border border-border bg-transparent p-0"
+          aria-label="Vlastní barva značek"
+          data-testid="symbol-color-input"
+        />
+      ) : null}
+      <span className="hidden text-foreground xl:inline">{SYMBOL_COLOR_MODES.find((mode) => mode.id === symbolColor.mode)?.label}</span>
+    </div>
+  );
   const symbolScaleField = (
     <>
           <label className="flex items-center gap-1 text-muted-foreground">
@@ -2516,6 +2577,12 @@ export function FloorplanEditor({
       </select>
     </label>
   );
+  // Fáze 109: výrazné tlačítko převodu (horní lišta i pravý panel u „Úroveň instalace“)
+  const convertButton = (
+    <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 border-primary/60 text-xs font-semibold" onClick={() => setConvertOpen(true)} data-testid="convert-installation">
+      🔄 Převést návrh: Klasická 230 V ⇄ Chytrá domácnost (Zachovat obě verze)
+    </Button>
+  );
   const levelField = (
     <>
           {/* Fáze 98: v úzké kartě designu (24rem) i v levé paletě se výběr zalomí a zúží – nepřetéká sloupec */}
@@ -2535,6 +2602,7 @@ export function FloorplanEditor({
               ))}
             </select>
           </label>
+          {convertButton}
     </>
   );
   const methodField = (
@@ -2891,13 +2959,21 @@ export function FloorplanEditor({
           {wizard === 1 ? (
             planeInfo
           ) : wizard === 5 ? (
-            selectTool
+            <>
+              {selectTool}
+              {/* Fáze 109: závěrečná kontrola – 🔴 červené značky nad ztlumeným podkladem */}
+              <div className="flex flex-wrap items-center gap-2 text-xs" role="group" aria-label="Zobrazení značek">
+                {symbolColorField}
+              </div>
+            </>
           ) : (
             <>
               {selectTool}
               <div className="flex flex-wrap items-center gap-2 text-xs" role="group" aria-label="Zobrazení značek">
                 {symbolScaleField}
+                {symbolColorField}
               </div>
+              {wizard === 3 || wizard === 4 ? convertButton : null}
               {wizard === 3 || wizard === 4 ? (
                 <ToolbarPopover label={`📦 Instalační krabice: ${boxMakerLabel}`} testId="wizard-boxes" wide>
                   {boxSettings}
@@ -2936,11 +3012,13 @@ export function FloorplanEditor({
                 {appearance}
                 {boxSettings}
               </ToolbarPopover>
+              {convertButton}
               <ToolbarPopover label="🔌 Trasy & Výšky" testId="compact-routes" wide>
                 <div className="flex flex-wrap items-center gap-2">
                   {routesPanel}
                   <div className="flex flex-wrap items-center gap-2 text-xs" role="group" aria-label="Zobrazení značek">
                     {symbolScaleField}
+                    {symbolColorField}
                   </div>
                 </div>
               </ToolbarPopover>
@@ -3066,6 +3144,16 @@ export function FloorplanEditor({
           <ModeBar tone={step.tone} title={step.title} hint={hint} onDone={step.onDone} doneLabel={step.doneLabel} below={draft.background ? <BackgroundLookSwitch value={bgLook} onChange={setBackgroundLook} /> : null}>
             {step.extra}
           </ModeBar>
+          {/* Fáze 109: varianty zakázky (Klasická 230 V ⇄ Smart Home) – přepnutí jedním klikem, rozdíl kabelů a ceny práce */}
+          <ProjectVariantBar
+            draft={draft}
+            onSwitch={(variantId) => {
+              update((current) => switchProjectVariant(current, variantId));
+              setTool({ kind: "select" });
+              setSelection([]);
+            }}
+            onRemove={(variantId) => update((current) => removeProjectVariant(current, variantId))}
+          />
           {/* Fáze 98: plátno vyplní volnou výšku sloupce (celé vidět, bez natahování stránky) */}
           <div className="relative overflow-hidden rounded-xl border border-border bg-zinc-950 xl:min-h-0 xl:flex-1" data-testid="floorplan-canvas-frame">
             <svg
@@ -3131,7 +3219,9 @@ export function FloorplanEditor({
                 {/* Fáze 100: vzhled podkladu – ztlumení s potlačeným kontrastem a invertovaný tmavý CAD */}
                 {draft.background ? <BackgroundFilters /> : null}
               </defs>
-              {/* Fáze 100: statický podklad a místnosti jako memoizované vrstvy (při pohybu myší se nepřekreslují) */}
+              {/* Fáze 100: statický podklad a místnosti jako memoizované vrstvy (při pohybu myší se nepřekreslují);
+                  fáze 109: při červené kontrole značek ztlumené */}
+              <g opacity={dimUnderlay ? UNDERLAY_DIM_OPACITY : undefined} data-testid="plan-underlay" data-dimmed={dimUnderlay ? "true" : "false"}>
               <PlanBackdrop widthMm={draft.widthMm} heightMm={draft.heightMm} background={draft.background} mmPerPx={draft.mmPerPx} look={bgLook} fineGrid={fineGrid} fineGridOn={viewMm.w <= 20_000} cad={draft.cad} cadGeometry={cadReady} onPaper={onPaper} unit={ui} />
               <RoomsLayer rooms={draft.rooms} selectedRoomId={selectedRoomId} unit={ui} stroke={stroke} onPaper={onPaper} selecting={tool.kind === "select"} locked={locked} handlers={handlers} />
 
@@ -3139,6 +3229,7 @@ export function FloorplanEditor({
               <g data-testid="annotation-layer">
                 <NotesLayer notes={draft.annotations} unit={ui} selectedNoteId={selectedNoteId} interactive={tool.kind === "select"} handlers={handlers} />
                 {noteDraft ? <AnnotationShape note={{ ...newAnnotation(noteDraft.mode, noteDraft.from, noteDraft.to), ...noteStyles[noteDraft.mode], id: "draft" }} unit={ui} selected={false} interactive={false} /> : null}
+              </g>
               </g>
 
               {roomDraft ? (
@@ -3196,7 +3287,7 @@ export function FloorplanEditor({
                   drag={routeDragView}
                   onSegmentDown={routeHandlers.segmentDown}
                   onReset={routeHandlers.reset}
-                  colorOf={colorOf}
+                  colorOf={uniformInk ? uniformRouteColor : colorOf}
                   focusId={focusedId}
                   hoverId={hoverCircuit}
                   onPick={routesEditable ? routeHandlers.pick : undefined}
@@ -3217,7 +3308,7 @@ export function FloorplanEditor({
               {(routeVisible(phase, "lighting", layerFilter) ? draft.elements : []).flatMap((element) =>
                 element.controls.map((lightId) => {
                   const light = draft.elements.find((candidate) => candidate.id === lightId);
-                  return light ? <line key={`${element.id}-${lightId}`} x1={element.x} y1={element.y} x2={light.x} y2={light.y} stroke={onPaper ? "#71717a" : "#e4e4e7"} strokeWidth={stroke * 1.5} strokeDasharray={`${ui / 4} ${ui / 4}`} data-testid="switch-link" pointerEvents="none" /> : null;
+                  return light ? <line key={`${element.id}-${lightId}`} x1={element.x} y1={element.y} x2={light.x} y2={light.y} stroke={uniformInk ?? (onPaper ? "#71717a" : "#e4e4e7")} strokeWidth={stroke * 1.5} strokeDasharray={`${ui / 4} ${ui / 4}`} data-testid="switch-link" pointerEvents="none" /> : null;
                 }),
               )}
 
@@ -3278,6 +3369,9 @@ export function FloorplanEditor({
                     unit={ui}
                     stroke={stroke}
                     handlers={handlers}
+                    ink={fixture ? null : symbolInk(symbolColor, item, onPaper)}
+                    uniform={Boolean(uniformInk)}
+                    mmPerPx={ui / 20}
                   />
                 );
               })}
@@ -3853,6 +3947,19 @@ export function FloorplanEditor({
         />
       ) : null}
 
+      {convertOpen ? (
+        <ConvertInstallationModal
+          open={convertOpen}
+          onOpenChange={setConvertOpen}
+          draft={draft}
+          onConverted={(result) => {
+            update(() => result.draft);
+            setTool({ kind: "select" });
+            setSelection([]);
+            toast.success(`${result.variant.label} – původní návrh zůstal jako přepínatelná varianta.`, { description: result.summary.lines.join(" · ") });
+          }}
+        />
+      ) : null}
       {levelPrompt ? (
         <Dialog open onOpenChange={(open) => !open && setLevelPrompt(null)}>
           <DialogContent className="sm:max-w-lg" data-testid="level-conversion">

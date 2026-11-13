@@ -67,7 +67,10 @@ function DeviceCard({ product, system, props }: { product: CatalogProduct; syste
   const total = auto + extra;
   // Fáze 78: oficiální náhled výrobce z public/catalog-images (se zdrojem a licencí), jinak vektorový náhled
   // Fáze 104: náhled výrobce ze serveru (index fotek s objednacími čísly je jen na serveru)
-  const photo = useCatalogImage("product", product.id);
+  const productPhoto = useCatalogImage("product", product.id);
+  // Fáze 109: fotka výrobce je jedna na výrobek (bez barvy) – u panelů s barevnými variantami ukazovala bílý panel i při
+  // zvolené černé; tam vždy věrný render ve zvolené barvě (náhled, objednací číslo i typ se přepínají spolu)
+  const photo = (product.variants?.length ?? 0) > 1 ? null : productPhoto;
   return (
     <article className={cn("flex flex-col gap-2 rounded-lg border bg-background/40 p-2", active ? "border-primary ring-1 ring-primary" : "border-border")} data-testid="device-card" data-card={product.id}>
       <div className="flex gap-2">
@@ -82,7 +85,9 @@ function DeviceCard({ product, system, props }: { product: CatalogProduct; syste
             data-testid="device-photo"
           />
         ) : (
-          <SmartHomeDeviceIllustration product={product} variant={variant?.id} system={system} tone={props.tone} className="size-20 shrink-0 rounded-md bg-muted/40 p-1" />
+          <span className="contents" data-testid="device-render" data-variant={variant?.id ?? ""}>
+            <SmartHomeDeviceIllustration product={product} variant={variant?.id} system={system} tone={props.tone} className="size-20 shrink-0 rounded-md bg-muted/40 p-1" />
+          </span>
         )}
         <div className="min-w-0">
           <h4 className="text-sm font-bold leading-tight">

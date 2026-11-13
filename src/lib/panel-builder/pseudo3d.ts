@@ -101,7 +101,8 @@ function kindOf(element: EditorElement): SceneKind {
   if (!item) return "other";
   if (item.kind === "panel") return "board";
   if (item.kind === "light") return "light";
-  if (item.kind === "switch") return item.control === "thermostat" ? "control" : "switch";
+  // Fáze 109: ovladače bez párování světel (termostat, čidlo, magnet) tyrkysově – vypínače zeleně
+  if (item.kind === "switch") return item.control === "thermostat" || item.control === "none" || item.sensor ? "control" : "switch";
   if (item.kind === "appliance") return "appliance";
   if (item.kind === "single_socket" || item.kind === "double_socket" || item.kind === "data_socket") return "socket";
   if (item.control || item.sensor || item.bus) return "control";

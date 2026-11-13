@@ -128,6 +128,12 @@ export const PALETTE_GROUPS: { id: PaletteGroup; icon: string; label: string; hi
   { id: "medical", icon: "🏥", label: "Zdravotnictví (Skupina 1)", hint: "EKV, lůžková rampa LUZ, lehátko – ČSN 33 2000-7-710 ed. 2" },
 ];
 
+/**
+ * Fáze 109: okna, dveře, nábytek, koupelna a rozváděče se vkládají po jednom – po kliknutí do půdorysu se nástroj vrátí na
+ * Výběr a vložený kus zůstane vybraný (rozměr X × Y, natočení). Další kus = znovu klik v paletě.
+ */
+export const placesOnce = (item: Pick<PaletteItem, "group">) => item.group === "architecture" || item.group === "fixtures" || item.group === "panel";
+
 /** Nadpis a podtitul skupiny ovládání podle úrovně instalace (fáze 57, fáze 74 krátce, fáze 100 s ikonou). */
 export const CONTROLS_LABEL: Record<InstallLevel, { icon: string; label: string; hint: string }> = {
   classic: { icon: "🔘", label: "Vypínače 230 V", hint: "řazení dle ČSN, stmívače, čidla" },
@@ -240,7 +246,8 @@ export const PALETTE: PaletteItem[] = [
   { id: "arch-island", group: "architecture", label: "Kuchyňský ostrůvek (1,80 × 0,90 m)", symbol: "OSTR", kind: "fixture" },
   { id: "arch-wardrobe", group: "architecture", label: "Šatní / vestavěná skříň (2,00 × 0,60 m)", symbol: "SKRIN", kind: "fixture" },
   { id: "arch-tv", group: "architecture", label: "TV stolek / obývací stěna (1,80 × 0,45 m)", symbol: "TV_ST", kind: "fixture" },
-  { id: "arch-wc", group: "architecture", alsoIn: ["fixtures"], label: "WC mísa / závěsné WC (0,40 × 0,65 m)", symbol: "WC_M", kind: "fixture" },
+  // Fáze 109: WC jen v Koupelně (dřív i v „Okna, dveře a nábytek“ – duplicitní položka palety); id zůstává kvůli uloženým půdorysům
+  { id: "arch-wc", group: "fixtures", label: "WC mísa / závěsné WC (0,40 × 0,65 m)", symbol: "WC_M", kind: "fixture" },
   // Fáze 93: zdravotnický prostor Skupiny 1 – doplňující ochranné pospojování, lůžková rampa a vyšetřovací lehátko
   { id: "ekv", group: "medical", occupancies: MEDICAL_ONLY, label: "EKV – přípojka doplňujícího ochranného pospojování (CYA 6 mm² ZŽ, H07V-K)", symbol: "EKV", kind: "bonding", heightMm: 300 },
   { id: "bed-ramp", group: "medical", occupancies: MEDICAL_ONLY, label: "LUZ – lůžková rampa / vyšetřovací pracoviště (Okruh A + Okruh B + PE + RJ45)", symbol: "LUZ", kind: "double_socket", ramp: true, heightMm: 1200 },
@@ -604,6 +611,39 @@ export interface FloorplanDraft {
    */
   occupancy: OccupancyId;
   updatedAt: number;
+  /**
+   * Fáze 109: uložené varianty téže zakázky (Klasická 230 V ⇄ Smart Home) – snímky neaktivních variant; převod nikdy
+   * nepřepíše původní návrh (`installation-mode-converter.ts`).
+   */
+  projectVariants?: ProjectVariant[];
+  /** Fáze 109: označení aktivní varianty; bez údaje = projekt bez variant (původní návrh). */
+  activeVariant?: VariantMeta | null;
+}
+
+/** Fáze 109: označení varianty zakázky. */
+export interface VariantMeta {
+  id: string;
+  label: string;
+  installation: InstallLevel;
+  smartSystem: string | null;
+  createdAt: number;
+}
+
+/** Fáze 109: „instalační“ část nákresu varianty – místnosti, podklad a ostatní nastavení zakázky jsou společné. */
+export interface VariantSnapshot {
+  floors: { id: string; elements: EditorElement[]; frames: FrameGroup[] }[];
+  installation: InstallLevel;
+  smartSystem: string;
+  series: string | null;
+  color: string;
+  frameColor: string | null;
+  smartExtras: Record<string, number>;
+  routeEdits: Record<string, { x: number; y: number }[]>;
+  mode: CableRoutingMode;
+}
+
+export interface ProjectVariant extends VariantMeta {
+  snapshot: VariantSnapshot;
 }
 
 /** Fáze 76: „walls“ = obvodově po stěnách dle ČSN 33 2130 ed. 4, „direct“ = nejkratší přímé L-trasy podlahou. */
@@ -722,7 +762,80 @@ export function parseDraft(value: unknown): FloorplanDraft | null {
     // Fáze 93: režim objektu (starší nákresy = bytová instalace)
     occupancy: isOccupancyId(draft.occupancy) ? draft.occupancy : DEFAULT_OCCUPANCY,
     updatedAt: num(draft.updatedAt, 0, 0, 1e15),
+    // Fáze 109: varianty zakázky (Klasická 230 V ⇄ Smart Home) – jen u nákresu s variantami
+    ...parseVariants(draft.projectVariants, draft.activeVariant),
   });
+}
+
+/** Fáze 109: nejvýš variant v nákresu (snímky zvětšují uložený půdorys). */
+const MAX_PROJECT_VARIANTS = 4;
+const VARIANT_ID = /^v\d{1,2}$/;
+
+function parseVariantMeta(value: unknown): VariantMeta | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Partial<VariantMeta>;
+  if (typeof raw.id !== "string" || !VARIANT_ID.test(raw.id) || typeof raw.label !== "string" || !isInstallLevel(raw.installation)) return null;
+  return {
+    id: raw.id,
+    label: raw.label.slice(0, 120),
+    installation: raw.installation,
+    smartSystem: typeof raw.smartSystem === "string" && SMART_SYSTEM_IDS.includes(raw.smartSystem) ? raw.smartSystem : null,
+    createdAt: typeof raw.createdAt === "number" && Number.isFinite(raw.createdAt) ? raw.createdAt : 0,
+  };
+}
+
+/** Snímek varianty projde stejnou kontrolou jako nákres (prvky a rámečky všech podlaží, úroveň, systém, řada, trasy). */
+function parseSnapshot(value: unknown): VariantSnapshot | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Partial<VariantSnapshot>;
+  if (!Array.isArray(raw.floors) || !raw.floors.length) return null;
+  const floors = raw.floors.filter((floor): floor is VariantSnapshot["floors"][number] => Boolean(floor) && typeof floor === "object" && typeof floor.id === "string" && Array.isArray(floor.elements)).slice(0, MAX_FLOORS);
+  if (!floors.length) return null;
+  const [first, ...rest] = floors;
+  const parsed = parseDraft({
+    version: 1,
+    rooms: [],
+    elements: first.elements,
+    frames: Array.isArray(first.frames) ? first.frames : [],
+    floorId: first.id,
+    otherFloors: rest.map((floor) => ({ id: floor.id, name: floor.id, rooms: [], elements: floor.elements, frames: Array.isArray(floor.frames) ? floor.frames : [], annotations: [] })),
+    installation: raw.installation,
+    smartSystem: raw.smartSystem,
+    series: raw.series,
+    color: raw.color,
+    frameColor: raw.frameColor,
+    smartExtras: raw.smartExtras,
+    routeEdits: raw.routeEdits,
+    mode: raw.mode,
+  } as unknown as FloorplanDraft);
+  if (!parsed) return null;
+  return {
+    floors: [{ id: parsed.floorId, elements: parsed.elements, frames: parsed.frames }, ...parsed.otherFloors.map((floor) => ({ id: floor.id, elements: floor.elements, frames: floor.frames }))],
+    installation: parsed.installation,
+    smartSystem: parsed.smartSystem,
+    series: parsed.series,
+    color: parsed.color,
+    frameColor: parsed.frameColor,
+    smartExtras: parsed.smartExtras,
+    routeEdits: parsed.routeEdits,
+    mode: parsed.mode,
+  };
+}
+
+function parseVariants(variants: unknown, active: unknown): Pick<FloorplanDraft, "projectVariants" | "activeVariant"> {
+  const meta = parseVariantMeta(active);
+  if (!meta) return {};
+  const seen = new Set([meta.id]);
+  const projectVariants = (Array.isArray(variants) ? variants : [])
+    .slice(0, MAX_PROJECT_VARIANTS)
+    .flatMap((entry): ProjectVariant[] => {
+      const variant = parseVariantMeta(entry);
+      const snapshot = parseSnapshot((entry as { snapshot?: unknown } | null)?.snapshot);
+      if (!variant || !snapshot || seen.has(variant.id)) return [];
+      seen.add(variant.id);
+      return [{ ...variant, snapshot }];
+    });
+  return { projectVariants, activeVariant: meta };
 }
 
 type Num = (input: unknown, fallback: number, min: number, max: number) => number;

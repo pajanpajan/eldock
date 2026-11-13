@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import type { InstallLevel } from "@/engine/floorplan-bridge";
 import type { PaletteItem } from "@/lib/panel-builder/floorplan-editor";
 import { FIXTURES, ZONE2_MM } from "@/lib/panel-builder/fixtures";
+import { SYMBOL_PLATE, SYMBOL_PLATE_PX, SYMBOL_STROKE_FACTOR, MIN_SYMBOL_STROKE_PX } from "@/lib/panel-builder/symbol-colors";
 import { symbolParts } from "@/lib/panel-builder/symbol-parts";
 
 export { symbolParts };
@@ -29,6 +30,9 @@ export function FloorSymbol({
   lem,
   hitSlot = null,
   plate = false,
+  ink: inkOverride = null,
+  uniform = false,
+  mmPerPx = 0,
 }: {
   item: PaletteItem;
   size: number;
@@ -51,12 +55,19 @@ export function FloorSymbol({
    * kroužky vyplní) a popisek světle na tmavém obrysu (`paint-order: stroke`). Tiskový výkres ho nemá.
    */
   plate?: boolean;
+  /** Fáze 109: barva značky z přepínače „🎨 Barva značek“ (dle typu / kontrolní). */
+  ink?: string | null;
+  /** Fáze 109: jednotná kontrolní barva (červená, žlutá, cyan, vlastní) – přebije i zelenou nouzového svítidla. */
+  uniform?: boolean;
+  /** Fáze 109: mm plánu na 1 px obrazovky – minimální tloušťka čar a štítku na plátně. */
+  mmPerPx?: number;
 }) {
   const parts = symbolParts(item, size, { switchNo, level });
-  // Fáze 93: nouzové únikové svítidlo zelenou kresbou
-  const ink = parts.color ?? (onPaper ? "#111827" : "#f4f4f5");
-  const halo = active ? "#facc15" : onPaper ? "rgba(255,255,255,0.9)" : plate ? "rgba(15,23,42,0.88)" : "rgba(9,9,11,0.85)";
-  const w = size / 22;
+  // Fáze 93: nouzové únikové svítidlo zelenou kresbou; fáze 109: barva z přepínače, kontrolní barva přebije vše
+  const ink = (uniform ? inkOverride : null) ?? parts.color ?? inkOverride ?? (onPaper ? "#111827" : "#f4f4f5");
+  const halo = active ? "#facc15" : onPaper ? "rgba(255,255,255,0.9)" : plate ? SYMBOL_PLATE : "rgba(9,9,11,0.85)";
+  // Fáze 109: na plátně o 35 % silnější čáry, na obrazovce aspoň 2,4 px (tiskový výkres beze změny)
+  const w = plate ? Math.max((size / 22) * SYMBOL_STROKE_FACTOR, MIN_SYMBOL_STROKE_PX * mmPerPx) : size / 22;
   const draw = (stroke: string, width: number, key: string, wipe = false) => (
     <g key={key} fill="none" stroke={stroke} strokeWidth={width} strokeLinecap="round" strokeLinejoin="round">
       {parts.paths.map((d, index) => (
@@ -67,8 +78,8 @@ export function FloorSymbol({
       ))}
     </g>
   );
-  // Fáze 100: štítek pod značkou – obrys 4,5× (vybraná 5,5×) tloušťky čáry, vnitřek kroužků zakrytý
-  const haloWidth = w * (plate ? (active ? 5.5 : 4.5) : active ? 4.5 : 3.2);
+  // Fáze 100: štítek pod značkou – obrys 4,5× (vybraná 5,5×) tloušťky čáry, vnitřek kroužků zakrytý; fáze 109: aspoň 4,5 px
+  const haloWidth = Math.max(w * (plate ? (active ? 5.5 : 4.5) : active ? 4.5 : 3.2), plate ? SYMBOL_PLATE_PX * mmPerPx * 2 : 0);
   const labelText = parts.label;
   const font = size * 0.3;
   const spec = item.kind === "fixture" ? (FIXTURES[item.id] ?? null) : null;
@@ -107,9 +118,9 @@ export function FloorSymbol({
             y={-size * 0.5}
             fontSize={font}
             fontWeight={800}
-            fill={plate ? "#f8fafc" : ink}
-            stroke={plate ? "rgba(15,23,42,0.88)" : onPaper ? "#fff" : "#09090b"}
-            strokeWidth={plate ? font * 0.32 : w * 1.4}
+            fill={plate ? (uniform ? ink : "#f8fafc") : ink}
+            stroke={plate ? SYMBOL_PLATE : onPaper ? "#fff" : "#09090b"}
+            strokeWidth={plate ? Math.max(font * 0.32, SYMBOL_PLATE_PX * mmPerPx) : w * 1.4}
             strokeLinejoin="round"
             paintOrder="stroke"
             data-testid={plate ? "symbol-label" : undefined}
@@ -124,8 +135,9 @@ export function FloorSymbol({
 }
 
 /** Rozváděč: obdélník s vyplněnou polovinou (úhlopříčka) a označením. */
-export function PanelSymbol({ size, active, onPaper, label }: { size: number; active: boolean; onPaper: boolean; label: string }): ReactNode {
-  const ink = onPaper ? "#111827" : "#f4f4f5";
+export function PanelSymbol({ size, active, onPaper, label, ink: inkOverride = null }: { size: number; active: boolean; onPaper: boolean; label: string; ink?: string | null }): ReactNode {
+  // Fáze 109: barva rozváděče z přepínače „🎨 Barva značek“
+  const ink = inkOverride ?? (onPaper ? "#111827" : "#f4f4f5");
   const w = size * 0.6;
   const h = size * 0.35;
   return (

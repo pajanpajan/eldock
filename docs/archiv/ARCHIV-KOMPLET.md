@@ -65,36 +65,38 @@
 59. ZADANI-faze-106.md
 60. ZADANI-faze-107.md
 61. ZADANI-faze-108.md
-62. DENIK-faze-100.md
-63. DENIK-faze-101.md
-64. DENIK-faze-102.md
-65. DENIK-faze-103.md
-66. DENIK-faze-104.md
-67. DENIK-faze-105.md
-68. DENIK-faze-106.md
-69. DENIK-faze-49-54.md
-70. DENIK-faze-55-59.md
-71. DENIK-faze-60-61.md
-72. DENIK-faze-62-65.md
-73. DENIK-faze-66-67.md
-74. DENIK-faze-68-70.md
-75. DENIK-faze-71-73.md
-76. DENIK-faze-74-77.md
-77. DENIK-faze-78-80.md
-78. DENIK-faze-81-82.md
-79. DENIK-faze-83-85.md
-80. DENIK-faze-86-88.md
-81. DENIK-faze-89-90.md
-82. DENIK-faze-91.md
-83. DENIK-faze-92.md
-84. DENIK-faze-93.md
-85. DENIK-faze-94.md
-86. DENIK-faze-95.md
-87. DENIK-faze-96.md
-88. DENIK-faze-97.md
-89. DENIK-faze-98.md
-90. DENIK-faze-99.md
-91. docs/PLAN.md (aktuální plán a deník posledních fází)
+62. ZADANI-faze-109.md
+63. DENIK-faze-100.md
+64. DENIK-faze-101.md
+65. DENIK-faze-102.md
+66. DENIK-faze-103.md
+67. DENIK-faze-104.md
+68. DENIK-faze-105.md
+69. DENIK-faze-106.md
+70. DENIK-faze-107.md
+71. DENIK-faze-49-54.md
+72. DENIK-faze-55-59.md
+73. DENIK-faze-60-61.md
+74. DENIK-faze-62-65.md
+75. DENIK-faze-66-67.md
+76. DENIK-faze-68-70.md
+77. DENIK-faze-71-73.md
+78. DENIK-faze-74-77.md
+79. DENIK-faze-78-80.md
+80. DENIK-faze-81-82.md
+81. DENIK-faze-83-85.md
+82. DENIK-faze-86-88.md
+83. DENIK-faze-89-90.md
+84. DENIK-faze-91.md
+85. DENIK-faze-92.md
+86. DENIK-faze-93.md
+87. DENIK-faze-94.md
+88. DENIK-faze-95.md
+89. DENIK-faze-96.md
+90. DENIK-faze-97.md
+91. DENIK-faze-98.md
+92. DENIK-faze-99.md
+93. docs/PLAN.md (aktuální plán a deník posledních fází)
 
 ---
 
@@ -7101,6 +7103,246 @@ Aby měl každý revizní technik 100% jistotu, že nikdo cizí nezneužil jeho 
 
 ---
 
+# 📄 ZADANI-faze-109.md
+
+# Zadání fáze 109 – 2D půdorys: viditelnost a barva značek, 3D náhled se stěnami, nábytek po kusech, výška u kuchyňské linky, panely ABB-free@home podle barvy a převod Klasická 230 V ⇄ Smart Home se zachováním variant
+
+Vloženo z chatu 2026-11-13 (původně jako fáze 108; průmyslové zadání vložené mezitím dostalo přednost jako fáze 108). Celé zadání beze změn je níže, za ním rozhodnutí při implementaci.
+
+## Zadání (z chatu)
+
+Máme 7 konkrétních vizuálních a funkčních úprav v 2D půdorysu (`/panel-builder/floorplan`) a katalogu Smart Home podle přímého testování:
+
+1) Zvýraznění schématických značek na 2D půdorysu + možnost přepnutí barvy značek (např. na kontrastní červenou pro závěrečnou kontrolu).
+2) V 3D náhledu (`3D náhled a kontrola výšek`) vykreslit poloprůhledné stěny místností (cca 20 % opacity) do zadané výšky stropu a jasně barevně odlišit vypínače od světel a dalších prvků.
+3) Po vložení jakéhokoliv prvku z kategorie `Okna, dveře a nábytek` nebo `Koupelna` automaticky ukončit vkládání (přepnout nástroj zpět na `Výběr`), aby uživatel nevkládal nábytek opakovaně.
+4) Odstranit duplicitní `WC mísa / závěsné WC` ze záložky `Okna, dveře a nábytek` (zůstane pouze v záložce `Koupelna`).
+5) Nastavit automatickou výškovou logiku pro zásuvky a vypínače umístěné nad kuchyňskou linkou, ostrůvkem a umyvadlem (automaticky `1150 mm` nad pracovní deskou místo `300 mm`).
+6) Opravit náhledové obrázky, přepínání barev (Černá vs. Bílá) a přesná MPN u panelů `ABB-free@home®` (`RoomTouch 4"`, `Trevion 2,4"`, `SmartTouch 10"`, `OneTouch 7"`).
+7) Přidat funkci automatického převodu mezi `Klasickou instalací 230 V` a `Chytrou domácností (Smart Home)` přes krátké vyskakovací okno s tím, že původní návrh zůstane v projektu trvale uložený jako přepínatelná varianta!
+
+Zapiš tuto etapu jako novou fázi do `docs/PLAN.md` a kompletně ji naimplementuj v těchto 7 částech:
+
+================================================================================
+ČÁST 1: VYSOKÁ VIDITELNOST SCHÉMATICKÝCH ZNAČEK + PŘEPÍNAČ BARVY PRO KONTROLU
+================================================================================
+
+PROBLÉM: Na tmavém CAD podkladu a přes bílé čáry/šrafování stavebního výkresu jsou šedé schématické značky (`IP44`, `BUS 4x`, `ZAL_M`, značky zásuvek, vypínačů a světel) špatně viditelné.
+
+OPRAVA v `/panel-builder/floorplan`:
+1. **Výraznější vykreslení značek a popisků na plátně:**
+   - Zvyš tloušťku čar (`strokeWidth`) všech schématických značek o 35 % (min. `2.2px` až `2.8px`).
+   - Pod každou značku i její textový popisek (`IP44`, `BUS 4×`, `ZAL_M`, `-F1`) přidej kontrastní podkladový obrys / štítek (`paint-order: stroke fill; stroke: rgba(9, 13, 22, 0.92); stroke-width: 4.5px;` nebo poloprůhledný tmavý podklad pod značkou), aby symbol nikdy nesplýval s bílým šrafováním stěn pod ním!
+2. **Přepínač barvy schématických značek v horní liště plátna (vedle posuvníku `Velikost značek`):**
+   - Přidej ovládací prvek **`🎨 Barva značek:`** s rychlými volbami:
+     * **`[ 🌈 Dle typu (Výchozí kontrastní) ]`** – jasné syté barvy podle kategorie (žádná tmavě šedá!).
+     * **`[ 🔴 Červená (Kontrola) ]`** – VŠECHNY elektrické značky, popisky a vazby na výkresu se okamžitě vykreslí **zářivě červenou barvou (`#ff2e2e` s bílým/tmavým kontrastním lemem)** a podkladový výkres se jemně ztlumí, aby měl projektant při závěrečné kontrole 100% jistotu, že žádný prvek nepřehlédne!
+     * **`[ 🟡 Neon žlutá ]`** (`#facc15`)
+     * **`[ 🔵 Jasně modrá / Cyan ]`** (`#00f0ff`)
+     * **`[ 🎨 Vlastní barva ]`** (`<input type="color" />` pro libovolnou barvu dle přání uživatele).
+
+================================================================================
+ČÁST 2: 3D NÁHLED – POLOPRŮHLEDNÉ STĚNY (20 %) DO VÝŠKY STROPU + JASNÉ BARVY PRVKŮ
+================================================================================
+
+Uprav modal / komponentu `3D náhled a kontrola výšek` (`FloorplanPseudo3DModal.tsx`):
+
+1. **Vykreslení poloprůhledných 3D stěn místností (~20 % průhlednost) podle zadané výšky stropu:**
+   - Pro každou místnost v půdorysu vykresli v 3D izometrii její **obvodové stěny vytažené od podlahy (`0 mm`) až do zadané výšky stropu (`ceilingHeightMm`, výchozí `2600 mm`)**!
+   - Stěny vykresli jako poloprůhledné plochy s **~20% krytím (`fill: rgba(148, 163, 184, 0.20)`)** a jasnými obrysovými hranami u podlahy, v rozích a u stropu (`stroke: rgba(226, 232, 240, 0.55)`), včetně názvu místnosti na podlaze a průhledných otvorů oken (`parapet 900 mm` do `2300 mm`) a dveří (`0 mm` do `2000 mm`).
+2. **Jasné barevné a tvarové odlišení prvků (konec splývání vypínačů a světel!):**
+   - Změň paletu barev v 3D pohledu (i ve spodní legendě) tak, aby byla každá kategorie okamžitě rozpoznatelná:
+     * **`🔵 Zásuvka`:** Jasně modrá (`#38bdf8`) – kroužek s modrou čárkovanou svislicí k podlaze.
+     * **`🟢 Vypínač`:** Smaragdově zelená (`#10b981`) – **čtvercový / kosočtvercový symbol** s jasným bílým obrysem (už NIKDY oranžová, která splývala se žlutými světly!).
+     * **`🟡 Svítidlo`:** Zářivě žlutá (`#fde047`) se světelnou září (glow efekt) a symbolem paprsků.
+     * **`🟣 Rozváděč`:** Výrazná purpurová / fialová (`#d946ef`) – obdélníkový 3D box skříně na stěně.
+     * **`🩵 Ovladač / Čidlo / Magnet`:** Tyrkysová / Cyan (`#06b6d4`) – trojúhelníkový/kruhový bod.
+     * **`🔴 Spotřebič`:** Sytě červená / Korálová (`#f43f5e`).
+     * **`⚪ Nábytek / Zařizovací předměty`:** Světle šedý 3D kvádr (`rgba(255,255,255,0.14)`) s popiskem (`Linka 900 mm`, `Postel`, `Vana`).
+
+================================================================================
+ČÁST 3: AUTOMATICKÉ „HOTOVO“ PO VLOŽENÍ NÁBYTKU A KOUPELNOVÝCH PRVKŮ + ODSTRANĚNÍ DUPLICITNÍHO WC
+================================================================================
+
+1. **Jednorázové vložení nábytku, oken, dveří a koupelnových prvků (Auto-reset na `Výběr`):**
+   - Když uživatel v levé paletě vybere jakýkoliv prvek z kategorie **`🛋️ Okna, dveře a nábytek`** nebo **`🛁 Zařizovací předměty (Koupelna)`** ( případně **`⚡ Rozváděče`**) a kliknutím ho umístí do půdorysu:
+     * **Okamžitě po vložení přepni aktivní nástroj zpět na `Výběr` (`select` / `activePaletteItem = null`)** a nově vložený prvek automaticky označ jako vybraný!
+     * Uživatel tak může ihned upravit rozměr `X × Y` nebo otočení vloženého nábytku, aniž by při dalším kliknutí do výkresu omylem vložil druhou kuchyňskou linku nebo druhou vanu. Pokud chce vložit další kus, jednoduše na něj znovu klikne v levém menu.
+2. **Odstranění duplicitního WC ze sekce `Okna, dveře a nábytek`:**
+   - Ze seznamu položek v kategorii `🛋️ Okna, dveře a nábytek` odstraň položku **`WC mísa / závěsné WC (0,40 × 0,65 m)`**, protože WC už je správně zařazené v kategorii `🛁 Koupelna (Zařizovací předměty)`.
+
+================================================================================
+ČÁST 4: CHYTRÁ LOGIKA VÝŠKY ZÁSUVEK A VYPÍNAČŮ NAD KUCHYŇSKOU LINKOU A NÁBYTKEM
+================================================================================
+
+Naimplementuj v `/panel-builder/floorplan` automatickou prostorovou detekci výšky prvků u nábytku:
+1. **Při vložení nebo přesunu zásuvky / vypínače ke kuchyňské lince, ostrůvku nebo umyvadlu:**
+   - Pokud uživatel umístí nebo přesune běžnou zásuvku (`1N`, `2N`, `IP44`, `USB`, vícerámeček se zásuvkami) nebo vypínač/ovladač do půdorysného obdélníku (nebo do vzdálenosti `≤ 20 cm` od hrany) prvku **`Kuchyňská linka`**, **`Kuchyňský ostrůvek`** nebo **`Umyvadlo / Dvojumyvadlo`**:
+     * Automaticky nastav výšku této zásuvky / vypínače na **`1150 mm`** (standardní výška nad pracovní deskou `900 mm`!), pokud měla výchozí podlahovou výšku `300 mm`!
+     * Výjimka: Samostatné spotřebiče zapojené pod linkou (`Myčka`, `Trouba`, `Varná deska`, `Lednice`) si ponechají svou technologickou výšku pod deskou (`300–600 mm`).
+2. **Při vložení nebo posunutí samotné Kuchyňské linky pod již osazené zásuvky:**
+   - Pokud uživatel položí nebo posune `Kuchyňskou linku` na místo, kde už na stěně jsou běžné zásuvky ve výšce `300 mm`, automaticky je zvedni na **`1150 mm`** a zobraz krátké informační upozornění: *„📏 Zásuvky nad kuchyňskou linkou byly automaticky nastaveny do výšky 1150 mm (nad pracovní desku 900 mm).“*
+
+================================================================================
+ČÁST 5: OPRAVA NÁHLEDOVÝCH OBRÁZKŮ, BAREV A MPN U ABB-free@home® (`SmartHomeDeviceCatalog`)
+================================================================================
+
+PROBLÉM (`{C5A56358-DFED-4711-AF41-428C41111E9A}.png`):
+- U karty `Dotykový panel ABB RoomTouch® 4"` je vybraná barva `Černá / antracit`, ale obrázek vlevo je bílý čtverec (`Blinds south`).
+- U karty `Dotykový panel ABB Trevion® 2,4"` je jen prázdný šedý čtvereček a obě karty mají zástupné MPN (`2TMA310011B0003` / `2TMA310011B0001`).
+
+OPRAVA:
+1. U všech panelů a nástěnných ovladačů v katalogu **ABB-free@home®** a **ABB i-bus® KNX** zajisti, aby přepnutí barevné varianty (`Černá / antracit` vs. `Bílá` vs. `Stříbrná / Nerez`) **dynamicky přepínalo jak náhledový obrázek (`imageUrl` / věrný produktový render v dané barvě!), tak skutečné objednací číslo `MPN` a `EAN`**:
+   - **Dotykový panel ABB RoomTouch® 4" (HD kapacitní displej s tenkým rámečkem):**
+     * Varianta `Černá / antracit`: MPN **`2TMA310050B0001`** (`RT-F-4.0.1-B`, EAN `6955891816626`) -> zobraz realistický černý skleněný štíhlý panel s tmavým rozhraním ABB RoomTouch (ovládání žaluzií, teploty `22,5 °C` a osvětlení).
+     * Varianta `Bílá`: MPN **`2TMA310050W0001`** (`RT-F-4.0.1-WL`, EAN `6955891816619`) -> zobraz bílý skleněný panel se světlým rámečkem.
+   - **Dotykový displej ABB Trevion® 2,4" (55 × 55 mm pod rámeček Zoni / Levit / Time / solo):**
+     * Varianta `Černá / matná černá`: MPN **`2CKA006220A0875`** (EAN `4011395326459`) -> zobraz detailní černý displej Trevion 2,4" v černém rámečku s rozsvíceným barevným displejem (teplota místnosti, ikony světel a scén) a kapacitní lištou.
+     * Varianta `Bílá / studiová bílá`: MPN **`2CKA006220A0872`** (EAN `4011395326411`) -> zobraz bílý displej Trevion 2,4" v bílém rámečku.
+   - Zkontroluj a stejně dynamicky napáruj barvy a MPN i u `ABB SmartTouch® 10"` (`2TMA310051B0001` černá / `2TMA310051W0001` bílá) a `ABB OneTouch™ 7"` (`2TMA130050B0001` černá / `2TMA130050W0001` bílá).
+
+================================================================================
+ČÁST 6: AUTOMATICKÝ PŘEVOD MEZI KLASICKOU 230 V A CHYTROU DOMÁCNOSTÍ (SE ZACHOVÁNÍM PŮVODNÍHO NÁVRHU!)
+================================================================================
+
+Vytvoř chytrý obousměrný převodník instalace (`src/lib/panel-builder/installation-mode-converter.ts` + modal `ConvertInstallationModal.tsx`):
+
+1. **Tlačítko a přepínač variant návrhu v 2D půdorysu:**
+   - V horní liště 2D půdorysu i v pravém panelu u volby `Úroveň instalace` přidej výrazné tlačítko:
+     **`[ 🔄 Převést návrh: Klasická 230 V ⇄ Chytrá domácnost (Zachovat obě verze) ]`**.
+2. **Krátké vyskakovací okno pro doplnění parametrů převodu (`ConvertInstallationModal.tsx`):**
+   - Když má uživatel nakreslenou **Klasickou instalaci 230 V** a klikne na převod do **Chytré domácnosti**, vyskočí přehledné okno, kde během 10 vteřin upřesní:
+     1) **Cílový systém Smart Home:** `ABB-free@home®` | `Loxone (Miniserver + Tree)` | `ABB i-bus® KNX` | `TapHome`.
+     2) **Designová řada ovladačů:** (automaticky nabídne kompatibilní řadu, např. `ABB Zoni / Levit`, `Loxone Touch Pure`, `TapHome`).
+     3) **Jak převést vypínače a světla (zaškrtávací volby):**
+        * `[✓] Nahradit klasické vypínače 230 V (č. 1, 5, 6, 7) sběrnicovými tlačítky 24 V DC`
+        * `[✓] Sloučit vícenásobné vypínače u dveří (např. světlo + žaluzie) do jednoho vícerámečku / vícekanálového tlačítka`
+        * `[✓] Přepočítat trasy světel a žaluzií na přímé hvězdicové větve do rozváděče + sběrnicovou linku 24 V DC`
+        * `[ ] Volitelně: Nastavit hlavní světla v obytných místnostech jako stmívatelná (přidat stmívací aktor)`
+        * `[ ] Volitelně: Doplnit do chodeb a koupelen stropní PIR čidla přítomnosti`
+   - Pokud uživatel převádí **opačně (`Chytrá domácnost ➔ Klasická instalace 230 V`)**, okno se zeptá na cílovou designovou řadu 230V vypínačů (např. `ABB Levit`) a automaticky převede sběrnicová tlačítka zpět na klasické vypínače (řazení 1, 5, 6 u 2 ovladačů v místnosti, řazení 7 u 3+ ovladačů) a žaluziové spínače, a přepočítá trasy na klasické okruhy!
+3. **ZACHOVÁNÍ PŮVODNÍHO NÁVRHU (PŘEPÍNATELNÉ VARIANTY V PROJEKTU):**
+   - Při potvrzení převodu **NIKDY nepřepisuj původní návrh natvrdo**!
+   - Ulož původní návrh do pole `projectVariants` v projektu půdorysu a nad plátnem zobraz čistý přepínač uložených variant téže zakázky:
+     **`Varianta návrhu: [ ⚡ Varianta 1: Klasická 230 V (Původní) ] ⇄ [ 🤖 Varianta 2: Smart Home – ABB-free@home® ]`** (+ ukazatel rozdílu metráže kabelů a ceny!).
+   - Elektrikář nebo projektant tak může jedním klikem přepínat mezi původní klasickou elektroinstalací a přepočítanou chytrou domácností, vygenerovat pro každou z nich rozváděč i cenovou nabídku a ukázat zákazníkovi přesné srovnání!
+
+================================================================================
+ČÁST 7: TESTY, VERIFIKACE A NASAZENÍ NA PRODUKCI
+================================================================================
+
+1. Napiš unit testy ověřující:
+   - Že převodník `convertInstallationMode` správně převede klasický půdorys na Smart Home (vypínače -> sběrnicová tlačítka, trasy -> hvězdice + sběrnice, přidání Smart Home aktorů) A ZÁROVEŇ zachová původní návrh v `projectVariants` pro okamžité přepnutí zpět.
+   - Že umístění běžné zásuvky nad `Kuchyňskou linku` automaticky nastaví výšku `1150 mm`.
+   - Že v kategorii `Okna, dveře a nábytek` již není duplicitní položka `WC`.
+   - Že u `ABB RoomTouch 4"` a `ABB Trevion 2,4"` přepnutí barvy `Černá` vs. `Bílá` vrací odpovídající barevný obrázek a MPN.
+2. Spusť `npm run verify`, aktualizuj `docs/PLAN.md` a `CLAUDE.md`, udělej commit a rovnou vše pushni a nasaď na produkční server `https://eldock.cz`.
+
+## Rozhodnutí při implementaci
+
+Bez migrace databáze – varianty zakázky se ukládají v nákresu půdorysu (JSON).
+
+**1. Viditelnost značek a 🎨 Barva značek** (`src/lib/panel-builder/symbol-colors.ts`, `useSymbolColor.ts`):
+
+- Na plátně editoru mají značky o 35 % silnější čáry, na obrazovce aspoň 2,4 px (přepočet mm plánu na pixel podle jednotky
+  zobrazení).
+- Pod značkou i popiskem je tmavý podkladový štítek `rgba(9, 13, 22, 0.92)` (aspoň 4,5 px, `paint-order: stroke`).
+- Přepínač „🎨 Barva značek:“ je vedle posuvníku „Velikost značek“ (kroky 2–4 průvodce i kompaktní lišta) a v kroku 5
+  (závěrečná kontrola):
+  - 🌈 Dle typu (výchozí) – syté barvy kategorií: zásuvky modře, datové fialově, vypínače zeleně, ovladače a čidla
+    tyrkysově, svítidla žlutě, rozváděč purpurově, spotřebiče korálově; nad bílým výkresem tmavší odstíny;
+  - 🔴 Červená (Kontrola) `#ff2e2e` – všechny značky, popisky, trasy i vazby vypínač → světlo červeně a podklad
+    (výkres, místnosti, poznámky) se ztlumí;
+  - 🟡 Neon žlutá `#facc15`, 🔵 Cyan `#00f0ff` a 🎨 vlastní barva (`input type="color"`).
+- Volba se pamatuje v prohlížeči (je to pohled projektanta). Tiskový výkres a exporty zůstávají černobílé podle ČSN.
+
+**2. 3D náhled** (`FloorplanPseudo3DModal.tsx`):
+
+- Stěny místností od podlahy do výšky stropu `ceilingHeightMm` (výchozí 2 600 mm) s výplní `rgba(148, 163, 184, 0.20)`
+  a hranami `rgba(226, 232, 240, 0.55)` u podlahy, v rozích a u stropu.
+- Název místnosti je na podlaze. Okna (parapet 900 → 2 300 mm) a dveře (0 → 2 000 mm) jsou průhledné otvory jen
+  obrysem.
+- Prvky barvou i tvarem:
+  - 🔵 zásuvka – kroužek se svodem k podlaze;
+  - 🟢 vypínač – kosočtverec s bílým obrysem;
+  - 🟡 svítidlo – září a paprsky;
+  - 🟣 rozváděč – skříň;
+  - 🩵 ovladač, čidlo, termostat a magnet – trojúhelník;
+  - 🔴 spotřebič.
+- Nábytek je světlý poloprůhledný kvádr s popiskem („Kuchyňská linka 900 mm“). Legenda je pod náhledem.
+- Termostaty a sběrnicová čidla se ve scéně počítají jako ovladače (dřív zeleně jako vypínače).
+
+**3. Nábytek po kusech a WC:**
+
+- Okna, dveře, nábytek, koupelna a rozváděče se vkládají po jednom kusu (`placesOnce`). Po kliknutí do půdorysu se
+  nástroj vrátí na Výběr a vložený kus zůstane vybraný (rozměr X × Y, natočení).
+- WC mísa / závěsné WC je jen v Koupelně (zařizovací předměty). Id `arch-wc` zůstává kvůli uloženým půdorysům.
+
+**4. Výška u pracovní desky** (`src/lib/panel-builder/counter-heights.ts`):
+
+- Zásuvka (1N, 2N, IP44, USB …) nebo vypínač / ovladač ve výchozí výšce, který leží v kuchyňské lince, ostrůvku,
+  umyvadle či dvojumyvadle nebo do 20 cm od jejich hrany, se při vložení i přesunu zvedne na 1 150 mm.
+- Vložená nebo posunutá linka zvedne zásuvky, které nad ní už jsou, s upozorněním podle zadání.
+- Spotřebiče pod linkou (myčka, trouba, varná deska, lednice) si technologickou výšku nechávají.
+- Prvek s ručně zadanou výškou se nemění.
+
+**5. Panely ABB-free@home:**
+
+- Karta katalogu u panelů s barevnými variantami ukazuje vždy věrný render ve zvolené barvě. Fotka výrobce je jedna
+  na výrobek bez barvy – u RoomTouch® 4" ukazovala bílý panel i při zvolené černé.
+- RoomTouch® je štíhlé sklo: černé s tmavým rozhraním, bílé se světlým rámečkem. Trevion® 2,4" má rámeček i displej
+  v barvě varianty, rozsvícený barevný displej (teplota, světla, scény) a kapacitní lištu.
+- Objednací číslo a typ se přepínají s barvou. U SmartTouch® 10" i OneTouch 7" mají obě barvy vlastní číslo.
+- **Odchylka – čísla ze zadání ověřená proti katalogu výrobců v repozitáři (`prisma/external-catalog/catalog.json`):**
+  - RoomTouch® 4" `2TMA310050B0001` / `W0001` (RT-F-4.0.1) v katalogu nejsou → ověřená `2TMA310011B0003`
+    (RT/U12.86.1-825, černá) a `2TMA310011W0001` (RT/U12.86.1-811, bílá);
+  - „Trevion“ `2CKA006220A0875` / `A0872` jsou podle katalogu ovladače ABB-Tenton® (12násobný a 6násobný s termostatem)
+    → Trevion černý 55 × 55 mm `2TMA310011B0001` (SD/U12.55.1-825), 63 × 63 mm `2TMA310011B0002`; bílý Trevion
+    v katalogu není → „ověřte u výrobce“;
+  - OneTouch 7" `2TMA130050B0001` / `W0001` v katalogu nejsou → `2TMA320051B0001` / `W0001` (M2249-2B / -2W);
+  - SmartTouch® 10" `2TMA310051B0001` / `W0001` souhlasí;
+  - EAN ze zadání v oficiálních datech nejsou (katalog ani data ETIM v repozitáři je nemají) → neuvádějí se.
+
+**6. Převod Klasická 230 V ⇄ Chytrá domácnost** (`installation-mode-converter.ts`, `ConvertInstallationModal.tsx`,
+`ProjectVariantBar.tsx`):
+
+- Tlačítko „🔄 Převést návrh: Klasická 230 V ⇄ Chytrá domácnost (Zachovat obě verze)“ je v horní liště (kroky 3–4,
+  kompaktní lišta) a v pravém panelu u „Úroveň instalace“.
+- Převod do Smart Home – okno s cílovým systémem (ABB-free@home®, Loxone, ABB i-bus® KNX, TapHome), designovou řadou
+  podle systému a volbami ze zadání:
+  - vypínače 230 V (č. 1, 5, 6, 7, tlačítka, stmívač, žaluziový spínač, PIR) → sběrnicová tlačítka a prvky 24 V DC;
+    termostaty a bezdrátové prvky převede dosavadní převod úrovní (`convertForLevel`);
+  - tlačítka světel u jedněch dveří (do 35 cm) → jedno vícekanálové tlačítko se sloučeným párováním;
+  - světlo + žaluzie → společný víceramček (párování žaluzie zůstane platné);
+  - hvězda + sběrnice = úroveň „Plně sběrnicová“; bez ní hybrid / retrofit (kabeláž a vypínače zůstanou);
+  - volitelně stmívatelná hlavní světla obytných místností a stropní čidla přítomnosti v chodbách a koupelnách.
+- Zpětný převod: okno se zeptá na designovou řadu 230 V. Tlačítka dostanou řazení podle počtu ovládacích míst světla:
+  1 místo = 1 (dvě skupiny světel = 5, stmívané světlo = stmívač), 2 místa = 6, 3 a více = 6 na krajích a 7 uprostřed.
+  Žaluziová tlačítka → žaluziové spínače, PIR, termostaty. Prvky bez klasické náhrady (dotykové panely, čidla) se
+  odeberou. Ruční úpravy tras se u převedené varianty vynulují (trasy se přepočítají).
+- Původní návrh se nikdy nepřepíše:
+  - uloží se jako varianta do `projectVariants` v nákresu (snímek prvků a rámečků všech podlaží, úrovně, systému,
+    řady, barev a tras);
+  - místnosti, podklad a ostatní nastavení zakázky jsou společné;
+  - nejvýš 4 varianty kvůli limitu velikosti uloženého půdorysu (900 kB).
+- Nad plátnem je přepínač „Varianta návrhu: [ ⚡ Varianta 1: Klasická 230 V (Původní) ] ⇄ [ 🤖 Varianta 2: Smart Home –
+  ABB-free@home® ]“. Uloženou variantu jde odebrat. Rozváděč, kusovník i cenová nabídka se generují z aktivní varianty.
+- Ukazatel rozdílu:
+  - metráž kabelů z výkazu kabeláže;
+  - cena práce a revize podle normohodin × 650 Kč/h z generátoru nabídky (fáze 105);
+  - **odchylka:** bez materiálu – ceníkové ceny přístrojů v datech chybějí; materiál ocení cenová nabídka.
+
+**7. Testy:**
+
+- `src/lib/panel-builder/phase109.test.ts` (12): převod do Smart Home s variantou a přepnutím (i po uložení a načtení),
+  volby, zpětný převod s řazením, ukazatel; WC a vkládání po kusech; výška u linky; barvy značek a tloušťka; 3D otvory
+  a druhy; panely ABB podle barvy (render i číslo, žádná neověřená čísla).
+- E2E `e2e/phase109.spec.ts` (3): barva značek a 3D náhled; převod Smart Home ⇄ Klasická 230 V se třemi variantami
+  a přepnutím; nábytek po kusech, WC a panely ABB.
+- Upravený test fáze 90 (WC jen v Koupelně).
+
+---
+
 # 📄 DENIK-faze-100.md
 
 # Deník fáze 100 (přesunuto z `docs/PLAN.md`, sekce C)
@@ -7168,6 +7410,16 @@ Aby měl každý revizní technik 100% jistotu, že nikdo cizí nezneužil jeho 
 | Fáze | Datum | Poznámky |
 |---|---|---|
 | 106 | 2026-11-12 | Zadání z chatu → `docs/archiv/ZADANI-faze-106.md` (i rozhodnutí a odchylky). **Migrace** `phase106_turnkey_manufacturing` (`PanelManufacturer`, `ManufacturingOrder`). **CNC:** `src/lib/panel-builder/cnc-manufacturing-engine.ts` (`cncLayout`, `wireHarnessList`, `cutList`, `glandFor`), `cnc-outputs.ts` (`generateManufacturingPackage`, `cncDxf`, `cncCsv`), `DxfWriter` s vlastními hladinami, `CncManufacturingPanel.tsx`. **Výroba na klíč:** `turnkey-manufacturing.ts`, `src/server/services/manufacturing.ts`, `src/server/turnkey-data.ts`, `actions/manufacturing.ts`, `manufacturer-session.ts` (cookie `eldock-vyroba`), `TurnkeyEntry` / `ManufacturingSection` / `TurnkeyOrderModal`, `src/app/vyroba-rozvadecu/` (zakázky, elaborát, štítky), `/api/vyroba/package/[orderId]`, velín `ManufacturersTab`, `getPanelProjectById`. **Testy:** `src/lib/panel-builder/__tests__/cnc-manufacturing.test.ts` (7), `src/server/services/phase106.test.ts` (3), E2E `e2e/phase106.spec.ts` (1). **Opravy:** unikátní klíče řádků Listu 4 a soupisu přístrojů (dva můstky N stejné velikosti, dvakrát -A1), výchozí montáž podle skříně a ventilátor podle oteplení, materiál bez ceníku „doplní výrobce“. |
+
+---
+
+# 📄 DENIK-faze-107.md
+
+# Deník fáze 107 (přesunuto z `docs/PLAN.md`, sekce C)
+
+| Fáze | Datum | Poznámky |
+|---|---|---|
+| 107 | 2026-11-12 | Zadání z chatu → `docs/archiv/ZADANI-faze-107.md` (i rozhodnutí a odchylky). **Migrace** `phase107_contact_messages` (`ContactMessage`). **Kód:** `src/lib/contact.ts`, `src/server/services/contact.ts` (tiket, filtry, stav, retence 2 roky), `src/server/contact-intake.ts` (sharp → WebP do `storage/uploads/feedback`, registr jen pro velín, notifikace), `/api/contact` (POST / GET / PATCH), `src/components/contact/` (`GlobalContactWidget`, `ContactFeedbackModal`, `contact-events`, `image-compress`), `src/app/kontakt/page.tsx`, velín `ContactMessagesTab` + `ContactMessageControls`, `ReportAiErrorButton` a „🐛 Nahlásit chybu“ v 2D půdorysu, odkazy v navigaci / patičce / `/prezentace`, limit `contact` v proxy, zásady 1.5 (7c). **Testy:** `src/lib/phase107.test.ts` (6), `src/server/services/phase107.test.ts` (5), E2E `e2e/phase107.spec.ts` (6), upravené `phase50` a `phase54`; po nasazení plovoucí tlačítko nad lištou cookies (`--consent-banner-h`). |
 
 ---
 
@@ -7528,6 +7780,7 @@ a postup nasazení jsou v `CLAUDE.md`. Soubor drž pod 150 řádky.
 | 62 | 2D půdorys: kabeláž jde skrýt (přepínač „Kabeláž“ u plátna i v liště kroku, klávesa K), při párování vypínačů se světly je ve výchozím stavu skrytá; lišta probíhajícího kroku nad projektem (`ModeBar`, lepkavá pod hlavičkou) s názvem kroku, nápovědou a „Hotovo“ pro párování, vkládání, kreslení, zakreslení změn, ořez / kalibraci („Zrušit“) i úpravu vybraného prvku – v bočním panelu „Hotovo“ není, v kroku 1 Panel Builderu ukončuje úpravu přístroje lišta nad rozváděčem; sestavy ve víceramečku v panelu nad paletou (hotové: 2–4× jednozásuvka, 2–3× vypínač č. 1, vypínač + přepínač, vypínač + zásuvky, zásuvka + RJ45, sběrnicové tlačítko + zásuvky; vlastní sestava po pozicích do 5R) s náhledem u kurzoru a vložením jedním klikem přisazeným ke stěně, ▦+ a „Přidat do rámečku“ u vybraného přístroje; rámeček s dvojzásuvkou na začátku se při otáčení a posunu v rámečku už neposouvá, přístroj v rámečku jde přesně vybrat (klikací plocha jen na jeho pozici) | ✅ |
 | 63 | 2D půdorys: paleta jako akordeon (počty osazených prvků, sbalit / rozbalit vše, režim jedné kategorie); zařizovací předměty ve skutečném rozměru – vana, sprchový kout, umyvadlo UMY 600 × 450 a dvojumyvadlo DUM 1200 × 450 s architektonickou značkou, žlutým rohem a posuvnými stranami (živé kóty X × Y), otočením 90° / 45° a přesným rozměrem v detailu, zóny 0–2 a pás nad a pod umyvadlem se přepočítají, hlídač vzdálenosti zásuvek a spínačů od vany, sprchy a umyvadla; knihovna samostatných spotřebičů (název, zkratka, příkon, jistič 1P / 3P B / C, chránič A / F / B / RCBO, kabel, výška, vlastní spotřebiče ze šablon, prohlížeč + profil firmy, okruhy podle zadání); lišta výrobců s rodinami ABB (domovní přístroje / ABB-free@home / ABB i-bus KNX & ABB-flexTronics), Loxone a TapHome s výrobky k vložení a akčními členy na DIN lištu jako informací; věrné náhledy řad (Levit, Zoni, Tango, Time, Time Arbo, Decento, Céliane, Nová Unica, Sedna, Asfora …) a „🌐 Prohlédnout řadu na webu výrobce ↗“; ruční posun úseků tras (vodorovný jen v ose Y, svislý jen v ose X, šikmý kolmo ke stěně), odskok dvojklikem, reset pravým tlačítkem / v panelu, délky kabelů z upravené trasy; polygonální místnosti se šikmými stěnami (přichytávání 0° / 45° / 90°, Shift = volný úhel), trasy podél stěn v odsazení 200 mm s kolmou odbočkou; normové CAD značení kabelů (rysky žil, čárkovaně ovládání a sběrnice, štítek okruhu) a export výkresu do PDF (A3 / A4, razítko, legenda, tabulka okruhů) a DXF (8 hladin, mm 1 : 1) | ✅ |
 | 64 | 2D půdorys jako uložený projekt na serveru: modely `Floorplan` + `FloorplanVersion` (migrace `floorplans`), seznam půdorysů firmy `/panel-builder/floorplan` (zákazník, místo, podlaží / místnosti / prvky, poslední úprava, vygenerovaný rozváděč; údaje, kopie, koš s obnovením a trvalým smazáním), nový půdorys `/novy` vznikne na serveru při první změně, editor `/[id]`; průběžné ukládání s kontrolou verze a zálohou neuložených změn v prohlížeči, souběh dvou oken s volbou „Načíst aktuální verzi“ / „Ponechat mou verzi“ (odmítnutý i přepsaný stav v historii); historie verzí s obnovením (automaticky nejvýš 1× za 10 min, pojmenovaná verze, stav při generování rozváděče a před obnovením, 30 verzí); převzetí nákresu z prohlížeče (`eldock.pb.floorplan`) při otevření seznamu; „📐 Upravit půdorys“ u rozváděče z půdorysu a vazba na nově vygenerovaný rozváděč; Zpět / Znovu (Ctrl+Z, Ctrl+Shift+Z / Ctrl+Y, tlačítka – tažení i klik = jeden krok); `FloorplanEditor.tsx` rozdělen (`ElementPanels.tsx`, `background-image.ts`, hooky `useDraftHistory` / `useFloorplanSync`) | ✅ |
+| 109 | 2D půdorys: 🎨 barva značek (dle typu, červená kontrola se ztlumeným podkladem, žlutá, cyan, vlastní) se silnějšími čarami (+35 %, min. 2,4 px) a tmavým štítkem; 3D náhled s poloprůhlednými stěnami do stropu, názvy místností, průhlednými otvory a odlišenými prvky; nábytek, koupelna a rozváděče po kusech (WC jen v Koupelně); zásuvky a vypínače u kuchyňské linky, ostrůvku a umyvadla na 1 150 mm; panely ABB-free@home s renderem a číslem podle barvy (jen ověřená čísla); 🔄 převod Klasická 230 V ⇄ Smart Home se zachováním variant (`projectVariants`), přepínač variant s rozdílem kabelů a ceny práce | 🟦 |
 | 108 | Průmyslová část: úprava, přesun tažením na mapě a smazání budov ze seznamu, mapy i hlavičky detailu (audit `BUILDING_DELETED`), nové haly bez překryvu (`freeSpotFor`), vycentrované podlaží s „+ Přidat rozváděč nebo stroj“ a přesunem / smazáním zařízení; Chytrá revize `SmartRevisionTripOptimizer` (kotva po termínu / do 30 dnů, horizont 30–180 dnů, stejná → sousední budova, sloučení do formuláře, seznam technikovi) na mapě, podlaží, /inspections a v plánovači; formulář revizního technika (profil TIČR s ARES, šablona měření, podpis na plátno, razítko, PIN, pečeť SHA-256, PAdES); 🛡️ Měsíční report & Ochrana TIČR se zneplatněním cizí revize, měsíčním e-mailem a výkazem PDF / CSV | ✅ |
 | 107 | Kontaktní a zpětnovazební hub: plovoucí tlačítko „💬 Nápověda, Chyby & Kontakt“ na každé stránce (rychlé akce, v editorech kompaktní pilulka), formulář se 7 kategoriemi (chyba, tip / chybějící prvek, schůzka a ukázka, spolupráce, B2B, QR štítky, poradna) s printscreeny přes Ctrl + V, přetažení i výběr souboru (zmenšení canvasem na 1600 px), ARES a technickou diagnostikou; „Nahlásit chybu“ v AI Panel Builderu a 2D půdorysu s ID projektu; veřejná stránka `/kontakt`; `POST /api/contact` s číslem tiketu #EL-… a notifikací (SMTP / Resend / webhook); velín „📬 Zprávy, Chyby & Schůzky“ s odznakem nepřečtených, lightboxem a stavem | ✅ |
 | 106 | Výroba rozváděče na klíč: konfigurátor mechanického provedení (vývodky M16–M40 podle průměru kabelů, přívod shora / zespodu / oboje, pod omítku = membránová příruba, DIN lišty TS 35 s otvory M5, žlaby 40 × 60 a 25 × 60, PE / N / N1…, výřezy dveří Ø 22,5 / 92 × 92 / 120 × 120); `generateManufacturingPackage` – CNC plán 1 : 1 (DXF s hladinami 0–4 a CSV souřadnic pro Perforex / Steinhauer), nářezový a drátovací list vodičů (Odkud → Kam, H07V-K, barvy, délka po žlabech + 90 mm, dutinky, TWIN u smyček, hřebeny) a nářezový list lišt, žlabů a hřebenů; „🛠️ CNC & Výroba na klíč“ v kroku 4; „🏭 Poptat / Objednat výrobu rozváděče na klíč“ (kroky 1b a 4, kalkulace, výrobce v kraji nebo všem, rezervace QR štítku EL-…); portál `/vyroba-rozvadecu` (přijetí, ZIP podklady, kusová zkouška výrobce, uzamčení Verze 1.0 pod štítkem) a velín „🏭 Výrobci rozváděčů“ | ✅ |
@@ -7577,14 +7830,14 @@ Fáze 86, 87 a 89 nasazeny 2026-11-10 (commit `c5ce70e`; commity `0388470`, `e92
 
 ## B. Otevřená fáze
 
-Další fáze podle zadání z chatu: fáze 109 (2D půdorys: viditelnost a barvy značek, 3D pohled, návrat do Výběru, výška u kuchyňské linky, barvy panelů ABB, převod 230 V ⇄ Smart Home) je zadaná a následuje. Fáze 76–108 jsou hotové a nasazené (2026-11-10 až 2026-11-13; zadání fáze 81 `docs/archiv/ZADANI-faze-81.md`, fází 83–85 `docs/archiv/ZADANI-faze-83-85.md`, fáze 87 `docs/archiv/ZADANI-faze-87.md`, fáze 89 `docs/archiv/ZADANI-faze-89.md`, fáze 90 `docs/archiv/ZADANI-faze-90.md`, fáze 91 `docs/archiv/ZADANI-faze-91.md`, fáze 92 `docs/archiv/ZADANI-faze-92.md`, fáze 93 `docs/archiv/ZADANI-faze-93.md`, fáze 94 `docs/archiv/ZADANI-faze-94.md`, fáze 95 `docs/archiv/ZADANI-faze-95.md`, fáze 96 `docs/archiv/ZADANI-faze-96.md`, fáze 97 `docs/archiv/ZADANI-faze-97.md`, fáze 98 `docs/archiv/ZADANI-faze-98.md`, fáze 99 `docs/archiv/ZADANI-faze-99.md`, fáze 100 `docs/archiv/ZADANI-faze-100.md`, fáze 101 `docs/archiv/ZADANI-faze-101.md`, fáze 102 `docs/archiv/ZADANI-faze-102.md`, fáze 103 `docs/archiv/ZADANI-faze-103.md`, fáze 104 `docs/archiv/ZADANI-faze-104.md`, fáze 105 `docs/archiv/ZADANI-faze-105.md`, fáze 106 `docs/archiv/ZADANI-faze-106.md`, fáze 107 `docs/archiv/ZADANI-faze-107.md` a fáze 108 `docs/archiv/ZADANI-faze-108.md`; fáze 88 = katalog ABB pro ČR, zadání v deníku). Otevřené body jsou v sekci D; další fáze podle roadmapy níže. Roadmapa po fázi 79 (`ZADANI-faze-71.md` až `ZADANI-faze-73.md`): vydání aplikací v Google Play a App Store, podepsaný instalátor pro Windows a podpis vydání Androidu vlastním klíčem až s účty Eldock s.r.o.; ověření aplikace pro iOS na skutečném iPhonu (Mac nebo ruční workflow; server závodu přes http v interní síti – ATS a dotaz na místní síť); synchronizace na pozadí (iOS BGTask, Android WorkManager), univerzální odkazy https a push oznámení. **Rozhodnuto 2026-11-09:** provoz obojí podle závodu – aplikace vždy offline s denní synchronizací přímo s eldock.cz, závod s interní sítí bez internetu navíc server závodu (Windows, zařízení `PLANT_SERVER`, denní synchronizace s cloudem); účty Apple (Organization, 99 USD/rok), Google Play s ověřením vývojáře Android (organizace, 25 USD) a podpis aplikace pro Windows přes Azure Artifact Signing (9,99 USD/měsíc, v EU jen firmy) až na zapsanou Eldock s.r.o. s číslem D-U-N-S – do té doby vývoj a zkušební sestavení mimo obchody; e-maily přes schránku `noreply@eldock.cz` u Zoneru (MX i SPF domény jsou u Zoneru); zálohy mimo server do Hetzner Object Storage v Helsinkách (HEL1, server je ve Falkensteinu `fsn1-dc14`). **Na straně uživatele:** schránka u Zoneru → `ELDOCK_SMTP_URL` + `ELDOCK_MAIL_FROM` do `.env` (DKIM a DMARC v DNS doporučeno); bucket v HEL1, klíče S3 a heslo záloh → `ELDOCK_BACKUP_S3_*` + `ELDOCK_BACKUP_KEY` do `.env` (heslo uložit i mimo server); po zápisu do OR údaje firmy v `lib/company.ts`, D-U-N-S a účty Apple, Google a Artifact Signing. Další plánované fáze z analýzy webu (`docs/archiv/ZADANI-faze-54.md`): normový registr v Eldocku, Projekt elektroinstalace jako produkt.
+Fáze 109 (2D půdorys – barva a viditelnost značek, 3D náhled se stěnami, nábytek po kusech, výška u kuchyňské linky, panely ABB podle barvy, převod Klasická 230 V ⇄ Smart Home se zachováním variant) je hotová a čeká na nasazení – bez migrace; zadání `docs/archiv/ZADANI-faze-109.md`. Fáze 76–108 jsou hotové a nasazené (2026-11-10 až 2026-11-13; zadání fáze 81 `docs/archiv/ZADANI-faze-81.md`, fází 83–85 `docs/archiv/ZADANI-faze-83-85.md`, fáze 87 `docs/archiv/ZADANI-faze-87.md`, fáze 89 `docs/archiv/ZADANI-faze-89.md`, fáze 90 `docs/archiv/ZADANI-faze-90.md`, fáze 91 `docs/archiv/ZADANI-faze-91.md`, fáze 92 `docs/archiv/ZADANI-faze-92.md`, fáze 93 `docs/archiv/ZADANI-faze-93.md`, fáze 94 `docs/archiv/ZADANI-faze-94.md`, fáze 95 `docs/archiv/ZADANI-faze-95.md`, fáze 96 `docs/archiv/ZADANI-faze-96.md`, fáze 97 `docs/archiv/ZADANI-faze-97.md`, fáze 98 `docs/archiv/ZADANI-faze-98.md`, fáze 99 `docs/archiv/ZADANI-faze-99.md`, fáze 100 `docs/archiv/ZADANI-faze-100.md`, fáze 101 `docs/archiv/ZADANI-faze-101.md`, fáze 102 `docs/archiv/ZADANI-faze-102.md`, fáze 103 `docs/archiv/ZADANI-faze-103.md`, fáze 104 `docs/archiv/ZADANI-faze-104.md`, fáze 105 `docs/archiv/ZADANI-faze-105.md`, fáze 106 `docs/archiv/ZADANI-faze-106.md`, fáze 107 `docs/archiv/ZADANI-faze-107.md` a fáze 108 `docs/archiv/ZADANI-faze-108.md`; fáze 88 = katalog ABB pro ČR, zadání v deníku). Otevřené body jsou v sekci D; další fáze podle roadmapy níže. Roadmapa po fázi 79 (`ZADANI-faze-71.md` až `ZADANI-faze-73.md`): vydání aplikací v Google Play a App Store, podepsaný instalátor pro Windows a podpis vydání Androidu vlastním klíčem až s účty Eldock s.r.o.; ověření aplikace pro iOS na skutečném iPhonu (Mac nebo ruční workflow; server závodu přes http v interní síti – ATS a dotaz na místní síť); synchronizace na pozadí (iOS BGTask, Android WorkManager), univerzální odkazy https a push oznámení. **Rozhodnuto 2026-11-09:** provoz obojí podle závodu – aplikace vždy offline s denní synchronizací přímo s eldock.cz, závod s interní sítí bez internetu navíc server závodu (Windows, zařízení `PLANT_SERVER`, denní synchronizace s cloudem); účty Apple (Organization, 99 USD/rok), Google Play s ověřením vývojáře Android (organizace, 25 USD) a podpis aplikace pro Windows přes Azure Artifact Signing (9,99 USD/měsíc, v EU jen firmy) až na zapsanou Eldock s.r.o. s číslem D-U-N-S – do té doby vývoj a zkušební sestavení mimo obchody; e-maily přes schránku `noreply@eldock.cz` u Zoneru (MX i SPF domény jsou u Zoneru); zálohy mimo server do Hetzner Object Storage v Helsinkách (HEL1, server je ve Falkensteinu `fsn1-dc14`). **Na straně uživatele:** schránka u Zoneru → `ELDOCK_SMTP_URL` + `ELDOCK_MAIL_FROM` do `.env` (DKIM a DMARC v DNS doporučeno); bucket v HEL1, klíče S3 a heslo záloh → `ELDOCK_BACKUP_S3_*` + `ELDOCK_BACKUP_KEY` do `.env` (heslo uložit i mimo server); po zápisu do OR údaje firmy v `lib/company.ts`, D-U-N-S a účty Apple, Google a Artifact Signing. Další plánované fáze z analýzy webu (`docs/archiv/ZADANI-faze-54.md`): normový registr v Eldocku, Projekt elektroinstalace jako produkt.
 
 ## C. Deník (jen poslední záznamy, starší jsou v archivu)
 
 | Fáze | Datum | Poznámky |
 |---|---|---|
+| 109 | 2026-11-13 | Zadání z chatu → `docs/archiv/ZADANI-faze-109.md` (i rozhodnutí a odchylky). Bez migrace. **Kód:** `src/lib/panel-builder/symbol-colors.ts` + `useSymbolColor.ts` (přepínač v liště, `FloorSymbol` / `PanelSymbol` / `PlanElement` s barvou a minimální tloušťkou, ztlumení podkladu, trasy a vazby v kontrolní barvě), 3D `FloorplanPseudo3DModal.tsx` (stěny 20 %, popisky, otvory, `ElementMarker`, legenda) a `pseudo3d.ts` (ovladače), `placesOnce` a WC v `floorplan-editor.ts`, `counter-heights.ts`, náhledy panelů v `SmartHomeDeviceCatalog.tsx` a `SmartHomeDeviceIllustration.tsx`, převod `installation-mode-converter.ts` (+ `projectVariants` / `activeVariant` v nákresu a `parseDraft`), `ConvertInstallationModal.tsx`, `ProjectVariantBar.tsx`. **Testy:** `src/lib/panel-builder/phase109.test.ts` (12), E2E `e2e/phase109.spec.ts` (3), upravený `phase90.test.ts`. |
 | 108 | 2026-11-13 | Zadání z chatu (prioritní, 2D půdorys posunut na fázi 109) → `docs/archiv/ZADANI-faze-108.md` (i rozhodnutí a odchylky). **Migrace** `phase108_revision_signing` (`InspectorProfile`; podpis, pečeť, PAdES a zneplatnění v `InspectionRecord`; 4 bezpečnostní události). **Kód:** budovy `src/lib/building-edit.ts`, `campus-layout.ts` (`freeSpotFor`), `services/buildings.ts`, `actions/buildings.ts`, `BuildingDialogs.tsx`, `EquipmentManage.tsx`, lišta a tažení na mapě areálu, Studio `?building=&floor=`; Chytrá revize `src/lib/revision-trip.ts`, `queries/revision-trip.ts`, `actions/revision-trip.ts`, `SmartRevisionTripOptimizer.tsx`; podpis `src/lib/revision-signature.ts`, `services/revision-signing.ts`, `actions/revision-signing.ts`, `RevisionTechnicianFormModal.tsx`, `SignaturePad`, `InspectorStamp`, `PadesUpload`, `/api/inspections/pades`, pečeť v `mock-graphics/document.ts` a v protokolu; report `/inspections/ticr` (tisk, CSV `/api/inspections/ticr`), měsíční e-mail v `jobs.ts`; zneplatněné revize mimo lhůty (`governingInspection`, dotazy); zásady 1.6. **Testy:** `src/lib/phase108.test.ts` (13), `src/server/services/phase108.test.ts` (8), E2E `e2e/phase108.spec.ts` (3), upravený `plant-onboarding.test.ts`. Oprava z E2E: plovoucí tlačítko kontaktu se zvedne nad spodní lišty akcí (`data-bottom-bar`) a hlavní plocha aplikace má spodní rezervu `pb-24`. |
-| 107 | 2026-11-12 | Zadání z chatu → `docs/archiv/ZADANI-faze-107.md` (i rozhodnutí a odchylky). **Migrace** `phase107_contact_messages` (`ContactMessage`). **Kód:** `src/lib/contact.ts`, `src/server/services/contact.ts` (tiket, filtry, stav, retence 2 roky), `src/server/contact-intake.ts` (sharp → WebP do `storage/uploads/feedback`, registr jen pro velín, notifikace), `/api/contact` (POST / GET / PATCH), `src/components/contact/` (`GlobalContactWidget`, `ContactFeedbackModal`, `contact-events`, `image-compress`), `src/app/kontakt/page.tsx`, velín `ContactMessagesTab` + `ContactMessageControls`, `ReportAiErrorButton` a „🐛 Nahlásit chybu“ v 2D půdorysu, odkazy v navigaci / patičce / `/prezentace`, limit `contact` v proxy, zásady 1.5 (7c). **Testy:** `src/lib/phase107.test.ts` (6), `src/server/services/phase107.test.ts` (5), E2E `e2e/phase107.spec.ts` (6), upravené `phase50` a `phase54`; po nasazení plovoucí tlačítko nad lištou cookies (`--consent-banner-h`). |
 
 ## D. Známé nedostatky a backlog
 
@@ -7593,5 +7846,5 @@ Další fáze podle zadání z chatu: fáze 109 (2D půdorys: viditelnost a barv
 - Fáze 66: lhůtník (semafor, piny, hlídač e-mailem) dál počítá s `validUntil`; nejzazší zákonný termín je jen informace v lhůtníku, zprávě a auditním reportu. Vizuální kontrola LPS se hlídá jen na kartě zařízení (ne v hlídači a plánovači). Starší data bez `db:fix-intervals` ukážou u VTZ s delší lhůtou červené upozornění a termín „po zákonném termínu“. Fáze 67–68: Panel Builder má dál jedno heslo firmy; bez `ELDOCK_SMTP_URL` pozvánky a obnovy jen jako odkaz u správce / v logu serveru. Zálohy mimo server čekají na úložiště a heslo (`ELDOCK_BACKUP_*`) – do té doby jen místní snímky databáze na stejném serveru a soubory úložiště bez zálohy (ověřeno 2026-11-10: denní místní snímky od 8. 11. ve 02:30, nešifrované; `ELDOCK_BACKUP_KEY`, `ELDOCK_BACKUP_S3_*` ani `ELDOCK_SMTP_URL` v `.env` nejsou; databáze 7 MB, soubory 14 MB). Fáze 69: export bez ZIP64 (do 4 GB a 65 535 souborů na firmu); opravy a omezení zpracování (čl. 16, 18 GDPR) jen přes kontaktní e-mail; smlouvu o zpracování (DPA) a zásady 1.2 před ostrým prodejem zkontrolovat právníkem. Fáze 70: z aplikací jde v1 jen 7 druhů úprav (revize VTZ se zprávou PDF, Studio a CAE back-office zůstávají na webu); server závodu ↔ cloud hotový ve fázi 72; bez push notifikací (aplikace se ptá při synchronizaci); CORS pro webové aplikace neřešen (nativní aplikace ho nepotřebují); přesun záznamu do jiného závodu žurnál nepřenese (rozsah se určí při vložení – aplikace ho nepodporují ani na webu).
 - Fáze 73: aplikace pro iOS se sestaví pro simulátor v GitHub Actions (ověřeno 9. 11. 2026 na macos-15-intel s Xcode 26.3 – runnery Apple Silicon GitHub tehdy nesehnal), spuštění v simulátoru ani na iPhonu zatím neověřené; server závodu přes http z iPhonu ověřit na zařízení (ATS, dotaz na místní síť); na pozadí aplikace nesynchronizuje (jen připomenutí oznámením); APK podepsané ladicím klíčem – vydání vlastním klíčem a v obchodech s účty Eldock s.r.o. Fáze 74–75: fotky výrobců v galerii řad čekají na potvrzení práv (`SERIES_PHOTOS` prázdný – zatím vektorové náhledy); dvoubarevné kódy rámeček / klapka mimo Katalog ABB 2026 neověřené; text ČSN 33 2130 ed. 4 k umývacímu prostoru (převzato z ed. 3, čl. 7.8) a ČSN 33 2000-7-701 ed. 3 ověřit v licencovaném textu; SPD v podružném rozváděči zůstává T1+T2 (u RP ve stejné budově obvykle stačí T2 – posoudí projektant); kresba umývacího prostoru přesahuje 250 mm za stěnu (`BASIN_WALL_MM`); vnitřní odkazy PDF ověřené pro tisk z Chrome / Edge (jiné prohlížeče je mohou zahodit). Fáze 76–80: náhledy výrobců – klíčové řady ABB mají vlastní rendery (fáze 80), ostatní řady ABB a Schneider / Legrand / Hager kreslený náhled; originální fotky výrobců smí být ve veřejném repozitáři (potvrzeno 2026-11-10), ale zatím nejsou – chybí zdroj ke stažení (`npm run catalog:images -- --download` podle `zdroje.json`); MEAN WELL HDR, obecné řadiče PWM a binární vstupy jsou neověřené (typ bez objednacího čísla); import DXF jen ASCII (binární DXF a DWG ne), ELLIPSE, SPLINE, HATCH a DIMENSION se nekreslí (jen počet ve výsledku importu), podklad CAD není v tisku PDF ani v exportu DXF půdorysu, přichytávání jen při vkládání a kreslení místností (ne při přesunu prvku), přichycená nástěnná značka mimo nakreslenou místnost drží natočení předchozí značky. Fáze 81: bez ověřeného čísla (null / „ověřte“) jsou stříbrná a zlatá IP TOUCH, bílý Trevion, bílý Loxone Wall Display, krabice OneTouch 7", Loxone Touch Pure Display a DALI Extension (100200 ze zadání), všechny kusy TapHome (čísla, šířky a Pv ze zadání); Pv akčních členů ABB mimo rešerši datasheetů a šířka UD/S 4.210.2.1 (6 M) jsou orientační; TapHome nemá akční člen topení (výpočet hlásí doplnit ručně); SmartTouch jen ve variantě free@home (KNX verze v katalogu výrobců není). Fáze 82: limit zásuvek na světelném okruhu norma neuvádí (Eldock hlídá 10 vývodů světla + zásuvky na okruh); text ČSN 33 2130 ed. 4 o zásuvkách na světelném obvodu ověřit v licencovaném textu; volba jištění 10 / 13 A platí pro celý půdorys (ne po okruzích). Fáze 83: plátno drží poměr stran plochy – u úzké a hluboké plochy (např. 15 × 40 m) je vysoké a posouvá se stránka; u haly 100 m je mřížka po 1 m v celkovém pohledu hustá. Fáze 84: pokud produkční `.env` nastavuje `ELDOCK_BANK_IBAN` na jiný platný účet, má přednost před účtem Raiffeisenbank (vzorový demo IBAN se ignoruje) – ověřit na serveru. Fáze 85: dvířka v náhledu jsou orientační (katalog skříní nevede druh dvířek – u ověřených rozvodnic fáze 86 je náhled bere z popisu výrobce). Fáze 86: Rittal zůstává jen orientační AX (rozvodnice s řadami modulů Rittal nevede – AX / KX s moduly Ri4Power ISV nejsou jedna objednatelná skříň); ABB Unifix, ComfortLine CW a Eaton DBP / DBM výrobci nevedou, Eaton dál jen z exportu (BC, BF, BP, IKA, KLV, MINI). Nezařazeno: Hager FWU73S (výrobce uvádí 21 řad), FW2 (FW…FT), FWU…N / K1, univers na omítku jen FWB z exportu, Schrack BK080109, BK080113, BK080163, BK080057 a provedení -H do dutých stěn. Rozpory Schracku: zapuštěné s bílými dveřmi mají v popisu „s průhlednými dveřmi“ a BK080058 / BK080059 u dveří „Plast průhledný“ – platí název výrobku; BK080153 je podle výrobce 482 mm vysoká (průhledná BK080103 525 mm); P_max = „Ztrátový výkon“ (web ho píše se znaménkem minus). ABB a Hager P_max neuvádí (null). Vícepolové skříně (ABB 2–4 sloupce, Hager 2–3 pole) mají v návrhu lištu přes celou řadu – přístroj přes hranici pole Eldock nehlídá. Údaje ověřeny 10. 11. 2026 – změny sortimentu (např. konec Hager vector II L / PN) je nutné doplnit ručně. Fáze 87: komentář syntetizuje Edge TTS (text kapitol jde na službu Microsoftu – je veřejný na /navody; `--tts=local` = lokální hlas Windows, robotičtější); video 1 ukazuje aplikaci k 2026-11-11 po fázi 90 (průvodce půdorysem v 5 krocích s krokovými kartami), video 2 k 2026-11-10 po fázi 88 (řada Mistral65) – po změně UI, které ukazují (editor půdorysu, kroky Panel Builderu), je přegenerovat (`npm run tutorials:generate`, ~15 min); akce kapitoly 3 videa 1 (osazení) jsou delší než komentář o pár sekund; Interactive Tour je jen v editoru půdorysu (cíle = `targets` kapitol); titulky jsou vypálené ve videu (bez samostatné stopy WebVTT). Fáze 88: Pv přístrojů z katalogu ABB pro ČR je odhad (ABB CZ ho neuvádí – typická hodnota nahrazeného řádku nebo IEC); vazby S201 / S201M → PS1 a S203 / S203M → PS3 jsou odvozené z pólů (neověřeno), PSc → DS301C, PS-END a E292 → E290 podle katalogu. Chyby stránek ABB CZ (platí typové označení, poznámka u zdroje): FH204 A-40 a A-63 uvádí 25 A typ AC, OVR T2 jiné kA, 41P18X42A / 41P18X41A „18 (18x4)“. Nezařazeno: S2C a CP-D (new.abb.com se nedá číst), OT, spínače, tlačítka a zvonky, S3C, kryty, CU VMW / K, multimediální UK600 / AK600, ARIA / APO; S202 / S204 katalog ABB pro ČR nevede; externí řada „Mistral“ má dál jen MISTRAL65 1 × 4 M (1SL1200A00 – na stránce řady Mistral65 není), UK600 zůstává z exportu. DS201 B16 A30: ruční zápis (referenční PB-001) má 2CSR255140R1165, katalog ABB pro ČR i externí databáze 2CSR255180R1165 – v katalogu vyhrává ruční zápis, ověřit. V databázích s importem externí databáze zůstávají z dřívějška dvojice orientační řádek + kus s objednacím číslem (DS201 B10 A30, DS201 C16 A30, ESB25-20N-01) – adopce přeznačí jen řádek, jehož objednací číslo databáze ještě nemá. Údaje ověřeny 10. 11. 2026. Fáze 89: profil uživatele = profil firmy (Panel Builder nemá osobní účty), volba v prohlížeči platí pro všechny firmy v něm. Fáze 90: okna a dveře nepřerušují čáru stěny (kreslí se přes ni) a nehlídají kolizi s nábytkem; objednací čísla monobloků Garant / Praktik / Variant+ v kusovníku chybí jako dosud; pás 0,2 m u umyvadla přístroje IP44 podle zadání nehlídá (v plném znění ČSN 33 2130 ed. 4 ověřit); krok průvodce si pamatuje jen karta prohlížeče (jiná karta otevře krok podle obsahu nákresu). Fáze 91: fotografie výrobců se nestahovaly (rendery jsou vlastní dílo; fotky se schváleným zdrojem do `public/catalog-images/`); Schneider Electric na webu ověřen jen pro vzduchotěsné krabice Multifix Air do dutých stěn a SEZ bez objednacích čísel hlubokých krabic – jinde kusovník ukáže „doplnit“; limity Schneider / Legrand / Hager jsou ze zadání (katalogy neověřeny), řady berker B.7, K.1, K.5, R.classic a W.1 půdorys nenabízí; svislý víceramček se v půdorysu nekreslí (limit `vertical` jen v pravidlech); rozbočovací zásuvka (víc než 2 kabely) se pozná jen z tras aktivního podlaží a ne v dokumentaci rozváděče; mezery a rozpěrky 1159-34 mezi krabicemi Decenta kusovník nepočítá. Fáze 92: harvester fotek (`npm run catalog:photos`) web ABB 2026-11-11 nepustil (headless prohlížeč – net::ERR_HTTP2_PROTOCOL_ERROR; blokace se neobchází), `public/catalog-images/manifest.json` je prázdný – reálné fotky zatím jen přes nahrávač Ctrl+V ve velínu; adaptér harvesteru jen pro ABB (Schneider / Legrand / Hager ručně); nástěnné monobloky Garant / Praktik / Variant+ bez ověřeného objednacího čísla v kusovníku harvester přeskočí. Trenažér 2D půdorysu je bungalov na ABB-free@home (stmívací akční člen v rozváděči je pravdivý jen ve sběrnicové instalaci); velikosti tréninkových zakázek jsou podle výběru generátoru (48M / 96M / 120M, ne 36M / 72M / 108M ze zadání – rezerva 25 %). Průvodce závodem nevytváří vzorový závod v datech firmy (mise B jen v prohlížeči); režim A jen s právem Studio výstavby. Fáze 93: bezhalogenové krabice HF ověřené jen u KOPOS (kopos.cz 2026-11-11: KU 68-45/HF_HA, KPR 68-70/HF_HA, KU 68 LD/1HF_HA, KPL 64-50/2LD HF_KA) – ostatní výrobci a hluboká HF krabice do SDK se v kusovníku doplní ručně (hlídač nabídne přepnutí na KOPOS); KPR 68_KA a KU 68 LD_NA ze zadání nejsou podle stránky výrobce bezhalogenové. Typy spouště a elektroměru MID (ABB S2C-A2, B23 312-100 …) jsou příklady ze zadání bez ověření objednacích čísel; vodič EKV v kusovníku je odhad 3 m na přípojku. Lhůty zdravotnických prostorů a přístrojů podle zadání (ČSN 33 2000-7-710 ed. 2, ČSN EN 62353 ed. 2) jako normové (ne závazné) – ověřit v licencovaném znění. Kapacitu DA / UPS zadává uživatel u kořene větve; výkon větve = Ib (naměřený, jinak součet podřízených × 0,8) · √3 · 400 V · cos φ 0,9. Fáze 94: data ETIM ABB nemají ceny (PRODUCT_PRICE 0) ani šířku DIN přístrojů v modulech; vestavnou hloubku stmívačů, termostatů a USB zásuvek řad neuvádějí (hlídač u nich dál podle pravidel fáze 91); Time Arbo v datech není (zůstává render), Garant jen šedý hliníkový IP55; dvoubarevné rámečky Zoni 241–244 a Swing 5R z matice katalogu ETIM nevede (⚠ / „ověřit“). Fotka řady bez čísla v kusovníku je reprezentativní výrobek řady (číslo pod fotkou), Swing L má ve všech barvách bílý střed Swing. Pv z ETIM je na celý přístroj (vícepólový = všechny póly). Fáze 95: místnosti IfcSpace jdou do Studia jako obálka (obdélník; mnohoúhelník jen v 2D půdorysu), kabelové žlaby nemají v mapě závodu vlastní vrstvu (u zařízení jen délka a typ přívodu), DA a UPS jsou v závodě kořenové zdroje typu trafostanice se zálohováním a kapacitou (napájení UPS z DA zůstane v popisu), IfcGridPlacement a zakřivené profily se nevyhodnocují; stroje v 2D půdorysu jsou vlastní spotřebiče do 32 A (nad to varování), vývody a hlavní vypínač nad 125 A navrhne AI Panel Builder jako orientační kus; Server Action nese jen zmenšený model (do ~1 MB – velký export z Revitu importujte po budovách). Fáze 96: kanonickou URL má každá veřejná stránka zvlášť (v layoutu by všechny podstránky ukazovaly na úvod); ověřovací meta Google / Seznam se vypíší jen s proměnnými `GOOGLE_SITE_VERIFICATION` / `SEZNAM_WMT_VERIFICATION` v `.env` serveru (Seznam jde ověřit i souborem `seznam-wmt-….txt`); trenažér 2D půdorysu, editor a ukládání projektů dál vyžadují přihlášení firmy; IndexNow se po nasazení spouští `npm run seo:ping` (nebo `POST /api/seo/ping` s `ELDOCK_CRON_SECRET`) – automatický ping při každém startu kontejneru záměrně není. Fáze 97: web ABB (nizke-napeti.cz.abb.com) a Eaton automatizovaný přístup odmítají (spojení bez odpovědi / ERR_HTTP2_PROTOCOL_ERROR) – ABB z vlastní kopie `ELSB_ETIM-9.0_2026-05.zip`, Eaton bez dat; databáze ETIM a ceníky Legrand jsou pod heslem (výrobce ho posílá e-mailem), ceník OEZ jen po přihlášení partnera, KOPOS a Schneider ETIM / BMEcat veřejně nevedou (data ze stránek výrobků), Schrack a Saltek bez veřejného datového souboru výrobků; Plexo s „L“ (`069621L` …) fotobanka Legrand nevede (fotka jiného čísla se nepoužije); Schneider zatím není ve výběru skříně (rozvodnice s fotkou jen v katalogu přístrojů); ceny KOPOS z ceníku jsou v datech, aplikace je nezobrazuje.
 - Testovací firma Správy závodů (2026-11-10, `PLANT_TESTER`: `test@eldock.cz` a `test-udrzba@eldock.cz`, `db:plant-tester` při startu s `ELDOCK_SEED_DEMO=1`): hesla jsou veřejná v repozitáři – před registrací první skutečné firmy ji smazat ve velínu a nastavit `ELDOCK_SEED_DEMO=0` (CLAUDE.md, oddíl 7); s SMTP by šlo z testovacího účtu rozesílat pozvánky. Nasazeno 2026-11-10 (commit `97932c5`; start kontejneru firmu založil – závod TZ s halou A a 5 zařízeními; bez migrací, kontejner `healthy`, log bez chyb, úklid mezivrstev 1,23 GB, volno 24 GB).
-- Fáze 98: fáze 2D půdorysu je krok průvodce (relace prohlížeče; kompaktní lišta ukazuje bez filtru vše – „Zobrazit vše“), agenda závodu jen v adrese `?faze=`; detail výběru je ve všech fázích a varování zón / krabiček i ve fázi 4 (odchylka od zadání, viz zadání); Elektro-linter s opravou jedním klikem zůstává u DIN lišt (část 1a), fáze 2 má jeho souhrn; kapitoly video-návodu AI Panel Builderu nesou čísla kroků z namluveného videa; rozvržení na výšku okna až od 1280 px (pod tím sloupce pod sebou); karta Nařízení (EU) 2023/1230 počítá jen otevřené změny s klasifikací podstatné změny (uzavřené jsou v historii zařízení). Fáze 99: demo scénář založí při každém kliknutí nový půdorys firmy (staré demo půdorysy se mažou ručně v seznamu) a rozváděč z něj stojí 1 kredit jako každý jiný; scénář průmyslového závodu jen odkazuje na agendy naposledy otevřeného závodu (plná vzorová data má závod obchodního dema); generování rozváděče z půdorysu trvalo na vývojovém serveru 3,3–3,8 s včetně překladu stránky – cíl pod 1 s na produkci samostatně neměřen; prezentace `/prezentace` je mimo vyhledávače (noindex, není v sitemap) a údaje jednání drží jen prohlížeč prezentujícího. Fáze 100: tahák zakázky je podle zadání v záložce Normy (přechody z taháku ji nechají otevřenou, lišta průvodce otevře výchozí záložku fáze); vzhled 🌗 se ukládá s podkladem podlaží a starší půdorysy bez údaje mají 60 %; fotky v `public/catalog-images/` mají mezipaměť `immutable` na rok – opravenou fotku ukládat pod novým názvem; 60 FPS ověřeno počtem překreslení vrstev v E2E, ne měřením snímků na slabém notebooku. Fáze 101: anténní zásuvka TV / SAT nemá v datech ABB ETIM objednací číslo (v kusovníku „dle katalogu výrobce“) a trasa koaxiálního kabelu se kreslí ve vrstvě datových rozvodů; svislý víceramček se v půdorysu kreslí kolmo ke stěně (schematicky), výšky pozic po 71 mm; offline převod BIM jen na už načtené stránce (bez service workeru). Fáze 102: služby třetích stran (GA4, Clarity, Sklik, Ads, LinkedIn) jsou připravené, ale na produkci bez ID v `.env` vypnuté; trychtýř počítá vstupy bez identifikátoru (obnovení vstupní stránky se započte znovu) a kontakt zachytí jen ukázková firma (export kusovníku, tisk elaborátu, uložení projektu – export PDF / DXF výkresu se jen počítá); oblíbenost řad a objem materiálu z nejnovějších 300 uložených půdorysů; zásady 1.4 před ostrým prodejem zkontrolovat právníkem. Fáze 103: PDF verze = tisk neměnného snímku z prohlížeče (snímek jsou data, ne uložený soubor PDF); ZPL tiskne čistý QR kód bez loga (logo jen v PDF 1:1); odevzdání z poolu platí až po schválení údržbou; e-mail firemnímu projektantovi jen s SMTP a u závodu registrované firmy; karta štítku je veřejná, ale osobní údaje zákazníka vidí jen firma výrobce (PIN dokumentace zatím není); odměny v poolu jsou orientační, platby projektantům platforma neřeší. Fáze 104: limit požadavků drží okna v paměti jedné instance (restart je vynuluje); blokace robotů podle User-Agent (podvrhnutelný – před vytěžováním chrání hlavně limit a přihlášení); výpočtové algoritmy zůstávají v minifikovaném klientském JS (editor a aplikace počítají offline), na serveru jsou surová data výrobců; podmínky užití 1.1 (čl. 7 ochrana databáze) před ostrým prodejem zkontrolovat právníkem. Fáze 105: ceníkové ceny přístrojů ABB / Hager / OEZ / Eaton v dodaných balíčcích nejsou (OEZ ETIM 8 má 0 Kč) – nabídka je nechá doplnit elektrikáři; ceny jen kabelů a vodičů (Schrack) a krabic KOPOS; šablony importu košíků velkoobchodů ověřit s obchodními zástupci; výška stropu jen v profilu nákresu (ne po místnostech). Fáze 106: drátovací list jen silové propojení podle stromu (bez ovládacích obvodů), délky z pravoúhlého modelu tras; PDF elaborátu a štítků výrobce tiskne z prohlížeče (bez serverového PDF); orientační kalkulace s paušální dopravou 1 490 Kč; výrobci jsou samostatné účty portálu (kód z velínu). Fáze 107: zprávy kontaktního hubu jsou v databázi a printscreeny v soukromém úložišti (ne JSON ani public/), potvrzení e-mailem odesílateli se neposílá (ochrana před zneužitím); plovoucí tlačítko není na /kontakt, ve velínu a na /prezentace. Fáze 108: podpis revize vrstvy A je prostý elektronický podpis s pečetí obsahu (ne kvalifikovaný); PAdES (vrstva B) se ověřuje jen formálně (PDF se slovníkem podpisu), platnost certifikátu ne; e-maily Chytré revize a měsíčního reportu bez SMTP jen v logu notifikací; revize pod stejným číslem osvědčení u cizí firmy ukáže report jen počtem; odhad času revize je orientační tabulka; zneplatňuje se po záznamech (ne celý protokol); texty podpisu nechat zkontrolovat právníkem.
+- Fáze 98: fáze 2D půdorysu je krok průvodce (relace prohlížeče; kompaktní lišta ukazuje bez filtru vše – „Zobrazit vše“), agenda závodu jen v adrese `?faze=`; detail výběru je ve všech fázích a varování zón / krabiček i ve fázi 4 (odchylka od zadání, viz zadání); Elektro-linter s opravou jedním klikem zůstává u DIN lišt (část 1a), fáze 2 má jeho souhrn; kapitoly video-návodu AI Panel Builderu nesou čísla kroků z namluveného videa; rozvržení na výšku okna až od 1280 px (pod tím sloupce pod sebou); karta Nařízení (EU) 2023/1230 počítá jen otevřené změny s klasifikací podstatné změny (uzavřené jsou v historii zařízení). Fáze 99: demo scénář založí při každém kliknutí nový půdorys firmy (staré demo půdorysy se mažou ručně v seznamu) a rozváděč z něj stojí 1 kredit jako každý jiný; scénář průmyslového závodu jen odkazuje na agendy naposledy otevřeného závodu (plná vzorová data má závod obchodního dema); generování rozváděče z půdorysu trvalo na vývojovém serveru 3,3–3,8 s včetně překladu stránky – cíl pod 1 s na produkci samostatně neměřen; prezentace `/prezentace` je mimo vyhledávače (noindex, není v sitemap) a údaje jednání drží jen prohlížeč prezentujícího. Fáze 100: tahák zakázky je podle zadání v záložce Normy (přechody z taháku ji nechají otevřenou, lišta průvodce otevře výchozí záložku fáze); vzhled 🌗 se ukládá s podkladem podlaží a starší půdorysy bez údaje mají 60 %; fotky v `public/catalog-images/` mají mezipaměť `immutable` na rok – opravenou fotku ukládat pod novým názvem; 60 FPS ověřeno počtem překreslení vrstev v E2E, ne měřením snímků na slabém notebooku. Fáze 101: anténní zásuvka TV / SAT nemá v datech ABB ETIM objednací číslo (v kusovníku „dle katalogu výrobce“) a trasa koaxiálního kabelu se kreslí ve vrstvě datových rozvodů; svislý víceramček se v půdorysu kreslí kolmo ke stěně (schematicky), výšky pozic po 71 mm; offline převod BIM jen na už načtené stránce (bez service workeru). Fáze 102: služby třetích stran (GA4, Clarity, Sklik, Ads, LinkedIn) jsou připravené, ale na produkci bez ID v `.env` vypnuté; trychtýř počítá vstupy bez identifikátoru (obnovení vstupní stránky se započte znovu) a kontakt zachytí jen ukázková firma (export kusovníku, tisk elaborátu, uložení projektu – export PDF / DXF výkresu se jen počítá); oblíbenost řad a objem materiálu z nejnovějších 300 uložených půdorysů; zásady 1.4 před ostrým prodejem zkontrolovat právníkem. Fáze 103: PDF verze = tisk neměnného snímku z prohlížeče (snímek jsou data, ne uložený soubor PDF); ZPL tiskne čistý QR kód bez loga (logo jen v PDF 1:1); odevzdání z poolu platí až po schválení údržbou; e-mail firemnímu projektantovi jen s SMTP a u závodu registrované firmy; karta štítku je veřejná, ale osobní údaje zákazníka vidí jen firma výrobce (PIN dokumentace zatím není); odměny v poolu jsou orientační, platby projektantům platforma neřeší. Fáze 104: limit požadavků drží okna v paměti jedné instance (restart je vynuluje); blokace robotů podle User-Agent (podvrhnutelný – před vytěžováním chrání hlavně limit a přihlášení); výpočtové algoritmy zůstávají v minifikovaném klientském JS (editor a aplikace počítají offline), na serveru jsou surová data výrobců; podmínky užití 1.1 (čl. 7 ochrana databáze) před ostrým prodejem zkontrolovat právníkem. Fáze 105: ceníkové ceny přístrojů ABB / Hager / OEZ / Eaton v dodaných balíčcích nejsou (OEZ ETIM 8 má 0 Kč) – nabídka je nechá doplnit elektrikáři; ceny jen kabelů a vodičů (Schrack) a krabic KOPOS; šablony importu košíků velkoobchodů ověřit s obchodními zástupci; výška stropu jen v profilu nákresu (ne po místnostech). Fáze 106: drátovací list jen silové propojení podle stromu (bez ovládacích obvodů), délky z pravoúhlého modelu tras; PDF elaborátu a štítků výrobce tiskne z prohlížeče (bez serverového PDF); orientační kalkulace s paušální dopravou 1 490 Kč; výrobci jsou samostatné účty portálu (kód z velínu). Fáze 107: zprávy kontaktního hubu jsou v databázi a printscreeny v soukromém úložišti (ne JSON ani public/), potvrzení e-mailem odesílateli se neposílá (ochrana před zneužitím); plovoucí tlačítko není na /kontakt, ve velínu a na /prezentace. Fáze 108: podpis revize vrstvy A je prostý elektronický podpis s pečetí obsahu (ne kvalifikovaný); PAdES (vrstva B) se ověřuje jen formálně (PDF se slovníkem podpisu), platnost certifikátu ne; e-maily Chytré revize a měsíčního reportu bez SMTP jen v logu notifikací; revize pod stejným číslem osvědčení u cizí firmy ukáže report jen počtem; odhad času revize je orientační tabulka; zneplatňuje se po záznamech (ne celý protokol); texty podpisu nechat zkontrolovat právníkem. Fáze 109: barva značek platí jen pro plátno editoru (výkres a exporty černobílé podle ČSN); čísla panelů ABB jen z katalogu výrobců – čísla RoomTouch, Trevion (ve skutečnosti ABB-Tenton) a OneTouch ze zadání v katalogu nejsou a EAN nejsou v oficiálních datech; rozdíl variant ukazuje kabely a cenu práce bez materiálu (chybí ceníkové ceny přístrojů); varianty se ukládají v nákresu (nejvýš 4, místnosti a podklad společné).
 - Backlog z MVP: skutečný serverový přepis hlasu, redlining nad PDF (pdf.js), PostgreSQL, elektronický podpis schválení.

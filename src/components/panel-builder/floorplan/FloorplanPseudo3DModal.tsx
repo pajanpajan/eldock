@@ -10,9 +10,60 @@ import type { FloorplanDraft } from "@/lib/panel-builder/floorplan-editor";
 import { DEFAULT_ISO, HEIGHT_LEVELS, HEIGHT_PRESETS, WALL_SIDES, buildScene, elevationOf, heightIssues, isoProject, type IsoView, type SceneKind, type WallSide } from "@/lib/panel-builder/pseudo3d";
 import { cn } from "@/lib/utils";
 
-/** Barvy značek podle druhu prvku (zásuvky modré / zelené, vypínače jantarové, světla žlutá, rozváděč fialový). */
-const KIND_COLOR: Record<SceneKind, string> = { socket: "#38bdf8", switch: "#f59e0b", light: "#facc15", board: "#a78bfa", control: "#34d399", appliance: "#fb7185", other: "#a1a1aa" };
-const KIND_LABEL: Record<SceneKind, string> = { socket: "zásuvka", switch: "vypínač", light: "svítidlo", board: "rozváděč", control: "ovladač / čidlo", appliance: "spotřebič", other: "prvek" };
+/**
+ * Fáze 109: barvy a tvary prvků jasně odlišené – zásuvka modrý kroužek se svodem k podlaze, vypínač zelený kosočtverec
+ * (ne oranžová – splývala se světly), svítidlo žluté se září a paprsky, rozváděč purpurová skříň, ovladač / čidlo
+ * tyrkysový trojúhelník, spotřebič korálový.
+ */
+const KIND_COLOR: Record<SceneKind, string> = { socket: "#38bdf8", switch: "#10b981", light: "#fde047", board: "#d946ef", control: "#06b6d4", appliance: "#f43f5e", other: "#a1a1aa" };
+const KIND_LABEL: Record<SceneKind, string> = { socket: "zásuvka", switch: "vypínač", light: "svítidlo", board: "rozváděč", control: "ovladač / čidlo / magnet", appliance: "spotřebič", other: "prvek" };
+const KIND_EMOJI: Record<SceneKind, string> = { socket: "🔵", switch: "🟢", light: "🟡", board: "🟣", control: "🩵", appliance: "🔴", other: "⚫" };
+/** Poloprůhledné stěny do výšky stropu (~20 %) a jejich hrany. */
+const WALL_FILL = "rgba(148, 163, 184, 0.20)";
+const WALL_EDGE = "rgba(226, 232, 240, 0.55)";
+const FURNITURE_FILL = "rgba(255, 255, 255, 0.14)";
+
+/** Značka prvku v izometrii podle druhu (v souřadnicích obrazovky, `u` = jednotka velikosti). */
+function ElementMarker({ kind, u, selected }: { kind: SceneKind; u: number; selected: boolean }) {
+  const color = KIND_COLOR[kind];
+  const scale = selected ? 1.35 : 1;
+  const outline = selected ? "#ffffff" : "#0b1220";
+  const s = u * scale;
+  switch (kind) {
+    case "socket":
+      return <circle r={s * 0.8} fill="#0b1220" stroke={color} strokeWidth={s * 0.38} />;
+    case "switch":
+      return <rect x={-s * 0.6} y={-s * 0.6} width={s * 1.2} height={s * 1.2} transform="rotate(45)" fill={color} stroke="#ffffff" strokeWidth={s * (selected ? 0.3 : 0.18)} />;
+    case "light":
+      return (
+        <g>
+          <circle r={s * 2} fill="url(#pseudo3d-light-glow)" />
+          {Array.from({ length: 8 }, (_, index) => {
+            const angle = (index * Math.PI) / 4;
+            return <line key={index} x1={Math.cos(angle) * s * 1} y1={Math.sin(angle) * s * 1} x2={Math.cos(angle) * s * 1.6} y2={Math.sin(angle) * s * 1.6} stroke={color} strokeWidth={s * 0.16} strokeLinecap="round" />;
+          })}
+          <circle r={s * 0.7} fill={color} stroke={outline} strokeWidth={s * 0.15} />
+        </g>
+      );
+    case "board":
+      return (
+        <g>
+          <polygon points={`${-s * 0.9},${-s * 1.1} ${-s * 0.5},${-s * 1.45} ${s * 1.1},${-s * 1.45} ${s * 0.7},${-s * 1.1}`} fill={color} fillOpacity={0.6} stroke={outline} strokeWidth={s * 0.1} />
+          <polygon points={`${s * 0.7},${-s * 1.1} ${s * 1.1},${-s * 1.45} ${s * 1.1},${s * 0.85} ${s * 0.7},${s * 1.2}`} fill={color} fillOpacity={0.45} stroke={outline} strokeWidth={s * 0.1} />
+          <rect x={-s * 0.9} y={-s * 1.1} width={s * 1.6} height={s * 2.3} fill={color} stroke={selected ? "#ffffff" : "#fdf4ff"} strokeWidth={s * 0.14} />
+        </g>
+      );
+    case "control":
+      return <polygon points={`0,${-s * 0.95} ${s * 0.85},${s * 0.6} ${-s * 0.85},${s * 0.6}`} fill={color} stroke={selected ? "#ffffff" : "#ecfeff"} strokeWidth={s * 0.14} strokeLinejoin="round" />;
+    case "appliance":
+      return <rect x={-s * 0.7} y={-s * 0.7} width={s * 1.4} height={s * 1.4} rx={s * 0.3} fill={color} stroke={outline} strokeWidth={s * 0.16} />;
+    default:
+      return <circle r={s * 0.6} fill={color} stroke={outline} strokeWidth={s * 0.15} />;
+  }
+}
+
+/** „Kuchyňská linka (0,60 m)“ → „Kuchyňská linka“ (popisek kvádru nábytku). */
+const furnitureName = (label: string) => label.replace(/\s*\(.*\)\s*$/, "");
 
 type Pt = { x: number; y: number };
 const polygon = (points: readonly Pt[]) => points.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
@@ -83,7 +134,8 @@ function IsoView3D({ draft, view, selectedId, onSelect }: { draft: FloorplanDraf
       return { quad: [point, bottom[next], top[next], top[index]], depth: (point.depth + bottom[next].depth) / 2 };
     });
     sides.sort((a, b) => a.depth - b.depth);
-    return { id: entry.id, label: entry.label, top, sides, depth: top.reduce((sum, point) => sum + point.depth, 0) / top.length };
+    const center = top.reduce((sum, point) => ({ x: sum.x + point.x / top.length, y: sum.y + point.y / top.length }), { x: 0, y: 0 });
+    return { id: entry.id, label: entry.label, height: entry.height, center, top, sides, depth: top.reduce((sum, point) => sum + point.depth, 0) / top.length };
   });
   furniture.sort((a, b) => a.depth - b.depth);
   const openings = scene.openings.map((opening) => {
@@ -102,31 +154,54 @@ function IsoView3D({ draft, view, selectedId, onSelect }: { draft: FloorplanDraf
   const maxY = Math.max(...all.map((point) => point.y), 1) + 400;
   const unit = Math.max(maxX - minX, maxY - minY) / 120;
   return (
-    <svg viewBox={`${minX} ${minY} ${maxX - minX} ${maxY - minY}`} className="h-[58vh] w-full rounded-xl bg-zinc-950" role="img" aria-label="Izometrický 3D náhled půdorysu" data-testid="pseudo3d-iso" data-rotation={view.rotation}>
+    <svg viewBox={`${minX} ${minY} ${maxX - minX} ${maxY - minY}`} className="h-[58vh] w-full rounded-xl bg-zinc-950" role="img" aria-label="Izometrický 3D náhled půdorysu" data-testid="pseudo3d-iso" data-ceiling={H} data-rotation={view.rotation}>
       {scene.rooms.map((room) => (
         <polygon key={room.id} points={polygon(room.polygon.map((point) => project({ ...point, z: 0 })))} fill="#27272a" stroke="#52525b" strokeWidth={unit * 0.15} />
       ))}
+      <defs>
+        <radialGradient id="pseudo3d-light-glow">
+          <stop offset="0%" stopColor="#fde047" stopOpacity={0.75} />
+          <stop offset="100%" stopColor="#fde047" stopOpacity={0} />
+        </radialGradient>
+      </defs>
+      {/* Fáze 109: název místnosti na podlaze */}
+      {scene.rooms.map((room) => {
+        const floor = room.polygon.map((point) => project({ ...point, z: 0 }));
+        const center = floor.reduce((sum, point) => ({ x: sum.x + point.x / floor.length, y: sum.y + point.y / floor.length }), { x: 0, y: 0 });
+        return room.name ? (
+          <text key={`label-${room.id}`} x={center.x} y={center.y} fontSize={unit * 1.5} fontWeight={700} textAnchor="middle" dominantBaseline="central" fill="#e2e8f0" fillOpacity={0.85} pointerEvents="none" data-testid="pseudo3d-room-label">
+            {room.name}
+          </text>
+        ) : null;
+      })}
       {furniture.map((entry) => (
         <g key={entry.id} data-testid="pseudo3d-furniture">
           {entry.sides.map((side, index) => (
-            <polygon key={index} points={polygon(side.quad)} fill="#78716c" fillOpacity={0.55} stroke="#a8a29e" strokeWidth={unit * 0.08} />
+            <polygon key={index} points={polygon(side.quad)} fill={FURNITURE_FILL} stroke="rgba(255,255,255,0.35)" strokeWidth={unit * 0.08} />
           ))}
-          <polygon points={polygon(entry.top)} fill="#a8a29e" fillOpacity={0.75} stroke="#d6d3d1" strokeWidth={unit * 0.08}>
+          <polygon points={polygon(entry.top)} fill={FURNITURE_FILL} stroke="rgba(255,255,255,0.5)" strokeWidth={unit * 0.08}>
             <title>{entry.label}</title>
           </polygon>
+          <text x={entry.center.x} y={entry.center.y} fontSize={unit * 0.95} fontWeight={600} textAnchor="middle" dominantBaseline="central" fill="#f8fafc" stroke="rgba(9,13,22,0.9)" strokeWidth={unit * 0.25} paintOrder="stroke" pointerEvents="none" data-testid="pseudo3d-furniture-label">
+            {furnitureName(entry.label)} {entry.height} mm
+          </text>
         </g>
       ))}
+      {/* Fáze 109: poloprůhledné stěny (~20 %) od podlahy do výšky stropu s hranami u podlahy, v rozích a u stropu */}
       {walls.map((wall) => (
-        <polygon key={wall.key} points={polygon(wall.quad)} fill="#e4e4e7" fillOpacity={0.1} stroke="#d4d4d8" strokeOpacity={0.7} strokeWidth={unit * 0.12} />
+        <polygon key={wall.key} points={polygon(wall.quad)} fill={WALL_FILL} stroke={WALL_EDGE} strokeWidth={unit * 0.14} strokeLinejoin="round" data-testid="pseudo3d-wall-face" />
       ))}
+      {/* Průhledné otvory: okna (parapet 900 → 2300 mm) a dveře (0 → 2000 mm) jen obrysem */}
       {openings.map((opening) => (
-        <polygon key={opening.id} points={polygon(opening.quad)} fill={opening.door ? "#92400e" : "#7dd3fc"} fillOpacity={opening.door ? 0.55 : 0.4} stroke={opening.door ? "#d97706" : "#38bdf8"} strokeWidth={unit * 0.12} data-testid="pseudo3d-opening" />
+        <polygon key={opening.id} points={polygon(opening.quad)} fill={opening.door ? "rgba(251,191,36,0.05)" : "rgba(125,211,252,0.08)"} stroke={opening.door ? "#fbbf24" : "#7dd3fc"} strokeWidth={unit * 0.16} data-kind={opening.door ? "door" : "window"} data-testid="pseudo3d-opening" />
       ))}
       {elements.map(({ element, at, foot }) => (
         <g key={element.id} onClick={() => onSelect(element.id)} className="cursor-pointer" data-testid="pseudo3d-element" data-id={element.id} data-z={Math.round(element.z)}>
           {/* Svislý svod: zásuvky od podlahy, vypínače a ostatní ze stropu */}
-          {element.kind !== "light" ? <line x1={foot.x} y1={foot.y} x2={at.x} y2={at.y} stroke={KIND_COLOR[element.kind]} strokeOpacity={0.6} strokeWidth={unit * 0.12} strokeDasharray={`${unit * 0.5} ${unit * 0.3}`} /> : null}
-          <circle cx={at.x} cy={at.y} r={unit * (selectedId === element.id ? 1.1 : 0.75)} fill={KIND_COLOR[element.kind]} stroke={selectedId === element.id ? "#fff" : "#18181b"} strokeWidth={unit * 0.2} />
+          {element.kind !== "light" ? <line x1={foot.x} y1={foot.y} x2={at.x} y2={at.y} stroke={KIND_COLOR[element.kind]} strokeOpacity={0.7} strokeWidth={unit * 0.14} strokeDasharray={`${unit * 0.5} ${unit * 0.3}`} /> : null}
+          <g transform={`translate(${at.x} ${at.y})`} data-kind={element.kind} data-color={KIND_COLOR[element.kind]}>
+            <ElementMarker kind={element.kind} u={unit * 0.75} selected={selectedId === element.id} />
+          </g>
           <title>{`${element.label} · ${Math.round(element.z)} mm`}</title>
         </g>
       ))}
@@ -329,12 +404,20 @@ export function FloorplanPseudo3DModal({ draft, onHeights }: { draft: FloorplanD
         ) : (
           <p className="text-sm text-muted-foreground">Nakreslete nejdřív místnost.</p>
         )}
-        <p className="flex flex-wrap gap-3 text-[11px] text-muted-foreground">
-          {(Object.keys(KIND_LABEL) as SceneKind[]).map((kind) => (
-            <span key={kind} className="flex items-center gap-1">
-              <span className="size-2.5 rounded-full" style={{ background: KIND_COLOR[kind] }} aria-hidden /> {KIND_LABEL[kind]}
-            </span>
-          ))}
+        <p className="flex flex-wrap gap-3 text-[11px] text-muted-foreground" data-testid="pseudo3d-legend">
+          {(Object.keys(KIND_LABEL) as SceneKind[])
+            .filter((kind) => kind !== "other")
+            .map((kind) => (
+              <span key={kind} className="flex items-center gap-1" data-kind={kind}>
+                <span className="size-2.5 rounded-sm" style={{ background: KIND_COLOR[kind] }} aria-hidden /> {KIND_EMOJI[kind]} {KIND_LABEL[kind]}
+              </span>
+            ))}
+          <span className="flex items-center gap-1" data-kind="furniture">
+            <span className="size-2.5 rounded-sm border border-white/40" style={{ background: FURNITURE_FILL }} aria-hidden /> ⚪ nábytek / zařizovací předměty
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="size-2.5 rounded-sm border" style={{ background: WALL_FILL, borderColor: WALL_EDGE }} aria-hidden /> stěny do výšky stropu
+          </span>
         </p>
       </DialogContent>
     </Dialog>
