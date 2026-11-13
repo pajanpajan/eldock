@@ -7,6 +7,7 @@ import type { ComponentCategory } from "@/generated/prisma/enums";
 import { estimatePowerLoss } from "@/lib/panel-builder/catalog";
 import type { ItemConfig } from "@/lib/panel-builder/configurator";
 import type { EnclosureLike } from "@/lib/panel-builder/enclosures";
+import { CONCEPT_INFO, SINGLE_LAYOUT, fitsLayout, layoutNeed, layoutOptions, matchLayoutEnclosures, packRails, planLayout, planTwoBoards, type LayoutConcept, type PackGroup, type PlannedRail, type RailLayout } from "@/lib/panel-builder/rail-layout";
 import { constructionDetails } from "@/lib/panel-builder/environments";
 import { CENTRAL_STOP_LABEL, MEDICAL_CIRCUIT, MID_METER_LABEL, isCommercial, isMedical, isMedicalRoom, midMeterConfig, shuntTripConfig, type MedicalCircuit, type OccupancyId } from "@/lib/panel-builder/occupancy";
 
@@ -1216,6 +1217,12 @@ export interface Switchboard {
   totalPowerLossW: number;
   enclosure: EnclosureLike | null;
   warnings: string[];
+  /** Fáze 111: uspořádání lišt – dvě pole vedle sebe (Silnoproud | Slaboproud), přepážka, koncepce. */
+  layout: RailLayout;
+  /** Fáze 111: dva samostatné rozváděče – RH2 (slaboproud / Smart Home) s vlastními lištami a skříní. */
+  second: { rails: { index: number; capacity: number; devices: PanelDevice[]; used: number }[]; devices: PanelDevice[]; enclosure: EnclosureLike | null; totalPowerLossW: number } | null;
+  /** Fáze 111: skupiny přístrojů (chránič s jističi, slaboproud …) pro průvodce uspořádáním skříně a lišt. */
+  packGroups: PackGroup<PanelDevice>[];
 }
 
 /** Max. okruhů pod jedním 4P chráničem 30 mA (zadání: 5 až 6). */
@@ -1415,6 +1422,15 @@ export function buildSwitchboardFromCircuits(
      * jednotky s vypínací spouští CENTRAL STOP a podružný elektroměr MID s komunikací Modbus / M-Bus.
      */
     occupancy?: OccupancyId;
+    /**
+     * Fáze 111: koncepce uspořádání skříně a lišt z průvodce (dvoupolová skříň Silnoproud | Slaboproud, široké 24M
+     * lišty, kompaktní 18M lišty, dva rozváděče) a zvolené skříně z databáze; bez ní lišty pod sebou a nejmenší skříň.
+     */
+    layout?: LayoutConcept;
+    enclosureId?: string | null;
+    secondEnclosureId?: string | null;
+    /** Fáze 111: výrobce přístrojů – v koncepcích přednost skříním stejného výrobce. */
+    manufacturer?: string | null;
   },
 ): Switchboard {
   const warnings: string[] = [];
@@ -1465,6 +1481,10 @@ export function buildSwitchboardFromCircuits(
   const groups: PanelDevice[][] = [];
   /** Fáze 81: skupiny, které začínají na vlastní (vyhrazené) liště – akční členy chytré domácnosti. */
   const ownRail = new Set<PanelDevice[]>();
+  /** Fáze 111: skupiny, které se na lištách nedělí (hlavní vypínač se svodičem, chránič se svými jističi). */
+  const keep = new Set<PanelDevice[]>();
+  /** Fáze 111: skupina řídicích obvodů (jistič, zdroje, moduly) – slaboproud, když nese PLC / zdroj. */
+  let controlRef: PanelDevice[] | null = null;
   /** Fáze 81: přístroj modulu chytré domácnosti s přesným kusem katalogu a jeho Pv (jinak odhad dle IEC). */
   const smartDevice = (unit: SmartBoardModule, psu: boolean) => {
     const item = device(psu ? "T" : "A", unit.label, psu ? "PSU" : "PLC", "1P", unit.modules, null, config({ category: "OTHER", poles: "1P", modules: unit.modules, moduleSubtype: psu ? "PSU_DC" : "PLC", manufacturer: unit.manufacturer }));
@@ -1487,7 +1507,9 @@ export function buildSwitchboardFromCircuits(
         device("FV", "Svodič přepětí T1+T2 bez předjištění", "SPD", "3P+N", 4, null, config({ category: "SPD", poles: "3P+N", modules: 4, spdType: "T1+T2", surgeCurrentKa: 25 }), null, "L1,L2,L3"),
         device("X", "Rozbočovací svorkovnice (HLAK)", "TERMINAL", "4P", 4, null, config({ category: "ACCESSORY", poles: "4P", modules: 4, moduleSubtype: "TERMINAL_BLOCK" })),
       ];
-  groups.push([tree(head[0], "main", null), tree(head[1], "spd", "main"), tree(head[2], "terminal", "main")]);
+  const headGroup = [tree(head[0], "main", null), tree(head[1], "spd", "main"), tree(head[2], "terminal", "main")];
+  groups.push(headGroup);
+  keep.add(headGroup);
   // Fáze 93: BD4 – vypínací spoušť CENTRAL STOP / TOTAL STOP na hlavním vypínači a podružný elektroměr MID nájemní jednotky
   if (isCommercial(options.occupancy)) {
     const shunt = shuntTripConfig(null);
@@ -1518,7 +1540,9 @@ export function buildSwitchboardFromCircuits(
     const rcd: PanelDevice = { ...device("FI", `Proudový chránič 30 mA typ ${group.type}${group.lightingOnly ? " – jen světla" : ""}`, "RCD", rcdPoles, single ? 2 : 4, rated, config({ category: "RCD", poles: rcdPoles, modules: single ? 2 : 4, ratedCurrentA: rated, rcdType: group.type, rcdSensitivityMa: 30 }), null, single ? "L1,N" : "L1,L2,L3"), key: `rcd:${group.designation}`, parentKey: "main" };
     rcd.designation = group.designation;
     // Jističe skupiny pod svým chráničem (strom podle hierarchie, i když se skupina rozdělí na dvě lišty)
-    groups.push([rcd, ...circuits.map((circuit) => ({ ...mcb(circuit), parentKey: rcd.key }))]);
+    const rcdGroup = [rcd, ...circuits.map((circuit) => ({ ...mcb(circuit), parentKey: rcd.key }))];
+    groups.push(rcdGroup);
+    keep.add(rcdGroup);
     addBom(bom, "Izolovaný N-můstek (pod chránič)");
     addBom(bom, single ? "Hřebenová propojovací lišta 1P+N (pod chránič)" : "Hřebenová propojovací lišta 3P (pod chránič)");
   }
@@ -1588,6 +1612,7 @@ export function buildSwitchboardFromCircuits(
     );
     const controlGroup = supply ? [supply, ...parented] : parented;
     groups.push(controlGroup);
+    controlRef = controlGroup;
     // Fáze 81: akční členy chytré domácnosti na vyhrazené liště (začínají na nové řadě rozváděče)
     if (options.mode === "bus_loxone" && options.smart?.some((unit) => unit.modules > 0)) ownRail.add(controlGroup);
   }
@@ -1597,47 +1622,89 @@ export function buildSwitchboardFromCircuits(
   const requiredModules = Math.ceil(totalModules * (1 + MODULE_RESERVE));
   const totalPowerLossW = Math.round(devices.reduce((sum, item) => sum + item.powerLossW, 0) * 100) / 100;
 
-  /** Rozložení skupin na lišty dané šířky (skupina širší než lišta se rozdělí). */
-  const layout = (capacity: number) => {
-    const rails: { index: number; capacity: number; devices: PanelDevice[]; used: number }[] = [];
-    const open = () => rails.push({ index: rails.length + 1, capacity, devices: [], used: 0 });
-    open();
-    for (const group of groups) {
-      const width = group.reduce((sum, item) => sum + item.modules, 0);
-      let rail = rails[rails.length - 1];
-      if ((rail.used + width > capacity && width <= capacity) || (ownRail.has(group) && rail.used > 0)) {
-        open();
-        rail = rails[rails.length - 1];
-      }
-      for (const item of group) {
-        rail = rails[rails.length - 1];
-        if (rail.used + item.modules > capacity) {
-          open();
-          rail = rails[rails.length - 1];
-        }
-        rail.devices.push(item);
-        rail.used += item.modules;
-      }
-    }
-    return rails;
+  // Fáze 111: skupiny pro komprimaci lišt – chránič s jističi a hlavní vypínač se svodičem se nedělí, jističochrániče,
+  // samostatné jističe a přívody vyplní mezery; řídicí obvody s PLC / zdrojem = slaboproud (pravé pole, spodní lišty,
+  // RH2) s jističem řídicích obvodů na začátku (u dvou rozváděčů zůstává v RH1 jako přívod RH2)
+  const lowDevice = (item: PanelDevice) => item.category === "PLC" || item.category === "PSU";
+  const packGroups: PackGroup<PanelDevice>[] = groups.map((group) => {
+    const low = group === controlRef && group.some(lowDevice);
+    // Řídicí obvody (jistič, relé, elektroměr DLM, moduly) jsou funkční celek – pohromadě na liště
+    return { devices: group, keepTogether: keep.has(group) || group === controlRef, low, ownRail: ownRail.has(group), powerLead: low && group[0]?.key === "control" ? 1 : 0 };
+  });
+  /** Lišty pod sebou: s rezervou ~15 % lišty, když se do řad skříně nevejdou, tak bez rezervy. */
+  const singleRails = (capacity: number, rows = Infinity) => {
+    const roomy = packRails(packGroups, capacity);
+    return roomy.length <= rows ? roomy : packRails(packGroups, capacity, { reserve: false });
   };
+  const toRails = (list: readonly { capacity: number; devices: PanelDevice[]; used: number }[]) => list.map((rail, index) => ({ index: index + 1, capacity: rail.capacity, devices: rail.devices, used: rail.used }));
+  const lossOf = (list: readonly PanelDevice[]) => Math.round(list.reduce((sum, item) => sum + item.powerLossW, 0) * 100) / 100;
 
   // Skříň: pojme moduly + 25 % rezervu, rozložení skupin na její řady a ztráty ≤ P_max; nejmenší vyhovující
   const fits = (enclosure: EnclosureLike) => {
     if (enclosure.totalModules < requiredModules || enclosure.pMaxW === null || totalPowerLossW > enclosure.pMaxW) return false;
-    return layout(enclosure.modulesPerRow).length <= enclosure.rows;
+    return singleRails(enclosure.modulesPerRow, enclosure.rows).length <= enclosure.rows;
   };
-  const enclosure = [...options.enclosures].filter(fits).sort((a, b) => a.totalModules - b.totalModules || (a.pMaxW ?? 0) - (b.pMaxW ?? 0) || a.model.localeCompare(b.model))[0] ?? null;
-  if (!enclosure) warnings.push(`Žádná skříň z databáze nepojme ${requiredModules} M (${totalModules} M + 25 % rezerva) se ztrátami ${String(totalPowerLossW).replace(".", ",")} W – vyberte skříň ručně.`);
-  const rails = layout(enclosure?.modulesPerRow ?? options.railModules ?? 12);
+  let enclosure: EnclosureLike | null = null;
+  let rails: Switchboard["rails"];
+  let layout: RailLayout = SINGLE_LAYOUT;
+  let second: Switchboard["second"] = null;
+  let boardDevices = devices;
+  const concept = options.layout;
+  if (concept === "two_boards") {
+    // Fáze 111: RH1 silnoproud + RH2 slaboproud / Smart Home – každý s vlastní skříní (12M nebo 18M lišty)
+    const boards = planTwoBoards(packGroups, options.enclosures, options.manufacturer ?? null);
+    const main = (options.enclosureId ? boards.main.matches.find((match) => match.enclosure.id === options.enclosureId) : null) ?? boards.main.matches[0] ?? null;
+    enclosure = main?.enclosure ?? null;
+    rails = toRails(boards.main.rails);
+    boardDevices = rails.flatMap((rail) => rail.devices);
+    layout = { ...SINGLE_LAYOUT, concept };
+    if (!enclosure) warnings.push(`RH1: žádná skříň z databáze nepojme ${boards.main.rails.length} × ${boards.main.rails[0]?.capacity ?? 12} M – vyberte skříň ručně.`);
+    if (boards.second) {
+      const pick = (options.secondEnclosureId ? boards.second.matches.find((match) => match.enclosure.id === options.secondEnclosureId) : null) ?? boards.second.matches[0] ?? null;
+      const secondRails = toRails(boards.second.rails);
+      const secondDevices = secondRails.flatMap((rail) => rail.devices);
+      second = { rails: secondRails, devices: secondDevices, enclosure: pick?.enclosure ?? null, totalPowerLossW: lossOf(secondDevices) };
+      if (!pick) warnings.push(`RH2: žádná skříň z databáze nepojme ${boards.second.rails.length} × ${boards.second.rails[0]?.capacity ?? 12} M – vyberte skříň ručně.`);
+    }
+  } else if (concept) {
+    const plan = planLayout(packGroups, concept);
+    const need = layoutNeed(plan.rails as PlannedRail<PanelDevice>[], plan.layout.fields, totalPowerLossW);
+    const exactWidth = concept !== "two_field";
+    const chosen = options.enclosureId ? (options.enclosures.find((row) => row.id === options.enclosureId && fitsLayout(row, need, { exactWidth })) ?? null) : null;
+    enclosure = chosen ?? matchLayoutEnclosures(options.enclosures, need, { manufacturer: options.manufacturer, exactWidth, limit: 1 })[0]?.enclosure ?? null;
+    rails = toRails(plan.rails);
+    layout = plan.layout;
+    if (!enclosure) warnings.push(`Žádná skříň z databáze nepojme uspořádání „${CONCEPT_INFO[concept].short}“ (${need.fields === 2 ? `2 pole × ${need.rows} řad` : `${need.rows} řad`} po ${need.fieldWidth} M, ${need.requiredModules} M s rezervou 25 %) – zvolte jinou koncepci nebo skříň ručně.`);
+  } else {
+    enclosure = [...options.enclosures].filter(fits).sort((a, b) => a.totalModules - b.totalModules || (a.pMaxW ?? 0) - (b.pMaxW ?? 0) || a.model.localeCompare(b.model))[0] ?? null;
+    if (enclosure) rails = toRails(singleRails(enclosure.modulesPerRow, enclosure.rows));
+    else {
+      // Fáze 111: nevejde se do skříně s lištami pod sebou → dvoupolová skříň / široké či kompaktní lišty z databáze
+      const option = layoutOptions(packGroups, options.enclosures, { manufacturer: options.manufacturer, limit: 1 })
+        .filter((candidate) => candidate.concept !== "two_boards" && candidate.available)
+        .sort((a, b) => Number(b.recommended) - Number(a.recommended) || a.main.matches[0].enclosure.totalModules - b.main.matches[0].enclosure.totalModules)[0];
+      if (option) {
+        enclosure = option.main.matches[0].enclosure;
+        rails = toRails(option.plan.rails);
+        layout = option.plan.layout;
+        warnings.push(`Lišty pod sebou se nevejdou do žádné skříně – zvoleno uspořádání „${CONCEPT_INFO[option.concept].short}“ se skříní ${enclosure.manufacturer} ${enclosure.model} (změníte v „📐 Uspořádání skříně a lišt“).`);
+      } else {
+        warnings.push(`Žádná skříň z databáze nepojme ${requiredModules} M (${totalModules} M + 25 % rezerva) se ztrátami ${String(totalPowerLossW).replace(".", ",")} W – vyberte skříň ručně.`);
+        rails = toRails(singleRails(options.railModules ?? 12));
+      }
+    }
+  }
 
   const spread = Math.max(load.L1, load.L2, load.L3) - Math.min(load.L1, load.L2, load.L3);
   // Fáze 55: u 1f přívodu je vše na L1 – nesymetrie se nehodnotí
   if (!single && spread > 3680) warnings.push(`Nesymetrie fází ${spread} W – zvažte přesun spotřebičů.`);
 
   return {
-    devices,
+    devices: boardDevices,
     rails,
+    layout,
+    second,
+    packGroups,
     phaseLoadW: load,
     phaseOf,
     rcdGroups,

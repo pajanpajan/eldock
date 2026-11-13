@@ -5,7 +5,7 @@ import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
 import { actionFailure, guardCompany } from "@/server/panel-guards";
-import { createCreditOrder } from "@/server/services/credits";
+import { createCreditOrder, unlockOutput } from "@/server/services/credits";
 
 import type { ActionResult } from "./workflow";
 
@@ -25,3 +25,20 @@ export async function createCreditOrderAction(packageCode: string): Promise<Acti
 }
 
 // Fáze 107: hlášení chyby AI posílá kontaktní modal (POST /api/contact → createAiFeedback k projektu přihlášené firmy).
+
+/**
+ * Fáze 111: odemčení výstupu z prodejního modalu – plná verze zkušebního rozváděče / půdorysu (bez zkušebního označení),
+ * samostatná cenová nabídka nebo CNC výrobní balíček. Bez kreditů vrátí data prodejního modalu (`paywall`).
+ */
+export async function unlockOutputAction(kind: "switchboard" | "floorplan" | "quote" | "cnc", id: string): Promise<ActionResult<{ cost: number; license: string; balance: number }>> {
+  if (!["switchboard", "floorplan", "quote", "cnc"].includes(kind) || !z.string().min(1).max(64).safeParse(id).success) return { ok: false, error: "Neplatné odemčení." };
+  try {
+    const company = await guardCompany();
+    const result = await unlockOutput(prisma, company.id, kind, id);
+    revalidatePath("/panel-builder", "layout");
+    return { ok: true, data: result };
+  } catch (error) {
+    return actionFailure(error, "Výstup se nepodařilo odemknout.");
+  }
+}
+

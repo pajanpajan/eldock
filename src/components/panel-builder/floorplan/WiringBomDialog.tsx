@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { toCsv } from "@/lib/csv";
 import { BOX_TABLE_TITLE, bomBoxRows, bomMainRows, bomOrderLabel, bomTable, type WiringBomRow } from "@/lib/panel-builder/wiring-bom";
 import { buildXlsx } from "@/lib/xlsx";
+import { TRIAL_WATERMARK } from "@/lib/credits/pricing";
 import { useLeadGate } from "@/components/analytics/LeadCaptureModal";
 import { cn } from "@/lib/utils";
 
@@ -28,7 +29,7 @@ function download(name: string, data: BlobPart, type: string) {
  * Fáze 55: souhrn kusovníku domovní instalace v pravém panelu + modal s tabulkou, exportem CSV / XLSX a tiskem. Fáze 102:
  * u ukázkové firmy export přes okno kontaktu (`useLeadGate`), `context` = co návštěvník vytvořil.
  */
-export function WiringBomDialog({ rows: computed, context }: { rows: readonly WiringBomRow[]; context?: { summary: string; circuits?: number; cableM?: number } }) {
+export function WiringBomDialog({ rows: computed, context, trial = false }: { rows: readonly WiringBomRow[]; context?: { summary: string; circuits?: number; cableM?: number }; trial?: boolean }) {
   // Fáze 104: EAN objednacích čísel ze serveru (celý import ETIM a data KOPOS do klientského bundlu nesmí)
   const rows = useCatalogEans(computed);
   const gate = useLeadGate();
@@ -36,7 +37,8 @@ export function WiringBomDialog({ rows: computed, context }: { rows: readonly Wi
   const devices = rows.filter((row) => row.unit === "ks").reduce((sum, row) => sum + row.quantity, 0);
   const missing = rows.filter((row) => !row.mpn && row.unit === "ks").length;
   const unverified = rows.filter((row) => row.mpn && !row.verified).length;
-  const table = bomTable(rows);
+  // Fáze 111: zkušební půdorys – zkušební označení v exportu kusovníku (první řádek)
+  const table = trial ? [[TRIAL_WATERMARK], ...bomTable(rows)] : bomTable(rows);
   // Fáze 91: krabice v samostatné tabulce na konci kusovníku
   const main = bomMainRows(rows);
   const boxes = bomBoxRows(rows);

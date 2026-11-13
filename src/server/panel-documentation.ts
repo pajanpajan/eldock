@@ -103,6 +103,8 @@ export async function buildDocumentationData(project: PanelProjectDetail, origin
   const floorplanSheets = draft ? floorplanAnnex(draft, project.boardCode) : undefined;
   const boards = project.boardCode ? await linkedBoardsOf(project, origin) : undefined;
   const data: DocumentationData = {
+    // Fáze 111: zkušební projekt (1. testovací projekt / ukázková firma) – zkušební označení listů
+    trial: project.license === "TRIAL",
     panelHotspots,
     sldHotspots,
     ...(floorplanSheets?.length ? { floorplanSheets } : {}),

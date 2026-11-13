@@ -32,6 +32,7 @@ export default async function FloorplanEditorPage({ params }: PageProps<"/panel-
           updatedAt: floorplan.updatedAt,
           draftJson: floorplan.draftJson,
           project: floorplan.project,
+          license: floorplan.license,
         }}
       />
     </PageTransition>

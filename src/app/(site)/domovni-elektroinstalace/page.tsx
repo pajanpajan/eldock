@@ -71,7 +71,7 @@ export default async function HomeInstallationsPage() {
               <a href="#kontakt">Domluvit ukázku</a>
             </Button>
           </div>
-          <p className="text-sm text-muted-foreground">Registrace firmy je zdarma s 5 testovacími kredity (1 kredit = 1 nový rozváděč). Údaje firmy doplníme z registru ARES podle IČO.</p>
+          <p className="text-sm text-muted-foreground">Registrace firmy je zdarma s 1 testovacím projektem (zkušební 2D půdorys + zkušební rozváděč). Pak rozváděč 15 kreditů, 2D půdorys 15 kreditů, celá zakázka 25 kreditů – <Link href="/sekce/elektroinstalace#cenik" className="text-primary underline-offset-4 hover:underline">ceník</Link>. Údaje firmy doplníme z registru ARES podle IČO.</p>
         </section>
 
         {/* Elektrikář + produkt AI Panel Builder */}

@@ -22,7 +22,11 @@ export function BimBoardButton({ equipmentId, feeds }: { equipmentId: string; fe
         setBusy(true);
         const response = await createBimBoardProjectAction({ equipmentId });
         setBusy(false);
-        if (!response.ok) return void toast.error(response.error, { duration: 10_000 });
+        if (!response.ok) {
+          // Fáze 111: bez kreditů prodejní modal (je v layoutu AI Panel Builderu), jinak toast s odkazem na dobití
+          if (response.paywall) return void toast.error(response.error, { duration: 12_000, action: { label: "💎 Dobít kredity / Tarify", onClick: () => router.push("/panel-builder/credits") } });
+          return void toast.error(response.error, { duration: 10_000 });
+        }
         toast.success(`⚡ Návrh rozváděče: ${response.data.devices} přístrojů, ${response.data.circuits} vývodů z BIMu.`);
         router.push(`/panel-builder/${response.data.id}`);
       }}

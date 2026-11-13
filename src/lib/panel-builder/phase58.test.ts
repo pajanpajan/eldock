@@ -81,7 +81,7 @@ describe("fáze 58 – datasheet ke každému přístroji", () => {
 
 describe("fáze 58 – mapa webu", () => {
   it("úvodní stránka rozcestí na domovní elektroinstalace a průmysl, obě jsou v navigaci, patičce i sitemap.xml", () => {
-    expect(siteNav({ showcase: false }).map((link) => link.href)).toEqual(["/domovni-elektroinstalace", "/prumysl", "/#novinky", "/kontakt"]);
+    expect(siteNav({ showcase: false }).map((link) => link.href)).toEqual(["/domovni-elektroinstalace", "/prumysl", "/hlidac-revizi", "/#novinky", "/kontakt"]);
     expect(siteNav({ showcase: true }).map((link) => link.href)).toContain("/ukazka-elaboratu");
     const footer = footerSections({ showcase: true }).flatMap((section) => section.links.map((link) => link.href));
     expect(footer).toEqual(expect.arrayContaining([SEGMENTS.domov.path, SEGMENTS.prumysl.path, "/prumysl#udrzba", "/register-plant", "/ochrana-osobnich-udaju"]));

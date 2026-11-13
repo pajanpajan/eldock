@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import { PUBLIC_STATE } from "./auth";
-import { goPhase, rightTab } from "./floorplan-phases";
+import { goPhase, rightTab, confirmLayoutWizard } from "./floorplan-phases";
 import { startAs } from "./helpers";
 
 // Fáze 103: zámek místností 2D půdorysu v krocích 2–5, generátor QR štítků ve velínu, kusová zkouška a uzamčení
@@ -60,7 +60,9 @@ test("🔒 2D půdorys: místnosti a stěny jdou upravit jen v kroku 1 – v kro
   // ✏️ Přepnout do Fáze 1 → místnost je zase plně editovatelná
   await detail.getByTestId("room-unlock").click();
   await expect(page.getByTestId("floorplan-wizard")).toHaveAttribute("data-step", "1");
-  await page.mouse.click(spot.x, spot.y);
+  // Krok 1 má nad plátnem jinou lištu (plocha X × Y) – plátno se posune, místo kliknutí znovu z polohy místnosti
+  const unlocked = (await room.boundingBox())!;
+  await page.mouse.click(unlocked.x + unlocked.width * 0.14, unlocked.y + unlocked.height * 0.74);
   await expect(page.getByTestId("room-detail")).not.toHaveAttribute("data-locked", "true");
   await expect(page.getByTestId("room-detail").getByLabel("Šířka X [m]")).toBeEnabled();
   await expect(canvas.getByTestId("room-handle")).toBeVisible();
@@ -120,6 +122,7 @@ test("👨‍🔧 Kusová zkouška a uzamčení do cloudu: Verze 1.0 pod QR št�
   await page.getByLabel("Název rozváděče").fill("RD103 kusová zkouška");
   await expect(generate).toBeEnabled();
   await generate.click();
+  await confirmLayoutWizard(page);
   await expect(page).toHaveURL(/\/panel-builder\/(?!floorplan)[^/]+$/, { timeout: 120_000 });
   const projectUrl = page.url();
   await page.goto(`${projectUrl}/documentation`);

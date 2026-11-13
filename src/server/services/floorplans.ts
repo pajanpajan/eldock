@@ -6,6 +6,7 @@ import type { FloorplanVersionReason, PrismaClient } from "@/generated/prisma/cl
 import { allElements, floorsOf, parseDraft, type FloorplanDraft } from "@/lib/panel-builder/floorplan-editor";
 import { emptyLibrary, parseFloorplanLibrary, type FloorplanLibrary } from "@/lib/panel-builder/floorplan-library";
 import { WorkflowError } from "@/lib/workflow/state-machine";
+import { chargeNewFloorplan, refundCharge } from "./credits";
 
 /** Největší nákres (JSON) – Server Action má limit 1 MB. */
 export const MAX_DRAFT_CHARS = 900_000;
@@ -37,6 +38,8 @@ const LIST_SELECT = {
   createdAt: true,
   updatedAt: true,
   deletedAt: true,
+  // Fáze 111: licence půdorysu (zkušební / plná verze / balíček celá zakázka)
+  license: true,
   project: { select: { id: true, code: true, name: true } },
 } as const;
 
@@ -113,13 +116,13 @@ export async function nextFloorplanCode(prisma: Pick<PrismaClient, "floorplan">,
 async function insertFloorplan(
   prisma: PrismaClient,
   companyId: string,
-  input: { meta: FloorplanMeta; draft: FloorplanDraft; json: string; projectId?: string | null; snapshot: Pick<SnapshotInput, "reason" | "label">; at: Date },
+  input: { meta: FloorplanMeta; draft: FloorplanDraft; json: string; projectId?: string | null; snapshot: Pick<SnapshotInput, "reason" | "label">; at: Date; license?: string },
 ) {
   const summary = draftSummary(input.draft);
   // Fáze 78: kód a založení v jedné transakci (fronta SQLite – dvě založení ve firmě nedostanou stejný kód)
   const row = await prisma.$transaction(async (tx) =>
     tx.floorplan.create({
-      data: { companyId, code: await nextFloorplanCode(tx, companyId), ...input.meta, draftJson: input.json, ...summary, projectId: input.projectId ?? null, createdAt: input.at, updatedAt: input.at },
+      data: { companyId, code: await nextFloorplanCode(tx, companyId), ...input.meta, draftJson: input.json, ...summary, projectId: input.projectId ?? null, ...(input.license ? { license: input.license } : {}), createdAt: input.at, updatedAt: input.at },
       select: { id: true, code: true, version: true, updatedAt: true },
     }),
   );
@@ -140,10 +143,26 @@ export async function getFloorplan(prisma: PrismaClient, companyId: string, id: 
   return row ? { ...row, draft: readDraft(row.draftJson) } : null;
 }
 
+/**
+ * Fáze 111: založení nového půdorysu se zkušebním půdorysem (1. testovací projekt) nebo odečtem 15 kreditů; nepovedené
+ * založení kredit / zkušební půdorys vrátí. Bez kreditů → prodejní modal (`PaywallError`), nákres zůstává v editoru.
+ */
+async function insertCharged(prisma: PrismaClient, companyId: string, input: Omit<Parameters<typeof insertFloorplan>[2], "license">) {
+  const charge = await chargeNewFloorplan(prisma, companyId);
+  try {
+    const created = await insertFloorplan(prisma, companyId, { ...input, license: charge.plan.license });
+    if (charge.transactionId) await prisma.creditTransaction.update({ where: { id: charge.transactionId }, data: { refId: created.id } });
+    return { ...created, license: charge.plan.license, cost: charge.plan.cost };
+  } catch (error) {
+    await refundCharge(prisma, charge);
+    throw error;
+  }
+}
+
 /** Nový půdorys (první uložení z editoru, „Duplikovat“, převzetí). */
 export async function createFloorplan(prisma: PrismaClient, companyId: string, input: { meta?: Partial<FloorplanMeta>; draft: unknown }, { now = new Date() }: { now?: Date } = {}) {
   const { draft, json } = serializeDraft(input.draft);
-  return insertFloorplan(prisma, companyId, { meta: cleanMeta(input.meta ?? {}, "Půdorys"), draft, json, snapshot: { reason: "AUTO" }, at: now });
+  return insertCharged(prisma, companyId, { meta: cleanMeta(input.meta ?? {}, "Půdorys"), draft, json, snapshot: { reason: "AUTO" }, at: now });
 }
 
 /**
@@ -214,7 +233,7 @@ export async function duplicateFloorplan(prisma: PrismaClient, companyId: string
   const draft = readDraft(row.draftJson);
   if (!draft) throw new WorkflowError("VALIDATION", "Uložený půdorys se nepodařilo načíst.");
   const meta = { name: `Kopie – ${row.name}`.slice(0, 120), customerName: row.customerName, installationSite: row.installationSite };
-  return insertFloorplan(prisma, companyId, { meta, draft, json: row.draftJson, snapshot: { reason: "IMPORT", label: `Kopie půdorysu „${row.name}“` }, at: now });
+  return insertCharged(prisma, companyId, { meta, draft, json: row.draftJson, snapshot: { reason: "IMPORT", label: `Kopie půdorysu „${row.name}“` }, at: now });
 }
 
 /** Smazání do koše / obnovení z koše / trvalé smazání (jen z koše). */
@@ -266,7 +285,7 @@ export async function importBrowserDraft(prisma: PrismaClient, companyId: string
   const { draft, json } = serializeDraft(input.draft);
   const existing = await prisma.floorplan.findFirst({ where: { companyId, draftJson: json, createdAt: { gte: new Date(now.getTime() - IMPORT_DEDUP_MS) } }, select: { id: true } });
   if (existing) return { id: existing.id, created: false };
-  const created = await insertFloorplan(prisma, companyId, { meta: cleanMeta({ name: input.name ?? undefined }, "Půdorys z prohlížeče"), draft, json, snapshot: { reason: "IMPORT", label: "Převzato z prohlížeče" }, at: now });
+  const created = await insertCharged(prisma, companyId, { meta: cleanMeta({ name: input.name ?? undefined }, "Půdorys z prohlížeče"), draft, json, snapshot: { reason: "IMPORT", label: "Převzato z prohlížeče" }, at: now });
   return { id: created.id, created: true };
 }
 
@@ -275,7 +294,7 @@ export async function importBrowserDraft(prisma: PrismaClient, companyId: string
  * při generování rozváděče (projekty z fází 49–63).
  */
 export async function floorplanForProject(prisma: PrismaClient, companyId: string, projectId: string, { now = new Date() }: { now?: Date } = {}) {
-  const project = await prisma.panelBoardProject.findFirst({ where: { id: projectId, companyId }, select: { id: true, code: true, name: true, customerName: true, installationSite: true, floorplanJson: true } });
+  const project = await prisma.panelBoardProject.findFirst({ where: { id: projectId, companyId }, select: { id: true, code: true, name: true, customerName: true, installationSite: true, floorplanJson: true, license: true } });
   if (!project) throw new WorkflowError("NOT_FOUND", "Projekt nebyl nalezen.");
   const linked = await prisma.floorplan.findFirst({ where: { companyId, projectId, deletedAt: null }, orderBy: { updatedAt: "desc" }, select: { id: true } });
   if (linked) return { id: linked.id, created: false };
@@ -283,7 +302,8 @@ export async function floorplanForProject(prisma: PrismaClient, companyId: strin
   if (!draft) throw new WorkflowError("NOT_FOUND", "Projekt nevznikl z 2D půdorysu.");
   const { json } = serializeDraft(draft);
   const meta = cleanMeta({ name: `Půdorys – ${project.name}`, customerName: project.customerName, installationSite: project.installationSite }, "Půdorys");
-  const created = await insertFloorplan(prisma, companyId, { meta, draft, json, projectId: project.id, snapshot: { reason: "IMPORT", label: `Převzato z projektu ${project.code}` }, at: now });
+  // Fáze 111: půdorys zakázky rozváděče – zkušební projekt zůstává zkušební, jinak zakázka v balíčku (bez kreditu)
+  const created = await insertFloorplan(prisma, companyId, { meta, draft, json, projectId: project.id, snapshot: { reason: "IMPORT", label: `Převzato z projektu ${project.code}` }, at: now, license: project.license === "TRIAL" ? "TRIAL" : "BUNDLE" });
   return { id: created.id, created: true };
 }
 

@@ -58,7 +58,7 @@ export function ManufacturingSection({ variant, projectId, projectLabel, base, i
   }
   return (
     <div id="vyroba" className="flex flex-col gap-2">
-      <CncManufacturingPanel base={base} initial={config} onConfig={setConfig}>
+      <CncManufacturingPanel base={base} initial={config} onConfig={setConfig} projectId={projectId}>
         <div className="flex flex-col gap-2 border-t border-border pt-3">
           {modal("🏭 Objednat výrobu tohoto rozváděče na klíč")}
           <OrderStatusList orders={orders} />

@@ -10,15 +10,15 @@ test.describe("fáze 58 – veřejný web", () => {
   test("úvod: proč Eldock vznikl, vlevo domovní elektroinstalace, vpravo průmysl, obě části s drobečkovou navigací a mapou webu", async ({ page, request }) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.goto("/");
-    await expect(page.getByTestId("mission")).toContainText("Eldock vznikl");
-    const chooser = page.getByTestId("segment-chooser");
-    const home = chooser.getByTestId("segment-domov");
-    const industry = chooser.getByTestId("segment-prumysl");
-    // domovní vlevo, průmysl vpravo
+    // Fáze 111: rozcestník – domovní instalace vlevo, průmysl vpravo; podrobnosti až v podsekci
+    const home = page.getByTestId("gateway-elektroinstalace");
+    const industry = page.getByTestId("gateway-prumysl-a-revize");
     expect((await home.boundingBox())!.x).toBeLessThan((await industry.boundingBox())!.x);
     await expect(page.getByRole("navigation", { name: "Hlavní navigace" }).getByRole("link", { name: "Průmysl" })).toHaveAttribute("href", "/prumysl");
 
-    await home.getByTestId("segment-link-domov").click();
+    await home.click();
+    await expect(page).toHaveURL(/\/sekce\/elektroinstalace$/);
+    await page.getByTestId("section-overview").click();
     await expect(page).toHaveURL(/\/domovni-elektroinstalace$/);
     await expect(page.getByRole("heading", { level: 1 })).toContainText("dokumentace domovní elektroinstalace");
     await expect(page.getByTestId("breadcrumbs")).toContainText("Domovní elektroinstalace");

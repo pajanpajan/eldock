@@ -7,6 +7,7 @@ import { runBackup } from "@/server/services/backup";
 import { executeDueClosures } from "@/server/services/data-requests";
 import { runRetention } from "@/server/services/retention";
 import { sendDueMonthlyReports } from "@/server/services/revision-signing";
+import { creditSubscriptions } from "@/server/services/credits";
 import { brandEnv } from "@/lib/auth";
 import { smtpTransportFromEnv } from "@/server/mailer";
 
@@ -75,6 +76,13 @@ export async function runDueMaintenance(context: JobContext, trigger: Maintenanc
       if (sent.length) context.log?.(`[eldock] Měsíční report TIČR: ${sent.length} profilů`);
     } catch (error) {
       context.log?.(`[eldock] Měsíční report TIČR selhal: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    // Fáze 111: měsíční kredity předplatného ELDOCK PRO (100 kreditů každý měsíc, dokud předplatné běží)
+    try {
+      const credited = await creditSubscriptions(context.prisma, now);
+      if (credited.credited) context.log?.(`[eldock] Kredity předplatného PRO: ${credited.credited} firem`);
+    } catch (error) {
+      context.log?.(`[eldock] Kredity předplatného selhaly: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
   if (backup || retention) context.log?.(`[eldock] Denní údržba: záloha ${backup?.status ?? "vypnutá"}, retence ${retention?.status ?? "–"}${erasure ? `, výmaz účtů ${erasure.status}` : ""}.`);

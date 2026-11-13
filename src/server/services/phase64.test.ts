@@ -32,7 +32,8 @@ let prisma: PrismaClient;
 
 const company = (id: string) =>
   prisma.registeredCompany.create({
-    data: { id, productScope: "PANEL_BUILDER", ico: "12345678", companyName: `Firma ${id}`, street: "Ulice 1", city: "Liberec", zip: "46001", contactName: "Projektant", email: `${id}@example.cz`, phone: "+420 777 000 000", passwordHash: "x", termsAcceptedAt: new Date() },
+    // Fáze 111: nový půdorys stojí 15 kreditů (první je zkušební) – testy ukládání mají kreditů dost
+    data: { id, productScope: "PANEL_BUILDER", ico: "12345678", companyName: `Firma ${id}`, street: "Ulice 1", city: "Liberec", zip: "46001", contactName: "Projektant", email: `${id}@example.cz`, phone: "+420 777 000 000", passwordHash: "x", termsAcceptedAt: new Date(), creditsRemaining: 1000 },
   });
 
 beforeEach(async () => {

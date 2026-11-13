@@ -1,4 +1,4 @@
-import { goPhase, phaseForPalette, rightTab } from "./floorplan-phases";
+import { goPhase, phaseForPalette, rightTab, confirmLayoutWizard } from "./floorplan-phases";
 import { expect, test } from "@playwright/test";
 
 // Fáze 49: 2D půdorys elektroinstalace – osazení značek, párování vypínače se světlem, výkaz kabeláže
@@ -76,6 +76,7 @@ test("📐 2D půdorys: osazení, párování, výkaz kabeláže Spodem / Vrchem
   await expect(page.getByTestId("generate-from-floorplan")).toBeDisabled();
   await page.getByTestId("floorplan-environment").selectOption("INDOOR_DRY");
   await page.getByTestId("generate-from-floorplan").click();
+  await confirmLayoutWizard(page);
   await expect(page).toHaveURL(/\/panel-builder\/[^/]+$/, { timeout: 60_000 });
   await expect(page.getByRole("heading", { level: 1 })).toContainText("RD49 z půdorysu");
   await expect(page.getByTestId("symbol--Q1")).toBeVisible();

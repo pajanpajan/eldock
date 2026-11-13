@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Download, FolderOpen, Loader2, Upload } from "lucide-react";
 import { toast } from "sonner";
+import { showPaywall } from "@/components/credits/paywall";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -106,7 +107,11 @@ export function FloorplanFileMenu({
       const missing = new Set(assetUrls(file.draft).filter((url) => !map.has(url)));
       const moved = replaceBackgroundUrls(file.draft, map);
       const result = await createFloorplanAction({ meta: { name: file.meta.name, customerName: file.meta.customerName, installationSite: file.meta.installationSite }, draft: missing.size ? stripMissingAssets(moved, missing) : moved });
-      if (!result.ok) throw new Error(result.error);
+      if (!result.ok) {
+        // Fáze 111: nový půdorys bez kreditů → prodejní modal
+        if (result.paywall) return void showPaywall(result.paywall);
+        throw new Error(result.error);
+      }
       if (file.templates.length) onTemplates(file.templates);
       toast.success(`Projekt „${file.meta.name}“ nahrán z počítače jako ${result.data.code ?? "nový půdorys"}${missing.size ? ` (bez ${missing.size} podkladů, které soubor neobsahoval)` : ""}.`);
       router.push(`/panel-builder/floorplan/${result.data.id}`);

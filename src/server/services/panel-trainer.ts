@@ -78,7 +78,8 @@ export async function openTrainerProject(prisma: PrismaClient, input: { companyI
 export async function injectWallboxDefect(prisma: PrismaClient, projectId: string) {
   const items = await prisma.panelBoardItem.findMany({ where: { projectId }, include: { catalogComponent: true } });
   const configOf = (item: (typeof items)[number]) => parseConfig(item.configJson) ?? (item.catalogComponent ? configFromComponent(item.catalogComponent) : null);
-  const wallbox = items.find((item) => /wallbox|elektromobil|nabíje/i.test(item.circuitLabel) && TYPE_B_LABEL.test(item.circuitLabel));
+  // Fáze 111: jen jistič / jističochránič okruhu wallboxu (ne elektroměr DLM „… wallboxu“ – pořadí na lištách se mění)
+  const wallbox = items.find((item) => /wallbox|elektromobil|nabíje/i.test(item.circuitLabel) && TYPE_B_LABEL.test(item.circuitLabel) && ["MCB", "RCBO"].includes(configOf(item)?.category ?? ""));
   if (!wallbox) throw new WorkflowError("VALIDATION", "V tréninkové zakázce chybí okruh wallboxu.");
   const own = configOf(wallbox);
   // Jističochránič wallboxu, jinak chránič nad jeho jističem

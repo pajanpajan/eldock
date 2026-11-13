@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, FileText, TriangleAlert } from "lucide-react";
+import { ArrowRight, Camera, FileText, Loader2, TriangleAlert } from "lucide-react";
+
+import { useDeviceDetail } from "@/components/hlidac/DeviceDetailDialog";
 
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { InspectionStatusBadge } from "@/components/inspections/InspectionStatusBadge";
@@ -33,7 +35,10 @@ export function EquipmentQuickView({
   /** Fáze 108: právo Studia – přesun (Studio nad tímto patrem) a smazání vybraného zařízení. */
   manageHref?: string | null;
 }) {
+  const detail = useDeviceDetail();
   return (
+    <>
+    {detail.dialog}
     <Sheet open={equipment !== null} onOpenChange={onOpenChange}>
       <SheetContent className="w-full overflow-y-auto sm:max-w-md">
         {equipment ? (
@@ -126,6 +131,10 @@ export function EquipmentQuickView({
 
             <SheetFooter>
               {manageHref ? <EquipmentManageActions equipment={equipment} studioHref={manageHref} onDone={() => onOpenChange(false)} /> : null}
+              {/* Fáze 111: 2 fotografické sloty (zařízení + výrobní štítek s AI čtením) a identifikační štítek */}
+              <Button type="button" size="lg" variant="outline" className="touch-target w-full gap-2 text-base" disabled={detail.loadingId === equipment.id} onClick={() => detail.open(equipment.id)} data-testid="quickview-nameplate">
+                {detail.loadingId === equipment.id ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Camera className="size-4" aria-hidden />} 📷 Fotky & výrobní štítek (AI)
+              </Button>
               <Button asChild size="lg" className="touch-target w-full text-base">
                 <Link href={equipmentHref(equipment.id)}>
                   Otevřít detail
@@ -137,5 +146,6 @@ export function EquipmentQuickView({
         ) : null}
       </SheetContent>
     </Sheet>
+    </>
   );
 }

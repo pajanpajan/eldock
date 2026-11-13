@@ -96,7 +96,8 @@ test("2D půdorys: akordeon palety, předměty X × Y, spotřebiče, úprava tra
   await goPhase(page, 5);
   // Fáze 100: kontrola norem je v záložce 🛡️ Normy (Linter)
   await rightTab(page, "norms");
-  await expect(page.getByTestId("plan-checks")).toContainText("Jednozásuvka (výška 300 mm) – níž než 1,2 m blíž než 20 cm od hrany umyvadlového prostoru");
+  // Fáze 109: zásuvka u umyvadla se při vložení zvedne nad desku na 1150 mm – pořád níž než 1,2 m, hlídač ji hlásí
+  await expect(page.getByTestId("plan-checks")).toContainText("Jednozásuvka (výška 1150 mm) – níž než 1,2 m blíž než 20 cm od hrany umyvadlového prostoru");
   await clickAt(6500, 1600);
   const placedBath = canvas.locator('[data-element="bath"]');
   const bath = placedBath.getByTestId("fixture");

@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 
 import type { PrismaClient } from "@/generated/prisma/client";
 import { NACE_SEGMENT_LABEL, type AresCompany } from "@/lib/ares";
-import { LEAD_BONUS_CREDITS, LEAD_CONSENT_VERSION, LEAD_MARKETING_TEXT, LEAD_PROCESSING_TEXT, leadSchema, type LeadContext, type LeadRole, type LeadRow } from "@/lib/leads";
+import { LEAD_CONSENT_VERSION, LEAD_MARKETING_TEXT, LEAD_PROCESSING_TEXT, leadSchema, type LeadContext, type LeadRole, type LeadRow } from "@/lib/leads";
 import { referrerHost, trafficSource } from "@/lib/telemetry";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 
@@ -70,13 +70,11 @@ export async function leadPrefill(prisma: PrismaClient, token: string) {
   return lead && !lead.registeredCompanyId ? { email: lead.email, ico: lead.ico, companyName: lead.companyName, dic: lead.dic, address: lead.address } : null;
 }
 
-/** Registrace z odkazu kontaktu: firma dostane 45 kreditů a kontakt se s ní propojí (token jen jednou). */
+/** Registrace z odkazu kontaktu: kontakt se propojí s firmou (token jen jednou) – fáze 111: bez kreditů navíc, firma má 1 testovací projekt. */
 export async function applyLeadBonus(prisma: PrismaClient, token: string | null | undefined, companyId: string): Promise<boolean> {
   if (!token || !/^[A-Za-z0-9_-]{16,64}$/.test(token)) return false;
   const { count } = await prisma.lead.updateMany({ where: { token, registeredCompanyId: null }, data: { registeredCompanyId: companyId } });
-  if (!count) return false;
-  await prisma.registeredCompany.update({ where: { id: companyId }, data: { creditsRemaining: LEAD_BONUS_CREDITS } });
-  return true;
+  return count > 0;
 }
 
 /** Řádky kontaktů pro velín a export CSV. */

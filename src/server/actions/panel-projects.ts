@@ -8,9 +8,10 @@ import { SCHEDULE_APPLIANCES } from "@/engine/room-schedule";
 import { prisma } from "@/lib/prisma";
 import { companyManufacturer } from "@/lib/registered-company";
 import { actionFailure, guardCompany, guardEditableProject } from "@/server/panel-guards";
-import { consumeCredit } from "@/server/services/companies";
+import { chargeNewSwitchboard, refundCharge, settleSwitchboardCharge } from "@/server/services/credits";
 import { linkGeneratedProject } from "@/server/services/floorplans";
-import { createProjectFromFloorplan, createProjectFromSchedule, deletePanelProjects, updateProjectHeader, type DeleteResult } from "@/server/services/panel-projects";
+import { createProjectFromFloorplan, createProjectFromSchedule, deletePanelProjects, previewFloorplanLayouts, updateProjectHeader, type DeleteResult } from "@/server/services/panel-projects";
+import type { LayoutPreviewDto } from "@/lib/panel-builder/layout-options";
 import { recordSwitchboard } from "@/server/services/telemetry";
 import { companyOwner } from "@/lib/file-ownership";
 import { removeOwnedFile } from "@/server/file-access";
@@ -91,7 +92,8 @@ export async function createScheduleProjectAction(input: z.input<typeof schedule
   if (!parsed.success) return { ok: false, error: "Zkontrolujte název rozváděče a soupis místností." };
   try {
     const company = await guardCompany();
-    await consumeCredit(prisma, company.id);
+    // Fáze 111: zkušební rozváděč nebo 15 kreditů
+    const charge = await chargeNewSwitchboard(prisma, company.id);
     try {
       const result = await createProjectFromSchedule(prisma, {
         ...parsed.data,
@@ -99,13 +101,14 @@ export async function createScheduleProjectAction(input: z.input<typeof schedule
         companyId: company.id,
         manufacturerInfo: companyManufacturer(company),
       });
+      await settleSwitchboardCharge(prisma, charge, [result.id]);
       // Fáze 102: vygenerovaný rozváděč v telemetrii (moduly, výrobci přístrojů)
       await recordSwitchboard(prisma, { projectId: result.id, companyId: company.id === TESTER_COMPANY.id ? null : company.id, source: "schedule" });
       revalidatePath("/panel-builder", "layout");
       return { ok: true, data: result };
     } catch (error) {
       // Nepovedený návrh kredit nespotřebuje
-      await prisma.registeredCompany.update({ where: { id: company.id }, data: { creditsRemaining: { increment: 1 } } });
+      await refundCharge(prisma, charge);
       throw error;
     }
   } catch (error) {
@@ -113,28 +116,43 @@ export async function createScheduleProjectAction(input: z.input<typeof schedule
   }
 }
 
-const floorplanSchema = z.object({ name: text.min(1), customerName: text.nullable(), installationSite: text.nullable(), draft: z.unknown(), manufacturer: z.string().trim().max(60).nullable().optional(), floorplanId: id.optional() });
+// Fáze 111: koncepce uspořádání skříně a lišt z průvodce (a zvolené skříně z databáze)
+const layoutSchema = z.object({ concept: z.enum(["two_field", "wide24", "compact18", "two_boards"]), enclosureId: id.nullable().optional(), secondEnclosureId: id.nullable().optional() });
+const floorplanSchema = z.object({ name: text.min(1), customerName: text.nullable(), installationSite: text.nullable(), draft: z.unknown(), manufacturer: z.string().trim().max(60).nullable().optional(), floorplanId: id.optional(), layout: layoutSchema.nullable().optional() });
+
+/** Fáze 111: náhled průvodce „📐 Uspořádání skříně a lišt“ před generováním z půdorysu (bez kreditu). */
+export async function previewFloorplanLayoutsAction(input: { draft: unknown; manufacturer?: string | null }): Promise<ActionResult<LayoutPreviewDto>> {
+  if (JSON.stringify(input?.draft ?? null).length > 900_000) return { ok: false, error: "Půdorys je příliš velký." };
+  try {
+    await guardCompany();
+    return { ok: true, data: await previewFloorplanLayouts(prisma, { draft: input.draft, manufacturer: typeof input.manufacturer === "string" ? input.manufacturer.slice(0, 60) : null }) };
+  } catch (error) {
+    return actionFailure(error, "Koncepce uspořádání se nepodařilo spočítat.");
+  }
+}
 
 /** ⚡ Vygenerovat rozváděč z 2D půdorysu (fáze 49) – 1 kredit; nepovedený návrh kredit vrátí. Fáze 64: vazba na uložený půdorys. */
-export async function createFloorplanProjectAction(input: z.input<typeof floorplanSchema>): Promise<ActionResult<{ id: string; devices: number; circuits: number; enclosure: string | null; manufacturer: string | null; warnings: string[]; boards: { code: string; id: string }[] }>> {
+export async function createFloorplanProjectAction(input: z.input<typeof floorplanSchema>): Promise<ActionResult<{ id: string; devices: number; circuits: number; enclosure: string | null; manufacturer: string | null; warnings: string[]; boards: { code: string; id: string }[]; license: string; cost: number }>> {
   const parsed = floorplanSchema.safeParse(input);
   // Fáze 59: vícepodlažní nákres s poznámkami je větší – limit 900 kB (Server Action do 1 MB)
   if (!parsed.success || JSON.stringify(parsed.data.draft ?? null).length > 900_000) return { ok: false, error: "Zadejte název rozváděče; půdorys je příliš velký nebo neplatný." };
   const { floorplanId, ...project } = parsed.data;
   try {
     const company = await guardCompany();
-    await consumeCredit(prisma, company.id);
+    // Fáze 111: zkušební rozváděč, doplatek do balíčku celá zakázka (zaplacený půdorys) nebo 15 kreditů
+    const charge = await chargeNewSwitchboard(prisma, company.id, { floorplanId: floorplanId ?? null });
     try {
       const result = await createProjectFromFloorplan(prisma, { ...project, companyId: company.id, manufacturerInfo: companyManufacturer(company) });
+      await settleSwitchboardCharge(prisma, charge, [result.id, ...result.boards.map((board) => board.id).filter((boardId) => boardId !== result.id)], { floorplanId: floorplanId ?? null });
       // Fáze 64: uložený půdorys ukazuje na poslední vygenerovaný rozváděč; nákres jde do historie verzí (chyba vazby generování nezruší)
       if (floorplanId) await linkGeneratedProject(prisma, company.id, floorplanId, result.id, project.draft).catch((error: unknown) => console.error("Vazba půdorysu na rozváděč selhala", error));
       // Fáze 102: vygenerovaný rozváděč v telemetrii (moduly, výrobci přístrojů, typ prostoru nákresu)
       const occupancy = project.draft && typeof project.draft === "object" && "occupancy" in project.draft ? String((project.draft as { occupancy?: unknown }).occupancy ?? "") : null;
       await recordSwitchboard(prisma, { projectId: result.id, companyId: company.id === TESTER_COMPANY.id ? null : company.id, source: "floorplan", occupancy });
       revalidatePath("/panel-builder", "layout");
-      return { ok: true, data: result };
+      return { ok: true, data: { ...result, license: charge.plan.license, cost: charge.plan.cost } };
     } catch (error) {
-      await prisma.registeredCompany.update({ where: { id: company.id }, data: { creditsRemaining: { increment: 1 } } });
+      await refundCharge(prisma, charge);
       throw error;
     }
   } catch (error) {

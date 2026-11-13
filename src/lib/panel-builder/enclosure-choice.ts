@@ -3,7 +3,7 @@
 // Eldocku (`STD-…`) ho nemá („ověřte“), nic se nevymýšlí. Rozložení lišt podle skříně, limity lišt u zvolené skříně,
 // popis, dvířka náhledu a objednací údaje ke zkopírování. Čisté funkce.
 
-import { INSTALLATION_LABELS, type EnclosureInstallation, type EnclosureLike } from "./enclosures";
+import { INSTALLATION_LABELS, enclosureFields, type EnclosureInstallation, type EnclosureLike } from "./enclosures";
 import { MAX_RAILS, MAX_RAIL_MODULES, MIN_RAIL_MODULES } from "./rails";
 import { VERIFIED_ENCLOSURE_SOURCE, VERIFIED_ON, enclosureSourceUrl } from "./verified-enclosures";
 
@@ -151,13 +151,34 @@ export function enclosureOrderText(enclosure: EnclosureLike & { description?: st
 
 const clampRail = (modules: number) => Math.min(MAX_RAIL_MODULES, Math.max(MIN_RAIL_MODULES, Math.round(modules)));
 
-/** Lišty návrhu podle skříně: řady × moduly na řadu (rozsah editoru 4–48 M, nejvýš 12 lišt). */
-export function enclosureRails(enclosure: Pick<EnclosureLike, "rows" | "modulesPerRow">): number[] {
-  return Array.from({ length: Math.min(MAX_RAILS, Math.max(1, enclosure.rows)) }, () => clampRail(enclosure.modulesPerRow));
+/** Fáze 111: dvoupolová skříň („2 pole po 12 M“) – dvě pole lišt vedle sebe. */
+const twoFields = (enclosure: Pick<EnclosureLike, "rows" | "modulesPerRow"> & { model?: string }) => {
+  const fields = enclosureFields({ model: enclosure.model ?? "", modulesPerRow: enclosure.modulesPerRow });
+  return fields.fields === 2 ? fields : null;
+};
+
+/**
+ * Lišty návrhu podle skříně: řady × moduly na řadu (rozsah editoru 4–48 M, nejvýš 16 lišt). Fáze 111: dvoupolová
+ * skříň = řady × 2 lišty po šířce pole (levé pole lišty 1…n, pravé n+1…2n – `enclosureLayout`).
+ */
+export function enclosureRails(enclosure: Pick<EnclosureLike, "rows" | "modulesPerRow"> & { model?: string }): number[] {
+  const fields = twoFields(enclosure);
+  const rows = Math.max(1, enclosure.rows);
+  if (fields) return Array.from({ length: Math.min(MAX_RAILS, rows * 2) }, () => clampRail(fields.fieldWidth));
+  return Array.from({ length: Math.min(MAX_RAILS, rows) }, () => clampRail(enclosure.modulesPerRow));
 }
 
-/** Limity lišt: u zvolené skříně nejvýš její řady po nejvýš jejích modulech, jinak limity editoru. */
-export function railLimits(enclosure: Pick<EnclosureLike, "rows" | "modulesPerRow"> | null): { maxRails: number; maxModules: number } {
+/** Fáze 111: uspořádání lišt návrhu podle skříně – u dvoupolové skříně dvě pole vedle sebe, jinak null. */
+export function enclosureLayout(enclosure: Pick<EnclosureLike, "rows" | "modulesPerRow"> & { model?: string }): { fields: 2; fieldARails: number } | null {
+  const fields = twoFields(enclosure);
+  const rails = enclosureRails(enclosure).length;
+  return fields && rails >= 2 ? { fields: 2, fieldARails: Math.ceil(rails / 2) } : null;
+}
+
+/** Limity lišt: u zvolené skříně nejvýš její řady po nejvýš jejích modulech, jinak limity editoru (u 2 polí 2 × řady). */
+export function railLimits(enclosure: (Pick<EnclosureLike, "rows" | "modulesPerRow"> & { model?: string }) | null): { maxRails: number; maxModules: number } {
   if (!enclosure) return { maxRails: MAX_RAILS, maxModules: MAX_RAIL_MODULES };
+  const fields = twoFields(enclosure);
+  if (fields) return { maxRails: Math.min(MAX_RAILS, Math.max(1, enclosure.rows) * 2), maxModules: clampRail(fields.fieldWidth) };
   return { maxRails: Math.min(MAX_RAILS, Math.max(1, enclosure.rows)), maxModules: clampRail(enclosure.modulesPerRow) };
 }

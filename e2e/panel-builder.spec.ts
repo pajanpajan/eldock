@@ -161,7 +161,9 @@ test("nový projekt: sloučení 3× 1M → 3P, rozdělení zpět, filtr výrobce
   await page.getByRole("button", { name: "Ukázková fotka" }).click();
   await page.getByRole("button", { name: "Založit a analyzovat fotku" }).click();
   await expect(page).toHaveURL(/\/panel-builder\/[^/]+$/, { timeout: 30_000 });
-  await expect(page.getByRole("heading", { level: 1 })).toContainText("PB-002");
+  // Kód projektu je pořadový napříč firmami (dřívější testy sady už mohly založit PB-002) – projekt podle názvu
+  await expect(page.getByRole("heading", { level: 1 })).toContainText(/PB-\d{3}/);
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("Podružný rozváděč RP2 – dílna");
   const panel = page.getByTestId("vector-panel");
   const symbols = panel.locator("[data-symbol]");
   await expect(symbols).toHaveCount(13);
@@ -201,8 +203,8 @@ test("nový projekt: sloučení 3× 1M → 3P, rozdělení zpět, filtr výrobce
 test("Vision Analyzer 2.0: režim analýzy, přidání a smazání modulu i lišty, kompaktní 2×1P", async ({ page }) => {
   page.on("dialog", (dialog) => void dialog.accept());
   await page.goto("/panel-builder");
-  await page.getByRole("link", { name: /PB-002/ }).click();
-  await expect(page.getByRole("heading", { level: 1 })).toContainText("PB-002");
+  await page.getByRole("link", { name: /Podružný rozváděč RP2 – dílna/ }).first().click();
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("Podružný rozváděč RP2 – dílna");
   const panel = page.getByTestId("vector-panel");
   const symbols = panel.locator("[data-symbol]");
   await expect(symbols).toHaveCount(13);

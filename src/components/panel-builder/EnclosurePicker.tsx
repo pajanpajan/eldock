@@ -163,7 +163,7 @@ export function EnclosurePicker({
           </ul>
         ) : (
           <p className="rounded-lg border border-dashed border-amber-500/60 p-4 text-sm text-amber-200" data-testid="enclosure-empty">
-            Žádná skříň {manufacturer} s touto montáží návrh nepojme (potřeba {need.rails} řad × {need.maxModulesPerRail} M). Zkuste jiného výrobce nebo montáž.
+            Žádná skříň {manufacturer} s touto montáží návrh nepojme (potřeba {need.fields === 2 ? `2 pole × ${need.rails} řad po ${need.maxModulesPerRail} M` : `${need.rails} řad × ${need.maxModulesPerRail} M`}). Zkuste jiného výrobce nebo montáž – nebo přístroje přeskládejte tlačítkem „📐 Uspořádání skříně a lišt (Silnoproud / Slaboproud)“ nad plátnem (dvoupolová skříň, 24M nebo 18M lišty, dva rozváděče).
           </p>
         )}
       </DialogContent>

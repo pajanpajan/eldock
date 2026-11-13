@@ -46,22 +46,56 @@ export interface EnclosureLike {
 
 /** Požadavek návrhu na skříň. */
 export interface EnclosureNeed {
+  /** Řady skříně (u dvou polí vedle sebe řady jednoho pole). */
   rails: number;
+  /** Nejširší lišta (u dvou polí nejširší lišta pole). */
   maxModulesPerRail: number;
   usedModules: number;
+  /** Fáze 111: dvě pole vedle sebe (Silnoproud | Slaboproud) – skříň musí mít aspoň 2 pole. */
+  fields?: 1 | 2;
 }
 
-export function enclosureNeed(capacities: readonly number[], items: readonly { modulesWidth: number }[]): EnclosureNeed {
-  return {
-    rails: capacities.length,
-    maxModulesPerRail: Math.max(1, ...capacities),
-    usedModules: Math.round(items.reduce((sum, item) => sum + item.modulesWidth, 0) * 10) / 10,
-  };
+/** Fáze 111: pole skříně z názvu modelu („CA25V (2 pole po 12 M)“ → 2 pole po 12 M), jinak 1 pole na celou řadu. */
+export interface EnclosureFields {
+  fields: number;
+  fieldWidth: number;
 }
 
-/** Pravidlo zadání: skrin.rows ≥ lišty, modulesPerRow ≥ max. moduly na liště, totalModules ≥ obsazeno. */
-export const fitsEnclosure = (enclosure: Pick<EnclosureLike, "rows" | "modulesPerRow" | "totalModules">, need: EnclosureNeed) =>
-  enclosure.rows >= need.rails && enclosure.modulesPerRow >= need.maxModulesPerRail && enclosure.totalModules >= need.usedModules;
+export function enclosureFields(enclosure: Pick<EnclosureLike, "model" | "modulesPerRow">): EnclosureFields {
+  const match = /\((\d+)\s*pol[ea]\s*po\s*(\d+)\s*M\)/i.exec(enclosure.model);
+  if (match) {
+    const fields = Number(match[1]);
+    const fieldWidth = Number(match[2]);
+    if (fields >= 2 && fieldWidth >= 4 && fields * fieldWidth <= enclosure.modulesPerRow + 0.5) return { fields, fieldWidth };
+  }
+  return { fields: 1, fieldWidth: enclosure.modulesPerRow };
+}
+
+/**
+ * Požadavek z lišt projektu. Fáze 111: u dvou polí vedle sebe (`layout.fields = 2`, lišty 1…n vlevo) jsou řady = víc lišt
+ * z obou polí a šířka = nejširší lišta pole – skříň „2 pole po 12 M“ se 7 řadami pojme 2 × 7 lišt po 12 M.
+ */
+export function enclosureNeed(capacities: readonly number[], items: readonly { modulesWidth: number }[], layout?: { fields: number; fieldARails: number } | null): EnclosureNeed {
+  const usedModules = Math.round(items.reduce((sum, item) => sum + item.modulesWidth, 0) * 10) / 10;
+  if (layout?.fields === 2 && layout.fieldARails >= 1 && layout.fieldARails < capacities.length) {
+    const left = capacities.slice(0, layout.fieldARails);
+    const right = capacities.slice(layout.fieldARails);
+    return { rails: Math.max(left.length, right.length), maxModulesPerRail: Math.max(1, ...capacities), usedModules, fields: 2 };
+  }
+  return { rails: capacities.length, maxModulesPerRail: Math.max(1, ...capacities), usedModules };
+}
+
+/**
+ * Pravidlo zadání: skrin.rows ≥ lišty, modulesPerRow ≥ max. moduly na liště, totalModules ≥ obsazeno. Fáze 111: dvě pole
+ * vedle sebe potřebují skříň s aspoň 2 poli, každé pole aspoň tak široké jako lišta.
+ */
+export const fitsEnclosure = (enclosure: Pick<EnclosureLike, "rows" | "modulesPerRow" | "totalModules"> & Partial<Pick<EnclosureLike, "model">>, need: EnclosureNeed) => {
+  if (need.fields === 2) {
+    const fields = enclosureFields({ model: enclosure.model ?? "", modulesPerRow: enclosure.modulesPerRow });
+    return fields.fields >= 2 && fields.fieldWidth >= need.maxModulesPerRail && enclosure.rows >= need.rails && enclosure.totalModules >= need.usedModules;
+  }
+  return enclosure.rows >= need.rails && enclosure.modulesPerRow >= need.maxModulesPerRail && enclosure.totalModules >= need.usedModules;
+};
 
 /** Kolik % modulů zůstane ve skříni volných. */
 export const reservePercent = (enclosure: Pick<EnclosureLike, "totalModules">, need: EnclosureNeed) =>

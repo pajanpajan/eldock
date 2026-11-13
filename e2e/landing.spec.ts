@@ -8,13 +8,14 @@ test.describe("nepřihlášený návštěvník", () => {
     await page.goto("/");
     await expect(page).toHaveURL(/\/$/);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Eldock – elektrodokumentace od rodinného domu po výrobní závod");
-    // Fáze 58: úvod = proč Eldock vznikl + rozcestník; pilíře a role závodu jsou na /prumysl (e2e/phase58.spec.ts)
-    for (const name of ["Kde Eldock použijete?", "Ukážeme vám Eldock na vaší zakázce nebo ve vašem závodě"]) {
+    // Fáze 111: úvod = čistý dvoustranný rozcestník (podrobnosti v podsekcích /sekce/…)
+    for (const name of ["Domovní a komerční elektroinstalace & Rozváděče", "Průmysl, Administrativní budovy & Hlídač revizí"]) {
       await expect(page.getByRole("heading", { name })).toBeVisible();
     }
     await expect(page.getByText("Eldock s.r.o. (v založení)").first()).toBeVisible();
-    await expect(page.getByRole("link", { name: "Domluvit nezávaznou ukázku" })).toHaveAttribute("href", "#kontakt");
-    // produktové video se líně načte a samo se rozběhne (scéna 2 začíná v 8. sekundě)
+    await expect(page.getByRole("link", { name: "Domluvte si nezávaznou ukázku" })).toHaveAttribute("href", "/kontakt");
+    // produktové video (podsekce Průmysl, budovy & Hlídač revizí) se líně načte a samo se rozběhne (scéna 2 v 8. s)
+    await page.goto("/sekce/prumysl-a-revize");
     const video = page.getByTestId("promo-video");
     await expect(video.getByText("Průmyslový dok dokumentace a revizí")).toBeAttached({ timeout: 30_000 });
     await expect(video.getByText("RH1 · Hlavní rozváděč").first()).toBeAttached({ timeout: 20_000 });

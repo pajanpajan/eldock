@@ -53,7 +53,7 @@ const firstIssue = (error: z.ZodError, fallback: string) => error.issues[0]?.mes
 const assertDraftFiles = (companyId: string, draft: unknown) => assertPanelFiles(companyId, collectFileUrls(draft), { strict: false });
 
 /** První uložení nového půdorysu z editoru (`/panel-builder/floorplan/novy`). */
-export async function createFloorplanAction(input: { meta: z.input<typeof metaSchema>; draft: unknown }): Promise<ActionResult<{ id: string; code: string | null; version: number; savedAt: string }>> {
+export async function createFloorplanAction(input: { meta: z.input<typeof metaSchema>; draft: unknown }): Promise<ActionResult<{ id: string; code: string | null; version: number; savedAt: string; license: string; cost: number }>> {
   const parsed = z.object({ meta: metaSchema, draft: draftSchema }).safeParse(input);
   if (!parsed.success) return { ok: false, error: firstIssue(parsed.error, "Půdorys se nepodařilo uložit.") };
   try {
@@ -61,7 +61,7 @@ export async function createFloorplanAction(input: { meta: z.input<typeof metaSc
     await assertDraftFiles(company.id, parsed.data.draft);
     const created = await createFloorplan(prisma, company.id, parsed.data);
     revalidatePath(LIST_PATH);
-    return { ok: true, data: { id: created.id, code: created.code, version: created.version, savedAt: created.savedAt.toISOString() } };
+    return { ok: true, data: { id: created.id, code: created.code, version: created.version, savedAt: created.savedAt.toISOString(), license: created.license, cost: created.cost } };
   } catch (error) {
     return actionFailure(error, "Půdorys se nepodařilo uložit.");
   }

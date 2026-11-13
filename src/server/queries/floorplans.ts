@@ -23,9 +23,12 @@ export interface FloorplanRow {
   updatedAt: string;
   deletedAt: string | null;
   project: { id: string; code: string; name: string } | null;
+  /** Fáze 111: TRIAL (zkušební označení výstupů) | PAID | BUNDLE (celá zakázka). */
+  license: string;
 }
 
 const toRow = (row: FloorplanListRow): FloorplanRow => ({
+  license: row.license,
   id: row.id,
   code: row.code,
   name: row.name,
@@ -68,5 +71,5 @@ export type FloorplanForEditor = NonNullable<Awaited<ReturnType<typeof getFloorp
 export async function getFloorplanEditorData() {
   const [series, manufacturers, applianceJson, company] = await Promise.all([getWiringSeries(), getBoardManufacturers(), getApplianceLibraryJson(), getPanelCompany()]);
   const library = company ? await floorplanLibraryOf(prisma, company.id) : null;
-  return { series: series.map(({ key, label, count }) => ({ key, label, count })), manufacturers, applianceJson, libraryJson: library ? JSON.stringify(library) : null, company: company?.companyName ?? null };
+  return { series: series.map(({ key, label, count }) => ({ key, label, count })), manufacturers, applianceJson, libraryJson: library ? JSON.stringify(library) : null, company: company?.companyName ?? null, credits: company?.creditsRemaining ?? 0 };
 }

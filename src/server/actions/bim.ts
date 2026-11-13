@@ -11,7 +11,8 @@ import { WorkflowError } from "@/lib/workflow/state-machine";
 import { assertFeature } from "@/server/modules";
 import { getPanelCompany } from "@/server/panel-session";
 import { importBimToPlant, type BimImportResult } from "@/server/services/bim-import";
-import { consumeCredit } from "@/server/services/companies";
+import { PaywallError, chargeNewSwitchboard, refundCharge, settleSwitchboardCharge } from "@/server/services/credits";
+import type { PaywallInfo } from "@/lib/credits/entitlements";
 import { createProjectFromBimBoard } from "@/server/services/panel-projects";
 import { getCurrentAccount } from "@/server/session";
 import { assertTenantAccess } from "@/server/tenant";
@@ -24,7 +25,9 @@ import type { ActionResult } from "./workflow";
 
 const importSchema = z.object({ plantId: z.string().min(1).max(64), mode: z.enum(["CREATE", "UPDATE"]), payload: bimPlantPayloadSchema });
 
-function failure(error: unknown, fallback: string): { ok: false; error: string } {
+function failure(error: unknown, fallback: string): { ok: false; error: string; paywall?: PaywallInfo } {
+  // Fáze 111: nedostatek kreditů → prodejní modal
+  if (error instanceof PaywallError) return { ok: false, error: error.message, paywall: error.paywall };
   if (error instanceof WorkflowError) return { ok: false, error: error.message };
   console.error(error);
   return { ok: false, error: fallback };
@@ -64,13 +67,14 @@ export async function createBimBoardProjectAction(input: z.input<typeof boardSch
     const company = await getPanelCompany();
     if (!company) throw new WorkflowError("FORBIDDEN", "Přihlaste se do AI Panel Builderu (účet firmy) – návrh rozváděče se uloží do projektů vaší firmy.");
     await assertFeature("enterprise.ai_panel_builder");
-    await consumeCredit(prisma, company.id);
+    const charge = await chargeNewSwitchboard(prisma, company.id);
     try {
       const result = await createProjectFromBimBoard(prisma, { equipmentId: parsed.data.equipmentId, companyId: company.id, manufacturerInfo: companyManufacturer(company) });
+      await settleSwitchboardCharge(prisma, charge, [result.id]);
       revalidatePath("/panel-builder", "layout");
       return { ok: true, data: { id: result.id, devices: result.devices, circuits: result.circuits, warnings: result.warnings } };
     } catch (error) {
-      await prisma.registeredCompany.update({ where: { id: company.id }, data: { creditsRemaining: { increment: 1 } } });
+      await refundCharge(prisma, charge);
       throw error;
     }
   } catch (error) {

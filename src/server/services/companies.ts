@@ -54,11 +54,7 @@ export async function updateCompanyDetails(prisma: PrismaClient, companyId: stri
   return prisma.registeredCompany.update({ where: { id: companyId }, data: details(input), select: { id: true, companyName: true } });
 }
 
-/** Testovací kredit za nový projekt rozváděče; bez kreditů projekt nevznikne. */
-export async function consumeCredit(prisma: PrismaClient | Tx, companyId: string) {
-  const { count } = await prisma.registeredCompany.updateMany({ where: { id: companyId, creditsRemaining: { gt: 0 } }, data: { creditsRemaining: { decrement: 1 } } });
-  if (!count) throw new WorkflowError("FORBIDDEN", "Došly testovací kredity – pro další projekty kontaktujte obchod ELDOCK.");
-}
+// Fáze 111: odečet kreditů za nový rozváděč / půdorys je v `credits.ts` (`chargeNewSwitchboard`, `chargeNewFloorplan`).
 
 /**
  * Registrace výrobního závodu (Správa závodů, dokumentace a revizí) v JEDNÉ transakci: firma (PLANT_MANAGEMENT),

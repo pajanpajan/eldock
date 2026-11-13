@@ -3,7 +3,8 @@
 import { useMemo, useRef, useState, useTransition, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Ban, CircleCheck, ListChecks, Loader2, MapPin, Pencil, QrCode, ScanLine, Search, UserRound } from "lucide-react";
+import { Ban, Camera, CircleCheck, ListChecks, Loader2, MapPin, Pencil, QrCode, ScanLine, Search, UserRound } from "lucide-react";
+import { useDeviceDetail } from "@/components/hlidac/DeviceDetailDialog";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -69,6 +70,7 @@ export function RapidInspection({ items, planIds = [] }: { items: RapidItem[]; p
   const queue = fromPlan ? planned : sortQueue(items.filter((item) => item.zone === zone));
   const pendingQueue = queue.filter((item) => !item.inspectedToday);
   const current = items.find((item) => item.id === selectedId) ?? pendingQueue[0] ?? null;
+  const detail = useDeviceDetail();
   const done = queue.length - pendingQueue.length;
 
   function selectItem(item: RapidItem) {
@@ -238,7 +240,14 @@ export function RapidInspection({ items, planIds = [] }: { items: RapidItem[]; p
         {/* Karta vybraného kusu */}
         <div className="lg:order-none">
           {current ? (
-            <RapidCard key={current.id} item={current} profile={profile} onSaved={advance} />
+            <>
+              <RapidCard key={current.id} item={current} profile={profile} onSaved={advance} />
+              {/* Fáze 111: fotka zařízení a výrobního štítku s AI čtením údajů (S/N, třída) a identifikační štítek */}
+              <Button type="button" variant="outline" className="touch-target mt-2 w-full gap-2" disabled={detail.loadingId === current.id} onClick={() => detail.open(current.id)} data-testid="rapid-nameplate">
+                {detail.loadingId === current.id ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Camera className="size-4" aria-hidden />} 📷 Fotky & výrobní štítek (AI) · štítek EL-xxxxxx
+              </Button>
+              {detail.dialog}
+            </>
           ) : (
             <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-emerald-500/40 bg-emerald-500/5 p-10 text-center">
               <CircleCheck className="size-10 text-emerald-400" aria-hidden />

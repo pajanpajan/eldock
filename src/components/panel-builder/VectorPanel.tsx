@@ -5,7 +5,7 @@ import { ArrowDown, ArrowUp, Camera, Minus, Moon, Plus, Printer, Trash2 } from "
 
 import { cn } from "@/lib/utils";
 import { MAX_RAIL_MODULES, MIN_RAIL_MODULES, RAIL_PRESETS } from "@/lib/panel-builder/rails";
-import { pathOf, vectorLayout, wiringPaths, VECTOR, type IncomerFrom, type Rect, type WiringNode } from "@/lib/panel-builder/vector-layout";
+import { FIELD_GAP, pathOf, vectorLayout, wiringPaths, VECTOR, type IncomerFrom, type Rect, type WiringNode } from "@/lib/panel-builder/vector-layout";
 import { symbolTexts, type VectorDevice } from "@/lib/panel-builder/vector-symbols";
 
 import type { BusbarPlan } from "@/lib/panel-builder/pe-n-busbars";
@@ -59,6 +59,8 @@ export function VectorPanel({
   onMoveDevice,
   onRailPhoto,
   busbars,
+  fields = null,
+  partition = null,
 }: {
   devices: readonly VectorDevice[];
   rails: number;
@@ -100,11 +102,15 @@ export function VectorPanel({
   onRailPhoto?: (rail: number) => void;
   /** Fáze 55 – svorkovnice PE / N0 / N-FIx (nahoře nebo dole podle přívodu). */
   busbars?: BusbarPlan | null;
+  /** Fáze 111 – dvě pole vedle sebe (lišty 1…n vlevo „Pole A – Silnoproud“, zbytek vpravo) se svislou přepážkou. */
+  fields?: { aRails: number; labels: [string, string] } | null;
+  /** Fáze 111 – vodorovná izolační přepážka pod lištou (silnoproud nahoře, slaboproud dole). */
+  partition?: { afterRail: number; label: string } | null;
 }) {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
   const [theme, setTheme] = useState<VectorTheme>("dark");
   const colors = VECTOR_THEMES[theme];
-  const layout = useMemo(() => vectorLayout(devices, rails, modulesPerRail), [devices, rails, modulesPerRail]);
+  const layout = useMemo(() => vectorLayout(devices, rails, modulesPerRail, { fields, partition }), [devices, rails, modulesPerRail, fields, partition]);
   const wires = useMemo(() => (nodes ? wiringPaths(layout, devices, nodes, incomer) : []), [layout, devices, nodes, incomer]);
   const svg = useRef<SVGSVGElement>(null);
   const [drag, setDrag] = useState<{ ids: string[]; startX: number; startY: number; x: number; y: number; active: boolean; pointerId: number; origin: VectorDevice; additive: boolean } | null>(null);
@@ -188,7 +194,9 @@ export function VectorPanel({
     if (!box) return null;
     const x = ((event.clientX - box.left) / box.width) * layout.width;
     const y = ((event.clientY - box.top) / box.height) * layout.height;
-    const rail = [...layout.rails].sort((a, b) => Math.abs(a.y - y) - Math.abs(b.y - y))[0];
+    // Fáze 111: u dvou polí nejbližší lišta ve sloupci pod kurzorem
+    const column = layout.fields ? layout.rails.filter((candidate) => x >= candidate.left - FIELD_GAP / 2 && x <= candidate.right + FIELD_GAP / 2) : layout.rails;
+    const rail = [...(column.length ? column : layout.rails)].sort((a, b) => Math.abs(a.y - y) - Math.abs(b.y - y))[0];
     if (!rail) return null;
     const onRail = devices.filter((device) => device.dinRailIndex === rail.index && device.id !== exclude).sort((a, b) => a.positionOnRail - b.positionOnRail);
     const before = onRail.filter((device) => {
@@ -197,7 +205,7 @@ export function VectorPanel({
     });
     const next = onRail[before.length];
     const last = before[before.length - 1];
-    const lineX = next ? layout.rects.get(next.id)!.x : last ? layout.rects.get(last.id)!.x + layout.rects.get(last.id)!.w : VECTOR.left;
+    const lineX = next ? layout.rects.get(next.id)!.x : last ? layout.rects.get(last.id)!.x + layout.rects.get(last.id)!.w : rail.left;
     return { rail: rail.index, position: before.length + 1, x: lineX };
   }
   const placing = (event: ReactDragEvent) => !!onPlaceDrop && event.dataTransfer.types.includes(PLACE_MIME);
@@ -276,6 +284,33 @@ export function VectorPanel({
             </defs>
             <rect width={layout.width} height={layout.height} fill={colors.bg} />
 
+            {/* Fáze 111: dvě pole vedle sebe – záhlaví polí a svislá přepážka skříně (jako ABB CA2xV / OEZ RZA) */}
+            {layout.fields ? (
+              <g data-testid="vector-fields" pointerEvents="none">
+                {layout.fields.columns.map((column, index) => (
+                  <g key={index} data-field={index === 0 ? "A" : "B"}>
+                    <rect x={column.left - 10} y={12} width={column.right - column.left + 20} height={22} rx={5} fill={index === 0 ? "rgba(250, 204, 21, 0.14)" : "rgba(34, 211, 238, 0.14)"} stroke={index === 0 ? "#facc15" : "#22d3ee"} strokeWidth={1} />
+                    <text x={column.left} y={27} fontSize={12} fontWeight={800} fill={index === 0 ? "#facc15" : "#22d3ee"} fontFamily="ui-sans-serif, system-ui, sans-serif" data-testid={`vector-field-${index === 0 ? "A" : "B"}`}>
+                      {layout.fields!.labels[index]}
+                    </text>
+                  </g>
+                ))}
+                <line x1={layout.fields.partitionX} x2={layout.fields.partitionX} y1={40} y2={layout.height - 16} stroke={colors.railStroke} strokeWidth={6} strokeDasharray="14 7" opacity={0.85} data-testid="vector-partition-vertical" />
+                <text x={layout.fields.partitionX + 6} y={layout.height - 22} fontSize={9.5} fill={colors.muted} fontFamily="ui-sans-serif, system-ui, sans-serif">
+                  přepážka skříně
+                </text>
+              </g>
+            ) : null}
+            {layout.partition ? (
+              <g data-testid="vector-partition" pointerEvents="none">
+                <line x1={20} x2={layout.width - 20} y1={layout.partition.y} y2={layout.partition.y} stroke="#f59e0b" strokeWidth={4} strokeDasharray="16 8" />
+                <rect x={VECTOR.left} y={layout.partition.y - 11} width={Math.min(layout.width - VECTOR.left - 24, layout.partition.label.length * 6.2 + 16)} height={22} rx={5} fill={colors.bg} stroke="#f59e0b" strokeWidth={1} />
+                <text x={VECTOR.left + 8} y={layout.partition.y + 4} fontSize={11} fontWeight={700} fill="#f59e0b" fontFamily="ui-sans-serif, system-ui, sans-serif">
+                  {layout.partition.label}
+                </text>
+              </g>
+            ) : null}
+
             {/* DIN lišty (35 mm) a volné pozice */}
             {layout.rails.map((rail) => (
               <g key={rail.index} data-rail={rail.index} data-capacity={rail.capacity} data-active={activeRail === rail.index ? "true" : undefined}>
@@ -286,7 +321,7 @@ export function VectorPanel({
                 {Array.from({ length: Math.max(0, rail.capacity - Math.ceil(rail.used)) }, (_, index) => (
                   <rect
                     key={index}
-                    x={VECTOR.left + (Math.ceil(rail.used) + index) * VECTOR.moduleW + 2}
+                    x={rail.left + (Math.ceil(rail.used) + index) * VECTOR.moduleW + 2}
                     y={rail.top + 6}
                     width={VECTOR.moduleW - 4}
                     height={VECTOR.deviceH - 12}
@@ -296,10 +331,10 @@ export function VectorPanel({
                     strokeDasharray="4 4"
                   />
                 ))}
-                <text x={8} y={rail.y - 4} fontSize={11} fontWeight={700} fill={colors.text} fontFamily="ui-sans-serif, system-ui, sans-serif">
+                <text x={rail.left - VECTOR.left + 8} y={rail.y - 4} fontSize={11} fontWeight={700} fill={colors.text} fontFamily="ui-sans-serif, system-ui, sans-serif">
                   Lišta {rail.index}
                 </text>
-                <text x={8} y={rail.y + 10} fontSize={9.5} fill={rail.used > rail.capacity ? "#ef4444" : colors.muted} fontFamily="ui-monospace, monospace" data-testid={`rail-usage-${rail.index}`}>
+                <text x={rail.left - VECTOR.left + 8} y={rail.y + 10} fontSize={9.5} fill={rail.used > rail.capacity ? "#ef4444" : colors.muted} fontFamily="ui-monospace, monospace" data-testid={`rail-usage-${rail.index}`}>
                   {String(rail.used).replace(".", ",")}/{rail.capacity} M
                 </text>
               </g>
@@ -413,7 +448,7 @@ export function VectorPanel({
                   aria-label={`Označit celou lištu ${rail.index}`}
                   title="Označit celou lištu (pak přetáhnout na napájecí přístroj)"
                   className="absolute rounded px-1 text-[10px] text-sky-300 hover:bg-sky-500/15"
-                  style={{ left: pct(6, layout.width), top: pct(rail.y + 16, layout.height) }}
+                  style={{ left: pct(rail.left - VECTOR.left + 6, layout.width), top: pct(rail.y + 16, layout.height) }}
                 >
                   ▣ lišta
                 </button>
@@ -421,7 +456,7 @@ export function VectorPanel({
               {onRailCapacity ? (
                 <div
                   className="absolute z-10 flex items-center gap-0.5 rounded-md border border-border/80 bg-background/85 px-1 py-0.5 text-[10px] whitespace-nowrap shadow backdrop-blur"
-                  style={{ left: pct(VECTOR.left - 8, layout.width), top: `calc(${pct(rail.top, layout.height)} - 34px)` }}
+                  style={{ left: pct(rail.left - 8, layout.width), top: `calc(${pct(rail.top, layout.height)} - 34px)` }}
                   role="group"
                   aria-label={`Ovládání lišty ${rail.index}`}
                   data-testid={`rail-controls-${rail.index}`}
@@ -487,7 +522,7 @@ export function VectorPanel({
                   aria-label={`Smazat celou lištu ${rail.index}`}
                   title="Smazat celou lištu"
                   className="absolute flex items-center gap-0.5 rounded px-1 text-[10px] text-red-300 hover:bg-red-500/15 disabled:opacity-50"
-                  style={{ left: pct(6, layout.width), top: pct(rail.y + 16, layout.height) }}
+                  style={{ left: pct(rail.left - VECTOR.left + 6, layout.width), top: pct(rail.y + 16, layout.height) }}
                 >
                   <Trash2 className="size-3" aria-hidden /> lišta
                 </button>
@@ -500,7 +535,7 @@ export function VectorPanel({
                   aria-label={`Přidat modul na lištu ${rail.index}`}
                   title="Přidat modul na konec lišty"
                   className="absolute flex -translate-y-1/2 flex-col items-center rounded-md border-2 border-dashed border-slate-500 px-1 py-1 text-[10px] text-slate-300 hover:border-primary hover:text-white disabled:opacity-50"
-                  style={{ left: pct(layout.width - VECTOR.right + 6, layout.width), top: pct(rail.y, layout.height) }}
+                  style={{ left: pct((layout.fields ? rail.right : layout.width - VECTOR.right) + 6, layout.width), top: pct(rail.y, layout.height) }}
                 >
                   <Plus className="size-3.5" aria-hidden /> modul
                 </button>

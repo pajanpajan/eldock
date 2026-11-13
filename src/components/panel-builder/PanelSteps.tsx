@@ -19,6 +19,7 @@ import {
 } from "@/lib/panel-builder/panel-phases";
 import { stepProgress } from "@/lib/panel-builder/project";
 import { railCapacities } from "@/lib/panel-builder/rails";
+import { parseRailLayout } from "@/lib/panel-builder/rail-layout";
 import { cn } from "@/lib/utils";
 import type { PanelProjectDetail } from "@/server/queries/panel-builder";
 import { documentationState } from "@/server/services/panel-builder";
@@ -28,7 +29,7 @@ export type PanelStep = PanelPage;
 /** Stav kroků projektu (✓ Hotovo / Rozpracováno) – vybraná skříň, do které se návrh vejde = skříň hotová. */
 function progressOf(project: PanelProjectDetail) {
   const { connected, thermal } = documentationState(project);
-  const need = enclosureNeed(railCapacities(project), project.items);
+  const need = enclosureNeed(railCapacities(project), project.items, parseRailLayout(project.railLayoutJson, railCapacities(project).length));
   const enclosure = Boolean(project.enclosureId || project.enclosureModel) && (!project.enclosure || fitsEnclosure(project.enclosure, need));
   return stepProgress({ items: project.items, status: project.status, connected, thermalOk: thermal.ok, enclosure });
 }

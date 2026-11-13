@@ -121,3 +121,30 @@ export async function pairLabelWithEquipment(prisma: PrismaClient, input: { code
     return label.serialCode;
   });
 }
+
+/**
+ * Fáze 111: štítek zařízení z registru (idempotentní) – identifikační štítek s QR kódem EL-xxxxxx: spárovaný štítek
+ * zařízení, jinak nový z registru (série 1 ks pro firmu závodu; spotřebiče a nářadí 30 × 15 mm, rozváděče 50 × 25 mm,
+ * stroje 70 × 40 mm). QR vede na kartu štítku /q/EL-… → karta zařízení.
+ */
+export async function ensureEquipmentLabel(prisma: PrismaClient, equipmentId: string): Promise<string> {
+  return prisma.$transaction(async (tx) => {
+    const taken = await tx.qrLabelItem.findFirst({ where: { targetType: "EQUIPMENT", targetId: equipmentId }, select: { serialCode: true } });
+    if (taken) return taken.serialCode;
+    const equipment = await tx.equipment.findUnique({ where: { id: equipmentId }, select: { id: true, type: true, floor: { select: { building: { select: { plant: { select: { id: true, name: true } } } } } } } });
+    if (!equipment) throw new WorkflowError("NOT_FOUND", "Zařízení nebylo nalezeno.");
+    const plant = equipment.floor.building.plant;
+    const company = await tx.registeredCompany.findFirst({ where: { plantId: plant.id, closedAt: null }, select: { id: true, companyName: true, ico: true, email: true } });
+    const purpose: LabelPurpose = equipment.type === "SWITCHBOARD" ? "SWITCHBOARD" : ["MACHINE", "CNC_MACHINE", "PRODUCTION_LINE", "ROBOT_CELL", "COMPRESSOR", "HVAC_UNIT", "TRANSFORMER"].includes(equipment.type) ? "MACHINE" : "APPLIANCE";
+    const range = await reserve(tx, 1);
+    const batch = await tx.qrLabelBatch.create({ data: { companyName: company?.companyName ?? plant.name, ico: company?.ico ?? null, email: company?.email ?? null, registeredCompanyId: company?.id ?? null, purpose, firstSequence: range.first, lastSequence: range.last, count: 1, note: "Přiděleno automaticky – identifikační štítek zařízení (Hlídač revizí)" } });
+    await tx.qrLabelItem.create({ data: { sequence: range.first, serialCode: range.codes[0], batchId: batch.id, targetType: "EQUIPMENT", targetId: equipmentId, activatedAt: new Date() } });
+    return range.codes[0];
+  });
+}
+
+/** Štítek zařízení z registru bez přidělení (null = zatím žádný). */
+export async function equipmentLabelSerial(prisma: PrismaClient, equipmentId: string): Promise<string | null> {
+  return (await prisma.qrLabelItem.findFirst({ where: { targetType: "EQUIPMENT", targetId: equipmentId }, select: { serialCode: true } }))?.serialCode ?? null;
+}
+

@@ -88,6 +88,10 @@ describe("technické SEO", () => {
       "https://eldock.cz/navody",
       "https://eldock.cz/domovni-elektroinstalace",
       "https://eldock.cz/prumysl",
+      // Fáze 111: podsekce úvodního rozcestníku a Hlídač revizí
+      "https://eldock.cz/sekce/elektroinstalace",
+      "https://eldock.cz/sekce/prumysl-a-revize",
+      "https://eldock.cz/hlidac-revizi",
       "https://eldock.cz/kontakt",
       "https://eldock.cz/panel-builder/auth",
       "https://eldock.cz/register-plant",

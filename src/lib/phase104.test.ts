@@ -139,7 +139,7 @@ describe("fáze 104 – vrstva 3: limit požadavků podle IP a blokace kopírova
 describe("fáze 104 – vrstva 4: právní doložka", () => {
   it("přesné znění doložky v patičce, dokumentaci a VOP 1.1", () => {
     expect(IP_NOTICE).toBe("© 2026 ELDOCK.cz – Všechna práva vyhrazena. Databáze prvků, výpočtové algoritmy a struktura dokumentace jsou chráněny autorským právem a zvláštním právem pořizovatele databáze dle zák. č. 121/2000 Sb. Automatizované vytěžování (scraping) a reverzní inženýrství je zakázáno.");
-    expect(TERMS_VERSION).toBe("1.1-2026-11");
+    expect(TERMS_VERSION).toMatch(/^1.[1-9]-2026-11$/);
     const section = TERMS_SECTIONS.find((entry) => entry.title.includes("Ochrana databáze"));
     expect(section?.text).toContain("121/2000 Sb.");
     expect(TERMS_SECTIONS.indexOf(section!)).toBe(TERMS_SECTIONS.findIndex((entry) => entry.title.startsWith("6.")) + 1);

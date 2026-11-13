@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { parseRailLayout } from "@/lib/panel-builder/rail-layout";
 
 import { PageTransition } from "@/components/layout/PageTransition";
 import { panelBuilderGuard } from "@/components/panel-builder/access";
@@ -35,7 +36,7 @@ export default async function PanelThermalPage({ params }: PageProps<"/panel-bui
         enclosureModel={project.enclosureModel}
         fans={fans}
         fan={{ id: project.fanId, count: project.fanCount }}
-        enclosurePicker={<EnclosurePicker projectId={project.id} need={enclosureNeed(railCapacities(project), project.items)} current={{ model: project.enclosureModel, enclosureId: project.enclosureId }} />}
+        enclosurePicker={<EnclosurePicker projectId={project.id} need={enclosureNeed(railCapacities(project), project.items, parseRailLayout(project.railLayoutJson, railCapacities(project).length))} current={{ model: project.enclosureModel, enclosureId: project.enclosureId }} />}
         initialProject={{
           heightMm: project.heightMm,
           widthMm: project.widthMm,

@@ -11,6 +11,11 @@ import { SwitchRoleButton } from "@/components/common/SwitchRoleButton";
 import { ChangeRequestCta } from "@/components/equipment/ChangeRequestCta";
 import { DocumentationTabs } from "@/components/equipment/DocumentationTabs";
 import { EquipmentPhotoCard } from "@/components/equipment/EquipmentPhotoCard";
+import { NameplateCard } from "@/components/equipment/NameplateCard";
+import { idLabelData, titleWithoutTag } from "@/lib/equipment-id-label";
+import { parseReading } from "@/lib/nameplate";
+import { prisma } from "@/lib/prisma";
+import { equipmentLabelSerial } from "@/server/services/qr-labels";
 import { FieldQuickActions } from "@/components/equipment/FieldQuickActions";
 import { RevisionTimeline } from "@/components/equipment/RevisionTimeline";
 import { SafetyBanner } from "@/components/equipment/SafetyBanner";
@@ -101,7 +106,7 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
   const canEditReferences = account.can("caeOffice") || account.can("studio");
   const withReferences = !!selected && !isLightCard(equipment.type) && modules.on("cae.hotspots");
   // Nezávislé dotazy po ověření přístupu najednou: napájení (LOTO), štítek, kusovník vybrané revize, reference.
-  const [powerNodes, label, bom, references, linkable, passports, knowledge, health] = await Promise.all([
+  const [powerNodes, label, bom, references, linkable, passports, knowledge, health, labelSerial] = await Promise.all([
     getPowerNodes(plantId),
     buildLabelData(equipment, inspection),
     selected ? getRevisionBom(selected.id) : Promise.resolve([]),
@@ -110,6 +115,8 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
     equipment.type === "SWITCHBOARD" ? getEquipmentPassports(equipment.id) : Promise.resolve([]),
     getEquipmentKnowledge(equipment.id),
     isLightCard(equipment.type) ? Promise.resolve(null) : getEquipmentHealth(equipment.id, plantId),
+    // Fáze 111: identifikační štítek z registru (EL-xxxxxx), bez přidělení
+    equipmentLabelSerial(prisma, equipment.id),
   ]);
   // Fáze 46: knihovna návodů / datasheetů a verzované zálohy řídicího SW
   const libraryDocuments = knowledge.documents.map((document) => ({
@@ -275,6 +282,29 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
         canEdit={canEditCard}
       />
       <LazyQrLabelCard label={label} printHref={`${basePath}/label`} canEdit={canEditCard} />
+      {/* Fáze 111: druhá fotka – výrobní štítek s AI čtením údajů a identifikační štítek EL-xxxxxx */}
+      <div className="lg:col-span-2">
+        <NameplateCard
+          equipmentId={equipment.id}
+          tag={equipment.tag}
+          photoUrl={equipment.nameplatePhotoUrl}
+          readAt={equipment.nameplateReadAt?.toISOString() ?? null}
+          reading={parseReading(equipment.nameplateDataJson)}
+          current={{
+            title: titleWithoutTag(equipment.name, equipment.tag),
+            manufacturer: equipment.manufacturer,
+            model: equipment.model,
+            serialNumber: equipment.serialNumber,
+            ratedVoltage: equipment.ratedVoltage,
+            ipRating: equipment.ipRating,
+            protectionClass: equipment.protectionClass,
+            usageGroup: equipment.usageGroup,
+            handHeld: equipment.handHeld,
+          }}
+          label={idLabelData(equipment, { serial: labelSerial, building: building.name, floor: floor.name, validUntil: inspection.validUntil })}
+          canEdit={canEditCard}
+        />
+      </div>
       {/* Fáze 93: zálohování napájení rozváděče / zdroje a nájemní jednotka / zdravotnické oddělení */}
       {hasBackupTier(equipment.type) ? (
         <PowerBackupCard

@@ -2,6 +2,7 @@ import "server-only";
 
 import { prisma } from "@/lib/prisma";
 import { WorkflowError } from "@/lib/workflow/state-machine";
+import type { PaywallInfo } from "@/lib/credits/entitlements";
 import { assertFeature } from "@/server/modules";
 import { getPanelCompany } from "@/server/panel-session";
 import { assertEditable } from "@/server/services/switchboard-versions";
@@ -47,7 +48,9 @@ export async function guardEditableItem(itemId: string) {
   return company;
 }
 
-export function actionFailure(error: unknown, fallback: string): { ok: false; error: string } {
+export function actionFailure(error: unknown, fallback: string): { ok: false; error: string; paywall?: PaywallInfo } {
+  // Fáze 111: nedostatek kreditů → data prodejního modalu „💎 Odemkněte plnou verzi ELDOCK“
+  if (error instanceof WorkflowError && "paywall" in error) return { ok: false, error: error.message, paywall: (error as WorkflowError & { paywall: PaywallInfo }).paywall };
   if (error instanceof WorkflowError) return { ok: false, error: error.message };
   console.error(error);
   return { ok: false, error: fallback };

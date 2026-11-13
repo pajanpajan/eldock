@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import { PUBLIC_STATE } from "./auth";
-import { goPhase, rightTab } from "./floorplan-phases";
+import { goPhase, rightTab, confirmLayoutWizard } from "./floorplan-phases";
 
 // Fáze 106: výroba rozváděče na klíč – velín zasmluvní výrobce (přístupový kód), firma v kroku 4 uvidí CNC plán 1 : 1
 // a drátovací list, odešle objednávku (rezervace QR štítku EL-…), výrobce v portálu /vyroba-rozvadecu zakázku přijme,
@@ -43,6 +43,7 @@ test("🏭 Výroba na klíč: výrobce z velínu, CNC & drátovací list v kroku
   if (await environment.count()) await environment.selectOption("TIMBER");
   await page.getByLabel("Název rozváděče").fill("RD106 výroba na klíč");
   await page.getByTestId("generate-from-floorplan").click();
+  await confirmLayoutWizard(page);
   await expect(page).toHaveURL(/\/panel-builder\/(?!floorplan)[^/]+$/, { timeout: 120_000 });
   const projectUrl = page.url();
 
@@ -67,7 +68,8 @@ test("🏭 Výroba na klíč: výrobce z velínu, CNC & drátovací list v kroku
   await expect(wires).toContainText("H07V-K (CYA)");
   await expect(wires).toContainText(/Dutinka \d+(,\d)? mm²/);
   const [dxf] = await Promise.all([page.waitForEvent("download"), cnc.getByTestId("cnc-download-dxf").click()]);
-  expect(dxf.suggestedFilename()).toBe("1_CNC_Vrtaci_plan_1-1.dxf");
+  // Fáze 111: ukázková firma má projekty zkušební – soubory CNC nesou příponu -ZKUSEBNI
+  expect(dxf.suggestedFilename()).toBe("1_CNC_Vrtaci_plan_1-1-ZKUSEBNI.dxf");
   await page.screenshot({ path: "test-results/phase106-cnc.png" });
 
   // Objednávka výroby u vybraného výrobce → rezervace QR štítku EL-…

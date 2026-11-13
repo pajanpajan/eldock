@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { parseRailLayout } from "@/lib/panel-builder/rail-layout";
 
 import { PageTransition } from "@/components/layout/PageTransition";
 import { panelBuilderGuard } from "@/components/panel-builder/access";
@@ -27,7 +28,8 @@ export default async function PanelEnclosurePage({ params }: PageProps<"/panel-b
   const [project, catalog] = await Promise.all([getPanelProject((await params).id), getEnclosureCatalog()]);
   if (!project) notFound();
   const capacities = railCapacities(project);
-  const need = enclosureNeed(capacities, project.items);
+  // Fáze 111: dvě pole vedle sebe = řady jednoho pole, skříň s aspoň 2 poli
+  const need = enclosureNeed(capacities, project.items, parseRailLayout(project.railLayoutJson, capacities.length));
   const railUsed = capacities.map((_, index) => Math.round(project.items.filter((item) => item.dinRailIndex === index + 1).reduce((sum, item) => sum + item.modulesWidth, 0)));
   const environment = environmentOf(project.environment);
   const { thermal } = documentationState(project);

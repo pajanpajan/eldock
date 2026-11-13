@@ -4,7 +4,7 @@ import { Flame, ShieldCheck, Zap } from "lucide-react";
 
 import { PanelAuthForms } from "@/components/companies/PanelAuthForms";
 import { safeNextPath } from "@/lib/auth";
-import { LEAD_BONUS_CREDITS } from "@/lib/leads";
+import { LEAD_BONUS_TEXT } from "@/lib/leads";
 import { prisma } from "@/lib/prisma";
 import { TESTER_COMPANY } from "@/lib/registered-company";
 import { getPanelCompany } from "@/server/panel-session";
@@ -40,7 +40,7 @@ export default async function PanelAuthPage({ searchParams }: PageProps<"/panel-
           </li>
         </ul>
         <p className="rounded-lg border border-border bg-card/60 p-3 text-xs text-muted-foreground">
-          {lead ? `Registrace z odkazu dokumentace: ${LEAD_BONUS_CREDITS} kreditů zdarma (1 kredit = 1 nový rozváděč). E-mail a IČO máte předvyplněné, sídlo doplní registr ARES.` : "Registrace firmy je zdarma s 5 testovacími kredity (1 kredit = 1 nový rozváděč). Údaje firmy doplníme z registru ARES podle IČO."}
+          {lead ? `Registrace z odkazu dokumentace: ${LEAD_BONUS_TEXT} (zkušební 2D půdorys + zkušební rozváděč). E-mail a IČO máte předvyplněné, sídlo doplní registr ARES.` : "Registrace firmy je zdarma s 1 testovacím projektem (zkušební 2D půdorys + zkušební rozváděč, výstupy se zkušebním označením). Údaje firmy doplníme z registru ARES podle IČO."}
         </p>
       </section>
       <PanelAuthForms next={next} initialTab={registering ? "register" : "login"} lead={lead && token ? { token, email: lead.email, ico: lead.ico, companyName: lead.companyName, dic: lead.dic } : null} />

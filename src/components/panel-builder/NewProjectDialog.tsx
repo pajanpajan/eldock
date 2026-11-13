@@ -16,6 +16,7 @@ import { PANEL_PHOTO_MAX_PX, PANEL_PHOTO_QUALITY, resizeImage, uploadPanelFile }
 import { cn } from "@/lib/utils";
 import { VIDEO_ACCEPT, captureFrame, extractVideoFrames, loadVideo } from "@/lib/video-frames";
 import { createPanelProjectAction } from "@/server/actions/panel-builder";
+import { reportActionError, showPaywall } from "@/components/credits/paywall";
 import { DEFAULT_OCCUPANCY, type OccupancyId } from "@/lib/panel-builder/occupancy";
 import { createScheduleProjectAction } from "@/server/actions/panel-projects";
 import { INSTALL_LEVELS, INSTALL_METHODS, type InstallLevel, type InstallMethod } from "@/engine/floorplan-bridge";
@@ -62,7 +63,15 @@ let shotSequence = 0;
 const shotId = () => `s${++shotSequence}`;
 
 /** Nový projekt rozváděče: návrh od nuly, pasport z fotek / videa, soupis místností nebo 2D půdorys. */
-export function NewProjectDialog({ credits = null }: { credits?: number | null }) {
+/** Fáze 111: cena nového rozváděče pro přihlášenou firmu (zkušební zdarma / 15 kreditů) a zda kredity stačí. */
+export interface NewProjectCharge {
+  label: string;
+  cost: number;
+  balance: number;
+  allowed: boolean;
+}
+
+export function NewProjectDialog({ charge = null }: { charge?: NewProjectCharge | null }) {
   const router = useRouter();
   const photoInput = useRef<HTMLInputElement>(null);
   const videoInput = useRef<HTMLInputElement>(null);
@@ -181,7 +190,10 @@ export function NewProjectDialog({ credits = null }: { credits?: number | null }
     if (schedule) {
       startTransition(async () => {
         const result = await createScheduleProjectAction({ ...header, mode: installMode, installMethod, countDoubleAsTwo, lightingSocketA, rooms });
-        if (!result.ok) return void toast.error(result.error);
+        if (!result.ok) {
+          if (result.paywall) setOpen(false);
+          return void reportActionError(result);
+        }
         toast.success(`Rozváděč vygenerován: ${result.data.circuits} okruhů, ${result.data.devices} přístrojů${result.data.enclosure ? `, skříň ${result.data.enclosure}` : ""}.`);
         for (const warning of result.data.warnings.slice(0, 3)) toast.warning(warning);
         setOpen(false);
@@ -201,7 +213,10 @@ export function NewProjectDialog({ credits = null }: { credits?: number | null }
         railPhotos,
         enclosureId: enclosure?.id ?? null,
       });
-      if (!result.ok) return void toast.error(result.error);
+      if (!result.ok) {
+        if (result.paywall) setOpen(false);
+        return void reportActionError(result);
+      }
       if (result.data.design)
         toast.success(enclosure && enclosureLayout ? `Návrh založen ve skříni ${brandLabel(enclosure.manufacturer)} ${enclosure.model} –${enclosureLayout.length}× DIN lišta ${enclosureLayout[0]}M, vkládejte přístroje z pravého menu.` : "Návrh založen – 1 DIN lišta 12M, vkládejte přístroje z pravého menu.");
       else toast.success(`${result.data.mode === "GEMINI" ? "Fotka analyzována přes Gemini" : "Fotka analyzována (Demo AI režim)"}${result.data.details ? ` + ${result.data.details} ${result.data.details === 1 ? "detail lišty" : "detaily lišt"}` : ""}.`);
@@ -212,12 +227,11 @@ export function NewProjectDialog({ credits = null }: { credits?: number | null }
   }
 
   // Bez kreditů: místo dialogu rovnou dobití kreditů (fáze 50)
-  if (credits !== null && credits <= 0) {
+  // Fáze 111: bez zkušebního rozváděče a bez dost kreditů místo dialogu prodejní modal
+  if (charge && !charge.allowed) {
     return (
-      <Button asChild className="touch-target gap-2" title="Došly kredity – dobijte balíček">
-        <Link href="/panel-builder/credits?reason=no-credits">
-          <Plus className="size-4" aria-hidden /> Nový projekt rozváděče
-        </Link>
+      <Button type="button" className="touch-target gap-2" title={charge.label} onClick={() => showPaywall({ reason: "NO_CREDITS", action: "Nový rozváděč", cost: charge.cost, balance: charge.balance })} data-testid="new-project-paywall">
+        <Plus className="size-4" aria-hidden /> Nový projekt rozváděče
       </Button>
     );
   }
@@ -227,7 +241,7 @@ export function NewProjectDialog({ credits = null }: { credits?: number | null }
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button className="touch-target gap-2" title={credits !== null ? `Spotřebuje 1 kredit (zbývá ${credits})` : undefined}>
+        <Button className="touch-target gap-2" title={charge ? `${charge.label} (zbývá ${charge.balance} kreditů)` : undefined}>
           <Plus className="size-4" aria-hidden /> Nový projekt rozváděče
         </Button>
       </DialogTrigger>
@@ -235,6 +249,12 @@ export function NewProjectDialog({ credits = null }: { credits?: number | null }
         <DialogHeader>
           <DialogTitle>Nový projekt rozváděče</DialogTitle>
           <DialogDescription>{HINTS[mode]}</DialogDescription>
+          {charge ? (
+            <p className={cn("rounded-md border px-2.5 py-1.5 text-xs", charge.cost ? "border-primary/40 bg-primary/10" : "border-emerald-500/40 bg-emerald-500/10 text-emerald-100")} data-testid="new-project-charge">
+              {charge.label}
+              {charge.cost ? ` · zbývá ${charge.balance} kreditů` : ""}
+            </p>
+          ) : null}
         </DialogHeader>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2" role="group" aria-label="Režim projektu" data-testid="project-modes">
           {MODES.map((option) => {

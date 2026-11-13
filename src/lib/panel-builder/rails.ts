@@ -5,7 +5,8 @@
 export const RAIL_PRESETS = [8, 12, 14, 18, 24, 36] as const;
 export const MIN_RAIL_MODULES = 4;
 export const MAX_RAIL_MODULES = 48;
-export const MAX_RAILS = 12;
+/** Fáze 111: až 16 lišt – dvoupolová skříň 2 × 8 řad (dříve 12). */
+export const MAX_RAILS = 16;
 /** Výchozí řada nového návrhu od nuly (1× 12M). */
 export const DEFAULT_RAIL_MODULES = 12;
 

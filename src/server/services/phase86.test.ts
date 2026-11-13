@@ -96,6 +96,8 @@ describe("fáze 86 – ověřené rozvodnice výrobců v katalogu skříní", ()
     const univers = await prisma.panelEnclosure.findUniqueOrThrow({ where: { articleNumber: "FWU42S" } });
     const flush = await createPanelProject(prisma, { name: "Byt FWU", customerName: null, photoUrl: null, designMode: "DESIGN", enclosureId: univers.id });
     expect(flush).toMatchObject({ enclosureModel: "Hager Univers FWU42S (2 pole po 12 M)", enclosureType: "FLUSH_MOUNTED", enclosureMaterial: "PAINTED_STEEL", ipRating: "IP 30", enclosurePmaxW: null });
-    expect(railCapacities(flush)).toEqual([24, 24, 24, 24]);
+    // Fáze 111: dvoupolová skříň = 2 pole vedle sebe po 4 řadách lišt 12 M (Silnoproud | Slaboproud)
+    expect(railCapacities(flush)).toEqual([12, 12, 12, 12, 12, 12, 12, 12]);
+    expect(JSON.parse(flush.railLayoutJson ?? "{}")).toMatchObject({ fields: 2, fieldARails: 4 });
   });
 });

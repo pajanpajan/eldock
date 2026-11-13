@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { goPhase, phaseForPalette, rightTab } from "./floorplan-phases";
+import { goPhase, phaseForPalette, rightTab, confirmLayoutWizard } from "./floorplan-phases";
 
 // Fáze 60: trasy podél stěn, pořadí zásuvek nezávislé na kreslení, rozváděč z půdorysu podle hierarchie od jednoho
 // výrobce a převod hotového rozváděče na jiného výrobce.
@@ -54,6 +54,7 @@ test("půdorys → trasy podél stěn a optimální pořadí → rozváděč Eat
   await page.getByTestId("floorplan-environment").selectOption("INDOOR_DRY");
   await page.getByLabel("Název rozváděče").fill("RD60 Eaton");
   await page.getByTestId("generate-from-floorplan").click();
+  await confirmLayoutWizard(page);
   await expect(page).toHaveURL(/\/panel-builder\/(?!floorplan)[^/]+$/, { timeout: 90_000 });
   await expect(page.getByRole("heading", { level: 1 })).toContainText("RD60 Eaton");
   const panel = page.getByTestId("vector-panel");

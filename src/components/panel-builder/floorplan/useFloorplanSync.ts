@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { parseDraft, type FloorplanDraft } from "@/lib/panel-builder/floorplan-editor";
 import { clearBackup, writeBackup } from "@/lib/panel-builder/floorplan-storage";
 import { createFloorplanAction, loadFloorplanAction, saveFloorplanAction } from "@/server/actions/floorplans";
+import { showPaywall } from "@/components/credits/paywall";
 
 // Fáze 64: průběžné ukládání 2D půdorysu na server. Změny se uloží 0,8 s po poslední úpravě (fáze 78; při nepřetržité
 // práci nejpozději po 10 s), nový půdorys vznikne na serveru při první změně (a dostane kód FP-001 …). Před odesláním se změny zálohují v prohlížeči;
@@ -42,7 +43,7 @@ export function useFloorplanSync({
   disabled = false,
 }: {
   /** Půdorys na serveru při otevření (null = nový). */
-  stored: { id: string; code?: string | null; version: number; savedAt: string } | null;
+  stored: { id: string; code?: string | null; version: number; savedAt: string; license?: string | null } | null;
   draft: FloorplanDraft;
   /** Nákres odpovídající serveru při otevření (null = obnovená záloha / nový se zálohou → hned uložit). */
   initialSaved: FloorplanDraft | null;
@@ -55,6 +56,8 @@ export function useFloorplanSync({
   const [floorplanId, setFloorplanId] = useState<string | null>(stored?.id ?? null);
   /** Fáze 78: kód půdorysu ve firmě (nový ho dostane při prvním uložení). */
   const [code, setCode] = useState<string | null>(stored?.code ?? null);
+  /** Fáze 111: licence půdorysu (nový ji dostane při prvním uložení – zkušební / plná). */
+  const [license, setLicense] = useState<string | null>(stored?.license ?? null);
   const [saved, setSaved] = useState<FloorplanDraft | null>(initialSaved);
   const [savedAt, setSavedAt] = useState<string | null>(stored?.savedAt ?? null);
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
@@ -66,6 +69,8 @@ export function useFloorplanSync({
   const replaceRef = useRef(replaceDraft);
   const inflight = useRef<Promise<boolean> | null>(null);
   const dirtySince = useRef<number | null>(null);
+  /** Fáze 111: založení na serveru narazilo na nedostatek kreditů – bez automatických pokusů, nákres zůstává v prohlížeči. */
+  const paywalled = useRef(false);
 
   useEffect(() => {
     draftRef.current = draft;
@@ -91,10 +96,20 @@ export function useFloorplanSync({
         const id = idRef.current;
         if (!id) {
           const result = await createFloorplanAction({ meta: metaRef.current, draft: snapshot });
-          if (!result.ok) throw new SaveError(result.error);
+          if (!result.ok) {
+            // Fáze 111: bez zkušebního půdorysu a bez kreditů – prodejní modal jen jednou, zálohu drží prohlížeč
+            if (result.paywall) {
+              if (!paywalled.current) showPaywall(result.paywall);
+              paywalled.current = true;
+              throw new SaveError(`${result.error} Půdorys zůstává v tomto prohlížeči – po dobití kreditů ho uložíte tlačítkem „Uložit“.`);
+            }
+            throw new SaveError(result.error);
+          }
+          paywalled.current = false;
           idRef.current = result.data.id;
           setFloorplanId(result.data.id);
           setCode(result.data.code);
+          setLicense(result.data.license);
           clearBackup(null);
           // Adresa nového půdorysu bez přenačtení editoru (reload otevře uložený půdorys)
           window.history.replaceState(null, "", `/panel-builder/floorplan/${result.data.id}`);
@@ -146,7 +161,7 @@ export function useFloorplanSync({
 
   // Výpadek spojení: další pokus po 3 / 10 / 30 s, hned po obnovení sítě
   useEffect(() => {
-    if (phase.kind !== "error") return;
+    if (phase.kind !== "error" || paywalled.current) return;
     const retry = () => void save();
     const timer = window.setTimeout(retry, RETRY_MS[Math.min(phase.attempt, RETRY_MS.length) - 1]);
     window.addEventListener("online", retry);
@@ -221,5 +236,5 @@ export function useFloorplanSync({
             ? { kind: "pending" }
             : { kind: "saved", at: savedAt };
 
-  return { floorplanId, code, status, flush, reload, keepMine, adopt, currentId };
+  return { floorplanId, code, license, status, flush, reload, keepMine, adopt, currentId };
 }

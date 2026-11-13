@@ -110,7 +110,7 @@ test.describe("telemetrie, kontakt v ukázkové firmě a velín", () => {
     await expect(modal).toContainText("📩 Kam vám máme poslat hotový kusovník a PDF dokumentaci?");
     await expect(modal).toContainText("Export XLSX kusovníku");
     await expect(modal.getByTestId("lead-marketing")).not.toBeChecked();
-    await expect(modal.getByRole("button", { name: /Stáhnout dokumentaci & získat 45 kreditů zdarma/ })).toBeVisible();
+    await expect(modal.getByRole("button", { name: /Stáhnout dokumentaci & získat 1 testovací projekt zdarma/ })).toBeVisible();
     const email = `e2e-lead-${Date.now()}@eldock.test`;
     await modal.getByTestId("lead-email").fill(email);
     await modal.getByTestId("lead-role-designer").click();

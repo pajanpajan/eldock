@@ -56,18 +56,19 @@ test("úvodní stránka: dva produkty; nepřihlášený do Panel Builderu → re
   await page.getByRole("checkbox", { name: /Souhlas s obchodními podmínkami/ }).check();
   await submit.click();
 
-  // Vlastní lišta Panel Builderu: firma + IČO, 5 kreditů, žádné cizí projekty (PB-001 patří firmě Tester)
+  // Vlastní lišta Panel Builderu: firma + IČO, 0 kreditů + 1 testovací projekt (fáze 111), žádné cizí projekty
   await expect(page).toHaveURL(/\/panel-builder$/);
   await expect(page.getByTestId("panel-company")).toContainText("Rozvaděče Turnov s.r.o.");
   await expect(page.getByTestId("panel-company")).toContainText("IČO 27074358");
-  await expect(page.getByTestId("panel-credits")).toHaveText(/Kredity: 5/);
+  await expect(page.getByTestId("panel-credits")).toHaveText(/Kredity: 0/);
+  await expect(page.getByTestId("panel-trial")).toContainText("1 testovací projekt zdarma: zkušební 2D půdorys + zkušební rozváděč");
   await expect(page.getByText("Zatím žádný projekt rozváděče")).toBeVisible();
   await expect(page.getByRole("link", { name: /PB-001/ })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Studio" })).toHaveCount(0);
 
   // Firemní údaje a razítko: úprava odpovědné osoby
   await page.getByRole("link", { name: "Firemní údaje a razítko" }).click();
-  await expect(page.getByTestId("terms-accepted")).toContainText("1.1-2026-11");
+  await expect(page.getByTestId("terms-accepted")).toContainText("1.2-2026-11");
   await page.getByLabel("Jméno a příjmení odpovědné osoby / projektanta").fill("Ing. Petra Nová");
   await page.getByRole("button", { name: "Uložit firemní údaje" }).click();
   await expect(toast(page)).toContainText("Firemní údaje uloženy");

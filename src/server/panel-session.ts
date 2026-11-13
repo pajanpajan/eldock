@@ -24,6 +24,12 @@ const companySelect = {
   phone: true,
   authorizationNumber: true,
   creditsRemaining: true,
+  // Fáze 111: 1 testovací projekt (zkušební půdorys + rozváděč) a platnost kreditů
+  trialFloorplanUsed: true,
+  trialSwitchboardUsed: true,
+  creditsValidUntil: true,
+  subscriptionPlan: true,
+  subscriptionUntil: true,
   plantId: true,
   termsVersion: true,
   termsAcceptedAt: true,

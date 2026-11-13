@@ -1,5 +1,10 @@
 "use client";
 
+import { toast } from "sonner";
+import { reportActionError } from "@/components/credits/paywall";
+import { TRIAL_WATERMARK } from "@/lib/credits/pricing";
+import { unlockOutputAction } from "@/server/actions/credits";
+
 import { useMemo, useState } from "react";
 import { Download, FileSpreadsheet } from "lucide-react";
 
@@ -103,8 +108,19 @@ function CncDrawing({ pkg }: { pkg: ReturnType<typeof generateManufacturingPacka
  * Fáze 106: „🛠️ CNC & Výroba na klíč“ – mechanické provedení skříně (přívod kabelů, montáž, prvky ve dveřích),
  * náhled CNC plánu 1 : 1, drátovací list vodičů (Odkud → Kam) a stažení DXF / CSV / XLSX.
  */
-export function CncManufacturingPanel({ base, initial, onConfig, children }: { base: Omit<CncInput, "entry" | "mounting" | "door">; initial: TurnkeyConfig; onConfig?: (config: TurnkeyConfig) => void; children?: React.ReactNode }) {
+/** Fáze 111: `projectId` = CNC výrobní balíček za 8 kreditů (jednorázově na projekt, zkušební projekt se zkušebním označením). */
+export function CncManufacturingPanel({ base, initial, onConfig, children, projectId = null }: { base: Omit<CncInput, "entry" | "mounting" | "door">; initial: TurnkeyConfig; onConfig?: (config: TurnkeyConfig) => void; children?: React.ReactNode; projectId?: string | null }) {
   const [config, setConfig] = useState<TurnkeyConfig>(initial);
+  /** Fáze 111: CNC balíček – nárok ověří server (8 kreditů jednorázově, zkušební projekt s označením v souboru). */
+  async function downloadGated(file: { name: string; content: unknown; mime: string }) {
+    if (!projectId) return download(file.name, file.content as BlobPart, file.mime);
+    const unlocked = await unlockOutputAction("cnc", projectId);
+    if (!unlocked.ok) return reportActionError(unlocked);
+    if (unlocked.data.cost) toast.success(`CNC výrobní balíček odemčen za ${unlocked.data.cost} kreditů (zbývá ${unlocked.data.balance}).`);
+    const trial = unlocked.data.license === "TRIAL";
+    const content = trial && typeof file.content === "string" ? (file.name.endsWith(".dxf") ? file.content : `${TRIAL_WATERMARK}\n${file.content}`) : file.content;
+    download(trial ? file.name.replace(/(\.[a-z]+)$/i, "-ZKUSEBNI$1") : file.name, content as BlobPart, file.mime);
+  }
   const update = (patch: Partial<TurnkeyConfig>) => {
     const next = { ...config, ...patch, door: { ...config.door, ...(patch.door ?? {}) } };
     setConfig(next);
@@ -160,7 +176,7 @@ export function CncManufacturingPanel({ base, initial, onConfig, children }: { b
       </div>
       <div className="flex flex-wrap gap-1.5">
         {pkg.files.map((file) => (
-          <Button key={file.name} type="button" size="sm" variant={file.name.endsWith(".dxf") ? "default" : "outline"} className="gap-1.5" onClick={() => download(file.name, file.content as BlobPart, file.mime)} data-testid={`cnc-download-${file.name.split(".").pop()}`}>
+          <Button key={file.name} type="button" size="sm" variant={file.name.endsWith(".dxf") ? "default" : "outline"} className="gap-1.5" onClick={() => void downloadGated(file)} data-testid={`cnc-download-${file.name.split(".").pop()}`}>
             {file.name.endsWith(".xlsx") ? <FileSpreadsheet className="size-4" aria-hidden /> : <Download className="size-4" aria-hidden />} {file.name}
           </Button>
         ))}

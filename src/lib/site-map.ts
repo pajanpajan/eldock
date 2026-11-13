@@ -58,6 +58,8 @@ export function siteNav(options: { showcase: boolean }): SiteLink[] {
   return [
     { href: SEGMENTS.domov.path, label: SEGMENTS.domov.title },
     { href: SEGMENTS.prumysl.path, label: SEGMENTS.prumysl.title },
+    // Fáze 111: samostatná sekce Hlídač revizí & Správa spotřebičů a zařízení
+    { href: "/hlidac-revizi", label: "Hlídač revizí" },
     ...(options.showcase ? [{ href: "/ukazka-elaboratu", label: "Ukázka dokumentace" }] : []),
     { href: "/#novinky", label: "Novinky" },
     // Fáze 107: samostatná stránka kontaktu, schůzek a spolupráce (formulář se 7 kategoriemi)

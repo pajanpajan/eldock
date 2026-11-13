@@ -10,6 +10,7 @@ import type { ComponentCategory, RecognitionStatus } from "@/generated/prisma/en
 import { defaultConfig, withManufacturer, type ConfigCategory, type ItemConfig } from "@/lib/panel-builder/configurator";
 import { enclosureNeed } from "@/lib/panel-builder/enclosures";
 import { formatRailSummary, freeOnRail, railSummary } from "@/lib/panel-builder/rails";
+import { FIELD_A_LABEL, FIELD_B_LOW_LABEL, FIELD_B_POWER_LABEL, PARTITION_LABEL, SINGLE_LAYOUT, layoutSummaryText, type RailLayout } from "@/lib/panel-builder/rail-layout";
 import { deviceWithConfig, type VectorDevice } from "@/lib/panel-builder/vector-symbols";
 import { RECOGNITION } from "@/lib/panel-builder/project";
 import { cn } from "@/lib/utils";
@@ -32,6 +33,7 @@ import { ManufacturerTransfer } from "./ManufacturerTransfer";
 import { ModeBar } from "./ModeBar";
 import { PhotoViewer } from "./PhotoViewer";
 import { PlacementCard } from "./PlacementCard";
+import { RailLayoutToolbar } from "./RailLayoutToolbar";
 import { VectorPanel } from "./VectorPanel";
 import type { ItemWiring } from "./WiringSection";
 
@@ -93,6 +95,7 @@ export function RecognitionWorkspace({
   railPhotos = [],
   boardManufacturers = [],
   occupancy = "RESIDENTIAL",
+  railLayout = SINGLE_LAYOUT,
 }: {
   projectId: string;
   designMode: "PHOTO" | "DESIGN";
@@ -116,9 +119,17 @@ export function RecognitionWorkspace({
   boardManufacturers?: { name: string; count: number }[];
   /** Fáze 93: typ objektu – Elektro-linter BD4 (CENTRAL STOP, MID) a zdravotnictví (okruhy A / B, chrániče ≤ 30 mA). */
   occupancy?: string;
+  /** Fáze 111: uspořádání lišt – dvě pole vedle sebe (Silnoproud | Slaboproud) nebo přepážka. */
+  railLayout?: RailLayout;
 }) {
   const router = useRouter();
   const design = designMode === "DESIGN";
+  // Fáze 111: pole vedle sebe a přepážka na plátně (stabilní objekty pro výpočet rozložení)
+  const { fields: fieldCount, fieldARails, fieldBLow, partitionAfterRail } = railLayout;
+  const railFields = useMemo(() => (fieldCount === 2 ? { aRails: fieldARails, labels: [FIELD_A_LABEL, fieldBLow ? FIELD_B_LOW_LABEL : FIELD_B_POWER_LABEL] as [string, string] } : null), [fieldCount, fieldARails, fieldBLow]);
+  const railPartition = useMemo(() => (fieldCount === 1 && partitionAfterRail ? { afterRail: partitionAfterRail, label: PARTITION_LABEL } : null), [fieldCount, partitionAfterRail]);
+  const layoutNeedInput = useMemo(() => ({ fields: fieldCount, fieldARails }), [fieldCount, fieldARails]);
+  const layoutText = layoutSummaryText(railLayout, capacities.length);
   const [analysisMode, setAnalysisMode] = useState<AnalysisMode>(coverState === "UNCOVERED" || coverState === "COVERED" ? coverState : "AUTO");
   const [editing, startEditing] = useTransition();
   const unresolved = items.filter((item) => item.recognitionStatus !== "VERIFIED");
@@ -522,13 +533,13 @@ export function RecognitionWorkspace({
           <div className="ml-auto flex flex-wrap items-center gap-2">
             {items.length ? <ManufacturerTransfer projectId={projectId} current={dominant} manufacturers={boardManufacturers} /> : null}
             {enclosureFitsEnvironment(enclosure.ipRating, env) ? (
-              <EnclosurePicker projectId={projectId} need={enclosureNeed(capacities, items)} current={enclosure} minIp={env.minIp} />
+              <EnclosurePicker projectId={projectId} need={enclosureNeed(capacities, items, layoutNeedInput)} current={enclosure} minIp={env.minIp} />
             ) : (
               <>
                 <span className="rounded-full border border-amber-500/70 bg-amber-500/10 px-2.5 py-1 text-xs font-semibold text-amber-200" data-testid="environment-warning" role="alert">
                   ⚠ Skříň {enclosure.ipRating} nevyhovuje prostředí (min. {ipLabel(env.minIp)})
                 </span>
-                <EnclosurePicker projectId={projectId} need={enclosureNeed(capacities, items)} current={enclosure} minIp={env.recommendedIp} warning triggerLabel={`Vybrat vhodnou skříň (min. ${ipLabel(env.recommendedIp)})`} />
+                <EnclosurePicker projectId={projectId} need={enclosureNeed(capacities, items, layoutNeedInput)} current={enclosure} minIp={env.recommendedIp} warning triggerLabel={`Vybrat vhodnou skříň (min. ${ipLabel(env.recommendedIp)})`} />
               </>
             )}
           </div>
@@ -542,6 +553,7 @@ export function RecognitionWorkspace({
         <div className="flex flex-wrap items-center gap-2">
         <p className={cn("rounded-md border px-2.5 py-1.5 font-mono text-xs", summary.used > summary.total ? "border-red-500/60 text-red-300" : "border-border text-muted-foreground")} data-testid="rail-summary" role="status">
           {formatRailSummary(summary)}
+          {layoutText ? ` · ${layoutText}` : ""}
         </p>
         <LinterPanel
           issues={issues}
@@ -628,6 +640,9 @@ export function RecognitionWorkspace({
           onPlaceDrop={(rail, position) => place(1, rail, position, true)}
           onMoveDevice={move}
           onRailPhoto={design ? undefined : pickRailPhoto}
+          fields={railFields}
+          partition={railPartition}
+          toolbar={<RailLayoutToolbar projectId={projectId} layout={railLayout} capacities={capacities} disabled={editing || placing} />}
         />
       </section>
 

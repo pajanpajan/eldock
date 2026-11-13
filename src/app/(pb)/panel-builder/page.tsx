@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { TESTER_COMPANY } from "@/lib/registered-company";
+import { switchboardCharge } from "@/lib/credits/entitlements";
 import Link from "next/link";
 import { Library } from "lucide-react";
 
@@ -48,6 +50,9 @@ export default async function PanelBuilderPage() {
     };
   });
 
+  // Fáze 111: cena nového rozváděče – ukázková firma zkušební bez kreditů, jinak zkušební rozváděč / 15 kreditů
+  const plan = company.id === TESTER_COMPANY.id ? { label: "Ukázková firma – zkušební rozváděč se zkušebním označením (bez kreditů)", cost: 0 } : switchboardCharge(company);
+  const charge = { label: plan.label, cost: plan.cost, balance: company.creditsRemaining, allowed: plan.cost <= company.creditsRemaining };
   // Fáze 92: tréninkové zakázky – nová firma (bez vlastních projektů) je vidí rozbalené; už otevřené se jen znovu otevřou
   const own = projects.filter((project) => !project.trainerPreset).length;
   const opened: Partial<Record<TrainerPresetId, string>> = {};
@@ -57,7 +62,7 @@ export default async function PanelBuilderPage() {
     <PageTransition>
       <PageHeader
         title="AI Panel Builder"
-        description={`${company.companyName} · rozváděče z fotky: rozpoznání přístrojů, strom zapojení, výpočet oteplení dle ČSN EN 61439 a dokumentace s CE štítkem. Nový projekt = 1 kredit (zbývá ${company.creditsRemaining}).`}
+        description={`${company.companyName} · rozváděče z fotky: rozpoznání přístrojů, strom zapojení, výpočet oteplení dle ČSN EN 61439 a dokumentace s CE štítkem. ${charge.label} (zbývá ${company.creditsRemaining} kreditů).`}
         actions={
           <>
             {/* Fáze 87: video-návod AI Panel Builderu s kapitolami */}
@@ -67,7 +72,7 @@ export default async function PanelBuilderPage() {
                 <Library className="size-4" aria-hidden /> Katalog prvků
               </Link>
             </Button>
-            <NewProjectDialog credits={company.creditsRemaining} />
+            <NewProjectDialog charge={charge} />
           </>
         }
       />

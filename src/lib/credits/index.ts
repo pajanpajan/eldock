@@ -1,18 +1,14 @@
-// Kredity AI Panel Builderu (fáze 50): balíčky, DPH, variabilní symbol a český QR kód platby (SPD 1.0).
-// Čisté funkce – bezpečné pro klient i server.
+// Kredity ELDOCK (fáze 50, nový ceník fáze 111): balíčky a předplatné, DPH, variabilní symbol a český QR kód platby
+// (SPD 1.0). Čisté funkce – bezpečné pro klient i server. Ceník a nároky na výstupy jsou v `pricing.ts` a
+// `entitlements.ts` (fáze 111).
 
-export const VAT_RATE = 0.21;
+import { VAT_RATE, orderProduct } from "./pricing";
 
-export const CREDIT_PACKAGES = [
-  { code: "START_10", name: "START 10", title: "Balíček 10 rozváděčů", credits: 10, priceExclVat: 990, note: "99 Kč / rozváděč", highlight: false },
-  { code: "PROFI_30", name: "PROFI 30", title: "Balíček 30 rozváděčů", credits: 30, priceExclVat: 2490, note: "83 Kč / rozváděč – nejoblíbenější", highlight: true },
-  { code: "UNLIMITED_YEAR", name: "PROJEKTANT ROK", title: "Roční neomezený tarif", credits: 200, priceExclVat: 5900, note: "200 kreditů na 12 měsíců", highlight: false },
-] as const;
+export * from "./pricing";
+export * from "./entitlements";
 
-export type CreditPackage = (typeof CREDIT_PACKAGES)[number];
-export type PackageCode = CreditPackage["code"];
-
-export const creditPackage = (code: string): CreditPackage | null => CREDIT_PACKAGES.find((item) => item.code === code) ?? null;
+/** Produkt objednávky podle kódu (balíček kreditů, předplatné nebo dřívější balíček – jen zobrazení starých objednávek). */
+export const creditPackage = (code: string) => orderProduct(code);
 
 /** Cena s DPH 21 % zaokrouhlená na celé koruny. */
 export const withVat = (priceExclVat: number) => Math.round(priceExclVat * (1 + VAT_RATE));

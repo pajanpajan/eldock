@@ -12,7 +12,10 @@ import { pickWiringDevice, type WiringNeed } from "@/lib/panel-builder/wiring-pi
 import { DEFAULT_COLOR, dbSeriesFor, designColor } from "@/lib/panel-builder/wiring-designs";
 import { isSampleProject, projectUploads, refundsCredit } from "@/lib/panel-builder/project-admin";
 import { railColumns } from "@/lib/panel-builder/rails";
+import { SINGLE_LAYOUT, layoutOptions, serializeRailLayout } from "@/lib/panel-builder/rail-layout";
+import { layoutPreviewDto, type LayoutChoice, type LayoutPreviewDto } from "@/lib/panel-builder/layout-options";
 import { WorkflowError } from "@/lib/workflow/state-machine";
+import { grantCredits, projectRefunds } from "./credits";
 
 import { componentForConfig, createPanelProject, renumberProject, saveTree, type CreateProjectInput } from "./panel-builder";
 import { describeConfig } from "@/lib/panel-builder/configurator";
@@ -38,8 +41,8 @@ export interface DeleteResult {
 }
 
 /**
- * Smaže projekty firmy v jedné transakci (prvky a jejich domovní přístroje kaskádou). Za každý
- * nedokončený projekt mimo vzorový PB-001 vrátí 1 kredit. Fotky projektu se pak fyzicky smažou
+ * Smaže projekty firmy v jedné transakci (prvky a jejich domovní přístroje kaskádou). Za nedokončené projekty mimo
+ * vzorový PB-001 vrátí odečtené kredity (fáze 111). Fotky projektu se pak fyzicky smažou
  * z `storage/uploads` – kromě `seed/` a souborů, na které dál odkazuje jiný projekt.
  */
 export async function deletePanelProjects(
@@ -50,7 +53,7 @@ export async function deletePanelProjects(
 ): Promise<DeleteResult> {
   const unique = [...new Set(ids)];
   if (!unique.length) throw new WorkflowError("VALIDATION", "Vyberte alespoň jeden projekt.");
-  const found = await prisma.panelBoardProject.findMany({ where: { id: { in: unique }, companyId }, select: { id: true, code: true, status: true, photoUrl: true, railPhotosJson: true, qrSerial: true, _count: { select: { versions: true } } } });
+  const found = await prisma.panelBoardProject.findMany({ where: { id: { in: unique }, companyId }, select: { id: true, code: true, status: true, photoUrl: true, railPhotosJson: true, qrSerial: true, license: true, parentBoardId: true, _count: { select: { versions: true } } } });
   if (found.length !== unique.length) throw new WorkflowError("NOT_FOUND", "Projekt nebyl nalezen.");
   // Fáze 103: vydaná dokumentace pod QR štítkem v terénu se nemaže (karta /q/EL-… musí dál fungovat)
   const published = found.filter((project) => project._count.versions > 0);
@@ -59,12 +62,11 @@ export async function deletePanelProjects(
   const targets = found.filter((project) => !skipped.includes(project.code));
   if (!targets.length) return { deleted: 0, refunded: 0, skipped, removedFiles: 0 };
 
-  const refunded = targets.filter(refundsCredit).length;
+  // Fáze 111: vrací se, co se za nedokončený projekt odečetlo (pohyby kreditů; projekt z doby před fází 111 = 15 kr.)
+  const refunded = await projectRefunds(prisma, targets.filter(refundsCredit));
   const targetIds = targets.map((project) => project.id);
-  await prisma.$transaction([
-    prisma.panelBoardProject.deleteMany({ where: { id: { in: targetIds }, companyId } }),
-    ...(refunded ? [prisma.registeredCompany.update({ where: { id: companyId }, data: { creditsRemaining: { increment: refunded } } })] : []),
-  ]);
+  await prisma.panelBoardProject.deleteMany({ where: { id: { in: targetIds }, companyId } });
+  if (refunded) await grantCredits(prisma, companyId, refunded, { reason: "REFUND", refType: "PANEL_PROJECT", note: `Smazání nedokončených projektů: ${targets.map((project) => project.code).join(", ")}`.slice(0, 190) });
 
   // Soubory až po potvrzené transakci; sdílené fotky (stejná URL v jiném projektu) zůstanou
   let removedFiles = 0;
@@ -163,6 +165,8 @@ async function createPlanProject(
       where: { id: project.id },
       data: {
         ...railColumns(board.rails.map((rail) => rail.capacity)),
+        // Fáze 111: dvě pole vedle sebe / přepážka silnoproud – slaboproud / koncepce z průvodce
+        ...(board.layout && (board.layout.fields === 2 || board.layout.partitionAfterRail || board.layout.concept !== "single") ? { railLayoutJson: serializeRailLayout(board.layout) } : {}),
         ...(board.enclosure ? { enclosureId: board.enclosure.id, ...enclosureProjectData(board.enclosure) } : {}),
         ...options.data,
       },
@@ -268,6 +272,8 @@ export interface FloorplanProjectInput extends Omit<CreateProjectInput, "photoUr
   draft: unknown;
   /** Fáze 60: výrobce přístrojů celého rozváděče (výchozí ABB). */
   manufacturer?: string | null;
+  /** Fáze 111: koncepce uspořádání skříně a lišt z průvodce (a zvolené skříně z databáze). */
+  layout?: LayoutChoice | null;
 }
 
 /**
@@ -358,14 +364,18 @@ export function parseFeederInfo(json: string | null | undefined): FeederInfo | n
   }
 }
 
-export async function createProjectFromFloorplan(prisma: PrismaClient, input: FloorplanProjectInput) {
+/**
+ * Fáze 111: společný kontext generování z půdorysu (okruhy, chytrá domácnost, prvky, skříně z databáze, výrobce) –
+ * sdílí náhled koncepcí uspořádání skříně a samotné generování.
+ */
+async function floorplanBoardContext(prisma: PrismaClient, input: { draft: unknown; manufacturer?: string | null; supplySystem?: string | null }) {
   const draft = parseDraft(input.draft);
   if (!draft) throw new WorkflowError("VALIDATION", "Půdorys se nepodařilo načíst.");
   const { build, circuits, summary } = analyzeFloorplan(draft);
   if (!circuits.circuits.length) throw new WorkflowError("VALIDATION", "V půdorysu není žádný silový vývod (zásuvka, světlo nebo spotřebič).");
   const enclosures = (await prisma.panelEnclosure.findMany({ orderBy: { totalModules: "asc" } })).filter((row) => !isHiddenManufacturer(row.manufacturer));
   // Fáze 55: soustava z nákresu půdorysu (přepínač v editoru), jinak z dialogu
-  const supply = supplyById(draft.supplySystem ?? input.supplySystem);
+  const supply = supplyById(draft.supplySystem ?? input.supplySystem ?? undefined);
   // Fáze 60: skříň přednostně od výrobce přístrojů, jinak nejmenší vyhovující z databáze
   const manufacturer = input.manufacturer?.trim() || "ABB";
   const own = enclosures.filter((row) => sameManufacturer(row.manufacturer, manufacturer));
@@ -388,12 +398,32 @@ export async function createProjectFromFloorplan(prisma: PrismaClient, input: Fl
   }));
   // Fáze 77: klasická instalace – řídicí jednotka DALI, zdroje a řadiče LED 24 V, hlídač zaplavení s uzávěrem vody
   const field = draft.installation === "bus_loxone" ? null : classicDeviceModules(fieldDemand(draft));
-  const switchboard = (plan: Parameters<typeof buildSwitchboardFromCircuits>[0], withSmart: boolean) => {
+  const switchboard = (plan: Parameters<typeof buildSwitchboardFromCircuits>[0], withSmart: boolean, choice: LayoutChoice | null = null) => {
     const extra = withSmart ? { smart, ...(field?.modules.length ? { devices: field.modules } : {}) } : {};
+    // Fáze 111: koncepce z průvodce – všechny skříně z databáze, přednost výrobci přístrojů
+    if (choice) return buildSwitchboardFromCircuits(plan, { mode: draft.installation, enclosures, supplyPhases: supply.phases, occupancy: draft.occupancy, ...extra, layout: choice.concept, enclosureId: choice.enclosureId ?? null, secondEnclosureId: choice.secondEnclosureId ?? null, manufacturer });
     // Fáze 93: BD4 – vypínací spoušť CENTRAL STOP a podružný elektroměr MID v každém rozváděči nájemní jednotky
-    const preferred = own.length ? buildSwitchboardFromCircuits(plan, { mode: draft.installation, enclosures: own, supplyPhases: supply.phases, occupancy: draft.occupancy, ...extra }) : null;
-    return preferred?.enclosure ? preferred : buildSwitchboardFromCircuits(plan, { mode: draft.installation, enclosures, supplyPhases: supply.phases, occupancy: draft.occupancy, ...extra });
+    const preferred = own.length ? buildSwitchboardFromCircuits(plan, { mode: draft.installation, enclosures: own, supplyPhases: supply.phases, occupancy: draft.occupancy, manufacturer, ...extra }) : null;
+    return preferred?.enclosure ? preferred : buildSwitchboardFromCircuits(plan, { mode: draft.installation, enclosures, supplyPhases: supply.phases, occupancy: draft.occupancy, manufacturer, ...extra });
   };
+  const mainCircuits = circuitsOfBoard(circuits, MAIN_BOARD);
+  return { draft, build, circuits, summary, enclosures, supply, manufacturer, smartPlan, field, switchboard, mainCircuits, mainPlan: { ...circuits, circuits: mainCircuits } };
+}
+
+/**
+ * Fáze 111: náhled průvodce „📐 Uspořádání skříně a lišt“ před generováním z půdorysu – čtyři koncepce (dvoupolová
+ * skříň Silnoproud | Slaboproud, široké 24M lišty, kompaktní 18M lišty, dva rozváděče) se skutečnými skříněmi z databáze.
+ */
+export async function previewFloorplanLayouts(prisma: PrismaClient, input: { draft: unknown; manufacturer?: string | null }): Promise<LayoutPreviewDto> {
+  const context = await floorplanBoardContext(prisma, input);
+  // Skupiny přístrojů hlavního rozváděče včetně chytré domácnosti a prvků půdorysu (stejně jako při generování)
+  const board = context.switchboard(context.mainPlan, true, { concept: "two_field" });
+  const options = layoutOptions(board.packGroups, context.enclosures, { manufacturer: context.manufacturer, limit: 3 });
+  return layoutPreviewDto(options, { totalModules: board.totalModules, totalPowerLossW: board.totalPowerLossW, smart: board.packGroups.some((group) => group.low) });
+}
+
+export async function createProjectFromFloorplan(prisma: PrismaClient, input: FloorplanProjectInput) {
+  const { draft, build, circuits, summary, supply, manufacturer, smartPlan, field, switchboard, mainCircuits, mainPlan } = await floorplanBoardContext(prisma, input);
   const header = { name: input.name, customerName: input.customerName, installationSite: input.installationSite, companyId: input.companyId, manufacturerInfo: input.manufacturerInfo, createdById: input.createdById, supplySystem: supply.id, occupancy: draft.occupancy };
   // Fáze 57: prostředí dle ČSN 33 2000-5-51 ed. 3 zvolené v půdorysu = potvrzené prostředí dokumentace
   const environment = draft.environment ? environmentOf(draft.environment) : null;
@@ -402,23 +432,41 @@ export async function createProjectFromFloorplan(prisma: PrismaClient, input: Fl
   const multiple = subBoards.length > 0;
   const elementsOf = (code: string) => new Set([...build.boardOf.entries()].filter(([, board]) => board === code).map(([nodeId]) => build.elementOf.get(nodeId)?.id).filter((id): id is string => Boolean(id)));
   const shared = { ...(environment ? { environment: environment.id, ambientTempC: environment.ambientTempC, environmentConfirmedAt: new Date() } : {}), dominantManufacturer: manufacturer, floorplanJson: JSON.stringify(draft) };
-  const mainCircuits = circuitsOfBoard(circuits, MAIN_BOARD);
-  const mainPlan = { ...circuits, circuits: mainCircuits };
-  const main = await createPlanProject(prisma, header, mainPlan, switchboard(mainPlan, true), {
+  // Fáze 111: koncepce uspořádání z průvodce; dva rozváděče = RH1 silnoproud + RH2 slaboproud / Smart Home
+  const mainBoard = switchboard(mainPlan, true, input.layout ?? null);
+  const twoBoards = Boolean(mainBoard.second?.devices.length);
+  const mainCode = multiple ? MAIN_BOARD : twoBoards ? "RH1" : null;
+  const main = await createPlanProject(prisma, header, mainPlan, mainBoard, {
     data: {
       ...shared,
       cableReportJson: JSON.stringify(cableReportOf(summary, draft.profile, multiple ? new Set(mainCircuits.map((circuit) => circuit.id)) : undefined)),
-      ...(multiple ? { boardCode: MAIN_BOARD } : {}),
+      ...(mainCode ? { boardCode: mainCode } : {}),
     },
     manufacturer,
     afterItems: async (items) => [...(smartPlan?.warnings ?? []).map((warning) => `Chytrá domácnost (${smartPlan!.system.label}): ${warning}`), ...(field?.warnings ?? []), ...(await assignWiringDevices(prisma, items, mainPlan, build, draft, multiple ? elementsOf(MAIN_BOARD) : undefined))],
   });
-  if (!multiple) return { ...main, boards: [] as { code: string; id: string }[] };
+  if (!multiple && !twoBoards) return { ...main, boards: [] as { code: string; id: string }[] };
   const mainProject = await prisma.panelBoardProject.findUniqueOrThrow({ where: { id: main.id }, select: { code: true } });
   const designations = circuitDesignations(mainCircuits);
-  const boards: { code: string; id: string }[] = [{ code: MAIN_BOARD, id: main.id }];
+  const boards: { code: string; id: string }[] = [{ code: mainCode ?? MAIN_BOARD, id: main.id }];
   const warnings = [...main.warnings];
   try {
+    if (twoBoards && mainBoard.second) {
+      // RH2: moduly chytré domácnosti, zdroje a sběrnice – napájené z jističe řídicích obvodů v RH1 (vrchol stromu RH2)
+      const second = mainBoard.second;
+      const keys = new Set(second.devices.map((device) => device.key));
+      for (const device of second.devices) if (device.parentKey && !keys.has(device.parentKey)) device.parentKey = null;
+      const supplyItem = await prisma.panelBoardItem.findFirst({ where: { projectId: main.id, circuitLabel: "Ovládání a řídicí obvody" }, select: { designation: true } });
+      const info: FeederInfo = { board: "RH2", fromBoard: mainCode ?? MAIN_BOARD, fromProjectId: main.id, fromProjectCode: mainProject.code, designation: supplyItem?.designation ?? null, protection: "B6 1P", cable: "CYKY-J 3×1,5", lengthM: 1, voltageDropPct: 0, designW: Math.max(10, Math.round(second.totalPowerLossW)) };
+      const plan = { circuits: [], io: { di: 0, do: 0, impulseRelays: 0, treeDevices: 0 }, bom: [], switching: [], warnings: [] };
+      const secondBoard = { ...mainBoard, devices: second.devices, rails: second.rails, enclosure: second.enclosure, warnings: [], layout: SINGLE_LAYOUT, second: null, totalPowerLossW: second.totalPowerLossW, bom: [] };
+      const created = await createPlanProject(prisma, { ...header, name: `${input.name} – RH2 Slaboproud / Smart Home`.slice(0, 120) }, plan as unknown as Parameters<typeof createPlanProject>[2], secondBoard, {
+        data: { ...shared, boardCode: "RH2", parentBoardId: main.id, feederJson: JSON.stringify(info) },
+        manufacturer,
+      });
+      boards.push({ code: "RH2", id: created.id });
+      warnings.push(...created.warnings.map((warning) => `RH2: ${warning}`));
+    }
     for (const board of subBoards) {
       const own = circuitsOfBoard(circuits, board.code);
       const plan = { circuits: own, io: { di: 0, do: 0, impulseRelays: 0, treeDevices: 0 }, bom: [], switching: [], warnings: [] };

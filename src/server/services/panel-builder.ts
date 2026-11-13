@@ -14,7 +14,8 @@ import { thermalDevices, thermalEnclosure, type ThermalItemInput } from "@/lib/p
 import { ancestors, isConnected, isPhaseAssignment, proposeTree, renumber, treeNodeFrom, validateTree, type TreeAssignment } from "@/lib/panel-builder/tree";
 import { calculateThermal } from "@/lib/thermalCalculation";
 import { DEFAULT_RAIL_MODULES, MAX_RAILS, railCapacities, railColumns, withRailAdded, withRailRemoved } from "@/lib/panel-builder/rails";
-import { brandLabel, enclosureRails, railLimits } from "@/lib/panel-builder/enclosure-choice";
+import { brandLabel, enclosureLayout, enclosureRails, railLimits } from "@/lib/panel-builder/enclosure-choice";
+import { SINGLE_LAYOUT, layoutAfterRailRemoved, parseRailLayout, serializeRailLayout } from "@/lib/panel-builder/rail-layout";
 import { enclosureProjectData } from "@/lib/panel-builder/enclosures";
 import { supplyById, supplyColumns } from "@/lib/panel-builder/supply";
 import { ENVIRONMENT_BLOCKER } from "@/lib/panel-builder/environments";
@@ -144,6 +145,8 @@ export async function createPanelProject(prisma: PrismaClient, input: CreateProj
       ...input.dims,
       ...(input.designMode === "DESIGN" ? { designMode: "DESIGN", photoUrl: null, status: "RECOGNIZED" as const, ...railColumns([DEFAULT_RAIL_MODULES]) } : {}),
       ...(enclosure ? { enclosureId: enclosure.id, enclosureFixed: true, ...enclosureProjectData(enclosure), ...(input.designMode === "DESIGN" ? railColumns(enclosureRails(enclosure)) : {}) } : {}),
+      // Fáze 111: dvoupolová skříň (2 pole po 12 M) – lišty ve dvou polích vedle sebe
+      ...(enclosure && input.designMode === "DESIGN" && enclosureLayout(enclosure) ? { railLayoutJson: serializeRailLayout({ ...SINGLE_LAYOUT, concept: "two_field", fields: 2, fieldARails: enclosureLayout(enclosure)!.fieldARails, fieldBLow: true }) } : {}),
     },
   });
 }
@@ -743,7 +746,8 @@ export async function deleteRail(prisma: PrismaClient, projectId: string, rail: 
     ...project.items
       .filter((item) => item.dinRailIndex > rail)
       .map((item) => prisma.panelBoardItem.update({ where: { id: item.id }, data: { dinRailIndex: item.dinRailIndex - 1 } })),
-    prisma.panelBoardProject.update({ where: { id: projectId }, data: railColumns(withRailRemoved(railCapacities(project), rail)) }),
+    // Fáze 111: pole vedle sebe / přepážka se posunou s lištami
+    prisma.panelBoardProject.update({ where: { id: projectId }, data: { ...railColumns(withRailRemoved(railCapacities(project), rail)), ...(project.railLayoutJson ? { railLayoutJson: serializeRailLayout(layoutAfterRailRemoved(parseRailLayout(project.railLayoutJson, project.dinRailsCount), rail, project.dinRailsCount)) } : {}) } }),
   ]);
   await renumberProject(prisma, projectId);
   return { removed: removed.length };

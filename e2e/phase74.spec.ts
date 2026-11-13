@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { goPhase, phaseForPalette, rightTab } from "./floorplan-phases";
+import { goPhase, phaseForPalette, rightTab, confirmLayoutWizard } from "./floorplan-phases";
 
 // Fáze 74: soupis okruhů s vrstvami a výběrem okruhu (úprava trasy jen u něj), plovoucí nabídka okruhu u zásuvky,
 // podružný rozváděč s přiřazením okruhů a generováním propojených rozváděčů, ochranná zóna umyvadla, barva rámečku
@@ -198,6 +198,7 @@ test("umyvadlo s ochrannou zónou, barva rámečku zvlášť, rozváděč RH + R
   await expect(page.getByTestId("generate-boards")).toContainText("RH + RP1");
   await page.getByLabel("Název rozváděče").fill("RD Novák E2E 74");
   await page.getByTestId("generate-from-floorplan").click();
+  await confirmLayoutWizard(page);
   await expect(page.getByText(/Rozváděče RH \+ RP1 jsou propojené projekty/)).toBeVisible({ timeout: 90_000 });
   await page.waitForURL(/\/panel-builder\/[^/]+$/, { timeout: 90_000 });
 

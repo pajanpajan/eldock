@@ -20,7 +20,7 @@ export function SiteHeader({ clientZone, showcase, current }: { clientZone: Site
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur" data-testid="site-header">
       <div className="mx-auto flex min-h-16 w-full max-w-6xl items-center gap-4 px-4 sm:px-6">
-        <Link href="/" className="rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50" aria-label="Eldock – úvodní stránka">
+        <Link href="/" className="rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50" aria-label="Eldock – úvodní stránka" data-testid="logo-home">
           <Logo />
         </Link>
         <nav aria-label="Hlavní navigace" className="hidden items-center gap-0.5 lg:flex">

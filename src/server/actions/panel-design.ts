@@ -16,6 +16,9 @@ import { saveRoutineTest, setStandardEdition } from "@/server/services/panel-des
 import { ROUTINE_TEST_POINTS } from "@/lib/legislation-2027";
 import { listEnclosures, moveRail, placeComponents, placeLintDevices, previewConfig, releaseEnclosureLimit, saveApplianceLibrary, saveCircuitChips, selectEnclosure, setCompanyBranding, setEnvironment, setRailCapacity, type ConfigPreview } from "@/server/services/panel-design";
 import { MAX_CHIPS, type ChipSet } from "@/lib/panel-builder/circuit-chips";
+import { applyProjectLayout, previewProjectLayouts, setAllRailCapacities, setRailFields } from "@/server/services/panel-design";
+import { LAYOUT_CONCEPTS } from "@/lib/panel-builder/rail-layout";
+import type { LayoutChoice, LayoutPreviewDto } from "@/lib/panel-builder/layout-options";
 import { MAX_APPLIANCES, parseApplianceList } from "@/lib/panel-builder/appliances";
 
 import type { ActionResult } from "./workflow";
@@ -386,3 +389,65 @@ export async function setProjectFanAction(projectId: string, fanId: string | nul
     return actionFailure(error, "Ventilátor se nepodařilo uložit.");
   }
 }
+
+// ---------------------------------------------------------------------------
+//  Fáze 111: 📐 Uspořádání skříně a lišt (Silnoproud / Slaboproud)
+// ---------------------------------------------------------------------------
+
+const layoutChoiceSchema = z.object({
+  concept: z.enum(LAYOUT_CONCEPTS as unknown as [string, ...string[]]),
+  enclosureId: id.nullable().optional(),
+  secondEnclosureId: id.nullable().optional(),
+});
+
+/** Náhled čtyř koncepcí uspořádání osazeného rozváděče se skutečnými skříněmi z databáze. */
+export async function previewProjectLayoutsAction(projectId: string): Promise<ActionResult<LayoutPreviewDto>> {
+  if (!id.safeParse(projectId).success) return { ok: false, error: "Neplatný projekt." };
+  try {
+    await guardEditableProject(projectId);
+    return { ok: true, data: await previewProjectLayouts(prisma, projectId) };
+  } catch (error) {
+    return actionFailure(error, "Koncepce uspořádání se nepodařilo spočítat.");
+  }
+}
+
+/** Přeuspořádání rozváděče podle zvolené koncepce (dva rozváděče = nový propojený projekt RH2 bez kreditu). */
+export async function applyProjectLayoutAction(projectId: string, choice: LayoutChoice): Promise<ActionResult<{ rails: number; enclosure: string | null; secondId: string | null }>> {
+  const parsed = layoutChoiceSchema.safeParse(choice);
+  if (!id.safeParse(projectId).success || !parsed.success) return { ok: false, error: "Neplatná koncepce uspořádání." };
+  try {
+    await guardEditableProject(projectId);
+    const result = await applyProjectLayout(prisma, projectId, parsed.data as LayoutChoice);
+    revalidatePath("/panel-builder", "layout");
+    return { ok: true, data: { rails: result.rails, enclosure: result.enclosure, secondId: result.secondId } };
+  } catch (error) {
+    return actionFailure(error, "Uspořádání se nepodařilo použít.");
+  }
+}
+
+/** „Šířka všech lišt“ – všechny lišty na zvolenou šířku a přístroje znovu na lišty. */
+export async function setAllRailCapacitiesAction(projectId: string, modules: number): Promise<ActionResult<{ rails: number }>> {
+  if (!id.safeParse(projectId).success || !z.number().int().min(MIN_RAIL_MODULES).max(MAX_RAIL_MODULES).safeParse(modules).success) return { ok: false, error: `Šířka lišty musí být ${MIN_RAIL_MODULES}–${MAX_RAIL_MODULES} modulů.` };
+  try {
+    await guardEditableProject(projectId);
+    const result = await setAllRailCapacities(prisma, projectId, modules);
+    revalidatePath(`/panel-builder/${projectId}`, "layout");
+    return { ok: true, data: { rails: result.rails } };
+  } catch (error) {
+    return actionFailure(error, "Šířku lišt se nepodařilo změnit.");
+  }
+}
+
+/** „Sloupce (Pole): 1 pole / 2 pole vedle sebe (Silnoproud | Slaboproud)“. */
+export async function setRailFieldsAction(projectId: string, fields: 1 | 2, fieldARails?: number | null): Promise<ActionResult<{ fields: 1 | 2; fieldARails: number }>> {
+  if (!id.safeParse(projectId).success || (fields !== 1 && fields !== 2) || (fieldARails !== undefined && fieldARails !== null && !rail.safeParse(fieldARails).success)) return { ok: false, error: "Neplatné rozdělení polí." };
+  try {
+    await guardEditableProject(projectId);
+    const result = await setRailFields(prisma, projectId, fields, fieldARails ?? null);
+    revalidatePath(`/panel-builder/${projectId}`, "layout");
+    return { ok: true, data: { fields: result.layout.fields, fieldARails: result.layout.fieldARails } };
+  } catch (error) {
+    return actionFailure(error, "Rozdělení polí se nepodařilo změnit.");
+  }
+}
+

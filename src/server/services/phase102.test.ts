@@ -92,15 +92,16 @@ describe("fáze 102 – telemetrie a kontakty", () => {
     await expect(captureLead(prisma, { email: "x", role: "installer", marketing: false, context })).rejects.toThrow();
   });
 
-  it("registrace z odkazu kontaktu: předvyplnění a 45 kreditů jen jednou", async () => {
+  it("registrace z odkazu kontaktu: předvyplnění a propojení jen jednou (fáze 111: 1 testovací projekt místo 45 kreditů)", async () => {
     const { token } = await captureLead(prisma, { email: "petr@projekce.cz", role: "designer", marketing: false, context: { kind: "panel", trigger: "pdf", summary: "Rozváděč RH1" } });
     expect(await leadPrefill(prisma, token)).toMatchObject({ email: "petr@projekce.cz" });
     const company = await prisma.registeredCompany.create({
       data: { productScope: "PANEL_BUILDER", ico: "27082440", companyName: "Projekce Petr", street: "Ulice 1", city: "Praha", zip: "110 00", contactName: "Petr", email: "petr@projekce.cz", phone: "+420 777 000 000", passwordHash: "x", termsAcceptedAt: new Date() },
     });
-    expect(company.creditsRemaining).toBe(5);
+    expect(company).toMatchObject({ creditsRemaining: 0, trialFloorplanUsed: false, trialSwitchboardUsed: false });
     expect(await applyLeadBonus(prisma, token, company.id)).toBe(true);
-    expect((await prisma.registeredCompany.findUniqueOrThrow({ where: { id: company.id } })).creditsRemaining).toBe(45);
+    expect((await prisma.registeredCompany.findUniqueOrThrow({ where: { id: company.id } })).creditsRemaining).toBe(0);
+    expect((await prisma.lead.findFirstOrThrow({ where: { token } })).registeredCompanyId).toBe(company.id);
     expect(await applyLeadBonus(prisma, token, company.id)).toBe(false);
     expect(await leadPrefill(prisma, token)).toBeNull();
     expect(await applyLeadBonus(prisma, "neplatny", company.id)).toBe(false);

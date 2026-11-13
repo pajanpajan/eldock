@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { rightTab } from "./floorplan-phases";
+import { rightTab, confirmLayoutWizard } from "./floorplan-phases";
 import { PUBLIC_STATE } from "./auth";
 
 // Fáze 99 / 101: „pre-flight check“ před prezentací (`npm run verify:demo`) – veřejná prezentace /prezentace s 8 věcnými
@@ -164,6 +164,7 @@ test("🎯 2D půdorys: 3 demo scénáře na 1 klik, fáze 1–5, kusovník KOPO
   await rightTab(page, "bom");
   const started = Date.now();
   await page.getByTestId("wizard-generate").click();
+  await confirmLayoutWizard(page);
   await expect(page).toHaveURL(/\/panel-builder\/(?!floorplan)[^/]+$/, { timeout: 90_000 });
   console.log(`generování rozváděče: ${Date.now() - started} ms`);
   const panel = page.getByTestId("vector-panel");

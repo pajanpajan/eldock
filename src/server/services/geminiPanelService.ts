@@ -89,6 +89,15 @@ async function generateJson<T>(model: string, parts: Part[], schema: object): Pr
   }
 }
 
+/**
+ * Fáze 111: obecné čtení obrázku do JSON podle schématu (AI čtečka výrobního štítku zařízení). Bez GEMINI_API_KEY nebo
+ * s nepodporovaným formátem vyhodí chybu – volající přejde do demo režimu.
+ */
+export async function visionJson<T>(image: { bytes: Buffer; mimeType: string }, prompt: string, schema: object): Promise<T> {
+  if (!GEMINI_IMAGE_TYPES.includes(image.mimeType)) throw new Error("Nepodporovaný formát obrázku pro Gemini.");
+  return generateJson<T>(geminiConfig().visionModel, [{ text: prompt }, { inline_data: { mime_type: image.mimeType, data: image.bytes.toString("base64") } }], schema);
+}
+
 const CATEGORY_ENUM = { type: "STRING", enum: [...COMPONENT_CATEGORIES] };
 const num = (value: unknown) => (typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null);
 const str = (value: unknown) => (typeof value === "string" && value.trim() ? value.trim() : null);

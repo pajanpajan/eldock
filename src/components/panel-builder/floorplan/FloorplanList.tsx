@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Copy, Loader2, Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { reportActionError } from "@/components/credits/paywall";
 
 import { Button } from "@/components/ui/button";
 import { formatRelative } from "@/lib/format";
@@ -66,7 +67,7 @@ export function FloorplanList({ active, deleted }: { active: FloorplanRow[]; del
     startTransition(async () => {
       const result = await duplicateFloorplanAction(row.id);
       setBusy(null);
-      if (!result.ok) return void toast.error(result.error);
+      if (!result.ok) return void reportActionError(result);
       toast.success(`Vytvořena kopie půdorysu „${row.name}“.`);
       router.refresh();
     });

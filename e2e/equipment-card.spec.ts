@@ -36,7 +36,8 @@ test("karta zařízení: fotografie, QR štítek, tisk a přegenerování kódu"
 test("nahrání fotografie zařízení z mobilu", async ({ page }) => {
   await page.goto("/equipment/eq-sp-0330");
   await expect(page.getByTestId("equipment-photo")).toBeVisible();
-  await page.locator('input[type="file"]').setInputFiles({ name: "konvice.png", mimeType: "image/png", buffer: PNG });
+  // Fáze 111: karta má i druhý slot (výrobní štítek) – fotografie zařízení je v oblasti „Fotografie zařízení“
+  await page.getByRole("region", { name: "Fotografie zařízení" }).locator('input[type="file"]').setInputFiles({ name: "konvice.png", mimeType: "image/png", buffer: PNG });
   await expect(page.locator("[data-sonner-toast]").first()).toContainText("Fotografie SP-0330 uložena.");
   await expect(page.getByTestId("equipment-photo")).toHaveAttribute("src", /^\/api\/files\/photos\/(?!seed\/)/);
 });

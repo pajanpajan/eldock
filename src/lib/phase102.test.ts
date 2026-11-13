@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { classifyNace, mapAresSubject } from "./ares";
 import { CONSENT_STORAGE_KEY, CONSENT_VERSION, consentConfigFromEnv, consentModeState, consentServices, consentStorageValue, optionalCategories, parseConsent, serializeConsent } from "./consent";
-import { LEAD_BONUS_CREDITS, leadSchema, leadsCsv } from "./leads";
+import { LEAD_BONUS_TEXT, leadSchema, leadsCsv } from "./leads";
 import { PRIVACY_SECTIONS, PRIVACY_VERSION } from "./legal";
 import { isBotAgent, referrerHost, telemetrySchema, trafficSource } from "./telemetry";
 
@@ -88,7 +88,8 @@ describe("fáze 102 – ARES s obory CZ-NACE a kontakty z trenažéru", () => {
     expect(leadSchema.safeParse({ email: "jan@firma.cz", ico: "12345678", role: "installer", marketing: false, context }).success).toBe(false);
     expect(leadSchema.safeParse({ email: "spatne", role: "installer", marketing: false, context }).success).toBe(false);
     expect(leadSchema.safeParse({ email: "jan@firma.cz", role: "hacker", marketing: false, context }).success).toBe(false);
-    expect(LEAD_BONUS_CREDITS).toBe(45);
+    // Fáze 111: místo 45 kreditů zdarma 1 testovací projekt (zkušební půdorys + rozváděč)
+    expect(LEAD_BONUS_TEXT).toBe("1 testovací projekt zdarma");
   });
 
   it("export kontaktů: CSV s BOM, středníkem a sloupcem souhlasu s obchodními sděleními", () => {

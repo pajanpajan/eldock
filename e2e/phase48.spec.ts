@@ -36,7 +36,8 @@ test("🏠 rozváděč ze soupisu místností, ✓ stav kroků, ✏️ hlavička
 
   // Přehled: hledání + ✏️ úprava hlavičky
   await page.goto("/panel-builder");
-  await expect(page.getByTestId("panel-credits")).toContainText(`Kredity: ${before - 1}`);
+  // Fáze 111: ukázková firma (Tester) má všechny projekty zkušební se zkušebním označením – kredity se neodečítají
+  await expect(page.getByTestId("panel-credits")).toContainText(`Kredity: ${before}`);
   await page.getByRole("textbox", { name: "Hledat projekt" }).fill("mirove nam");
   const card = page.getByTestId("project-list").locator("li");
   await expect(card).toHaveCount(1);
@@ -116,7 +117,8 @@ test.describe("veřejná část bez přihlášení", () => {
   });
 
   test("📄 vzorový 6listový elaborát na úvodní stránce bez registrace", async ({ page }) => {
-    await page.goto("/");
+    // Fáze 111: vzorový elaborát je v podsekci Domovní instalace & Rozváděče (úvod = rozcestník)
+    await page.goto("/sekce/elektroinstalace");
     await page.getByTestId("sample-elaborate").click();
     const frame = page.frameLocator('iframe[title="Vzorový 6listový elaborát rozváděče"]');
     await expect(frame.getByTestId("doc-sheet-1")).toBeVisible({ timeout: 30_000 });

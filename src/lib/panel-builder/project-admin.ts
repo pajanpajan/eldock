@@ -28,7 +28,7 @@ export function filterProjects<T extends { code: string; name: string; customerN
   });
 }
 
-/** Smazání nedokončeného projektu (mimo vzorový PB-001) vrací firmě 1 kredit. */
+/** Smazání nedokončeného projektu (mimo vzorový PB-001) vrací firmě odečtené kredity (fáze 111 – pohyby kreditů). */
 export const refundsCredit = (project: { code: string; status: PanelProjectStatus }) => project.status !== "COMPLETED" && !isSampleProject(project);
 
 /**

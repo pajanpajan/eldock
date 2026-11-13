@@ -71,10 +71,9 @@ test.describe("veřejně bez přihlášení", () => {
     await expect(page.getByTestId("copy-invite")).toContainText("Pozvánka je ve schránce");
     expect(await page.evaluate(() => navigator.clipboard.readText())).toContain("https://eldock.cz/navody");
 
-    // úvodní stránka: odkaz hned vedle vzorového elaborátu, patička
-    await page.goto("/");
-    const card = page.getByTestId("segment-domov");
-    await expect(card.getByTestId("tutorials-link")).toHaveAttribute("href", "/navody");
+    // podsekce Domovní instalace & Rozváděče (fáze 111): odkaz hned vedle vzorového elaborátu, patička
+    await page.goto("/sekce/elektroinstalace");
+    await expect(page.getByTestId("tutorials-link")).toHaveAttribute("href", "/navody");
     // Od fáze 96 je odkaz v patičce dvakrát (mapa webu Domovní i „Nástroje a návody“)
     await expect(page.getByTestId("site-footer").getByRole("link", { name: "Video-návody" }).first()).toHaveAttribute("href", "/navody");
   });

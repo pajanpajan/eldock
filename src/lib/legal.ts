@@ -6,7 +6,7 @@
 
 import { COMPANY_INFO } from "./company";
 
-export const PRIVACY_VERSION = "1.6 – 13. 11. 2026";
+export const PRIVACY_VERSION = "1.7 – 13. 11. 2026";
 
 /**
  * Fáze 104: doložka ochrany databáze a autorských práv (patička webu, obchodní podmínky, zápatí PDF výstupů) – databáze
@@ -75,7 +75,7 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
     paragraphs: ["Údaje neprodáváme ani nepředáváme k marketingu. Pro provoz využíváme tyto zpracovatele:"],
     list: [
       "Hetzner Online GmbH (Německo) – hosting serveru a databáze v EU, případně úložiště záloh v EU (zálohy mimo server jsou šifrované, klíč má jen Eldock),",
-      "Google (Gemini API) – rozpoznání přístrojů z fotografií rozváděčů a čtení technických listů; odesílá se jen fotografie nebo dokument určený k analýze, který jste nahráli,",
+      "Google (Gemini API) – rozpoznání přístrojů z fotografií rozváděčů, čtení technických listů a čtení výrobních štítků zařízení (Hlídač revizí); odesílá se jen fotografie nebo dokument určený k analýze, který jste nahráli,",
       "poskytovatel odesílání e-mailů – doručení avíz, systémových zpráv a newsletteru, případně i firemní komunikační nástroj Eldocku – upozornění na novou zprávu z kontaktního formuláře (text a kontakt, bez přiložených obrázků),",
       "Google Ireland Ltd. (Google Analytics 4, Google Ads), Microsoft Ireland Operations Ltd. (Clarity), Seznam.cz, a.s. (Sklik) a LinkedIn Ireland Unlimited Company (Insight Tag) – jen pokud je služba na webu zapnutá a dáte k ní souhlas v liště cookies,",
       "Ministerstvo financí ČR (registr ARES) – podle zadaného IČO načteme veřejné údaje firmy; posíláme jen IČO.",

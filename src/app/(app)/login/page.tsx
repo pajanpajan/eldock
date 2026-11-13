@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { LoginForm } from "@/components/auth/LoginForm";
@@ -19,7 +20,10 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center gap-6 py-6">
       <div className="flex flex-col items-center gap-3 text-center">
-        <Logo className="scale-125" withTagline />
+        {/* Fáze 111: logo ELDOCK vždy na úvodní rozcestník */}
+        <Link href="/" className="rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50" aria-label="Eldock – úvodní stránka">
+          <Logo className="scale-125" withTagline />
+        </Link>
         <h1 className="text-2xl font-semibold tracking-tight">Přihlášení do Eldock</h1>
         <p className="max-w-xl text-sm text-muted-foreground">
           Elektrodokumentace a údržba závodu. Zaměstnanci firem se přihlašují e-mailem a vlastním heslem, obchodní demo výběrem účtu a heslem dema.

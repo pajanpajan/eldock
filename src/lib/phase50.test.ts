@@ -4,17 +4,18 @@ import { isSuperadminToken, signAuthToken, signSuperadminToken, superadminPasswo
 import { CREDIT_PACKAGES, creditPackage, nextVariableSymbol, normalizeIban, spdPayload, spdText, vatOf, withVat } from "@/lib/credits";
 
 describe("balíčky kreditů a DPH", () => {
-  it("3 balíčky s cenou bez DPH a dopočtem 21 % DPH", () => {
+  it("3 balíčky s cenou bez DPH a dopočtem 21 % DPH (fáze 111: nový ceník, starší balíčky jen pro zobrazení)", () => {
     expect(CREDIT_PACKAGES.map((pkg) => [pkg.code, pkg.credits, pkg.priceExclVat])).toEqual([
-      ["START_10", 10, 990],
-      ["PROFI_30", 30, 2490],
-      ["UNLIMITED_YEAR", 200, 5900],
+      ["START_30", 30, 750],
+      ["MONTER_125", 125, 2490],
+      ["FIRMA_300", 300, 4990],
     ]);
-    expect(withVat(990)).toBe(1198);
+    expect(withVat(750)).toBe(908);
     expect(withVat(2490)).toBe(3013);
-    expect(withVat(5900)).toBe(7139);
-    expect(vatOf(990)).toBe(208);
+    expect(withVat(4990)).toBe(6038);
+    expect(vatOf(750)).toBe(158);
     expect(creditPackage("NESMYSL")).toBeNull();
+    expect(creditPackage("PROFI_30")).toMatchObject({ kind: "LEGACY", credits: 30 });
   });
 
   it("variabilní symbol RRRR + pořadí, nový rok začíná od 0001", () => {

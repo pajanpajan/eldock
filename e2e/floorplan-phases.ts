@@ -70,3 +70,15 @@ export async function ensureActive(page: Page, element: Locator) {
   const all = page.getByTestId("layer-filter-all");
   if ((await all.count()) && (await all.getAttribute("aria-checked")) !== "true") await all.click();
 }
+
+/**
+ * Fáze 111: po „⚡ Vygenerovat rozváděč z půdorysu“ se otevře průvodce „📐 Uspořádání skříně a lišt“ – potvrdit
+ * doporučenou (nebo zvolenou) koncepci se skutečnou rozvodnicí z databáze.
+ */
+export async function confirmLayoutWizard(page: Page, concept?: "two_field" | "wide24" | "compact18" | "two_boards") {
+  const wizard = page.getByTestId("layout-wizard");
+  await expect(wizard).toBeVisible({ timeout: 120_000 });
+  if (concept) await wizard.getByTestId(`layout-option-${concept}`).click();
+  await wizard.getByTestId("layout-wizard-confirm").click();
+}
+

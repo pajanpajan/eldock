@@ -10,7 +10,7 @@ import { analyzePanelPhoto, analyzeRailPhoto, extractDatasheetComponents, lookup
 import { PHASE_OPTIONS, type TreeIssue } from "@/lib/panel-builder/tree";
 import { analyzeProject, assignCatalogComponent, createPanelProject, importDatasheet, addModule, addRail, configureItem, deleteItem, deleteRail, lookupComponentForItem, mergeItems, releaseDocumentation, saveThermalInputs, saveTree, searchCatalog, setIncomer, splitItem, updateItemText, type CatalogHit, type ImportedComponent } from "@/server/services/panel-builder";
 import { actionFailure, guardCompany, guardEditableItem, guardEditableProject, guardProject } from "@/server/panel-guards";
-import { consumeCredit } from "@/server/services/companies";
+import { chargeNewSwitchboard, refundCharge, settleSwitchboardCharge } from "@/server/services/credits";
 import { companyManufacturer } from "@/lib/registered-company";
 import { assertPanelFiles } from "@/server/file-access";
 import { readStoredFile } from "@/server/storage";
@@ -85,13 +85,14 @@ export async function createPanelProjectAction(input: z.input<typeof createSchem
     if (designMode === "PHOTO" && !rest.photoUrl) return { ok: false, error: "Nahrajte fotku rozváděče, nebo zvolte návrh od nuly." };
     // Fáze 68: fotky jen z vlastních nahrání firmy (před odečtením kreditu)
     await assertPanelFiles(company.id, [rest.photoUrl, ...railPhotos.map((photo) => photo.url)]);
-    // 1 kredit = 1 nový rozváděč; údaje firmy se propíšou jako výrobce rozváděče
-    await consumeCredit(prisma, company.id);
+    // Fáze 111: nový rozváděč = zkušební (1. testovací projekt) nebo 15 kreditů; údaje firmy = výrobce rozváděče
+    const charge = await chargeNewSwitchboard(prisma, company.id);
     let project: Awaited<ReturnType<typeof createPanelProject>>;
     try {
       project = await createPanelProject(prisma, { ...rest, designMode, dims: { dinRailsCount, modulesPerRail }, companyId: company.id, manufacturerInfo: companyManufacturer(company) });
+      await settleSwitchboardCharge(prisma, charge, [project.id]);
     } catch (error) {
-      await prisma.registeredCompany.update({ where: { id: company.id }, data: { creditsRemaining: { increment: 1 } } });
+      await refundCharge(prisma, charge);
       throw error;
     }
     // Návrh od nuly: čisté plátno bez analýzy fotky

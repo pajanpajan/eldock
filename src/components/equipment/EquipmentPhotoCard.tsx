@@ -28,6 +28,7 @@ export function EquipmentPhotoCard({
   inspection,
   documentStatus,
   canEdit,
+  onChanged,
 }: {
   equipmentId: string;
   tag: string;
@@ -39,6 +40,8 @@ export function EquipmentPhotoCard({
   /** Stav dokumentace (jen pevná zařízení; „V revizi“ dokumentace = oranžová / modrá). */
   documentStatus: EquipmentStatus | null;
   canEdit: boolean;
+  /** Fáze 111: dialog detailu zařízení – po nahrání fotky znovu načíst data. */
+  onChanged?: () => void;
 }) {
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
@@ -62,6 +65,7 @@ export function EquipmentPhotoCard({
         }
         toast.success(`Fotografie ${tag} uložena.`);
         router.refresh();
+        onChanged?.();
       });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Fotku se nepodařilo nahrát.");

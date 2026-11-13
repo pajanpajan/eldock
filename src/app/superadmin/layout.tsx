@@ -19,14 +19,13 @@ export default async function SuperadminLayout({ children }: LayoutProps<"/super
     <div className="flex flex-1 flex-col">
       <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur">
         <div className="mx-auto flex w-full max-w-[1800px] items-center gap-3 px-4 py-2 sm:px-6">
-          <Link href="/superadmin" className="flex items-center gap-2.5" aria-label="Velín ELDOCK">
+          {/* Fáze 111: logo ELDOCK vždy na úvodní stránku, velín má vlastní odkaz vedle */}
+          <Link href="/" className="flex items-center gap-2.5" aria-label="ELDOCK – úvodní stránka" data-testid="logo-home">
             <LogoMark className="size-8" />
-            <span className="leading-tight">
-              <span className="block text-base font-black tracking-tight">ELDOCK</span>
-              <span className="flex items-center gap-1 text-xs font-semibold text-primary">
-                <ShieldCheck className="size-3" aria-hidden /> SuperAdmin velín
-              </span>
-            </span>
+            <span className="block text-base font-black tracking-tight">ELDOCK</span>
+          </Link>
+          <Link href="/superadmin" className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-primary hover:bg-muted" aria-label="Velín ELDOCK">
+            <ShieldCheck className="size-3.5" aria-hidden /> SuperAdmin velín
           </Link>
           {signedIn ? (
             <Link href="/superadmin?tab=zpravy" className="ml-auto flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground" data-testid="superadmin-inbox">

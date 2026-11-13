@@ -1,6 +1,7 @@
 // Výstupní dokumentace rozváděče: 6 listů A4 (tiskově čisté, černá na bílé). Výkresy jsou SVG
 // generované ze stromu zapojení, oteplení počítá stejný engine jako krok 4 (oteplení).
 
+import { TRIAL_WATERMARK } from "@/lib/credits/pricing";
 import type { ReactNode } from "react";
 
 import { LogoMark } from "@/components/layout/Logo";
@@ -24,6 +25,8 @@ import { PhaseBalance, ThermalCurve, ThermalTable } from "../ThermalViews";
 import { CeLabelQr } from "./DocumentationActions";
 
 export interface DocumentationData {
+  /** Fáze 111: zkušební projekt – jemné označení „ZKUŠEBNÍ VÝSTUP – ELDOCK TRIAL“ na každém listu. */
+  trial?: boolean;
   code: string;
   name: string;
   customerName: string | null;
@@ -127,10 +130,21 @@ function SupersededWatermark({ data }: { data: DocumentationData }) {
   );
 }
 
+/** Fáze 111: jemné zkušební označení listu (zkušební projekt – 1. testovací projekt zdarma). */
+function TrialWatermark({ data }: { data: DocumentationData }) {
+  if (!data.trial) return null;
+  return (
+    <div aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden" data-testid="trial-watermark">
+      <span className="-rotate-[30deg] text-center text-[19pt] font-black tracking-wide whitespace-nowrap text-sky-700/20">{TRIAL_WATERMARK}</span>
+    </div>
+  );
+}
+
 function Sheet({ data, number, children }: { data: DocumentationData; number: number; children: ReactNode }) {
   return (
     <section id={`list-${number}`} className="doc-sheet relative mx-auto flex w-full max-w-[210mm] flex-col bg-white p-[10mm] text-[9pt] leading-snug text-black shadow-2xl shadow-black/50 sm:min-h-[297mm]" data-testid={`doc-sheet-${number}`} aria-label={`List ${number}: ${DOCUMENT_SHEETS[number - 1]}`}>
       <SupersededWatermark data={data} />
+      <TrialWatermark data={data} />
       <header className="mb-3 flex items-baseline justify-between border-b-2 border-black pb-1.5">
         <h2 className="text-[13pt] font-bold">{DOCUMENT_SHEETS[number - 1]}</h2>
         <span className="flex items-baseline gap-3 font-mono text-[8pt]">
@@ -822,6 +836,7 @@ export function FloorplanAnnex({ data, sheet, letter, title }: { data: Documenta
   return (
     <section id={`priloha-${sheet.floorId}`} className="doc-sheet relative mx-auto flex w-full max-w-[210mm] flex-col bg-white p-[10mm] text-[9pt] leading-snug text-black shadow-2xl shadow-black/50 sm:min-h-[297mm]" data-testid="doc-annex" aria-label={`Příloha ${letter}: půdorys elektroinstalace ${sheet.floorName}`}>
       <SupersededWatermark data={data} />
+      <TrialWatermark data={data} />
       <header className="mb-3 flex items-baseline justify-between border-b-2 border-black pb-1.5">
         <h2 className="text-[13pt] font-bold">{title ?? `Příloha ${letter} – půdorys elektroinstalace ${sheet.floorName}`}</h2>
         <span className="flex items-baseline gap-3 font-mono text-[8pt]">
@@ -878,6 +893,7 @@ export function FloorplanVersionSheets({ data, plan }: { data: DocumentationData
       ))}
       <section className="doc-sheet relative mx-auto flex w-full max-w-[210mm] flex-col bg-white p-[10mm] text-[9pt] leading-snug text-black shadow-2xl shadow-black/50 sm:min-h-[297mm]" data-testid="floorplan-document-bom">
         <SupersededWatermark data={data} />
+        <TrialWatermark data={data} />
         <header className="mb-3 flex items-baseline justify-between border-b-2 border-black pb-1.5">
           <h2 className="text-[13pt] font-bold">Kusovník a kabeláž – {plan.name}</h2>
           <span className="flex items-baseline gap-3 font-mono text-[8pt]">

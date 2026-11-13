@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { track } from "@/lib/telemetry-client";
+import { ACTION_PRICES, TRIAL_WATERMARK } from "@/lib/credits/pricing";
+import { showPaywall } from "@/components/credits/paywall";
 import { applianceSpecFor } from "@/lib/panel-builder/appliances";
 import { floorplanDxf } from "@/lib/panel-builder/dxf-export";
 import { isArchitecture } from "@/lib/panel-builder/fixtures";
@@ -252,7 +254,8 @@ const slug = (value: string) =>
     .replace(/^-|-$/g, "")
     .toLowerCase() || "pudorys";
 
-export function FloorplanExport({ draft, analysis, company }: { draft: FloorplanDraft; analysis: Analysis | null; company?: string | null }) {
+/** Fáze 111: `trial` = zkušební půdorys – zkušební označení výkresu (PDF i DXF) a tlačítko pro odemčení plné verze. */
+export function FloorplanExport({ draft, analysis, company, trial = null }: { draft: FloorplanDraft; analysis: Analysis | null; company?: string | null; trial?: { floorplanId: string | null; credits: number } | null }) {
   const [open, setOpen] = useState(false);
   const [paper, setPaper] = useState<Paper>("A3");
   const [fields, setFields] = useState<SheetFields>({ project: "Elektroinstalace rodinného domu", investor: "", site: "", author: company ?? "", number: "E-01" });
@@ -269,7 +272,7 @@ export function FloorplanExport({ draft, analysis, company }: { draft: Floorplan
   }, [printing]);
   const downloadDxf = () => {
     try {
-      const text = floorplanDxf(draft, analysis, { title: fields.project || "Půdorys elektroinstalace" });
+      const text = floorplanDxf(draft, analysis, { title: trial ? `${fields.project || "Půdorys elektroinstalace"} – ${TRIAL_WATERMARK}` : fields.project || "Půdorys elektroinstalace" });
       const blob = new Blob([text], { type: "application/dxf" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -286,6 +289,18 @@ export function FloorplanExport({ draft, analysis, company }: { draft: Floorplan
   };
   return (
     <>
+      {trial ? (
+        <Button
+          type="button"
+          size="sm"
+          className="gap-1.5 font-semibold"
+          title={`Zkušební půdorys – výstupy nesou označení „${TRIAL_WATERMARK}“`}
+          onClick={() => (trial.floorplanId ? showPaywall({ reason: "TRIAL_OUTPUT", action: "Plná verze 2D půdorysu", cost: ACTION_PRICES.floorplan, balance: trial.credits, unlock: { kind: "floorplan", id: trial.floorplanId } }) : toast.info("Půdorys se ještě neuložil na server."))}
+          data-testid="floorplan-unlock"
+        >
+          💎 Odemknout plnou verzi
+        </Button>
+      ) : null}
       <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => setOpen(true)} data-testid="export-pdf">
         <FileText className="size-4" aria-hidden /> 📄 Exportovat výkres do PDF (A3/A4)
       </Button>
@@ -345,6 +360,11 @@ export function FloorplanExport({ draft, analysis, company }: { draft: Floorplan
         ? createPortal(
             <div className="fp-print-root" data-testid="print-root">
               <style>{`@media screen { .fp-print-root { display: none; } } @media print { @page { size: ${paper} landscape; margin: ${MARGIN}mm; } body > *:not(.fp-print-root) { display: none !important; } .fp-print-root { display: block !important; } html, body { background: #fff !important; } }`}</style>
+              {trial ? (
+                <p style={{ margin: "0 0 2mm", padding: "1mm 3mm", border: "1px dashed #0369a1", color: "#0369a1", font: "600 9pt sans-serif", textAlign: "center" }} data-testid="print-trial-watermark">
+                  {TRIAL_WATERMARK}
+                </p>
+              ) : null}
               <PlanSheet draft={draft} analysis={analysis} paper={paper} fields={fields} />
             </div>,
             document.body,

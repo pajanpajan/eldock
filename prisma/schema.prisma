@@ -477,7 +477,11 @@ model Equipment {
 
   // Vizuální karta a QR štítek
   photoUrl            String? // fotografie zařízení (/api/files/photos/…)
-  qrToken             String? @unique // kód fyzického QR štítku – přegenerováním přestane starý štítek platit
+  /// Fáze 111: fotka výrobního štítku (druhá fotka zařízení) a údaje přečtené AI čtečkou (JSON `NameplateReading`)
+  nameplatePhotoUrl   String?
+  nameplateDataJson   String?
+  nameplateReadAt     DateTime?
+  qrToken             String?   @unique // kód fyzického QR štítku – přegenerováním přestane starý štítek platit
   /// Digitální pas baterie dle Nařízení (EU) 2023/1542 (UPS, BESS > 2 kWh) – JSON (fáze 46).
   batteryPassportJson String?
 
@@ -927,48 +931,62 @@ enum ProductScope {
 
 /// Firma registrovaná do jednoho z produktů (IČO z ARES, odpovědná osoba, souhlas s VOP a přenesením odpovědnosti).
 model RegisteredCompany {
-  id                   String       @id @default(cuid())
-  productScope         ProductScope
-  ico                  String
-  dic                  String?
-  companyName          String // propisuje se jako Výrobce rozváděče
-  street               String
-  city                 String
-  zip                  String
-  contactName          String // odpovědná osoba / projektant
-  email                String       @unique // přihlašovací e-mail
-  phone                String
-  passwordHash         String // scrypt (node:crypto), viz src/server/password.ts
-  authorizationNumber  String? // ev. č. oprávnění firmy (zákon 250/2021 Sb., § 8) nebo osvědčení revizního technika (§ 11)
-  termsAcceptedAt      DateTime
-  termsVersion         String       @default("1.0-2026-11")
-  creditsRemaining     Int          @default(5)
-  plantId              String? // vlastní závod (PLANT_MANAGEMENT)
+  id                     String       @id @default(cuid())
+  productScope           ProductScope
+  ico                    String
+  dic                    String?
+  companyName            String // propisuje se jako Výrobce rozváděče
+  street                 String
+  city                   String
+  zip                    String
+  contactName            String // odpovědná osoba / projektant
+  email                  String       @unique // přihlašovací e-mail
+  phone                  String
+  passwordHash           String // scrypt (node:crypto), viz src/server/password.ts
+  authorizationNumber    String? // ev. č. oprávnění firmy (zákon 250/2021 Sb., § 8) nebo osvědčení revizního technika (§ 11)
+  termsAcceptedAt        DateTime
+  termsVersion           String       @default("1.0-2026-11")
+  /// Fáze 111: kredity v jednotkách nového ceníku (rozváděč 15 kr., 2D půdorys 15 kr., celá zakázka 25 kr.)
+  creditsRemaining       Int          @default(0)
+  /// Fáze 111: 1 testovací projekt zdarma = 1 zkušební 2D půdorys + 1 zkušební rozváděč (výstupy se zkušebním označením)
+  trialFloorplanUsed     Boolean      @default(false)
+  trialSwitchboardUsed   Boolean      @default(false)
+  /// Fáze 111: platnost dobitých kreditů (12 měsíců od posledního dobití)
+  creditsValidUntil      DateTime?
+  /// Fáze 111: předplatné PRO (100 kreditů měsíčně) – kód tarifu, konec období a poslední měsíční připsání kreditů
+  subscriptionPlan       String?
+  subscriptionUntil      DateTime?
+  subscriptionCreditedAt DateTime?
+  /// Fáze 111: bonus k prvnímu dobití – 20 ks stříbrných QR štítků ELDOCK (série v registru štítků)
+  firstTopUpBonusAt      DateTime?
+  plantId                String? // vlastní závod (PLANT_MANAGEMENT)
   /// Firemní logo (fáze 43) – titulní list, rohové razítko výkresů a výrobní štítek CE.
-  logoUrl              String?
+  logoUrl                String?
   /// Otisk razítka a podpisu odpovědné osoby (PNG s průhledným pozadím) – prohlášení o shodě a kusová zkouška.
-  stampUrl             String?
+  stampUrl               String?
   /**
    * Rychlé štítky funkce obvodu se Smart Presety (fáze 45), JSON { chips, updatedAt }.
    */
-  circuitChipsJson     String?
+  circuitChipsJson       String?
   /// Knihovna samostatných spotřebičů 2D půdorysu (fáze 63), JSON { specs, updatedAt } – vyhrává novější.
-  applianceLibraryJson String?
+  applianceLibraryJson   String?
   /// Fáze 78: knihovna 2D půdorysu firmy – šablony sestav ve víceramečku a oblíbené položky levého panelu (JSON `FloorplanLibrary`).
-  floorplanLibraryJson String?
+  floorplanLibraryJson   String?
   /// Fáze 105: nastavení cenových nabídek (JSON `QuoteSettings` – sazba, konstrukce, DPH, velkoobchod, kalibrace NH, číslování).
-  quoteSettingsJson    String?
+  quoteSettingsJson      String?
   /// Fáze 69: zrušená firma – zůstávají jen fakturační údaje kvůli dokladům k objednávkám kreditů (bez kontaktu a přihlášení).
-  closedAt             DateTime?
-  createdAt            DateTime     @default(now())
-  updatedAt            DateTime     @updatedAt
+  closedAt               DateTime?
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
 
-  plant         Plant?              @relation(fields: [plantId], references: [id], onDelete: SetNull)
-  panelProjects PanelBoardProject[]
-  users         User[]
-  creditOrders  CreditOrder[]
-  aiFeedback    AiFeedbackReport[]
-  floorplans    Floorplan[]
+  plant               Plant?               @relation(fields: [plantId], references: [id], onDelete: SetNull)
+  panelProjects       PanelBoardProject[]
+  users               User[]
+  creditOrders        CreditOrder[]
+  /// Fáze 111: pohyby kreditů (odečty za akce, dobití, vrácení)
+  creditTransactions  CreditTransaction[]
+  aiFeedback          AiFeedbackReport[]
+  floorplans          Floorplan[]
   /// Fáze 106: zakázky výroby rozváděčů na klíč
   manufacturingOrders ManufacturingOrder[]
 
@@ -1087,19 +1105,19 @@ model CatalogComponent {
 
 /// Projekt rozváděče (pasportizace z fotky → strom zapojení → oteplení → dokumentace).
 model PanelBoardProject {
-  id                   String             @id @default(cuid())
+  id                   String              @id @default(cuid())
   name                 String
-  code                 String             @unique // "PB-001"
+  code                 String              @unique // "PB-001"
   equipmentId          String? // propuštěno do provozu = karta rozváděče v Eldocku
   customerName         String?
   /// Místo instalace rozváděče (fáze 48) – hlavička projektu a titulní list dokumentace.
   installationSite     String?
-  manufacturerInfoJson String             @default("{}") // výrobce rozváděče: { name, address, city, phone }
-  status               PanelProjectStatus @default(DRAFT)
+  manufacturerInfoJson String              @default("{}") // výrobce rozváděče: { name, address, city, phone }
+  status               PanelProjectStatus  @default(DRAFT)
   /// Fáze 103: zamykání dokumentace (rozpracováno / čeká na kusovou zkoušku / uzamčená schválená verze)
   docState             SwitchboardDocState @default(DRAFT)
   /// Fáze 103: QR štítek rozváděče z registru (EL-000001) – karta https://eldock.cz/q/EL-000001
-  qrSerial             String?            @unique
+  qrSerial             String?             @unique
 
   enclosureType          EnclosureType     @default(WALL_MOUNTED)
   enclosureMaterial      EnclosureMaterial @default(PLASTIC)
@@ -1130,6 +1148,13 @@ model PanelBoardProject {
   designMode             String            @default("PHOTO")
   /// Kapacita jednotlivých DIN lišt v modulech, JSON pole [12, 14, …]; null = všechny `modulesPerRail`.
   railModulesJson        String?
+  /// Fáze 111: uspořádání skříně a lišt (JSON `RailLayout` – koncepce, pole vedle sebe Silnoproud | Slaboproud, přepážka)
+  railLayoutJson         String?
+  /// Fáze 111: licence výstupů TRIAL (zkušební označení) | PAID | BUNDLE (celá zakázka – nabídka v ceně) | SAMPLE
+  license                String            @default("PAID")
+  /// Fáze 111: samostatně odemčená cenová nabídka a CNC výrobní balíček (8 kreditů)
+  quoteUnlockedAt        DateTime?
+  cncUnlockedAt          DateTime?
   /// Vybraná skříň z katalogu rozvodnic a její max. ztrátový výkon P_max [W].
   enclosureId            String?
   enclosurePmaxW         Float?
@@ -1165,7 +1190,7 @@ model PanelBoardProject {
   trainerPreset          String?
   /// Fáze 93: typ objektu a normativní režim – RESIDENTIAL (ČSN 33 2130 ed. 4, BD1) | COMMERCIAL_BD4 (ČSN 33 2000-7-718,
   /// bezhalogenové kabely, CENTRAL STOP, elektroměr MID) | MEDICAL_G1 (ČSN 33 2000-7-710 ed. 2, Skupina 1).
-  occupancy              String             @default("RESIDENTIAL")
+  occupancy              String            @default("RESIDENTIAL")
 
   createdById String?
   /// Registrovaná firma (fáze 41): vidí jen své rozváděče, její údaje se propisují do dokumentace.
@@ -1174,16 +1199,16 @@ model PanelBoardProject {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  equipment  Equipment?         @relation(fields: [equipmentId], references: [id], onDelete: SetNull)
-  company    RegisteredCompany? @relation(fields: [companyId], references: [id], onDelete: SetNull)
-  enclosure  PanelEnclosure?    @relation(fields: [enclosureId], references: [id], onDelete: SetNull)
-  fan        EnclosureFan?      @relation(fields: [fanId], references: [id], onDelete: SetNull)
-  items      PanelBoardItem[]
+  equipment           Equipment?           @relation(fields: [equipmentId], references: [id], onDelete: SetNull)
+  company             RegisteredCompany?   @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  enclosure           PanelEnclosure?      @relation(fields: [enclosureId], references: [id], onDelete: SetNull)
+  fan                 EnclosureFan?        @relation(fields: [fanId], references: [id], onDelete: SetNull)
+  items               PanelBoardItem[]
   /// Fáze 103: vydané verze dokumentace (1.0, 1.1 … – neaktuální zůstávají v archivu)
-  versions   SwitchboardVersion[]
-  feedback   AiFeedbackReport[]
+  versions            SwitchboardVersion[]
+  feedback            AiFeedbackReport[]
   /// Fáze 64: půdorysy, ze kterých byl rozváděč naposledy vygenerován.
-  floorplans Floorplan[]
+  floorplans          Floorplan[]
   /// Fáze 106: zakázky výroby na klíč
   manufacturingOrders ManufacturingOrder[]
 
@@ -1225,6 +1250,10 @@ model Floorplan {
   projectId        String?
   /// Smazaný půdorys (koš) – jde obnovit.
   deletedAt        DateTime?
+  /// Fáze 111: licence výstupů TRIAL (zkušební označení) | PAID | BUNDLE (celá zakázka)
+  license          String    @default("PAID")
+  /// Fáze 111: samostatně odemčená cenová nabídka půdorysu (8 kreditů; v balíčku celé zakázky zdarma)
+  quoteUnlockedAt  DateTime?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
@@ -1529,6 +1558,27 @@ model CreditOrder {
 
   @@index([companyId, createdAt])
   @@index([status])
+}
+
+/// Fáze 111: pohyb kreditů firmy – odečet za akci (rozváděč, 2D půdorys, nabídka, CNC), dobití, bonus, vrácení.
+model CreditTransaction {
+  id           String   @id @default(cuid())
+  companyId    String
+  /// + připsání, − odečet
+  amount       Int
+  balanceAfter Int
+  /// SWITCHBOARD | FLOORPLAN | BUNDLE_SWITCHBOARD | QUOTE | CNC | UNLOCK | TOP_UP | SUBSCRIPTION | REFUND | ADJUST | CONVERSION
+  reason       String
+  /// PANEL_PROJECT | FLOORPLAN | CREDIT_ORDER
+  refType      String?
+  refId        String?
+  note         String?
+  createdAt    DateTime @default(now())
+
+  company RegisteredCompany @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, createdAt])
+  @@index([refType, refId])
 }
 
 /// Hlášení chyby AI rozpoznání od testera (fáze 50) – snímek lišt a prvků v okamžiku hlášení.
@@ -1973,28 +2023,28 @@ enum SwitchboardDocState {
 
 /// Fáze 103: neměnný snímek vydané verze rozváděče (dokumentace + kusová zkouška + navázaný 2D půdorys).
 model SwitchboardVersion {
-  id                 String   @id @default(cuid())
-  projectId          String
-  major              Int
-  minor              Int
+  id                  String    @id @default(cuid())
+  projectId           String
+  major               Int
+  minor               Int
   /// „1.0“, „1.1“ …
-  version            String
+  version             String
   /// LOCKED_PUBLISHED (aktuální) | SUPERSEDED (neaktuální – nahrazeno novější verzí)
-  status             String   @default("LOCKED_PUBLISHED")
-  inspectorName      String
-  inspectorCert      String
-  measuredAt         DateTime
+  status              String    @default("LOCKED_PUBLISHED")
+  inspectorName       String
+  inspectorCert       String
+  measuredAt          DateTime
   /// JSON naměřených hodnot (Riso, PE, Zs / Ik, RCD IΔ / tA, mechanická zkouška, verdikt, poznámka)
-  measurementsJson   String
+  measurementsJson    String
   /// JSON neměnných dat 6listového elaborátu (DocumentationData v okamžiku vydání)
-  documentationJson  String
+  documentationJson   String
   /// JSON navázaného 2D půdorysu (nákres + kusovník) – null bez půdorysu
-  floorplanJson      String?
-  floorplanName      String?
-  publishedAt        DateTime @default(now())
-  supersededAt       DateTime?
+  floorplanJson       String?
+  floorplanName       String?
+  publishedAt         DateTime  @default(now())
+  supersededAt        DateTime?
   supersededByVersion String?
-  createdAt          DateTime @default(now())
+  createdAt           DateTime  @default(now())
 
   project PanelBoardProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
@@ -2010,7 +2060,7 @@ model QrLabelCounter {
 
 /// Fáze 103: série QR štítků ELDOCK vydaná firmě.
 model QrLabelBatch {
-  id                  String   @id @default(cuid())
+  id                  String    @id @default(cuid())
   companyName         String
   ico                 String?
   email               String?
@@ -2022,7 +2072,7 @@ model QrLabelBatch {
   lastSequence        Int
   count               Int
   note                String?
-  createdAt           DateTime @default(now())
+  createdAt           DateTime  @default(now())
   printedAt           DateTime?
 
   items QrLabelItem[]
@@ -2051,41 +2101,41 @@ model QrLabelItem {
 
 /// Fáze 103: schválený externí projektant ELDOCK Poolu (přístup do portálu e-mailem + přístupovým kódem).
 model PoolDesigner {
-  id           String   @id @default(cuid())
-  name         String
-  email        String   @unique
+  id         String   @id @default(cuid())
+  name       String
+  email      String   @unique
   /// scrypt otisk přístupového kódu (kód vidí jen velín při vydání)
-  accessHash   String
-  active       Boolean  @default(true)
-  createdAt    DateTime @default(now())
+  accessHash String
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
 
   tasks RedlineTask[]
 }
 
 /// Fáze 103: předání Červenky k překreslení – firemní projektant (A) nebo ELDOCK Pool (B, kdo první přijme).
 model RedlineTask {
-  id               String    @id @default(cuid())
-  changeRequestId  String    @unique
+  id              String    @id @default(cuid())
+  changeRequestId String    @unique
   /// INTERNAL_DESIGNER | POOL
-  mode             String
+  mode            String
   /// OPEN | CLAIMED | SUBMITTED | DONE | CANCELLED
-  status           String    @default("OPEN")
+  status          String    @default("OPEN")
   /// PDF | PC_SCHEMATIC | EPLAN | DWG
-  format           String    @default("PDF")
-  sheets           Int       @default(1)
-  rewardCzk        Int?
-  dueAt            DateTime?
-  description      String?
-  internalName     String?
-  internalEmail    String?
-  claimedById      String?
-  claimedAt        DateTime?
-  resultPdfUrl     String?
-  resultCadUrl     String?
-  submittedAt      DateTime?
-  revisionId       String?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  format          String    @default("PDF")
+  sheets          Int       @default(1)
+  rewardCzk       Int?
+  dueAt           DateTime?
+  description     String?
+  internalName    String?
+  internalEmail   String?
+  claimedById     String?
+  claimedAt       DateTime?
+  resultPdfUrl    String?
+  resultCadUrl    String?
+  submittedAt     DateTime?
+  revisionId      String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   changeRequest ChangeRequest @relation(fields: [changeRequestId], references: [id], onDelete: Cascade)
   claimedBy     PoolDesigner? @relation(fields: [claimedById], references: [id], onDelete: SetNull)

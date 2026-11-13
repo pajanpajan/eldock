@@ -106,6 +106,12 @@ export default async function IndustryPage() {
             <Button asChild variant="outline" className={anchorButton}>
               <Link href="/register-plant">Registrovat výrobní závod</Link>
             </Button>
+            {/* Fáze 111: samostatná sekce Hlídač revizí & Správa spotřebičů a zařízení */}
+            <Button asChild variant="outline" className={anchorButton}>
+              <Link href="/hlidac-revizi" data-testid="industry-hlidac-link">
+                🛡️ Hlídač revizí & spotřebiče
+              </Link>
+            </Button>
           </div>
         </section>
 

@@ -1,4 +1,8 @@
 import type { Metadata } from "next";
+import { ChargeNotice } from "@/components/credits/ChargeNotice";
+import { getPanelCompany } from "@/server/panel-session";
+import { ACTION_PRICES, TRIAL_WATERMARK } from "@/lib/credits/pricing";
+import { TESTER_COMPANY } from "@/lib/registered-company";
 import { notFound } from "next/navigation";
 
 import { PageTransition } from "@/components/layout/PageTransition";
@@ -63,6 +67,17 @@ export default async function PanelDocumentationPage({ params, searchParams }: P
         <PanelSteps project={project} current="documentation" />
       </div>
       <div className="flex flex-col gap-6">
+        {/* Fáze 111: zkušební projekt – výstupy se zkušebním označením, odemčení plné verze za kredity */}
+        {project.license === "TRIAL" ? (
+          <div className="no-print">
+            <ChargeNotice
+              testId="trial-project-notice"
+              tone={project.companyId === TESTER_COMPANY.id ? "demo" : "trial"}
+              text={project.companyId === TESTER_COMPANY.id ? `Ukázková firma: elaborát a nabídka nesou označení „${TRIAL_WATERMARK}“. Pro plnou verzi si zaregistrujte vlastní firmu.` : `🎁 Zkušební projekt – elaborát a cenová nabídka nesou označení „${TRIAL_WATERMARK}“. Plná verze bez označení: ${ACTION_PRICES.switchboard} kreditů.`}
+              paywall={project.companyId === TESTER_COMPANY.id ? null : { reason: "TRIAL_OUTPUT", action: "Plná verze rozváděče", cost: ACTION_PRICES.switchboard, balance: (await getPanelCompany())?.creditsRemaining ?? 0, unlock: { kind: "switchboard", id: project.id } }}
+            />
+          </div>
+        ) : null}
         <DocumentationActions
           projectId={project.id}
           // Fáze 102: co návštěvník vytvořil – do okna kontaktu u ukázkové firmy
@@ -74,7 +89,7 @@ export default async function PanelDocumentationPage({ params, searchParams }: P
         />
         {/* Fáze 105: cenová nabídka (rozváděč / kompletní zakázka) a poptávka do velkoobchodu */}
         <div className="no-print flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-3" data-testid="quote-entry">
-          <QuoteWizardModal source={quoteSource} company={{ name: project.company?.companyName ?? null, contact: project.company?.contactName ?? null, phone: project.company?.phone ?? null }} />
+          <QuoteWizardModal source={quoteSource} company={{ name: project.company?.companyName ?? null, contact: project.company?.contactName ?? null, phone: project.company?.phone ?? null }} access={{ id: project.id }} />
           <p className="text-xs text-muted-foreground">Nabídka pro zákazníka z přístrojů rozváděče{project.floorplanJson ? " a domovní instalace z 2D půdorysu" : ""} – materiál, montáž, kompletace rozváděče a revize.</p>
         </div>
         <div className="no-print">

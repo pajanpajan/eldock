@@ -127,7 +127,10 @@ import { track } from "@/lib/telemetry-client";
 import { cn } from "@/lib/utils";
 import { boxSummary, resolveBox } from "@/lib/panel-builder/mounting-boxes-catalog";
 import { compileFloorplanBom } from "@/lib/panel-builder/wiring-bom";
-import { createFloorplanProjectAction } from "@/server/actions/panel-projects";
+import { createFloorplanProjectAction, previewFloorplanLayoutsAction } from "@/server/actions/panel-projects";
+import type { LayoutChoice, LayoutPreviewDto } from "@/lib/panel-builder/layout-options";
+import { SwitchboardLayoutWizardModal } from "@/components/panel-builder/SwitchboardLayoutWizardModal";
+import { reportActionError } from "@/components/credits/paywall";
 import { createSandboxProjectAction } from "@/server/actions/panel-trainer";
 import { SANDBOX_BATH_LIGHT_ID, SANDBOX_BED_TARGET, SANDBOX_NAME, SANDBOX_SOCKET_ITEM, bathDimmerOf, sandboxDraft, sandboxProgress } from "@/lib/panel-builder/floorplan-sandbox-preset";
 import { liveChecklist } from "@/lib/panel-builder/floorplan-live-checklist";
@@ -280,6 +283,8 @@ export interface StoredFloorplan {
   updatedAt: string;
   draftJson: string;
   project: { id: string; code: string; name: string } | null;
+  /** Fáze 111: licence půdorysu – zkušební = zkušební označení výstupů. */
+  license?: string;
 }
 
 const snap = (value: number) => Math.round(value / SNAP_MM) * SNAP_MM;
@@ -336,6 +341,7 @@ export function FloorplanEditor({
   help = null,
   sandbox = false,
   startChoice = false,
+  credits = 0,
 }: {
   series: SeriesOption[];
   manufacturers?: { name: string; count: number }[];
@@ -350,6 +356,8 @@ export function FloorplanEditor({
   sandbox?: boolean;
   /** Fáze 92: první půdorys firmy – v pravém sloupci volba trenažér nanečisto / prázdný půdorys. */
   startChoice?: boolean;
+  /** Fáze 111: zůstatek kreditů firmy (odemčení plné verze zkušebního půdorysu). */
+  credits?: number;
 }) {
   const router = useRouter();
   const svg = useRef<SVGSVGElement>(null);
@@ -361,7 +369,7 @@ export function FloorplanEditor({
   const [boot] = useState(() => (sandbox ? sandboxBoot() : bootDraft(stored, library?.specs ?? null)));
   const { draft, setDraft, undo, redo, reset, canUndo, canRedo, gestureActive } = useDraftHistory(() => boot.initial);
   const [meta, setMeta] = useState<FloorplanMetaState>(() => ({ name: sandbox ? SANDBOX_NAME : (stored?.name ?? defaultFloorplanName()), customerName: stored?.customerName ?? null, installationSite: stored?.installationSite ?? null }));
-  const sync = useFloorplanSync({ stored: stored ? { id: stored.id, code: stored.code ?? null, version: stored.version, savedAt: stored.updatedAt } : null, draft, initialSaved: boot.initialSaved, meta, replaceDraft: reset, disabled: sandbox });
+  const sync = useFloorplanSync({ stored: stored ? { id: stored.id, code: stored.code ?? null, version: stored.version, savedAt: stored.updatedAt, license: stored.license ?? null } : null, draft, initialSaved: boot.initialSaved, meta, replaceDraft: reset, disabled: sandbox });
   // Fáze 78: šablony sestav a oblíbené položky firmy (prohlížeč + profil firmy, novější vyhrává)
   const [floorLibrary, saveFloorLibrary] = useFloorplanLibrary(libraryJson);
   // Fáze 89: průvodce v 5 krocích / kompaktní CAD lišta (prohlížeč i profil firmy), aktivní krok a vodicí čáry přichytávání
@@ -432,6 +440,8 @@ export function FloorplanEditor({
   const [levelPrompt, setLevelPrompt] = useState<({ level: InstallLevel } & ReturnType<typeof levelConversionPreview>) | null>(null);
   // Fáze 109: 🔄 převod návrhu Klasická 230 V ⇄ Chytrá domácnost se zachováním obou verzí
   const [convertOpen, setConvertOpen] = useState(false);
+  // Fáze 111: průvodce uspořádáním skříně a lišt před generováním (koncepce ze serveru + údaje formuláře)
+  const [layoutWizard, setLayoutWizard] = useState<{ preview: LayoutPreviewDto; values: { name: string; customerName: string | null; installationSite: string | null; manufacturer: string | null } } | null>(null);
   /** Fáze 59: natočení další vkládané značky = natočení předchozí (R při vkládání otočí náhled). */
   const [placeRotation, setPlaceRotation] = useState<number>(0);
   const [hover, setHover] = useState<{ x: number; y: number; shift?: boolean } | null>(null);
@@ -1965,22 +1975,45 @@ export function FloorplanEditor({
     if (uiMode !== "wizard") setShowAll(false);
   }
 
+  /** Fáze 111: ⚡ Vygenerovat rozváděč → nejdřív průvodce „📐 Uspořádání skříně a lišt“ (koncepce se skutečnými skříněmi). */
   function generate(form: FormData) {
     if (sandbox) return generateSandbox();
     if (!checklist.ready) return void toast.error(checklist.items.find((item) => !item.ok)?.label ?? "Doplňte kontrolní seznam.");
+    const values = {
+      name: String(form.get("name") ?? ""),
+      customerName: String(form.get("customer") ?? "") || null,
+      installationSite: String(form.get("site") ?? "") || null,
+      manufacturer: String(form.get("manufacturer") ?? "") || null,
+    };
+    if (!values.name.trim()) return void toast.error("Zadejte název rozváděče.");
+    startTransition(async () => {
+      const preview = await previewFloorplanLayoutsAction({ draft, manufacturer: values.manufacturer });
+      if (!preview.ok) return void toast.error(preview.error);
+      setLayoutWizard({ preview: preview.data, values });
+    });
+  }
+
+  function generateWithLayout(choice: LayoutChoice) {
+    const values = layoutWizard?.values;
+    if (!values) return;
     startTransition(async () => {
       // Fáze 64: nejdřív uložit půdorys (nový tím vznikne na serveru) – rozváděč se k němu naváže a nákres jde do historie verzí
       await sync.flush();
       const floorplanId = sync.currentId();
       const result = await createFloorplanProjectAction({
-        name: String(form.get("name") ?? ""),
-        customerName: String(form.get("customer") ?? "") || null,
-        installationSite: String(form.get("site") ?? "") || null,
+        ...values,
         draft,
-        manufacturer: String(form.get("manufacturer") ?? "") || null,
+        layout: choice,
         ...(floorplanId ? { floorplanId } : {}),
       });
-      if (!result.ok) return void toast.error(result.error);
+      if (!result.ok) {
+        // Fáze 111: nedostatek kreditů → prodejní modal místo průvodce
+        if (result.paywall) setLayoutWizard(null);
+        return void reportActionError(result);
+      }
+      setLayoutWizard(null);
+      if (result.data.license === "TRIAL") toast.info("🎁 Zkušební rozváděč (1. testovací projekt) – výstupy nesou označení „ZKUŠEBNÍ VÝSTUP – ELDOCK TRIAL“.");
+      else if (result.data.cost) toast.info(`Odečteno ${result.data.cost} kreditů${result.data.license === "BUNDLE" ? " – balíček celá zakázka (cenová nabídka v ceně)" : ""}.`);
       // Fáze 74: hlavní rozváděč + propojené podružné rozváděče z jednoho generování
       const boardsNote = result.data.boards.length > 1 ? ` Rozváděče ${result.data.boards.map((board) => board.code).join(" + ")} jsou propojené projekty.` : "";
       toast.success(`Rozváděč vygenerován: ${result.data.circuits} okruhů, ${result.data.devices} přístrojů${result.data.manufacturer ? ` ${result.data.manufacturer}` : ""}${result.data.enclosure ? `, skříň ${result.data.enclosure}` : ""}. Strom zapojení je sestavený podle hierarchie.${boardsNote}`);
@@ -2383,7 +2416,7 @@ export function FloorplanEditor({
   );
   const exportButtons = (
     <>
-        <FloorplanExport draft={deferred} analysis={analysis.ok ? analysis : null} company={company} />
+        <FloorplanExport draft={deferred} analysis={analysis.ok ? analysis : null} company={company} trial={sync.license === "TRIAL" ? { floorplanId: sync.floorplanId, credits } : null} />
     </>
   );
   const videoButton = (
@@ -3882,9 +3915,9 @@ export function FloorplanEditor({
           />
           ) : null}
           {/* Fáze 55: kusovník domovní instalace s objednacími čísly */}
-          {tab("bom") ? <WiringBomDialog rows={bom} context={bomLeadContext} /> : null}
+          {tab("bom") ? <WiringBomDialog rows={bom} context={bomLeadContext} trial={sync.license === "TRIAL"} /> : null}
           {/* Fáze 105: cenová nabídka (materiál z ceníkových cen, práce z normohodin) a export do velkoobchodu */}
-          {tab("bom") && quoteSource && company && !sandbox ? <QuoteWizardModal source={quoteSource} company={{ name: company }} triggerClassName="w-full" /> : null}
+          {tab("bom") && quoteSource && company && !sandbox ? <QuoteWizardModal source={quoteSource} company={{ name: company }} triggerClassName="w-full" access={{ id: sync.floorplanId }} /> : null}
           {tab("inventory") && inventory.length ? (
             <PanelSection id="inventory" title={`Soupis domovní instalace${floors.length > 1 ? ` (${floors.length} podlaží)` : ""}`} ariaLabel="Soupis domovní instalace" testId="wiring-inventory">
               <ul className="flex flex-col gap-0.5 text-xs">
@@ -3947,6 +3980,8 @@ export function FloorplanEditor({
         />
       ) : null}
 
+      {/* Fáze 111: průvodce uspořádáním skříně a lišt před generováním rozváděče */}
+      <SwitchboardLayoutWizardModal preview={layoutWizard?.preview ?? null} onClose={() => setLayoutWizard(null)} onConfirm={generateWithLayout} confirmLabel="⚡ Vygenerovat rozváděč" busy={pending} context="floorplan" />
       {convertOpen ? (
         <ConvertInstallationModal
           open={convertOpen}

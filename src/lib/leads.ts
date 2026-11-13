@@ -14,8 +14,11 @@ export const LEAD_ROLES = [
 export type LeadRole = (typeof LEAD_ROLES)[number]["id"];
 export const leadRoleLabel = (role: string | null | undefined) => LEAD_ROLES.find((item) => item.id === role)?.label.replace(/^\S+\s/, "") ?? "–";
 
-/** Kredity při dokončení registrace z okna zachycení kontaktu (výchozí registrace má 5). */
-export const LEAD_BONUS_CREDITS = 45;
+/**
+ * Fáze 111: registrace z okna zachycení kontaktu = stejný nárok jako každá nová firma – 1 testovací projekt zdarma
+ * (zkušební 2D půdorys + zkušební rozváděč). Dřívějších 45 kreditů zdarma (fáze 102) bylo příliš mnoho.
+ */
+export const LEAD_BONUS_TEXT = "1 testovací projekt zdarma";
 
 export const LEAD_CONSENT_VERSION = "1.0-2026-11";
 /** Informace o zpracování (čl. 13 GDPR) – zobrazená v okně, uložená ke kontaktu. */

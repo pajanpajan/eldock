@@ -18,7 +18,8 @@ import { getCurrentRole, getCurrentUser } from "@/server/session";
 
 // Tenké Server Actions: role z cookie → validace zod → služba → revalidace.
 
-export type ActionResult<T = undefined> = { ok: true; data: T } | { ok: false; error: string };
+/** Fáze 111: neúspěch může nést data prodejního modalu (`paywall`) – nedostatek kreditů, prošlá platnost. */
+export type ActionResult<T = undefined> = { ok: true; data: T } | { ok: false; error: string; paywall?: import("@/lib/credits/entitlements").PaywallInfo };
 
 const id = z.string().min(1).max(64);
 const text = (max: number) => z.string().max(max).optional().nullable();

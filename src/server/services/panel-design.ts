@@ -1,20 +1,23 @@
 import type { PrismaClient } from "@/generated/prisma/client";
-import { HIDDEN_MANUFACTURER_NAMES } from "@/lib/panel-builder/brands";
-import { catalogCategory, matchConfig, synthesizeComponent, type ItemConfig } from "@/lib/panel-builder/configurator";
+import { HIDDEN_MANUFACTURER_NAMES, isHiddenManufacturer } from "@/lib/panel-builder/brands";
+import { catalogCategory, matchConfig, parseConfig, synthesizeComponent, type ItemConfig } from "@/lib/panel-builder/configurator";
 import { parseChipSet, type ChipSet } from "@/lib/panel-builder/circuit-chips";
 import { parseApplianceLibrary, parseApplianceList, type ApplianceLibrary } from "@/lib/panel-builder/appliances";
 import { brandLabel, railLimits } from "@/lib/panel-builder/enclosure-choice";
-import { enclosureProjectData } from "@/lib/panel-builder/enclosures";
+import { enclosureProjectData, type EnclosureLike } from "@/lib/panel-builder/enclosures";
 import { environmentOf, isEnvironmentId } from "@/lib/panel-builder/environments";
 import { isStandardEdition, parseRoutineTest, routineTestVerdict, standardEditionOf, type RoutineTest } from "@/lib/legislation-2027";
 import { freeOnRail, parseRailPhotos, railCapacities, railColumns, railMoveTarget, withRailCapacity, withRailsSwapped } from "@/lib/panel-builder/rails";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 
-import { addRail, componentForConfig, renumberProject } from "./panel-builder";
+import { addRail, componentForConfig, createPanelProject, renumberProject } from "./panel-builder";
 import type { analyzeRailPhoto } from "./geminiPanelService";
 import { isMix } from "@/lib/panel-builder/catalog";
 import { matchDetection, type Detection } from "@/lib/panel-builder/matching";
 import { planRailMerge, signatureFromItem, signatureOf } from "@/lib/panel-builder/rail-merge";
+import { layoutPreviewDto, type LayoutChoice, type LayoutPreviewDto } from "@/lib/panel-builder/layout-options";
+import { SINGLE_LAYOUT, layoutNeed, layoutOptions, lowStartRail, matchLayoutEnclosures, normalizeLayout, packRails, parseRailLayout, planLayout, planTwoBoards, projectGroups, serializeRailLayout, withFields, type EnclosureMatch, type PlannedRail, type RailLayout } from "@/lib/panel-builder/rail-layout";
+import type { FeederInfo } from "./panel-projects";
 
 // Návrh rozváděče od nuly (fáze 43): kapacita a pořadí DIN lišt, osazení přístrojů z kaskádového
 // menu (drag & drop, 1× / +3× / +6×), živá karta přiřazeného přístroje, výběr skříně a razítko firmy.
@@ -27,6 +30,7 @@ async function railProject(prisma: PrismaClient, projectId: string) {
       dinRailsCount: true,
       modulesPerRail: true,
       railModulesJson: true,
+      railLayoutJson: true,
       enclosureFixed: true,
       enclosure: { select: { manufacturer: true, model: true, rows: true, modulesPerRow: true } },
       items: { select: { id: true, dinRailIndex: true, positionOnRail: true, modulesWidth: true } },
@@ -440,3 +444,225 @@ export async function insertNextTo(prisma: PrismaClient, itemId: string, mode: "
   await renumberProject(prisma, item.projectId);
   return { id: created.id, projectId: item.projectId };
 }
+
+// ---------------------------------------------------------------------------
+//  Fáze 111: 📐 Uspořádání skříně a lišt (Silnoproud / Slaboproud) v AI Panel Builderu
+// ---------------------------------------------------------------------------
+
+const round2 = (value: number) => Math.round(value * 100) / 100;
+
+async function visibleEnclosures(prisma: PrismaClient) {
+  return (await prisma.panelEnclosure.findMany({ orderBy: { totalModules: "asc" } })).filter((row) => !HIDDEN_MANUFACTURER_NAMES.includes(row.manufacturer) && !isHiddenManufacturer(row.manufacturer));
+}
+
+/** Projekt s přístroji pro koncepce (kategorie z konfigurace, jinak z katalogu; ztráty z katalogového kusu). */
+async function layoutProject(prisma: PrismaClient, projectId: string) {
+  const project = await prisma.panelBoardProject.findUnique({
+    where: { id: projectId },
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      customerName: true,
+      installationSite: true,
+      companyId: true,
+      createdById: true,
+      manufacturerInfoJson: true,
+      dominantManufacturer: true,
+      supplyPhases: true,
+      networkSystem: true,
+      occupancy: true,
+      boardCode: true,
+      parentBoardId: true,
+      dinRailsCount: true,
+      modulesPerRail: true,
+      railModulesJson: true,
+      railLayoutJson: true,
+      enclosureFixed: true,
+      items: { select: { id: true, dinRailIndex: true, positionOnRail: true, modulesWidth: true, designation: true, circuitLabel: true, parentItemId: true, configJson: true, catalogComponent: { select: { category: true, powerLossWatts: true } } } },
+    },
+  });
+  if (!project) throw new WorkflowError("NOT_FOUND", "Projekt rozváděče neexistuje.");
+  const items = project.items.map((item) => {
+    const config = parseConfig(item.configJson);
+    return {
+      id: item.id,
+      dinRailIndex: item.dinRailIndex,
+      positionOnRail: item.positionOnRail,
+      modulesWidth: item.modulesWidth,
+      designation: item.designation,
+      circuitLabel: item.circuitLabel,
+      parentItemId: item.parentItemId,
+      category: config ? catalogCategory(config) : (item.catalogComponent?.category ?? null),
+      powerLossW: item.catalogComponent?.powerLossWatts ?? 0,
+    };
+  });
+  const manufacturer = project.dominantManufacturer && project.dominantManufacturer !== "MIX" ? project.dominantManufacturer : null;
+  return { project, items, manufacturer };
+}
+
+/** Náhled čtyř koncepcí pro osazený projekt (průvodce z horní lišty plátna). */
+export async function previewProjectLayouts(prisma: PrismaClient, projectId: string): Promise<LayoutPreviewDto> {
+  const { items, manufacturer } = await layoutProject(prisma, projectId);
+  if (!items.length) throw new WorkflowError("VALIDATION", "Rozváděč zatím nemá přístroje – nejdřív je osaďte, pak zvolte uspořádání skříně a lišt.");
+  const groups = projectGroups(items);
+  const options = layoutOptions(groups, await visibleEnclosures(prisma), { manufacturer, limit: 3 });
+  return layoutPreviewDto(options, {
+    totalModules: round2(items.reduce((sum, item) => sum + item.modulesWidth, 0)),
+    totalPowerLossW: round2(items.reduce((sum, item) => sum + item.powerLossW, 0)),
+    smart: groups.some((group) => group.low),
+  });
+}
+
+const pickMatch = <E extends EnclosureLike>(matches: readonly EnclosureMatch<E>[], id: string | null | undefined) =>
+  (id ? matches.find((match) => match.enclosure.id === id) : null) ?? matches[0] ?? null;
+
+const slotsOf = <T extends { id: string }>(rails: readonly PlannedRail<T>[]) => rails.flatMap((rail, index) => rail.devices.map((device, position) => ({ id: device.id, rail: index + 1, position: position + 1 })));
+
+/**
+ * Přeuspořádání osazeného projektu podle koncepce: přístroje na lišty (skupina chrániče pohromadě, slaboproud
+ * v pravém poli / za přepážkou), šířky lišt, uspořádání a skříň z databáze. Dva rozváděče: slaboproud do nového
+ * propojeného projektu RH2 (napájení z jističe řídicích obvodů v RH1), bez odečtu kreditu.
+ */
+export async function applyProjectLayout(prisma: PrismaClient, projectId: string, choice: LayoutChoice) {
+  const { project, items, manufacturer } = await layoutProject(prisma, projectId);
+  if (!items.length) throw new WorkflowError("VALIDATION", "Rozváděč zatím nemá přístroje.");
+  const groups = projectGroups(items);
+  const enclosures = await visibleEnclosures(prisma);
+  const lossW = items.reduce((sum, item) => sum + item.powerLossW, 0);
+  let mainRails: PlannedRail<(typeof items)[number]>[];
+  let layout: RailLayout;
+  let enclosure: (typeof enclosures)[number] | null;
+  let second: { rails: PlannedRail<(typeof items)[number]>[]; enclosure: (typeof enclosures)[number] | null } | null = null;
+  if (choice.concept === "two_boards") {
+    if (project.parentBoardId) throw new WorkflowError("VALIDATION", "Podružný rozváděč nejde rozdělit na další dva – zvolte jinou koncepci.");
+    const boards = planTwoBoards(groups, enclosures, manufacturer);
+    mainRails = boards.main.rails;
+    layout = { ...SINGLE_LAYOUT, concept: "two_boards" };
+    enclosure = pickMatch(boards.main.matches, choice.enclosureId)?.enclosure ?? null;
+    if (boards.second) second = { rails: boards.second.rails, enclosure: pickMatch(boards.second.matches, choice.secondEnclosureId)?.enclosure ?? null };
+  } else {
+    const plan = planLayout(groups, choice.concept);
+    const need = layoutNeed(plan.rails, plan.layout.fields, lossW);
+    const matches = matchLayoutEnclosures(enclosures, need, { manufacturer, exactWidth: choice.concept !== "two_field" });
+    mainRails = plan.rails;
+    layout = plan.layout;
+    enclosure = pickMatch(matches, choice.enclosureId)?.enclosure ?? null;
+  }
+  const mainSlots = slotsOf(mainRails);
+  await prisma.$transaction([
+    ...mainSlots.map((slot) => prisma.panelBoardItem.update({ where: { id: slot.id }, data: { dinRailIndex: slot.rail, positionOnRail: slot.position, sortOrder: slot.rail * 100 + slot.position } })),
+    prisma.panelBoardProject.update({
+      where: { id: projectId },
+      data: {
+        ...railColumns(mainRails.map((rail) => rail.capacity)),
+        railLayoutJson: serializeRailLayout(normalizeLayout(layout, mainRails.length)),
+        // Skříň z průvodce: rozměry, krytí a P_max do oteplení; omezení lišt na řady skříně se uvolní (lišty dává koncepce)
+        ...(enclosure ? { enclosureId: enclosure.id, enclosureFixed: false, ...enclosureProjectData(enclosure) } : {}),
+        ...(second ? { boardCode: project.boardCode ?? "RH1" } : {}),
+      },
+    }),
+  ]);
+  let secondId: string | null = null;
+  if (second) {
+    const created = await createPanelProject(prisma, {
+      name: `${project.name} – RH2 Slaboproud / Smart Home`.slice(0, 120),
+      customerName: project.customerName,
+      installationSite: project.installationSite,
+      photoUrl: null,
+      designMode: "DESIGN",
+      companyId: project.companyId,
+      createdById: project.createdById,
+      dominantManufacturer: project.dominantManufacturer,
+      manufacturerInfo: JSON.parse(project.manufacturerInfoJson || "{}"),
+      occupancy: project.occupancy,
+    });
+    const slots = slotsOf(second.rails);
+    const moved = new Set(slots.map((slot) => slot.id));
+    const parentOf = new Map(items.map((item) => [item.id, item.parentItemId]));
+    const supply = items.find((item) => item.circuitLabel === "Ovládání a řídicí obvody" && !moved.has(item.id));
+    const info: FeederInfo = { board: "RH2", fromBoard: project.boardCode ?? "RH1", fromProjectId: project.id, fromProjectCode: project.code, designation: supply?.designation ?? null, protection: "B6 1P", cable: "CYKY-J 3×1,5", lengthM: 1, voltageDropPct: 0, designW: Math.max(10, Math.round(second.rails.reduce((sum, rail) => sum + rail.devices.reduce((acc, device) => acc + device.powerLossW, 0), 0))) };
+    await prisma.$transaction([
+      // Přesun přístrojů do RH2; vazba na rodiče v RH1 končí – vrchol stromu RH2 je napájený z přívodu
+      ...slots.map((slot) => {
+        const parent = parentOf.get(slot.id) ?? null;
+        return prisma.panelBoardItem.update({ where: { id: slot.id }, data: { projectId: created.id, dinRailIndex: slot.rail, positionOnRail: slot.position, sortOrder: slot.rail * 100 + slot.position, ...(parent && !moved.has(parent) ? { parentItemId: null, fedFromIncomer: true } : {}) } });
+      }),
+      prisma.panelBoardItem.updateMany({ where: { projectId, parentItemId: { in: [...moved] } }, data: { parentItemId: null } }),
+      prisma.panelBoardProject.update({
+        where: { id: created.id },
+        data: {
+          ...railColumns(second.rails.map((rail) => rail.capacity)),
+          supplyPhases: project.supplyPhases,
+          networkSystem: project.networkSystem,
+          boardCode: "RH2",
+          parentBoardId: project.id,
+          feederJson: JSON.stringify(info),
+          ...(second.enclosure ? { enclosureId: second.enclosure.id, ...enclosureProjectData(second.enclosure) } : {}),
+        },
+      }),
+    ]);
+    await renumberProject(prisma, created.id);
+    secondId = created.id;
+  }
+  await renumberProject(prisma, projectId);
+  return { rails: mainRails.length, layout, enclosure: enclosure ? `${brandLabel(enclosure.manufacturer)} ${enclosure.model}` : null, secondId, secondRails: second?.rails.length ?? 0 };
+}
+
+/**
+ * „Šířka všech lišt: 12M / 18M / 24M / 36M“ – všechny lišty najednou a přístroje znovu na lišty nové šířky (skupina
+ * chrániče pohromadě, slaboproud v pravém poli / za přepážkou / na vlastní liště); prázdné lišty zmizí. Skříň zvolená při
+ * zakládání omezí šířku.
+ */
+export async function setAllRailCapacities(prisma: PrismaClient, projectId: string, modules: number) {
+  const rails = await railProject(prisma, projectId);
+  const fixed = rails.enclosureFixed ? rails.enclosure : null;
+  if (fixed && modules > railLimits(fixed).maxModules) throw new WorkflowError("VALIDATION", `Zvolená skříň ${brandLabel(fixed.manufacturer)} ${fixed.model} má řady po ${fixed.modulesPerRow} M – širší lišty nepustí (omezení uvolníte v kroku 3 Skříň).`);
+  const { project, items } = await layoutProject(prisma, projectId);
+  const count = Math.max(1, project.dinRailsCount);
+  const current = parseRailLayout(project.railLayoutJson, count);
+  if (!items.length) {
+    const capacities = rails.capacities.map(() => modules);
+    await prisma.panelBoardProject.update({ where: { id: projectId }, data: railColumns(capacities) });
+    return { rails: capacities.length, layout: current };
+  }
+  const groups = projectGroups(items);
+  const plan =
+    current.fields === 2
+      ? planLayout(groups, "two_field", { railModules: modules })
+      : current.partitionAfterRail
+        ? planLayout(groups, "wide24", { railModules: modules })
+        : { rails: packRails(groups, modules).map((rail) => ({ ...rail, field: 0 as const, low: false })), layout: current };
+  const layout = normalizeLayout({ ...plan.layout, concept: current.concept }, plan.rails.length);
+  const slots = slotsOf(plan.rails);
+  await prisma.$transaction([
+    ...slots.map((slot) => prisma.panelBoardItem.update({ where: { id: slot.id }, data: { dinRailIndex: slot.rail, positionOnRail: slot.position, sortOrder: slot.rail * 100 + slot.position } })),
+    prisma.panelBoardProject.update({ where: { id: projectId }, data: { ...railColumns(plan.rails.map(() => modules)), ...(project.railLayoutJson || layout.fields === 2 || layout.partitionAfterRail ? { railLayoutJson: serializeRailLayout(layout) } : {}) } }),
+  ]);
+  await renumberProject(prisma, projectId);
+  return { rails: plan.rails.length, layout };
+}
+
+/**
+ * „Sloupce (Pole): 1 pole / 2 pole vedle sebe (Silnoproud | Slaboproud)“ – dvě pole dělí lišty podle první lišty se
+ * slaboproudem (PLC, zdroje, moduly chytré domácnosti), jinak napůl; `fieldARails` posune hranici polí.
+ */
+export async function setRailFields(prisma: PrismaClient, projectId: string, fields: 1 | 2, fieldARails?: number | null) {
+  const project = await prisma.panelBoardProject.findUnique({
+    where: { id: projectId },
+    select: { dinRailsCount: true, railLayoutJson: true, items: { select: { dinRailIndex: true, configJson: true, catalogComponent: { select: { category: true } } } } },
+  });
+  if (!project) throw new WorkflowError("NOT_FOUND", "Projekt rozváděče neexistuje.");
+  const count = Math.max(1, project.dinRailsCount);
+  if (fields === 2 && count < 2) throw new WorkflowError("VALIDATION", "Pro 2 pole vedle sebe potřebuje rozváděč aspoň 2 DIN lišty – přidejte lištu.");
+  const current = parseRailLayout(project.railLayoutJson, count);
+  const lowStart = lowStartRail(project.items.map((item) => {
+    const config = parseConfig(item.configJson);
+    return { dinRailIndex: item.dinRailIndex, category: config ? catalogCategory(config) : (item.catalogComponent?.category ?? null) };
+  }));
+  let layout = withFields(current, count, fields, lowStart);
+  if (fields === 2 && fieldARails) layout = normalizeLayout({ ...layout, fieldARails }, count);
+  await prisma.panelBoardProject.update({ where: { id: projectId }, data: { railLayoutJson: serializeRailLayout(layout) } });
+  return { layout };
+}
+

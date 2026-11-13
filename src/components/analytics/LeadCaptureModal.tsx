@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { isValidIco, normalizeIco } from "@/lib/ares";
-import { LEAD_BONUS_CREDITS, LEAD_MARKETING_TEXT, LEAD_PROCESSING_TEXT, LEAD_ROLES, LEAD_TRIGGER_LABEL, type LeadContext, type LeadRole } from "@/lib/leads";
+import { LEAD_BONUS_TEXT, LEAD_MARKETING_TEXT, LEAD_PROCESSING_TEXT, LEAD_ROLES, LEAD_TRIGGER_LABEL, type LeadContext, type LeadRole } from "@/lib/leads";
 import { track } from "@/lib/telemetry-client";
 import { cn } from "@/lib/utils";
 import { captureLeadAction } from "@/server/actions/leads";
@@ -103,7 +103,7 @@ function LeadCaptureModal({ request, onClose, onDone }: { request: LeadRequest; 
     document.cookie = `${LEAD_COOKIE}=1; Max-Age=${30 * 86_400}; Path=/; SameSite=Lax${location.protocol === "https:" ? "; Secure" : ""}`;
     toast.success(`Hotovo – ${LEAD_TRIGGER_LABEL[request.trigger].toLowerCase()} se připravuje.${result.data.newsletter === "pending" ? " Odběr novinek potvrďte odkazem v e-mailu." : ""}`, {
       duration: 15_000,
-      action: { label: `Dokončit registraci (${LEAD_BONUS_CREDITS} kreditů)`, onClick: () => router.push(`/panel-builder/auth?tab=register&lead=${result.data.token}`) },
+      action: { label: `Dokončit registraci (${LEAD_BONUS_TEXT})`, onClick: () => router.push(`/panel-builder/auth?tab=register&lead=${result.data.token}`) },
     });
     onDone();
   };
@@ -162,7 +162,7 @@ function LeadCaptureModal({ request, onClose, onDone }: { request: LeadRequest; 
             </p>
           ) : null}
           <Button type="submit" className="h-auto min-h-11 gap-2 py-2 font-bold whitespace-normal" disabled={busy} data-testid="lead-submit">
-            {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null} Stáhnout dokumentaci & získat {LEAD_BONUS_CREDITS} kreditů zdarma →
+            {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null} Stáhnout dokumentaci & získat {LEAD_BONUS_TEXT} →
           </Button>
         </form>
       </DialogContent>

@@ -14,6 +14,9 @@ import type { OrderLine } from "@/lib/quoting/wholesaler-export";
 import { IP_NOTICE } from "@/lib/legal";
 import { cn } from "@/lib/utils";
 import { buildXlsx } from "@/lib/xlsx";
+import { TRIAL_WATERMARK } from "@/lib/credits/pricing";
+import { reportActionError } from "@/components/credits/paywall";
+import { unlockOutputAction } from "@/server/actions/credits";
 import { quoteContextAction, reserveQuoteNumberAction, saveQuoteSettingsAction } from "@/server/actions/quotes";
 
 import { WholesalerExport } from "./WholesalerExport";
@@ -137,7 +140,11 @@ function NhCalibrationPanel({ calibration, plannedHours, onChange }: { calibrati
  * úprava cen a DPH, zákazník a platnost), interní žlutý banner jen pro elektrikáře a náhled nabídky pro zákazníka
  * (tisk / PDF, XLSX). Nabídka pro zákazníka neobsahuje interní pojmy kalkulace (hlídá `assertCustomerSafe`).
  */
-export function QuoteWizardModal({ source, triggerClassName, company }: { source: QuoteSource; triggerClassName?: string; company?: { name?: string | null; contact?: string | null; phone?: string | null } | null }) {
+/**
+ * Fáze 111: `access` = komu nabídka patří (projekt rozváděče / půdorys) – před tiskem a XLSX server ověří nárok: zkušební
+ * projekt = zkušební označení, balíček celá zakázka = v ceně, jinak jednorázově 8 kreditů (bez kreditů prodejní modal).
+ */
+export function QuoteWizardModal({ source, triggerClassName, company, access = null }: { source: QuoteSource; triggerClassName?: string; company?: { name?: string | null; contact?: string | null; phone?: string | null } | null; access?: { id: string | null } | null }) {
   const [open, setOpen] = useState(false);
   const [loading, startLoading] = useTransition();
   const [prices, setPrices] = useState<Record<string, { priceCzk: number; source: string }>>({});
@@ -228,9 +235,29 @@ export function QuoteWizardModal({ source, triggerClassName, company }: { source
     return number || "NAB-návrh";
   }
 
+  /** Fáze 111: nárok na nabídku pro zákazníka (null = zablokováno, prodejní modal / chyba už se ukázaly). */
+  async function gate(): Promise<{ watermark: boolean } | null> {
+    if (!access) return { watermark: false };
+    if (!access.id) {
+      toast.error("Půdorys se ještě neuložil na server – cenovou nabídku vytvoříte po prvním uložení.");
+      return null;
+    }
+    const unlocked = await unlockOutputAction("quote", access.id);
+    if (!unlocked.ok) {
+      reportActionError(unlocked);
+      return null;
+    }
+    if (unlocked.data.cost) toast.success(`Cenová nabídka odemčena za ${unlocked.data.cost} kreditů (zbývá ${unlocked.data.balance}).`);
+    return { watermark: unlocked.data.license === "TRIAL" };
+  }
+
   async function printQuote() {
+    const allowed = await gate();
+    if (!allowed) return;
     const numberNow = await finalNumber();
-    const html = customerQuoteHtml({ ...result.customer, number: numberNow }, IP_NOTICE);
+    const plain = customerQuoteHtml({ ...result.customer, number: numberNow }, IP_NOTICE);
+    // Fáze 111: zkušební projekt – jemné označení nabídky
+    const html = allowed.watermark ? plain.replace(/<body([^>]*)>/i, `<body$1><p style="margin:0 0 8px;padding:4px 8px;border:1px dashed #0369a1;color:#0369a1;font:600 11px sans-serif;text-align:center" data-trial="1">${TRIAL_WATERMARK}</p>`) : plain;
     const view = window.open("", "_blank", "noopener=no");
     if (!view) {
       download(`nabidka-${numberNow}.html`, html, "text/html;charset=utf-8");
@@ -434,8 +461,11 @@ export function QuoteWizardModal({ source, triggerClassName, company }: { source
                 variant="outline"
                 className="gap-1.5"
                 onClick={async () => {
+                  const allowed = await gate();
+                  if (!allowed) return;
                   const numberNow = await finalNumber();
-                  download(`nabidka-${numberNow}.xlsx`, buildXlsx("Nabídka", customerQuoteRows({ ...customerQuote, number: numberNow })) as BlobPart, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+                  const rows = customerQuoteRows({ ...customerQuote, number: numberNow });
+                  download(`nabidka-${numberNow}.xlsx`, buildXlsx("Nabídka", allowed.watermark ? [[TRIAL_WATERMARK], ...rows] : rows) as BlobPart, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
                 }}
                 data-testid="quote-xlsx"
               >

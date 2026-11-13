@@ -4,7 +4,8 @@ import type { PrismaClient } from "@/generated/prisma/client";
 import { panelRegistrationSchema, plantRegistrationSchema } from "@/lib/registered-company";
 
 import { verifyPassword } from "../password";
-import { authenticateCompany, consumeCredit, registerPanelCompany, registerPlantCompany, updateCompanyDetails } from "./companies";
+import { authenticateCompany, registerPanelCompany, registerPlantCompany, updateCompanyDetails } from "./companies";
+import { chargeNewSwitchboard } from "./credits";
 import { createPanelProject } from "./panel-builder";
 import { createTestDb, seedMinimal } from "./test-db";
 
@@ -36,11 +37,12 @@ const base = {
 };
 
 describe("AI Panel Builder – registrace firmy", () => {
-  it("registrace s hashem hesla, souhlasem a 5 kredity; přihlášení jen do svého produktu", async () => {
+  it("registrace s hashem hesla a souhlasem, 0 kreditů + 1 testovací projekt (fáze 111); přihlášení jen do svého produktu", async () => {
     const company = await registerPanelCompany(prisma, panelRegistrationSchema.parse(base), new Date("2026-11-03T10:00:00Z"));
-    expect(company.creditsRemaining).toBe(5);
+    expect(company.creditsRemaining).toBe(0);
+    expect(await prisma.registeredCompany.findUniqueOrThrow({ where: { id: company.id }, select: { trialFloorplanUsed: true, trialSwitchboardUsed: true } })).toEqual({ trialFloorplanUsed: false, trialSwitchboardUsed: false });
     const row = await prisma.registeredCompany.findUniqueOrThrow({ where: { id: company.id } });
-    expect(row).toMatchObject({ productScope: "PANEL_BUILDER", termsVersion: "1.1-2026-11", authorizationNumber: "E-0815/2021", dic: null });
+    expect(row).toMatchObject({ productScope: "PANEL_BUILDER", termsVersion: "1.2-2026-11", authorizationNumber: "E-0815/2021", dic: null });
     expect(row.passwordHash).toMatch(/^scrypt\$/);
     expect(row.passwordHash).not.toContain("tajneheslo");
     expect(await verifyPassword("tajneheslo", row.passwordHash)).toBe(true);
@@ -52,11 +54,12 @@ describe("AI Panel Builder – registrace firmy", () => {
     await expect(registerPanelCompany(prisma, panelRegistrationSchema.parse(base))).rejects.toThrow(/už je registrovaná/);
   });
 
-  it("kredity: 1 kredit = 1 projekt, bez kreditů projekt nevznikne; úprava firemních údajů", async () => {
+  it("kredity (fáze 111): zkušební rozváděč zdarma, další 15 kreditů, bez kreditů prodejní modal; úprava firemních údajů", async () => {
     const company = await registerPanelCompany(prisma, panelRegistrationSchema.parse(base));
-    await prisma.registeredCompany.update({ where: { id: company.id }, data: { creditsRemaining: 1 } });
-    await consumeCredit(prisma, company.id);
-    await expect(consumeCredit(prisma, company.id)).rejects.toThrow(/Došly testovací kredity/);
+    expect((await chargeNewSwitchboard(prisma, company.id)).plan).toMatchObject({ license: "TRIAL", cost: 0 });
+    await prisma.registeredCompany.update({ where: { id: company.id }, data: { creditsRemaining: 15 } });
+    expect((await chargeNewSwitchboard(prisma, company.id)).plan).toMatchObject({ license: "PAID", cost: 15 });
+    await expect(chargeNewSwitchboard(prisma, company.id)).rejects.toThrow(/potřebujete 15 kreditů, zbývá 0/);
     expect((await prisma.registeredCompany.findUniqueOrThrow({ where: { id: company.id } })).creditsRemaining).toBe(0);
 
     const project = await createPanelProject(prisma, { name: "Rozvodnice RD", customerName: null, photoUrl: null, companyId: company.id });

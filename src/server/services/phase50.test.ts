@@ -24,26 +24,33 @@ const credits = async () => (await prisma.registeredCompany.findUniqueOrThrow({ 
 describe("objednávky kreditů", () => {
   it("objednávka má VS roku, cenu s DPH a čeká na úhradu", async () => {
     const now = new Date("2026-11-05T10:00:00Z");
-    const first = await createCreditOrder(prisma, companyId, "PROFI_30", now);
-    const second = await createCreditOrder(prisma, companyId, "START_10", now);
-    expect(first).toMatchObject({ variableSymbol: "20260001", creditsCount: 30, priceCzkExclVat: 2490, priceCzkInclVat: 3013, status: "PENDING" });
+    // Fáze 111: balíčky nového ceníku (START 30 / MONTÉR 125 / FIRMA 300); dřívější kódy už objednat nejde
+    const first = await createCreditOrder(prisma, companyId, "MONTER_125", now);
+    const second = await createCreditOrder(prisma, companyId, "START_30", now);
+    expect(first).toMatchObject({ variableSymbol: "20260001", creditsCount: 125, priceCzkExclVat: 2490, priceCzkInclVat: 3013, status: "PENDING" });
+    await expect(createCreditOrder(prisma, companyId, "PROFI_30")).rejects.toThrow(/Neznámý balíček/);
     expect(second.variableSymbol).toBe("20260002");
     await expect(createCreditOrder(prisma, companyId, "ZDARMA_999")).rejects.toThrow(/Neznámý balíček/);
   });
 
   it("✅ potvrzení úhrady v transakci: PAID + paidAt + kredity firmě; podruhé nic nepřičte", async () => {
-    const order = await createCreditOrder(prisma, companyId, "START_10");
+    const order = await createCreditOrder(prisma, companyId, "START_30");
     const before = await credits();
     const paidAt = new Date("2026-11-06T08:00:00Z");
     const result = await confirmCreditOrder(prisma, order.id, paidAt);
-    expect(result.company.creditsRemaining).toBe(before + 10);
+    expect(result.company.creditsRemaining).toBe(before + 30);
+    // Fáze 111: platnost 12 měsíců a bonus k prvnímu dobití – série 20 stříbrných QR štítků v registru
+    expect(result.bonusLabels).toBe(20);
+    expect((await prisma.registeredCompany.findUniqueOrThrow({ where: { id: companyId } })).creditsValidUntil?.toISOString()).toBe("2027-11-06T08:00:00.000Z");
+    expect(await prisma.qrLabelBatch.findFirst({ where: { registeredCompanyId: companyId, count: 20 } })).not.toBeNull();
+    expect(await prisma.creditTransaction.findFirst({ where: { companyId, reason: "TOP_UP", refId: order.id } })).toMatchObject({ amount: 30 });
     expect(await prisma.creditOrder.findUniqueOrThrow({ where: { id: order.id } })).toMatchObject({ status: "PAID", paidAt });
     await expect(confirmCreditOrder(prisma, order.id)).rejects.toThrow(/už není čekající/);
-    expect(await credits()).toBe(before + 10);
+    expect(await credits()).toBe(before + 30);
   });
 
   it("storno jen čekající objednávky; stornovanou nelze potvrdit", async () => {
-    const order = await createCreditOrder(prisma, companyId, "UNLIMITED_YEAR");
+    const order = await createCreditOrder(prisma, companyId, "FIRMA_300");
     await cancelCreditOrder(prisma, order.id);
     await expect(cancelCreditOrder(prisma, order.id)).rejects.toThrow(/čekající/);
     await expect(confirmCreditOrder(prisma, order.id)).rejects.toThrow(/stornována/);

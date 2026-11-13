@@ -25,7 +25,7 @@ const credits = async () => (await prisma.registeredCompany.findUniqueOrThrow({ 
 const project = (name: string, extra: Partial<Parameters<typeof createPanelProject>[1]> = {}) => createPanelProject(prisma, { name, customerName: null, photoUrl: null, designMode: "DESIGN", companyId, ...extra });
 
 describe("🗑️ smazání projektů", () => {
-  it("smaže projekt s prvky, vrátí kredit za nedokončený a fyzicky smaže jen jeho vlastní fotky (ne seed/ ani sdílené)", async () => {
+  it("smaže projekt s prvky, vrátí kredity za nedokončený a fyzicky smaže jen jeho vlastní fotky (ne seed/ ani sdílené)", async () => {
     const own = await project("test-1");
     await prisma.panelBoardProject.update({ where: { id: own.id }, data: { photoUrl: "/api/files/photos/a.jpg", railPhotosJson: JSON.stringify({ 1: "/api/files/photos/b.jpg", 2: "/api/files/photos/seed/x.svg", 3: "/api/files/photos/shared.jpg" }) } });
     const other = await project("jiný");
@@ -37,9 +37,10 @@ describe("🗑️ smazání projektů", () => {
 
     const removed: string[] = [];
     const result = await deletePanelProjects(prisma, companyId, [own.id, done.id], { removeFile: async (url) => (removed.push(url), true) });
-    expect(result).toMatchObject({ deleted: 2, refunded: 1, skipped: [], removedFiles: 2 });
+    // Fáze 111: projekt bez pohybu kreditů (založený mimo akci) = 1 původní kredit = 15 kreditů nového ceníku
+    expect(result).toMatchObject({ deleted: 2, refunded: 15, skipped: [], removedFiles: 2 });
     expect(removed.sort()).toEqual(["/api/files/photos/a.jpg", "/api/files/photos/b.jpg"]);
-    expect(await credits()).toBe(before + 1);
+    expect(await credits()).toBe(before + 15);
     expect(await prisma.panelBoardItem.count({ where: { projectId: own.id } })).toBe(0);
     expect(await prisma.panelBoardProject.count({ where: { id: other.id } })).toBe(1);
   });
@@ -48,7 +49,7 @@ describe("🗑️ smazání projektů", () => {
     const sample = await prisma.panelBoardProject.findUniqueOrThrow({ where: { code: "PB-001" } });
     const test = await project("test 3");
     const result = await deletePanelProjects(prisma, companyId, [sample.id, test.id], { protectSample: true });
-    expect(result).toMatchObject({ deleted: 1, refunded: 1, skipped: ["PB-001"] });
+    expect(result).toMatchObject({ deleted: 1, refunded: 15, skipped: ["PB-001"] });
     expect(await prisma.panelBoardProject.count({ where: { code: "PB-001" } })).toBe(1);
     const foreign = await createPanelProject(prisma, { name: "cizí", customerName: null, photoUrl: null, designMode: "DESIGN", companyId: null });
     await expect(deletePanelProjects(prisma, companyId, [foreign.id])).rejects.toThrow(/nebyl nalezen/);

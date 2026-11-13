@@ -9,6 +9,7 @@ import { RecognitionWorkspace, type WorkspaceItem } from "@/components/panel-bui
 import { configFromComponent, parseConfig } from "@/lib/panel-builder/configurator";
 import { brandOf } from "@/lib/panel-builder/brands";
 import { railCapacities, railPhotoList } from "@/lib/panel-builder/rails";
+import { parseRailLayout } from "@/lib/panel-builder/rail-layout";
 import { vectorDeviceFrom } from "@/lib/panel-builder/vector-symbols";
 import { WIRING_CATEGORIES } from "@/lib/panel-builder/wiring-devices";
 import { ENCLOSURE_TYPES } from "@/lib/panel-builder/project";
@@ -109,6 +110,7 @@ export default async function PanelProjectPage({ params }: PageProps<"/panel-bui
         chipsJson={project.company?.circuitChipsJson ?? null}
         boardManufacturers={boardManufacturers}
         occupancy={project.occupancy}
+        railLayout={parseRailLayout(project.railLayoutJson, railCapacities(project).length)}
       />
       {/* Fáze 75: výrazný další krok dole na stránce */}
       <NextStepBar project={project} current="recognition" />

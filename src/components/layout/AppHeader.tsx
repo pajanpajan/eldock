@@ -1,11 +1,11 @@
 import Link from "next/link";
-import { Blocks, CalendarCheck, CalendarRange, FileCheck2, Globe2, Inbox, PencilRuler, ScanLine, ShieldCheck, UserRoundCog, UsersRound, type LucideIcon } from "lucide-react";
+import { Blocks, CalendarCheck, CalendarRange, FileCheck2, Globe2, Inbox, PencilRuler, Plug, ScanLine, ShieldCheck, UserRoundCog, UsersRound, type LucideIcon } from "lucide-react";
 
 import { isAccountSwitcherLocked } from "@/lib/auth";
 import type { Permission } from "@/lib/accounts";
 import { LockedNavItem } from "@/components/modules/Upsell";
 import type { FeatureKey } from "@/lib/modules";
-import { APP_HOME, auditReportHref, inspectionsHref, plannerHref, plantHref, rapidInspectionHref, ticrReportHref } from "@/lib/routes";
+import { auditReportHref, inspectionsHref, plannerHref, plantHref, rapidInspectionHref, ticrReportHref } from "@/lib/routes";
 import { getFeatures } from "@/server/modules";
 import { getAccountUsers } from "@/server/queries/accounts";
 import { getPlants } from "@/server/queries/plant";
@@ -24,6 +24,8 @@ const NAV: { href: string; label: string; srLabel: string; icon: LucideIcon; per
   // Fáze 103: portál externích projektantů ELDOCK Poolu (fronta Červenek k překreslení)
   { href: "/portal-projektantu", label: "Pool projektantů", srLabel: "Portál projektantů ELDOCK Pool", icon: Globe2, permission: "submitChange", hideInFieldView: true },
   { href: inspectionsHref, label: "Revize", srLabel: "Přehled revizí", icon: CalendarCheck, permission: "inspections", hideInFieldView: true },
+  // Fáze 111: 🛡️ Hlídač revizí & Správa spotřebičů a zařízení (budovy, místnosti, AI čtečka výrobního štítku)
+  { href: "/hlidac-revizi", label: "Hlídač revizí", srLabel: "Hlídač revizí a správa spotřebičů a zařízení", icon: Plug, permission: "inspections", hideInFieldView: true },
   { href: plannerHref, label: "Plánovač", srLabel: "Plánovač revizí", icon: CalendarRange, permission: "planner", feature: "inspections.planner" },
   { href: rapidInspectionHref, label: "Rychlá revize", srLabel: "Rychlá revize", icon: ScanLine, permission: "rapid", feature: "inspections.planner" },
   { href: auditReportHref, label: "Audit", srLabel: "Auditní report", icon: FileCheck2, permission: "audit", feature: "inspections.audit" },
@@ -41,7 +43,7 @@ export async function AppHeader() {
     return (
       <header className="border-b border-border bg-background/90">
         <div className="mx-auto flex min-h-14 w-full max-w-[1800px] items-center px-3 py-2 sm:px-6">
-          <Link href="/" className="rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50" aria-label="Eldock – úvodní stránka">
+          <Link href="/" className="rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50" aria-label="Eldock – úvodní stránka" data-testid="logo-home">
             <Logo withTagline />
           </Link>
         </div>
@@ -60,7 +62,8 @@ export async function AppHeader() {
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur">
       <div className="mx-auto flex min-h-14 w-full max-w-[1800px] flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 sm:px-6">
-        <Link href={APP_HOME} className="touch-target flex items-center rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50" aria-label="Eldock – rozcestník aplikace">
+        {/* Fáze 111: logo ELDOCK vždy na úvodní rozcestník https://eldock.cz/ */}
+        <Link href="/" className="touch-target flex items-center rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50" aria-label="Eldock – úvodní stránka" data-testid="logo-home">
           <Logo withTagline />
         </Link>
 

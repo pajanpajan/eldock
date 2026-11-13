@@ -8,6 +8,8 @@ import { prisma } from "@/lib/prisma";
 import { equipmentHref } from "@/lib/routes";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 import { regenerateQrToken, setEquipmentPhoto } from "@/server/services/equipment-card";
+import { applyNameplate } from "@/server/services/nameplate";
+import { ensureEquipmentLabel } from "@/server/services/qr-labels";
 import { getCurrentAccount } from "@/server/session";
 import { assertTenantAccess } from "@/server/tenant";
 
@@ -60,3 +62,43 @@ export async function regenerateQrLabelAction(input: z.input<typeof qrSchema>) {
     return { qrToken: result.qrToken! };
   });
 }
+
+// ---------------------------------------------------------------------------
+//  Fáze 111: 📷 výrobní štítek – potvrzení přečtených údajů a identifikační štítek EL-xxxxxx
+// ---------------------------------------------------------------------------
+
+const optional = (max: number) => z.string().trim().max(max).nullable().optional().transform((value) => value || null);
+const nameplateSchema = z.object({
+  equipmentId: id,
+  title: optional(120),
+  name: optional(120),
+  manufacturer: optional(40),
+  model: optional(60),
+  serialNumber: optional(40),
+  voltage: optional(40),
+  powerW: z.number().positive().max(10_000_000).nullable().optional().transform((value) => value ?? null),
+  currentA: z.number().positive().max(100_000).nullable().optional().transform((value) => value ?? null),
+  ipRating: optional(8),
+  protectionClass: z.enum(["I", "II", "III"]).nullable().optional().transform((value) => value ?? null),
+  usageGroup: z.enum(["A", "B", "C", "D", "E"]).nullable().optional().transform((value) => value ?? null),
+  year: z.number().int().min(1950).max(2100).nullable().optional().transform((value) => value ?? null),
+  handHeld: z.boolean().nullable().optional(),
+});
+
+/** Potvrzené údaje z výrobního štítku do karty zařízení; lhůta revize podle třídy a skupiny (ČSN 33 1600 ed. 2). */
+export async function applyNameplateAction(input: z.input<typeof nameplateSchema>) {
+  return run(nameplateSchema, input, async ({ equipmentId, ...fields }) => {
+    const result = await applyNameplate(prisma, equipmentId, fields);
+    // Identifikační štítek s QR kódem EL-xxxxxx (registr štítků, idempotentně)
+    const serial = await ensureEquipmentLabel(prisma, equipmentId);
+    revalidatePath(equipmentHref(equipmentId));
+    revalidatePath("/hlidac-revizi");
+    return { ...result, labelSerial: serial };
+  });
+}
+
+/** Přidělení identifikačního štítku EL-xxxxxx (před tiskem). */
+export async function ensureEquipmentLabelAction(input: z.input<typeof qrSchema>) {
+  return run(qrSchema, input, async ({ equipmentId }) => ({ serial: await ensureEquipmentLabel(prisma, equipmentId) }));
+}
+

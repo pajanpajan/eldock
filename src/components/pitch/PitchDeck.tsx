@@ -151,7 +151,7 @@ export function PitchDeck({ live }: { live: PitchLiveData }) {
       <style>{PRINT_CSS[mode]}</style>
       {/* Ovládání – při tisku skryté */}
       <div className="pitch-no-print sticky top-0 z-30 flex flex-wrap items-center gap-2 border-b border-slate-700/70 bg-[#090d16]/95 px-3 py-2 backdrop-blur">
-        <Link href="/" className="mr-1 text-sm font-black tracking-tight" aria-label="ELDOCK – úvodní stránka">
+        <Link href="/" className="mr-1 text-sm font-black tracking-tight" aria-label="ELDOCK – úvodní stránka" data-testid="logo-home">
           <span className="text-yellow-400">EL</span>DOCK
         </Link>
         <span className="flex overflow-hidden rounded-lg border border-slate-600 text-sm" role="radiogroup" aria-label="Režim prezentace">

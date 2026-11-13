@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { ensureActive, goPhase, phaseForPalette, rightTab } from "./floorplan-phases";
+import { ensureActive, goPhase, phaseForPalette, rightTab, confirmLayoutWizard } from "./floorplan-phases";
 
 // Fáze 57: 2D půdorys – úprava PDF podkladu (otočení, zoom, ořez, kalibrace s ověřením), značky dle ČSN EN 60617-11,
 // rezerva kabeláže, prostředí dle ČSN 33 2000-5-51 před generováním a ovládání podle úrovně instalace.
@@ -244,6 +244,7 @@ test("značky dle ČSN EN 60617-11, přesun / otočení / mazání, úroveň ins
   await expect(generate).toBeEnabled();
   await page.getByLabel("Název rozváděče").fill("RD57 sběrnice");
   await generate.click();
+  await confirmLayoutWizard(page);
   await expect(page).toHaveURL(/\/panel-builder\/(?!floorplan)[^/]+$/, { timeout: 90_000 });
   await expect(page.getByRole("heading", { level: 1 })).toContainText("RD57 sběrnice");
   await page.goto(page.url() + "/documentation");
