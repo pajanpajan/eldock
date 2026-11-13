@@ -284,7 +284,7 @@ export function ChangeRequestWizard({ equipment, schematic, openChange, annotate
       </section>
 
       {/* Velká tlačítka Zpět / Další – přilepená dole (rukavice, tablet) */}
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 pb-safe backdrop-blur">
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 pb-safe backdrop-blur" data-bottom-bar>
         <div className="mx-auto flex w-full max-w-5xl gap-3 px-3 pt-3 sm:px-6">
           <Button
             type="button"

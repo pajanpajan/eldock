@@ -19,7 +19,11 @@ async function loadFloorView(plantId: string, buildingId: string, floorId: strin
         select: {
           id: true,
           name: true,
-          plant: { select: { id: true, name: true } },
+          // Fáze 108: úprava budovy z hlavičky podlaží (kód, zkrácený název, poloha na mapě, rozměr pozemku)
+          code: true,
+          shortName: true,
+          mapPolygon: true,
+          plant: { select: { id: true, name: true, campusWidthM: true, campusDepthM: true } },
           floors: { orderBy: { level: "desc" }, select: { id: true, name: true, code: true } },
         },
       },
@@ -53,7 +57,7 @@ async function loadFloorView(plantId: string, buildingId: string, floorId: strin
             select: { version: true, approvedAt: true, createdAt: true },
           },
           inspections: {
-            where: { type: { in: [...DEADLINE_TYPES] } },
+            where: { type: { in: [...DEADLINE_TYPES] }, misuseFlaggedAt: null },
             select: { type: true, inspectionDate: true, validUntil: true, result: true },
           },
           changeRequests: {

@@ -68,13 +68,15 @@ export interface InspectionLike {
   inspectionDate: Date;
   validUntil: Date;
   result?: InspectionResult;
+  /** Fáze 108: revizní technik záznam zneplatnil (podezření ze zneužití osvědčení TIČR) – do lhůty se nepočítá. */
+  misuseFlaggedAt?: Date | null;
 }
 
-/** Revize, která určuje lhůtu: nejnovější výchozí / pravidelná. */
+/** Revize, která určuje lhůtu: nejnovější výchozí / pravidelná (bez záznamů zneplatněných technikem). */
 export function governingInspection<T extends InspectionLike>(records: readonly T[]): T | null {
   let latest: T | null = null;
   for (const record of records) {
-    if (!DEADLINE_TYPES.includes(record.type)) continue;
+    if (!DEADLINE_TYPES.includes(record.type) || record.misuseFlaggedAt) continue;
     if (!latest || record.inspectionDate.getTime() > latest.inspectionDate.getTime()) latest = record;
   }
   return latest;
@@ -84,7 +86,7 @@ export function governingInspection<T extends InspectionLike>(records: readonly 
 export function latestOfType<T extends InspectionLike>(records: readonly T[], type: InspectionType): T | null {
   let latest: T | null = null;
   for (const record of records) {
-    if (record.type !== type) continue;
+    if (record.type !== type || record.misuseFlaggedAt) continue;
     if (!latest || record.inspectionDate.getTime() > latest.inspectionDate.getTime()) latest = record;
   }
   return latest;

@@ -73,7 +73,8 @@ describe("fáze 92 – průvodce závodem, režim A", () => {
     expect(cleanTag("Rozváděč r-101", "X")).toBe("ROZVADEC-R-101");
     expect(uniqueTag("HR-1", new Set(["HR-1", "HR-1-2"]))).toBe("HR-1-3");
     expect(nextBuildingCode(["A", "b"])).toBe("C");
-    expect(freeHallSpot(["8,10 36,10 36,30 8,30"])).toMatchObject({ x: 40, y: 10 });
+    // Fáze 108: první volné místo bez překryvu (s odstupem 2 %), ne pevná pozice vedle první haly
+    expect(freeHallSpot(["8,10 36,10 36,30 8,30"])).toEqual({ x: 38, y: 2, w: 28, h: 20 });
     expect(transformerCurrentA(1000)).toBe(1443);
   });
 });

@@ -356,3 +356,12 @@
 img[data-broken="true"] {
   visibility: hidden;
 }
+
+/* Fáze 108: plovoucí tlačítko „💬 Nápověda, Chyby & Kontakt“ (fáze 107) na desktopu nad spodní lištou akcí stránky
+   (odeslání revize CAE, žádanka o změnu, hromadná revize) – jinak by překrylo její hlavní tlačítko vpravo dole.
+   Mimo vrstvy, aby přebilo utility `sm:bottom-*`. */
+@media (min-width: 40rem) {
+  body:has([data-bottom-bar]) [data-contact-fab] {
+    bottom: calc(var(--consent-banner-h, 0px) + 6.5rem);
+  }
+}

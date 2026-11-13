@@ -17,6 +17,8 @@ import { SafetyBanner } from "@/components/equipment/SafetyBanner";
 import { SchematicViewer } from "@/components/equipment/SchematicViewer";
 import { CompliancePassport } from "@/components/inspections/CompliancePassport";
 import { InspectionLogbook } from "@/components/inspections/InspectionLogbook";
+import { SignedRevisionEntry } from "@/components/inspections/SignedRevisionEntry";
+import { MISUSE_BANNER } from "@/lib/revision-signature";
 import { InspectionStatusBadge } from "@/components/inspections/InspectionStatusBadge";
 import { LotoCard } from "@/components/inspections/LotoCard";
 import { BatteryPassportCard } from "@/components/inspections/BatteryPassportCard";
@@ -435,6 +437,26 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
               Naskenovaný štítek u {equipment.tag} byl nahrazen novým kódem a už neplatí. Ověřte, že jste u správného zařízení, a nahlaste výměnu štítku – platný štítek vytisknete níže.
             </AlertDescription>
           </Alert>
+        ) : null}
+
+        {/* Fáze 108: revize zneplatněná technikem (podezření ze zneužití osvědčení TIČR) – červené varování pod QR */}
+        {equipment.inspections
+          .filter((record) => record.misuseFlaggedAt)
+          .slice(0, 3)
+          .map((record) => (
+            <Alert key={`misuse-${record.id}`} variant="destructive" data-testid="revision-misuse-banner">
+              <ShieldX />
+              <AlertTitle>{MISUSE_BANNER}</AlertTitle>
+              <AlertDescription>
+                Záznam {record.reportNumber} ze dne {record.inspectionDate.toLocaleDateString("cs-CZ")} (technik {record.inspectorName}, osvědčení {record.inspectorLicense}) je zablokovaný a do platnosti revize se nepočítá.
+                {record.misuseNote ? ` Poznámka technika: ${record.misuseNote}` : ""}
+              </AlertDescription>
+            </Alert>
+          ))}
+
+        {/* Fáze 108: formulář revizního technika z karty rozváděče / stroje a po naskenování QR štítku */}
+        {account.can("recordInspection") ? (
+          <SignedRevisionEntry equipment={{ id: equipment.id, tag: equipment.tag, name: equipment.name }} today={pragueToday(now)} scanned={labelCheck === "valid"} />
         ) : null}
 
         {fieldView ? (

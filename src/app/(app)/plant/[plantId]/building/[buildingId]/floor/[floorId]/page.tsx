@@ -6,9 +6,14 @@ import { LocationBreadcrumb, type LocationCrumb } from "@/components/common/Loca
 import { PageHeader } from "@/components/common/PageHeader";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { PageTransition } from "@/components/layout/PageTransition";
+import { BuildingHeaderActions } from "@/components/map/campus/BuildingDialogs";
 import { FloorExplorer } from "@/components/map/floorplan/FloorExplorer";
+import { SmartRevisionTripOptimizer } from "@/components/inspections/SmartRevisionTripOptimizer";
+import { pragueToday } from "@/lib/inspection";
+import { getTripItems } from "@/server/queries/revision-trip";
 import { buildingHref, floorHref, plantHref } from "@/lib/routes";
 import { cn } from "@/lib/utils";
+import { getFeatures } from "@/server/modules";
 import { getFloorView } from "@/server/queries/floor";
 import { getCurrentAccount } from "@/server/session";
 
@@ -22,9 +27,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 // Level 3 – půdorys patra s piny zařízení.
 export default async function FloorPage({ params }: Props) {
-  const [{ plantId, buildingId, floorId }, account] = await Promise.all([params, getCurrentAccount()]);
+  const [{ plantId, buildingId, floorId }, account, modules] = await Promise.all([params, getCurrentAccount(), getFeatures()]);
   const floor = await getFloorView(plantId, buildingId, floorId, account.types);
   if (!floor) notFound();
+  // Fáze 108: budova a zařízení patra jdou upravit / smazat s právem Studia výstavby
+  const canEdit = account.can("studio") && modules.on("enterprise.studio");
+  const now = new Date();
+  const showTrip = account.definition.showInspections && !account.definition.fieldView;
+  const tripItems = showTrip ? await getTripItems(plantId, now, account.types) : [];
 
   const { building } = floor;
   const multiFloor = building.floors.length > 1;
@@ -39,6 +49,8 @@ export default async function FloorPage({ params }: Props) {
 
   return (
     <PageTransition>
+      {/* Fáze 108: stránka podlaží vycentrovaná na plnou šířku (bez prázdného levého sloupce) */}
+      <div className="mx-auto w-full max-w-[1600px]" data-testid="floor-page">
       <PageHeader
         breadcrumb={<LocationBreadcrumb items={crumbs} />}
         title={floor.name}
@@ -50,7 +62,15 @@ export default async function FloorPage({ params }: Props) {
           </>
         }
         actions={
-          multiFloor ? (
+          <div className="flex flex-wrap items-center justify-end gap-2">
+          <BuildingHeaderActions
+            plantId={building.plant.id}
+            building={{ id: building.id, code: building.code, name: building.name, shortName: building.shortName, mapPolygon: building.mapPolygon }}
+            campus={{ width: building.plant.campusWidthM, height: building.plant.campusDepthM }}
+            floor={{ id: floor.id, name: floor.name, description: floor.description }}
+            canEdit={canEdit}
+          />
+          {multiFloor ? (
             <nav aria-label="Patra budovy" className="flex flex-wrap gap-1 rounded-xl border border-border bg-card p-1">
               {building.floors.map((item) => (
                 <Link
@@ -67,15 +87,19 @@ export default async function FloorPage({ params }: Props) {
                 </Link>
               ))}
             </nav>
-          ) : null
+          ) : null}
+          </div>
         }
       />
+      {showTrip ? <SmartRevisionTripOptimizer items={tripItems} today={pragueToday(now)} focusBuildingId={buildingId} canRecord={account.can("recordInspection")} className="mb-4" /> : null}
       <FloorExplorer
         floor={floor}
         showInspections={account.definition.showInspections}
         canBatchInspect={account.can("recordInspection")}
         scopeLabel={account.types ? `${account.definition.label}: ${account.definition.scopeDescription}` : null}
+        studioHref={canEdit ? `/studio?plant=${building.plant.id}&building=${building.id}&floor=${floor.id}` : null}
       />
+      </div>
     </PageTransition>
   );
 }

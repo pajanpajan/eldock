@@ -2,7 +2,7 @@ import type { ComplianceCategory, InspectionResult, InspectionType } from "@/gen
 import { thermalLevel, type ThermalLevel } from "@/lib/defects";
 import { buildInterfaceRows, parseAmps, type InterfaceSource } from "@/lib/switchboard-interface";
 
-import { renderDocumentSvg, renderSingleLineSvg, type DocumentTone, type SingleLineFeeder } from "./document";
+import { renderDocumentSvg, renderSingleLineSvg, type DocumentSeal, type DocumentTone, type SingleLineFeeder } from "./document";
 
 // Obsah dokumentů pasportu (ČSN EN 61439) a revizních zpráv (ČSN 33 1500) jako SVG.
 // Používá seed i Server Action „Zapsat novou revizi“ (když technik nenahraje vlastní soubor).
@@ -201,6 +201,10 @@ export interface InspectionReportContext {
   measurements?: ReportMeasurements | null;
   /** Termovize: nejvyšší teplota a ΔT vůči okolí. */
   thermal?: { maxTempC: number | null; deltaTempC: number | null } | null;
+  /** Fáze 108: podepsaná revize – podpis, razítko TIČR a pečeť SHA-256 v patičce. */
+  seal?: DocumentSeal | null;
+  /** Fáze 108: soupis měření podepsané revize (R_iso, PE, Z_s / I_k, RCD, termovize). */
+  measurementLines?: string[] | null;
 }
 
 export interface ReportMeasurements {
@@ -283,7 +287,10 @@ export function renderInspectionReportSvg(ctx: InspectionReportContext): string 
           { heading: "Závady", lines: [ctx.defectsSummary ?? "Nebyla zjištěna žádná kritická teplotní anomálie."] },
         ]
       : [
-          {
+          // Fáze 108: podepsaná revize – skutečný soupis měření technika (bez ilustračních hodnot)
+          ctx.measurementLines?.length
+            ? { heading: "Měření", lines: ctx.measurementLines }
+            : {
             heading: "Měření",
             table: ctx.measurements ? measurementRows(ctx.measurements) : [
               ["Měření", "Naměřeno", "Požadavek", "Vyhovuje"],
@@ -308,6 +315,7 @@ export function renderInspectionReportSvg(ctx: InspectionReportContext): string 
       tone: verdict.tone,
     },
     signature: { name: ctx.inspectorName, role: ctx.inspectorLicense, date: ctx.inspectionDate },
+    seal: ctx.seal ?? null,
   });
 }
 
@@ -320,6 +328,10 @@ export interface BatchProtocolContext {
   result: InspectionResult;
   defectsSummary: string | null;
   items: { tag: string; name: string; standard: string; validUntil: string }[];
+  /** Fáze 108: podepsaný sloučený protokol (druh revize, měření, podpis, razítko TIČR, pečeť). */
+  title?: string;
+  measurementLines?: string[] | null;
+  seal?: DocumentSeal | null;
 }
 
 /** Společný protokol hromadné revize (jeden technik, jedno datum, více zařízení). */
@@ -329,7 +341,7 @@ export function renderBatchProtocolSvg(ctx: BatchProtocolContext): string {
   if (ctx.items.length > 22) rows.push(["…", `a dalších ${ctx.items.length - 22} položek`, "", ""]);
   return renderDocumentSvg({
     issuer: `Revizní technik – ${ctx.inspectorName}`,
-    title: "Protokol hromadné revize",
+    title: ctx.title ?? "Protokol hromadné revize",
     subtitle: "Souhrnný záznam o revizi více elektrických zařízení provedené jedním revizním technikem v jednom termínu.",
     documentNumber: ctx.protocolNumber,
     meta: [
@@ -342,9 +354,11 @@ export function renderBatchProtocolSvg(ctx: BatchProtocolContext): string {
     ],
     sections: [
       { heading: "Revidovaná zařízení", table: [["Tag", "Zařízení", "Norma", "Platnost do"], ...rows] },
+      ...(ctx.measurementLines?.length ? [{ heading: "Měření", lines: ctx.measurementLines }] : []),
       { heading: "Zjištěné závady", lines: [ctx.defectsSummary?.trim() ? ctx.defectsSummary : "Bez závad."] },
     ],
     verdict: { label: "Celkový posudek", text: verdict.label, tone: verdict.tone },
     signature: { name: ctx.inspectorName, role: ctx.inspectorLicense, date: ctx.inspectionDate },
+    seal: ctx.seal ?? null,
   });
 }

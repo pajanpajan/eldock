@@ -40,7 +40,14 @@ export default async function StudioPage({ searchParams }: PageProps<"/studio">)
           </div>
         }
       />
-      <StudioWizard key={`${data.plant.id}:${startNewPlant}`} data={data} startNewPlant={startNewPlant} />
+      {/* Fáze 108: odkaz z podlaží budovy (?building=&floor=) otevře Studio rovnou nad tímto patrem */}
+      <StudioWizard
+        key={`${data.plant.id}:${startNewPlant}:${params.building ?? ""}:${params.floor ?? ""}`}
+        data={data}
+        startNewPlant={startNewPlant}
+        initialBuildingId={typeof params.building === "string" ? params.building : null}
+        initialFloorId={typeof params.floor === "string" ? params.floor : null}
+      />
     </>
   );
 }

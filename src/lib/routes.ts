@@ -39,6 +39,8 @@ export const inspectionsHref = "/inspections";
 export const rapidInspectionHref = "/inspections/rapid";
 
 export const plannerHref = "/inspections/planner";
+/** Fáze 108: 🛡️ Měsíční report & Ochrana TIČR (pro revizní techniky). */
+export const ticrReportHref = "/inspections/ticr";
 
 /** Notifikace a hlídač lhůt (souhrnné avízo vedení závodu). */
 export const inspectionAlertsHref = "/inspections/alerts";

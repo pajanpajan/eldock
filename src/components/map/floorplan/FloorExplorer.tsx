@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useRef, useState, type FormEvent } from "react";
 import { EyeOff, Search, X } from "lucide-react";
 import type { ReactZoomPanPinchRef } from "react-zoom-pan-pinch";
@@ -38,6 +39,7 @@ export function FloorExplorer({
   showInspections = true,
   canBatchInspect = true,
   scopeLabel = null,
+  studioHref = null,
 }: {
   floor: FloorView;
   /** Lhůtník revizí (CAE ne). */
@@ -46,6 +48,8 @@ export function FloorExplorer({
   canBatchInspect?: boolean;
   /** Výřez dat účtu („Revizní technik VTZ: …“). */
   scopeLabel?: string | null;
+  /** Fáze 108: Studio nad tímto patrem (právo Studia) – přidání rozváděče / stroje, přesun a smazání zařízení. */
+  studioHref?: string | null;
 }) {
   const [spider, setSpider] = useState(false);
   const apiRef = useRef<ReactZoomPanPinchRef>(null);
@@ -209,6 +213,14 @@ export function FloorExplorer({
       />
 
       <div className="flex flex-wrap items-center gap-2">
+        {/* Fáze 108: rozváděč nebo stroj rovnou na toto podlaží (Studio otevřené nad tímto patrem) */}
+        {studioHref ? (
+          <Button asChild className="touch-target gap-2 font-semibold">
+            <Link href={studioHref} data-testid="floor-add-equipment">
+              + Přidat rozváděč nebo stroj na toto podlaží
+            </Link>
+          </Button>
+        ) : null}
         <Button
           type="button"
           variant="outline"
@@ -235,7 +247,8 @@ export function FloorExplorer({
         extra={<span>Kolečko myši / dva prsty = zoom · tažení = posun · dvojklik = přiblížit</span>}
       />
 
-      <section aria-label="Zařízení patra" className="space-y-2">
+      {/* Fáze 108: odstup pod tabulkou – plovoucí lišta „Zapsat hromadnou revizi“ nepřekryje poslední řádky */}
+      <section aria-label="Zařízení patra" className={cn("space-y-2", canBatchInspect && "pb-28")}>
         <h2 className="text-lg font-semibold">
           Zařízení na patře{" "}
           <span className="font-mono text-sm text-muted-foreground">
@@ -256,7 +269,7 @@ export function FloorExplorer({
 
       {canBatchInspect ? <BatchInspectionBar items={batchItems} today={floor.today} onClear={() => setChecked(new Set())} /> : null}
 
-      <EquipmentQuickView equipment={sheetOpen ? selected : null} onOpenChange={setSheetOpen} />
+      <EquipmentQuickView equipment={sheetOpen ? selected : null} onOpenChange={setSheetOpen} manageHref={studioHref} />
     </div>
   );
 }

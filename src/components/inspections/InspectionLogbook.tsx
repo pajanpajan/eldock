@@ -298,6 +298,17 @@ export function InspectionLogbook({
                         {result.label}
                       </span>
                       {isGoverning ? <span className="text-xs font-medium text-primary">určuje lhůtu</span> : null}
+                      {/* Fáze 108: podepsaná revize (pečeť SHA-256, PAdES) a zneplatnění technikem */}
+                      {record.sealHash ? (
+                        <span className="rounded-full border border-emerald-500/50 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-200" title={`SHA-256 ${record.sealHash}`} data-testid="record-signed">
+                          🔏 podepsáno{record.padesUrl ? " + PAdES" : ""}
+                        </span>
+                      ) : null}
+                      {record.misuseFlaggedAt ? (
+                        <span className="rounded-full border border-red-500/60 bg-red-500/15 px-2 py-0.5 text-[11px] font-bold text-red-200" data-testid="record-flagged">
+                          ⛔ zneplatněno technikem
+                        </span>
+                      ) : null}
                       <span className="ml-auto text-sm text-muted-foreground">{formatDateShort(record.inspectionDate)}</span>
                     </header>
                     <dl className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-3">

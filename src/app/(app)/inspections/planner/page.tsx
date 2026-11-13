@@ -6,10 +6,13 @@ import { ModuleDisabled } from "@/components/common/ModuleDisabled";
 import { NoAccess } from "@/components/common/NoAccess";
 import { PageHeader } from "@/components/common/PageHeader";
 import { InspectionPlanner } from "@/components/inspections/InspectionPlanner";
+import { SmartRevisionTripOptimizer } from "@/components/inspections/SmartRevisionTripOptimizer";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { Button } from "@/components/ui/button";
 import { inspectionAlertsHref, inspectionsHref } from "@/lib/routes";
+import { pragueToday } from "@/lib/inspection";
 import { getPlannerItems } from "@/server/queries/inspections";
+import { getTripItems } from "@/server/queries/revision-trip";
 import { getPlants } from "@/server/queries/plant";
 import { getFeatures } from "@/server/modules";
 import { getCurrentAccount, getRememberedPlantId } from "@/server/session";
@@ -26,7 +29,7 @@ export default async function InspectionPlannerPage() {
   const plant = role === "MAINTENANCE" ? (plants.find((entry) => entry.id === rememberedId) ?? plants[0]) : undefined;
   const now = new Date();
   // Revizní technik VTZ plánuje jen VTZ, technik spotřebičů jen spotřebiče.
-  const items = await getPlannerItems(plant?.id, now, account.types);
+  const [items, tripItems] = await Promise.all([getPlannerItems(plant?.id, now, account.types), getTripItems(plant?.id ?? null, now, account.types)]);
 
   return (
     <PageTransition>
@@ -52,6 +55,8 @@ export default async function InspectionPlannerPage() {
           </>
         }
       />
+      {/* Fáze 108: Chytrá revize – sloučení výjezdu technika (horizont 30 / 60 / 90 / 180 dnů) */}
+      <SmartRevisionTripOptimizer items={tripItems} today={pragueToday(now)} canRecord={account.can("recordInspection")} className="mb-6" />
       <InspectionPlanner
         items={items}
         nowIso={now.toISOString()}

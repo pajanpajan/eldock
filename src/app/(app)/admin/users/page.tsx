@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { AccountSecurityActions } from "@/components/admin/AccountSecurityActions";
 import { AdminTabs } from "@/components/admin/AdminTabs";
@@ -28,6 +29,13 @@ export default async function AdminUsersPage() {
   return (
     <PageTransition>
       <PageHeader title="Správa podúčtů" description="Účty závodu, jejich oprávnění a kategorie zařízení, které vidí (výřez dat na mapě i v přehledech)." />
+      {/* Fáze 108: revizní technici – měsíční kontrola revizí pod jejich číslem osvědčení */}
+      <p className="mb-4 rounded-xl border border-border bg-card px-4 py-3 text-sm" data-testid="users-ticr-link">
+        🛡️ <strong>Revizní technici:</strong> měsíční přehled všech revizí pod číslem osvědčení TIČR, zneplatnění cizí revize a měsíční e-mail –{" "}
+        <Link href="/inspections/ticr" className="font-semibold text-primary underline-offset-2 hover:underline">
+          Měsíční report & Ochrana TIČR →
+        </Link>
+      </p>
       <AdminTabs current="/admin/users" canUsers canModules={account.can("manageModules")} canData={company} />
       <div className="space-y-6">
         {!company ? (

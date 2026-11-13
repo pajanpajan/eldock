@@ -266,7 +266,7 @@ export function RevisionUploadForm({
         />
       </Step>
 
-      <div className="sticky bottom-0 z-10 -mx-3 border-t border-border bg-background/95 px-3 py-3 backdrop-blur sm:mx-0 sm:rounded-xl sm:border sm:px-4">
+      <div className="sticky bottom-0 z-10 -mx-3 border-t border-border bg-background/95 px-3 py-3 backdrop-blur sm:mx-0 sm:rounded-xl sm:border sm:px-4" data-bottom-bar>
         <div className="flex flex-wrap items-center gap-3">
           <div className="min-w-0 flex-1 text-sm">
             {error ? (

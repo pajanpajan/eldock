@@ -68,6 +68,8 @@ export function GlobalContactWidget() {
       {hidden ? null : (
         <div
           ref={wrapper}
+          // Fáze 108: na desktopu se zvedne nad spodní lištu akcí stránky (`data-bottom-bar`, pravidlo v globals.css)
+          data-contact-fab
           // Na mobilu nad pevnými spodními lištami (žádanka o změnu, hromadná revize, schválení) – od šířky sm vpravo dole;
           // dokud je vidět lišta cookies, nad ní (proměnná --consent-banner-h z CookieConsentBanner)
           className={cn("no-print fixed right-3 z-40 flex flex-col items-end gap-2 print:hidden", compact ? "bottom-[calc(var(--consent-banner-h,0px)_+_6rem)]" : "bottom-[calc(var(--consent-banner-h,0px)_+_5rem)] sm:right-5 sm:bottom-[calc(var(--consent-banner-h,0px)_+_1.25rem)]")}

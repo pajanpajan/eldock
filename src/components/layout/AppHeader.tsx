@@ -1,11 +1,11 @@
 import Link from "next/link";
-import { Blocks, CalendarCheck, CalendarRange, FileCheck2, Globe2, Inbox, PencilRuler, ScanLine, UserRoundCog, UsersRound, type LucideIcon } from "lucide-react";
+import { Blocks, CalendarCheck, CalendarRange, FileCheck2, Globe2, Inbox, PencilRuler, ScanLine, ShieldCheck, UserRoundCog, UsersRound, type LucideIcon } from "lucide-react";
 
 import { isAccountSwitcherLocked } from "@/lib/auth";
 import type { Permission } from "@/lib/accounts";
 import { LockedNavItem } from "@/components/modules/Upsell";
 import type { FeatureKey } from "@/lib/modules";
-import { APP_HOME, auditReportHref, inspectionsHref, plannerHref, plantHref, rapidInspectionHref } from "@/lib/routes";
+import { APP_HOME, auditReportHref, inspectionsHref, plannerHref, plantHref, rapidInspectionHref, ticrReportHref } from "@/lib/routes";
 import { getFeatures } from "@/server/modules";
 import { getAccountUsers } from "@/server/queries/accounts";
 import { getPlants } from "@/server/queries/plant";
@@ -27,6 +27,8 @@ const NAV: { href: string; label: string; srLabel: string; icon: LucideIcon; per
   { href: plannerHref, label: "Plánovač", srLabel: "Plánovač revizí", icon: CalendarRange, permission: "planner", feature: "inspections.planner" },
   { href: rapidInspectionHref, label: "Rychlá revize", srLabel: "Rychlá revize", icon: ScanLine, permission: "rapid", feature: "inspections.planner" },
   { href: auditReportHref, label: "Audit", srLabel: "Auditní report", icon: FileCheck2, permission: "audit", feature: "inspections.audit" },
+  // Fáze 108: 🛡️ Měsíční report & Ochrana TIČR (pro revizní techniky)
+  { href: ticrReportHref, label: "TIČR report", srLabel: "Měsíční report a ochrana TIČR pro revizní techniky", icon: ShieldCheck, permission: "recordInspection", hideInFieldView: true },
   { href: "/studio", label: "Studio", srLabel: "Studio výstavby závodu", icon: PencilRuler, permission: "studio", feature: "enterprise.studio" },
   { href: "/admin/modules", label: "Moduly", srLabel: "Správa modulů a tarifů", icon: Blocks, permission: "manageModules" },
   { href: "/admin/users", label: "Účty", srLabel: "Správa podúčtů", icon: UsersRound, permission: "manageUsers" },

@@ -108,14 +108,58 @@ export const metersToRect = (widthM: number, depthM: number, campus: CampusSize 
   h: round(Math.min(100, Math.max(MIN_SIZE, (depthM / campus.height) * 100))),
 });
 
-/** První volné místo pro budovu dané velikosti (prohledává areál po řádcích s okrajem 2 %). */
-export function findFreeSpot(size: { w: number; h: number }, obstacles: readonly CampusRect[], margin = 2): CampusRect {
+/** Plocha překryvu dvou obdélníků (0 = bez překryvu). */
+export const overlapArea = (a: CampusRect, b: CampusRect) => Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)) * Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+
+/** Měřítka zmenšení nové budovy, když se v plné velikosti do volného místa areálu nevejde. */
+const SHRINK_STEPS = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4] as const;
+
+export interface FreeSpot {
+  rect: CampusRect;
+  /** Volné místo bez překryvu se stávajícími budovami (false = areál je plný, nejmenší možný překryv). */
+  fits: boolean;
+  /** Zmenšení oproti požadované velikosti (1 = plná velikost). */
+  scale: number;
+}
+
+/**
+ * Fáze 108: volné místo pro novou budovu bez překryvu se stávajícími (s odstupem `margin` %). Prohledává areál po 1 %
+ * od levého horního rohu; když se budova v plné velikosti nevejde, zkusí ji postupně zmenšit (až na 40 %). Teprve plný
+ * areál vrátí místo s nejmenším překryvem – nikdy ne slepě levý horní roh přes stávající haly (chyba průvodce halou).
+ */
+export function freeSpotFor(size: { w: number; h: number }, obstacles: readonly CampusRect[], margin = 2): FreeSpot {
   const padded = obstacles.map((rect) => ({ x: rect.x - margin, y: rect.y - margin, w: rect.w + 2 * margin, h: rect.h + 2 * margin }));
-  for (let y = margin; y + size.h <= 100 - margin; y += 2) {
-    for (let x = margin; x + size.w <= 100 - margin; x += 2) {
-      const candidate = { x, y, w: size.w, h: size.h };
-      if (!padded.some((rect) => rectsOverlap(candidate, rect))) return clampRect(candidate);
+  for (const scale of SHRINK_STEPS) {
+    const w = Math.max(MIN_SIZE, round(size.w * scale));
+    const h = Math.max(MIN_SIZE, round(size.h * scale));
+    for (let y = margin; y + h <= 100 - margin + 1e-9; y += 1) {
+      for (let x = margin; x + w <= 100 - margin + 1e-9; x += 1) {
+        const candidate = { x, y, w, h };
+        if (!padded.some((rect) => rectsOverlap(candidate, rect))) return { rect: clampRect(candidate), fits: true, scale };
+      }
     }
   }
-  return clampRect({ x: margin, y: margin, ...size });
+  let best: CampusRect = clampRect({ x: margin, y: margin, ...size });
+  let bestArea = Number.POSITIVE_INFINITY;
+  for (let y = 0; y + size.h <= 100 + 1e-9; y += 1) {
+    for (let x = 0; x + size.w <= 100 + 1e-9; x += 1) {
+      const candidate = { x, y, w: size.w, h: size.h };
+      const area = obstacles.reduce((sum, rect) => sum + overlapArea(candidate, rect), 0);
+      if (area < bestArea) {
+        bestArea = area;
+        best = clampRect(candidate);
+      }
+    }
+  }
+  return { rect: best, fits: false, scale: 1 };
+}
+
+/** První volné místo pro budovu dané velikosti (bez překryvu, případně zmenšenou – viz `freeSpotFor`). */
+export function findFreeSpot(size: { w: number; h: number }, obstacles: readonly CampusRect[], margin = 2): CampusRect {
+  return freeSpotFor(size, obstacles, margin).rect;
+}
+
+/** Fáze 108: budovy, se kterými se obdélník překrývá (kontrola úpravy a přesunu budovy na mapě). */
+export function overlappingBuildings<T extends { rect: CampusRect }>(rect: CampusRect, others: readonly T[]): T[] {
+  return others.filter((other) => rectsOverlap(rect, other.rect));
 }

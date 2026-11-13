@@ -1,15 +1,20 @@
 "use client";
 
-import { useMemo, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Wrench } from "lucide-react";
+import { Move, Pencil, Trash2, Wrench } from "lucide-react";
+import { toast } from "sonner";
 
+import { placementError, shiftRect } from "@/lib/building-edit";
+import { polygonBounds, type CampusRect, type CampusSize } from "@/lib/campus-layout";
 import { formatCount } from "@/lib/format";
 import { bounds,offsetPoints, parsePercentPolygon, toSvgPoints } from "@/lib/map-geometry";
 import { EQUIPMENT_STATUS } from "@/lib/status";
 import { cn } from "@/lib/utils";
+import { moveBuildingAction } from "@/server/actions/buildings";
 import type { BuildingOverview } from "@/server/queries/plant";
 
+import { BuildingDeleteDialog, BuildingEditDialog } from "./BuildingDialogs";
 import { CampusSite } from "./CampusSite";
 import { getSiteLayout } from "./site-layouts";
 
@@ -21,6 +26,8 @@ interface Props {
   onHover: (id: string | null) => void;
   /** Fáze 93: zvýraznění budov větve zálohování (barva úrovně) a páteřních tras mezi budovami. */
   highlight?: { ids: ReadonlySet<string>; color: string; routes: { from: string; to: string }[] } | null;
+  /** Fáze 108: právo Studia – lišta ✥ Posunout · ✏️ Upravit · 🗑️ Smazat u budovy a přesun tažením. */
+  edit?: { plantId: string; campus: CampusSize } | null;
 }
 
 const ROOF = "#27303a";
@@ -37,10 +44,79 @@ function describeBuilding({ name, counts }: BuildingOverview): string {
 }
 
 /** Level 1 – SVG mapa areálu s klikacími budovami a štítky. */
-export function CampusMap({ plantCode, viewBox, buildings, hoveredId, onHover, highlight = null }: Props) {
+export function CampusMap({ plantCode, viewBox, buildings, hoveredId, onHover, highlight = null, edit = null }: Props) {
   const router = useRouter();
   const layout = getSiteLayout(plantCode, viewBox.height);
   const { width, height } = viewBox;
+  // Fáze 108: přesun budovy tažením (obdélník v procentech mapy) a dialogy úpravy / smazání
+  const svgRef = useRef<SVGSVGElement>(null);
+  const [moving, setMoving] = useState<{ id: string; name: string; rect: CampusRect; origin: CampusRect; grab: { x: number; y: number } | null } | null>(null);
+  const [dialog, setDialog] = useState<{ kind: "edit" | "delete"; building: BuildingOverview } | null>(null);
+  const [saving, startSaving] = useTransition();
+  const moveError = moving ? placementError(moving.rect, moving.id, buildings) : null;
+
+  useEffect(() => {
+    if (!moving) return;
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") setMoving(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [moving]);
+
+  /** Bod obrazovky → procenta mapy areálu. */
+  function toPercent(event: { clientX: number; clientY: number }) {
+    const svg = svgRef.current;
+    const matrix = svg?.getScreenCTM();
+    if (!svg || !matrix) return null;
+    const point = new DOMPoint(event.clientX, event.clientY).matrixTransform(matrix.inverse());
+    return { x: (point.x / width) * 100, y: (point.y / height) * 100 };
+  }
+
+  function startMove(building: BuildingOverview) {
+    const rect = polygonBounds(building.mapPolygon);
+    setMoving({ id: building.id, name: building.name, rect, origin: rect, grab: null });
+    toast.info(`✥ Přetáhněte budovu ${building.code} na volné místo · Esc = zrušit`);
+  }
+
+  function onMovePointer(event: ReactPointerEvent<SVGSVGElement>) {
+    if (!moving) return;
+    const point = toPercent(event);
+    if (!point) return;
+    if (event.type === "pointerdown") {
+      const inside = point.x >= moving.rect.x && point.x <= moving.rect.x + moving.rect.w && point.y >= moving.rect.y && point.y <= moving.rect.y + moving.rect.h;
+      if (!inside) return;
+      event.currentTarget.setPointerCapture(event.pointerId);
+      setMoving({ ...moving, grab: { x: point.x - moving.rect.x, y: point.y - moving.rect.y } });
+      return;
+    }
+    if (!moving.grab) return;
+    if (event.type === "pointermove") {
+      const next = shiftRect(moving.rect, point.x - moving.grab.x - moving.rect.x, point.y - moving.grab.y - moving.rect.y);
+      setMoving({ ...moving, rect: { ...next, x: Math.round(next.x * 2) / 2, y: Math.round(next.y * 2) / 2 } });
+      return;
+    }
+    // pointerup – položení budovy: mimo areál / přes jinou halu se vrátí, jinak se poloha uloží
+    const dropped = { ...moving, grab: null };
+    const error = placementError(dropped.rect, dropped.id, buildings);
+    if (error) {
+      toast.error(error);
+      setMoving({ ...dropped, rect: dropped.origin });
+      return;
+    }
+    setMoving(dropped);
+    startSaving(async () => {
+      const result = await moveBuildingAction({ buildingId: dropped.id, rect: dropped.rect });
+      if (!result.ok) {
+        toast.error(result.error);
+        setMoving({ ...dropped, rect: dropped.origin });
+        return;
+      }
+      toast.success(`Budova ${dropped.name} přesunuta.`);
+      setMoving(null);
+      router.refresh();
+    });
+  }
 
   const shapes = useMemo(
     () =>
@@ -60,6 +136,7 @@ export function CampusMap({ plantCode, viewBox, buildings, hoveredId, onHover, h
   );
 
   function open(href: string) {
+    if (moving) return;
     router.push(href);
   }
 
@@ -77,11 +154,16 @@ export function CampusMap({ plantCode, viewBox, buildings, hoveredId, onHover, h
       style={{ aspectRatio: `${width} / ${height}`, maxWidth: `calc((100dvh - 8rem) * ${width / height})` }}
     >
       <svg
+        ref={svgRef}
         viewBox={`0 0 ${width} ${height}`}
-        className="absolute inset-0 size-full"
+        className={cn("absolute inset-0 size-full", moving && "cursor-grab touch-none")}
         role="group"
         aria-label="Mapa areálu"
         fontFamily="var(--font-sans)"
+        onPointerDown={onMovePointer}
+        onPointerMove={onMovePointer}
+        onPointerUp={onMovePointer}
+        data-moving={moving ? moving.id : undefined}
       >
         <defs>
           <pattern id="roof-ribs" width="10" height="10" patternUnits="userSpaceOnUse">
@@ -110,6 +192,9 @@ export function CampusMap({ plantCode, viewBox, buildings, hoveredId, onHover, h
               className="cursor-pointer outline-none"
               opacity={highlight && !marked ? 0.35 : 1}
               data-backup={marked ? "on" : undefined}
+              data-testid="campus-building"
+              data-code={building.code}
+              data-polygon={building.mapPolygon}
               onClick={() => open(building.href)}
               onKeyDown={(event) => onKeyDown(event, building.href)}
               onMouseEnter={() => {
@@ -148,6 +233,23 @@ export function CampusMap({ plantCode, viewBox, buildings, hoveredId, onHover, h
           );
         })}
 
+        {/* Fáze 108: přesouvaná budova – žlutý obrys na volném místě, červený přes jinou halu / mimo areál */}
+        {moving ? (
+          <rect
+            x={(moving.rect.x / 100) * width}
+            y={(moving.rect.y / 100) * height}
+            width={(moving.rect.w / 100) * width}
+            height={(moving.rect.h / 100) * height}
+            fill={moveError ? "rgba(239,68,68,0.18)" : "rgba(250,200,0,0.16)"}
+            stroke={moveError ? "#ef4444" : ACCENT}
+            strokeWidth={4}
+            strokeDasharray="14 8"
+            className="cursor-grab"
+            data-testid="building-move-ghost"
+            data-error={moveError ? "true" : "false"}
+          />
+        ) : null}
+
         {/* Fáze 93: páteřní trasy zálohované větve mezi budovami (od zdroje k rozváděčům) */}
         {highlight?.routes.map((route, index) => {
           const from = buildings.find((building) => building.id === route.from);
@@ -171,6 +273,44 @@ export function CampusMap({ plantCode, viewBox, buildings, hoveredId, onHover, h
           );
         })}
       </svg>
+
+      {/* Fáze 108: rychlá lišta budovy (najetí / fokus) – ✥ Posunout · ✏️ Upravit · 🗑️ Smazat */}
+      {edit && !moving
+        ? buildings.map((building) => {
+            if (hoveredId !== building.id) return null;
+            const box = polygonBounds(building.mapPolygon);
+            return (
+              <div
+                key={`tools-${building.id}`}
+                className="absolute z-10 flex -translate-x-full items-center gap-0.5 rounded-lg border border-primary/60 bg-zinc-950/95 p-0.5 shadow-xl"
+                style={{ left: `${Math.min(100, box.x + box.w)}%`, top: `${box.y}%` }}
+                onMouseEnter={() => onHover(building.id)}
+                onMouseLeave={() => onHover(null)}
+                data-testid="building-map-tools"
+              >
+                <button type="button" onClick={() => startMove(building)} className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] font-semibold hover:bg-muted" data-testid="building-map-move">
+                  <Move className="size-3.5" aria-hidden /> Posunout
+                </button>
+                <button type="button" onClick={() => setDialog({ kind: "edit", building })} className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] font-semibold hover:bg-muted" data-testid="building-map-edit">
+                  <Pencil className="size-3.5" aria-hidden /> Upravit
+                </button>
+                <button type="button" onClick={() => setDialog({ kind: "delete", building })} className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] font-semibold text-red-300 hover:bg-red-500/15" data-testid="building-map-delete">
+                  <Trash2 className="size-3.5" aria-hidden /> Smazat
+                </button>
+              </div>
+            );
+          })
+        : null}
+      {moving ? (
+        <div className="absolute inset-x-2 top-2 z-10 flex flex-wrap items-center justify-center gap-2 rounded-lg border border-primary/60 bg-zinc-950/90 px-3 py-1.5 text-xs" role="status" data-testid="building-move-hint">
+          {saving ? "Ukládám polohu…" : moveError ? `⚠️ ${moveError}` : `✥ Přetáhněte budovu „${moving.name}“ na volné místo a pusťte – poloha se uloží.`}
+          <button type="button" onClick={() => setMoving(null)} className="rounded-md border border-border px-2 py-0.5 hover:bg-muted">
+            Zrušit (Esc)
+          </button>
+        </div>
+      ) : null}
+      {dialog?.kind === "edit" && edit ? <BuildingEditDialog open onOpenChange={(open) => !open && setDialog(null)} building={dialog.building} campus={edit.campus} /> : null}
+      {dialog?.kind === "delete" && edit ? <BuildingDeleteDialog open onOpenChange={(open) => !open && setDialog(null)} building={dialog.building} plantId={edit.plantId} /> : null}
 
       {/* Štítky budov (HTML nad SVG; pozice v procentech viewBoxu) */}
       {buildings.map((building) => {

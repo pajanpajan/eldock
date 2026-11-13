@@ -20,14 +20,18 @@ import { equipmentHref } from "@/lib/routes";
 import { CHANGE_REQUEST_STATUS } from "@/lib/status";
 import { cn } from "@/lib/utils";
 import type { FloorEquipment } from "@/server/queries/floor";
+import { EquipmentManageActions } from "./EquipmentManage";
 
 /** Rychlý náhled zařízení po kliknutí na pin. */
 export function EquipmentQuickView({
   equipment,
   onOpenChange,
+  manageHref = null,
 }: {
   equipment: FloorEquipment | null;
   onOpenChange: (open: boolean) => void;
+  /** Fáze 108: právo Studia – přesun (Studio nad tímto patrem) a smazání vybraného zařízení. */
+  manageHref?: string | null;
 }) {
   return (
     <Sheet open={equipment !== null} onOpenChange={onOpenChange}>
@@ -121,6 +125,7 @@ export function EquipmentQuickView({
             </div>
 
             <SheetFooter>
+              {manageHref ? <EquipmentManageActions equipment={equipment} studioHref={manageHref} onDone={() => onOpenChange(false)} /> : null}
               <Button asChild size="lg" className="touch-target w-full text-base">
                 <Link href={equipmentHref(equipment.id)}>
                   Otevřít detail

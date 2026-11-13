@@ -198,10 +198,12 @@ function openConcept(target: ExistingBuilding, key: string, scale: DrawingScale,
 }
 
 /** Studio výstavby závodu: mapa závodu → budova (zařízení / místnosti / podlaží), nebo průvodce areálem a novým závodem. */
-export function StudioWizard({ data: source, startNewPlant = false }: { data: StudioData; startNewPlant?: boolean }) {
+export function StudioWizard({ data: source, startNewPlant = false, initialBuildingId = null, initialFloorId = null }: { data: StudioData; startNewPlant?: boolean; initialBuildingId?: string | null; initialFloorId?: string | null }) {
   const router = useRouter();
+  // Fáze 108: „+ Přidat rozváděč nebo stroj na toto podlaží“ (?building=&floor=) otevře rovnou budovu na daném patře
+  const initialTarget = !startNewPlant && initialBuildingId ? (source.plant.buildings.find((entry) => entry.id === initialBuildingId) ?? null) : null;
   // Závod bez budov (odkaz „Přidat budovu do areálu“) rovnou otevře průvodce s novou budovou
-  const [view, setView] = useState<View>(startNewPlant || !source.plant.buildings.length ? "wizard" : "map");
+  const [view, setView] = useState<View>(startNewPlant || !source.plant.buildings.length ? "wizard" : initialTarget ? "building" : "map");
   const [workMode, setWorkMode] = useState<WorkMode>("devices");
   const [plantMode, setPlantMode] = useState<PlantMode>(startNewPlant ? "new" : "existing");
   const [newPlant, setNewPlant] = useState<StudioNewPlantDraft>(NEW_PLANT_DEFAULT);
@@ -241,7 +243,11 @@ export function StudioWizard({ data: source, startNewPlant = false }: { data: St
     const initialKey = (prefix: string) => `${prefix}0${index++}`;
     const buildings = data.plant.buildings;
     return {
-      concepts: [makeConcept(PRESETS[0], { codes: buildings.map((building) => building.code), rects: buildings.map((building) => polygonBounds(building.mapPolygon)), campus }, DEFAULT_GRID.scale, initialKey)],
+      concepts: [
+        initialTarget
+          ? openConcept(initialTarget, initialKey("b"), DEFAULT_GRID.scale, initialFloorId)
+          : makeConcept(PRESETS[0], { codes: buildings.map((building) => building.code), rects: buildings.map((building) => polygonBounds(building.mapPolygon)), campus }, DEFAULT_GRID.scale, initialKey),
+      ],
       past: [],
       future: [],
       lastPush: 0,

@@ -38,6 +38,33 @@ export interface DocumentInput {
   sections: DocumentSection[];
   verdict?: { label: string; text: string; tone: DocumentTone };
   signature: { name: string; role: string; date: string };
+  /** Fáze 108: podepsaný protokol – vlastnoruční podpis (PNG data URL), razítko TIČR a patička s pečetí SHA-256. */
+  seal?: DocumentSeal | null;
+}
+
+export interface DocumentSeal {
+  signaturePng: string | null;
+  stamp: { title: string; name: string; certificate: string; scope: string | null; authorization: string | null };
+  /** Řádky patičky (otisk, čas UTC / SEČ, IP, ověření, právní poznámka). */
+  footer: string[];
+}
+
+/** Grafické razítko revizního technika (kulaté) s číslem osvědčení TIČR. */
+function stampSvg(cx: number, cy: number, stamp: DocumentSeal["stamp"]): string {
+  const color = "#1d4ed8";
+  const lines = [stamp.name, stamp.certificate, stamp.scope, stamp.authorization].filter((line): line is string => Boolean(line));
+  const out = [
+    `<g opacity="0.85">`,
+    `<circle cx="${cx}" cy="${cy}" r="52" fill="none" stroke="${color}" stroke-width="2.4"/>`,
+    `<circle cx="${cx}" cy="${cy}" r="45" fill="none" stroke="${color}" stroke-width="1"/>`,
+    `<text x="${cx}" y="${cy - 26}" font-family="${FONT}" font-size="8.5" font-weight="700" letter-spacing="1" fill="${color}" text-anchor="middle">${esc(stamp.title)}</text>`,
+  ];
+  lines.forEach((line, index) => {
+    const size = index === 0 ? 9.5 : 7.4;
+    out.push(`<text x="${cx}" y="${cy - 8 + index * 12}" font-family="${FONT}" font-size="${size}" font-weight="${index === 0 ? 700 : 500}" fill="${color}" text-anchor="middle">${esc(line.length > 30 ? `${line.slice(0, 29)}…` : line)}</text>`);
+  });
+  out.push(`</g>`);
+  return out.join("");
 }
 
 /** Zalomení textu podle odhadu šířky znaků. */
@@ -147,17 +174,32 @@ export function renderDocumentSvg(input: DocumentInput): string {
     });
   }
 
-  // Podpis a razítko
-  const sy = H - 150;
+  // Podpis a razítko (fáze 108: u podepsané revize skutečný podpis, razítko TIČR a patička s pečetí)
+  const seal = input.seal ?? null;
+  const sy = seal ? H - 196 : H - 150;
   out.push(`<line x1="${W - M - 250}" y1="${sy + 40}" x2="${W - M}" y2="${sy + 40}" stroke="#71717a"/>`);
-  out.push(`<path d="M ${W - M - 230} ${sy + 30} c 20 -26 34 8 52 -10 s 30 -14 44 4 s 26 -6 40 -12" fill="none" stroke="#1d4ed8" stroke-width="1.6"/>`);
+  if (seal?.signaturePng) {
+    out.push(`<image href="${esc(seal.signaturePng)}" x="${W - M - 240}" y="${sy - 22}" width="230" height="60" preserveAspectRatio="xMidYMid meet"/>`);
+  } else if (!seal) {
+    out.push(`<path d="M ${W - M - 230} ${sy + 30} c 20 -26 34 8 52 -10 s 30 -14 44 4 s 26 -6 40 -12" fill="none" stroke="#1d4ed8" stroke-width="1.6"/>`);
+  }
   out.push(`<text x="${W - M}" y="${sy + 58}" font-family="${FONT}" font-size="12" font-weight="600" fill="#18181b" text-anchor="end">${esc(input.signature.name)}</text>`);
   out.push(`<text x="${W - M}" y="${sy + 74}" font-family="${FONT}" font-size="10.5" fill="#52525b" text-anchor="end">${esc(input.signature.role)}</text>`);
   out.push(`<text x="${M}" y="${sy + 58}" font-family="${FONT}" font-size="12" fill="#18181b">Datum: ${esc(input.signature.date)}</text>`);
-  out.push(`<circle cx="${M + 230}" cy="${sy + 30}" r="34" fill="none" stroke="#2563eb" stroke-width="2" opacity="0.55"/>`);
-  out.push(`<text x="${M + 230}" y="${sy + 34}" font-family="${FONT}" font-size="9" fill="#2563eb" opacity="0.7" text-anchor="middle">RAZÍTKO</text>`);
+  if (seal) {
+    out.push(stampSvg(M + 250, sy + 26, seal.stamp));
+    // Patička uzamčeného protokolu: pečeť SHA-256, časové razítko UTC / SEČ, IP a zařízení, ověření
+    const fy = H - M - 62;
+    out.push(`<rect x="${M}" y="${fy - 14}" width="${inner}" height="${seal.footer.length * 12 + 12}" rx="4" fill="#f4f4f5" stroke="#d4d4d8"/>`);
+    seal.footer.forEach((line, index) => {
+      out.push(`<text x="${M + 10}" y="${fy + index * 12}" font-family="${index === 0 ? MONO : FONT}" font-size="${index === 0 ? 8.6 : 8.4}" fill="#3f3f46">${esc(line)}</text>`);
+    });
+  } else {
+    out.push(`<circle cx="${M + 230}" cy="${sy + 30}" r="34" fill="none" stroke="#2563eb" stroke-width="2" opacity="0.55"/>`);
+    out.push(`<text x="${M + 230}" y="${sy + 34}" font-family="${FONT}" font-size="9" fill="#2563eb" opacity="0.7" text-anchor="middle">RAZÍTKO</text>`);
+  }
 
-  out.push(`<text x="${W / 2}" y="${H - M + 14}" font-family="${FONT}" font-size="9.5" fill="#a1a1aa" text-anchor="middle">Demo dokument ELDOCK · eldock.cz – vygenerováno aplikací, fiktivní údaje · strana 1/1</text>`);
+  if (!seal) out.push(`<text x="${W / 2}" y="${H - M + 14}" font-family="${FONT}" font-size="9.5" fill="#a1a1aa" text-anchor="middle">Demo dokument ELDOCK · eldock.cz – vygenerováno aplikací, fiktivní údaje · strana 1/1</text>`);
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${out.join("")}</svg>`;
 }

@@ -2,6 +2,11 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { PrintToolbar } from "@/components/common/PrintToolbar";
+import { InspectorStamp } from "@/components/inspections/InspectorStamp";
+import { PadesUpload } from "@/components/inspections/PadesUpload";
+import { prisma } from "@/lib/prisma";
+import { MISUSE_BANNER, sealTimestamp } from "@/lib/revision-signature";
+import { verifySeal } from "@/server/services/revision-signing";
 import { LogoMark } from "@/components/layout/Logo";
 import { BRAND } from "@/lib/brand";
 import { BUILDING_TYPE_LABELS, EQUIPMENT_TYPE_LABELS, INSPECTION_TYPE_LABELS, formatDate } from "@/lib/format";
@@ -32,6 +37,9 @@ export default async function InspectionReportPage({ params }: Props) {
   if (!record || !modules.on("inspections.pdf_reports") || !account.can("inspections") || !account.canSee(record.equipment.type)) notFound();
 
   const { equipment } = record;
+  // Fáze 108: podepsaná revize – přepočet pečeti SHA-256 z uložených údajů protokolu
+  const seal = record.sealHash ? await verifySeal(prisma, record.id) : null;
+  const signedTime = record.signedAt ? sealTimestamp(record.signedAt) : null;
   const { building } = equipment.floor;
   const { plant } = building;
   const variant = protocolVariant(equipment.type);
@@ -104,6 +112,11 @@ export default async function InspectionReportPage({ params }: Props) {
         }
       `}</style>
       <PrintToolbar className="max-w-[210mm]" hint={`Revizní zpráva ${record.reportNumber} · A4. Pro PDF zvolte v dialogu tisku „Uložit jako PDF“.`} />
+      {record.sealHash && account.can("recordInspection") && !record.misuseFlaggedAt ? (
+        <div className="no-print w-full max-w-[210mm]">
+          <PadesUpload inspectionId={record.id} padesUrl={record.padesUrl} padesInfo={record.padesInfo} />
+        </div>
+      ) : null}
 
       <article className="sheet flex w-full max-w-[210mm] flex-col gap-4 bg-white p-[12mm] text-[10pt] leading-snug text-black shadow-2xl shadow-black/50 sm:min-h-[297mm]" data-testid="inspection-protocol" data-variant={variant}>
         <header className="flex items-start justify-between gap-6 border-b-2 border-black pb-3">
@@ -221,14 +234,59 @@ export default async function InspectionReportPage({ params }: Props) {
           )}
         </section>
 
+        {/* Fáze 108: revize zneplatněná technikem – červené varování i v tisku */}
+        {record.misuseFlaggedAt ? (
+          <p className="rounded border-2 border-red-600 bg-red-50 px-3 py-2 text-[10pt] font-bold text-red-700" data-testid="protocol-misuse">
+            {MISUSE_BANNER} ({formatDate(record.misuseFlaggedAt)}){record.misuseNote ? ` – ${record.misuseNote}` : ""}
+          </p>
+        ) : null}
+
         <section className="mt-auto grid break-inside-avoid grid-cols-2 gap-6 pt-2">
           <SignatureBox
             title="Revizní technik"
-            lines={[record.inspectorName, `Osvědčení ${certificate}`, `Zprávu vypracoval dne: ${formatDate(record.reportedAt ?? record.inspectionDate)}`]}
+            lines={[
+              record.inspectorName,
+              `Osvědčení ${certificate}`,
+              ...(record.inspectorAuthorization ? [`Oprávnění TIČR ${record.inspectorAuthorization}`] : []),
+              ...(record.inspectorCompany ? [[record.inspectorCompany, record.inspectorIco ? `IČO ${record.inspectorIco}` : null].filter(Boolean).join(" · ")] : []),
+              `Zprávu vypracoval dne: ${formatDate(record.reportedAt ?? record.inspectionDate)}`,
+            ]}
             stamp
+            signed={
+              record.sealHash
+                ? {
+                    signatureUrl: record.signatureUrl,
+                    stamp: { name: record.inspectorName, certificateNo: record.inspectorLicense, certificateScope: record.inspectorScope, authorizationNo: record.inspectorAuthorization, company: record.inspectorCompany },
+                  }
+                : null
+            }
           />
           <SignatureBox title="Převzal za provozovatele" lines={["Jméno:", "Funkce:", `Datum převzetí: ${record.handedOverAt ? formatDate(record.handedOverAt) : ""}`]} />
         </section>
+
+        {/* Fáze 108: patička uzamčeného protokolu – pečeť SHA-256, časové razítko UTC / SEČ, IP a zařízení, PAdES */}
+        {record.sealHash && seal ? (
+          <section className="break-inside-avoid rounded border border-zinc-400 bg-zinc-50 px-3 py-2 text-[7.5pt] leading-relaxed text-zinc-700" data-testid="protocol-seal" data-seal={seal.status}>
+            <p className="font-mono text-[7.5pt] break-all">Pečeť SHA-256: {record.sealHash}</p>
+            <p>
+              Ověření pečeti: {seal.status === "VALID" ? "✅ shoda – obsah protokolu od podpisu nezměněn" : "⛔ NESHODA – údaje protokolu byly po podpisu změněny"} ({seal.count} {seal.count === 1 ? "záznam" : "záznamů"} protokolu).
+            </p>
+            <p>
+              Elektronicky podepsal(a): {record.inspectorName} · osvědčení TIČR č. {record.inspectorLicense}
+              {record.pinVerified ? " · vydání potvrzeno osobním PINem" : ""}
+            </p>
+            {signedTime ? (
+              <p>
+                Časové razítko: {signedTime.utc} · {signedTime.local} · IP {record.signedIp ?? "neuvedena"}
+                {record.signedDevice ? ` · ${record.signedDevice}` : ""}
+              </p>
+            ) : null}
+            <p>
+              {record.padesUrl ? `Kvalifikovaný elektronický podpis PAdES připojen ${record.padesUploadedAt ? formatDate(record.padesUploadedAt) : ""} (${record.padesInfo?.split(" · SHA-256")[0] ?? "PDF"}). ` : ""}
+              Prostý elektronický podpis s pečetí obsahu (eIDAS čl. 25 odst. 1){record.padesUrl ? "; kvalifikovaný podpis PAdES (eIDAS čl. 25 odst. 2, zákon č. 297/2016 Sb.)." : "; kvalifikovaný podpis PAdES lze připojit."}
+            </p>
+          </section>
+        ) : null}
 
         <footer className="border-t border-zinc-400 pt-1.5 text-[7.5pt] text-zinc-600">
           Vystaveno v systému {BRAND.name} ({BRAND.domain}) · zařízení {equipment.tag} · zpráva {record.reportNumber}. Originál revizní zprávy uchovává provozovatel po dobu životnosti zařízení. Elektronicky předaná zpráva musí být podepsána uznávaným elektronickým podpisem (NV 190/2022 Sb., § 10 odst. 1 písm. d).
@@ -267,17 +325,40 @@ function TextSection({ title, text, testId }: { title: string; text: string; tes
   );
 }
 
-function SignatureBox({ title, lines, stamp = false }: { title: string; lines: string[]; stamp?: boolean }) {
+function SignatureBox({
+  title,
+  lines,
+  stamp = false,
+  signed = null,
+}: {
+  title: string;
+  lines: string[];
+  stamp?: boolean;
+  /** Fáze 108: podepsaná revize – vlastnoruční podpis z plátna a razítko TIČR místo prázdných polí. */
+  signed?: { signatureUrl: string | null; stamp: { name: string; certificateNo: string; certificateScope: string | null; authorizationNo: string | null; company: string | null } } | null;
+}) {
   return (
     <div className="flex flex-col gap-1">
       <p className="text-[8pt] font-semibold tracking-wide text-zinc-600 uppercase">{title}</p>
       {lines.map((line) => (
         <p key={line}>{line}</p>
       ))}
-      <div className="mt-1 flex h-20 items-end justify-between gap-3 border-b border-dashed border-zinc-500 pb-1 text-[8pt] text-zinc-500">
-        <span>Podpis</span>
-        {stamp ? <span className="flex size-16 items-center justify-center rounded-full border border-dashed border-zinc-400 text-center">Razítko</span> : null}
-      </div>
+      {signed ? (
+        <div className="mt-1 flex h-24 items-end justify-between gap-3 border-b border-zinc-500 pb-1" data-testid="protocol-signature">
+          {signed.signatureUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element -- podpis technika z úložiště souborů
+            <img src={signed.signatureUrl} alt={`Podpis – ${signed.stamp.name}`} className="h-20 max-w-[60%] object-contain" />
+          ) : (
+            <span className="text-[8pt] text-zinc-500">Podpis</span>
+          )}
+          <InspectorStamp profile={signed.stamp} size={88} />
+        </div>
+      ) : (
+        <div className="mt-1 flex h-20 items-end justify-between gap-3 border-b border-dashed border-zinc-500 pb-1 text-[8pt] text-zinc-500">
+          <span>Podpis</span>
+          {stamp ? <span className="flex size-16 items-center justify-center rounded-full border border-dashed border-zinc-400 text-center">Razítko</span> : null}
+        </div>
+      )}
     </div>
   );
 }

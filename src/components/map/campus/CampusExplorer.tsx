@@ -13,7 +13,9 @@ import { PowerBackupFilter } from "./PowerBackupFilter";
  * Mapa areálu a seznam budov se sdíleným zvýrazněním (hover / focus). Fáze 93: nad mapou filtr větví podle zálohování
  * napájení (síť / DA / UPS · ZIS IT) a hledání nájemní jednotky / oddělení – zvýrazní budovy a páteřní trasy větve.
  */
-export function CampusExplorer({ plant, legend, power = [] }: { plant: PlantOverview; legend: React.ReactNode; power?: readonly BackupNode[] }) {
+export function CampusExplorer({ plant, legend, power = [], canEdit = false }: { plant: PlantOverview; legend: React.ReactNode; power?: readonly BackupNode[]; canEdit?: boolean }) {
+  // Fáze 108: úprava, přesun a smazání budov (právo Studia výstavby)
+  const edit = canEdit ? { plantId: plant.id, campus: plant.campus } : null;
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [filter, setFilter] = useState<BackupFilter>("ALL");
   const [query, setQuery] = useState("");
@@ -39,10 +41,11 @@ export function CampusExplorer({ plant, legend, power = [] }: { plant: PlantOver
           hoveredId={hoveredId}
           onHover={setHoveredId}
           highlight={highlight}
+          edit={edit}
         />
         {legend}
       </div>
-      <BuildingList buildings={plant.buildings} hoveredId={hoveredId} onHover={setHoveredId} />
+      <BuildingList buildings={plant.buildings} hoveredId={hoveredId} onHover={setHoveredId} edit={edit} />
     </div>
   );
 }

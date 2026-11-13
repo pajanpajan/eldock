@@ -92,7 +92,7 @@ export async function getEquipmentLabel(equipmentId: string) {
       name: true,
       type: true,
       qrToken: true,
-      inspections: { select: { type: true, inspectionDate: true, validUntil: true, result: true } },
+      inspections: { where: { misuseFlaggedAt: null }, select: { type: true, inspectionDate: true, validUntil: true, result: true } },
     },
   });
 }
@@ -202,7 +202,7 @@ export async function getSchematicReferences(revisionId: string, now: Date = new
           status: true,
           revisions: { where: { status: "ACTIVE" }, select: { version: true, createdAt: true }, take: 1 },
           changeRequests: { orderBy: { submittedAt: "desc" }, take: 3, select: { id: true, number: true, status: true, submittedAt: true, note: true } },
-          inspections: { where: { type: { in: [...DEADLINE_TYPES] } }, select: { type: true, inspectionDate: true, validUntil: true, result: true } },
+          inspections: { where: { type: { in: [...DEADLINE_TYPES] }, misuseFlaggedAt: null }, select: { type: true, inspectionDate: true, validUntil: true, result: true } },
         },
       },
     },

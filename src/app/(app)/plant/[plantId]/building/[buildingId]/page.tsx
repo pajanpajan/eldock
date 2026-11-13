@@ -6,9 +6,11 @@ import { LocationBreadcrumb } from "@/components/common/LocationBreadcrumb";
 import { PageHeader } from "@/components/common/PageHeader";
 import { StatusLegend } from "@/components/common/StatusLegend";
 import { PageTransition } from "@/components/layout/PageTransition";
+import { BuildingHeaderActions } from "@/components/map/campus/BuildingDialogs";
 import { BuildingExplorer } from "@/components/map/isometric/BuildingExplorer";
 import { BUILDING_TYPE_LABELS, formatCount } from "@/lib/format";
 import { plantHref } from "@/lib/routes";
+import { getFeatures } from "@/server/modules";
 import { getBuildingOverview } from "@/server/queries/building";
 import { getCurrentAccount } from "@/server/session";
 
@@ -22,9 +24,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 // Level 2 – 45° izometrický pohled na budovu a výběr patra.
 export default async function BuildingPage({ params }: Props) {
-  const [{ plantId, buildingId }, account] = await Promise.all([params, getCurrentAccount()]);
+  const [{ plantId, buildingId }, account, modules] = await Promise.all([params, getCurrentAccount(), getFeatures()]);
   const building = await getBuildingOverview(plantId, buildingId, account.types);
   if (!building) notFound();
+  // Fáze 108: úprava / smazání budovy s právem Studia výstavby
+  const canEdit = account.can("studio") && modules.on("enterprise.studio");
 
   const equipment = building.floors.reduce((sum, floor) => sum + floor.counts.total, 0);
 
@@ -45,6 +49,14 @@ export default async function BuildingPage({ params }: Props) {
         ]
           .filter(Boolean)
           .join(" · ")}
+        actions={
+          <BuildingHeaderActions
+            plantId={building.plant.id}
+            building={{ id: building.id, code: building.code, name: building.name, shortName: building.shortName, mapPolygon: building.mapPolygon }}
+            campus={{ width: building.plant.campusWidthM, height: building.plant.campusDepthM }}
+            canEdit={canEdit}
+          />
+        }
       />
       <BuildingExplorer
         floors={building.floors}

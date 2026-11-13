@@ -28,6 +28,7 @@ import { cn } from "@/lib/utils";
 import { recordBatchInspectionAction } from "@/server/actions/inspection";
 
 import { useInspectorProfile } from "./inspector-profile";
+import { RevisionTechnicianFormModal } from "./RevisionTechnicianFormModal";
 
 /** Položka hromadné revize – pole pravidla lhůty (fáze 66: budova, provedení, LPS) a napětí pro kontrolu osvědčení. */
 export interface BatchItem extends RuleInput {
@@ -46,6 +47,9 @@ export function BatchInspectionBar({ items, today, onClear }: { items: BatchItem
   const router = useRouter();
   const [profile, updateProfile] = useInspectorProfile();
   const [open, setOpen] = useState(false);
+  // Fáze 108: hromadná revize s podpisem technika (profil TIČR, měření, razítko, PIN, pečeť SHA-256)
+  const [signOpen, setSignOpen] = useState(false);
+  const [signed, setSigned] = useState(false);
   const [pending, startTransition] = useTransition();
   const [date, setDate] = useState(today);
   const [result, setResult] = useState<InspectionResult>("CAPABLE");
@@ -119,11 +123,14 @@ export function BatchInspectionBar({ items, today, onClear }: { items: BatchItem
 
   return (
     <>
-      <div className="fixed inset-x-0 bottom-0 z-30 flex justify-center p-3 pb-safe" role="region" aria-label="Hromadná revize">
+      <div className="fixed inset-x-0 bottom-0 z-30 flex justify-center p-3 pb-safe" role="region" aria-label="Hromadná revize" data-bottom-bar>
         <div className="flex w-full max-w-2xl flex-wrap items-center gap-2 rounded-2xl border border-primary/50 bg-zinc-900/95 p-2 shadow-2xl shadow-black/60 backdrop-blur">
           <Button size="lg" className="h-12 flex-1 gap-2 text-base font-semibold" onClick={() => setOpen(true)}>
             <ClipboardCheck className="size-5" aria-hidden />
             Zapsat hromadnou revizi ({items.length} vybráno)
+          </Button>
+          <Button size="lg" variant="outline" className="h-12 gap-2 border-primary/60" onClick={() => setSignOpen(true)} data-testid="batch-signed-open">
+            🖊️ Podepsat (TIČR)
           </Button>
           <Button size="lg" variant="ghost" className="h-12 gap-2" onClick={onClear}>
             <X className="size-4" aria-hidden />
@@ -131,6 +138,24 @@ export function BatchInspectionBar({ items, today, onClear }: { items: BatchItem
           </Button>
         </div>
       </div>
+
+      {signOpen ? (
+        <RevisionTechnicianFormModal
+          open={signOpen}
+          onOpenChange={(value) => {
+            setSignOpen(value);
+            // Výběr se zruší až po zavření souhrnu (odkaz na protokol a PAdES zůstane vidět)
+            if (!value && signed) {
+              setSigned(false);
+              onClear();
+            }
+          }}
+          equipment={items.map((item) => ({ id: item.id, tag: item.tag, name: item.name }))}
+          today={today}
+          title="Hromadná revize s podpisem"
+          onSigned={() => setSigned(true)}
+        />
+      ) : null}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-2xl">

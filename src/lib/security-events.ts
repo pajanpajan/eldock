@@ -25,4 +25,9 @@ export const SECURITY_EVENT_LABELS: Record<SecurityEventKind, { label: string; t
   DEVICE_PAIRED: { label: "Spárována aplikace", tone: "ok" },
   DEVICE_REVOKED: { label: "Aplikace odpojena", tone: "warn" },
   DEVICE_PAIR_FAILED: { label: "Chybný kód párování aplikace", tone: "warn" },
+  // Fáze 108: budovy závodu a elektronický podpis revizí
+  BUILDING_DELETED: { label: "Smazána budova závodu (i se zařízeními a revizemi)", tone: "bad" },
+  REVISION_SIGNED: { label: "Revize podepsána profilem technika (PIN, pečeť SHA-256)", tone: "ok" },
+  REVISION_MISUSE: { label: "Revize zneplatněna – zneužití osvědčení TIČR", tone: "bad" },
+  INSPECTOR_PIN_FAILED: { label: "Chybný PIN revizního technika", tone: "warn" },
 };

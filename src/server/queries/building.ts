@@ -27,7 +27,7 @@ async function loadBuildingOverview(plantId: string, buildingId: string, types: 
   const building = await prisma.building.findFirst({
     where: { id: buildingId, plantId },
     include: {
-      plant: { select: { id: true, name: true } },
+      plant: { select: { id: true, name: true, campusWidthM: true, campusDepthM: true } },
       floors: {
         orderBy: { level: "asc" },
         include: {
@@ -78,6 +78,9 @@ async function loadBuildingOverview(plantId: string, buildingId: string, types: 
     id: building.id,
     code: building.code,
     name: building.name,
+    // Fáze 108: úprava / smazání budovy z hlavičky detailu
+    shortName: building.shortName,
+    mapPolygon: building.mapPolygon,
     type: building.type,
     description: building.description,
     plant: building.plant,

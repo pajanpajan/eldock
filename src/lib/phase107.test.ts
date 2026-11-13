@@ -101,7 +101,7 @@ describe("fáze 107 – kontaktní a zpětnovazební hub", () => {
     expect(UPLOAD_KINDS).toContain("feedback");
     expect(resolveUploadPath("/srv/storage/uploads", ["feedback", "0b7c1a1e-1111-4222-8333-944455556666.webp"])).not.toBeNull();
     expect(resolveUploadPath("/srv/storage/uploads", ["feedback", "..", "x.webp"])).toBeNull();
-    expect(PRIVACY_VERSION).toMatch(/^1\.5/);
+    expect(PRIVACY_VERSION).toMatch(/^1\.[5-9]/);
     const section = PRIVACY_SECTIONS.find((item) => item.id === "kontaktni-formular");
     expect(section?.title).toBe("7c. Kontaktní formulář a hlášení chyb");
     const text = PRIVACY_SECTIONS.map((item) => [...item.paragraphs, ...(item.list ?? [])].join(" ")).join(" ");

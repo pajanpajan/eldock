@@ -6,6 +6,9 @@ import { backupConfig, type BackupConfig } from "@/server/backup/config";
 import { runBackup } from "@/server/services/backup";
 import { executeDueClosures } from "@/server/services/data-requests";
 import { runRetention } from "@/server/services/retention";
+import { sendDueMonthlyReports } from "@/server/services/revision-signing";
+import { brandEnv } from "@/lib/auth";
+import { smtpTransportFromEnv } from "@/server/mailer";
 
 // Plánovač údržby v procesu aplikace (fáze 68): jednou denně po čase `ELDOCK_BACKUP_TIME` (Europe/Prague) záloha,
 // retence a (fáze 69) výmaz účtů firem po lhůtě. Spouští ho `src/instrumentation.ts` jen v produkčním serveru; běh se
@@ -65,6 +68,15 @@ export async function runDueMaintenance(context: JobContext, trigger: Maintenanc
   const backup = backupDue ? await runBackup({ prisma: context.prisma, config, storageRoot, now: context.now, log: context.log }, trigger) : null;
   const retention = dailyDue ? await runRetention(context.prisma, trigger, now) : null;
   const erasure = dailyDue ? await runErasure(context.prisma, trigger, { storageRoot, now }) : null;
+  // Fáze 108: 1. den v měsíci kontrolní report revizí pod číslem osvědčení TIČR (jednou za měsíc a profil)
+  if (dailyDue) {
+    try {
+      const sent = await sendDueMonthlyReports(context.prisma, { now, origin: brandEnv("PUBLIC_URL") ?? "https://eldock.cz", transport: smtpTransportFromEnv() });
+      if (sent.length) context.log?.(`[eldock] Měsíční report TIČR: ${sent.length} profilů`);
+    } catch (error) {
+      context.log?.(`[eldock] Měsíční report TIČR selhal: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
   if (backup || retention) context.log?.(`[eldock] Denní údržba: záloha ${backup?.status ?? "vypnutá"}, retence ${retention?.status ?? "–"}${erasure ? `, výmaz účtů ${erasure.status}` : ""}.`);
   return { backup, retention, erasure };
 }

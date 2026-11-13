@@ -30,7 +30,7 @@ export async function loadDigestItems(prisma: PrismaClient, plantId: string, now
       name: true,
       assignedZone: true,
       floor: { select: { name: true, building: { select: { name: true } } } },
-      inspections: { where: { type: { in: [...DEADLINE_TYPES] } }, select: { type: true, inspectionDate: true, validUntil: true, result: true } },
+      inspections: { where: { type: { in: [...DEADLINE_TYPES] }, misuseFlaggedAt: null }, select: { type: true, inspectionDate: true, validUntil: true, result: true } },
     },
   });
   return equipment.flatMap(({ inspections, floor, assignedZone, ...item }) => {

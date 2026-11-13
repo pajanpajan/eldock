@@ -64,35 +64,37 @@
 58. ZADANI-faze-105.md
 59. ZADANI-faze-106.md
 60. ZADANI-faze-107.md
-61. DENIK-faze-100.md
-62. DENIK-faze-101.md
-63. DENIK-faze-102.md
-64. DENIK-faze-103.md
-65. DENIK-faze-104.md
-66. DENIK-faze-105.md
-67. DENIK-faze-49-54.md
-68. DENIK-faze-55-59.md
-69. DENIK-faze-60-61.md
-70. DENIK-faze-62-65.md
-71. DENIK-faze-66-67.md
-72. DENIK-faze-68-70.md
-73. DENIK-faze-71-73.md
-74. DENIK-faze-74-77.md
-75. DENIK-faze-78-80.md
-76. DENIK-faze-81-82.md
-77. DENIK-faze-83-85.md
-78. DENIK-faze-86-88.md
-79. DENIK-faze-89-90.md
-80. DENIK-faze-91.md
-81. DENIK-faze-92.md
-82. DENIK-faze-93.md
-83. DENIK-faze-94.md
-84. DENIK-faze-95.md
-85. DENIK-faze-96.md
-86. DENIK-faze-97.md
-87. DENIK-faze-98.md
-88. DENIK-faze-99.md
-89. docs/PLAN.md (aktuální plán a deník posledních fází)
+61. ZADANI-faze-108.md
+62. DENIK-faze-100.md
+63. DENIK-faze-101.md
+64. DENIK-faze-102.md
+65. DENIK-faze-103.md
+66. DENIK-faze-104.md
+67. DENIK-faze-105.md
+68. DENIK-faze-106.md
+69. DENIK-faze-49-54.md
+70. DENIK-faze-55-59.md
+71. DENIK-faze-60-61.md
+72. DENIK-faze-62-65.md
+73. DENIK-faze-66-67.md
+74. DENIK-faze-68-70.md
+75. DENIK-faze-71-73.md
+76. DENIK-faze-74-77.md
+77. DENIK-faze-78-80.md
+78. DENIK-faze-81-82.md
+79. DENIK-faze-83-85.md
+80. DENIK-faze-86-88.md
+81. DENIK-faze-89-90.md
+82. DENIK-faze-91.md
+83. DENIK-faze-92.md
+84. DENIK-faze-93.md
+85. DENIK-faze-94.md
+86. DENIK-faze-95.md
+87. DENIK-faze-96.md
+88. DENIK-faze-97.md
+89. DENIK-faze-98.md
+90. DENIK-faze-99.md
+91. docs/PLAN.md (aktuální plán a deník posledních fází)
 
 ---
 
@@ -6828,6 +6830,277 @@ v `src/server/services/contact.ts`.
 
 ---
 
+# 📄 ZADANI-faze-108.md
+
+# Zadání fáze 108 – průmyslová část: úprava, přesun a smazání budov, rozvržení podlaží, Chytrá revize (optimalizace výjezdu technika), formulář revizního technika s podpisem a pečetí SHA-256, měsíční report a ochrana osvědčení TIČR
+
+Vloženo z chatu 2026-11-13 jako prioritní fáze (během zadání 2D půdorysu, které se tím posunulo na fázi 109). Celé zadání beze změn je níže, za ním rozhodnutí při implementaci.
+
+## Zadání (z chatu)
+
+Provedli jsme testování průmyslové části aplikace (`/plant/...`, `/revize`, `/rychla-revize`, `/planovac`, `/studio`) a narazili jsme na konkrétní chyby v ovládání, rozbité rozvržení obrazovky a chybějící funkce pro revizní techniky.
+
+Zapiš tuto etapu jako prioritní fázi do `docs/PLAN.md` a kompletně ji naimplementuj v těchto 6 částech:
+
+================================================================================
+ČÁST 1: MOŽNOST ODSTRANIT, UPRAVIT A POSUNOUT BUDOVU + KONEC PŘEKRÝVÁNÍ HAL NA MAPĚ
+================================================================================
+
+PROBLÉM (`{34F613CD-11CE-447E-ACC9-56D96ADC851B}.jpg` a `{BA9CE0F6-0767-4CE7-BF61-59D1F0ECFB1A}.jpg`):
+1) Když uživatel přidá budovu přes rychlé tlačítko `+ Přidat budovu do závodu`, nová budova (např. `Hala 1 - Výroba`) se na 2D mapě závodu položí přímo přes stávající budovy (`Hala A - Lisovna` a `Administrativa`).
+2) Nikde v pravém seznamu budov, na mapě ani v detailu budovy (`/plant/[plantId]/building/[buildingId]/...`) není možnost přidanou budovu **odstranit (smazat)**, přejmenovat nebo změnit její pozici/rozměry!
+
+OPRAVA:
+1. **Okamžitá možnost odstranit a upravit budovu (na 3 místech):**
+   - **V pravém seznamu budov na stránce závodu (`/plant/[plantId]`):** Ke každé kartě budovy přidej kromě šipky `>` také rychlé akční ikony **`[ ✏️ Upravit ]`** (změna názvu, kódu, rozměrů a pozice X/Y na mapě) a **`[ 🗑️ Odstranit budovu ]`**!
+   - **Přímo na 2D mapě areálu:** Po kliknutí nebo najetí na budovu na mapě zobraz v rohu budovy rychlou lištu `[ ✥ Posunout ]` · `[ ✏️ Upravit ]` · `[ 🗑️ Smazat ]` a umožni budovu na mapě jednoduše přetáhnout myší (Drag & Drop) na volné místo!
+   - **V hlavičce detailu budovy / podlaží (`/plant/[plantId]/building/[buildingId]/floor/[floorId]`):** Vedle nadpisu budovy (`1. NP - Výroba`) přidej tlačítka **`[ ← Zpět na mapu závodu ]`**, **`[ ✏️ Upravit budovu / podlaží ]`** a červené tlačítko **`[ 🗑️ Odstranit tuto budovu ]`** (po potvrzení budovu smaže ze stavu i `localStorage`/DB a přesměruje uživatele zpět na mapu závodu `/plant/[plantId]`).
+2. **Chytré umístění nově přidané budovy bez kolize (Non-overlapping Placement):**
+   - Uprav funkci pro přidání nové budovy (`+ Přidat budovu do závodu`) tak, aby zkontrolovala obdélníky (`x, y, width, height`) všech stávajících budov na mapě a novou budovu automaticky umístila na **první volnou pozici v areálu bez jakéhokoliv překryvu se stávajícími halami**!
+
+================================================================================
+ČÁST 2: OPRAVA ROZBITÉHO LAYOUTU V DETAILU HALY A KOMPLETNÍ AUDIT PRŮMYSLOVÉ ČÁSTI
+================================================================================
+
+PROBLÉM (`{BA9CE0F6-0767-4CE7-BF61-59D1F0ECFB1A}.jpg`):
+- Na stránce podlaží budovy (`/plant/[plantId]/building/[buildingId]/floor/[floorId]`) je celá levá třetina obrazovky (~35 % šířky) prázdná černá díra a obsah je natlačený pouze do pravé části obrazovky!
+- Spodní plovoucí žluté tlačítko `Zapsat hromadnou revizi (1 vybráno)` překrývá řádky tabulky `Zařízení na patře`.
+
+OPRAVA:
+1. Zkontroluj a oprav CSS layout v `src/app/plant/[plantId]/building/[buildingId]/floor/[floorId]/page.tsx` (i v nadřazených layout souborech `/plant/**`):
+   - Odstraň prázdný levý grid sloupec / přebytečný `ml-*` offset, který odsouvá obsah doprava! Celá stránka podlaží musí být čistě vycentrovaná na plnou šířku (`max-w-[1600px] mx-auto w-full px-4 sm:px-6`).
+   - Přidej spodní tabulce dostatečný vnitřní odstup (`pb-28`), aby plovoucí akční lišta `Zapsat hromadnou revizi` nikdy nepřekrývala poslední řádky tabulky.
+2. Proveď audit všech podstránek průmyslové části (`/`, `/plant/[plantId]`, `/revize`, `/planovac`, `/rychla-revize`, `/audit`, `/studio`, `/moduly`, `/ucty`):
+   - Zajisti, aby nově přidané budovy, rozváděče, stroje i zapsané revize byly **100% synchronizované přes společný perzistentní stav/úložiště** napříč všemi těmito stránkami i 4 fázemi průvodce!
+   - V detailu podlaží (`1. NP - Výroba`) přidej přímo nad mapu haly jasné tlačítko **`[ + Přidat rozváděč nebo stroj na toto podlaží ]`** a možnost smazat nebo přesunout vybrané zařízení v hale.
+
+================================================================================
+ČÁST 3: NÁVRAT A VYLEPŠENÍ „CHYTRÉ REVIZE (OPTIMALIZACE VÝJEZDU TECHNIKA)“
+================================================================================
+
+PROBLÉM: Z průmyslové části se vytratila klíčová funkce **Chytré revize**, která před tím, než revizní technik vyrazí do závodu dělat revizi jednoho zařízení, automaticky nabídne a přibalí i ostatní revize v téže hale nebo závodě, kterým se blíží expirace!
+
+OPRAVA – Vytvoř a viditelně zapoj komponentu **`SmartRevisionTripOptimizer.tsx`** na 3 klíčových místech (v přehledu závodu `/plant/[plantId]`, v detailu podlaží budovy i na stránkách `/revize` a `/planovac`):
+
+1. **Jak funguje logika Chytré revize („Když už tam revizní technik jede“):**
+   - Kdykoliv je v závodě alespoň 1 zařízení po termínu revize (`EXPIRED`) nebo do 30 dnů před expirací (`DUE_SOON`), systém automaticky prohledá celý závod (seřazený podle stejné budovy -> sousedních budov) a najde všechna další zařízení (rozváděče, stroje, nouzová osvětlení, spotřebiče), kterým končí revize v horizontu **30 / 60 / 90 / 180 dnů** (přepínatelný horizont!).
+2. **Přehledný banner a jednoklikové sloučení do jednoho výjezdu:**
+   - Zobraz výrazný chytrý panel:
+     * **`🧠 Chytrá revize – Optimalizace výjezdu revizního technika:`**
+     * *"Než revizní technik vyrazí do závodu kvůli 1 neodkladné revizi, doporučujeme do stejného výjezdu přibalit dalších **X zařízení v téže budově / závodě**, kterým vyprší platnost revize v nejbližších **90 dnech**. Ušetříte tím opakovaný výjezd a dopravu technika."*
+   - Zobraz seznam těchto blížících se zařízení (se zaškrtávátky `[✓]`, budovou, počtem zbývajících dnů do expirace a odhadovanou časovou náročností) a tlačítka:
+     * **`[ ⚡ Sloučit vybrané (X) do jednoho revizního výjezdu a otevřít formulář revize ]`**
+     * **`[ 📩 Odeslat tento sloučený seznam reviznímu technikovi k přípravě ]`**
+
+================================================================================
+ČÁST 4: INTUITIVNÍ FORMULÁŘ „DOPLNIT DATA K REVIZI“ + ZÁKONNĚ UZNATEĽNÝ DIGITÁLNÍ PODPIS (eIDAS / ZÁK. 297/2016 Sb. / NV 190/2022 Sb.)
+================================================================================
+
+Vytvoř pro revizního technika maximálně rychlé, přehledné a zákonně neprůstřelné rozhraní pro zápis a uzavření revize (`RevisionTechnicianFormModal.tsx` – dostupné z každého rozváděče/stroje, z hromadné revize i po naskenování QR štítku):
+
+1. **automatické PŘEDVYPLNĚNÍ PROFILU REVIZNÍHO TECHNIKA (aby nemusel nic vypisovat ručně):**
+   - Umožni reviznímu technikovi uložit si svůj profil (nebo vybrat z uložených revizních techniků závodu):
+     * **Jméno, příjmení a titul** (např. `Ing. Martin Dvořák`),
+     * **Firma / IČO** (s načtením z ARESu), **Telefon** a **E-mail** (na tento e-mail mu bude chodit i měsíční bezpečnostní report!),
+     * **Evidenční číslo osvědčení TIČR** (např. `1248/23/R-EZ-E2A` – rozsah `E2A / E2B / E1A`),
+     * **Evidenční číslo oprávnění TIČR** (pro podnikající FO / PO),
+     * **Použitý měřicí přístroj + číslo kalibračního listu** (např. `Metrel EurotestXC MI 3155, Kalibrační list č. KL-2026-0842, platnost do 10/2027`).
+
+2. **RYCHLÉ DOPLNĚNÍ NAMĚŘENÝCH HODNOT (PŘEDVYPLNĚNÉ ŠABLONY NA 1 KLIK):**
+   - Druh revize: `[ Pravidelná (periodická) ]` · `[ Výchozí ]` · `[ Mimořádná (po opravě / změně) ]` + lhůta příští revize dle ČSN 33 1500 (např. `3 roky` / `4 roky` / `2 roky` / `1 rok`).
+   - Tlačítko **`[ ✨ Předvyplnit standardní vyhovující hodnoty měření ]`** (technik pak jen přepíše konkrétní čísla z přístroje):
+     * Izolační odpor $R_{\text{iso}}$ [MΩ] (např. `> 500 MΩ při 500 V DC`),
+     * Spojitost ochranného vodiče a pospojování PE [Ω] (např. `0,05 Ω`),
+     * Impedance poruchové smyčky $Z_s$ [Ω] / zkratový proud $I_k$ [A],
+     * Zkouška proudových chráničů RCD ($I_{\Delta n} = 30\text{ mA}$, vybavovací čas $t_A = 18\text{ ms}$),
+     * Kontrola oteplení / termovize a dotažení spojů (`VYHOVUJE`),
+     * Zjištěné závady (s možností přidat závadu a termín odstranění, nebo `Bez zjištěných závad`),
+     * Celkový posudek dle § 10 NV č. 190/2022 Sb.: **`ZAŘÍZENÍ JE SCHOPNÉ BEZPEČNÉHO PROVOZU`**.
+
+3. **ZÁKONNĚ UZNATELNÝ ELEKTRONICKÝ PODPIS A KRYPTOGRAFICKÁ PEČEŤ (`eIDAS` + `Zák. č. 297/2016 Sb.`):**
+   - Implementuj 2 spojené vrstvy podpisu, které splňují požadavky českého zákona č. 297/2016 Sb. (§ 7), nařízení eIDAS (čl. 25) a zákona č. 250/2021 Sb.:
+     * **Vrstva A – Interaktivní podpisový pad + Digitální razítko TIČR + Autorizační PIN / 2FA kód + SHA-256 pečeť:**
+       - Technik se podepíše myší/prstem na plátno (nebo použije uložený podpis), automaticky se vygeneruje grafický otisk jeho **kulatého/hranatého razítka revizního technika s číslem TIČR** a technik potvrdí vydání revize svým **osobním bezpečnostním PINem / autorizačním kódem**.
+       - Systém ze všech dat protokolu, TIČR čísla a naměřených hodnot vygeneruje **neměnný kryptografický otisk `SHA-256`**, uloží přesné časové razítko UTC/CET a IP adresu a zapíše je přímo do patičky uzamčeného PDF protokolu i do cloudového registru!
+     * **Vrstva B – Podpora kvalifikovaného elektronického podpisu PAdES (PostSignum / I.CA / eObčanka):**
+       - Umožni technikovi stáhnout vygenerovaný PDF protokol, opatřit jej v PC svým kvalifikovaným certifikátem PAdES (`.pdf` s elektronickou značkou z USB tokenu / čipové karty) a jedním klikem jej nahrát/připojit k uzamčené revizi v cloudu!
+
+================================================================================
+ČÁST 5: MĚSÍČNÍ KONTROLNÍ REPORT REVIZNÍM TECHNIKŮM (OCHRANA PROTI ZNEUŽITÍ TIČR ČÍSLA A RAZÍTKA)
+================================================================================
+
+Aby měl každý revizní technik 100% jistotu, že nikdo cizí nezneužil jeho jméno nebo číslo osvědčení TIČR k vystavení falešné revize:
+
+1. Vytvoř v horní navigaci průmyslové části (a v sekci `/revize` / `/ucty`) specializovaný modul **`🛡️ Měsíční report & Ochrana TIČR (Pro revizní techniky)`**:
+   - Zobrazuje přehled za zvolený měsíc (např. *Listopad 2026*) filtrovaný podle **čísla osvědčení TIČR** revizního technika:
+     * Celkový počet vystavených revizí a kusových zkoušek pod tímto TIČR číslem v daném měsíci,
+     * Kompletní kontrolní tabulka každé jedné revize: **Datum a přesný čas podpisu**, **Závod / Klient / Budova**, **Zařízení a jeho QR štítek (`EL-xxxxxx`)**, **Výsledek revize**, **IP adresa / Zařízení při podpisu** a **Kryptografický hash `SHA-256`**.
+2. **Tlačítko okamžité obrany proti zneužití (`[ 🚨 Nahlásit zneužití / Tato revize není moje! ]`):**
+   - Pokud by revizní technik v měsíčním výpisu uviděl revizi, kterou sám neprovedl, jedním klikem ji označí jako **NEAUTORIZOVANOU / ZNEUŽITÍ TIČR ČÍSLA**.
+   - Revize se v cloudu i pod QR štítkem okamžitě zablokuje s červeným varováním **`⛔ POZOR: REVIZNÍ TECHNIK ZNEPLATNIL TENTO ZÁZNAM PRO PODEZŘENÍ ZE ZNEUŽITÍ OSVĚDČENÍ TIČR`**, a událost se zaloguje do bezpečnostního auditu.
+3. **Automatické zasílání měsíčního reportu e-mailem + Export PDF výpisu:**
+   - Přidej přepínač **`[✓] Zasílat vždy 1. den v měsíci souhrnný bezpečnostní výpis všech mých revizí na e-mail revizního technika`**, tlačítko **`[ 📧 Odeslat kontrolní report na můj e-mail ihned ]`** a **`[ 📄 Stáhnout podepsaný měsíční výkaz revizí (PDF / CSV) ]`** (který technikovi zároveň poslouží jako podklad pro jeho vlastní fakturaci a evidenci pro TIČR!).
+
+================================================================================
+ČÁST 6: TESTY, VERIFIKACE A NASAZENÍ NA PRODUKCI
+================================================================================
+
+1. Napiš unit a integrační testy ověřující:
+   - Že přidanou budovu v průmyslovém závodě lze upravit i kompletně smazat (jak ze seznamu na mapě závodu, tak z detailu budovy) a že nově přidaná budova se nepoloží přes stávající budovy.
+   - Že Chytrá revize (`SmartRevisionTripOptimizer`) správně vyhledá a nabídne zařízení v téže budově/závodě, kterým se blíží konec platnosti revize v horizontu 30/60/90 dnů.
+   - Že formulář revizního technika uloží TIČR číslo, kontaktní údaje, naměřené hodnoty a vygeneruje protokol s kryptografickým otiskem `SHA-256`.
+   - Že Měsíční report revizního technika vypíše všechny revize pod daným TIČR číslem a umožní zneplatnit neautorizovaný záznam.
+2. Spusť `npm run verify`, aktualizuj `docs/PLAN.md` a `CLAUDE.md`, udělej commit a rovnou vše pushni a nasaď na produkční server `https://eldock.cz`.
+
+## Rozhodnutí při implementaci
+
+**Data:** migrace `phase108_revision_signing`:
+
+- nová tabulka `InspectorProfile` – profil revizního technika závodu: jméno a titul, firma, IČO, telefon, e-mail,
+  číslo osvědčení TIČR a jeho klíč pro párování, rozsah a platnost, číslo oprávnění, měřicí přístroj, kalibrační list,
+  uložený podpis, otisk PINu (scrypt), počítadlo chyb a zámek, přepínač měsíčního e-mailu;
+- `InspectionRecord` má navíc kontakty technika a odkaz na profil, kalibrační list, zkratový proud I_k, kontrolu spojů,
+  podpis (obrázek, čas, IP, zařízení, ověření PINem), pečeť SHA-256 s verzí, PDF s podpisem PAdES a zneplatnění
+  technikem (čas, poznámka);
+- nové druhy událostí bezpečnostního deníku `BUILDING_DELETED`, `REVISION_SIGNED`, `REVISION_MISUSE`,
+  `INSPECTOR_PIN_FAILED`.
+
+**1. Budovy – úprava, přesun a smazání:**
+
+- Seznam budov na mapě závodu má u každé karty ✏️ a 🗑️ (s právem Studia výstavby a modulem Studio).
+- Na mapě areálu ukáže najetí na budovu lištu ✥ Posunout · ✏️ Upravit · 🗑️ Smazat:
+  - posun tažením ukazuje obrys – žlutý na volném místě, červený přes jinou halu nebo mimo areál;
+  - poloha se uloží až po puštění na volné místo, Esc přesun zruší.
+- Hlavička detailu budovy i podlaží: ← Zpět na mapu závodu, ✏️ Upravit budovu / podlaží (na podlaží nabídka budova
+  nebo podlaží) a červené 🗑️ Odstranit tuto budovu.
+- Smazání:
+  - dialog vypíše, co zmizí (podlaží, zařízení, záznamy revizí, dokumenty);
+  - budovu se zařízeními, revizemi nebo dokumenty smaže jen opsaný název;
+  - po smazání se zapíše `BUILDING_DELETED` do bezpečnostního deníku a stránka přejde na mapu závodu;
+  - lokální stav prohlížeče se uklidí (`forgetBuildingLocally`).
+- Úprava budovy: název, kód (unikátní v závodě), krátký název, poloha a rozměr v metrech pozemku (převod na procenta
+  mapy). Kontrola polohy `placementError` – mimo areál nebo přes jinou budovu (s názvy budov) se neuloží.
+- Příčina překrývání nových hal: průvodce založením haly měl při plném prvním řádku pevné místo 8,10. Nově
+  `freeSpotFor` v `src/lib/campus-layout.ts`:
+  - prohledá areál po 1 % s odstupem 2 %;
+  - když se hala nevejde, postupně ji zmenší (až na 40 %);
+  - teprve plný areál vrátí místo s nejmenším překryvem.
+- Služby `src/server/services/buildings.ts`, akce `src/server/actions/buildings.ts`, dialogy
+  `src/components/map/campus/BuildingDialogs.tsx`.
+
+**2. Podlaží a synchronizace dat:**
+
+- Stránka podlaží je vycentrovaná (`mx-auto w-full max-w-[1600px]`), tabulka zařízení má `pb-28` pod plovoucí lištou
+  hromadné revize. Prázdný levý sloupec v kódu nebyl – „díra“ byla prázdná výrobní zóna nové haly; snímek nové haly
+  pořizuje E2E.
+- Nad mapou haly je tlačítko „+ Přidat rozváděč nebo stroj na toto podlaží“ – otevře Studio rovnou nad tímto patrem
+  (`/studio?plant=&building=&floor=`).
+- Rychlý náhled vybraného zařízení má Přesunout (Studio nad patrem) a Smazat:
+  - zařízení s revizemi nebo dokumenty smaže jen opsané označení;
+  - nejde smazat zařízení, které napájí jiná, ani s otevřenou žádankou o změnu.
+- Synchronizace: všechny stránky průmyslové části čtou z databáze a každá změna obnoví celý layout
+  (`revalidatePath("/", "layout")`). Žádný oddělený klientský stav k synchronizaci nebyl potřeba.
+
+**3. Chytrá revize – `SmartRevisionTripOptimizer`:**
+
+- Je na mapě závodu (agendy 1 a 4), v detailu podlaží, na `/inspections` (v zadání `/revize`) a v plánovači
+  `/inspections/planner` (v zadání `/planovac`).
+- Logika `src/lib/revision-trip.ts`:
+  - kotva výjezdu = nejnaléhavější zařízení po termínu (EXPIRED) nebo do 30 dnů (DUE_SOON); v detailu podlaží
+    přednostně v této budově;
+  - nabídka = další zařízení téhož závodu, kterým platnost skončí do horizontu 30 / 60 / 90 / 180 dnů (přepínač si
+    pamatuje prohlížeč);
+  - řazení: stejná budova → sousední budovy podle vzdálenosti středů na mapě → nejdřív končící;
+  - zařízení bez revize a vyřazená (neschopná provozu) se nenabízí – řeší je lhůtník a zápis revize;
+  - CAE vidí výjezdy po závodech (výběr závodu).
+- Banner podle zadání, seznam se zaškrtávátky (budova, podlaží, dny do konce platnosti, orientační čas revize podle
+  druhu zařízení) a dvě tlačítka:
+  - ⚡ Sloučit vybrané otevře formulář revizního technika (část 4) pro kotvu a vybraná zařízení;
+  - 📩 Odeslat pošle seznam na e-mail uloženého profilu technika závodu (SMTP; bez SMTP se jen zapíše do logu
+    notifikací – limit 10 e-mailů za hodinu na uživatele). Bez profilu otevře seznam v poštovním programu uživatele;
+    seznam jde i zkopírovat.
+- Odchylka: odhad času je orientační tabulka minut podle druhu zařízení (`INSPECTION_MINUTES`), ne normová hodnota.
+
+**4. Formulář revizního technika – `RevisionTechnicianFormModal`:**
+
+- Otevře se z karty rozváděče / stroje (po naskenování platného QR štítku zvýrazněně), z lišty hromadné revize
+  („🖊️ Podepsat (TIČR)“) a ze sloučeného výjezdu.
+- Profil technika se ukládá do databáze pro závod (všichni technici závodu); prohlížeč si pamatuje naposledy vybraný.
+  Firma se načte z ARES podle IČO.
+- Druh revize: pravidelná, výchozí, mimořádná (s důvodem). Lhůta příští revize: podle lhůty zařízení, nebo 1–4 roky –
+  zákonnou nejdelší lhůtu dál hlídá služba revizí.
+- „✨ Předvyplnit standardní vyhovující hodnoty měření“ vyplní R_iso > 500 MΩ při 500 V DC, PE 0,05 Ω,
+  Z_s 0,35 Ω (I_k = 230 V / Z_s), RCD 30 mA / 18 ms typ A a termovizi / spoje VYHOVUJE. Dokud hodnoty odpovídají
+  šabloně, formulář upozorní, že to není měření. Před podpisem technik zaškrtne, že revizi provedl a hodnoty
+  odpovídají skutečnému měření.
+- Závady s porušeným ustanovením a termínem odstranění (text „… – odstranit do RRRR-MM-DD [ustanovení]“), nebo
+  „Bez zjištěných závad“; celkový posudek podle § 10 NV č. 190/2022 Sb. („ZAŘÍZENÍ JE SCHOPNÉ BEZPEČNÉHO PROVOZU“).
+- Vrstva A:
+  - podpis na plátno (nebo uložený podpis profilu) a generované kulaté razítko s číslem osvědčení TIČR;
+  - osobní PIN (4–8 číslic, scrypt; po 5 chybách zámek na 15 minut, každá chyba v bezpečnostním deníku);
+  - pečeť SHA-256 nad kanonickým obsahem protokolu (`sealPayload`: zařízení, druh, data, výsledek, závady, měření,
+    přístroj a kalibrace, technik, obrázek podpisu, čas, IP, zařízení, ověření PINem);
+  - čas UTC i SEČ / SELČ, IP a zařízení jsou v patičce zprávy (SVG i tiskový protokol) a v registru;
+  - celý protokol (i sloučený výjezd) se zapíše v jedné transakci s událostí `REVISION_SIGNED`.
+- Protokol `/inspections/report/[id]` přepočítá pečeť z uložených údajů: ✅ shoda, nebo ⛔ neshoda, když se údaj po
+  podpisu změnil.
+- Vrstva B: protokol se uloží jako PDF z tisku, technik ho podepíše kvalifikovaným certifikátem a nahraje
+  (`POST /api/inspections/pades`):
+  - server ověří, že jde o PDF se slovníkem podpisu (`/ByteRange`, `/SubFilter` PAdES / PKCS#7);
+  - připojí ho jednou k celému protokolu – uzamčený protokol se už nemění;
+  - platnost a kvalifikovanost certifikátu Eldock neověřuje (to dělá ověřovací software).
+- Právní rámec bez nadsázky: vrstva A je prostý elektronický podpis (eIDAS čl. 25 odst. 1) s pečetí obsahu; vrstva B
+  kvalifikovaný podpis technika (eIDAS čl. 25 odst. 2, zákon č. 297/2016 Sb.). Text formuláře a patičky nechat
+  zkontrolovat právníkem.
+
+**5. Měsíční report & Ochrana TIČR – `/inspections/ticr`:**
+
+- Odkaz „TIČR report“ je v horní navigaci (účty s právem zápisu revize), v hlavičce `/inspections` a na `/admin/users`.
+- Report vypíše za zvolený měsíc (pražský čas) všechny revize pod číslem osvědčení profilu ve všech závodech účtu.
+  Číslo se páruje bez ohledu na mezery, pomlčky, velikost písmen a příponu rozsahu.
+  - Souhrn: celkem, revize, kontroly spotřebičů / kusové zkoušky, podepsané a zneplatněné.
+  - Tabulka: čas podpisu (u nepodepsaných den revize), závod / budova, zařízení s QR štítkem, výsledek, IP / zařízení
+    a SHA-256.
+- 🚨 „Nahlásit zneužití / Tato revize není moje!“:
+  - vyžaduje PIN profilu se stejným číslem osvědčení (jiný technik cizí záznam zneplatnit nemůže);
+  - záznam dostane čas zneplatnění, poznámku a událost `REVISION_MISUSE`;
+  - na kartě zařízení (pod QR štítkem) a v protokolu se ukáže červené varování;
+  - zneplatněná revize se nepočítá do lhůt – lhůtník, mapa, plánovač, hlídač i Chytrá revize ji vynechají
+    (`governingInspection` a `misuseFlaggedAt: null` v dotazech).
+- Přepínač měsíčního e-mailu: denní údržba 1. den v měsíci pošle souhrn za předchozí měsíc jednou za profil
+  (`lastMonthlyReport`). „📧 Odeslat ihned“ pošle souhrn hned (s limitem e-mailů).
+- „📄 Stáhnout podepsaný měsíční výkaz (PDF)“ je tisková stránka A4 na šířku s otiskem SHA-256 obsahu výkazu, uloženým
+  podpisem a razítkem technika; CSV výkaz `GET /api/inspections/ticr` (oddělovač `;`, BOM).
+- Odchylky:
+  - QR štítky `EL-xxxxxx` patří rozváděčům z AI Panel Builderu; průmyslová zařízení mají vlastní QR kód karty, report
+    proto ukazuje označení zařízení a zda má QR štítek;
+  - revize pod stejným číslem mimo závody účtu ukáže report jen počtem (bez podrobností cizí firmy) s výzvou
+    kontaktovat podporu;
+  - bez nastaveného SMTP se e-maily jen zapíší do logu notifikací.
+- Zásady ochrany osobních údajů 1.6: profil technika, podpis, IP a zařízení při podpisu, doba uložení a účel
+  (oddíly 2, 3 a 6).
+
+**6. Testy:**
+
+- `src/lib/phase108.test.ts` (13): budovy bez překryvu, úprava a kontrola polohy, Chytrá revize (horizont 30 / 60 / 90 /
+  180, řazení, kotva v budově, víc závodů, texty), pečeť, číslo osvědčení, šablona měření, PAdES, měsíc a čas.
+- `src/server/services/phase108.test.ts` (8): úprava, přesun a smazání budovy s auditem a smazání zařízení; podepsaná
+  revize s TIČR, kontakty, měřením a pečetí (i neshoda po změně, chybný PIN a zámek); PAdES jednou na protokol;
+  měsíční report se zneplatněním a lhůtou; měsíční e-mail ručně i 1. den v měsíci.
+- E2E `e2e/phase108.spec.ts` (3): nová hala z průvodce bez překryvu → úprava ze seznamu → podlaží (šířka 1600 px,
+  tlačítko, snímek) → smazání z hlavičky; Chytrá revize na 4 místech a horizonty; formulář technika s profilem, ARES,
+  šablonou, podpisem a PINem → protokol s ověřenou pečetí → TIČR report → zneplatnění → červené varování na kartě.
+- Upravený test fáze 92 (průvodce halou): nové místo haly bez překryvu místo pevné pozice.
+
+**Oprava zjištěná při E2E (plovoucí tlačítko z fáze 107):**
+
+- Plovoucí tlačítko „💬 Nápověda, Chyby & Kontakt“ na desktopu překrývalo hlavní tlačítko spodních lišt akcí (odeslání
+  revize CAE ke schválení, žádanka o změnu, hromadná revize) i poslední akci stránky („Potvrdit a propsat do systému“).
+- Lišty mají atribut `data-bottom-bar` a tlačítko se nad ně na desktopu zvedne (pravidlo v `globals.css` mimo vrstvy
+  Tailwindu); hlavní plocha aplikace má spodní rezervu `pb-24`, takže poslední prvek stránky jde odrolovat nad tlačítko.
+
+---
+
 # 📄 DENIK-faze-100.md
 
 # Deník fáze 100 (přesunuto z `docs/PLAN.md`, sekce C)
@@ -6885,6 +7158,16 @@ v `src/server/services/contact.ts`.
 | Fáze | Datum | Poznámky |
 |---|---|---|
 | 105 | 2026-11-12 | Zadání z chatu → `docs/archiv/ZADANI-faze-105.md` (i rozhodnutí a odchylky). **Migrace** `phase105_quotes_list_prices` (`CatalogComponent.listPriceCzk` / `listPriceSource`, `RegisteredCompany.quoteSettingsJson`). **Data:** `scripts/import-etim-universal.mjs`, `list-prices.generated.ts` (server-only), `etim-universal.generated.ts` (seed `applyEtimComponents`), `src/server/quote-data.ts`, `src/lib/quoting/cable-designations.ts`. **Skříně:** `EnclosureVisual.tsx` v `EnclosureWorkspace`. **Kabely:** `src/engine/lighting-topology.ts`, `summarizeCabling` (`switchNos`, `fiveCoreLights`, `breakdown`, `lightingParts`), `buildPlan`, `CablePanel` (rozpad). **3D:** `src/lib/panel-builder/pseudo3d.ts`, `FloorplanPseudo3DModal.tsx`. **Nabídka:** `src/lib/quoting/` (`quote-engine`, `normohodiny-catalog`, `quote-print`, `quote-settings`, `quote-sources`, `wholesaler-export`), `QuoteWizardModal`, `WholesalerExport`, `actions/quotes.ts`, `src/server/quote-sources.ts` (krok 4). **Testy:** `src/lib/phase105.test.ts` (20), E2E `e2e/phase105.spec.ts` (3); upravené `phase51`, `phase57`, `commercial-medical-modes`, seed. |
+
+---
+
+# 📄 DENIK-faze-106.md
+
+# Deník fáze 106 (přesunuto z `docs/PLAN.md`, sekce C)
+
+| Fáze | Datum | Poznámky |
+|---|---|---|
+| 106 | 2026-11-12 | Zadání z chatu → `docs/archiv/ZADANI-faze-106.md` (i rozhodnutí a odchylky). **Migrace** `phase106_turnkey_manufacturing` (`PanelManufacturer`, `ManufacturingOrder`). **CNC:** `src/lib/panel-builder/cnc-manufacturing-engine.ts` (`cncLayout`, `wireHarnessList`, `cutList`, `glandFor`), `cnc-outputs.ts` (`generateManufacturingPackage`, `cncDxf`, `cncCsv`), `DxfWriter` s vlastními hladinami, `CncManufacturingPanel.tsx`. **Výroba na klíč:** `turnkey-manufacturing.ts`, `src/server/services/manufacturing.ts`, `src/server/turnkey-data.ts`, `actions/manufacturing.ts`, `manufacturer-session.ts` (cookie `eldock-vyroba`), `TurnkeyEntry` / `ManufacturingSection` / `TurnkeyOrderModal`, `src/app/vyroba-rozvadecu/` (zakázky, elaborát, štítky), `/api/vyroba/package/[orderId]`, velín `ManufacturersTab`, `getPanelProjectById`. **Testy:** `src/lib/panel-builder/__tests__/cnc-manufacturing.test.ts` (7), `src/server/services/phase106.test.ts` (3), E2E `e2e/phase106.spec.ts` (1). **Opravy:** unikátní klíče řádků Listu 4 a soupisu přístrojů (dva můstky N stejné velikosti, dvakrát -A1), výchozí montáž podle skříně a ventilátor podle oteplení, materiál bez ceníku „doplní výrobce“. |
 
 ---
 
@@ -7245,6 +7528,7 @@ a postup nasazení jsou v `CLAUDE.md`. Soubor drž pod 150 řádky.
 | 62 | 2D půdorys: kabeláž jde skrýt (přepínač „Kabeláž“ u plátna i v liště kroku, klávesa K), při párování vypínačů se světly je ve výchozím stavu skrytá; lišta probíhajícího kroku nad projektem (`ModeBar`, lepkavá pod hlavičkou) s názvem kroku, nápovědou a „Hotovo“ pro párování, vkládání, kreslení, zakreslení změn, ořez / kalibraci („Zrušit“) i úpravu vybraného prvku – v bočním panelu „Hotovo“ není, v kroku 1 Panel Builderu ukončuje úpravu přístroje lišta nad rozváděčem; sestavy ve víceramečku v panelu nad paletou (hotové: 2–4× jednozásuvka, 2–3× vypínač č. 1, vypínač + přepínač, vypínač + zásuvky, zásuvka + RJ45, sběrnicové tlačítko + zásuvky; vlastní sestava po pozicích do 5R) s náhledem u kurzoru a vložením jedním klikem přisazeným ke stěně, ▦+ a „Přidat do rámečku“ u vybraného přístroje; rámeček s dvojzásuvkou na začátku se při otáčení a posunu v rámečku už neposouvá, přístroj v rámečku jde přesně vybrat (klikací plocha jen na jeho pozici) | ✅ |
 | 63 | 2D půdorys: paleta jako akordeon (počty osazených prvků, sbalit / rozbalit vše, režim jedné kategorie); zařizovací předměty ve skutečném rozměru – vana, sprchový kout, umyvadlo UMY 600 × 450 a dvojumyvadlo DUM 1200 × 450 s architektonickou značkou, žlutým rohem a posuvnými stranami (živé kóty X × Y), otočením 90° / 45° a přesným rozměrem v detailu, zóny 0–2 a pás nad a pod umyvadlem se přepočítají, hlídač vzdálenosti zásuvek a spínačů od vany, sprchy a umyvadla; knihovna samostatných spotřebičů (název, zkratka, příkon, jistič 1P / 3P B / C, chránič A / F / B / RCBO, kabel, výška, vlastní spotřebiče ze šablon, prohlížeč + profil firmy, okruhy podle zadání); lišta výrobců s rodinami ABB (domovní přístroje / ABB-free@home / ABB i-bus KNX & ABB-flexTronics), Loxone a TapHome s výrobky k vložení a akčními členy na DIN lištu jako informací; věrné náhledy řad (Levit, Zoni, Tango, Time, Time Arbo, Decento, Céliane, Nová Unica, Sedna, Asfora …) a „🌐 Prohlédnout řadu na webu výrobce ↗“; ruční posun úseků tras (vodorovný jen v ose Y, svislý jen v ose X, šikmý kolmo ke stěně), odskok dvojklikem, reset pravým tlačítkem / v panelu, délky kabelů z upravené trasy; polygonální místnosti se šikmými stěnami (přichytávání 0° / 45° / 90°, Shift = volný úhel), trasy podél stěn v odsazení 200 mm s kolmou odbočkou; normové CAD značení kabelů (rysky žil, čárkovaně ovládání a sběrnice, štítek okruhu) a export výkresu do PDF (A3 / A4, razítko, legenda, tabulka okruhů) a DXF (8 hladin, mm 1 : 1) | ✅ |
 | 64 | 2D půdorys jako uložený projekt na serveru: modely `Floorplan` + `FloorplanVersion` (migrace `floorplans`), seznam půdorysů firmy `/panel-builder/floorplan` (zákazník, místo, podlaží / místnosti / prvky, poslední úprava, vygenerovaný rozváděč; údaje, kopie, koš s obnovením a trvalým smazáním), nový půdorys `/novy` vznikne na serveru při první změně, editor `/[id]`; průběžné ukládání s kontrolou verze a zálohou neuložených změn v prohlížeči, souběh dvou oken s volbou „Načíst aktuální verzi“ / „Ponechat mou verzi“ (odmítnutý i přepsaný stav v historii); historie verzí s obnovením (automaticky nejvýš 1× za 10 min, pojmenovaná verze, stav při generování rozváděče a před obnovením, 30 verzí); převzetí nákresu z prohlížeče (`eldock.pb.floorplan`) při otevření seznamu; „📐 Upravit půdorys“ u rozváděče z půdorysu a vazba na nově vygenerovaný rozváděč; Zpět / Znovu (Ctrl+Z, Ctrl+Shift+Z / Ctrl+Y, tlačítka – tažení i klik = jeden krok); `FloorplanEditor.tsx` rozdělen (`ElementPanels.tsx`, `background-image.ts`, hooky `useDraftHistory` / `useFloorplanSync`) | ✅ |
+| 108 | Průmyslová část: úprava, přesun tažením na mapě a smazání budov ze seznamu, mapy i hlavičky detailu (audit `BUILDING_DELETED`), nové haly bez překryvu (`freeSpotFor`), vycentrované podlaží s „+ Přidat rozváděč nebo stroj“ a přesunem / smazáním zařízení; Chytrá revize `SmartRevisionTripOptimizer` (kotva po termínu / do 30 dnů, horizont 30–180 dnů, stejná → sousední budova, sloučení do formuláře, seznam technikovi) na mapě, podlaží, /inspections a v plánovači; formulář revizního technika (profil TIČR s ARES, šablona měření, podpis na plátno, razítko, PIN, pečeť SHA-256, PAdES); 🛡️ Měsíční report & Ochrana TIČR se zneplatněním cizí revize, měsíčním e-mailem a výkazem PDF / CSV | 🟦 |
 | 107 | Kontaktní a zpětnovazební hub: plovoucí tlačítko „💬 Nápověda, Chyby & Kontakt“ na každé stránce (rychlé akce, v editorech kompaktní pilulka), formulář se 7 kategoriemi (chyba, tip / chybějící prvek, schůzka a ukázka, spolupráce, B2B, QR štítky, poradna) s printscreeny přes Ctrl + V, přetažení i výběr souboru (zmenšení canvasem na 1600 px), ARES a technickou diagnostikou; „Nahlásit chybu“ v AI Panel Builderu a 2D půdorysu s ID projektu; veřejná stránka `/kontakt`; `POST /api/contact` s číslem tiketu #EL-… a notifikací (SMTP / Resend / webhook); velín „📬 Zprávy, Chyby & Schůzky“ s odznakem nepřečtených, lightboxem a stavem | ✅ |
 | 106 | Výroba rozváděče na klíč: konfigurátor mechanického provedení (vývodky M16–M40 podle průměru kabelů, přívod shora / zespodu / oboje, pod omítku = membránová příruba, DIN lišty TS 35 s otvory M5, žlaby 40 × 60 a 25 × 60, PE / N / N1…, výřezy dveří Ø 22,5 / 92 × 92 / 120 × 120); `generateManufacturingPackage` – CNC plán 1 : 1 (DXF s hladinami 0–4 a CSV souřadnic pro Perforex / Steinhauer), nářezový a drátovací list vodičů (Odkud → Kam, H07V-K, barvy, délka po žlabech + 90 mm, dutinky, TWIN u smyček, hřebeny) a nářezový list lišt, žlabů a hřebenů; „🛠️ CNC & Výroba na klíč“ v kroku 4; „🏭 Poptat / Objednat výrobu rozváděče na klíč“ (kroky 1b a 4, kalkulace, výrobce v kraji nebo všem, rezervace QR štítku EL-…); portál `/vyroba-rozvadecu` (přijetí, ZIP podklady, kusová zkouška výrobce, uzamčení Verze 1.0 pod štítkem) a velín „🏭 Výrobci rozváděčů“ | ✅ |
 | 105 | Balíčky „ETIM data“ (`npm run catalog:universal`): OEZ ETIM 8 – EAN, rozměry a fotky DIN přístrojů z balíčku, Hager ETIM 10, ceníkové ceny kabelů a vodičů Schrack (Kč / m) jen na serveru, `CatalogComponent.listPriceCzk`; náhled každé skříně v kroku 1b (fotka výrobce nebo render řady) vedle mřížky modulů; kabely osvětlení s přesnou topologií – přívod do krabic vypínačů, svislé svody (strop − výška vypínače) + 0,30 m, řazení 1 / 5 / 6 / 6+6 / 7, u sběrnice hvězda po skupinách světel, rozpad vodorovně + svody + rezerva = celkem; „🧊 3D Náhled & Kontrola výšek“ (izometrie, pohled na stěnu, zásuvky u linky na 1150 mm); „💰 Vytvořit cenovou nabídku“ (NH-2026.11, kalibrace, DPH 12 / 21 %, ARES, výstup pro zákazníka bez interních pojmů) a „🛒 Export poptávky do velkoobchodu“ (Sonepar, ELKOV, K&V, DEK, univerzální CSV / XLSX / XML, schránka, e-mail) | ✅ |
@@ -7293,16 +7577,14 @@ Fáze 86, 87 a 89 nasazeny 2026-11-10 (commit `c5ce70e`; commity `0388470`, `e92
 
 ## B. Otevřená fáze
 
-Další fáze podle zadání z chatu. Fáze 76–107 jsou hotové a nasazené (2026-11-10 až 2026-11-12; zadání fáze 81 `docs/archiv/ZADANI-faze-81.md`, fází 83–85 `docs/archiv/ZADANI-faze-83-85.md`, fáze 87 `docs/archiv/ZADANI-faze-87.md`, fáze 89 `docs/archiv/ZADANI-faze-89.md`, fáze 90 `docs/archiv/ZADANI-faze-90.md`, fáze 91 `docs/archiv/ZADANI-faze-91.md`, fáze 92 `docs/archiv/ZADANI-faze-92.md`, fáze 93 `docs/archiv/ZADANI-faze-93.md`, fáze 94 `docs/archiv/ZADANI-faze-94.md`, fáze 95 `docs/archiv/ZADANI-faze-95.md`, fáze 96 `docs/archiv/ZADANI-faze-96.md`, fáze 97 `docs/archiv/ZADANI-faze-97.md`, fáze 98 `docs/archiv/ZADANI-faze-98.md`, fáze 99 `docs/archiv/ZADANI-faze-99.md`, fáze 100 `docs/archiv/ZADANI-faze-100.md`, fáze 101 `docs/archiv/ZADANI-faze-101.md`, fáze 102 `docs/archiv/ZADANI-faze-102.md`, fáze 103 `docs/archiv/ZADANI-faze-103.md`, fáze 104 `docs/archiv/ZADANI-faze-104.md`, fáze 105 `docs/archiv/ZADANI-faze-105.md`, fáze 106 `docs/archiv/ZADANI-faze-106.md` a fáze 107 `docs/archiv/ZADANI-faze-107.md`; fáze 88 = katalog ABB pro ČR, zadání v deníku). Otevřené body jsou v sekci D; další fáze podle roadmapy níže.
-
-Roadmapa po fázi 79 (`ZADANI-faze-71.md` až `ZADANI-faze-73.md`): vydání aplikací v Google Play a App Store, podepsaný instalátor pro Windows a podpis vydání Androidu vlastním klíčem až s účty Eldock s.r.o.; ověření aplikace pro iOS na skutečném iPhonu (Mac nebo ruční workflow; server závodu přes http v interní síti – ATS a dotaz na místní síť); synchronizace na pozadí (iOS BGTask, Android WorkManager), univerzální odkazy https a push oznámení. **Rozhodnuto 2026-11-09:** provoz obojí podle závodu – aplikace vždy offline s denní synchronizací přímo s eldock.cz, závod s interní sítí bez internetu navíc server závodu (Windows, zařízení `PLANT_SERVER`, denní synchronizace s cloudem); účty Apple (Organization, 99 USD/rok), Google Play s ověřením vývojáře Android (organizace, 25 USD) a podpis aplikace pro Windows přes Azure Artifact Signing (9,99 USD/měsíc, v EU jen firmy) až na zapsanou Eldock s.r.o. s číslem D-U-N-S – do té doby vývoj a zkušební sestavení mimo obchody; e-maily přes schránku `noreply@eldock.cz` u Zoneru (MX i SPF domény jsou u Zoneru); zálohy mimo server do Hetzner Object Storage v Helsinkách (HEL1, server je ve Falkensteinu `fsn1-dc14`). **Na straně uživatele:** schránka u Zoneru → `ELDOCK_SMTP_URL` + `ELDOCK_MAIL_FROM` do `.env` (DKIM a DMARC v DNS doporučeno); bucket v HEL1, klíče S3 a heslo záloh → `ELDOCK_BACKUP_S3_*` + `ELDOCK_BACKUP_KEY` do `.env` (heslo uložit i mimo server); po zápisu do OR údaje firmy v `lib/company.ts`, D-U-N-S a účty Apple, Google a Artifact Signing. Další plánované fáze z analýzy webu (`docs/archiv/ZADANI-faze-54.md`): normový registr v Eldocku, Projekt elektroinstalace jako produkt.
+Fáze 108 (průmyslová část – budovy, podlaží, Chytrá revize, formulář revizního technika s podpisem a pečetí SHA-256, měsíční report TIČR) je hotová a čeká na nasazení – migrace `phase108_revision_signing` (nová tabulka a sloupce, před nasazením záloha databáze); zadání `docs/archiv/ZADANI-faze-108.md`. Fáze 109 (2D půdorys: viditelnost a barvy značek, 3D pohled, návrat do Výběru, výška u kuchyňské linky, barvy panelů ABB, převod 230 V ⇄ Smart Home) je zadaná a následuje. Fáze 76–107 jsou hotové a nasazené (2026-11-10 až 2026-11-12; zadání fáze 81 `docs/archiv/ZADANI-faze-81.md`, fází 83–85 `docs/archiv/ZADANI-faze-83-85.md`, fáze 87 `docs/archiv/ZADANI-faze-87.md`, fáze 89 `docs/archiv/ZADANI-faze-89.md`, fáze 90 `docs/archiv/ZADANI-faze-90.md`, fáze 91 `docs/archiv/ZADANI-faze-91.md`, fáze 92 `docs/archiv/ZADANI-faze-92.md`, fáze 93 `docs/archiv/ZADANI-faze-93.md`, fáze 94 `docs/archiv/ZADANI-faze-94.md`, fáze 95 `docs/archiv/ZADANI-faze-95.md`, fáze 96 `docs/archiv/ZADANI-faze-96.md`, fáze 97 `docs/archiv/ZADANI-faze-97.md`, fáze 98 `docs/archiv/ZADANI-faze-98.md`, fáze 99 `docs/archiv/ZADANI-faze-99.md`, fáze 100 `docs/archiv/ZADANI-faze-100.md`, fáze 101 `docs/archiv/ZADANI-faze-101.md`, fáze 102 `docs/archiv/ZADANI-faze-102.md`, fáze 103 `docs/archiv/ZADANI-faze-103.md`, fáze 104 `docs/archiv/ZADANI-faze-104.md`, fáze 105 `docs/archiv/ZADANI-faze-105.md`, fáze 106 `docs/archiv/ZADANI-faze-106.md` a fáze 107 `docs/archiv/ZADANI-faze-107.md`; fáze 88 = katalog ABB pro ČR, zadání v deníku). Otevřené body jsou v sekci D; další fáze podle roadmapy níže. Roadmapa po fázi 79 (`ZADANI-faze-71.md` až `ZADANI-faze-73.md`): vydání aplikací v Google Play a App Store, podepsaný instalátor pro Windows a podpis vydání Androidu vlastním klíčem až s účty Eldock s.r.o.; ověření aplikace pro iOS na skutečném iPhonu (Mac nebo ruční workflow; server závodu přes http v interní síti – ATS a dotaz na místní síť); synchronizace na pozadí (iOS BGTask, Android WorkManager), univerzální odkazy https a push oznámení. **Rozhodnuto 2026-11-09:** provoz obojí podle závodu – aplikace vždy offline s denní synchronizací přímo s eldock.cz, závod s interní sítí bez internetu navíc server závodu (Windows, zařízení `PLANT_SERVER`, denní synchronizace s cloudem); účty Apple (Organization, 99 USD/rok), Google Play s ověřením vývojáře Android (organizace, 25 USD) a podpis aplikace pro Windows přes Azure Artifact Signing (9,99 USD/měsíc, v EU jen firmy) až na zapsanou Eldock s.r.o. s číslem D-U-N-S – do té doby vývoj a zkušební sestavení mimo obchody; e-maily přes schránku `noreply@eldock.cz` u Zoneru (MX i SPF domény jsou u Zoneru); zálohy mimo server do Hetzner Object Storage v Helsinkách (HEL1, server je ve Falkensteinu `fsn1-dc14`). **Na straně uživatele:** schránka u Zoneru → `ELDOCK_SMTP_URL` + `ELDOCK_MAIL_FROM` do `.env` (DKIM a DMARC v DNS doporučeno); bucket v HEL1, klíče S3 a heslo záloh → `ELDOCK_BACKUP_S3_*` + `ELDOCK_BACKUP_KEY` do `.env` (heslo uložit i mimo server); po zápisu do OR údaje firmy v `lib/company.ts`, D-U-N-S a účty Apple, Google a Artifact Signing. Další plánované fáze z analýzy webu (`docs/archiv/ZADANI-faze-54.md`): normový registr v Eldocku, Projekt elektroinstalace jako produkt.
 
 ## C. Deník (jen poslední záznamy, starší jsou v archivu)
 
 | Fáze | Datum | Poznámky |
 |---|---|---|
+| 108 | 2026-11-13 | Zadání z chatu (prioritní, 2D půdorys posunut na fázi 109) → `docs/archiv/ZADANI-faze-108.md` (i rozhodnutí a odchylky). **Migrace** `phase108_revision_signing` (`InspectorProfile`; podpis, pečeť, PAdES a zneplatnění v `InspectionRecord`; 4 bezpečnostní události). **Kód:** budovy `src/lib/building-edit.ts`, `campus-layout.ts` (`freeSpotFor`), `services/buildings.ts`, `actions/buildings.ts`, `BuildingDialogs.tsx`, `EquipmentManage.tsx`, lišta a tažení na mapě areálu, Studio `?building=&floor=`; Chytrá revize `src/lib/revision-trip.ts`, `queries/revision-trip.ts`, `actions/revision-trip.ts`, `SmartRevisionTripOptimizer.tsx`; podpis `src/lib/revision-signature.ts`, `services/revision-signing.ts`, `actions/revision-signing.ts`, `RevisionTechnicianFormModal.tsx`, `SignaturePad`, `InspectorStamp`, `PadesUpload`, `/api/inspections/pades`, pečeť v `mock-graphics/document.ts` a v protokolu; report `/inspections/ticr` (tisk, CSV `/api/inspections/ticr`), měsíční e-mail v `jobs.ts`; zneplatněné revize mimo lhůty (`governingInspection`, dotazy); zásady 1.6. **Testy:** `src/lib/phase108.test.ts` (13), `src/server/services/phase108.test.ts` (8), E2E `e2e/phase108.spec.ts` (3), upravený `plant-onboarding.test.ts`. Oprava z E2E: plovoucí tlačítko kontaktu se zvedne nad spodní lišty akcí (`data-bottom-bar`) a hlavní plocha aplikace má spodní rezervu `pb-24`. |
 | 107 | 2026-11-12 | Zadání z chatu → `docs/archiv/ZADANI-faze-107.md` (i rozhodnutí a odchylky). **Migrace** `phase107_contact_messages` (`ContactMessage`). **Kód:** `src/lib/contact.ts`, `src/server/services/contact.ts` (tiket, filtry, stav, retence 2 roky), `src/server/contact-intake.ts` (sharp → WebP do `storage/uploads/feedback`, registr jen pro velín, notifikace), `/api/contact` (POST / GET / PATCH), `src/components/contact/` (`GlobalContactWidget`, `ContactFeedbackModal`, `contact-events`, `image-compress`), `src/app/kontakt/page.tsx`, velín `ContactMessagesTab` + `ContactMessageControls`, `ReportAiErrorButton` a „🐛 Nahlásit chybu“ v 2D půdorysu, odkazy v navigaci / patičce / `/prezentace`, limit `contact` v proxy, zásady 1.5 (7c). **Testy:** `src/lib/phase107.test.ts` (6), `src/server/services/phase107.test.ts` (5), E2E `e2e/phase107.spec.ts` (6), upravené `phase50` a `phase54`; po nasazení plovoucí tlačítko nad lištou cookies (`--consent-banner-h`). |
-| 106 | 2026-11-12 | Zadání z chatu → `docs/archiv/ZADANI-faze-106.md` (i rozhodnutí a odchylky). **Migrace** `phase106_turnkey_manufacturing` (`PanelManufacturer`, `ManufacturingOrder`). **CNC:** `src/lib/panel-builder/cnc-manufacturing-engine.ts` (`cncLayout`, `wireHarnessList`, `cutList`, `glandFor`), `cnc-outputs.ts` (`generateManufacturingPackage`, `cncDxf`, `cncCsv`), `DxfWriter` s vlastními hladinami, `CncManufacturingPanel.tsx`. **Výroba na klíč:** `turnkey-manufacturing.ts`, `src/server/services/manufacturing.ts`, `src/server/turnkey-data.ts`, `actions/manufacturing.ts`, `manufacturer-session.ts` (cookie `eldock-vyroba`), `TurnkeyEntry` / `ManufacturingSection` / `TurnkeyOrderModal`, `src/app/vyroba-rozvadecu/` (zakázky, elaborát, štítky), `/api/vyroba/package/[orderId]`, velín `ManufacturersTab`, `getPanelProjectById`. **Testy:** `src/lib/panel-builder/__tests__/cnc-manufacturing.test.ts` (7), `src/server/services/phase106.test.ts` (3), E2E `e2e/phase106.spec.ts` (1). **Opravy:** unikátní klíče řádků Listu 4 a soupisu přístrojů (dva můstky N stejné velikosti, dvakrát -A1), výchozí montáž podle skříně a ventilátor podle oteplení, materiál bez ceníku „doplní výrobce“. |
 
 ## D. Známé nedostatky a backlog
 
@@ -7311,5 +7593,5 @@ Roadmapa po fázi 79 (`ZADANI-faze-71.md` až `ZADANI-faze-73.md`): vydání apl
 - Fáze 66: lhůtník (semafor, piny, hlídač e-mailem) dál počítá s `validUntil`; nejzazší zákonný termín je jen informace v lhůtníku, zprávě a auditním reportu. Vizuální kontrola LPS se hlídá jen na kartě zařízení (ne v hlídači a plánovači). Starší data bez `db:fix-intervals` ukážou u VTZ s delší lhůtou červené upozornění a termín „po zákonném termínu“. Fáze 67–68: Panel Builder má dál jedno heslo firmy; bez `ELDOCK_SMTP_URL` pozvánky a obnovy jen jako odkaz u správce / v logu serveru. Zálohy mimo server čekají na úložiště a heslo (`ELDOCK_BACKUP_*`) – do té doby jen místní snímky databáze na stejném serveru a soubory úložiště bez zálohy (ověřeno 2026-11-10: denní místní snímky od 8. 11. ve 02:30, nešifrované; `ELDOCK_BACKUP_KEY`, `ELDOCK_BACKUP_S3_*` ani `ELDOCK_SMTP_URL` v `.env` nejsou; databáze 7 MB, soubory 14 MB). Fáze 69: export bez ZIP64 (do 4 GB a 65 535 souborů na firmu); opravy a omezení zpracování (čl. 16, 18 GDPR) jen přes kontaktní e-mail; smlouvu o zpracování (DPA) a zásady 1.2 před ostrým prodejem zkontrolovat právníkem. Fáze 70: z aplikací jde v1 jen 7 druhů úprav (revize VTZ se zprávou PDF, Studio a CAE back-office zůstávají na webu); server závodu ↔ cloud hotový ve fázi 72; bez push notifikací (aplikace se ptá při synchronizaci); CORS pro webové aplikace neřešen (nativní aplikace ho nepotřebují); přesun záznamu do jiného závodu žurnál nepřenese (rozsah se určí při vložení – aplikace ho nepodporují ani na webu).
 - Fáze 73: aplikace pro iOS se sestaví pro simulátor v GitHub Actions (ověřeno 9. 11. 2026 na macos-15-intel s Xcode 26.3 – runnery Apple Silicon GitHub tehdy nesehnal), spuštění v simulátoru ani na iPhonu zatím neověřené; server závodu přes http z iPhonu ověřit na zařízení (ATS, dotaz na místní síť); na pozadí aplikace nesynchronizuje (jen připomenutí oznámením); APK podepsané ladicím klíčem – vydání vlastním klíčem a v obchodech s účty Eldock s.r.o. Fáze 74–75: fotky výrobců v galerii řad čekají na potvrzení práv (`SERIES_PHOTOS` prázdný – zatím vektorové náhledy); dvoubarevné kódy rámeček / klapka mimo Katalog ABB 2026 neověřené; text ČSN 33 2130 ed. 4 k umývacímu prostoru (převzato z ed. 3, čl. 7.8) a ČSN 33 2000-7-701 ed. 3 ověřit v licencovaném textu; SPD v podružném rozváděči zůstává T1+T2 (u RP ve stejné budově obvykle stačí T2 – posoudí projektant); kresba umývacího prostoru přesahuje 250 mm za stěnu (`BASIN_WALL_MM`); vnitřní odkazy PDF ověřené pro tisk z Chrome / Edge (jiné prohlížeče je mohou zahodit). Fáze 76–80: náhledy výrobců – klíčové řady ABB mají vlastní rendery (fáze 80), ostatní řady ABB a Schneider / Legrand / Hager kreslený náhled; originální fotky výrobců smí být ve veřejném repozitáři (potvrzeno 2026-11-10), ale zatím nejsou – chybí zdroj ke stažení (`npm run catalog:images -- --download` podle `zdroje.json`); MEAN WELL HDR, obecné řadiče PWM a binární vstupy jsou neověřené (typ bez objednacího čísla); import DXF jen ASCII (binární DXF a DWG ne), ELLIPSE, SPLINE, HATCH a DIMENSION se nekreslí (jen počet ve výsledku importu), podklad CAD není v tisku PDF ani v exportu DXF půdorysu, přichytávání jen při vkládání a kreslení místností (ne při přesunu prvku), přichycená nástěnná značka mimo nakreslenou místnost drží natočení předchozí značky. Fáze 81: bez ověřeného čísla (null / „ověřte“) jsou stříbrná a zlatá IP TOUCH, bílý Trevion, bílý Loxone Wall Display, krabice OneTouch 7", Loxone Touch Pure Display a DALI Extension (100200 ze zadání), všechny kusy TapHome (čísla, šířky a Pv ze zadání); Pv akčních členů ABB mimo rešerši datasheetů a šířka UD/S 4.210.2.1 (6 M) jsou orientační; TapHome nemá akční člen topení (výpočet hlásí doplnit ručně); SmartTouch jen ve variantě free@home (KNX verze v katalogu výrobců není). Fáze 82: limit zásuvek na světelném okruhu norma neuvádí (Eldock hlídá 10 vývodů světla + zásuvky na okruh); text ČSN 33 2130 ed. 4 o zásuvkách na světelném obvodu ověřit v licencovaném textu; volba jištění 10 / 13 A platí pro celý půdorys (ne po okruzích). Fáze 83: plátno drží poměr stran plochy – u úzké a hluboké plochy (např. 15 × 40 m) je vysoké a posouvá se stránka; u haly 100 m je mřížka po 1 m v celkovém pohledu hustá. Fáze 84: pokud produkční `.env` nastavuje `ELDOCK_BANK_IBAN` na jiný platný účet, má přednost před účtem Raiffeisenbank (vzorový demo IBAN se ignoruje) – ověřit na serveru. Fáze 85: dvířka v náhledu jsou orientační (katalog skříní nevede druh dvířek – u ověřených rozvodnic fáze 86 je náhled bere z popisu výrobce). Fáze 86: Rittal zůstává jen orientační AX (rozvodnice s řadami modulů Rittal nevede – AX / KX s moduly Ri4Power ISV nejsou jedna objednatelná skříň); ABB Unifix, ComfortLine CW a Eaton DBP / DBM výrobci nevedou, Eaton dál jen z exportu (BC, BF, BP, IKA, KLV, MINI). Nezařazeno: Hager FWU73S (výrobce uvádí 21 řad), FW2 (FW…FT), FWU…N / K1, univers na omítku jen FWB z exportu, Schrack BK080109, BK080113, BK080163, BK080057 a provedení -H do dutých stěn. Rozpory Schracku: zapuštěné s bílými dveřmi mají v popisu „s průhlednými dveřmi“ a BK080058 / BK080059 u dveří „Plast průhledný“ – platí název výrobku; BK080153 je podle výrobce 482 mm vysoká (průhledná BK080103 525 mm); P_max = „Ztrátový výkon“ (web ho píše se znaménkem minus). ABB a Hager P_max neuvádí (null). Vícepolové skříně (ABB 2–4 sloupce, Hager 2–3 pole) mají v návrhu lištu přes celou řadu – přístroj přes hranici pole Eldock nehlídá. Údaje ověřeny 10. 11. 2026 – změny sortimentu (např. konec Hager vector II L / PN) je nutné doplnit ručně. Fáze 87: komentář syntetizuje Edge TTS (text kapitol jde na službu Microsoftu – je veřejný na /navody; `--tts=local` = lokální hlas Windows, robotičtější); video 1 ukazuje aplikaci k 2026-11-11 po fázi 90 (průvodce půdorysem v 5 krocích s krokovými kartami), video 2 k 2026-11-10 po fázi 88 (řada Mistral65) – po změně UI, které ukazují (editor půdorysu, kroky Panel Builderu), je přegenerovat (`npm run tutorials:generate`, ~15 min); akce kapitoly 3 videa 1 (osazení) jsou delší než komentář o pár sekund; Interactive Tour je jen v editoru půdorysu (cíle = `targets` kapitol); titulky jsou vypálené ve videu (bez samostatné stopy WebVTT). Fáze 88: Pv přístrojů z katalogu ABB pro ČR je odhad (ABB CZ ho neuvádí – typická hodnota nahrazeného řádku nebo IEC); vazby S201 / S201M → PS1 a S203 / S203M → PS3 jsou odvozené z pólů (neověřeno), PSc → DS301C, PS-END a E292 → E290 podle katalogu. Chyby stránek ABB CZ (platí typové označení, poznámka u zdroje): FH204 A-40 a A-63 uvádí 25 A typ AC, OVR T2 jiné kA, 41P18X42A / 41P18X41A „18 (18x4)“. Nezařazeno: S2C a CP-D (new.abb.com se nedá číst), OT, spínače, tlačítka a zvonky, S3C, kryty, CU VMW / K, multimediální UK600 / AK600, ARIA / APO; S202 / S204 katalog ABB pro ČR nevede; externí řada „Mistral“ má dál jen MISTRAL65 1 × 4 M (1SL1200A00 – na stránce řady Mistral65 není), UK600 zůstává z exportu. DS201 B16 A30: ruční zápis (referenční PB-001) má 2CSR255140R1165, katalog ABB pro ČR i externí databáze 2CSR255180R1165 – v katalogu vyhrává ruční zápis, ověřit. V databázích s importem externí databáze zůstávají z dřívějška dvojice orientační řádek + kus s objednacím číslem (DS201 B10 A30, DS201 C16 A30, ESB25-20N-01) – adopce přeznačí jen řádek, jehož objednací číslo databáze ještě nemá. Údaje ověřeny 10. 11. 2026. Fáze 89: profil uživatele = profil firmy (Panel Builder nemá osobní účty), volba v prohlížeči platí pro všechny firmy v něm. Fáze 90: okna a dveře nepřerušují čáru stěny (kreslí se přes ni) a nehlídají kolizi s nábytkem; objednací čísla monobloků Garant / Praktik / Variant+ v kusovníku chybí jako dosud; pás 0,2 m u umyvadla přístroje IP44 podle zadání nehlídá (v plném znění ČSN 33 2130 ed. 4 ověřit); krok průvodce si pamatuje jen karta prohlížeče (jiná karta otevře krok podle obsahu nákresu). Fáze 91: fotografie výrobců se nestahovaly (rendery jsou vlastní dílo; fotky se schváleným zdrojem do `public/catalog-images/`); Schneider Electric na webu ověřen jen pro vzduchotěsné krabice Multifix Air do dutých stěn a SEZ bez objednacích čísel hlubokých krabic – jinde kusovník ukáže „doplnit“; limity Schneider / Legrand / Hager jsou ze zadání (katalogy neověřeny), řady berker B.7, K.1, K.5, R.classic a W.1 půdorys nenabízí; svislý víceramček se v půdorysu nekreslí (limit `vertical` jen v pravidlech); rozbočovací zásuvka (víc než 2 kabely) se pozná jen z tras aktivního podlaží a ne v dokumentaci rozváděče; mezery a rozpěrky 1159-34 mezi krabicemi Decenta kusovník nepočítá. Fáze 92: harvester fotek (`npm run catalog:photos`) web ABB 2026-11-11 nepustil (headless prohlížeč – net::ERR_HTTP2_PROTOCOL_ERROR; blokace se neobchází), `public/catalog-images/manifest.json` je prázdný – reálné fotky zatím jen přes nahrávač Ctrl+V ve velínu; adaptér harvesteru jen pro ABB (Schneider / Legrand / Hager ručně); nástěnné monobloky Garant / Praktik / Variant+ bez ověřeného objednacího čísla v kusovníku harvester přeskočí. Trenažér 2D půdorysu je bungalov na ABB-free@home (stmívací akční člen v rozváděči je pravdivý jen ve sběrnicové instalaci); velikosti tréninkových zakázek jsou podle výběru generátoru (48M / 96M / 120M, ne 36M / 72M / 108M ze zadání – rezerva 25 %). Průvodce závodem nevytváří vzorový závod v datech firmy (mise B jen v prohlížeči); režim A jen s právem Studio výstavby. Fáze 93: bezhalogenové krabice HF ověřené jen u KOPOS (kopos.cz 2026-11-11: KU 68-45/HF_HA, KPR 68-70/HF_HA, KU 68 LD/1HF_HA, KPL 64-50/2LD HF_KA) – ostatní výrobci a hluboká HF krabice do SDK se v kusovníku doplní ručně (hlídač nabídne přepnutí na KOPOS); KPR 68_KA a KU 68 LD_NA ze zadání nejsou podle stránky výrobce bezhalogenové. Typy spouště a elektroměru MID (ABB S2C-A2, B23 312-100 …) jsou příklady ze zadání bez ověření objednacích čísel; vodič EKV v kusovníku je odhad 3 m na přípojku. Lhůty zdravotnických prostorů a přístrojů podle zadání (ČSN 33 2000-7-710 ed. 2, ČSN EN 62353 ed. 2) jako normové (ne závazné) – ověřit v licencovaném znění. Kapacitu DA / UPS zadává uživatel u kořene větve; výkon větve = Ib (naměřený, jinak součet podřízených × 0,8) · √3 · 400 V · cos φ 0,9. Fáze 94: data ETIM ABB nemají ceny (PRODUCT_PRICE 0) ani šířku DIN přístrojů v modulech; vestavnou hloubku stmívačů, termostatů a USB zásuvek řad neuvádějí (hlídač u nich dál podle pravidel fáze 91); Time Arbo v datech není (zůstává render), Garant jen šedý hliníkový IP55; dvoubarevné rámečky Zoni 241–244 a Swing 5R z matice katalogu ETIM nevede (⚠ / „ověřit“). Fotka řady bez čísla v kusovníku je reprezentativní výrobek řady (číslo pod fotkou), Swing L má ve všech barvách bílý střed Swing. Pv z ETIM je na celý přístroj (vícepólový = všechny póly). Fáze 95: místnosti IfcSpace jdou do Studia jako obálka (obdélník; mnohoúhelník jen v 2D půdorysu), kabelové žlaby nemají v mapě závodu vlastní vrstvu (u zařízení jen délka a typ přívodu), DA a UPS jsou v závodě kořenové zdroje typu trafostanice se zálohováním a kapacitou (napájení UPS z DA zůstane v popisu), IfcGridPlacement a zakřivené profily se nevyhodnocují; stroje v 2D půdorysu jsou vlastní spotřebiče do 32 A (nad to varování), vývody a hlavní vypínač nad 125 A navrhne AI Panel Builder jako orientační kus; Server Action nese jen zmenšený model (do ~1 MB – velký export z Revitu importujte po budovách). Fáze 96: kanonickou URL má každá veřejná stránka zvlášť (v layoutu by všechny podstránky ukazovaly na úvod); ověřovací meta Google / Seznam se vypíší jen s proměnnými `GOOGLE_SITE_VERIFICATION` / `SEZNAM_WMT_VERIFICATION` v `.env` serveru (Seznam jde ověřit i souborem `seznam-wmt-….txt`); trenažér 2D půdorysu, editor a ukládání projektů dál vyžadují přihlášení firmy; IndexNow se po nasazení spouští `npm run seo:ping` (nebo `POST /api/seo/ping` s `ELDOCK_CRON_SECRET`) – automatický ping při každém startu kontejneru záměrně není. Fáze 97: web ABB (nizke-napeti.cz.abb.com) a Eaton automatizovaný přístup odmítají (spojení bez odpovědi / ERR_HTTP2_PROTOCOL_ERROR) – ABB z vlastní kopie `ELSB_ETIM-9.0_2026-05.zip`, Eaton bez dat; databáze ETIM a ceníky Legrand jsou pod heslem (výrobce ho posílá e-mailem), ceník OEZ jen po přihlášení partnera, KOPOS a Schneider ETIM / BMEcat veřejně nevedou (data ze stránek výrobků), Schrack a Saltek bez veřejného datového souboru výrobků; Plexo s „L“ (`069621L` …) fotobanka Legrand nevede (fotka jiného čísla se nepoužije); Schneider zatím není ve výběru skříně (rozvodnice s fotkou jen v katalogu přístrojů); ceny KOPOS z ceníku jsou v datech, aplikace je nezobrazuje.
 - Testovací firma Správy závodů (2026-11-10, `PLANT_TESTER`: `test@eldock.cz` a `test-udrzba@eldock.cz`, `db:plant-tester` při startu s `ELDOCK_SEED_DEMO=1`): hesla jsou veřejná v repozitáři – před registrací první skutečné firmy ji smazat ve velínu a nastavit `ELDOCK_SEED_DEMO=0` (CLAUDE.md, oddíl 7); s SMTP by šlo z testovacího účtu rozesílat pozvánky. Nasazeno 2026-11-10 (commit `97932c5`; start kontejneru firmu založil – závod TZ s halou A a 5 zařízeními; bez migrací, kontejner `healthy`, log bez chyb, úklid mezivrstev 1,23 GB, volno 24 GB).
-- Fáze 98: fáze 2D půdorysu je krok průvodce (relace prohlížeče; kompaktní lišta ukazuje bez filtru vše – „Zobrazit vše“), agenda závodu jen v adrese `?faze=`; detail výběru je ve všech fázích a varování zón / krabiček i ve fázi 4 (odchylka od zadání, viz zadání); Elektro-linter s opravou jedním klikem zůstává u DIN lišt (část 1a), fáze 2 má jeho souhrn; kapitoly video-návodu AI Panel Builderu nesou čísla kroků z namluveného videa; rozvržení na výšku okna až od 1280 px (pod tím sloupce pod sebou); karta Nařízení (EU) 2023/1230 počítá jen otevřené změny s klasifikací podstatné změny (uzavřené jsou v historii zařízení). Fáze 99: demo scénář založí při každém kliknutí nový půdorys firmy (staré demo půdorysy se mažou ručně v seznamu) a rozváděč z něj stojí 1 kredit jako každý jiný; scénář průmyslového závodu jen odkazuje na agendy naposledy otevřeného závodu (plná vzorová data má závod obchodního dema); generování rozváděče z půdorysu trvalo na vývojovém serveru 3,3–3,8 s včetně překladu stránky – cíl pod 1 s na produkci samostatně neměřen; prezentace `/prezentace` je mimo vyhledávače (noindex, není v sitemap) a údaje jednání drží jen prohlížeč prezentujícího. Fáze 100: tahák zakázky je podle zadání v záložce Normy (přechody z taháku ji nechají otevřenou, lišta průvodce otevře výchozí záložku fáze); vzhled 🌗 se ukládá s podkladem podlaží a starší půdorysy bez údaje mají 60 %; fotky v `public/catalog-images/` mají mezipaměť `immutable` na rok – opravenou fotku ukládat pod novým názvem; 60 FPS ověřeno počtem překreslení vrstev v E2E, ne měřením snímků na slabém notebooku. Fáze 101: anténní zásuvka TV / SAT nemá v datech ABB ETIM objednací číslo (v kusovníku „dle katalogu výrobce“) a trasa koaxiálního kabelu se kreslí ve vrstvě datových rozvodů; svislý víceramček se v půdorysu kreslí kolmo ke stěně (schematicky), výšky pozic po 71 mm; offline převod BIM jen na už načtené stránce (bez service workeru). Fáze 102: služby třetích stran (GA4, Clarity, Sklik, Ads, LinkedIn) jsou připravené, ale na produkci bez ID v `.env` vypnuté; trychtýř počítá vstupy bez identifikátoru (obnovení vstupní stránky se započte znovu) a kontakt zachytí jen ukázková firma (export kusovníku, tisk elaborátu, uložení projektu – export PDF / DXF výkresu se jen počítá); oblíbenost řad a objem materiálu z nejnovějších 300 uložených půdorysů; zásady 1.4 před ostrým prodejem zkontrolovat právníkem. Fáze 103: PDF verze = tisk neměnného snímku z prohlížeče (snímek jsou data, ne uložený soubor PDF); ZPL tiskne čistý QR kód bez loga (logo jen v PDF 1:1); odevzdání z poolu platí až po schválení údržbou; e-mail firemnímu projektantovi jen s SMTP a u závodu registrované firmy; karta štítku je veřejná, ale osobní údaje zákazníka vidí jen firma výrobce (PIN dokumentace zatím není); odměny v poolu jsou orientační, platby projektantům platforma neřeší. Fáze 104: limit požadavků drží okna v paměti jedné instance (restart je vynuluje); blokace robotů podle User-Agent (podvrhnutelný – před vytěžováním chrání hlavně limit a přihlášení); výpočtové algoritmy zůstávají v minifikovaném klientském JS (editor a aplikace počítají offline), na serveru jsou surová data výrobců; podmínky užití 1.1 (čl. 7 ochrana databáze) před ostrým prodejem zkontrolovat právníkem. Fáze 105: ceníkové ceny přístrojů ABB / Hager / OEZ / Eaton v dodaných balíčcích nejsou (OEZ ETIM 8 má 0 Kč) – nabídka je nechá doplnit elektrikáři; ceny jen kabelů a vodičů (Schrack) a krabic KOPOS; šablony importu košíků velkoobchodů ověřit s obchodními zástupci; výška stropu jen v profilu nákresu (ne po místnostech). Fáze 106: drátovací list jen silové propojení podle stromu (bez ovládacích obvodů), délky z pravoúhlého modelu tras; PDF elaborátu a štítků výrobce tiskne z prohlížeče (bez serverového PDF); orientační kalkulace s paušální dopravou 1 490 Kč; výrobci jsou samostatné účty portálu (kód z velínu). Fáze 107: zprávy kontaktního hubu jsou v databázi a printscreeny v soukromém úložišti (ne JSON ani public/), potvrzení e-mailem odesílateli se neposílá (ochrana před zneužitím); plovoucí tlačítko není na /kontakt, ve velínu a na /prezentace.
+- Fáze 98: fáze 2D půdorysu je krok průvodce (relace prohlížeče; kompaktní lišta ukazuje bez filtru vše – „Zobrazit vše“), agenda závodu jen v adrese `?faze=`; detail výběru je ve všech fázích a varování zón / krabiček i ve fázi 4 (odchylka od zadání, viz zadání); Elektro-linter s opravou jedním klikem zůstává u DIN lišt (část 1a), fáze 2 má jeho souhrn; kapitoly video-návodu AI Panel Builderu nesou čísla kroků z namluveného videa; rozvržení na výšku okna až od 1280 px (pod tím sloupce pod sebou); karta Nařízení (EU) 2023/1230 počítá jen otevřené změny s klasifikací podstatné změny (uzavřené jsou v historii zařízení). Fáze 99: demo scénář založí při každém kliknutí nový půdorys firmy (staré demo půdorysy se mažou ručně v seznamu) a rozváděč z něj stojí 1 kredit jako každý jiný; scénář průmyslového závodu jen odkazuje na agendy naposledy otevřeného závodu (plná vzorová data má závod obchodního dema); generování rozváděče z půdorysu trvalo na vývojovém serveru 3,3–3,8 s včetně překladu stránky – cíl pod 1 s na produkci samostatně neměřen; prezentace `/prezentace` je mimo vyhledávače (noindex, není v sitemap) a údaje jednání drží jen prohlížeč prezentujícího. Fáze 100: tahák zakázky je podle zadání v záložce Normy (přechody z taháku ji nechají otevřenou, lišta průvodce otevře výchozí záložku fáze); vzhled 🌗 se ukládá s podkladem podlaží a starší půdorysy bez údaje mají 60 %; fotky v `public/catalog-images/` mají mezipaměť `immutable` na rok – opravenou fotku ukládat pod novým názvem; 60 FPS ověřeno počtem překreslení vrstev v E2E, ne měřením snímků na slabém notebooku. Fáze 101: anténní zásuvka TV / SAT nemá v datech ABB ETIM objednací číslo (v kusovníku „dle katalogu výrobce“) a trasa koaxiálního kabelu se kreslí ve vrstvě datových rozvodů; svislý víceramček se v půdorysu kreslí kolmo ke stěně (schematicky), výšky pozic po 71 mm; offline převod BIM jen na už načtené stránce (bez service workeru). Fáze 102: služby třetích stran (GA4, Clarity, Sklik, Ads, LinkedIn) jsou připravené, ale na produkci bez ID v `.env` vypnuté; trychtýř počítá vstupy bez identifikátoru (obnovení vstupní stránky se započte znovu) a kontakt zachytí jen ukázková firma (export kusovníku, tisk elaborátu, uložení projektu – export PDF / DXF výkresu se jen počítá); oblíbenost řad a objem materiálu z nejnovějších 300 uložených půdorysů; zásady 1.4 před ostrým prodejem zkontrolovat právníkem. Fáze 103: PDF verze = tisk neměnného snímku z prohlížeče (snímek jsou data, ne uložený soubor PDF); ZPL tiskne čistý QR kód bez loga (logo jen v PDF 1:1); odevzdání z poolu platí až po schválení údržbou; e-mail firemnímu projektantovi jen s SMTP a u závodu registrované firmy; karta štítku je veřejná, ale osobní údaje zákazníka vidí jen firma výrobce (PIN dokumentace zatím není); odměny v poolu jsou orientační, platby projektantům platforma neřeší. Fáze 104: limit požadavků drží okna v paměti jedné instance (restart je vynuluje); blokace robotů podle User-Agent (podvrhnutelný – před vytěžováním chrání hlavně limit a přihlášení); výpočtové algoritmy zůstávají v minifikovaném klientském JS (editor a aplikace počítají offline), na serveru jsou surová data výrobců; podmínky užití 1.1 (čl. 7 ochrana databáze) před ostrým prodejem zkontrolovat právníkem. Fáze 105: ceníkové ceny přístrojů ABB / Hager / OEZ / Eaton v dodaných balíčcích nejsou (OEZ ETIM 8 má 0 Kč) – nabídka je nechá doplnit elektrikáři; ceny jen kabelů a vodičů (Schrack) a krabic KOPOS; šablony importu košíků velkoobchodů ověřit s obchodními zástupci; výška stropu jen v profilu nákresu (ne po místnostech). Fáze 106: drátovací list jen silové propojení podle stromu (bez ovládacích obvodů), délky z pravoúhlého modelu tras; PDF elaborátu a štítků výrobce tiskne z prohlížeče (bez serverového PDF); orientační kalkulace s paušální dopravou 1 490 Kč; výrobci jsou samostatné účty portálu (kód z velínu). Fáze 107: zprávy kontaktního hubu jsou v databázi a printscreeny v soukromém úložišti (ne JSON ani public/), potvrzení e-mailem odesílateli se neposílá (ochrana před zneužitím); plovoucí tlačítko není na /kontakt, ve velínu a na /prezentace. Fáze 108: podpis revize vrstvy A je prostý elektronický podpis s pečetí obsahu (ne kvalifikovaný); PAdES (vrstva B) se ověřuje jen formálně (PDF se slovníkem podpisu), platnost certifikátu ne; e-maily Chytré revize a měsíčního reportu bez SMTP jen v logu notifikací; revize pod stejným číslem osvědčení u cizí firmy ukáže report jen počtem; odhad času revize je orientační tabulka; zneplatňuje se po záznamech (ne celý protokol); texty podpisu nechat zkontrolovat právníkem.
 - Backlog z MVP: skutečný serverový přepis hlasu, redlining nad PDF (pdf.js), PostgreSQL, elektronický podpis schválení.

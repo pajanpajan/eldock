@@ -113,7 +113,7 @@ export async function capInspectionIntervals(
       ...RULE_FIELDS,
       floor: { select: { building: { select: BUILDING_RULE_FIELDS } } },
       inspections: {
-        where: { type: { in: [...DEADLINE_TYPES] }, result: { not: "INCAPABLE" } },
+        where: { type: { in: [...DEADLINE_TYPES] }, result: { not: "INCAPABLE" }, misuseFlaggedAt: null },
         select: { id: true, inspectionDate: true, validUntil: true, validUntilOriginal: true },
       },
     },

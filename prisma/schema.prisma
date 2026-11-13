@@ -304,6 +304,10 @@ enum SecurityEventKind {
   DEVICE_PAIRED // fáze 70: spárování aplikace (Windows, iOS, Android, server závodu)
   DEVICE_REVOKED // odpojení zařízení (uživatel, správce firmy, změna hesla, blokace)
   DEVICE_PAIR_FAILED // chybný nebo prošlý kód párování (limit pokusů na IP)
+  BUILDING_DELETED // fáze 108: smazání budovy závodu (počty pater, zařízení a revizí v detailu)
+  REVISION_SIGNED // fáze 108: revize podepsaná profilem technika s PINem (pečeť SHA-256)
+  REVISION_MISUSE // fáze 108: technik zneplatnil revizi jako zneužití svého osvědčení TIČR
+  INSPECTOR_PIN_FAILED // fáze 108: chybný PIN profilu revizního technika
 }
 
 /// Bezpečnostní deník (fáze 67): přihlášení, chyby, změny hesla a účtů. Slouží i k limitu pokusů – IP jen jako HMAC.
@@ -352,6 +356,8 @@ model Plant {
   updatedAt DateTime @updatedAt
 
   buildings           Building[]
+  /// Fáze 108: uložení revizní technici závodu (profil s osvědčením TIČR, PIN a podpisem)
+  inspectorProfiles   InspectorProfile[]
   registeredCompanies RegisteredCompany[]
   homeUsers           User[]              @relation("UserHomePlant")
 }
@@ -574,6 +580,33 @@ model InspectionRecord {
   maxTempC   Float? // nejvyšší naměřená teplota [°C]
   deltaTempC Float? // ΔT vůči okolí [K]
 
+  // Fáze 108: formulář revizního technika – kontakty a oprávnění, kalibrace přístroje, zkratový proud, spoje
+  inspectorProfileId     String?
+  inspectorCompany       String?
+  inspectorIco           String?
+  inspectorPhone         String?
+  inspectorEmail         String?
+  inspectorAuthorization String? // ev. č. oprávnění TIČR (podnikající FO / PO)
+  calibrationRef         String? // kalibrační list přístroje a jeho platnost
+  shortCircuitA          Float? // zkratový proud I_k [A]
+  connectionsOk          Boolean? // kontrola oteplení / termovize a dotažení spojů vyhověla
+  // Fáze 108: elektronický podpis – vrstva A (podpis, razítko, PIN, pečeť SHA-256) a B (PDF s podpisem PAdES)
+  signatureUrl           String? // obrázek podpisu (PNG v úložišti závodu)
+  signedAt               DateTime?
+  signedIp               String?
+  signedDevice           String?
+  pinVerified            Boolean   @default(false)
+  sealHash               String? // SHA-256 kanonického obsahu protokolu (lib/revision-signature.ts)
+  sealVersion            Int?
+  padesUrl               String? // technikem podepsané PDF (kvalifikovaný podpis PAdES)
+  padesUploadedAt        DateTime?
+  padesInfo              String? // co se o podpisu v PDF zjistilo (SubFilter, jméno podepisujícího)
+  // Fáze 108: technik záznam zneplatnil jako zneužití svého osvědčení TIČR (měsíční report)
+  misuseFlaggedAt        DateTime?
+  misuseNote             String?
+
+  inspectorProfile InspectorProfile? @relation(fields: [inspectorProfileId], references: [id], onDelete: SetNull)
+
   defects   InspectionDefect[]
   createdAt DateTime           @default(now())
   updatedAt DateTime           @updatedAt
@@ -583,6 +616,8 @@ model InspectionRecord {
   @@index([equipmentId, inspectionDate])
   @@index([validUntil])
   @@index([equipmentId, type, validUntil])
+  @@index([inspectorLicense, inspectionDate])
+  @@index([inspectorProfileId])
 }
 
 // -----------------------------------------------------------------------------
@@ -2163,4 +2198,42 @@ model ContactMessage {
   @@index([status, createdAt])
   @@index([category, createdAt])
   @@index([readAt])
+}
+
+/// Fáze 108: uložený profil revizního technika závodu – formulář revize ho předvyplní. Osvědčení a oprávnění TIČR,
+/// kontakty (e-mail i pro měsíční kontrolní report), měřicí přístroj s kalibrací, podpis a osobní PIN (jen otisk scrypt).
+model InspectorProfile {
+  id                    String    @id @default(cuid())
+  plantId               String
+  /// Účet, který profil založil.
+  createdById           String?
+  name                  String // „Ing. Martin Dvořák“ (i s titulem)
+  company               String?
+  ico                   String?
+  phone                 String?
+  email                 String?
+  /// Ev. č. osvědčení TIČR („1248/23/R-EZ-E2A“) a jeho tvar pro vyhledávání (bez mezer, velká písmena)
+  certificateNo         String
+  certificateKey        String
+  certificateScope      String? // E1A … E3B
+  certificateValidUntil DateTime?
+  authorizationNo       String? // ev. č. oprávnění TIČR (podnikající FO / PO)
+  instrument            String?
+  calibrationNo         String?
+  calibrationValidUntil DateTime?
+  signatureUrl          String? // uložený podpis (PNG)
+  pinHash               String? // scrypt – PIN se nikde neukládá
+  pinFailures           Int       @default(0)
+  pinLockedUntil        DateTime?
+  /// Zasílat 1. den v měsíci kontrolní výpis revizí pod tímto osvědčením na e-mail technika
+  monthlyEmail          Boolean   @default(false)
+  lastMonthlyReport     String? // „2026-10“ – poslední odeslaný měsíc
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  plant   Plant              @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  records InspectionRecord[]
+
+  @@index([plantId])
+  @@index([certificateKey])
 }

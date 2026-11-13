@@ -23,6 +23,7 @@ import {
 } from "@/lib/inspection-rules";
 import { certificateIssues, normalizeScope, scopeFromLicense } from "@/lib/inspector-certificate";
 import { renderBatchProtocolSvg, renderInspectionReportSvg } from "@/lib/mock-graphics/compliance";
+import type { DocumentSeal } from "@/lib/mock-graphics/document";
 import { sanitizeRcdTest, type RcdTest } from "@/lib/rcd-test";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 
@@ -113,6 +114,8 @@ const equipmentSelect = {
   floor: { select: { name: true, building: { select: { name: true, ...BUILDING_RULE_FIELDS } } } },
   // Podklady náležitostí zprávy (§ 10 písm. h, m): předchozí revize, platná dokumentace, protokol vnějších vlivů, provizoria
   inspections: {
+    // Fáze 108: revize zneplatněná technikem (zneužití osvědčení TIČR) není podkladem další zprávy
+    where: { misuseFlaggedAt: null },
     orderBy: { inspectionDate: "desc" },
     take: 12,
     select: { type: true, reportNumber: true, inspectionDate: true, result: true, defects: { select: { description: true, status: true } } },
@@ -334,8 +337,14 @@ function prepare(input: RecordInspectionInput, equipment: LoadedEquipment, now: 
 
 type Prepared = ReturnType<typeof prepare>;
 
-function reportSvg(equipment: LoadedEquipment, input: { type: InspectionType; result: InspectionResult }, data: Prepared) {
+function reportSvg(
+  equipment: LoadedEquipment,
+  input: { type: InspectionType; result: InspectionResult },
+  data: Prepared,
+  signed: { seal: DocumentSeal; measurementLines: string[] } | null = null,
+) {
   return renderInspectionReportSvg({
+    ...(signed ?? {}),
     tag: equipment.tag,
     name: equipment.name,
     location: `${equipment.floor.building.name} › ${equipment.floor.name}`,
@@ -362,6 +371,38 @@ export async function renderInspectionReport(prisma: PrismaClient, input: Record
   const equipment = await loadEquipment(prisma, input.equipmentId);
   return reportSvg(equipment, input, prepare(input, equipment, now));
 }
+
+/**
+ * Fáze 108: ověří a připraví zápisy revize (platnost, náležitosti zprávy, závady) bez uložení. Podepsaná revize
+ * z nich spočítá pečeť SHA-256, vygeneruje zprávu s patičkou a zapíše vše v jedné transakci.
+ */
+export async function prepareInspectionRows(prisma: PrismaClient, inputs: readonly RecordInspectionInput[], now: Date = new Date()) {
+  const rows = [];
+  for (const input of inputs) {
+    const equipment = await loadEquipment(prisma, input.equipmentId);
+    const data = prepare(input, equipment, now);
+    rows.push({
+      equipment: { id: equipment.id, tag: equipment.tag, name: equipment.name, location: `${equipment.floor.building.name} › ${equipment.floor.name}` },
+      standard: data.rule.standard,
+      validUntil: data.validUntil,
+      inspectionDate: data.inspectionDate,
+      columns: {
+        equipmentId: equipment.id,
+        type: input.type,
+        result: input.result,
+        ...recordColumns(data),
+        maxTempC: data.maxTempC,
+        deltaTempC: data.deltaTempC,
+      },
+      defects: defectRows(equipment.id, data.inspectionDate, input.result, data.defects, input.defectSeverity),
+      /** Zpráva o revizi jednoho zařízení s podpisem, razítkem a pečetí v patičce. */
+      svg: (signed: { seal: DocumentSeal; measurementLines: string[] }) => reportSvg(equipment, input, data, signed),
+    });
+  }
+  return rows;
+}
+
+export type PreparedInspectionRow = Awaited<ReturnType<typeof prepareInspectionRows>>[number];
 
 /** Sloupce záznamu z připraveného vstupu (bez vazeb). */
 function recordColumns(data: Prepared) {

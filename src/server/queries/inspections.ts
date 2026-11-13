@@ -37,7 +37,7 @@ export async function getInspectionWatch(plantId?: string, now: Date = new Date(
       name: true,
       floor: { select: { name: true, building: { select: { name: true, plant: { select: { name: true } } } } } },
       inspections: {
-        where: { type: { in: [...DEADLINE_TYPES] } },
+        where: { type: { in: [...DEADLINE_TYPES] }, misuseFlaggedAt: null },
         orderBy: { inspectionDate: "desc" },
         select: { type: true, inspectionDate: true, validUntil: true, result: true, defectsSummary: true },
       },
@@ -81,7 +81,7 @@ export async function getInspectionOverview(plantId?: string, now: Date = new Da
       assignedZone: true,
       floor: { select: { name: true, building: { select: { name: true, ...BUILDING_RULE_FIELDS, plant: { select: { name: true } } } } } },
       inspections: {
-        where: { type: { in: [...DEADLINE_TYPES] } },
+        where: { type: { in: [...DEADLINE_TYPES] }, misuseFlaggedAt: null },
         select: { id: true, type: true, inspectionDate: true, validUntil: true, result: true },
       },
     },
@@ -122,7 +122,7 @@ export async function getRapidQueue(plantId?: string, now: Date = new Date(), ty
       model: true,
       floor: { select: { name: true, building: { select: { name: true } } } },
       inspections: {
-        where: { type: { in: [...DEADLINE_TYPES] } },
+        where: { type: { in: [...DEADLINE_TYPES] }, misuseFlaggedAt: null },
         orderBy: { inspectionDate: "desc" },
         select: {
           type: true,
@@ -168,7 +168,7 @@ export async function getPlannerItems(plantId?: string, now: Date = new Date(), 
         },
       },
       inspections: {
-        where: { type: { in: [...DEADLINE_TYPES] } },
+        where: { type: { in: [...DEADLINE_TYPES] }, misuseFlaggedAt: null },
         select: { type: true, inspectionDate: true, validUntil: true, result: true },
       },
     },
@@ -208,7 +208,7 @@ export async function getAuditReport(plantId?: string, now: Date = new Date(), t
         ...RULE_FIELDS,
         floor: { select: { name: true, building: { select: { name: true, ...BUILDING_RULE_FIELDS, plant: { select: { name: true } } } } } },
         inspections: {
-          where: { type: { in: [...DEADLINE_TYPES] } },
+          where: { type: { in: [...DEADLINE_TYPES] }, misuseFlaggedAt: null },
           orderBy: { inspectionDate: "desc" },
           select: { type: true, inspectionDate: true, validUntil: true, validUntilOriginal: true, result: true, reportNumber: true, inspectorName: true },
         },

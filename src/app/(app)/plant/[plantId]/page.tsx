@@ -11,6 +11,7 @@ import { PageTransition } from "@/components/layout/PageTransition";
 import { StatusLegend } from "@/components/common/StatusLegend";
 import { InspectionWatcher } from "@/components/inspections/InspectionWatcher";
 import { PredictiveWatch } from "@/components/inspections/PredictiveWatch";
+import { SmartRevisionTripOptimizer } from "@/components/inspections/SmartRevisionTripOptimizer";
 import { getPredictiveSummary } from "@/server/queries/health";
 import { CampusExplorer } from "@/components/map/campus/CampusExplorer";
 import { PlantOnboardingLoader } from "@/components/plant/PlantOnboardingLoader";
@@ -24,7 +25,9 @@ import { Button } from "@/components/ui/button";
 import { PLANT_PHASE_PARAM, plantPhaseOf, type PlantPhaseCounts } from "@/lib/plant-phases";
 import { EQUIPMENT_STATUS } from "@/lib/status";
 import { getPlantCableNodes } from "@/server/queries/health";
+import { pragueToday } from "@/lib/inspection";
 import { getInspectionWatch } from "@/server/queries/inspections";
+import { getTripItems } from "@/server/queries/revision-trip";
 import { getPlantOverview, getPlantPower } from "@/server/queries/plant";
 import { getPlantAgenda } from "@/server/queries/plant-agenda";
 import { getFeatures } from "@/server/modules";
@@ -50,12 +53,17 @@ export default async function PlantPage({ params, searchParams }: PageProps<"/pl
   const now = new Date();
   const [plant, watch, agenda] = await Promise.all([getPlantOverview(plantId, account.types), getInspectionWatch(plantId, now, account.types), getPlantAgenda(plantId, account.types)]);
   if (!plant) notFound();
-  const [power, predictive, cableNodes] = await Promise.all([
+  const showInspections = account.definition.showInspections && !account.definition.fieldView;
+  const [power, predictive, cableNodes, tripItems] = await Promise.all([
     phase === 1 ? getPlantPower(plantId, account.types) : Promise.resolve([]),
     phase === 4 ? getPredictiveSummary(plantId, account.types) : Promise.resolve(null),
     phase === 4 ? getPlantCableNodes(plantId) : Promise.resolve([]),
+    // Fáze 108: Chytrá revize (optimalizace výjezdu technika) na mapě závodu i v agendě revizí
+    showInspections && (phase === 1 || phase === 4) ? getTripItems(plantId, now, account.types) : Promise.resolve([]),
   ]);
-  const showInspections = account.definition.showInspections && !account.definition.fieldView;
+  const trip = showInspections ? (
+    <SmartRevisionTripOptimizer items={tripItems} today={pragueToday(now)} canRecord={account.can("recordInspection")} className="mb-6" />
+  ) : null;
   const counts: PlantPhaseCounts = {
     buildings: plant.buildings.length,
     boards: agenda.filter((row) => row.group === "boards").length,
@@ -109,6 +117,7 @@ export default async function PlantPage({ params, searchParams }: PageProps<"/pl
       {phase === 3 ? <PlantDocsBoard rows={agenda} /> : null}
       {phase === 4 ? (
         <div className="flex flex-col gap-4" data-testid="plant-compliance">
+          {trip}
           {showInspections ? (
             <div>
               <InspectionWatcher watch={watch} />
@@ -172,9 +181,11 @@ export default async function PlantPage({ params, searchParams }: PageProps<"/pl
       </section>
       )}
 
+          {plant.buildings.length ? trip : null}
           <CampusExplorer
         plant={plant}
         power={power}
+        canEdit={canBuild}
         legend={
           <StatusLegend
             extra={

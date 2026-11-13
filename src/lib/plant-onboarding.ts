@@ -8,7 +8,7 @@ import type { EquipmentType } from "@/generated/prisma/enums";
 
 import { DEFAULT_GRID } from "./cad-grid";
 import { kwToAmps, simulateAddedLoad, type PowerCableNode, type SimulationRow } from "./cable-sizing";
-import { polygonBounds } from "./campus-layout";
+import { findFreeSpot, polygonBounds } from "./campus-layout";
 import { SAFETY_IMPACT } from "./legislation-2027";
 import type { PanelInput } from "./panel-model";
 import type { StudioDraft } from "./studio-draft";
@@ -78,17 +78,13 @@ export function nextBuildingCode(codes: readonly string[]): string {
 
 const HALL_MAP = { w: 28, h: 20 };
 
-/** Volné místo pro novou halu v areálu (procenta mapy) – první pozice bez překryvu se stávajícími budovami. */
+/**
+ * Volné místo pro novou halu v areálu (procenta mapy) bez překryvu se stávajícími budovami. Fáze 108: dřív jen 9 pevných
+ * pozic a při plném areálu levý horní roh přes stávající haly („Hala 1 – Výroba“ přes Lisovnu a Administrativu) – teď
+ * jemné hledání s případným zmenšením haly (`freeSpotFor`).
+ */
 export function freeHallSpot(polygons: readonly string[]): { x: number; y: number; w: number; h: number } {
-  const taken = polygons.map((polygon) => polygonBounds(polygon));
-  const overlaps = (a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }) => a.x < b.x + b.w + 2 && b.x < a.x + a.w + 2 && a.y < b.y + b.h + 2 && b.y < a.y + a.h + 2;
-  for (const y of [10, 40, 70]) {
-    for (const x of [8, 40, 70]) {
-      const spot = { x, y, ...HALL_MAP };
-      if (!taken.some((rect) => overlaps(spot, rect))) return spot;
-    }
-  }
-  return { x: 8, y: 10, ...HALL_MAP };
+  return findFreeSpot(HALL_MAP, polygons.map((polygon) => polygonBounds(polygon)));
 }
 
 /** Rozvržení haly 54 × 30 m: výroba a rozvodna s hlavním rozváděčem / trafostanicí (koncept Studia výstavby). */

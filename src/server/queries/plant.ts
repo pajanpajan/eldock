@@ -118,6 +118,8 @@ async function loadPlantOverview(plantId: string, types: EquipmentType[] | null 
     city: plant.city,
     address: plant.address,
     viewBox: { width: plant.campusViewBoxW, height: plant.campusViewBoxH },
+    // Fáze 108: rozměr pozemku v metrech (úprava polohy a rozměru budovy)
+    campus: { width: plant.campusWidthM, height: plant.campusDepthM },
     buildings,
     counts: {
       total: buildings.reduce((sum, building) => sum + building.counts.total, 0),

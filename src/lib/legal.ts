@@ -6,7 +6,7 @@
 
 import { COMPANY_INFO } from "./company";
 
-export const PRIVACY_VERSION = "1.5 – 12. 11. 2026";
+export const PRIVACY_VERSION = "1.6 – 13. 11. 2026";
 
 /**
  * Fáze 104: doložka ochrany databáze a autorských práv (patička webu, obchodní podmínky, zápatí PDF výstupů) – databáze
@@ -45,6 +45,7 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
       "přihlašovací údaje: e-mail a heslo (ukládáme jen jeho kryptografický otisk),",
       "obsah, který do platformy nahrajete: fotografie a videa rozváděčů a zařízení, zákresy, hlasové poznámky, revizní záznamy a dokumentaci včetně jmen osob, které změny zadaly nebo schválily,",
       "údaje o objednávkách kreditů a platbách (variabilní symbol, fakturační údaje),",
+      "profil revizního technika a elektronický podpis revize (fáze 108): jméno a titul, firma a IČO, telefon, e-mail, číslo osvědčení a oprávnění TIČR, měřicí přístroj a kalibrační list, obrázek vlastnoručního podpisu a osobní PIN (jen jeho kryptografický otisk); u každé podepsané revize čas podpisu, IP adresa a typ zařízení (prohlížeč a systém) a otisk SHA-256 obsahu protokolu – údaje jsou součástí uzamčené revizní zprávy a slouží jako důkaz, kdo a kdy revizi podepsal,",
       "technické záznamy nutné pro bezpečný provoz: časy přihlášení a změn v auditní stopě, bezpečnostní deník firmy (přihlášení, neúspěšné pokusy, změny hesel a účtů – bez IP adresy, pro omezení pokusů jen její jednosměrný otisk) a přihlášená zařízení (typ prohlížeče a systému),",
       "spárované aplikace Eldock pro Windows, iOS a Android: název zařízení, platforma, verze aplikace, časy spárování, posledního spojení a synchronizace a evidence úprav odeslaných z aplikace (druh, výsledek a čas) – přístupový token zařízení ukládáme jen jako kryptografický otisk,",
       "evidence žádostí o export a výmaz dat (firma, druh žádosti a čas – bez jmen),",
@@ -60,6 +61,7 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
       "poskytování platformy a plnění smlouvy s vaší firmou (čl. 6 odst. 1 písm. b) GDPR),",
       "vedení účetnictví a daňových dokladů k objednávkám kreditů (čl. 6 odst. 1 písm. c) GDPR),",
       "zabezpečení platformy, auditní stopa a obrana právních nároků (oprávněný zájem, čl. 6 odst. 1 písm. f) GDPR),",
+      "podepsaná revize a měsíční kontrolní report revizního technika: prokázání, kdo a kdy revizi vydal (čas, IP adresa a zařízení při podpisu, pečeť obsahu), ochrana technika před zneužitím jeho osvědčení TIČR a měsíční e-mail se souhrnem, pokud si ho technik zapne (plnění smlouvy a oprávněný zájem, čl. 6 odst. 1 písm. b) a f) GDPR),",
       "e-mailová avíza o blížících se lhůtách revizí, pokud si je ve své firmě zapnete (plnění smlouvy),",
       "zasílání newsletteru s novinkami jen na základě vašeho souhlasu (čl. 6 odst. 1 písm. a) GDPR),",
       "statistika návštěvnosti webu (Google Analytics 4, Microsoft Clarity, produktová analytika s identifikátorem) a měření kampaní a remarketing (Seznam Sklik, Google Ads, LinkedIn), jen pokud k nim dáte souhlas v liště cookies (čl. 6 odst. 1 písm. a) GDPR),",
@@ -92,6 +94,7 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
     ],
     list: [
       "bezpečnostní deník firmy: 1 rok,",
+      "údaje podpisu revize (čas, IP adresa, zařízení, obrázek podpisu, pečeť): po dobu uchování revizní zprávy, kterou provozovatel uchovává po dobu životnosti zařízení; profil technika do jeho smazání nebo zrušení účtu firmy,",
       "zrušená nebo prošlá přihlášení zařízení a odkazy na nastavení hesla: 30 dní,",
       "spárované aplikace: do odpojení (odpojí je uživatel, správce firmy, změna hesla nebo blokace účtu; po 90 dnech bez spojení vyprší), pak 30 dní; evidence úprav z aplikací 90 dní; jednorázové kódy párování 1 den,",
       "evidence žádostí o export a výmaz dat: 3 roky,",

@@ -20,7 +20,10 @@ export type EntityKind =
   | "schematicReference"
   | "floor"
   | "building"
-  | "plant";
+  | "plant"
+  // Fáze 108: záznam revize (podpis, PAdES, zneplatnění) a profil revizního technika závodu
+  | "inspection"
+  | "inspectorProfile";
 
 /** Pole vstupu akcí → druh záznamu. */
 export const FIELD_KINDS: Record<string, EntityKind> = {
@@ -36,6 +39,8 @@ export const FIELD_KINDS: Record<string, EntityKind> = {
   floorId: "floor",
   buildingId: "building",
   plantId: "plant",
+  inspectionId: "inspection",
+  inspectorProfileId: "inspectorProfile",
 };
 
 const viaEquipment = (plant: Plant, equipment: EquipmentWhere) => ({ equipment: { ...equipment, floor: { building: { plant } } } });
@@ -68,6 +73,10 @@ export function countAccessible(prisma: PrismaClient, kind: EntityKind, ids: str
       return prisma.building.count({ where: { id, plant } });
     case "plant":
       return prisma.plant.count({ where: { AND: [{ id }, plant] } });
+    case "inspection":
+      return prisma.inspectionRecord.count({ where: { id, ...viaEquipment(plant, equipment) } });
+    case "inspectorProfile":
+      return prisma.inspectorProfile.count({ where: { id, plant } });
   }
 }
 
