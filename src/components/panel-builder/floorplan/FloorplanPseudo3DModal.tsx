@@ -6,8 +6,38 @@ import { AlertTriangle, RotateCcw, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toWorld } from "@/lib/panel-builder/fixtures";
-import type { FloorplanDraft } from "@/lib/panel-builder/floorplan-editor";
-import { DEFAULT_ISO, HEIGHT_LEVELS, HEIGHT_PRESETS, WALL_SIDES, buildScene, elevationOf, heightIssues, isoProject, type IsoView, type SceneKind, type WallSide } from "@/lib/panel-builder/pseudo3d";
+import { analyzeDraft, type FloorplanDraft } from "@/lib/panel-builder/floorplan-editor";
+import { backgroundTransform, type FloorplanBackground } from "@/lib/panel-builder/floorplan-pdf";
+import {
+  DEFAULT_ISO,
+  HEIGHT_LEVELS,
+  HEIGHT_PRESETS,
+  INSTALL_ZONES,
+  WALL_SIDES,
+  buildScene,
+  cableRuns3D,
+  elevationOf,
+  elevationOfArea,
+  emptyElevation,
+  heightIssues,
+  inferWalls,
+  isoFloorMatrix,
+  isoProject,
+  roomWallSegments,
+  sceneExtent,
+  virtualRooms,
+  wallRunZ,
+  CABLE_COLORS,
+  type CableCircuitLike,
+  type CableRun3D,
+  type Elevation,
+  type IsoView,
+  type PlanExtent,
+  type SceneKind,
+  type WallSegment,
+  type WallSide,
+} from "@/lib/panel-builder/pseudo3d";
+import { displayRoutes } from "@/lib/panel-builder/route-display";
 import { cn } from "@/lib/utils";
 
 /**
@@ -111,21 +141,56 @@ function HeightEditor({ label, value, onChange }: { label: string; value: number
   );
 }
 
-/** Režim A: izometrický pohled na celý půdorys (otáčení po 90° / 15°, náklon). */
-function IsoView3D({ draft, view, selectedId, onSelect }: { draft: FloorplanDraft; view: IsoView; selectedId: string | null; onSelect: (id: string) => void }) {
+/** Fáze 110: PDF / obrázkový podklad na podlaze 3D náhledu (list podkladu v mm půdorysu). */
+export interface FloorUnderlay {
+  background: FloorplanBackground;
+  mmPerPx: number;
+  sheet: PlanExtent;
+}
+
+/**
+ * Režim A: izometrický pohled na celý půdorys (otáčení po 90° / 15°, náklon). Fáze 110: stěny z jednotných úseček
+ * (obdélníkové i mnohoúhelníkové místnosti, bez místností odvozené obvodové stěny a příčky), střed a výřez ze všech
+ * místností, prvků, nábytku, otvorů a listu podkladu, PDF podklad s mřížkou na podlaze a 3D trasy kabelů.
+ */
+export function IsoView3D({
+  draft,
+  view,
+  selectedId,
+  onSelect,
+  walls: wallSegments,
+  floor = null,
+  cables = null,
+}: {
+  draft: FloorplanDraft;
+  view: IsoView;
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+  walls: readonly WallSegment[];
+  floor?: FloorUnderlay | null;
+  cables?: readonly CableRun3D[] | null;
+}) {
   const scene = useMemo(() => buildScene(draft), [draft]);
-  const center = { x: (scene.bounds.minX + scene.bounds.maxX) / 2, y: (scene.bounds.minY + scene.bounds.maxY) / 2 };
+  const extent = sceneExtent(scene, floor?.sheet ?? null);
+  const center = { x: (extent.minX + extent.maxX) / 2, y: (extent.minY + extent.maxY) / 2 };
   const project = (point: { x: number; y: number; z?: number }) => isoProject(point, view, center);
   const H = scene.ceilingMm;
-  // Stěny místností (svislé čtyřúhelníky po obvodu), vzdálenější dřív
-  const walls = scene.rooms.flatMap((room) =>
-    room.polygon.map((a, index) => {
-      const b = room.polygon[(index + 1) % room.polygon.length];
-      const quad = [project({ ...a, z: 0 }), project({ ...b, z: 0 }), project({ ...b, z: H }), project({ ...a, z: H })];
-      return { key: `${room.id}-${index}`, quad, depth: (quad[0].depth + quad[1].depth) / 2 };
-    }),
-  );
+  // Stěny (svislé čtyřúhelníky od podlahy do stropu), vzdálenější dřív
+  const walls = wallSegments.map((segment, index) => {
+    const quad = [project({ ...segment.a, z: 0 }), project({ ...segment.b, z: 0 }), project({ ...segment.b, z: H }), project({ ...segment.a, z: H })];
+    return { key: `${segment.kind}-${index}`, kind: segment.kind, quad, depth: (quad[0].depth + quad[1].depth) / 2 };
+  });
   walls.sort((a, b) => a.depth - b.depth);
+  const runs = (cables ?? []).map((run) => ({ ...run, projected: run.points.map((point) => project(point)) }));
+  const sheetCorners = floor
+    ? [
+        { x: floor.sheet.minX, y: floor.sheet.minY },
+        { x: floor.sheet.maxX, y: floor.sheet.minY },
+        { x: floor.sheet.maxX, y: floor.sheet.maxY },
+        { x: floor.sheet.minX, y: floor.sheet.maxY },
+      ]
+    : [];
+  const gridStep = floor ? (Math.max(floor.sheet.maxX - floor.sheet.minX, floor.sheet.maxY - floor.sheet.minY) > 30_000 ? 2000 : 1000) : 1000;
   const furniture = scene.furniture.map((entry) => {
     const bottom = entry.geometry.corners.map((corner) => project({ ...corner, z: 0 }));
     const top = entry.geometry.corners.map((corner) => project({ ...corner, z: entry.height }));
@@ -147,16 +212,41 @@ function IsoView3D({ draft, view, selectedId, onSelect }: { draft: FloorplanDraf
   const elements = scene.elements
     .map((element) => ({ element, at: project(element), foot: project({ ...element, z: element.kind === "socket" || element.kind === "appliance" ? 0 : H }) }))
     .sort((a, b) => a.at.depth - b.at.depth);
-  const all = [...walls.flatMap((wall) => wall.quad), ...elements.map((entry) => entry.at), ...scene.rooms.flatMap((room) => room.polygon.map((point) => project({ ...point, z: 0 })))];
+  const all = [
+    ...walls.flatMap((wall) => wall.quad),
+    ...elements.map((entry) => entry.at),
+    ...scene.rooms.flatMap((room) => room.polygon.map((point) => project({ ...point, z: 0 }))),
+    ...furniture.flatMap((entry) => entry.top),
+    ...openings.flatMap((opening) => opening.quad),
+    ...sheetCorners.map((corner) => project({ ...corner, z: 0 })),
+    ...runs.flatMap((run) => run.projected),
+  ];
   const minX = Math.min(...all.map((point) => point.x), 0) - 400;
   const maxX = Math.max(...all.map((point) => point.x), 1) + 400;
   const minY = Math.min(...all.map((point) => point.y), 0) - 400;
   const maxY = Math.max(...all.map((point) => point.y), 1) + 400;
   const unit = Math.max(maxX - minX, maxY - minY) / 120;
   return (
-    <svg viewBox={`${minX} ${minY} ${maxX - minX} ${maxY - minY}`} className="h-[58vh] w-full rounded-xl bg-zinc-950" role="img" aria-label="Izometrický 3D náhled půdorysu" data-testid="pseudo3d-iso" data-ceiling={H} data-rotation={view.rotation}>
+    <svg viewBox={`${minX} ${minY} ${maxX - minX} ${maxY - minY}`} className="h-[58vh] w-full rounded-xl bg-zinc-950" role="img" aria-label="Izometrický 3D náhled půdorysu" data-testid="pseudo3d-iso" data-ceiling={H} data-rotation={view.rotation} data-walls={walls.length}>
+      {/* Fáze 110: PDF podklad na podlaze (z = 0) s obrysem listu a jemnou mřížkou – orientace podle čar výkresu */}
+      {floor ? (
+        <g transform={`matrix(${isoFloorMatrix(view, center).map((value) => value.toFixed(6)).join(" ")})`} pointerEvents="none" data-testid="pseudo3d-floor-pdf">
+          <rect x={floor.sheet.minX} y={floor.sheet.minY} width={floor.sheet.maxX - floor.sheet.minX} height={floor.sheet.maxY - floor.sheet.minY} fill="#0f172a" stroke="#64748b" strokeWidth={40} />
+          <g transform={backgroundTransform(floor.background, floor.mmPerPx)}>
+            <image href={floor.background.url} width={floor.background.widthPx} height={floor.background.heightPx} preserveAspectRatio="none" opacity={0.55} style={{ filter: "invert(1) hue-rotate(180deg)" }} />
+          </g>
+          <g stroke="#94a3b8" strokeOpacity={0.18} strokeWidth={14}>
+            {Array.from({ length: Math.floor((floor.sheet.maxX - floor.sheet.minX) / gridStep) + 1 }, (_, index) => floor.sheet.minX + index * gridStep).map((x) => (
+              <line key={`gx${x}`} x1={x} y1={floor.sheet.minY} x2={x} y2={floor.sheet.maxY} />
+            ))}
+            {Array.from({ length: Math.floor((floor.sheet.maxY - floor.sheet.minY) / gridStep) + 1 }, (_, index) => floor.sheet.minY + index * gridStep).map((y) => (
+              <line key={`gy${y}`} x1={floor.sheet.minX} y1={y} x2={floor.sheet.maxX} y2={y} />
+            ))}
+          </g>
+        </g>
+      ) : null}
       {scene.rooms.map((room) => (
-        <polygon key={room.id} points={polygon(room.polygon.map((point) => project({ ...point, z: 0 })))} fill="#27272a" stroke="#52525b" strokeWidth={unit * 0.15} />
+        <polygon key={room.id} points={polygon(room.polygon.map((point) => project({ ...point, z: 0 })))} fill="#27272a" fillOpacity={floor ? 0.3 : 1} stroke="#52525b" strokeWidth={unit * 0.15} />
       ))}
       <defs>
         <radialGradient id="pseudo3d-light-glow">
@@ -189,11 +279,28 @@ function IsoView3D({ draft, view, selectedId, onSelect }: { draft: FloorplanDraf
       ))}
       {/* Fáze 109: poloprůhledné stěny (~20 %) od podlahy do výšky stropu s hranami u podlahy, v rozích a u stropu */}
       {walls.map((wall) => (
-        <polygon key={wall.key} points={polygon(wall.quad)} fill={WALL_FILL} stroke={WALL_EDGE} strokeWidth={unit * 0.14} strokeLinejoin="round" data-testid="pseudo3d-wall-face" />
+        <polygon key={wall.key} points={polygon(wall.quad)} fill={WALL_FILL} stroke={WALL_EDGE} strokeWidth={unit * 0.14} strokeLinejoin="round" data-testid="pseudo3d-wall-face" data-kind={wall.kind} />
       ))}
       {/* Průhledné otvory: okna (parapet 900 → 2300 mm) a dveře (0 → 2000 mm) jen obrysem */}
       {openings.map((opening) => (
         <polygon key={opening.id} points={polygon(opening.quad)} fill={opening.door ? "rgba(251,191,36,0.05)" : "rgba(125,211,252,0.08)"} stroke={opening.door ? "#fbbf24" : "#7dd3fc"} strokeWidth={unit * 0.16} data-kind={opening.door ? "door" : "window"} data-testid="pseudo3d-opening" />
+      ))}
+      {/* Fáze 110: 🔌 3D trasy kabelů – vodorovně po podlaze / pod stropem a svislé svody po stěně do výšky prvku */}
+      {runs.map((run) => (
+        <polyline
+          key={run.id}
+          points={polygon(run.projected)}
+          fill="none"
+          stroke={run.color}
+          strokeOpacity={0.9}
+          strokeWidth={unit * 0.16}
+          strokeLinejoin="round"
+          strokeLinecap="round"
+          pointerEvents="none"
+          data-testid="pseudo3d-cable"
+          data-layer={run.layer}
+          data-routing={run.routing}
+        />
       ))}
       {elements.map(({ element, at, foot }) => (
         <g key={element.id} onClick={() => onSelect(element.id)} className="cursor-pointer" data-testid="pseudo3d-element" data-id={element.id} data-z={Math.round(element.z)}>
@@ -209,9 +316,25 @@ function IsoView3D({ draft, view, selectedId, onSelect }: { draft: FloorplanDraf
   );
 }
 
-/** Režim B: rozvinutý pohled na stěnu místnosti s pravítkem výšek; výška prvku tažením nebo číslem. */
-function WallView({ draft, roomId, side, selectedId, onSelect, onHeight }: { draft: FloorplanDraft; roomId: string; side: WallSide; selectedId: string | null; onSelect: (id: string) => void; onHeight: (id: string, heightMm: number) => void }) {
-  const elevation = useMemo(() => elevationOf(draft, roomId, side), [draft, roomId, side]);
+/**
+ * Režim B: rozvinutý pohled na stěnu s pravítkem výšek; výška prvku tažením nebo číslem. Fáze 110: stěna nakreslené
+ * místnosti i virtuální místnosti (celý půdorys na PDF podkladu, zóna z prvků), kabelové trasy v instalačních zónách.
+ */
+export function WallView({
+  elevation,
+  selectedId,
+  onSelect,
+  onHeight,
+  cables = null,
+  hint = null,
+}: {
+  elevation: Elevation | null;
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+  onHeight: (id: string, heightMm: number) => void;
+  cables?: readonly CableCircuitLike[] | null;
+  hint?: string | null;
+}) {
   const svg = useRef<SVGSVGElement>(null);
   const [drag, setDrag] = useState<{ id: string; z: number } | null>(null);
   if (!elevation) return <p className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">Na této straně místnost nemá stěnu – zvolte jinou stranu.</p>;
@@ -272,6 +395,44 @@ function WallView({ draft, roomId, side, selectedId, onSelect, onHeight }: { dra
       {elevation.openings.map((opening) => (
         <rect key={opening.id} x={opening.along - opening.width / 2} y={H - opening.sill - opening.height} width={opening.width} height={opening.height} fill={opening.type.startsWith("door") ? "#92400e" : "#7dd3fc"} fillOpacity={0.35} stroke={opening.type.startsWith("door") ? "#d97706" : "#38bdf8"} strokeWidth={8} />
       ))}
+      {/* Fáze 110: 🔌 vedení kabelů na stěně – instalační zóny (ČSN 33 2130 ed. 4), vodorovně v zóně a svisle k prvkům */}
+      {cables ? (
+        <g pointerEvents="none" data-testid="pseudo3d-wall-cables">
+          <rect x={0} y={INSTALL_ZONES.top.from} width={W} height={INSTALL_ZONES.top.to - INSTALL_ZONES.top.from} fill="#38bdf8" fillOpacity={0.06} />
+          <rect x={0} y={H - INSTALL_ZONES.bottom.to} width={W} height={INSTALL_ZONES.bottom.to - INSTALL_ZONES.bottom.from} fill="#38bdf8" fillOpacity={0.06} />
+          <text x={20} y={INSTALL_ZONES.top.from + 70} fontSize={56} fill="#7dd3fc" fillOpacity={0.75}>
+            instalační zóna pod stropem (ČSN 33 2130 ed. 4)
+          </text>
+          <text x={20} y={H - INSTALL_ZONES.bottom.to + 70} fontSize={56} fill="#7dd3fc" fillOpacity={0.75}>
+            instalační zóna nad podlahou
+          </text>
+          {cables.map((circuit) => {
+            // Prvky okruhu i konce jeho úseků (vypínač v korespondenci, rozváděč na začátku trasy)
+            const ids = new Set([...(circuit.elementIds ?? []), ...circuit.legs.flatMap((leg) => [leg.from, leg.to])]);
+            const fromPanel = circuit.legs.some((leg) => leg.from.startsWith("panel") || leg.to.startsWith("panel"));
+            const members = elevation.elements.filter((element) => ids.has(element.id) || (fromPanel && element.kind === "board"));
+            if (!members.length) return null;
+            const runZ = wallRunZ(circuit.routing, H);
+            const color = CABLE_COLORS[circuit.layer] ?? "#e5e7eb";
+            const alongs = members.map((element) => element.along);
+            const from = Math.min(...alongs);
+            const to = Math.max(...alongs);
+            return (
+              <g key={circuit.id} stroke={color} strokeWidth={10} strokeOpacity={0.85} fill="none" data-testid="pseudo3d-wall-cable" data-layer={circuit.layer}>
+                {to > from ? <line x1={from} y1={H - runZ} x2={to} y2={H - runZ} /> : <line x1={from - 150} y1={H - runZ} x2={from + 150} y2={H - runZ} />}
+                {members.map((element) => (
+                  <line key={element.id} x1={element.along} y1={H - runZ} x2={element.along} y2={H - element.z} strokeDasharray="24 14" />
+                ))}
+              </g>
+            );
+          })}
+        </g>
+      ) : null}
+      {hint ? (
+        <text x={W / 2} y={H / 2} fontSize={70} fill="#a1a1aa" textAnchor="middle" data-testid="pseudo3d-wall-hint">
+          {hint}
+        </text>
+      ) : null}
       {elevation.elements.map((element) => {
         const z = drag?.id === element.id ? drag.z : element.z;
         return (
@@ -314,10 +475,46 @@ export function FloorplanPseudo3DModal({ draft, onHeights }: { draft: FloorplanD
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [roomId, setRoomId] = useState<string | null>(null);
   const [side, setSide] = useState<WallSide>("N");
+  // Fáze 110: 🔌 kabelové trasy (výchozí zapnuté) a 🗺️ PDF podklad na podlaze
+  const [cablesOn, setCablesOn] = useState(true);
+  const [floorPdfOn, setFloorPdfOn] = useState(true);
   const issues = useMemo(() => (open ? heightIssues(draft) : []), [draft, open]);
   const scene = useMemo(() => (open ? buildScene(draft) : null), [draft, open]);
   const selected = scene?.elements.find((element) => element.id === selectedId) ?? null;
-  const room = draft.rooms.find((candidate) => candidate.id === roomId) ?? draft.rooms[0] ?? null;
+  const hasBackground = Boolean(draft.background);
+  const sheet = useMemo((): PlanExtent | null => (hasBackground ? { minX: 0, minY: 0, maxX: draft.widthMm, maxY: draft.heightMm } : null), [hasBackground, draft.widthMm, draft.heightMm]);
+  // Stěny: nakreslené místnosti (obdélník i mnohoúhelník), bez místností odvozené z prvků na podkladu
+  const inferred = useMemo(() => (scene && !draft.rooms.length ? inferWalls(scene, sheet) : null), [scene, draft.rooms.length, sheet]);
+  const walls = useMemo(() => (scene ? (draft.rooms.length ? roomWallSegments(scene) : (inferred?.walls ?? [])) : []), [scene, draft.rooms.length, inferred]);
+  const virtual = useMemo(() => (open ? virtualRooms(draft, { background: Boolean(draft.background), envelope: inferred?.envelope ?? null }) : []), [open, draft, inferred]);
+  const pdfMode = open && !draft.rooms.length && walls.length > 0;
+  const floor: FloorUnderlay | null = draft.background && sheet && floorPdfOn ? { background: draft.background, mmPerPx: draft.mmPerPx, sheet } : null;
+  // Trasy kabelů z výpočtu okruhů (jen při otevřeném náhledu se zapnutými trasami)
+  const circuits = useMemo((): CableCircuitLike[] | null => {
+    if (!open || !cablesOn) return null;
+    try {
+      const routes = displayRoutes(draft, analyzeDraft(draft));
+      return [...routes.circuits, ...(routes.bus ? [routes.bus] : [])].filter((circuit) => !circuit.inBoard);
+    } catch {
+      return [];
+    }
+  }, [open, cablesOn, draft]);
+  const runs = useMemo(() => {
+    if (!scene || !circuits) return null;
+    const board = scene.elements.find((element) => element.kind === "board");
+    return cableRuns3D(circuits, scene, board?.z ?? draft.profile.switchboardHeightMm);
+  }, [scene, circuits, draft.profile.switchboardHeightMm]);
+  // Pohled na stěnu: nakreslené místnosti + virtuální (celý půdorys na PDF podkladu, zóny z prvků)
+  const areas = [...draft.rooms.map((candidate) => ({ id: candidate.id, name: candidate.name })), ...virtual.map((candidate) => ({ id: candidate.id, name: candidate.name }))];
+  const areaId = areas.some((area) => area.id === roomId) ? roomId : (areas[0]?.id ?? null);
+  const room = draft.rooms.find((candidate) => candidate.id === areaId) ?? null;
+  const virtualArea = virtual.find((candidate) => candidate.id === areaId) ?? null;
+  const elevation = useMemo((): Elevation | null => {
+    if (!open || mode !== "wall") return null;
+    if (room) return elevationOf(draft, room.id, side);
+    if (virtualArea) return elevationOfArea(draft, virtualArea, side);
+    return emptyElevation(draft.profile.ceilingHeightMm);
+  }, [open, mode, room, virtualArea, side, draft]);
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -360,6 +557,27 @@ export function FloorplanPseudo3DModal({ draft, onHeights }: { draft: FloorplanD
               </button>
             ))}
           </div>
+          {/* Fáze 110: 🔌 kabelové trasy v izometrii i na stěně a 🗺️ PDF podklad na podlaze */}
+          <button
+            type="button"
+            aria-pressed={cablesOn}
+            onClick={() => setCablesOn((on) => !on)}
+            className={cn("rounded-md border px-2.5 py-1 text-xs font-semibold", cablesOn ? "border-orange-400 bg-orange-500/15 text-orange-100" : "border-border text-muted-foreground")}
+            data-testid="pseudo3d-cables"
+          >
+            🔌 Kabelové trasy
+          </button>
+          {draft.background && mode === "iso" ? (
+            <button
+              type="button"
+              aria-pressed={floorPdfOn}
+              onClick={() => setFloorPdfOn((on) => !on)}
+              className={cn("rounded-md border px-2.5 py-1 text-xs font-semibold", floorPdfOn ? "border-sky-400 bg-sky-500/15 text-sky-100" : "border-border text-muted-foreground")}
+              data-testid="pseudo3d-floor-toggle"
+            >
+              🗺️ PDF podklad na podlaze
+            </button>
+          ) : null}
           {mode === "iso" ? (
             <div className="flex flex-wrap items-center gap-2 text-xs">
               <Button type="button" size="sm" variant="outline" className="h-7 gap-1 px-2" onClick={() => setView({ ...view, rotation: (view.rotation + 270) % 360 })} data-testid="pseudo3d-rotate-left">
@@ -379,8 +597,8 @@ export function FloorplanPseudo3DModal({ draft, onHeights }: { draft: FloorplanD
             </div>
           ) : (
             <div className="flex flex-wrap items-center gap-2 text-xs">
-              <select value={room?.id ?? ""} onChange={(event) => setRoomId(event.target.value)} className="h-7 rounded-md border border-input bg-transparent px-1.5 dark:bg-input/30" aria-label="Místnost" data-testid="pseudo3d-room">
-                {draft.rooms.map((candidate) => (
+              <select value={areaId ?? ""} onChange={(event) => setRoomId(event.target.value)} className="h-7 rounded-md border border-input bg-transparent px-1.5 dark:bg-input/30" aria-label="Místnost" data-testid="pseudo3d-room">
+                {areas.map((candidate) => (
                   <option key={candidate.id} value={candidate.id}>
                     {candidate.name}
                   </option>
@@ -397,12 +615,25 @@ export function FloorplanPseudo3DModal({ draft, onHeights }: { draft: FloorplanD
           )}
         </div>
         {selected ? <HeightEditor key={`${selected.id}-${selected.z}`} label={`${selected.label} (${KIND_LABEL[selected.kind]})`} value={selected.z} onChange={(heightMm) => onHeights([selected.id], heightMm)} /> : <p className="text-xs text-muted-foreground">Klikněte na prvek (v pohledu na stěnu ho můžete i táhnout nahoru / dolů).</p>}
+        {pdfMode ? (
+          <p className="rounded-lg border border-sky-500/50 bg-sky-500/10 px-2 py-1 text-xs text-sky-100" data-testid="pseudo3d-pdf-mode">
+            {draft.background
+              ? "📐 PDF režim: Obvodové stěny a příčky byly automaticky odvozeny z prvků na PDF podkladu"
+              : "📐 Bez nakreslených místností: obvodové stěny a příčky byly automaticky odvozeny z osazených prvků"}
+            {inferred?.partitions ? ` · příček: ${inferred.partitions}` : ""}
+          </p>
+        ) : null}
         {mode === "iso" ? (
-          <IsoView3D draft={draft} view={view} selectedId={selectedId} onSelect={setSelectedId} />
-        ) : room ? (
-          <WallView draft={draft} roomId={room.id} side={side} selectedId={selectedId} onSelect={setSelectedId} onHeight={(id, heightMm) => onHeights([id], heightMm)} />
+          <IsoView3D draft={draft} view={view} selectedId={selectedId} onSelect={setSelectedId} walls={walls} floor={floor} cables={cablesOn ? runs : null} />
         ) : (
-          <p className="text-sm text-muted-foreground">Nakreslete nejdřív místnost.</p>
+          <WallView
+            elevation={elevation}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            onHeight={(id, heightMm) => onHeights([id], heightMm)}
+            cables={cablesOn ? circuits : null}
+            hint={!room && !virtualArea ? "Osaďte prvky nebo nahrajte podklad – zobrazí se na stěně" : null}
+          />
         )}
         <p className="flex flex-wrap gap-3 text-[11px] text-muted-foreground" data-testid="pseudo3d-legend">
           {(Object.keys(KIND_LABEL) as SceneKind[])
