@@ -120,6 +120,8 @@ import {
   type PlanView,
   type Rotation,
 } from "@/lib/panel-builder/floorplan-pdf";
+import { SWITCH_LINK_MODES, switchLinkPath } from "@/lib/panel-builder/switch-links";
+import type { CompanyStamp } from "@/lib/panel-builder/title-block";
 import { appearanceLabel, colorForSeries, designColor, frameColorForSeries, hasFrameChoice } from "@/lib/panel-builder/wiring-designs";
 import { renderPdfFile } from "@/lib/pdf-client";
 import { resizeImage, uploadPanelFile } from "@/lib/upload-client";
@@ -201,6 +203,7 @@ import { CompactCadBar, FloorplanWizardBar, HelpTip, PhaseNav, ToolbarPopover, U
 import { RoomBySizeForm } from "./RoomBySizeForm";
 import { useWizardStep } from "./useWizardStep";
 import { useFloorplanUiMode } from "./useFloorplanUiMode";
+import { useSwitchLinkMode } from "./useSwitchLinkMode";
 import { useSymbolColor } from "./useSymbolColor";
 import { ConvertInstallationModal } from "./ConvertInstallationModal";
 import { ProjectVariantBar } from "./ProjectVariantBar";
@@ -342,6 +345,7 @@ export function FloorplanEditor({
   sandbox = false,
   startChoice = false,
   credits = 0,
+  stamp = null,
 }: {
   series: SeriesOption[];
   manufacturers?: { name: string; count: number }[];
@@ -358,6 +362,8 @@ export function FloorplanEditor({
   startChoice?: boolean;
   /** Fáze 111: zůstatek kreditů firmy (odemčení plné verze zkušebního půdorysu). */
   credits?: number;
+  /** Fáze 112: firemní razítko – Projektant / Montážní firma v rohovém razítku výkresu (ČSN EN ISO 7200). */
+  stamp?: CompanyStamp | null;
 }) {
   const router = useRouter();
   const svg = useRef<SVGSVGElement>(null);
@@ -374,6 +380,8 @@ export function FloorplanEditor({
   const [floorLibrary, saveFloorLibrary] = useFloorplanLibrary(libraryJson);
   // Fáze 89: průvodce v 5 krocích / kompaktní CAD lišta (prohlížeč i profil firmy), aktivní krok a vodicí čáry přichytávání
   const [uiMode, setUiMode] = useFloorplanUiMode(floorLibrary, saveFloorLibrary);
+  // Fáze 112: ovládací vazby vypínač → světlo – pravoúhlé CAD / přímé / skryté (editor i tisk)
+  const [switchLinks, setSwitchLinks] = useSwitchLinkMode();
   // Fáze 90: krok mění jen uživatel – pamatuje se v relaci prohlížeče (nový půdorys po prvním uložení editor přemontuje)
   const [wizard, setWizard] = useWizardStep(stored?.id ?? null, sync.floorplanId, boot.initial);
   // Fáze 98: fázový průvodce – levá paleta, plátno i pravý panel jen s nástroji a vrstvami aktivní fáze. Kompaktní lišta
@@ -2416,7 +2424,7 @@ export function FloorplanEditor({
   );
   const exportButtons = (
     <>
-        <FloorplanExport draft={deferred} analysis={analysis.ok ? analysis : null} company={company} trial={sync.license === "TRIAL" ? { floorplanId: sync.floorplanId, credits } : null} />
+        <FloorplanExport draft={deferred} analysis={analysis.ok ? analysis : null} company={company} stamp={stamp} linkMode={switchLinks} projectRef={sync.floorplanId ? { id: sync.floorplanId, code: stored?.code ?? null } : null} trial={sync.license === "TRIAL" ? { floorplanId: sync.floorplanId, credits } : null} />
     </>
   );
   const videoButton = (
@@ -3337,11 +3345,13 @@ export function FloorplanEditor({
                 </g>
               ) : null}
 
-              {/* Ovládací vazby vypínač → světlo (aktivní podlaží); fáze 98: jen kde jsou vidět světelné trasy (fáze 4, 5) */}
+              {/* Ovládací vazby vypínač → světlo (aktivní podlaží); fáze 98: jen kde jsou vidět světelné trasy (fáze 4, 5);
+                  fáze 112: pravoúhlé CAD vodicí linky / přímé / skryté podle volby „📐 Vazby vypínačů“ */}
               {(routeVisible(phase, "lighting", layerFilter) ? draft.elements : []).flatMap((element) =>
                 element.controls.map((lightId) => {
                   const light = draft.elements.find((candidate) => candidate.id === lightId);
-                  return light ? <line key={`${element.id}-${lightId}`} x1={element.x} y1={element.y} x2={light.x} y2={light.y} stroke={uniformInk ?? (onPaper ? "#71717a" : "#e4e4e7")} strokeWidth={stroke * 1.5} strokeDasharray={`${ui / 4} ${ui / 4}`} data-testid="switch-link" pointerEvents="none" /> : null;
+                  const d = light ? switchLinkPath(switchLinks, element, light, ui * 1.2) : null;
+                  return d ? <path key={`${element.id}-${lightId}`} d={d} fill="none" stroke={uniformInk ?? (onPaper ? "#71717a" : "#e4e4e7")} strokeWidth={stroke * 1.5} strokeDasharray={`${ui / 4} ${ui / 4}`} strokeLinejoin="round" data-testid="switch-link" data-mode={switchLinks} pointerEvents="none" /> : null;
                 }),
               )}
 
@@ -3536,6 +3546,24 @@ export function FloorplanEditor({
               ) : null}
               {/* Fáze 105: Pseudo-3D náhled – izometrie a pohled na stěnu s kontrolou výšek */}
               <FloorplanPseudo3DModal draft={draft} onHeights={(ids, heightMm) => update((current) => setHeights(current, ids, heightMm))} />
+              {/* Fáze 112: [ 📐 Vazby vypínačů: Pravoúhlé CAD | Přímé | Skrýt ] – jen ve fázích se světelnými trasami (4, 5) */}
+              {routeVisible(phase, "lighting", layerFilter) ? (
+              <div className="pointer-events-auto flex items-center gap-0.5 rounded-md border border-border bg-card/90 px-1 py-0.5 text-xs shadow" role="group" aria-label="Vazby vypínačů" data-testid="switch-links-mode">
+                <span className="px-1 font-semibold">📐 Vazby vypínačů:</span>
+                {SWITCH_LINK_MODES.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    aria-pressed={switchLinks === option.id}
+                    onClick={() => setSwitchLinks(option.id)}
+                    className={cn("rounded px-1.5 py-0.5", switchLinks === option.id ? "bg-primary font-semibold text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground")}
+                    data-testid={`switch-links-${option.id}`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+              ) : null}
               <button
                 type="button"
                 aria-label="Zobrazit kabeláž v půdorysu"

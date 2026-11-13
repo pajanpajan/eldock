@@ -40,6 +40,7 @@ import { DEFAULT_BOX_MAKER, DEFAULT_WALL_TYPE, isBoxChoice, isBoxMaker, isWallTy
 import { DEFAULT_COLOR, appearanceLabel, designColor, migrateSeriesColor } from "./wiring-designs";
 import { CUSTOM_APPLIANCE_ITEM, applianceOverride, applianceSpecFor, parseApplianceList, type ApplianceSpec } from "./appliances";
 import { clampFixture, fixtureSpecOf, isBasinZone, type BasinZone } from "./fixtures";
+import { isHdoTag } from "./hdo";
 import { isPolygonRoom, nearestWall, pointInRoom, polygonBounds, roomArea, roomPolygon, translatePolygon, type RoomShape } from "./room-geometry";
 import { createPerimeterRouter, type PerimeterRoom } from "./perimeter-router";
 import { parseCadUnderlay, type CadUnderlay } from "./cad-underlay";
@@ -219,6 +220,8 @@ export const PALETTE: PaletteItem[] = [
   { id: "fridge", group: "appliances", label: "Chladnička (RCBO)", symbol: "CH", kind: "appliance", tag: "fridge" },
   { id: "boiler", group: "appliances", label: "Bojler", symbol: "BO", kind: "appliance", tag: "boiler" },
   { id: "heat-pump", group: "appliances", label: "Tepelné čerpadlo", symbol: "TČ", kind: "appliance", tag: "heat_pump" },
+  // Fáze 112: akumulační vytápění 3f 400 V spínané signálem HDO (stykač + ovládací jistič v rozváděči)
+  { id: "storage-heater", group: "appliances", label: "Akumulační vytápění (3f, HDO)", symbol: "AKU", kind: "appliance", tag: "storage_heater" },
   { id: "wallbox", group: "appliances", label: "Wallbox EV", symbol: "EV", kind: "appliance", tag: "ev_charger" },
   { id: "pv-inverter", group: "appliances", label: "Střídač FVE (chránič typ B)", symbol: "FVE", kind: "appliance", tag: "pv_inverter" },
   // Fáze 63: vlastní spotřebič z knihovny spotřebičů (prvek nese id spotřebiče v `appliance`)
@@ -342,6 +345,11 @@ export interface EditorElement {
   headDrive?: HeadDrive;
   /** Fáze 91: ruční volba instalační krabice (bez údaje automaticky podle přístroje). */
   box?: BoxChoice;
+  /**
+   * Fáze 112: řízení nízkého tarifu (HDO) – bojler, tepelné čerpadlo, akumulační vytápění (bez údaje ano) a wallbox (bez
+   * údaje ne). Rozváděč dostane stykač HDO a ovládací jistič B6.
+   */
+  hdo?: boolean;
 }
 
 /** Fáze 61: zátěž svítidla pro chytrou domácnost. */
@@ -1078,6 +1086,8 @@ function parseExtras(element: Partial<EditorElement> & { item: string }, num: Nu
     ...(paletteItem(element.item)?.heatingHead && isHeadDrive(element.headDrive) ? { headDrive: element.headDrive } : {}),
     // Fáze 91: ruční volba instalační krabice (automaticky = bez údaje)
     ...(isBoxChoice(element.box) && element.box !== "auto" ? { box: element.box } : {}),
+    // Fáze 112: ruční volba řízení HDO u bojleru, TČ, akumulace a wallboxu (bez údaje výchozí podle spotřebiče)
+    ...(typeof element.hdo === "boolean" && isHdoTag(paletteItem(element.item)?.tag) ? { hdo: element.hdo } : {}),
   };
 }
 
@@ -1629,6 +1639,8 @@ export function buildPlan(draft: FloorplanDraft): PlanBuild {
           // Fáze 93: okruh A / B lůžkové rampy a nouzové únikové svítidlo
           ...(part?.circuit ? { medicalCircuit: part.circuit } : {}),
           ...(item.emergency ? { emergency: true } : {}),
+          // Fáze 112: řízení HDO (stykač a ovládací jistič v rozváděči)
+          ...(isHdoTag(item.tag) && typeof element.hdo === "boolean" ? { hdo: element.hdo } : {}),
         };
         const heightMm = mountHeight(node, profile);
         // Fáze 74: délka přívodu prvku z jeho rozváděče

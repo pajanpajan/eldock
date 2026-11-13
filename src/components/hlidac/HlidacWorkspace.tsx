@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { Camera, Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 
+import { RevisionDataImporterModal } from "@/components/revisions/RevisionDataImporterModal";
+import { ScanSnapLoop } from "@/components/hlidac/ScanSnapLoop";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { HLIDAC_MODES, HLIDAC_PALETTE, type HlidacMode } from "@/lib/hlidac";
@@ -42,6 +44,8 @@ export function HlidacWorkspace({ plant, plants, mode: initialMode, overview, ca
 
   const current = selected ? overview.flatMap((building) => building.floors.map((floor) => ({ building, floor }))).find((entry) => entry.floor.id === selected.floorId) ?? null : null;
   const room = current?.floor.rooms.find((candidate) => candidate.key === selected?.room) ?? null;
+  // Fáze 112: patra s místnostmi pro import revizních dat (název místnosti = zóna Studia)
+  const importFloors = overview.flatMap((building) => building.floors.map((floor) => ({ id: floor.id, label: `${building.name} · ${floor.name}`, rooms: floor.rooms.map((candidate) => candidate.name) }))).filter((floor) => floor.rooms.length > 0);
 
   function changeMode(next: HlidacMode) {
     setMode(next);
@@ -186,9 +190,15 @@ export function HlidacWorkspace({ plant, plants, mode: initialMode, overview, ca
         <section className="flex min-w-0 flex-col gap-4" aria-label="Místnost a spotřebiče">
           {room && current ? (
             <>
-              <h2 className="text-xl font-bold" data-testid="hlidac-room-title">
-                {current.floor.name} – {room.name}
-              </h2>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="mr-auto text-xl font-bold" data-testid="hlidac-room-title">
+                  {current.floor.name} – {room.name}
+                </h2>
+                {/* Fáze 112: import ze staré revize / měřicího přístroje do této místnosti */}
+                {canStructure ? <RevisionDataImporterModal key={`${current.floor.id}-${room.key}`} target={{ kind: "floor", floors: importFloors, floorId: current.floor.id, room: room.name }} /> : null}
+                {/* Fáze 112: ⚡ sekvenční sběr Pípni QR ➔ Vyfoť štítek ➔ Další kus (i bez signálu) */}
+                {canStructure ? <ScanSnapLoop key={`snap-${current.floor.id}-${room.key}`} floors={importFloors} floorId={current.floor.id} room={room.name} /> : null}
+              </div>
               {canEdit ? (
                 <div className="grid gap-3 xl:grid-cols-3" data-testid="hlidac-palette">
                   {HLIDAC_PALETTE.map((group) => (

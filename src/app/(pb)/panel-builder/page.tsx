@@ -9,6 +9,7 @@ import { PageTransition } from "@/components/layout/PageTransition";
 import { panelBuilderGuard } from "@/components/panel-builder/access";
 import { PanelBuilderPublicLanding } from "@/components/panel-builder/PanelBuilderPublicLanding";
 import { NewProjectDialog } from "@/components/panel-builder/NewProjectDialog";
+import { RevisionDataImporterModal } from "@/components/revisions/RevisionDataImporterModal";
 import { PanelTrainerJobs } from "@/components/panel-builder/PanelTrainerJobs";
 import { ProjectBoard, type BoardProject } from "@/components/panel-builder/ProjectBoard";
 import { isTrainerPreset, type TrainerPresetId } from "@/lib/panel-builder/panel-trainer-presets";
@@ -72,6 +73,8 @@ export default async function PanelBuilderPage() {
                 <Library className="size-4" aria-hidden /> Katalog prvků
               </Link>
             </Button>
+            {/* Fáze 112: rozváděč z okruhů staré revizní zprávy / exportu měřicího přístroje */}
+            <RevisionDataImporterModal target={{ kind: "panel" }} />
             <NewProjectDialog charge={charge} />
           </>
         }

@@ -33,6 +33,8 @@ export interface CncDevice {
   label?: string | null;
   /** Vývodový kabel okruhu (z půdorysu / zadaný), např. „CYKY-J 3×1,5“. */
   cable?: string | null;
+  /** Fáze 112: stykač HDO – značení ovládacího jističe cívky (L přes kontakt přijímače HDO na A1, A2 na N). */
+  coilFrom?: string | null;
 }
 
 export interface CncEnclosure {
@@ -321,6 +323,9 @@ export interface WireRow {
   comb?: string;
 }
 
+/** Fáze 112: přijímač HDO distributora v elektroměrovém rozváděči (kontakt spíná cívky stykačů HDO). */
+export const HDO_RECEIVER_DEVICE = "Přijímač HDO (elektroměrový rozváděč)";
+
 const COLORS: Record<Conductor, string> = { L: "Černá / Hnědá (L)", L1: "Hnědá (L1)", L2: "Černá (L2)", L3: "Šedá (L3)", N: "Světle modrá (N)", PE: "Zelenožlutá (PE)" };
 
 /** Průřez vnitřního vodiče podle jmenovitého proudu napájeného přístroje [mm²]. */
@@ -478,6 +483,18 @@ export function wireHarnessList(input: CncInput, layout: CncLayout = cncLayout(i
     // Hlavní N z přívodu na sběrnici N, PE přívodu na sběrnici PE
     if (hasNeutral(root.poles)) wire(terminal(root, "N", true), nextBar("N"), "N", wireSection(root.ratedCurrentA));
     feed(root);
+  }
+  // Fáze 112: ovládání stykačů HDO – výstup ovládacího jističe na kontakt přijímače HDO v elektroměrovém rozváděči
+  // (přívod mimo rozváděč), z kontaktu na cívku A1 stykače, A2 na sběrnici N
+  const byDesignation = new Map(input.devices.map((device) => [device.designation, device]));
+  for (const contactor of input.devices.filter((device) => device.coilFrom && byDesignation.has(device.coilFrom))) {
+    const control = byDesignation.get(contactor.coilFrom!)!;
+    const box = placed.get(contactor.id)!;
+    const coil = (name: string): Terminal => ({ device: contactor.designation, name, x: r1(box.x + MODULE_MM / 2), y: r1(box.y - box.h / 2 - TERMINAL_OFFSET_MM), edge: "top" });
+    const receiver: Terminal = { device: HDO_RECEIVER_DEVICE, name: "spínací kontakt (mimo rozváděč)", x: coil("A1").x, y: 0, edge: "bar" };
+    wire(terminal(control, "L1", true), receiver, "L1", 1.5);
+    wire(receiver, coil("A1"), "L1", 1.5);
+    wire(coil("A2"), nextBar("N"), "N", 1.5);
   }
   return rows.map((row, index) => ({ ...row, no: row.kind === "comb" ? `H${String(index + 1).padStart(3, "0")}` : `W${String(index + 1).padStart(3, "0")}` }));
 }

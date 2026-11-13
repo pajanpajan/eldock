@@ -6,6 +6,9 @@ import { PageHeader } from "@/components/common/PageHeader";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { panelBuilderGuard } from "@/components/panel-builder/access";
 import { PackageCards } from "@/components/panel-builder/credits/PackageCards";
+import { LabelSetCards } from "@/components/panel-builder/credits/LabelSetCards";
+import { labelCountOf } from "@/lib/operator";
+import { getLabelSets, getOperatorProfile } from "@/server/operator";
 import { ACTION_PRICE_ROWS, ORDER_STATUS, SUBSCRIPTIONS, creditPackage, formatCzk, subscriptionActive, subscriptionOf, trialRemainingText } from "@/lib/credits";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -35,7 +38,8 @@ const REASONS: Record<string, string> = {
 export default async function CreditsPage({ searchParams }: PageProps<"/panel-builder/credits">) {
   const guard = await panelBuilderGuard();
   if (guard) return guard;
-  const [company, orders, params] = await Promise.all([requirePanelCompany(), getCreditOrders(), searchParams]);
+  // Fáze 112: sady QR štítků a plátcovství DPH z velínu
+  const [company, orders, params, labelSets, operator] = await Promise.all([requirePanelCompany(), getCreditOrders(), searchParams, getLabelSets(), getOperatorProfile()]);
   const status = await creditStatus(prisma, company.id);
   const trial = status.demo ? null : trialRemainingText(status);
   const preselected = typeof params.balicek === "string" ? params.balicek : null;
@@ -88,6 +92,7 @@ export default async function CreditsPage({ searchParams }: PageProps<"/panel-bu
       </section>
 
       <PackageCards preselected={preselected} firstTopUp={!status.firstTopUpBonusAt} />
+      <LabelSetCards sets={labelSets} vatPayer={operator.vatPayer} />
 
       <section className="mt-6 flex flex-col gap-2 text-sm text-muted-foreground" aria-label="Tarify budov a průmyslu">
         {SUBSCRIPTIONS.filter((row) => !row.selfService).map((row) => (
@@ -108,9 +113,9 @@ export default async function CreditsPage({ searchParams }: PageProps<"/panel-bu
               <li key={order.id}>
                 <Link href={`/panel-builder/credits/${order.id}`} className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 text-sm hover:border-primary/50">
                   <span className="font-mono text-primary">VS {order.variableSymbol}</span>
-                  <span className="font-semibold">{creditPackage(order.packageCode)?.title ?? order.packageCode}</span>
+                  <span className="font-semibold">{creditPackage(order.packageCode)?.title ?? (labelCountOf(order.packageCode) ? `Sada ${labelCountOf(order.packageCode)} ks QR štítků ELDOCK` : order.packageCode)}</span>
                   <span className="text-muted-foreground">{formatDate(order.createdAt)}</span>
-                  <span className="ml-auto font-mono tabular-nums">{formatCzk(order.priceCzkInclVat)} s DPH</span>
+                  <span className="ml-auto font-mono tabular-nums">{formatCzk(order.priceCzkInclVat)}{order.priceCzkInclVat > order.priceCzkExclVat ? " s DPH" : ""}</span>
                   <span className={cn("rounded-full border px-2 py-0.5 text-xs", ORDER_STATUS[order.status].badge)}>{ORDER_STATUS[order.status].label}</span>
                 </Link>
               </li>

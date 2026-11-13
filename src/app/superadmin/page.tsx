@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { OperatorSettingsForm } from "@/components/superadmin/OperatorSettingsForm";
+import { getLabelSets, getOperatorProfile, paymentAccount } from "@/server/operator";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Bug, Building2, CircuitBoard, DatabaseBackup, Download, FolderLock, HardDrive, Mail, Receipt } from "lucide-react";
@@ -23,7 +25,7 @@ import { getBackupOverview } from "@/server/queries/backups";
 import { getSuperadminCompanies, getSuperadminFeedback, getSuperadminOrders, getSuperadminOverview } from "@/server/queries/superadmin";
 import { prisma } from "@/lib/prisma";
 import { audienceLabel } from "@/lib/newsletter";
-import { bankAccount, parseFeedbackSnapshot } from "@/server/services/credits";
+import { parseFeedbackSnapshot } from "@/server/services/credits";
 import { contactUnreadCount } from "@/server/services/contact";
 import { newsletterOverview } from "@/server/services/newsletter";
 import { isSuperadmin } from "@/server/superadmin-session";
@@ -43,6 +45,8 @@ const TABS = [
   // Fáze 106: zasmluvnění výrobci rozváděčů (portál /vyroba-rozvadecu) a zakázky výroby na klíč
   { id: "manufacturers", label: "🏭 Výrobci rozváděčů" },
   { id: "orders", label: "Objednávky kreditů a fakturace" },
+  // Fáze 112: údaje provozovatele (patička, faktury, VOP, zásady) a sady QR štítků k objednání
+  { id: "provozovatel", label: "🏢 Provozovatel & fakturace" },
   { id: "feedback", label: "Hlášení chyb AI a fotky" },
   { id: "newsletter", label: "Newsletter" },
   { id: "backups", label: "Zálohy a data" },
@@ -83,7 +87,7 @@ export default async function SuperadminPage({ searchParams }: PageProps<"/super
           </Link>
         ))}
       </nav>
-      {tab === "companies" ? <CompaniesTab /> : tab === "zpravy" ? <ContactMessagesTab filter={typeof filterParam === "string" ? filterParam : "all"} /> : tab === "market" ? <MarketTab days={days} /> : tab === "qr" ? <QrLabelsTab /> : tab === "pool" ? <PoolTab /> : tab === "manufacturers" ? <ManufacturersTab /> : tab === "orders" ? <OrdersTab /> : tab === "newsletter" ? <NewsletterTab /> : tab === "backups" ? <BackupsTab /> : <FeedbackTab />}
+      {tab === "companies" ? <CompaniesTab /> : tab === "zpravy" ? <ContactMessagesTab filter={typeof filterParam === "string" ? filterParam : "all"} /> : tab === "market" ? <MarketTab days={days} /> : tab === "qr" ? <QrLabelsTab /> : tab === "pool" ? <PoolTab /> : tab === "manufacturers" ? <ManufacturersTab /> : tab === "orders" ? <OrdersTab /> : tab === "provozovatel" ? <OperatorTab /> : tab === "newsletter" ? <NewsletterTab /> : tab === "backups" ? <BackupsTab /> : <FeedbackTab />}
     </div>
   );
 }
@@ -186,11 +190,17 @@ async function CompaniesTab() {
   );
 }
 
+async function OperatorTab() {
+  const [profile, labelSets] = await Promise.all([getOperatorProfile(), getLabelSets()]);
+  return <OperatorSettingsForm profile={profile} labelSets={labelSets} />;
+}
+
 async function OrdersTab() {
   const rank = { PENDING: 0, PAID: 1, CANCELLED: 2 } as const;
   const orders = (await getSuperadminOrders()).sort((a, b) => rank[a.status] - rank[b.status] || b.createdAt.getTime() - a.createdAt.getTime());
   // Fáze 84: účet, na který chodí úhrady kreditů (párování podle variabilního symbolu)
-  const bank = bankAccount();
+  // Fáze 112: účet z údajů provozovatele ve velínu (jinak z prostředí / výchozí)
+  const bank = await paymentAccount();
   const account = (
     <p className="text-xs text-muted-foreground" data-testid="superadmin-bank">
       Úhrady kreditů na účet <b className="font-mono text-foreground">{bank.accountNumber ?? formatIban(bank.iban)}</b>

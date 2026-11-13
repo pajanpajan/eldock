@@ -34,6 +34,8 @@ export interface ItemConfig {
   smartSystem?: string | null;
   smartRole?: string | null;
   channels?: number | null;
+  /** Fáze 112: stykač HDO – značení ovládacího jističe cívky (L přes kontakt přijímače HDO na A1). */
+  hdoControl?: string | null;
 }
 
 export interface ConfigOption {

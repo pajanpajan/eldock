@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { MAX_RAIL_MODULES, MIN_RAIL_MODULES, RAIL_PRESETS } from "@/lib/panel-builder/rails";
 import { FIELD_GAP, pathOf, vectorLayout, wiringPaths, VECTOR, type IncomerFrom, type Rect, type WiringNode } from "@/lib/panel-builder/vector-layout";
 import { symbolTexts, type VectorDevice } from "@/lib/panel-builder/vector-symbols";
+import { combLabel, combRuns, nextCombSetting, phaseBadges, type CombNode, type CombSetting } from "@/lib/panel-builder/comb-busbars";
 
 import type { BusbarPlan } from "@/lib/panel-builder/pe-n-busbars";
 
@@ -61,6 +62,10 @@ export function VectorPanel({
   busbars,
   fields = null,
   partition = null,
+  combs,
+  onRailComb,
+  supplyPhases = 3,
+  combNodes,
 }: {
   devices: readonly VectorDevice[];
   rails: number;
@@ -106,12 +111,28 @@ export function VectorPanel({
   fields?: { aRails: number; labels: [string, string] } | null;
   /** Fáze 111 – vodorovná izolační přepážka pod lištou (silnoproud nahoře, slaboproud dole). */
   partition?: { afterRail: number; label: string } | null;
+  /** Fáze 112 – ruční volba propojovacího hřebenu lišt (bez údaje Auto) a přepnutí tlačítkem u hřebenu. */
+  combs?: Record<number, CombSetting>;
+  onRailComb?: (rail: number, setting: CombSetting) => void;
+  /** Fáze 112 – soustava přívodu (1f = všechny jističe L1, hřeben 1f). */
+  supplyPhases?: 1 | 3;
+  /** Fáze 112 – strom zapojení jen pro hřebeny a fáze (krok 1 bez modrých spojnic). */
+  combNodes?: readonly CombNode[];
 }) {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
   const [theme, setTheme] = useState<VectorTheme>("dark");
   const colors = VECTOR_THEMES[theme];
   const layout = useMemo(() => vectorLayout(devices, rails, modulesPerRail, { fields, partition }), [devices, rails, modulesPerRail, fields, partition]);
   const wires = useMemo(() => (nodes ? wiringPaths(layout, devices, nodes, incomer) : []), [layout, devices, nodes, incomer]);
+  // Fáze 112: propojovací hřebeny (bez „Vyp“ kvůli poloze tlačítka) a odznaky fází jističů
+  const combPlan = useMemo(() => {
+    const treeNodes = nodes ?? combNodes ?? devices.map((device) => ({ id: device.id, parentItemId: null }));
+    const settings = combs ?? {};
+    const shown = Object.fromEntries(Object.entries(settings).filter(([, setting]) => setting !== "OFF")) as Record<number, CombSetting>;
+    const runs = combRuns(devices, treeNodes, shown, supplyPhases);
+    const active = runs.filter((run) => settings[run.rail] !== "OFF");
+    return { runs, active, badges: phaseBadges(devices, active, supplyPhases), settings };
+  }, [devices, nodes, combNodes, combs, supplyPhases]);
   const svg = useRef<SVGSVGElement>(null);
   const [drag, setDrag] = useState<{ ids: string[]; startX: number; startY: number; x: number; y: number; active: boolean; pointerId: number; origin: VectorDevice; additive: boolean } | null>(null);
   const [editing, setEditing] = useState<{ id: string; value: string } | null>(null);
@@ -278,6 +299,11 @@ export function VectorPanel({
             onPointerDown={() => onBackground?.()}
           >
             <defs>
+              <linearGradient id={`copper-${uid}`} x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0" stopColor="#e9a96b" />
+                <stop offset="0.5" stopColor="#b87333" />
+                <stop offset="1" stopColor="#8a5226" />
+              </linearGradient>
               <marker id={`arrow-${uid}`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
                 <path d="M0 0 L10 5 L0 10 Z" fill={colors.wire} />
               </marker>
@@ -395,10 +421,40 @@ export function VectorPanel({
                     dashed={outline?.dashed}
                     glow={outline?.glow}
                     dimmed={drag?.active && drag.ids.includes(device.id)}
+                    phase={combPlan.badges.get(device.id) ?? null}
                   />
                 </g>
               );
             })}
+
+            {/* Fáze 112: měděné hřebenové přípojnice s vidličkami do svorek (pod výstupy chrániče, u RCBO na vstupu) */}
+            <g data-testid="vector-combs" pointerEvents="none">
+              {combPlan.active.map((run) => {
+                const rects = run.ids.map((id) => layout.rects.get(id)).filter((rect): rect is Rect => Boolean(rect));
+                if (rects.length < 2) return null;
+                const x0 = Math.min(...rects.map((rect) => rect.x)) + 3;
+                const x1 = Math.max(...rects.map((rect) => rect.x + rect.w)) - 3;
+                const edge = run.input ? Math.min(...rects.map((rect) => rect.y)) : Math.max(...rects.map((rect) => rect.y + rect.h));
+                const barY = run.input ? edge - 9 : edge + 3;
+                const byId = new Map(devices.map((device) => [device.id, device]));
+                return (
+                  <g key={`${run.rail}-${run.ids[0]}`} data-testid="comb-busbar" data-comb-rail={run.rail} data-kind={run.kind} data-count={run.ids.length}>
+                    {rects.map((rect, index) => {
+                      const device = byId.get(run.ids[index]);
+                      const poles = Math.max(1, Math.min(4, Number((device?.poles ?? "1").match(/\d/)?.[0] ?? 1) + (/\+N/.test(device?.poles ?? "") ? 1 : 0)));
+                      return Array.from({ length: poles }, (_, pole) => {
+                        const cx = rect.x + ((pole + 0.5) * rect.w) / poles;
+                        return <rect key={`${index}-${pole}`} x={cx - 2} y={run.input ? edge - 3 : edge - 6} width={4} height={run.input ? 9 : 9} fill="#c27c3a" stroke="#7c4a1e" strokeWidth={0.6} />;
+                      });
+                    })}
+                    <rect x={x0} y={barY} width={x1 - x0} height={6} rx={1.5} fill={`url(#copper-${uid})`} stroke="#7c4a1e" strokeWidth={0.8} />
+                    <text x={x0 + 4} y={barY + (run.input ? -3 : 15)} fontSize={8.5} fontWeight={700} fill="#d6a77a" fontFamily="ui-sans-serif, system-ui, sans-serif">
+                      {combLabel(run)}
+                    </text>
+                  </g>
+                );
+              })}
+            </g>
 
             {/* Místo vložení karty z pravého menu */}
             {indicator ? (
@@ -514,6 +570,33 @@ export function VectorPanel({
                   ) : null}
                 </div>
               ) : null}
+              {/* Fáze 112: volba propojovacího hřebenu lišty u přípojnice (Auto → 3f → 1f → Vyp) */}
+              {onRailComb
+                ? (() => {
+                    const run = combPlan.runs.find((candidate) => candidate.rail === rail.index);
+                    const rects = run ? run.ids.map((id) => layout.rects.get(id)).filter((rect): rect is Rect => Boolean(rect)) : [];
+                    if (!run || rects.length < 2) return null;
+                    const right = Math.max(...rects.map((rect) => rect.x + rect.w));
+                    const edge = run.input ? Math.min(...rects.map((rect) => rect.y)) : Math.max(...rects.map((rect) => rect.y + rect.h));
+                    const setting = combPlan.settings[rail.index] ?? "AUTO";
+                    const text = setting === "AUTO" ? `Auto (${run.kind === "3F" ? "3f" : "1f"})` : setting === "OFF" ? "Vyp" : setting === "3F" ? "3f" : "1f";
+                    return (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => onRailComb(rail.index, nextCombSetting(setting))}
+                        title="Propojovací hřeben lišty: Auto (podle chrániče) → 3f → 1f → Vyp"
+                        aria-label={`Hřeben lišty ${rail.index}: ${text}`}
+                        className="absolute z-10 rounded border border-amber-600/60 bg-background/90 px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap text-amber-300 shadow hover:bg-amber-500/15 disabled:opacity-50"
+                        style={{ left: `calc(${pct(right, layout.width)} - 104px)`, top: `calc(${pct(edge, layout.height)} + ${run.input ? -34 : 10}px)` }}
+                        data-testid={`rail-comb-${rail.index}`}
+                        data-comb={setting}
+                      >
+                        ⫼ Hřeben: {text}
+                      </button>
+                    );
+                  })()
+                : null}
               {onDeleteRail && !onRailCapacity ? (
                 <button
                   type="button"

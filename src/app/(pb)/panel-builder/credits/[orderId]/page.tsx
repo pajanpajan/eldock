@@ -13,7 +13,8 @@ import { ORDER_STATUS, creditPackage, formatCzk, spdPayload } from "@/lib/credit
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { getCreditOrder } from "@/server/queries/panel-builder";
-import { bankAccount } from "@/server/services/credits";
+import { labelCountOf } from "@/lib/operator";
+import { paymentAccount } from "@/server/operator";
 
 export const metadata: Metadata = { title: "Platba kreditů" };
 
@@ -23,8 +24,10 @@ export default async function CreditOrderPage({ params }: PageProps<"/panel-buil
   if (guard) return guard;
   const order = await getCreditOrder((await params).orderId);
   if (!order) notFound();
-  const bank = bankAccount();
-  const payload = spdPayload({ iban: bank.iban, bic: bank.bic, amountCzk: order.priceCzkInclVat, variableSymbol: order.variableSymbol, message: `ELDOCK Kredity ${order.company.companyName}` });
+  // Fáze 112: účet z velínu; sada QR štítků bez kreditů
+  const bank = await paymentAccount();
+  const labels = labelCountOf(order.packageCode);
+  const payload = spdPayload({ iban: bank.iban, bic: bank.bic, amountCzk: order.priceCzkInclVat, variableSymbol: order.variableSymbol, message: `ELDOCK ${labels ? "QR stitky" : "Kredity"} ${order.company.companyName}` });
   const pkg = creditPackage(order.packageCode);
   const status = ORDER_STATUS[order.status];
   return (
@@ -37,7 +40,7 @@ export default async function CreditOrderPage({ params }: PageProps<"/panel-buil
         }
         title={`Objednávka VS ${order.variableSymbol}`}
         badges={<span className={cn("rounded-full border px-2 py-0.5 text-xs", status.badge)}>{status.label}</span>}
-        description={`${pkg?.title ?? order.packageCode} · ${order.creditsCount} kreditů · objednáno ${formatDate(order.createdAt)}`}
+        description={`${labels ? `Sada ${labels} ks QR štítků ELDOCK` : `${pkg?.title ?? order.packageCode} · ${order.creditsCount} kreditů`} · objednáno ${formatDate(order.createdAt)}`}
       />
       <div className="grid gap-6 lg:grid-cols-[auto_minmax(0,1fr)]">
         <div className="flex flex-col items-center gap-2">
@@ -48,14 +51,14 @@ export default async function CreditOrderPage({ params }: PageProps<"/panel-buil
           <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm" data-testid="payment-details">
             <dt className="text-muted-foreground">Částka k úhradě</dt>
             <dd className="text-xl font-black tabular-nums">{formatCzk(order.priceCzkInclVat)}</dd>
-            <dt className="text-muted-foreground">Z toho bez DPH / DPH 21 %</dt>
+            <dt className="text-muted-foreground">{order.priceCzkInclVat > order.priceCzkExclVat ? "Z toho bez DPH / DPH 21 %" : "DPH"}</dt>
             <dd className="tabular-nums">
-              {formatCzk(order.priceCzkExclVat)} / {formatCzk(order.priceCzkInclVat - order.priceCzkExclVat)}
+              {order.priceCzkInclVat > order.priceCzkExclVat ? `${formatCzk(order.priceCzkExclVat)} / ${formatCzk(order.priceCzkInclVat - order.priceCzkExclVat)}` : "dodavatel není plátcem DPH"}
             </dd>
             {/* Fáze 84: banka, číslo účtu, IBAN, SWIFT / BIC a VS */}
             <BankDetails bank={bank} variableSymbol={order.variableSymbol} labelClass="text-muted-foreground" />
-            <dt className="text-muted-foreground">Kredity po úhradě</dt>
-            <dd>+{order.creditsCount}</dd>
+            <dt className="text-muted-foreground">{labels ? "Po úhradě" : "Kredity po úhradě"}</dt>
+            <dd>{labels ? `${labels} ks QR štítků poštou` : `+${order.creditsCount}`}</dd>
           </dl>
           <p className="text-xs text-muted-foreground">
             {order.status === "PAID" ? `Uhrazeno ${order.paidAt ? formatDate(order.paidAt) : ""} – kredity jsou připsané.` : "Kredity připíšeme po připsání platby na náš účet (obvykle do 1 pracovního dne)."}

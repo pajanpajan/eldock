@@ -3,6 +3,8 @@ import type { Metadata } from "next";
 import { LegalPage } from "@/components/landing/LegalPage";
 import { PRIVACY_SECTIONS, PRIVACY_VERSION } from "@/lib/legal";
 import { OG_IMAGE, SITE_URL } from "@/lib/seo";
+import { withOperator } from "@/lib/operator";
+import { getOperatorProfile } from "@/server/operator";
 
 const TITLE = "Zásady zpracování osobních údajů";
 
@@ -14,6 +16,8 @@ export const metadata: Metadata = {
 };
 
 /** Fáze 54: veřejné zásady zpracování osobních údajů (GDPR). */
-export default function PrivacyPage() {
-  return <LegalPage title={TITLE} version={PRIVACY_VERSION} sections={PRIVACY_SECTIONS} />;
+export default async function PrivacyPage() {
+  // Fáze 112: správce = provozovatel z velínu (jméno, sídlo, IČO, e-mail)
+  const operator = await getOperatorProfile();
+  return <LegalPage title={TITLE} version={PRIVACY_VERSION} sections={PRIVACY_SECTIONS.map((section) => ({ ...section, paragraphs: section.paragraphs.map((paragraph) => withOperator(paragraph, operator)) }))} />;
 }

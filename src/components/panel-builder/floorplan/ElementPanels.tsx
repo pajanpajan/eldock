@@ -24,6 +24,7 @@ import {
   type LightSpec,
   type PaletteItem,
 } from "@/lib/panel-builder/floorplan-editor";
+import { hdoEnabled, isHdoTag } from "@/lib/panel-builder/hdo";
 import { frameGangs, frameLimitOf, frameOf, isFrameable } from "@/lib/panel-builder/floorplan-frames";
 import { ROOMS_LOCKED_TEXT } from "@/lib/panel-builder/floorplan-phases";
 import { BOX_CHOICES, WALL_TYPES, type BoxChoice, type WallType } from "@/lib/panel-builder/box-options";
@@ -347,6 +348,16 @@ export function ElementDetail({
                 ✎ Upravit spotřebiče
               </Button>
             </div>
+          ) : null}
+          {/* Fáze 112: řízení nízkého tarifu (HDO) – stykač a ovládací jistič B6 v rozváděči */}
+          {isHdoTag(item.tag) ? (
+            <label className="flex items-start gap-2 rounded-lg border border-sky-500/40 bg-sky-500/5 p-2 text-xs" data-testid="element-hdo">
+              <input type="checkbox" className="mt-0.5 size-4 accent-sky-500" checked={hdoEnabled(item.tag, element.hdo)} onChange={(event) => onChange({ hdo: event.target.checked })} />
+              <span>
+                <b>⚡ Řízení HDO (nízký tarif)</b> – v rozváděči instalační stykač ABB ESB u jističe a ovládací jistič B6 cívek
+                (kontakt přijímače HDO v elektroměrovém rozváděči).
+              </span>
+            </label>
           ) : null}
           {/* Fáze 81: provedení panelu chytré domácnosti – barva a montážní krabice (do kusovníku) */}
           <PanelChoice draft={draft} element={element} onChange={onChange} />

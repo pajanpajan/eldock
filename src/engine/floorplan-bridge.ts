@@ -9,6 +9,7 @@ import type { ItemConfig } from "@/lib/panel-builder/configurator";
 import type { EnclosureLike } from "@/lib/panel-builder/enclosures";
 import { CONCEPT_INFO, SINGLE_LAYOUT, fitsLayout, layoutNeed, layoutOptions, matchLayoutEnclosures, packRails, planLayout, planTwoBoards, type LayoutConcept, type PackGroup, type PlannedRail, type RailLayout } from "@/lib/panel-builder/rail-layout";
 import { constructionDetails } from "@/lib/panel-builder/environments";
+import { HDO_CONTROL, hdoContactorFor, hdoContactorLabel, hdoEnabled, isHdoTag } from "@/lib/panel-builder/hdo";
 import { CENTRAL_STOP_LABEL, MEDICAL_CIRCUIT, MID_METER_LABEL, isCommercial, isMedical, isMedicalRoom, midMeterConfig, shuntTripConfig, type MedicalCircuit, type OccupancyId } from "@/lib/panel-builder/occupancy";
 
 import { planSocketGroups, type SocketGrouping } from "./socket-zones";
@@ -89,6 +90,11 @@ export interface FloorNode {
   medicalCircuit?: MedicalCircuit;
   /** Fáze 93: nouzové únikové svítidlo NO_SV (s vlastním akumulátorem, nespínaný přívod světelného okruhu). */
   emergency?: boolean;
+  /**
+   * Fáze 112: řízení nízkého tarifu (HDO) – bojler, tepelné čerpadlo, akumulační vytápění (výchozí ano) a wallbox (výchozí
+   * ne); okruh dostane instalační stykač spínaný kontaktem přijímače HDO přes ovládací jistič B6.
+   */
+  hdo?: boolean;
 }
 
 /** Fáze 63: zadání samostatného spotřebiče z knihovny spotřebičů (`lib/panel-builder/appliances.ts`). */
@@ -462,7 +468,7 @@ export function resolveSwitchWiring(input: { groups: 1 | 2; switchCount: number;
 //  3. Normativní shlukovač okruhů (ČSN 33 2130 ed. 4)
 // ===========================================================================
 
-export type ApplianceTag = "oven" | "dishwasher" | "washer" | "dryer" | "boiler" | "microwave_builtin" | "cooktop_3p" | "fridge" | "ev_charger" | "heat_pump" | "pv_inverter";
+export type ApplianceTag = "oven" | "dishwasher" | "washer" | "dryer" | "boiler" | "microwave_builtin" | "cooktop_3p" | "fridge" | "ev_charger" | "heat_pump" | "pv_inverter" | "storage_heater";
 /** Spotřebiče s výkonovou elektronikou (DC složka) – proudový chránič typ B (příp. F), nikdy A / AC. */
 export const RCD_TYPE_B_TAGS: readonly ApplianceTag[] = ["ev_charger", "heat_pump", "pv_inverter"];
 
@@ -479,6 +485,8 @@ export const APPLIANCES: Record<ApplianceTag, { label: string; powerW: number; s
   ev_charger: { label: "Nabíječka elektromobilu", powerW: 11000, simultaneity: 1 },
   heat_pump: { label: "Tepelné čerpadlo", powerW: 6000, simultaneity: 1 },
   pv_inverter: { label: "Střídač FVE", powerW: 10000, simultaneity: 1 },
+  // Fáze 112: akumulační kamna / akumulační vytápění 3f 400 V spínané signálem HDO (sazba D45d / D56d)
+  storage_heater: { label: "Akumulační vytápění", powerW: 6000, simultaneity: 1 },
 };
 
 /** Spotřebiče s vlastním 1f okruhem B16A (od 2 000 W, mikrovlnka jen vestavná ≥ 2 000 W). */
@@ -539,6 +547,8 @@ export interface Circuit {
   rcd: "A30" | "A30L" | "B30" | "F30" | "own" | "none";
   /** Spotřebič vyhrazeného okruhu (fáze 52 – synergický energetický management). */
   tag?: ApplianceTag;
+  /** Fáze 112: okruh spínaný signálem HDO (stykač + ovládací jistič v rozváděči). */
+  hdo?: boolean;
   /** Fáze 74: rozváděč okruhu (bez údaje hlavní `MAIN_BOARD`); přívod podružného rozváděče nese jeho kód v `feeds`. */
   board?: string;
   feeds?: string;
@@ -692,7 +702,9 @@ export function generateCircuitsFromFloorplan(plan: Floorplan, calibration: Cali
     const designA = base.phases === 3 ? base.designW / (Math.sqrt(3) * 400) : base.designW / NOMINAL_U0;
     const { mm2, drop, izA, loop } = sized(base.protection, base.phases, Math.min(designA, base.protection.ratedA), startMm2, lengthMm, limit, base.label);
     const cable = cores ? `CYKY-J ${cores}x${String(mm2).replace(".", ",")}` : cableFor(base.phases, mm2);
-    circuits.push({ ...base, id: nextId(base.kind), cable, crossSectionMm2: mm2, lengthMm, voltageDropPct: drop, izA, loop });
+    // Fáze 112: bojler, TČ, akumulace a wallbox s řízením HDO (volba u prvku, jinak výchozí podle spotřebiče)
+    const hdo = base.tag && isHdoTag(base.tag) && nodes.some((node) => hdoEnabled(base.tag, node.hdo)) ? { hdo: true } : {};
+    circuits.push({ ...base, ...hdo, id: nextId(base.kind), cable, crossSectionMm2: mm2, lengthMm, voltageDropPct: drop, izA, loop });
   }
 
   const sockets: FloorNode[] = [];
@@ -757,6 +769,16 @@ export function generateCircuitsFromFloorplan(plan: Floorplan, calibration: Cali
         { label: `${appliance!.label} – ${room}`, kind: "dedicated", phases: 1, protection: { device: "MCB", poles: "1P", curve: "B", ratedA: 16 }, rooms: [node.room], nodeIds: [node.id], outlets: 1, installedW: powerW, designW: powerW * appliance!.simultaneity, rcd: "A30", tag },
         [node],
         2.5,
+      );
+      continue;
+    }
+    // Fáze 112: akumulační vytápění 3f 400 V (jistič podle příkonu, kabel CYKY-J 5×2,5 a víc)
+    if (tag === "storage_heater") {
+      const ratedA = threePhaseRating(powerW);
+      push(
+        { label: `${appliance!.label} – ${room}`, kind: "cooktop", phases: 3, protection: { device: "MCB", poles: "3P", curve: "B", ratedA }, rooms: [node.room], nodeIds: [node.id], outlets: 1, installedW: powerW, designW: powerW * appliance!.simultaneity, rcd: "A30", tag },
+        [node],
+        threePhaseSection(ratedA),
       );
       continue;
     }
@@ -1552,6 +1574,30 @@ export function buildSwitchboardFromCircuits(
   const direct = plan.circuits.filter((circuit) => circuit.rcd === "none");
   if (direct.length) groups.push(direct.map(mcb));
 
+  // Fáze 112: řízení HDO – instalační stykač hned za jističem okruhu (napájený z jeho výstupu) a ovládací jistič B6
+  // cívek stykačů ve skupině řídicích obvodů; cívka spíná přes kontakt přijímače HDO v elektroměrovém rozváděči
+  const hdoContactors: PanelDevice[] = [];
+  for (const group of groups) {
+    for (let index = group.length - 1; index >= 0; index--) {
+      const breaker = group[index];
+      const circuit = breaker.circuitId ? byId.get(breaker.circuitId) : undefined;
+      if (!circuit?.hdo || (breaker.category !== "MCB" && breaker.category !== "RCBO")) continue;
+      const choice = hdoContactorFor(circuit.phases, circuit.protection.ratedA);
+      if (!choice) {
+        warnings.push(`${circuit.label}: stykač HDO pro jistič ${circuit.protection.ratedA} A navrhne projektant (nad 63 A).`);
+        continue;
+      }
+      const contactor: PanelDevice = {
+        ...device("KM", hdoContactorLabel(circuit.label), "CONTACTOR", choice.poles, choice.modules, choice.ratedA, config({ category: "CONTACTOR", poles: choice.poles, modules: choice.modules, ratedCurrentA: choice.ratedA, contactConfig: choice.contactConfig, coilVoltage: "230V AC", manufacturer: choice.manufacturer }), null, breaker.phase),
+        parentKey: breaker.key,
+        ...(choice.articleNumber ? { article: { manufacturer: choice.manufacturer, series: choice.series, typeCode: choice.typeCode, articleNumber: choice.articleNumber, description: `Instalační stykač ${choice.ratedA} A, ${choice.contactConfig}, cívka 230 V AC`, catalogArticle: choice.articleNumber, powerLossW: null } } : {}),
+      };
+      contactor.key = `hdo:${circuit.id}`;
+      group.splice(index + 1, 0, contactor);
+      hdoContactors.push(contactor);
+    }
+  }
+
   // Ovládání světel: impulzní relé a chytrá instalace
   const relays = plan.io.impulseRelays;
   const control: PanelDevice[] = Array.from({ length: relays }, () => device("KA", "Impulzní paměťové relé (např. ELKO MR-41)", "RELAY", "1P", 1, 16, config({ category: "RELAY", poles: "1P", modules: 1, ratedCurrentA: 16, relaySubtype: "IMPULSE" })));
@@ -1601,6 +1647,12 @@ export function buildSwitchboardFromCircuits(
     control.push(device("S", "Tlačítko TOTAL STOP / CENTRAL STOP", "OTHER", "1P", 1, null, config({ category: "OTHER", poles: "1P", modules: 1 })));
     addBom(bom, "Vypínací spoušť hlavního vypínače (pro TOTAL STOP)");
   }
+  // Fáze 112: ovládací jistič B6 cívek stykačů HDO (L přes kontakt přijímače HDO na A1, A2 na N)
+  const hdoSupply = hdoContactors.length ? tree(device("F", HDO_CONTROL.label, "MCB", "1P", 1, HDO_CONTROL.ratedA, config({ category: "MCB", poles: "1P", modules: 1, ratedCurrentA: HDO_CONTROL.ratedA, curve: HDO_CONTROL.curve, breakingCapacityKa: 6 }), null, "L1"), "hdo-control", "main") : null;
+  if (hdoSupply) {
+    for (const contactor of hdoContactors) contactor.config = { ...contactor.config, hdoControl: hdoSupply.designation };
+    addBom(bom, "Přívod ovládání HDO z přijímače HDO v elektroměrovém rozváděči (CYKY-J 3×1,5 / 1×1,5 H07V-K)");
+  }
   if (control.length) {
     // Fáze 60: řídicí obvody (zdroj sběrnice, moduly, relé SG Ready, TOTAL STOP) z vlastního jističe; impulzní relé
     // spíná světelný okruh, elektroměr DLM je za hlavním vypínačem
@@ -1616,6 +1668,8 @@ export function buildSwitchboardFromCircuits(
     // Fáze 81: akční členy chytré domácnosti na vyhrazené liště (začínají na nové řadě rozváděče)
     if (options.mode === "bus_loxone" && options.smart?.some((unit) => unit.modules > 0)) ownRail.add(controlGroup);
   }
+  // Fáze 112: ovládání HDO je silnoproudé (230 V) – vlastní skupina v silnoproudé části, ne mezi slaboproudem
+  if (hdoSupply) groups.push([hdoSupply]);
 
   const devices = groups.flat();
   const totalModules = devices.reduce((sum, item) => sum + item.modules, 0);

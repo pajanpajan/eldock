@@ -6,6 +6,7 @@ import { panelBuilderGuard } from "@/components/panel-builder/access";
 import { NextStepBar, PanelSteps } from "@/components/panel-builder/PanelSteps";
 import { ProjectHeader } from "@/components/panel-builder/ProjectHeader";
 import { RecognitionWorkspace, type WorkspaceItem } from "@/components/panel-builder/RecognitionWorkspace";
+import { supplyOf } from "@/lib/panel-builder/supply";
 import { configFromComponent, parseConfig } from "@/lib/panel-builder/configurator";
 import { brandOf } from "@/lib/panel-builder/brands";
 import { railCapacities, railPhotoList } from "@/lib/panel-builder/rails";
@@ -111,6 +112,7 @@ export default async function PanelProjectPage({ params }: PageProps<"/panel-bui
         boardManufacturers={boardManufacturers}
         occupancy={project.occupancy}
         railLayout={parseRailLayout(project.railLayoutJson, railCapacities(project).length)}
+        supplyPhases={supplyOf(project).phases}
       />
       {/* Fáze 75: výrazný další krok dole na stránce */}
       <NextStepBar project={project} current="recognition" />

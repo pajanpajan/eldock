@@ -148,3 +148,28 @@ export async function equipmentLabelSerial(prisma: PrismaClient, equipmentId: st
   return (await prisma.qrLabelItem.findFirst({ where: { targetType: "EQUIPMENT", targetId: equipmentId }, select: { serialCode: true } }))?.serialCode ?? null;
 }
 
+
+/**
+ * Fáze 112: naskenovaný štítek EL-xxxxxx ke zařízení (sekvenční sběr Scan & Snap) – jen nespárovaný štítek z registru
+ * a jen série firmy závodu (podle firmy, IČO nebo e-mailu; série bez firmy smí jen závod bez registrované firmy).
+ */
+export async function bindEquipmentLabel(prisma: PrismaClient, code: string, equipmentId: string): Promise<string> {
+  const label = await resolveLabel(prisma, code);
+  if (!label) throw new WorkflowError("NOT_FOUND", `Štítek ${code.trim().toUpperCase()} v registru ELDOCK není.`);
+  if (label.targetType === "EQUIPMENT" && label.targetId === equipmentId) return label.serialCode;
+  if (label.targetId) throw new WorkflowError("CONFLICT", `Štítek ${label.serialCode} už je spárovaný s jiným zařízením.`);
+  const equipment = await prisma.equipment.findUnique({ where: { id: equipmentId }, select: { id: true, floor: { select: { building: { select: { plantId: true } } } } } });
+  if (!equipment) throw new WorkflowError("NOT_FOUND", "Zařízení nebylo nalezeno.");
+  const company = await prisma.registeredCompany.findFirst({ where: { plantId: equipment.floor.building.plantId, closedAt: null }, select: { id: true, ico: true, email: true } });
+  const owns = label.batch.registeredCompanyId
+    ? label.batch.registeredCompanyId === company?.id
+    : company
+      ? Boolean((label.batch.ico && label.batch.ico === company.ico) || (label.batch.email && label.batch.email === company.email))
+      : !label.batch.ico && !label.batch.email;
+  if (!owns) throw new WorkflowError("FORBIDDEN", "Štítek patří jiné firmě.");
+  const taken = await prisma.qrLabelItem.findFirst({ where: { targetType: "EQUIPMENT", targetId: equipmentId }, select: { serialCode: true } });
+  if (taken) throw new WorkflowError("CONFLICT", `Zařízení už má štítek ${taken.serialCode}.`);
+  const { count } = await prisma.qrLabelItem.updateMany({ where: { id: label.id, targetId: null }, data: { targetType: "EQUIPMENT", targetId: equipmentId, activatedAt: new Date() } });
+  if (!count) throw new WorkflowError("CONFLICT", "Štítek je už spárovaný.");
+  return label.serialCode;
+}

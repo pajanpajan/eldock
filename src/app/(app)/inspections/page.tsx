@@ -11,12 +11,13 @@ import { PageTransition } from "@/components/layout/PageTransition";
 import { Button } from "@/components/ui/button";
 import { pragueToday } from "@/lib/inspection";
 import { auditReportHref, inspectionAlertsHref, inspectionImportHref, rapidInspectionHref, ticrReportHref } from "@/lib/routes";
-import { getInspectionOverview, getInspectionWatch } from "@/server/queries/inspections";
+import { getInspectionOverview, getInspectionWatch, getRoomTargets } from "@/server/queries/inspections";
+import { RevisionDataImporterModal } from "@/components/revisions/RevisionDataImporterModal";
 import { getTripItems } from "@/server/queries/revision-trip";
 import { getFeatures } from "@/server/modules";
 import { LockedButton } from "@/components/modules/Upsell";
 import { getPlants } from "@/server/queries/plant";
-import { getCurrentAccount, getRememberedPlantId } from "@/server/session";
+import { getCurrentAccount, getCurrentUser, getRememberedPlantId } from "@/server/session";
 
 export const metadata: Metadata = { title: "Přehled revizí" };
 
@@ -37,6 +38,8 @@ export default async function InspectionsPage() {
   ]);
 
   const canManage = account.can("manageModules");
+  // Fáze 112: patra s místnostmi pro import revizních dat (jen s oprávněním zápisu revizí nebo Studia)
+  const [importTargets, user] = account.can("recordInspection") || account.can("studio") ? await Promise.all([getRoomTargets(), getCurrentUser()]) : [[], null];
 
   return (
     <PageTransition>
@@ -45,6 +48,8 @@ export default async function InspectionsPage() {
         description={`${plant ? plant.name : "Všechny závody"} · rozváděče a VTZ (NV 190/2022 Sb., příloha č. 4), stroje (NV 378/2001 Sb.), spotřebiče a nářadí (ČSN 33 1600 ed. 2), hromosvody, nouzové osvětlení a CENTRAL STOP, zdravotnické přístroje (ČSN EN 62353 ed. 2) a prostory (ČSN 33 2000-7-710 ed. 2).`}
         actions={
           <>
+            {/* Fáze 112: import ze staré revizní zprávy / exportu měřicího přístroje do místnosti budovy */}
+            {(account.can("recordInspection") || account.can("studio")) && importTargets.length ? <RevisionDataImporterModal target={{ kind: "floor", floors: importTargets, inspectorName: user?.name ?? null }} triggerClassName="h-10" /> : null}
             {/* Fáze 108: 🛡️ Měsíční report & Ochrana TIČR (pro revizní techniky) */}
             {account.can("recordInspection") ? (
               <Button asChild size="lg" variant="outline" className="touch-target gap-2">

@@ -12,7 +12,8 @@ test.describe("nepřihlášený návštěvník", () => {
     for (const name of ["Domovní a komerční elektroinstalace & Rozváděče", "Průmysl, Administrativní budovy & Hlídač revizí"]) {
       await expect(page.getByRole("heading", { name })).toBeVisible();
     }
-    await expect(page.getByText("Eldock s.r.o. (v založení)").first()).toBeVisible();
+    // Fáze 112: provozovatel v patičce z velínu (místo „Eldock s.r.o. (v založení)“)
+    await expect(page.getByTestId("footer-operator")).toHaveText("ELDOCK.cz · Pavel Janoušek · Jablonec nad Nisou · info@eldock.cz");
     await expect(page.getByRole("link", { name: "Domluvte si nezávaznou ukázku" })).toHaveAttribute("href", "/kontakt");
     // produktové video (podsekce Průmysl, budovy & Hlídač revizí) se líně načte a samo se rozběhne (scéna 2 v 8. s)
     await page.goto("/sekce/prumysl-a-revize");

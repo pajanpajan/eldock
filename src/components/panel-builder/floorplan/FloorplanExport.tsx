@@ -26,6 +26,9 @@ import { FixtureShape } from "./FixtureShape";
 import { FloorSymbol, PanelSymbol } from "./FloorSymbol";
 import { RouteLayer } from "./RouteLayer";
 import { IP_NOTICE } from "@/lib/legal";
+import { QRCodeSVG } from "qrcode.react";
+import { switchLinkPath, type SwitchLinkMode } from "@/lib/panel-builder/switch-links";
+import { DRAWING_STAGES, LAYER_PRINT_COLORS, legendFor, titleBlockRows, versionLabel, type CompanyStamp, type DrawingStage } from "@/lib/panel-builder/title-block";
 
 /**
  * Fáze 63: export výkresu elektroinstalace aktivního podlaží. PDF = tiskový list A3 / A4 na šířku ve skutečném
@@ -47,6 +50,11 @@ interface SheetFields {
   site: string;
   author: string;
   number: string;
+  /** Fáze 112: stupeň dokumentace a číslo verze (rohové razítko ČSN EN ISO 7200). */
+  stage: DrawingStage;
+  version: string;
+  /** Fáze 112: barevné druhy okruhů ve výkresu (jinak černobíle). */
+  colored: boolean;
 }
 
 /** Zobrazovaný prvek (spotřebič z knihovny, výrobek z lišty výrobců). */
@@ -77,12 +85,18 @@ export function FloorplanPlanSvg({
   heightMm,
   scale,
   links,
+  linkMode = "ortho",
+  colored = false,
 }: {
   draft: FloorplanDraft;
   routes: ReturnType<typeof displayRoutes>;
   widthMm: number;
   heightMm: number;
   scale: number;
+  /** Fáze 112: ovládací vazby vypínač → světlo (pravoúhlé CAD / přímé / skryté). */
+  linkMode?: SwitchLinkMode;
+  /** Fáze 112: čáry okruhů v barvách druhů (legenda „Okruhy a kabely“). */
+  colored?: boolean;
   /** Okruh → odkaz (serializovatelné – kresba se vykresluje i ze serverové komponenty dokumentace). */
   links?: Readonly<Record<string, string>>;
 }) {
@@ -120,11 +134,13 @@ export function FloorplanPlanSvg({
             return room ? roomPolygon(room) : null;
           })()} />
         ))}
-      <RouteLayer circuits={routes.circuits} bus={routes.bus} view="cad" onPaper unit={unit} stroke={stroke} links={links} />
+      <RouteLayer circuits={routes.circuits} bus={routes.bus} view="cad" onPaper unit={unit} stroke={stroke} links={links} inkOf={colored ? (circuit) => LAYER_PRINT_COLORS[circuit.id === "bus" ? "bus" : circuit.layer].color : undefined} />
       {draft.elements.flatMap((element) =>
         element.controls.map((lightId) => {
           const light = draft.elements.find((candidate) => candidate.id === lightId);
-          return light ? <line key={`${element.id}-${lightId}`} x1={element.x} y1={element.y} x2={light.x} y2={light.y} stroke="#6b7280" strokeWidth={stroke * 1.2} strokeDasharray={`${unit / 4} ${unit / 4}`} /> : null;
+          // Fáze 112: pravoúhlé CAD vodicí linky (nebo přímé / skryté podle volby v editoru)
+          const d = light ? switchLinkPath(linkMode, element, light, unit * 1.2) : null;
+          return d ? <path key={`${element.id}-${lightId}`} d={d} fill="none" stroke="#6b7280" strokeWidth={stroke * 1.2} strokeDasharray={`${unit / 4} ${unit / 4}`} strokeLinejoin="round" data-testid="print-switch-link" /> : null;
         }),
       )}
       {draft.elements.map((element) => {
@@ -141,7 +157,7 @@ export function FloorplanPlanSvg({
   );
 }
 
-function PlanSheet({ draft, analysis, paper, fields }: { draft: FloorplanDraft; analysis: Analysis | null; paper: Paper; fields: SheetFields }) {
+function PlanSheet({ draft, analysis, paper, fields, stamp = null, linkMode = "ortho", projectRef = null }: { draft: FloorplanDraft; analysis: Analysis | null; paper: Paper; fields: SheetFields; stamp?: CompanyStamp | null; linkMode?: SwitchLinkMode; projectRef?: { id: string; code: string | null } | null }) {
   const size = PAPERS[paper];
   const drawW = size.w - MARGIN * 2 - COLUMN;
   const drawH = size.h - MARGIN * 2;
@@ -153,9 +169,11 @@ function PlanSheet({ draft, analysis, paper, fields }: { draft: FloorplanDraft; 
     // Fáze 90: okna, dveře a nábytek nejsou elektrické značky – v legendě značek nejsou
     .filter((entry): entry is { element: FloorplanDraft["elements"][number]; item: PaletteItem } => entry.item !== null && !isArchitecture(entry.item.id));
   const today = new Date().toLocaleDateString("cs-CZ");
+  const sheetLegend = legendFor(routes.circuits, routes.bus);
+  const qrValue = projectRef ? `https://eldock.cz/panel-builder/floorplan/${projectRef.id}` : "https://eldock.cz/panel-builder/floorplan";
   return (
     <div className="fp-sheet" style={{ width: `${size.w - MARGIN * 2}mm`, height: `${size.h - MARGIN * 2}mm`, display: "flex", gap: "3mm", fontFamily: "Arial, Helvetica, sans-serif", color: "#111827", background: "#fff" }} data-testid="print-sheet" data-paper={paper} data-scale={scale}>
-      <FloorplanPlanSvg draft={draft} routes={routes} widthMm={drawW} heightMm={drawH} scale={scale} />
+      <FloorplanPlanSvg draft={draft} routes={routes} widthMm={drawW} heightMm={drawH} scale={scale} linkMode={linkMode} colored={fields.colored} />
       <div style={{ width: `${COLUMN}mm`, display: "flex", flexDirection: "column", gap: "2mm", fontSize: "2.5mm", lineHeight: 1.25 }}>
         <section>
           <h2 style={{ fontSize: "3.2mm", fontWeight: 700, margin: 0 }}>Legenda značek (ČSN EN 60617-11)</h2>
@@ -183,6 +201,30 @@ function PlanSheet({ draft, analysis, paper, fields }: { draft: FloorplanDraft; 
               </svg>
               <span>ovládací / sběrnicové vedení 24 V DC, svody k vypínačům</span>
             </li>
+          </ul>
+        </section>
+        {/* Fáze 112: automatická tabulka vysvětlivek – druhy okruhů (barva a čára) a typy kabelů v tomto výkresu */}
+        <section data-testid="print-legend">
+          <h2 style={{ fontSize: "3.2mm", fontWeight: 700, margin: 0 }}>Vysvětlivky okruhů a kabelů</h2>
+          <ul style={{ listStyle: "none", padding: 0, margin: "1mm 0 0", display: "grid", gap: "0.5mm" }}>
+            {sheetLegend.layers.map((row) => (
+              <li key={row.layer} style={{ display: "flex", alignItems: "center", gap: "1.5mm" }} data-testid="print-legend-layer" data-layer={row.layer}>
+                <svg width="7mm" height="3mm" viewBox="0 0 70 30" aria-hidden>
+                  <line x1={0} y1={15} x2={70} y2={15} stroke={fields.colored ? row.color : "#111827"} strokeWidth={5} strokeDasharray={row.dashed ? "10 6" : undefined} />
+                </svg>
+                <span>
+                  {row.label} ({row.circuits})
+                </span>
+              </li>
+            ))}
+            {sheetLegend.cables.map((row) => (
+              <li key={row.cable} style={{ display: "flex", justifyContent: "space-between", gap: "1.5mm", fontFamily: "monospace" }} data-testid="print-legend-cable">
+                <span>{row.cable}</span>
+                <span>
+                  {row.circuits}× · {row.meters.toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} m
+                </span>
+              </li>
+            ))}
           </ul>
         </section>
         <section style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
@@ -213,26 +255,40 @@ function PlanSheet({ draft, analysis, paper, fields }: { draft: FloorplanDraft; 
             </p>
           ) : null}
         </section>
-        <table style={{ width: "100%", borderCollapse: "collapse", border: "0.4mm solid #111827", fontSize: "2.3mm" }} data-testid="title-block">
+        {/* Fáze 112: projekční rohové razítko dle ČSN EN ISO 7200 (vpravo dole) s QR kódem projektu ELDOCK */}
+        <table style={{ width: "100%", borderCollapse: "collapse", border: "0.4mm solid #111827", fontSize: "2.2mm" }} data-testid="title-block" data-standard="ČSN EN ISO 7200">
           <tbody>
-            {[
-              ["Akce", fields.project],
-              ["Investor", fields.investor],
-              ["Místo stavby", fields.site],
-              ["Vypracoval", fields.author],
-              ["Výkres", `Půdorys elektroinstalace – ${draft.floorName}`],
-              // Fáze 83: plocha půdorysu v rohovém razítku
-              ["Měřítko · formát", `1 : ${scale} · ${paper} · plocha ${meters(draft.widthMm)} × ${meters(draft.heightMm)} m`],
-              ["Datum · č. výkresu", `${today} · ${fields.number}`],
-            ].map(([label, value]) => (
-              <tr key={label} style={{ borderBottom: "0.2mm solid #111827" }}>
-                <th style={{ textAlign: "left", fontWeight: 400, color: "#4b5563", padding: "0.4mm 1mm", width: "28mm" }}>{label}</th>
-                <td style={{ padding: "0.4mm 1mm", fontWeight: label === "Výkres" ? 700 : 400 }}>{value || "—"}</td>
+            {titleBlockRows({
+              stamp,
+              author: fields.author,
+              investor: fields.investor,
+              site: fields.site,
+              project: fields.project,
+              floorName: draft.floorName,
+              stage: fields.stage,
+              scale,
+              paper: `${paper} · plocha ${meters(draft.widthMm)} × ${meters(draft.heightMm)} m`,
+              date: today,
+              version: fields.version,
+              number: fields.number,
+              projectCode: projectRef?.code ?? null,
+            }).map((row, index) => (
+              <tr key={row.label} style={{ borderBottom: "0.2mm solid #111827" }}>
+                <th style={{ textAlign: "left", fontWeight: 400, color: "#4b5563", padding: "0.35mm 1mm", width: "27mm" }}>{row.label}</th>
+                <td style={{ padding: "0.35mm 1mm", fontWeight: row.strong ? 700 : 400 }} data-testid={`title-${index}`}>
+                  {row.value}
+                </td>
+                {index === 0 ? (
+                  <td rowSpan={4} style={{ width: "17mm", padding: "0.6mm", borderLeft: "0.2mm solid #111827", textAlign: "center", verticalAlign: "middle" }} data-testid="title-qr">
+                    <QRCodeSVG value={qrValue} size={56} level="M" marginSize={0} style={{ width: "15mm", height: "15mm" }} title="QR kód projektu ELDOCK" />
+                    <span style={{ display: "block", fontSize: "1.6mm", marginTop: "0.4mm" }}>ELDOCK {projectRef?.code ?? ""}</span>
+                  </td>
+                ) : null}
               </tr>
             ))}
             <tr>
-              <td colSpan={2} style={{ padding: "0.6mm 1mm", fontSize: "2mm", color: "#4b5563" }}>
-                ELDOCK · značky ČSN EN 60617-11 · koupelnové zóny ČSN 33 2000-7-701 ed. 2 · okruhy ČSN 33 2130 ed. 4
+              <td colSpan={3} style={{ padding: "0.6mm 1mm", fontSize: "1.9mm", color: "#4b5563" }}>
+                Razítko ČSN EN ISO 7200 · značky ČSN EN 60617-11 · koupelnové zóny ČSN 33 2000-7-701 ed. 2 · okruhy ČSN 33 2130 ed. 4
                 {/* Fáze 104: ochrana databáze a autorských práv */}
                 <span style={{ display: "block", marginTop: "0.4mm", fontSize: "1.6mm" }} data-testid="doc-ip-notice">
                   {IP_NOTICE}
@@ -255,10 +311,27 @@ const slug = (value: string) =>
     .toLowerCase() || "pudorys";
 
 /** Fáze 111: `trial` = zkušební půdorys – zkušební označení výkresu (PDF i DXF) a tlačítko pro odemčení plné verze. */
-export function FloorplanExport({ draft, analysis, company, trial = null }: { draft: FloorplanDraft; analysis: Analysis | null; company?: string | null; trial?: { floorplanId: string | null; credits: number } | null }) {
+export function FloorplanExport({
+  draft,
+  analysis,
+  company,
+  trial = null,
+  stamp = null,
+  linkMode = "ortho",
+  projectRef = null,
+}: {
+  draft: FloorplanDraft;
+  analysis: Analysis | null;
+  company?: string | null;
+  trial?: { floorplanId: string | null; credits: number } | null;
+  /** Fáze 112: firemní razítko, volba vazeb vypínačů a projekt (QR kód) do rohového razítka ČSN EN ISO 7200. */
+  stamp?: CompanyStamp | null;
+  linkMode?: SwitchLinkMode;
+  projectRef?: { id: string; code: string | null } | null;
+}) {
   const [open, setOpen] = useState(false);
   const [paper, setPaper] = useState<Paper>("A3");
-  const [fields, setFields] = useState<SheetFields>({ project: "Elektroinstalace rodinného domu", investor: "", site: "", author: company ?? "", number: "E-01" });
+  const [fields, setFields] = useState<SheetFields>({ project: "Elektroinstalace rodinného domu", investor: "", site: "", author: company ?? "", number: "E-01", stage: "DPS", version: "v1.0", colored: true });
   const [printing, setPrinting] = useState(false);
   useEffect(() => {
     if (!printing) return;
@@ -339,6 +412,30 @@ export function FloorplanExport({ draft, analysis, company, trial = null }: { dr
               </label>
             ))}
           </div>
+          {/* Fáze 112: rohové razítko ČSN EN ISO 7200 – stupeň dokumentace, číslo verze a barevné druhy okruhů */}
+          <div className="grid gap-2 text-sm sm:grid-cols-2">
+            <label className="flex flex-col gap-0.5 text-xs text-muted-foreground">
+              Stupeň dokumentace
+              <select value={fields.stage} onChange={(event) => setFields((current) => ({ ...current, stage: event.target.value as DrawingStage }))} className="h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground" data-testid="export-stage">
+                {DRAWING_STAGES.map((stage) => (
+                  <option key={stage.id} value={stage.id}>
+                    {stage.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-0.5 text-xs text-muted-foreground">
+              Číslo verze
+              <Input value={fields.version} maxLength={16} onChange={(event) => setFields((current) => ({ ...current, version: event.target.value }))} onBlur={() => setFields((current) => ({ ...current, version: versionLabel(current.version) }))} data-testid="export-version" />
+            </label>
+            <label className="flex items-center gap-2 text-xs sm:col-span-2">
+              <input type="checkbox" className="size-4 accent-amber-400" checked={fields.colored} onChange={(event) => setFields((current) => ({ ...current, colored: event.target.checked }))} data-testid="export-colored" />
+              🎨 Barevné druhy okruhů (zásuvky, světla, spotřebiče …) s tabulkou vysvětlivek – jinak černobíle
+            </label>
+            <p className="text-xs text-muted-foreground sm:col-span-2" data-testid="export-stamp">
+              Projektant / Montážní firma v razítku: {stamp ? [stamp.name, stamp.ico ? `IČO ${stamp.ico}` : null].filter(Boolean).join(" · ") : "doplňte ve Firemních údajích a razítku"}
+            </p>
+          </div>
           <DialogFooter className="gap-2">
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
               Zavřít
@@ -365,7 +462,7 @@ export function FloorplanExport({ draft, analysis, company, trial = null }: { dr
                   {TRIAL_WATERMARK}
                 </p>
               ) : null}
-              <PlanSheet draft={draft} analysis={analysis} paper={paper} fields={fields} />
+              <PlanSheet draft={draft} analysis={analysis} paper={paper} fields={fields} stamp={stamp} linkMode={linkMode} projectRef={projectRef} />
             </div>,
             document.body,
           )

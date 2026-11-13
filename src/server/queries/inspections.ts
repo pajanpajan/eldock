@@ -8,6 +8,7 @@ import { BUILDING_RULE_FIELDS, PORTABLE_TYPES, RULE_FIELDS, ruleInputFrom } from
 import type { EquipmentType } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/prisma";
 import { plantAccessWhere } from "@/server/queries/plant";
+import { layoutOfFloor } from "@/lib/studio-layout";
 
 /** Výřez závodu a typů zařízení (účet) pro `equipment`. */
 const plantScope = (plantId?: string) => (plantId ? { floor: { building: { plantId } } } : {});
@@ -326,3 +327,18 @@ export async function getImportFloors() {
 }
 
 export type ImportFloor = Awaited<ReturnType<typeof getImportFloors>>[number];
+
+/** Fáze 112: patra s místnostmi (zóny Studia) jen ze závodů uživatele – import revizních dat a sekvenční sběr. */
+export async function getRoomTargets() {
+  const plant = await plantAccessWhere();
+  const floors = await prisma.floor.findMany({
+    where: { building: { plant } },
+    orderBy: [{ building: { plant: { code: "asc" } } }, { building: { sortOrder: "asc" } }, { level: "asc" }],
+    select: { id: true, name: true, studioLayoutJson: true, floorplanSvg: true, building: { select: { name: true, plant: { select: { name: true } } } } },
+  });
+  return floors
+    .map((floor) => ({ id: floor.id, label: `${floor.building.plant.name} · ${floor.building.name} · ${floor.name}`, rooms: layoutOfFloor(floor).zones.map((zone) => zone.name) }))
+    .filter((floor) => floor.rooms.length > 0);
+}
+
+export type RoomTarget = Awaited<ReturnType<typeof getRoomTargets>>[number];

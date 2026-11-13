@@ -53,7 +53,8 @@ test("📐 2D půdorys → ⚡ rozváděč: průvodce uspořádáním skříně,
   // Šířka všech lišt 24M → přístroje znovu na lišty; přepínač 1 pole / 2 pole vedle sebe
   await page.getByTestId("rails-width-24").click();
   await expect(panel.locator("g[data-rail]").first()).toHaveAttribute("data-capacity", "24", { timeout: 60_000 });
-  await expect(panel.locator('g[data-rail]:not([data-capacity="24"])')).toHaveCount(0);
+  // Přeskládání všech přístrojů na nové lišty dobíhá po první liště (pod zátěží celé sady i desítky sekund)
+  await expect(panel.locator('g[data-rail]:not([data-capacity="24"])')).toHaveCount(0, { timeout: 60_000 });
   await page.getByTestId("rails-fields-1").click();
   await expect(panel.getByTestId("vector-fields")).toHaveCount(0, { timeout: 60_000 });
   await page.getByTestId("rails-fields-2").click();

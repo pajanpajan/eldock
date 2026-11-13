@@ -2287,3 +2287,23 @@ model InspectorProfile {
   @@index([plantId])
   @@index([certificateKey])
 }
+
+/// Fáze 112: nastavení platformy upravitelné ve velínu – údaje provozovatele (patička, faktury, VOP, zásady) a sady
+/// QR štítků k objednání (klíč → JSON).
+model PlatformSetting {
+  key       String   @id
+  valueJson String
+  updatedAt DateTime @updatedAt
+}
+
+/// Fáze 112: odeslání z offline fronty prohlížeče (sekvenční sběr Scan & Snap) – id klienta zaručí, že se záznam při
+/// opakovaném odeslání po obnovení signálu nezaloží dvakrát (výsledek se vrátí znovu).
+model OfflineSubmission {
+  id         String   @id
+  accountId  String?
+  kind       String
+  resultJson String?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+}

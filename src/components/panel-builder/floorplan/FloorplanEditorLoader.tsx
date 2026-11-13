@@ -1,5 +1,6 @@
 "use client";
 
+import type { CompanyStamp } from "@/lib/panel-builder/title-block";
 import dynamic from "next/dynamic";
 
 import type { SeriesOption, StoredFloorplan } from "./FloorplanEditor";
@@ -21,6 +22,7 @@ export function FloorplanEditorLoader({
   sandbox = false,
   startChoice = false,
   credits = 0,
+  stamp = null,
 }: {
   series: SeriesOption[];
   manufacturers?: { name: string; count: number }[];
@@ -38,7 +40,9 @@ export function FloorplanEditorLoader({
   startChoice?: boolean;
   /** Fáze 111: zůstatek kreditů firmy (prodejní modal u odemčení plné verze). */
   credits?: number;
+  /** Fáze 112: firemní razítko do rohového razítka výkresu. */
+  stamp?: CompanyStamp | null;
 }) {
   // Jiný půdorys = nový editor (vlastní historie Zpět / Znovu a ukládání)
-  return <FloorplanEditor key={sandbox ? "trenazer" : (stored?.id ?? "novy")} series={series} manufacturers={manufacturers} applianceJson={applianceJson} libraryJson={libraryJson} company={company} stored={stored} help={help} sandbox={sandbox} startChoice={startChoice} credits={credits} />;
+  return <FloorplanEditor key={sandbox ? "trenazer" : (stored?.id ?? "novy")} series={series} manufacturers={manufacturers} applianceJson={applianceJson} libraryJson={libraryJson} company={company} stored={stored} help={help} sandbox={sandbox} startChoice={startChoice} credits={credits} stamp={stamp} />;
 }

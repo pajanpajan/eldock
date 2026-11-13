@@ -22,7 +22,9 @@ import { supplyOf } from "@/lib/panel-builder/supply";
 import { busbarPartsRows, planBusbars } from "@/lib/panel-builder/pe-n-busbars";
 import { equipmentHref } from "@/lib/routes";
 import { parseRoutineTest, standardEditionOf } from "@/lib/legislation-2027";
-import { getEnclosureComponent, getLinkedBoards, getProjectEnclosure, type PanelProjectDetail } from "@/server/queries/panel-builder";
+import { getBlankCovers, getEnclosureComponent, getLinkedBoards, getProjectEnclosure, type PanelProjectDetail } from "@/server/queries/panel-builder";
+import { blankCoverFor, blankingPartsRow, blankingPlan, freeModules, usedModules } from "@/lib/panel-builder/hdo";
+import { railCapacities } from "@/lib/panel-builder/rails";
 import { parseFeederInfo } from "@/server/services/panel-projects";
 import { documentationState } from "@/server/services/panel-builder";
 
@@ -40,7 +42,7 @@ const safeJson = (text: string): unknown => {
 const n = (value: number, digits = 2) => value.toLocaleString("cs-CZ", { minimumFractionDigits: digits, maximumFractionDigits: digits });
 
 export async function buildDocumentationData(project: PanelProjectDetail, origin: string, options: { showcase?: boolean } = {}) {
-  const [enclosureRow, picked] = await Promise.all([getEnclosureComponent(project.enclosureModel), getProjectEnclosure(project.enclosureId)]);
+  const [enclosureRow, picked, covers] = await Promise.all([getEnclosureComponent(project.enclosureModel), getProjectEnclosure(project.enclosureId), getBlankCovers()]);
   const { thermal, docItems, blockers } = documentationState(project);
   // Skříň vybraná z katalogu rozvodnic (fáze 43) má přednost před dohledáním podle názvu modelu
   const enclosure = picked
@@ -55,6 +57,8 @@ export async function buildDocumentationData(project: PanelProjectDetail, origin
     : enclosureRow
     ? { articleNumber: enclosureRow.articleNumber, typeCode: enclosureRow.typeCode, manufacturer: enclosureRow.manufacturer, description: enclosureRow.description, category: enclosureRow.category }
     : null;
+  const capacities = railCapacities(project);
+  const blanking = blankingPartsRow(blankingPlan(freeModules(capacities, usedModules(project.items, capacities.length)), blankCoverFor(picked?.manufacturer ?? enclosure?.manufacturer, covers)));
   const drawingItems: DrawingItem[] = project.items.map((item) => ({
     id: item.id,
     designation: item.designation,
@@ -132,7 +136,8 @@ export async function buildDocumentationData(project: PanelProjectDetail, origin
     symbolLegend: symbolLegend(drawingItems.map(drawingSymbolOf)).map(({ info, svg }) => ({ label: info.label, norm: info.norm, svg })),
     functions: readingOrder(project.items).map((item) => ({ designation: item.designation, label: item.circuitLabel })),
     // Fáze 55: sběrnice PE / N0 / N-FIx a propojka PEN v kusovníku (List 4)
-    parts: [...partsList(docItems, enclosure), ...busbarPartsRows(busbars)],
+    // Fáze 112: krycí záslepky neobsazených modulů všech lišt (objednací číslo jen z katalogu výrobce skříně)
+    parts: [...partsList(docItems, enclosure), ...busbarPartsRows(busbars), ...(blanking ? [blanking] : [])],
     components: componentsList(docItems, enclosure),
     homeBom,
     wiring: project.items.flatMap((item) =>

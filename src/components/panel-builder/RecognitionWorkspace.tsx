@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import type { ComponentCategory, RecognitionStatus } from "@/generated/prisma/enums";
+import { blankingPlan, blankingSummary, freeModules, usedModules } from "@/lib/panel-builder/hdo";
 import { defaultConfig, withManufacturer, type ConfigCategory, type ItemConfig } from "@/lib/panel-builder/configurator";
 import { enclosureNeed } from "@/lib/panel-builder/enclosures";
 import { formatRailSummary, freeOnRail, railSummary } from "@/lib/panel-builder/rails";
@@ -16,7 +17,7 @@ import { RECOGNITION } from "@/lib/panel-builder/project";
 import { cn } from "@/lib/utils";
 import { addRailAction, analyzePanelProjectAction, configureItemAction, deleteRailAction, updateItemTextAction } from "@/server/actions/panel-builder";
 import { PANEL_PHOTO_MAX_PX, PANEL_PHOTO_QUALITY, resizeImage, uploadPanelFile } from "@/lib/upload-client";
-import { analyzeRailDetailAction, moveItemAction, moveRailAction, placeComponentsAction, placeLintDevicesAction, setEnvironmentAction, setRailCapacityAction } from "@/server/actions/panel-design";
+import { analyzeRailDetailAction, moveItemAction, moveRailAction, placeComponentsAction, placeLintDevicesAction, setEnvironmentAction, setRailCapacityAction, setRailCombAction } from "@/server/actions/panel-design";
 import { nextChipLabel, presetConfig } from "@/lib/panel-builder/circuit-chips";
 import { ENVIRONMENTS, enclosureFitsEnvironment, environmentOf, ipLabel } from "@/lib/panel-builder/environments";
 import { validateSwitchboardState, type LintIssue } from "@/lib/panel-builder/linter";
@@ -96,6 +97,7 @@ export function RecognitionWorkspace({
   boardManufacturers = [],
   occupancy = "RESIDENTIAL",
   railLayout = SINGLE_LAYOUT,
+  supplyPhases = 3,
 }: {
   projectId: string;
   designMode: "PHOTO" | "DESIGN";
@@ -121,6 +123,8 @@ export function RecognitionWorkspace({
   occupancy?: string;
   /** Fáze 111: uspořádání lišt – dvě pole vedle sebe (Silnoproud | Slaboproud) nebo přepážka. */
   railLayout?: RailLayout;
+  /** Fáze 112: soustava přívodu – hřebeny 1f / 3f a fáze jističů na plátně. */
+  supplyPhases?: 1 | 3;
 }) {
   const router = useRouter();
   const design = designMode === "DESIGN";
@@ -130,6 +134,8 @@ export function RecognitionWorkspace({
   const railPartition = useMemo(() => (fieldCount === 1 && partitionAfterRail ? { afterRail: partitionAfterRail, label: PARTITION_LABEL } : null), [fieldCount, partitionAfterRail]);
   const layoutNeedInput = useMemo(() => ({ fields: fieldCount, fieldARails }), [fieldCount, fieldARails]);
   const layoutText = layoutSummaryText(railLayout, capacities.length);
+  // Fáze 112: krycí záslepky neobsazených modulů (stejný výpočet jako kusovník v dokumentaci)
+  const blanking = blankingPlan(freeModules(capacities, usedModules(items, capacities.length)));
   const [analysisMode, setAnalysisMode] = useState<AnalysisMode>(coverState === "UNCOVERED" || coverState === "COVERED" ? coverState : "AUTO");
   const [editing, startEditing] = useTransition();
   const unresolved = items.filter((item) => item.recognitionStatus !== "VERIFIED");
@@ -380,6 +386,8 @@ export function RecognitionWorkspace({
   }
 
   // Vektorové symboly: uložený stav + optimistický náhled konfigurace a popisu obvodu
+  // Fáze 112: strom zapojení pro hřebeny a fáze na plátně (bez modrých spojnic kroku 2)
+  const combNodes = useMemo(() => items.map((item) => ({ id: item.id, parentItemId: item.parentItemId ?? null })), [items]);
   const devices = items.map((item) => {
     const draft = previews.get(item.id);
     const device = draft ? deviceWithConfig(item.device, draft) : item.device;
@@ -555,6 +563,12 @@ export function RecognitionWorkspace({
           {formatRailSummary(summary)}
           {layoutText ? ` · ${layoutText}` : ""}
         </p>
+        {/* Fáze 112: volné moduly všech lišt → dělitelné krycí záslepky v kusovníku (List 4) */}
+        {blanking ? (
+          <p className="rounded-md border border-border px-2.5 py-1.5 font-mono text-xs text-muted-foreground" data-testid="blanking-summary">
+            🔲 {blankingSummary(blanking)}
+          </p>
+        ) : null}
         <LinterPanel
           issues={issues}
           busy={fixing || editing}
@@ -642,6 +656,10 @@ export function RecognitionWorkspace({
           onRailPhoto={design ? undefined : pickRailPhoto}
           fields={railFields}
           partition={railPartition}
+          combs={railLayout.combs}
+          combNodes={combNodes}
+          supplyPhases={supplyPhases}
+          onRailComb={(rail, setting) => railAction(() => setRailCombAction(projectId, rail, setting), `Hřeben lišty ${rail}: ${setting === "AUTO" ? "automaticky podle chrániče" : setting === "OFF" ? "vypnutý" : setting === "3F" ? "3f (L1 / L2 / L3 / N)" : "1f (L / N)"}.`)}
           toolbar={<RailLayoutToolbar projectId={projectId} layout={railLayout} capacities={capacities} disabled={editing || placing} />}
         />
       </section>

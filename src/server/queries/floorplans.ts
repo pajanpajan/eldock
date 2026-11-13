@@ -71,5 +71,7 @@ export type FloorplanForEditor = NonNullable<Awaited<ReturnType<typeof getFloorp
 export async function getFloorplanEditorData() {
   const [series, manufacturers, applianceJson, company] = await Promise.all([getWiringSeries(), getBoardManufacturers(), getApplianceLibraryJson(), getPanelCompany()]);
   const library = company ? await floorplanLibraryOf(prisma, company.id) : null;
-  return { series: series.map(({ key, label, count }) => ({ key, label, count })), manufacturers, applianceJson, libraryJson: library ? JSON.stringify(library) : null, company: company?.companyName ?? null, credits: company?.creditsRemaining ?? 0 };
+  return { series: series.map(({ key, label, count }) => ({ key, label, count })), manufacturers, applianceJson, libraryJson: library ? JSON.stringify(library) : null, company: company?.companyName ?? null,
+    // Fáze 112: firemní razítko do rohového razítka výkresu (ČSN EN ISO 7200)
+    stamp: company ? { name: company.companyName, ico: company.ico || null, address: [company.street, [company.zip, company.city].filter(Boolean).join(" ")].filter(Boolean).join(", ") || null, contact: company.contactName || null, phone: company.phone || null, authorization: company.authorizationNumber ?? null } : null, credits: company?.creditsRemaining ?? 0 };
 }

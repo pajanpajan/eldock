@@ -1,15 +1,15 @@
-// Firemní a kontaktní údaje pro veřejnou úvodní stránku a patičku – jediné místo k přepsání
-// po zápisu s.r.o. do obchodního rejstříku.
+// Výchozí firemní a kontaktní údaje (kontakt, JSON-LD, výchozí účet pro QR platby). Fáze 112: provozovatele (jméno, IČO,
+// DIČ, spisovou značku, IBAN) upravuje velín /superadmin – patička, faktury, VOP a zásady čtou `server/operator.ts`.
 
 export const COMPANY_INFO = {
-  name: "Eldock s.r.o. (v založení)",
+  name: "ELDOCK.cz – Pavel Janoušek",
   contactPerson: "Pavel Janoušek",
   email: "info@eldock.cz",
   location: "Jablonec nad Nisou, Česká republika",
-  ico: "Bude doplněno po zápisu do OR",
-  dic: "Bude doplněno",
-  /** Fakturační adresa dodavatele (zálohová faktura kreditů, fáze 50). */
-  street: "Bude doplněno",
+  /** Fáze 112: IČO, DIČ a ulici vyplní velín (prázdné = nezobrazuje se). */
+  ico: "",
+  dic: "",
+  street: "",
   city: "Jablonec nad Nisou",
   zip: "466 01",
   /**

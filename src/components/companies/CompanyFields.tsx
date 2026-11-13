@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { isValidIco, normalizeIco, type AresCompany } from "@/lib/ares";
 import { TERMS_SECTIONS, TERMS_VERSION } from "@/lib/registered-company";
+import { DEFAULT_OPERATOR, withOperator } from "@/lib/operator";
 import { cn } from "@/lib/utils";
 
 /** Údaje firmy ve formuláři (registrace i „Firemní údaje do razítka“). */
@@ -157,7 +158,8 @@ export function TermsConsent({ text, checked, onChange, invalid }: { text: strin
             {TERMS_SECTIONS.map((section) => (
               <section key={section.title}>
                 <h3 className="font-semibold">{section.title}</h3>
-                <p className="text-muted-foreground">{section.text}</p>
+                {/* Fáze 112: provozovatel (výchozí údaje; aktuální znění s údaji z velínu na /obchodni-podminky) */}
+                <p className="text-muted-foreground">{withOperator(section.text, DEFAULT_OPERATOR)}</p>
               </section>
             ))}
           </div>

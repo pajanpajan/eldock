@@ -16,7 +16,8 @@ import { saveRoutineTest, setStandardEdition } from "@/server/services/panel-des
 import { ROUTINE_TEST_POINTS } from "@/lib/legislation-2027";
 import { listEnclosures, moveRail, placeComponents, placeLintDevices, previewConfig, releaseEnclosureLimit, saveApplianceLibrary, saveCircuitChips, selectEnclosure, setCompanyBranding, setEnvironment, setRailCapacity, type ConfigPreview } from "@/server/services/panel-design";
 import { MAX_CHIPS, type ChipSet } from "@/lib/panel-builder/circuit-chips";
-import { applyProjectLayout, previewProjectLayouts, setAllRailCapacities, setRailFields } from "@/server/services/panel-design";
+import { applyProjectLayout, previewProjectLayouts, setAllRailCapacities, setRailComb, setRailFields } from "@/server/services/panel-design";
+import { isCombSetting, type CombSetting } from "@/lib/panel-builder/comb-busbars";
 import { LAYOUT_CONCEPTS } from "@/lib/panel-builder/rail-layout";
 import type { LayoutChoice, LayoutPreviewDto } from "@/lib/panel-builder/layout-options";
 import { MAX_APPLIANCES, parseApplianceList } from "@/lib/panel-builder/appliances";
@@ -78,6 +79,19 @@ export async function moveRailAction(projectId: string, railIndex: number, direc
     return { ok: true, data: result };
   } catch (error) {
     return actionFailure(error, "Lištu se nepodařilo přesunout.");
+  }
+}
+
+/** Fáze 112: propojovací hřeben lišty (Auto / 3f / 1f / Vyp). */
+export async function setRailCombAction(projectId: string, railIndex: number, setting: CombSetting): Promise<ActionResult<{ rail: number; setting: CombSetting }>> {
+  if (!id.safeParse(projectId).success || !rail.safeParse(railIndex).success || !isCombSetting(setting)) return { ok: false, error: "Neplatná volba hřebenu." };
+  try {
+    await guardEditableProject(projectId);
+    const result = await setRailComb(prisma, projectId, railIndex, setting);
+    revalidatePath(`/panel-builder/${projectId}`, "layout");
+    return { ok: true, data: result };
+  } catch (error) {
+    return actionFailure(error, "Hřeben lišty se nepodařilo nastavit.");
   }
 }
 

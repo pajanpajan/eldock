@@ -6,7 +6,8 @@ import { LandingMobileNav } from "@/components/landing/LandingMobileNav";
 import { Logo } from "@/components/layout/Logo";
 import { Button } from "@/components/ui/button";
 import { BRAND } from "@/lib/brand";
-import { COMPANY_INFO } from "@/lib/company";
+import { footerLine, registryLines } from "@/lib/operator";
+import { getOperatorProfile } from "@/server/operator";
 import { footerSections, siteNav, type SiteLink } from "@/lib/site-map";
 import { cn } from "@/lib/utils";
 import { IP_NOTICE } from "@/lib/legal";
@@ -51,29 +52,24 @@ export function SiteHeader({ clientZone, showcase, current }: { clientZone: Site
   );
 }
 
-export function SiteFooter({ clientZone, showcase }: { clientZone: SiteLink; showcase: boolean }) {
+export async function SiteFooter({ clientZone, showcase }: { clientZone: SiteLink; showcase: boolean }) {
+  // Fáze 112: provozovatel z velínu (IČO, DIČ, spisová značka se ukážou, až je velín vyplní)
+  const operator = await getOperatorProfile();
+  const registry = registryLines(operator);
   return (
     <footer className="no-print border-t border-border bg-background/80" data-testid="site-footer">
       <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-10 text-sm text-muted-foreground sm:px-6 md:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1fr_1fr]">
         <div className="flex flex-col gap-3">
           <Logo withTagline />
           <p className="max-w-sm">{BRAND.description}.</p>
-          <dl className="grid h-fit grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs">
-            <dt>Provozovatel</dt>
-            <dd className="text-foreground">{COMPANY_INFO.name}</dd>
-            <dt>Sídlo</dt>
-            <dd>{COMPANY_INFO.location}</dd>
-            <dt>IČO / DIČ</dt>
-            <dd>
-              {COMPANY_INFO.ico} / {COMPANY_INFO.dic}
-            </dd>
-            <dt>E-mail</dt>
-            <dd>
-              <a href={`mailto:${COMPANY_INFO.email}`} className="hover:text-foreground">
-                {COMPANY_INFO.email}
-              </a>
-            </dd>
-          </dl>
+          <p className="text-xs text-foreground" data-testid="footer-operator">
+            {footerLine(operator)}
+          </p>
+          {registry.length ? (
+            <p className="text-xs" data-testid="footer-registry">
+              {registry.join(" · ")}
+            </p>
+          ) : null}
         </div>
         {footerSections({ showcase }).map((section) => (
           <nav key={section.title} aria-label={`Mapa webu – ${section.title}`} className="flex flex-col gap-2">

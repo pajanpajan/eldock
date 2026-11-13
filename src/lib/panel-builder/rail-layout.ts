@@ -8,6 +8,7 @@
 // když se vedle vejde další. Párování se skříněmi podle polí, řad a šířky řady (P_max bez údaje výrobce = odhad).
 // Čisté funkce – sdílí generátor z půdorysu, průvodce uspořádáním, editor DIN lišt, krok skříně i testy.
 
+import { parseCombSettings, type CombSetting } from "./comb-busbars";
 import { enclosureFields, typicalPmax, type EnclosureFields, type EnclosureLike } from "./enclosures";
 
 export type LayoutConcept = "two_field" | "wide24" | "compact18" | "two_boards";
@@ -78,6 +79,8 @@ export interface RailLayout {
   partitionAfterRail: number | null;
   /** Pravé pole nese slaboproud / Smart Home (jinak pokračování silnoproudu). */
   fieldBLow: boolean;
+  /** Fáze 112: ruční volba propojovacího hřebenu lišty (číslo lišty → 3f / 1f / Vyp; bez údaje Auto). */
+  combs?: Record<number, CombSetting>;
 }
 
 export const SINGLE_LAYOUT: RailLayout = { version: 1, concept: "single", fields: 1, fieldARails: 0, partitionAfterRail: null, fieldBLow: false };
@@ -95,7 +98,8 @@ export function normalizeLayout(layout: RailLayout, railCount: number): RailLayo
   const fields = layout.fields === 2 && count >= 2 ? 2 : 1;
   const fieldARails = fields === 2 ? Math.min(count - 1, Math.max(1, Math.round(layout.fieldARails))) : 0;
   const partition = fields === 1 && layout.partitionAfterRail !== null && layout.partitionAfterRail >= 1 && layout.partitionAfterRail < count ? Math.round(layout.partitionAfterRail) : null;
-  return { version: 1, concept: layout.concept, fields, fieldARails, partitionAfterRail: partition, fieldBLow: fields === 2 && layout.fieldBLow };
+  const combs = Object.fromEntries(Object.entries(parseCombSettings(layout.combs)).filter(([rail]) => Number(rail) <= count));
+  return { version: 1, concept: layout.concept, fields, fieldARails, partitionAfterRail: partition, fieldBLow: fields === 2 && layout.fieldBLow, ...(Object.keys(combs).length ? { combs } : {}) };
 }
 
 /** JSON z databáze → uspořádání (poškozený / chybějící JSON = lišty pod sebou). */
@@ -106,7 +110,7 @@ export function parseRailLayout(json: string | null | undefined, railCount: numb
     if (raw.version !== 1) return SINGLE_LAYOUT;
     const concept: RailLayoutMode = raw.concept === "single" || isLayoutConcept(raw.concept) ? raw.concept : "single";
     return normalizeLayout(
-      { version: 1, concept, fields: raw.fields === 2 ? 2 : 1, fieldARails: Number(raw.fieldARails) || 0, partitionAfterRail: typeof raw.partitionAfterRail === "number" ? raw.partitionAfterRail : null, fieldBLow: raw.fieldBLow === true },
+      { version: 1, concept, fields: raw.fields === 2 ? 2 : 1, fieldARails: Number(raw.fieldARails) || 0, partitionAfterRail: typeof raw.partitionAfterRail === "number" ? raw.partitionAfterRail : null, fieldBLow: raw.fieldBLow === true, combs: parseCombSettings(raw.combs) },
       railCount,
     );
   } catch {
@@ -131,9 +135,39 @@ export function withFields(layout: RailLayout, railCount: number, fields: 1 | 2,
   return normalizeLayout({ ...layout, concept: "two_field", fields: 2, fieldARails: split, partitionAfterRail: null, fieldBLow: lowStart !== null && lowStart > 1 }, railCount);
 }
 
+/** Fáze 112: volba hřebenu lišty (Auto = bez údaje). */
+export function withComb(layout: RailLayout, rail: number, setting: CombSetting, railCount: number): RailLayout {
+  const combs = { ...(layout.combs ?? {}) };
+  if (setting === "AUTO") delete combs[rail];
+  else combs[rail] = setting;
+  return normalizeLayout({ ...layout, combs }, railCount);
+}
+
+/** Fáze 112: hřebeny po přesunu lišty nahoru / dolů (prohození dvou lišt). */
+export function layoutAfterRailSwap(layout: RailLayout, a: number, b: number, railCount: number): RailLayout {
+  if (!layout.combs) return layout;
+  const combs = { ...layout.combs };
+  const [first, second] = [combs[a], combs[b]];
+  delete combs[a];
+  delete combs[b];
+  if (second) combs[a] = second;
+  if (first) combs[b] = first;
+  return normalizeLayout({ ...layout, combs }, railCount);
+}
+
 /** Uspořádání po smazání lišty: pravé pole se posune, prázdné pole zmizí. */
 export function layoutAfterRailRemoved(layout: RailLayout, rail: number, railCount: number): RailLayout {
   const next = Math.max(1, railCount - 1);
+  // Fáze 112: hřebeny lišt pod smazanou lištou se posunou nahoru
+  if (layout.combs) {
+    const combs: Record<number, CombSetting> = {};
+    for (const [key, setting] of Object.entries(layout.combs)) {
+      const index = Number(key);
+      if (index < rail) combs[index] = setting;
+      else if (index > rail) combs[index - 1] = setting;
+    }
+    layout = { ...layout, combs };
+  }
   if (layout.fields === 2) return normalizeLayout({ ...layout, fieldARails: rail <= layout.fieldARails ? layout.fieldARails - 1 : layout.fieldARails }, next);
   const partition = layout.partitionAfterRail !== null && rail <= layout.partitionAfterRail ? layout.partitionAfterRail - 1 : layout.partitionAfterRail;
   return normalizeLayout({ ...layout, partitionAfterRail: partition }, next);

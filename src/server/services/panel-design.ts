@@ -16,7 +16,8 @@ import { isMix } from "@/lib/panel-builder/catalog";
 import { matchDetection, type Detection } from "@/lib/panel-builder/matching";
 import { planRailMerge, signatureFromItem, signatureOf } from "@/lib/panel-builder/rail-merge";
 import { layoutPreviewDto, type LayoutChoice, type LayoutPreviewDto } from "@/lib/panel-builder/layout-options";
-import { SINGLE_LAYOUT, layoutNeed, layoutOptions, lowStartRail, matchLayoutEnclosures, normalizeLayout, packRails, parseRailLayout, planLayout, planTwoBoards, projectGroups, serializeRailLayout, withFields, type EnclosureMatch, type PlannedRail, type RailLayout } from "@/lib/panel-builder/rail-layout";
+import { isCombSetting, type CombSetting } from "@/lib/panel-builder/comb-busbars";
+import { SINGLE_LAYOUT, layoutAfterRailSwap, layoutNeed, layoutOptions, lowStartRail, matchLayoutEnclosures, normalizeLayout, packRails, parseRailLayout, planLayout, planTwoBoards, projectGroups, serializeRailLayout, withComb, withFields, type EnclosureMatch, type PlannedRail, type RailLayout } from "@/lib/panel-builder/rail-layout";
 import type { FeederInfo } from "./panel-projects";
 
 // Návrh rozváděče od nuly (fáze 43): kapacita a pořadí DIN lišt, osazení přístrojů z kaskádového
@@ -66,10 +67,27 @@ export async function moveRail(prisma: PrismaClient, projectId: string, rail: nu
         const next = item.dinRailIndex === rail ? target : rail;
         return prisma.panelBoardItem.update({ where: { id: item.id }, data: { dinRailIndex: next, sortOrder: next * 100 + item.positionOnRail } });
       }),
-    prisma.panelBoardProject.update({ where: { id: projectId }, data: railColumns(withRailsSwapped(project.capacities, rail, target)) }),
+    prisma.panelBoardProject.update({
+      where: { id: projectId },
+      data: {
+        ...railColumns(withRailsSwapped(project.capacities, rail, target)),
+        // Fáze 112: volba hřebenu se přesune s lištou
+        ...(project.railLayoutJson ? { railLayoutJson: serializeRailLayout(layoutAfterRailSwap(parseRailLayout(project.railLayoutJson, project.capacities.length), rail, target, project.capacities.length)) } : {}),
+      },
+    }),
   ]);
   await renumberProject(prisma, projectId);
   return { rail: target };
+}
+
+/** Fáze 112: propojovací hřeben lišty – Auto (podle chrániče) / 3f / 1f / Vyp (uloženo v uspořádání projektu). */
+export async function setRailComb(prisma: PrismaClient, projectId: string, rail: number, setting: CombSetting) {
+  const project = await railProject(prisma, projectId);
+  if (rail < 1 || rail > project.capacities.length) throw new WorkflowError("VALIDATION", "Neplatná DIN lišta.");
+  if (!isCombSetting(setting)) throw new WorkflowError("VALIDATION", "Neplatná volba hřebenu.");
+  const layout = withComb(parseRailLayout(project.railLayoutJson, project.capacities.length), rail, setting, project.capacities.length);
+  await prisma.panelBoardProject.update({ where: { id: projectId }, data: { railLayoutJson: serializeRailLayout(layout) } });
+  return { rail, setting };
 }
 
 export interface PlaceInput {

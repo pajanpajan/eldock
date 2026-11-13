@@ -15,6 +15,8 @@ import { railColumns } from "@/lib/panel-builder/rails";
 import { SINGLE_LAYOUT, layoutOptions, serializeRailLayout } from "@/lib/panel-builder/rail-layout";
 import { layoutPreviewDto, type LayoutChoice, type LayoutPreviewDto } from "@/lib/panel-builder/layout-options";
 import { WorkflowError } from "@/lib/workflow/state-machine";
+import { revisionCircuitPlan } from "@/lib/revision-board";
+import type { RevisionRecord } from "@/lib/revision-import";
 import { grantCredits, projectRefunds } from "./credits";
 
 import { componentForConfig, createPanelProject, renumberProject, saveTree, type CreateProjectInput } from "./panel-builder";
@@ -139,6 +141,21 @@ export async function createProjectFromSchedule(prisma: PrismaClient, input: Sch
   return createPlanProject(prisma, input, circuits, board);
 }
 
+/**
+ * Fáze 112: rozváděč z okruhů staré revizní zprávy nebo exportu měřicího přístroje (jističe, kabely a názvy okruhů);
+ * skupiny pod chrániči a skříň navrhne generátor stejně jako u soupisu místností.
+ */
+export async function createProjectFromRevision(prisma: PrismaClient, input: Omit<CreateProjectInput, "photoUrl" | "designMode" | "dims"> & { records: readonly RevisionRecord[]; supplySystem?: string }) {
+  const plan = revisionCircuitPlan(input.records);
+  if (!plan.circuits.length) throw new WorkflowError("VALIDATION", "V importu nejsou žádné okruhy s jističem (B16, C10 …) – zkontrolujte sloupec „Jistič / typ“.");
+  const enclosures = (await prisma.panelEnclosure.findMany({ orderBy: { totalModules: "asc" } })).filter((row) => !isHiddenManufacturer(row.manufacturer));
+  const board = buildSwitchboardFromCircuits(plan, { mode: "classic", enclosures, supplyPhases: supplyById(input.supplySystem).phases });
+  const { records: _records, ...header } = input;
+  void _records;
+  const result = await createPlanProject(prisma, header, plan, board);
+  return { ...result, warnings: [...plan.warnings, ...result.warnings] };
+}
+
 type CircuitPlanResult = ReturnType<typeof generateCircuitsFromFloorplan>;
 type SwitchboardResult = ReturnType<typeof buildSwitchboardFromCircuits>;
 
@@ -211,6 +228,12 @@ async function createPlanProject(
         return { id: item.id, designation: item.designation, circuitLabel: item.circuitLabel, parentItemId: device.parentKey ? (itemOfKey.get(device.parentKey) ?? null) : null, fedFromIncomer: device.parentKey === null, phaseAssignment: phaseAssignmentOf(device) };
       }),
     );
+    // Fáze 112: stykač HDO odkazuje na ovládací jistič stabilním id prvku (značení se po uložení přečísluje)
+    const itemOfDesignation = new Map(devices.map(({ device }, index) => [device.designation, created[index].id]));
+    for (const [index, { device }] of devices.entries()) {
+      const controlId = device.config.hdoControl ? itemOfDesignation.get(device.config.hdoControl) : undefined;
+      if (controlId) await prisma.panelBoardItem.update({ where: { id: created[index].id }, data: { configJson: JSON.stringify({ ...device.config, hdoControl: `item:${controlId}` }) } });
+    }
     const extraWarnings = options.afterItems ? await options.afterItems(created.map((item, index) => ({ id: item.id, device: devices[index].device }))) : [];
     const manufacturerWarnings = estimated.size ? [`${options.manufacturer} v databázi prvků nemá: ${[...estimated].join(", ")} – přístroje mají parametry návrhu a odhad ztrát dle IEC (ověřte, případně vyberte typ v konfigurátoru).`] : [];
     return { id: project.id, devices: rows.length, circuits: circuits.circuits.length, enclosure: board.enclosure?.model ?? null, manufacturer: options.manufacturer ?? null, warnings: [...manufacturerWarnings, ...circuits.warnings, ...board.warnings, ...extraWarnings] };

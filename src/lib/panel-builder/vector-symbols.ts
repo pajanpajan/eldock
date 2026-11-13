@@ -33,6 +33,8 @@ export interface VectorDevice {
   status: RecognitionStatus;
   /** Fáze 81: profil kusu chytré domácnosti (funkce, kanály, barevný štítek) – jinak se dopočte z typu (`smartProfileOf`). */
   smart?: SmartDinProfile | null;
+  /** Fáze 112: přiřazená fáze („L1“, „L1,L2,L3,N“) – odznak fáze na plátně. */
+  phaseAssignment?: string | null;
 }
 
 /** Fáze 81: profil aktoru chytré domácnosti na DIN liště (z konfigurace, jinak z výrobce a typu kusu). */
@@ -110,6 +112,7 @@ export function vectorDeviceFrom(item: {
   recognitionStatus: RecognitionStatus;
   rawOcrText: string | null;
   configJson: string | null;
+  phaseAssignment?: string | null;
   catalogComponent: {
     category: ComponentCategory;
     manufacturer: string;
@@ -148,6 +151,7 @@ export function vectorDeviceFrom(item: {
     powerLossWatts: component?.powerLossWatts ?? null,
     label: item.circuitLabel,
     status: item.recognitionStatus,
+    phaseAssignment: item.phaseAssignment ?? null,
   };
   return base;
 }

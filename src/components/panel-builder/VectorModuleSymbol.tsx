@@ -5,6 +5,7 @@
 
 import type { ReactNode } from "react";
 
+import { PHASE_STYLE, type PhaseBadge } from "@/lib/panel-builder/comb-busbars";
 import type { SmartDinProfile } from "@/lib/panel-builder/smart-din-catalog";
 import { leverCount, screwCount, smartProfileOf, smartTerminalCount, symbolTexts, type VectorDevice } from "@/lib/panel-builder/vector-symbols";
 import type { Rect } from "@/lib/panel-builder/vector-layout";
@@ -49,6 +50,29 @@ export const VECTOR_THEMES: Record<VectorTheme, { bg: string; rail: string; rail
 
 const FONT = "ui-sans-serif, system-ui, Arial, sans-serif";
 const BAND = 18;
+
+/** Fáze 112: šířka odznaku fáze (jedna fáze 15 px, L1+L2+L3 tři segmenty). */
+export const phaseTagWidth = (phase: PhaseBadge) => (phase === "L1+L2+L3" ? 45 : 15);
+
+/** Fáze 112: kontrastní odznak fáze v barvě vodiče (ČSN 33 0165) – „L1“, „L2“, „L3“ nebo tři segmenty u 3P. */
+function PhaseTag({ x, y, phase }: { x: number; y: number; phase: PhaseBadge }) {
+  const parts = phase === "L1+L2+L3" ? (["L1", "L2", "L3"] as const) : [phase];
+  return (
+    <g data-testid="phase-badge" data-phase={phase} pointerEvents="none">
+      {parts.map((part, index) => {
+        const style = PHASE_STYLE[part];
+        return (
+          <g key={part}>
+            <rect x={x + index * 15} y={y} width={14} height={10} rx={2} fill={style.fill} stroke={style.stroke} strokeWidth={0.8} />
+            <text x={x + index * 15 + 7} y={y + 7.6} fontSize={7} fontWeight={800} fontFamily={FONT} fill={style.text} textAnchor="middle">
+              {part}
+            </text>
+          </g>
+        );
+      })}
+    </g>
+  );
+}
 
 /** Text, který se do šířky symbolu nevejde, se zúží (textLength) – nikdy nepřeteče do souseda. */
 function FitText({ x, y, text, size, max, anchor = "middle", weight, fill, testId }: { x: number; y: number; text: string; size: number; max: number; anchor?: "start" | "middle"; weight?: number; fill: string; testId?: string }) {
@@ -280,11 +304,14 @@ export function VectorModuleSymbol({
   dashed,
   glow,
   dimmed,
+  phase = null,
   children,
 }: {
   device: VectorDevice;
   rect: Rect;
   theme: VectorTheme;
+  /** Fáze 112: odznak fáze jističe (L1 hnědá, L2 černá, L3 šedá dle ČSN 33 0165). */
+  phase?: PhaseBadge | null;
   outline?: string | null;
   dashed?: boolean;
   glow?: boolean;
@@ -308,8 +335,9 @@ export function VectorModuleSymbol({
       <Screws x={x + 1} y={y} w={w - 2} count={screws} color={colors.screw} stroke={colors.stroke} />
       <Screws x={x + 1} y={y + h - BAND} w={w - 2} count={screws} color={colors.screw} stroke={colors.stroke} />
 
-      {/* 1) IEC značení vlevo pod horními šroubky */}
-      <FitText x={x + 4} y={y + 31} text={device.designation} size={11} max={inner} anchor="start" weight={800} fill={colors.text} testId="symbol-designation" />
+      {/* 1) IEC značení vlevo pod horními šroubky (fáze 112: vpravo odznak fáze) */}
+      <FitText x={x + 4} y={y + 31} text={device.designation} size={11} max={phase ? inner - phaseTagWidth(phase) - 2 : inner} anchor="start" weight={800} fill={colors.text} testId="symbol-designation" />
+      {phase ? <PhaseTag x={x + w - phaseTagWidth(phase) - 3} y={y + 20} phase={phase} /> : null}
       {/* 2) výrobce, výrazná klíčová hodnota a drobný typ */}
       <FitText x={x + w / 2} y={y + 43} text={texts.manufacturer} size={8} max={inner} fill={colors.muted} testId="symbol-manufacturer" />
       {smart ? <SmartBadge x={x} y={y + 57} w={w} profile={smart} /> : <FitText x={x + w / 2} y={y + 57} text={texts.value} size={12.5} max={inner} weight={800} fill={colors.text} testId="symbol-value" />}

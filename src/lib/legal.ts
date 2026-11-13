@@ -4,9 +4,8 @@
 // stran a kontakty z trenažéru s údaji z ARES). Čisté konstanty bez I/O.
 // Před ostrým prodejem nechat zkontrolovat právníkem (viz registr eldock-normovy-registr, INT-015).
 
-import { COMPANY_INFO } from "./company";
 
-export const PRIVACY_VERSION = "1.7 – 13. 11. 2026";
+export const PRIVACY_VERSION = "1.8 – 13. 11. 2026";
 
 /**
  * Fáze 104: doložka ochrany databáze a autorských práv (patička webu, obchodní podmínky, zápatí PDF výstupů) – databáze
@@ -33,7 +32,8 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
   {
     title: "1. Správce",
     paragraphs: [
-      `Správcem osobních údajů je ${COMPANY_INFO.name}, ${COMPANY_INFO.location} (dále „Eldock“). Kontakt pro otázky ochrany osobních údajů: ${COMPANY_INFO.email}.`,
+      // Fáze 112: identita provozovatele z velínu (`withOperator`)
+      "Správcem osobních údajů je {{PROVOZOVATEL}} (dále „Eldock“). Kontakt pro otázky ochrany osobních údajů: {{EMAIL}}.",
       "U údajů, které do platformy vkládá registrovaná firma o svých zaměstnancích, zařízeních a dokumentaci (Správa závodů), je správcem tato firma a Eldock je jejím zpracovatelem: data zpracováváme jen pro poskytování platformy, firma je může kdykoli stáhnout a po zrušení účtu je smažeme. Žádosti zaměstnanců firmy o jejich údaje vyřizuje firma – nástroje k tomu má v aplikaci (export dat, odebrání zaměstnance).",
     ],
   },
@@ -141,7 +141,7 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
   {
     title: "8. Vaše práva",
     paragraphs: [
-      `Máte právo na přístup ke svým údajům, jejich opravu, výmaz, omezení zpracování, přenositelnost a právo vznést námitku proti zpracování na základě oprávněného zájmu. Žádost pošlete na ${COMPANY_INFO.email}. Stížnost můžete podat u Úřadu pro ochranu osobních údajů (www.uoou.gov.cz).`,
+      `Máte právo na přístup ke svým údajům, jejich opravu, výmaz, omezení zpracování, přenositelnost a právo vznést námitku proti zpracování na základě oprávněného zájmu. Žádost pošlete na {{EMAIL}}. Stížnost můžete podat u Úřadu pro ochranu osobních údajů (www.uoou.gov.cz).`,
       "Část práv uplatníte přímo v aplikaci: uživatel registrované firmy si v „Můj účet“ stáhne své údaje (profil, přihlášená zařízení a aplikace, bezpečnostní deník) a odpojí spárované aplikace, správce firmy stáhne všechna data firmy ve strojově čitelném formátu (JSON a soubory), odebere zaměstnance a požádá o zrušení účtu firmy.",
     ],
   },

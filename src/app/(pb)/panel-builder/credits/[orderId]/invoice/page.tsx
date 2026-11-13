@@ -6,11 +6,11 @@ import { PrintButton } from "@/components/landing/PrintButton";
 import { BankDetails } from "@/components/panel-builder/credits/BankDetails";
 import { PaymentQr } from "@/components/panel-builder/credits/PaymentQr";
 import { panelBuilderGuard } from "@/components/panel-builder/access";
-import { COMPANY_INFO } from "@/lib/company";
+import { labelCountOf, operatorAddress, registryLines } from "@/lib/operator";
+import { getOperatorProfile, paymentAccount } from "@/server/operator";
 import { VAT_RATE, creditPackage, formatCzk, spdPayload } from "@/lib/credits";
 import { formatDate } from "@/lib/format";
 import { getCreditOrder } from "@/server/queries/panel-builder";
-import { bankAccount } from "@/server/services/credits";
 import { IP_NOTICE } from "@/lib/legal";
 
 export const metadata: Metadata = { title: "Zálohová faktura" };
@@ -34,12 +34,17 @@ export default async function InvoicePage({ params }: PageProps<"/panel-builder/
   if (guard) return guard;
   const order = await getCreditOrder((await params).orderId);
   if (!order) notFound();
-  const bank = bankAccount();
+  // Fáze 112: dodavatel a účet z velínu (IČO, DIČ, spisová značka, IBAN)
+  const [bank, operator] = await Promise.all([paymentAccount(), getOperatorProfile()]);
   const customer = order.company;
   const pkg = creditPackage(order.packageCode);
   const due = new Date(order.createdAt.getTime() + DUE_DAYS * 24 * 3600 * 1000);
   const vat = order.priceCzkInclVat - order.priceCzkExclVat;
-  const payload = spdPayload({ iban: bank.iban, bic: bank.bic, amountCzk: order.priceCzkInclVat, variableSymbol: order.variableSymbol, message: `ELDOCK Kredity ${customer.companyName}` });
+  // Fáze 112: sada QR štítků (bez kreditů) a faktura neplátce DPH (cena bez DPH je konečná)
+  const labels = labelCountOf(order.packageCode);
+  const withVat = vat > 0;
+  const itemTitle = labels ? `Sada ${labels} ks stříbrných QR štítků ELDOCK (EL-xxxxxx, odeslání poštou)` : `ELDOCK AI Panel Builder – ${pkg?.title ?? order.packageCode} (${pkg?.name ?? order.packageCode}), ${order.creditsCount} kreditů`;
+  const payload = spdPayload({ iban: bank.iban, bic: bank.bic, amountCzk: order.priceCzkInclVat, variableSymbol: order.variableSymbol, message: `ELDOCK ${labels ? "QR stitky" : "Kredity"} ${customer.companyName}` });
 
   return (
     <div className="flex flex-col items-center gap-4 py-4">
@@ -54,7 +59,7 @@ export default async function InvoicePage({ params }: PageProps<"/panel-builder/
             <span className="text-[18pt] font-black tracking-tight">ELDOCK</span>
           </div>
           <div className="text-right">
-            <h1 className="text-[16pt] font-bold">Zálohová faktura</h1>
+            <h1 className="text-[16pt] font-bold">Zálohová faktura – výzva k platbě</h1>
             <p className="text-[9pt] text-zinc-600">výzva k platbě – není daňovým dokladem</p>
             <p className="mt-1 font-mono text-[12pt] font-bold">č. {order.variableSymbol}</p>
           </div>
@@ -63,14 +68,16 @@ export default async function InvoicePage({ params }: PageProps<"/panel-builder/
         <section className="mt-4 grid grid-cols-2 gap-6">
           <div>
             <h2 className="mb-1 text-[9pt] font-bold tracking-wide text-zinc-600 uppercase">Dodavatel</h2>
-            <p className="font-semibold">{COMPANY_INFO.name}</p>
-            <p>{COMPANY_INFO.street}</p>
-            <p>
-              {COMPANY_INFO.zip} {COMPANY_INFO.city}
-            </p>
-            <p>IČO: {COMPANY_INFO.ico}</p>
-            <p>DIČ: {COMPANY_INFO.dic}</p>
-            <p>{COMPANY_INFO.email}</p>
+            <div data-testid="invoice-supplier">
+              <p className="font-semibold">{operator.name}</p>
+              <p>{operatorAddress(operator)}</p>
+              {registryLines(operator).map((line) => (
+                <p key={line}>{line}</p>
+              ))}
+              <p>
+                {operator.brand} · {operator.email}
+              </p>
+            </div>
           </div>
           <div data-testid="invoice-customer">
             <h2 className="mb-1 text-[9pt] font-bold tracking-wide text-zinc-600 uppercase">Odběratel</h2>
@@ -107,18 +114,18 @@ export default async function InvoicePage({ params }: PageProps<"/panel-builder/
               <th className={cell}>Položka</th>
               <th className={`${cell} text-right`}>Množství</th>
               <th className={`${cell} text-right`}>Cena bez DPH</th>
-              <th className={`${cell} text-right`}>DPH {Math.round(VAT_RATE * 100)} %</th>
-              <th className={`${cell} text-right`}>Celkem s DPH</th>
+              <th className={`${cell} text-right`}>{withVat ? `DPH ${Math.round(VAT_RATE * 100)} %` : "DPH"}</th>
+              <th className={`${cell} text-right`}>{withVat ? "Celkem s DPH" : "Celkem"}</th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <td className={cell}>
-                ELDOCK AI Panel Builder – {pkg?.title ?? order.packageCode} ({pkg?.name ?? order.packageCode}), {order.creditsCount} kreditů
+              <td className={cell} data-testid="invoice-item">
+                {itemTitle}
               </td>
               <td className={`${cell} text-right`}>1</td>
               <td className={`${cell} text-right tabular-nums`}>{formatCzk(order.priceCzkExclVat)}</td>
-              <td className={`${cell} text-right tabular-nums`}>{formatCzk(vat)}</td>
+              <td className={`${cell} text-right tabular-nums`}>{withVat ? formatCzk(vat) : "neplátce"}</td>
               <td className={`${cell} text-right tabular-nums`}>{formatCzk(order.priceCzkInclVat)}</td>
             </tr>
           </tbody>
@@ -132,7 +139,8 @@ export default async function InvoicePage({ params }: PageProps<"/panel-builder/
         </div>
 
         <footer className="mt-8 border-t border-zinc-300 pt-2 text-[8pt] text-zinc-600">
-          Zálohová faktura slouží jako výzva k platbě. Daňový doklad k přijaté platbě vystavíme po připsání úhrady na účet; kredity se připíší automaticky po potvrzení platby.
+          Zálohová faktura slouží jako výzva k platbě. {withVat ? "Daňový doklad k přijaté platbě vystavíme po připsání úhrady na účet" : "Dodavatel není plátcem DPH; doklad o přijaté platbě vystavíme po připsání úhrady na účet"}
+          {labels ? "; sada QR štítků se po potvrzení platby vytiskne a odešle poštou." : "; kredity se připíší automaticky po potvrzení platby."}
           {/* Fáze 104: ochrana databáze a autorských práv */}
           <span className="mt-1 block text-[6.5pt] text-zinc-500" data-testid="doc-ip-notice">
             {IP_NOTICE}

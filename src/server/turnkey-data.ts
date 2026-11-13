@@ -7,6 +7,7 @@ import { buildQuote } from "@/lib/quoting/quote-engine";
 import { prisma } from "@/lib/prisma";
 import { inspectionBlock, nextVersion, snapshotStringify } from "@/lib/switchboard-versions";
 import { ENVIRONMENT_BLOCKER } from "@/lib/panel-builder/environments";
+import { hdoControlDesignation, hdoControlOf } from "@/lib/panel-builder/hdo";
 import { smtpTransportFromEnv } from "@/server/mailer";
 import { buildDocumentationData } from "@/server/panel-documentation";
 import { getPanelProject, getPanelProjectById, type PanelProjectDetail } from "@/server/queries/panel-builder";
@@ -42,7 +43,9 @@ export function cncBaseOf(project: PanelProjectDetail): Omit<CncInput, "entry" |
       const poles = component?.poles ?? (item.phaseAssignment?.includes("L2") ? "3P" : "1P");
       const ratedA = component?.ratedCurrentA ?? 16;
       const outgoing = (category === "MCB" || category === "RCBO") && !project.items.some((child) => child.parentItemId === item.id);
-      return { id: item.id, designation: item.designation, category, poles, modules: item.modulesWidth || component?.modulesCount || 1, ratedCurrentA: ratedA, rail: item.dinRailIndex, position, parentId: item.parentItemId, label: item.circuitLabel || null, cable: outgoing ? outgoingCable(poles, ratedA) : null };
+      // Fáze 112: stykač HDO – ovládací jistič cívky z konfigurace prvku
+      const coilFrom = category === "CONTACTOR" ? hdoControlDesignation(hdoControlOf(item.configJson), project.items) : null;
+      return { id: item.id, designation: item.designation, category, poles, modules: item.modulesWidth || component?.modulesCount || 1, ratedCurrentA: ratedA, rail: item.dinRailIndex, position, parentId: item.parentItemId, label: item.circuitLabel || null, cable: outgoing ? outgoingCable(poles, ratedA) : null, ...(coilFrom ? { coilFrom } : {}) };
     });
   const enclosure = project.enclosure;
   const rails = Math.max(1, ...devices.map((device) => device.rail));

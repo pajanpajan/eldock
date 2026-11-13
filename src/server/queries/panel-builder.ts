@@ -151,6 +151,16 @@ export const getBoardManufacturers = cache(async (): Promise<{ name: string; cou
 /** Vybraná skříň z katalogu rozvodnic (kusovník, P_max). */
 export const getProjectEnclosure = cache((enclosureId: string | null) => (enclosureId ? prisma.panelEnclosure.findUnique({ where: { id: enclosureId } }) : null));
 
+/** Fáze 112: krycí záslepky modulů z katalogu prvků (výrobce skříně → objednací číslo v kusovníku). */
+export const getBlankCovers = cache(async () =>
+  (await prisma.catalogComponent.findMany({ where: { moduleSubtype: "BLANK_COVER" }, select: { manufacturer: true, typeCode: true, articleNumber: true, modulesCount: true } })).map((row) => ({
+    manufacturer: row.manufacturer,
+    typeCode: row.typeCode,
+    articleNumber: row.articleNumber,
+    modulesCount: row.modulesCount ?? 12,
+  })),
+);
+
 /** Fáze 74: propojené rozváděče z jednoho půdorysu – nadřazený rozváděč a podružné rozváděče (jen v rámci firmy). */
 export async function getLinkedBoards(project: { id: string; parentBoardId: string | null; companyId: string | null }) {
   const scope = project.companyId ? { companyId: project.companyId } : { companyId: null };

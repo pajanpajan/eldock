@@ -3,6 +3,7 @@
 // (administrativa / výroba). Záměrně bez `server-only` (testy nad SQLite).
 
 import type { PrismaClient } from "@/generated/prisma/client";
+import type { EquipmentType } from "@/generated/prisma/enums";
 import { metersToPercent } from "@/lib/cad-grid";
 import { findFreeSpot, polygonBounds } from "@/lib/campus-layout";
 import { HLIDAC_MODES, HLIDAC_MODE_KEY, buildingGrid, devicePosition, isHlidacMode, nextBuildingCode, paletteDevice, roomZones, type HlidacMode } from "@/lib/hlidac";
@@ -136,7 +137,28 @@ export async function createHlidacBuilding(prisma: PrismaClient, input: HlidacBu
 export async function addHlidacDevice(prisma: PrismaClient, input: { floorId: string; room: string; itemId: string; mode: HlidacMode }) {
   const item = paletteDevice(input.itemId);
   if (!item) throw new WorkflowError("VALIDATION", "Neznámý spotřebič palety.");
-  const floor = await prisma.floor.findUnique({ where: { id: input.floorId }, select: { id: true, name: true, studioLayoutJson: true, floorplanSvg: true, building: { select: { id: true, code: true, plantId: true, type: true, crowdOver200: true } } } });
+  return createRoomDevice(prisma, { floorId: input.floorId, room: input.room, label: item.label, type: item.type, protectionClass: item.protectionClass, handHeld: item.handHeld, mode: input.mode });
+}
+
+export interface RoomDeviceInput {
+  floorId: string;
+  room: string;
+  label: string;
+  type: EquipmentType;
+  protectionClass: "I" | "II" | "III" | null;
+  handHeld: boolean;
+  mode: HlidacMode;
+  /** Fáze 112: výrobní číslo z importu / štítku a vlastní evidenční číslo (obsazené = další volné). */
+  serialNumber?: string | null;
+  tag?: string | null;
+}
+
+/**
+ * Spotřebič / zařízení v místnosti patra: evidenční číslo budovy, skupina používání podle režimu objektu, lhůta podle
+ * ČSN 33 1600 ed. 2 / ČSN 33 1500 a pin v místnosti (paleta Hlídače revizí, import revizních dat, sekvenční sběr).
+ */
+export async function createRoomDevice(prisma: PrismaClient, input: RoomDeviceInput) {
+  const floor = await prisma.floor.findUnique({ where: { id: input.floorId }, select: { id: true, name: true, studioLayoutJson: true, floorplanSvg: true, building: { select: { id: true, code: true, plantId: true, type: true, name: true } } } });
   if (!floor) throw new WorkflowError("NOT_FOUND", "Patro nebylo nalezeno.");
   const zone = layoutOfFloor(floor).zones.find((candidate) => candidate.key === input.room || candidate.name === input.room);
   if (!zone) throw new WorkflowError("NOT_FOUND", "Místnost nebyla nalezena.");
@@ -144,24 +166,27 @@ export async function addHlidacDevice(prisma: PrismaClient, input: { floorId: st
     prisma.equipment.count({ where: { floorId: floor.id, assignedZone: zone.name } }),
     prisma.equipment.findMany({ where: { floor: { building: { plantId: floor.building.plantId } } }, select: { tag: true } }),
   ]);
-  const tag = nextTag(item.type, { buildingCode: floor.building.code, tags: tags.map((row) => row.tag) });
+  const taken = new Set(tags.map((row) => row.tag.toUpperCase()));
+  const own = input.tag?.trim().toUpperCase();
+  const tag = own && /^[A-Z0-9][A-Z0-9-]{0,23}$/.test(own) && !taken.has(own) ? own : nextTag(input.type, { buildingCode: floor.building.code, tags: tags.map((row) => row.tag) });
   const usageGroup = HLIDAC_MODES[input.mode].usageGroup;
-  const rule = inspectionRuleFor(ruleInputFrom({ type: item.type, usageGroup, protectionClass: item.protectionClass, handHeld: item.handHeld }, floor.building));
+  const rule = inspectionRuleFor(ruleInputFrom({ type: input.type, usageGroup, protectionClass: input.protectionClass, handHeld: input.handHeld }, floor.building));
   const pin = metersToPercent(frameOfFloor(floor), devicePosition(zone, inRoom));
   const created = await prisma.equipment.create({
     data: {
       floorId: floor.id,
       tag,
-      name: `${tag} - ${item.label}`.slice(0, 160),
-      type: item.type,
-      usageGroup: ["APPLIANCE", "POWER_TOOL", "EXTENSION_CORD", "WELDER"].includes(item.type) ? usageGroup : null,
-      protectionClass: item.protectionClass,
-      handHeld: item.handHeld,
+      name: `${tag} - ${input.label}`.slice(0, 160),
+      type: input.type,
+      usageGroup: ["APPLIANCE", "POWER_TOOL", "EXTENSION_CORD", "WELDER"].includes(input.type) ? usageGroup : null,
+      protectionClass: input.protectionClass,
+      handHeld: input.handHeld,
       assignedZone: zone.name,
       pinX: pin.pinX,
       pinY: pin.pinY,
       inspectionIntervalMonths: rule.months,
       qrToken: newQrToken(),
+      ...(input.serialNumber?.trim() ? { serialNumber: input.serialNumber.trim().slice(0, 80) } : {}),
     },
     select: { id: true, tag: true, name: true, inspectionIntervalMonths: true },
   });

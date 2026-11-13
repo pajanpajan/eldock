@@ -11,6 +11,8 @@ import { actionFailure } from "@/server/panel-guards";
 import { startManualBackup } from "@/server/jobs";
 import { adjustCredits, cancelCreditOrder, confirmCreditOrder, resolveAiFeedback } from "@/server/services/credits";
 import { requireSuperadmin } from "@/server/superadmin-session";
+import { saveLabelSets, saveOperatorProfile } from "@/server/services/operator";
+import { footerLine } from "@/lib/operator";
 
 import type { ActionResult } from "./workflow";
 
@@ -103,5 +105,30 @@ export async function resolveAiFeedbackAction(reportId: string, adminNote: strin
     return { ok: true, data: undefined };
   } catch (error) {
     return actionFailure(error, "Hlášení se nepodařilo uzavřít.");
+  }
+}
+
+/** Fáze 112: údaje provozovatele (patička, faktury, VOP, zásady) – IČO, DIČ, IBAN, spisová značka, plátcovství DPH. */
+export async function saveOperatorProfileAction(input: unknown): Promise<ActionResult<{ footer: string }>> {
+  try {
+    await requireSuperadmin();
+    const profile = await saveOperatorProfile(prisma, input);
+    revalidatePath("/", "layout");
+    return { ok: true, data: { footer: footerLine(profile) } };
+  } catch (error) {
+    return actionFailure(error, "Údaje provozovatele se nepodařilo uložit.");
+  }
+}
+
+/** Fáze 112: sady QR štítků k objednání (název, počet kusů, cena bez DPH). */
+export async function saveLabelSetsAction(input: unknown): Promise<ActionResult<{ count: number }>> {
+  try {
+    await requireSuperadmin();
+    const sets = await saveLabelSets(prisma, input);
+    revalidatePath("/panel-builder/credits");
+    revalidatePath("/superadmin");
+    return { ok: true, data: { count: sets.length } };
+  } catch (error) {
+    return actionFailure(error, "Sady štítků se nepodařilo uložit.");
   }
 }

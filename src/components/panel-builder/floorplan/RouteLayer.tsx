@@ -47,6 +47,7 @@ export const RouteLayer = memo(function RouteLayer({
   onPick,
   links,
   plate = false,
+  inkOf,
 }: {
   circuits: DisplayCircuit[];
   bus: DisplayCircuit | null;
@@ -71,6 +72,8 @@ export const RouteLayer = memo(function RouteLayer({
   links?: Readonly<Record<string, string>>;
   /** Fáze 100: podkladové štítky popisků (plátno editoru; tiskový výkres je nemá). */
   plate?: boolean;
+  /** Fáze 112: barva čáry okruhu v normovém zobrazení (tiskový výkres s barevnými druhy okruhů); jinak černě. */
+  inkOf?: (circuit: DisplayCircuit) => string | null;
 }) {
   const cad = view === "cad";
   const ink = onPaper ? "#111827" : "#e4e4e7";
@@ -100,7 +103,7 @@ export const RouteLayer = memo(function RouteLayer({
               <path
                 d={pathOf(runs)}
                 fill="none"
-                stroke={cad ? ink : color}
+                stroke={cad ? (inkOf?.(circuit) ?? ink) : color}
                 strokeWidth={(cad ? stroke * (circuit.lowVoltage ? 1.8 : 2.4) : stroke * (isBus ? 2.5 : 3.5)) * (strong ? 1.7 : 1)}
                 strokeLinejoin="round"
                 strokeDasharray={dashed ? (cad ? `${unit / 2.5} ${unit / 5}` : isBus ? `${unit / 6} ${unit / 6}` : `${unit / 2} ${unit / 5}`) : undefined}

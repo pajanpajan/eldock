@@ -7,7 +7,7 @@ import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, passwordIssues } from "./pass
 import type { ManufacturerInfo } from "./panel-builder/project";
 
 // Fáze 104: 1.1 – sekce 7 o ochraně databáze prvků, algoritmů a zákazu vytěžování
-export const TERMS_VERSION = "1.2-2026-11";
+export const TERMS_VERSION = "1.3-2026-11";
 
 /** Povinný souhlas pod registrací (doslovně podle zadání). */
 export const TERMS_CONSENT =
@@ -19,6 +19,8 @@ export const PLANT_TERMS_CONSENT =
 
 /** Celé znění obchodních podmínek a vyloučení odpovědnosti (modal u registrace). */
 export const TERMS_SECTIONS: { title: string; text: string }[] = [
+  // Fáze 112: identita provozovatele z velínu (`withOperator` – {{PROVOZOVATEL}}, {{EMAIL}})
+  { title: "Provozovatel", text: "Provozovatelem platformy ELDOCK je {{PROVOZOVATEL}}. Kontakt pro dotazy, reklamace a uplatnění práv: {{EMAIL}}." },
   { title: "1. Předmět", text: "Platforma ELDOCK (dále jen „platforma“) poskytuje registrovaným firmám softwarové nástroje pro tvorbu a evidenci elektrotechnické dokumentace: AI Panel Builder pro výrobní dokumentaci rozváděčů a Průmyslový dok pro správu výrobních závodů, dokumentace a revizí." },
   { title: "2. Pomocný nástroj", text: "Výstupy platformy (rozpoznání přístrojů z fotografie, návrh zapojení, výpočet oteplení dle IEC TR 60890, technické údaje, prohlášení o shodě a výrobní štítek) jsou podkladem pro odborně způsobilou osobu. Nenahrazují projekt, kusovou zkoušku ani odborné posouzení." },
   { title: "3. Odpovědnost výrobce rozváděče", text: "Výrobcem rozváděče ve smyslu ČSN EN IEC 61439 a nařízení vlády č. 118/2016 Sb. (elektrická zařízení nízkého napětí) a č. 117/2016 Sb. (elektromagnetická kompatibilita) je registrovaná firma. Ta odpovídá za správnost návrhu, dimenzování přístrojů, ověření oteplení, provedení kusové zkoušky, shodu s technickými normami a bezpečnostními předpisy i za vydání prohlášení o shodě a umístění označení CE." },

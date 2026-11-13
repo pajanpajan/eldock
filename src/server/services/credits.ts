@@ -1,4 +1,6 @@
 import type { PrismaClient } from "@/generated/prisma/client";
+import { labelCountOf, priceWithVat } from "@/lib/operator";
+import { labelSetsOf, operatorProfileOf } from "./operator";
 import { COMPANY_INFO } from "@/lib/company";
 import {
   ACTION_PRICES,
@@ -16,7 +18,6 @@ import {
   subscriptionOf,
   subscriptionUntilAfter,
   switchboardCharge,
-  withVat,
   type BankAccount,
   type ChargePlan,
   type PaywallInfo,
@@ -48,9 +49,15 @@ export function bankAccount(env: Partial<Record<string, string | undefined>> = p
 
 /** Nová objednávka balíčku s variabilním symbolem roku (při souběhu se VS zkusí znovu). */
 export async function createCreditOrder(prisma: PrismaClient, companyId: string, packageCode: string, now = new Date()) {
-  const pkg = orderProduct(packageCode);
+  // Fáze 112: sada QR štítků (cena a počet z velínu) – objednávka bez kreditů, po úhradě série štítků k odeslání
+  const labels = labelCountOf(packageCode);
+  const labelSet = labels ? (await labelSetsOf(prisma)).find((set) => set.code === packageCode) : null;
+  if (labels && !labelSet) throw new WorkflowError("VALIDATION", "Tato sada QR štítků se teď neprodává.");
+  const pkg = labelSet ? { code: labelSet.code, credits: 0, priceExclVat: labelSet.priceExclVat, kind: "LABELS" as const, subscription: undefined } : orderProduct(packageCode);
   // Fáze 111: balíčky nového ceníku a předplatné PRO (QR platba); tarify budov a průmyslu aktivuje obchod
   if (!pkg || pkg.kind === "LEGACY") throw new WorkflowError("VALIDATION", "Neznámý balíček kreditů.");
+  // Fáze 112: cena s DPH podle plátcovství provozovatele (neplátce = cena bez DPH je konečná)
+  const operator = await operatorProfileOf(prisma);
   if (pkg.kind === "SUBSCRIPTION" && !subscriptionOf(pkg.subscription?.plan)?.selfService) throw new WorkflowError("VALIDATION", "Tento tarif aktivuje obchod ELDOCK – napište nám přes Kontakt & Spolupráce.");
   const year = now.getFullYear();
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -63,7 +70,7 @@ export async function createCreditOrder(prisma: PrismaClient, companyId: string,
           packageCode: pkg.code,
           creditsCount: pkg.credits,
           priceCzkExclVat: pkg.priceExclVat,
-          priceCzkInclVat: withVat(pkg.priceExclVat),
+          priceCzkInclVat: priceWithVat(pkg.priceExclVat, operator.vatPayer),
           createdAt: now,
         },
       });
@@ -88,9 +95,11 @@ export async function confirmCreditOrder(prisma: PrismaClient, orderId: string, 
     if (!count) throw new WorkflowError("INVALID_STATE", `Objednávka VS ${order.variableSymbol} už není čekající (${order.status === "PAID" ? "uhrazena" : "stornována"}).`);
     const product = orderProduct(order.packageCode);
     const current = await tx.registeredCompany.findUniqueOrThrow({ where: { id: order.companyId }, select: { creditsValidUntil: true, subscriptionUntil: true, firstTopUpBonusAt: true } });
-    const credits = product?.kind === "LEGACY" ? order.creditsCount * ACTION_PRICES.switchboard : order.creditsCount;
+    // Fáze 112: sada QR štítků – bez kreditů a bez bonusu k prvnímu dobití
+    const labels = labelCountOf(order.packageCode);
+    const credits = labels ? 0 : product?.kind === "LEGACY" ? order.creditsCount * ACTION_PRICES.switchboard : order.creditsCount;
     const subscription = product?.kind === "SUBSCRIPTION" && product.subscription ? product.subscription : null;
-    const bonus = !current.firstTopUpBonusAt && product?.kind !== "SUBSCRIPTION";
+    const bonus = !labels && !current.firstTopUpBonusAt && product?.kind !== "SUBSCRIPTION";
     await tx.registeredCompany.update({
       where: { id: order.companyId },
       data: {
@@ -101,13 +110,17 @@ export async function confirmCreditOrder(prisma: PrismaClient, orderId: string, 
     });
     if (credits) await grantCredits(tx, order.companyId, credits, { reason: subscription ? "SUBSCRIPTION" : "TOP_UP", refType: "CREDIT_ORDER", refId: order.id, note: `${product?.title ?? order.packageCode} – VS ${order.variableSymbol}` });
     const company = await tx.registeredCompany.findUniqueOrThrow({ where: { id: order.companyId }, select: { id: true, companyName: true, creditsRemaining: true, ico: true, email: true } });
-    return { order: { ...order, status: "PAID" as const, paidAt: now }, company, bonus };
+    return { order: { ...order, status: "PAID" as const, paidAt: now }, company, bonus, labels };
   });
+  // Fáze 112: uhrazená sada QR štítků = série v registru štítků pro firmu (k vytištění a odeslání poštou)
+  if (result.labels) {
+    await createLabelBatch(prisma, { companyName: result.company.companyName, ico: result.company.ico, email: result.company.email, purpose: "APPLIANCE", count: result.labels, note: `Objednávka sady ${result.labels} ks QR štítků ELDOCK (VS ${result.order.variableSymbol}) – vytisknout a odeslat poštou` });
+  }
   // Bonus k prvnímu dobití: série 20 stříbrných QR štítků pro firmu (vlastní transakce registru štítků)
   if (result.bonus) {
     await createLabelBatch(prisma, { companyName: result.company.companyName, ico: result.company.ico, email: result.company.email, purpose: "SWITCHBOARD", count: FIRST_TOP_UP_LABELS, note: `Bonus k prvnímu dobití kreditů (VS ${result.order.variableSymbol}) – ${FIRST_TOP_UP_LABELS} ks stříbrných QR štítků ELDOCK, odeslat poštou` }).catch((error: unknown) => console.error("Bonus QR štítků se nepodařilo založit", error));
   }
-  return { order: result.order, company: { id: result.company.id, companyName: result.company.companyName, creditsRemaining: result.company.creditsRemaining }, bonusLabels: result.bonus ? FIRST_TOP_UP_LABELS : 0 };
+  return { order: result.order, company: { id: result.company.id, companyName: result.company.companyName, creditsRemaining: result.company.creditsRemaining }, bonusLabels: result.bonus ? FIRST_TOP_UP_LABELS : 0, orderedLabels: result.labels ?? 0 };
 }
 
 export async function cancelCreditOrder(prisma: PrismaClient, orderId: string) {

@@ -14,6 +14,23 @@ export const HLIDAC_MODES: Record<HlidacMode, { id: HlidacMode; icon: string; ti
 };
 export const isHlidacMode = (value: unknown): value is HlidacMode => value === "OFFICE" || value === "FACTORY";
 
+/**
+ * Fáze 112: druh zařízení podle názvu (import revizních dat, sekvenční sběr): prodlužovačka, ruční nářadí, svářečka,
+ * rozváděč, stroj, jinak spotřebič třídy I.
+ */
+export function guessDeviceType(name: string): { type: EquipmentType; protectionClass: "I" | "II" | "III" | null; handHeld: boolean } {
+  const text = name
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase();
+  if (/prodluz|prodluzovac|pohybliv\w* privod|rozbocov|privodni snura|extension/.test(text)) return { type: "EXTENSION_CORD", protectionClass: "I", handHeld: true };
+  if (/vrtac|brusk|flexa|pila|sroubov|kladiv|bourac|nářadí|naradi|fen horkovzd|aku |hoblik/.test(text)) return { type: "POWER_TOOL", protectionClass: "II", handHeld: true };
+  if (/svarec|svářeč|svarovac|welder/.test(text)) return { type: "WELDER", protectionClass: "I", handHeld: false };
+  if (/rozvadec|rozvodnic|switchboard|^r[hp]\d*\b/.test(text)) return { type: "SWITCHBOARD", protectionClass: null, handHeld: false };
+  if (/stroj|soustruh|frez|lis\b|kompresor|machine|linka/.test(text)) return { type: "MACHINE", protectionClass: "I", handHeld: false };
+  return { type: "APPLIANCE", protectionClass: "I", handHeld: false };
+}
+
 export interface PaletteDevice {
   id: string;
   emoji: string;

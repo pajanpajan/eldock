@@ -9,10 +9,11 @@ import { PageHeader } from "@/components/common/PageHeader";
 import { RapidInspection } from "@/components/inspections/RapidInspection";
 import { Button } from "@/components/ui/button";
 import { inspectionsHref } from "@/lib/routes";
-import { getRapidQueue } from "@/server/queries/inspections";
+import { getRapidQueue, getRoomTargets } from "@/server/queries/inspections";
+import { ScanSnapLoop } from "@/components/hlidac/ScanSnapLoop";
 import { getPlants } from "@/server/queries/plant";
 import { getFeatures } from "@/server/modules";
-import { getCurrentAccount, getRememberedPlantId } from "@/server/session";
+import { getCurrentAccount, getCurrentUser, getRememberedPlantId } from "@/server/session";
 
 export const metadata: Metadata = { title: "Rychlá revize" };
 
@@ -26,6 +27,8 @@ export default async function RapidInspectionPage({ searchParams }: PageProps<"/
   const planIds = typeof params.ids === "string" ? params.ids.split(",").filter(Boolean).slice(0, 500) : [];
   const plant = role === "MAINTENANCE" ? (plants.find((entry) => entry.id === rememberedId) ?? plants[0]) : undefined;
   const items = await getRapidQueue(plant?.id, new Date(), account.types);
+  // Fáze 112: patra s místnostmi pro sekvenční sběr
+  const [targets, user] = await Promise.all([getRoomTargets(), getCurrentUser()]);
 
   return (
     <>
@@ -33,12 +36,16 @@ export default async function RapidInspectionPage({ searchParams }: PageProps<"/
         title="Rychlá revize"
         description={`${plant ? plant.name : "Všechny závody"} · spotřebiče, nářadí a svářečky dle ČSN 33 1600 ed. 2 a ČSN EN 60974-4.`}
         actions={
-          <Button asChild variant="outline" className="touch-target gap-2">
-            <Link href={inspectionsHref}>
-              <ListChecks className="size-4" aria-hidden />
-              Přehled revizí
-            </Link>
-          </Button>
+          <>
+            {/* Fáze 112: ⚡ sekvenční sběr v místnosti (Pípni QR ➔ Vyfoť štítek ➔ Další kus) s offline frontou */}
+            {targets.length ? <ScanSnapLoop floors={targets} inspectorName={user?.name ?? null} /> : null}
+            <Button asChild variant="outline" className="touch-target gap-2">
+              <Link href={inspectionsHref}>
+                <ListChecks className="size-4" aria-hidden />
+                Přehled revizí
+              </Link>
+            </Button>
+          </>
         }
       />
       {items.length ? (
