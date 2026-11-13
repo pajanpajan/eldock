@@ -5,7 +5,7 @@ revize VTZ, změny skutečného provedení mezi údržbou v hale a externími CA
 rozváděčů. Pracovní název byl Digitry, od fáze 20 je to **ELDOCK**. Produkce běží na https://eldock.cz.
 Původní zadání MVP je v `docs/archiv/SPECIFIKACE-MVP.md`, celá historie fází 0–35 v `docs/archiv/PLAN-faze-00-35.md`, celý archiv v jednom souboru `docs/archiv/ARCHIV-KOMPLET.md`.
 
-## 1. Milníky (fáze 0–111 nasazené; 112 čeká na nasazení)
+## 1. Milníky (fáze 0–112 nasazené)
 
 | Fáze | Milník |
 |---|---|
@@ -316,7 +316,7 @@ Když uživatel řekne **„nasaď to na produkci“** nebo **„deploy“**:
 
 **Spuštění – uspořádání skříně, kredity, Hlídač revizí (fáze 111):** migrace `20261113162042_phase111_layout_credits_nameplate` (nové sloupce `Equipment`, `PanelBoardProject`, `Floorplan` a `RegisteredCompany`, tabulka `CreditTransaction`; převod zůstatků kreditů 1 : 15 se záznamem `CONVERSION`) → před nasazením záloha databáze (výše). Migraci použije start kontejneru; na serveru nic dalšího. Bez `GEMINI_API_KEY` čte AI čtečka štítků jen vložený text. Nasazeno 2026-11-13 (commit `ff755af`, migrace použita po záloze databáze), verify:demo 12 / 12.
 
-**Hřebeny, HDO, import revizí, Scan & Snap a provozovatel (fáze 112):** migrace `20261113210000_phase112_operator_offline` (tabulky `PlatformSetting` a `OfflineSubmission`) → před nasazením záloha databáze (výše). Po nasazení ve velínu (🏢 Provozovatel & fakturace) doplnit IČO, DIČ, spisovou značku a případně sady QR štítků; do té doby platí výchozí údaje (ELDOCK.cz · Pavel Janoušek · Jablonec nad Nisou · info@eldock.cz).
+**Hřebeny, HDO, import revizí, Scan & Snap a provozovatel (fáze 112):** migrace `20261113210000_phase112_operator_offline` (tabulky `PlatformSetting` a `OfflineSubmission`) → před nasazením záloha databáze (výše). Po nasazení ve velínu (🏢 Provozovatel & fakturace) doplnit IČO, DIČ, spisovou značku a případně sady QR štítků; do té doby platí výchozí údaje (ELDOCK.cz · Pavel Janoušek · Jablonec nad Nisou · info@eldock.cz). Nasazeno 2026-11-13 (commit `f0fb087`, migrace použita po záloze databáze), verify:demo 12 / 12.
 
 **Katalog ABB pro ČR (fáze 88):** bez migrace. Rozvodnice Mistral / ComfortLine CU, přístroje a příslušenství ABB i vazby příslušenství zapíše přírůstkový seed `db:panel-builder` při startu kontejneru (upsert, orientační řádek téhož typu dostane objednací číslo, nic se nemaže); ověřené rozvodnice převezmou řádky exportu se stejným objednacím číslem (MISTRAL65, CU24R / CU25R). Na serveru nic dalšího. Nasazeno 2026-11-10 (commit `1aacfdb`; seed „katalog 838 prvků aktualizován“, 163 ověřených skříní, kontejner `healthy`).
 
