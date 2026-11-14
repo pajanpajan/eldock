@@ -165,7 +165,8 @@ describe("fáze 112 – provozovatel, QR platba a sady QR štítků", () => {
     await expect(createCreditOrder(prisma, company.id, "LABELS_50")).rejects.toThrow(/neprodává/);
     await saveLabelSets(prisma, [{ title: "Sada 50 stříbrných QR štítků ELDOCK 30 × 15 mm", count: 50, priceExclVat: 690 }]);
     const order = await createCreditOrder(prisma, company.id, "LABELS_50");
-    expect(order).toMatchObject({ packageCode: "LABELS_50", creditsCount: 0, priceCzkExclVat: 690, priceCzkInclVat: 690 });
+    // Fáze 113: kód objednávky podle složení sady
+    expect(order).toMatchObject({ packageCode: "LABELS_A50", creditsCount: 0, priceCzkExclVat: 690, priceCzkInclVat: 690 });
     const confirmed = await confirmCreditOrder(prisma, order.id);
     expect(confirmed).toMatchObject({ orderedLabels: 50, bonusLabels: 0 });
     expect(confirmed.company.creditsRemaining).toBe(0);

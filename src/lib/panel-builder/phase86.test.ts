@@ -13,14 +13,23 @@ const row = (mpn: string) => rows.find((enclosure) => enclosure.articleNumber ==
 const cascade = (manufacturer: string) => enclosureSeries([...rows, ...matrix].filter((enclosure) => enclosure.manufacturer === manufacturer)).map((series) => `${series.label} (${series.count})`);
 
 /** Oficiální stránky výrobců, ze kterých údaje jsou. */
-const SOURCES: Record<string, string> = { ABB: "https://nizke-napeti.cz.abb.com/", Hager: "https://hager.com/cz/katalog/produkt/", Schrack: "https://www.schrack.cz/eshop/" };
+const SOURCES: Record<string, string> = {
+  ABB: "https://nizke-napeti.cz.abb.com/",
+  Hager: "https://hager.com/cz/katalog/produkt/",
+  Schrack: "https://www.schrack.cz/eshop/",
+  // Fáze 113
+  OEZ: "https://www.oez.cz/",
+  Schneider: "https://www.se.com/cz/cs/product/",
+  Eaton: "https://www.eaton.com/cz/cs-cz/skuPage.",
+};
 
 describe("fáze 86 – ověřené rozvodnice z katalogů výrobců", () => {
   it("počty modelů po výrobcích a řadách", () => {
     // Fáze 88 přidala 72 rozvodnic ABB (Mistral41W / 41F, Mistral65 / 65H, ComfortLine CU)
-    expect(VERIFIED_ENCLOSURES).toHaveLength(163);
+    // Fáze 113: + OEZ 71, Schneider 44, Eaton 92
+    expect(VERIFIED_ENCLOSURES).toHaveLength(370);
     const count = (key: "manufacturer" | "series") => Object.fromEntries([...new Set(VERIFIED_ENCLOSURES.map((enclosure) => enclosure[key]))].map((value) => [value, VERIFIED_ENCLOSURES.filter((enclosure) => enclosure[key] === value).length]));
-    expect(count("manufacturer")).toEqual({ ABB: 103, Hager: 23, Schrack: 37 });
+    expect(count("manufacturer")).toEqual({ ABB: 103, Hager: 23, Schrack: 37, OEZ: 71, Schneider: 44, Eaton: 92 });
     expect(count("series")).toEqual({
       "ComfortLine CA (rozteč 125 mm)": 16,
       "ComfortLine CA (rozteč 150 mm)": 15,
@@ -34,6 +43,15 @@ describe("fáze 86 – ověřené rozvodnice z katalogů výrobců", () => {
       "Univers FWU": 14,
       "TOPO nástěnná": 21,
       "TOPO zapuštěná": 16,
+      RZA: 8,
+      RZB: 14,
+      RZG: 39,
+      RZI: 10,
+      Pragma: 30,
+      "Mini Pragma": 14,
+      KLV: 32,
+      "KLV Multimedia": 8,
+      "xEnergy Basic BF": 52,
     });
   });
 
@@ -60,16 +78,19 @@ describe("fáze 86 – ověřené rozvodnice z katalogů výrobců", () => {
       expect(enclosure.modulesPerRow).toBeLessThanOrEqual(MAX_RAIL_MODULES);
       expect(Math.min(enclosure.widthMm, enclosure.heightMm, enclosure.depthMm)).toBeGreaterThan(90);
       expect(enclosure.ipRating).toMatch(/^IP\d\d$/);
-      expect(["SURFACE", "FLUSH"]).toContain(enclosure.installation);
+      expect(["SURFACE", "FLUSH", "HOLLOW_WALL"]).toContain(enclosure.installation);
       expect(["PLASTIC", "PAINTED_STEEL"]).toContain(enclosure.material);
       expect(enclosure.dataSource).toBe(VERIFIED_ENCLOSURE_SOURCE);
       // Odkaz vede na oficiální stránku výrobce s týmž objednacím číslem a je i v popisu
       expect(enclosure.sourceUrl.startsWith(SOURCES[enclosure.manufacturer])).toBe(true);
-      expect(enclosure.sourceUrl.toLowerCase()).toContain(enclosure.articleNumber.replace(/-+$/, "").toLowerCase());
+      // OEZ: stránka výrobku podle typu (objednací číslo je v údajích stránky)
+      expect(enclosure.sourceUrl.toLowerCase()).toContain((enclosure.manufacturer === "OEZ" ? enclosure.model.replace("DistriTon ", "") : enclosure.articleNumber).replace(/-+$/, "").toLowerCase());
       expect(enclosure.description).toContain(`Zdroj: ${enclosure.sourceUrl}`);
       expect(enclosureSourceUrl(enclosure.description)).toBe(enclosure.sourceUrl);
-      // P_max jen tam, kde ho výrobce uvádí (Schrack „ztrátový výkon“)
-      expect(enclosure.pMaxW === null).toBe(enclosure.manufacturer !== "Schrack");
+      // P_max jen tam, kde ho výrobce uvádí (Schrack a OEZ „ztrátový výkon“, Eaton IEC 60890 ΔT 35 K)
+      expect(enclosure.pMaxW === null).toBe(!["Schrack", "OEZ", "Eaton"].includes(enclosure.manufacturer));
+      // EAN jen z dat výrobce (13 číslic)
+      if (enclosure.ean) expect(enclosure.ean).toMatch(/^\d{13}$/);
     }
     expect(verifiedEnclosureData(VERIFIED_ENCLOSURES[0])).not.toHaveProperty("sourceUrl");
   });

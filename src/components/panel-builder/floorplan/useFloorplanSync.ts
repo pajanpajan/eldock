@@ -6,6 +6,7 @@ import { parseDraft, type FloorplanDraft } from "@/lib/panel-builder/floorplan-e
 import { clearBackup, writeBackup } from "@/lib/panel-builder/floorplan-storage";
 import { createFloorplanAction, loadFloorplanAction, saveFloorplanAction } from "@/server/actions/floorplans";
 import { showPaywall } from "@/components/credits/paywall";
+import { NEW_VERSION_MESSAGE, isStaleDeployment, reloadForNewVersion } from "@/lib/stale-deploy";
 
 // Fáze 64: průběžné ukládání 2D půdorysu na server. Změny se uloží 0,8 s po poslední úpravě (fáze 78; při nepřetržité
 // práci nejpozději po 10 s), nový půdorys vznikne na serveru při první změně (a dostane kód FP-001 …). Před odesláním se změny zálohují v prohlížeči;
@@ -28,9 +29,11 @@ export type SyncStatus =
   | { kind: "pending" }
   | { kind: "saving" }
   | { kind: "error"; message: string }
-  | { kind: "conflict"; serverVersion: number };
+  | { kind: "conflict"; serverVersion: number }
+  /** Fáze 113: stránka je ze starší verze aplikace (po nasazení) – změny jsou v prohlížeči, stránka se načte znovu. */
+  | { kind: "stale" };
 
-type Phase = { kind: "idle" } | { kind: "saving" } | { kind: "error"; message: string; attempt: number } | { kind: "conflict"; serverVersion: number };
+type Phase = { kind: "idle" } | { kind: "saving" } | { kind: "error"; message: string; attempt: number } | { kind: "conflict"; serverVersion: number } | { kind: "stale" };
 
 class SaveError extends Error {}
 
@@ -132,6 +135,16 @@ export function useFloorplanSync({
         if (draftRef.current === snapshot) clearBackup(idRef.current);
         return true;
       } catch (error) {
+        // Fáze 113: po nasazení nové verze server Server Action staré stránky nezná – záloha v prohlížeči a znovunačtení
+        // (po načtení editor zálohu převezme a hned ji uloží novou verzí aplikace)
+        if (isStaleDeployment(error)) {
+          if (!off.current) writeBackup(idRef.current, { baseVersion: idRef.current ? version.current : null, draft: draftRef.current, at: Date.now() });
+          setPhase({ kind: "stale" });
+          window.setTimeout(() => {
+            if (!reloadForNewVersion()) setPhase({ kind: "error", message: NEW_VERSION_MESSAGE, attempt: 1 });
+          }, 1200);
+          return false;
+        }
         const message = error instanceof SaveError ? error.message : OFFLINE;
         setPhase((current) => ({ kind: "error", message, attempt: current.kind === "error" ? current.attempt + 1 : 1 }));
         return false;
@@ -226,7 +239,9 @@ export function useFloorplanSync({
   const currentId = useCallback(() => idRef.current, []);
 
   const status: SyncStatus =
-    phase.kind === "conflict"
+    phase.kind === "stale"
+      ? { kind: "stale" }
+      : phase.kind === "conflict"
       ? { kind: "conflict", serverVersion: phase.serverVersion }
       : phase.kind === "error"
         ? { kind: "error", message: phase.message }

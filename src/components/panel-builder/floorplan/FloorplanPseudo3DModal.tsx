@@ -615,6 +615,12 @@ export function FloorplanPseudo3DModal({ draft, onHeights }: { draft: FloorplanD
           )}
         </div>
         {selected ? <HeightEditor key={`${selected.id}-${selected.z}`} label={`${selected.label} (${KIND_LABEL[selected.kind]})`} value={selected.z} onChange={(heightMm) => onHeights([selected.id], heightMm)} /> : <p className="text-xs text-muted-foreground">Klikněte na prvek (v pohledu na stěnu ho můžete i táhnout nahoru / dolů).</p>}
+        {/* Fáze 113: místnosti rozpoznané z PDF (nebo nakreslené) = obvodové stěny i vnitřní příčky mezi pokoji */}
+        {open && draft.rooms.length && draft.background ? (
+          <p className="rounded-lg border border-emerald-500/50 bg-emerald-500/10 px-2 py-1 text-xs text-emerald-100" data-testid="pseudo3d-room-walls">
+            🧱 Stěny a vnitřní příčky z místností podlaží ({draft.rooms.length}) – poloprůhledně 20 % nad PDF podkladem
+          </p>
+        ) : null}
         {pdfMode ? (
           <p className="rounded-lg border border-sky-500/50 bg-sky-500/10 px-2 py-1 text-xs text-sky-100" data-testid="pseudo3d-pdf-mode">
             {draft.background

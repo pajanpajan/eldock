@@ -30,6 +30,8 @@ export function etimEnclosure(row: EtimEnclosure): VerifiedEnclosure {
     installation: row.installation,
     material: row.material,
     pMaxW: null,
+    // Fáze 113: EAN do vlastního sloupce (dál i v popisu)
+    ean: row.gtin ?? null,
     dataSource: VERIFIED_ENCLOSURE_SOURCE,
     description: `${row.description} – ${row.rows} ${rowsWord(row.rows)} × ${row.modulesPerRow} M, ${row.ipRating}${row.gtin ? `, EAN ${row.gtin}` : ""}. Zdroj: ${page} (data ABB ETIM 9.0, ELSB_ETIM-9.0_2026-05)`,
     sourceUrl: page,

@@ -32,6 +32,16 @@ function SaveState({ status, onRetry }: { status: SyncStatus; onRetry: () => voi
         {status.kind === "saving" ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <CircleDot className="size-3.5" aria-hidden />} {status.kind === "saving" ? "Ukládám…" : "Neuložené změny"}
       </span>
     );
+  // Fáze 113: stránka ze starší verze aplikace – změny jsou zazálohované v prohlížeči, stránka se načte znovu
+  if (status.kind === "stale")
+    return (
+      <span className={cn(base, "border-sky-400/60 text-sky-100")} data-testid="floorplan-save-status" data-state="stale" role="status" title="Na serveru je nová verze ELDOCK – po načtení se změny z prohlížeče hned uloží.">
+        <Loader2 className="size-3.5 animate-spin" aria-hidden /> 🔄 Nová verze ELDOCK – načítám znovu…
+        <button type="button" className="underline underline-offset-2" onClick={() => window.location.reload()}>
+          Načíst
+        </button>
+      </span>
+    );
   if (status.kind === "error")
     return (
       <span className={cn(base, "border-red-500/60 text-red-200")} data-testid="floorplan-save-status" data-state="error" role="status" title={status.message}>

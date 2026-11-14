@@ -12,6 +12,8 @@ import { startManualBackup } from "@/server/jobs";
 import { adjustCredits, cancelCreditOrder, confirmCreditOrder, resolveAiFeedback } from "@/server/services/credits";
 import { requireSuperadmin } from "@/server/superadmin-session";
 import { saveLabelSets, saveOperatorProfile } from "@/server/services/operator";
+import { clearBackupStorage, clearSmtpSettings, loadPlatformSettings, saveBackupStorage, saveSmtpSettings } from "@/server/services/platform-settings";
+import { sendSmtpTest } from "@/server/mailer";
 import { footerLine } from "@/lib/operator";
 
 import type { ActionResult } from "./workflow";
@@ -55,6 +57,22 @@ export async function adjustCreditsAction(companyId: string, change: z.input<typ
   }
 }
 
+/**
+ * Fáze 113: ⭐ neomezený přístup firmy (účet provozovatele, ukázková firma pro prezentace) – nové projekty a půdorysy
+ * v plné verzi bez kreditů, Hlídač revizí bez limitu zařízení.
+ */
+export async function setUnlimitedAccessAction(companyId: string, unlimited: boolean): Promise<ActionResult<{ unlimitedAccess: boolean }>> {
+  if (!id.safeParse(companyId).success || typeof unlimited !== "boolean") return { ok: false, error: "Neplatná firma." };
+  try {
+    await requireSuperadmin();
+    const company = await prisma.registeredCompany.update({ where: { id: companyId }, data: { unlimitedAccess: unlimited }, select: { unlimitedAccess: true } });
+    revalidatePath("/superadmin");
+    return { ok: true, data: company };
+  } catch (error) {
+    return actionFailure(error, "Přístup se nepodařilo změnit.");
+  }
+}
+
 /** [ ✅ Potvrdit úhradu a připsat kredity ] – transakce PENDING → PAID + kredity firmě. */
 export async function confirmCreditOrderAction(orderId: string): Promise<ActionResult<{ creditsRemaining: number; companyName: string }>> {
   if (!id.safeParse(orderId).success) return { ok: false, error: "Neplatná objednávka." };
@@ -92,6 +110,69 @@ export async function runBackupNowAction(): Promise<ActionResult> {
   } catch (error) {
     if (error instanceof Error && !(error.name === "WorkflowError")) return { ok: false, error: error.message };
     return actionFailure(error, "Zálohu se nepodařilo spustit.");
+  }
+}
+
+/** Fáze 113: ⚙️ SMTP z velínu (heslo se ukládá šifrovaně; prázdné heslo = ponechat uložené). */
+export async function saveSmtpSettingsAction(input: unknown): Promise<ActionResult<{ host: string; port: number }>> {
+  try {
+    await requireSuperadmin();
+    const saved = await saveSmtpSettings(prisma, input);
+    revalidatePath("/superadmin");
+    return { ok: true, data: { host: saved.host, port: saved.port } };
+  } catch (error) {
+    return actionFailure(error, "Nastavení SMTP se nepodařilo uložit.");
+  }
+}
+
+/** Fáze 113: [ Otestovat SMTP ] – ověření spojení a zkušební e-mail na zadanou adresu. */
+export async function testSmtpAction(to: string): Promise<ActionResult<{ to: string; via: "env" | "velin" }>> {
+  const email = z.string().trim().email().max(200).safeParse(to);
+  if (!email.success) return { ok: false, error: "Zadejte platný e-mail pro zkušební zprávu." };
+  try {
+    await requireSuperadmin();
+    await loadPlatformSettings(prisma);
+    const result = await sendSmtpTest(email.data);
+    return { ok: true, data: { to: email.data, via: result.via } };
+  } catch (error) {
+    if (error instanceof Error && error.name !== "WorkflowError") return { ok: false, error: error.message };
+    return actionFailure(error, "Zkušební e-mail se nepodařilo odeslat.");
+  }
+}
+
+/** Fáze 113: ☁️ úložiště záloh mimo server (S3 / Cloudflare R2) z velínu – klíče a heslo šifrování šifrovaně. */
+export async function saveBackupStorageAction(input: unknown): Promise<ActionResult<{ bucket: string }>> {
+  try {
+    await requireSuperadmin();
+    const saved = await saveBackupStorage(prisma, input);
+    revalidatePath("/superadmin");
+    return { ok: true, data: { bucket: saved.bucket } };
+  } catch (error) {
+    return actionFailure(error, "Úložiště záloh se nepodařilo uložit.");
+  }
+}
+
+/** Fáze 113: odebrání SMTP z velínu. */
+export async function clearSmtpSettingsAction(): Promise<ActionResult> {
+  try {
+    await requireSuperadmin();
+    await clearSmtpSettings(prisma);
+    revalidatePath("/superadmin");
+    return { ok: true, data: undefined };
+  } catch (error) {
+    return actionFailure(error, "SMTP se nepodařilo odebrat.");
+  }
+}
+
+/** Fáze 113: odebrání úložiště záloh z velínu – zálohy dál místně na serveru. */
+export async function clearBackupStorageAction(): Promise<ActionResult> {
+  try {
+    await requireSuperadmin();
+    await clearBackupStorage(prisma);
+    revalidatePath("/superadmin");
+    return { ok: true, data: undefined };
+  } catch (error) {
+    return actionFailure(error, "Úložiště záloh se nepodařilo odebrat.");
   }
 }
 

@@ -6,6 +6,8 @@ import type { EnclosureMaterial, EnclosureType } from "@/generated/prisma/enums"
 
 /** Výrobci skříní v modalu (karty s logy). */
 export const ENCLOSURE_MANUFACTURERS = ["ABB", "Eaton", "Hager", "OEZ", "Noark", "Schrack", "Hensel", "Rittal"] as const;
+/** Fáze 113: výrobci ve výběru skříně – navíc Schneider Electric (jen ověřené typy Pragma, bez orientační matice). */
+export const ENCLOSURE_BRANDS = [...ENCLOSURE_MANUFACTURERS, "Schneider"] as const;
 
 export type EnclosureInstallation = "FLUSH" | "SURFACE" | "HOLLOW_WALL" | "FLOOR";
 

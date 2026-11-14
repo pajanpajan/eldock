@@ -30,6 +30,8 @@ const companySelect = {
   creditsValidUntil: true,
   subscriptionPlan: true,
   subscriptionUntil: true,
+  // Fáze 113: ⭐ neomezený přístup (provozovatel / ukázková firma)
+  unlimitedAccess: true,
   plantId: true,
   termsVersion: true,
   termsAcceptedAt: true,

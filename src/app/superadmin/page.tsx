@@ -1,5 +1,10 @@
 import type { Metadata } from "next";
 import { OperatorSettingsForm } from "@/components/superadmin/OperatorSettingsForm";
+import { PlatformSettingsForm } from "@/components/superadmin/PlatformSettingsForm";
+import { brandEnv } from "@/lib/auth";
+import { LOCAL_BACKUP_INFO } from "@/lib/platform-settings";
+import { backupConfig } from "@/server/backup/config";
+import { loadPlatformSettings, publicPlatformSettings } from "@/server/services/platform-settings";
 import { getLabelSets, getOperatorProfile, paymentAccount } from "@/server/operator";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -12,7 +17,7 @@ import { ManufacturersTab } from "@/components/superadmin/ManufacturersTab";
 import { PoolTab } from "@/components/superadmin/PoolTab";
 import { QrLabelsTab } from "@/components/superadmin/QrLabelsTab";
 import { NewsletterComposer } from "@/components/superadmin/NewsletterComposer";
-import { BackupNowButton, ClosureControls, CreditControls, OrderActions, ResolveFeedback } from "@/components/superadmin/SuperadminControls";
+import { BackupNowButton, ClosureControls, CreditControls, OrderActions, ResolveFeedback, UnlimitedAccessToggle } from "@/components/superadmin/SuperadminControls";
 import { DATA_REQUESTER_LABELS, DATA_REQUEST_KIND_LABELS, DATA_REQUEST_STATUS_LABELS } from "@/lib/data-requests";
 import { TESTER_COMPANY } from "@/lib/registered-company";
 import { getSuperadminDataRequests } from "@/server/queries/data-requests";
@@ -50,6 +55,8 @@ const TABS = [
   { id: "feedback", label: "Hlášení chyb AI a fotky" },
   { id: "newsletter", label: "Newsletter" },
   { id: "backups", label: "Zálohy a data" },
+  // Fáze 113: SMTP a úložiště záloh mimo server zadané webem (hesla šifrovaně)
+  { id: "nastaveni", label: "⚙️ Nastavení SMTP & Cloud záloh (R2/S3)" },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
@@ -64,7 +71,7 @@ export default async function SuperadminPage({ searchParams }: PageProps<"/super
   const daysParam = Number((await searchParams).dni);
   const days = [7, 30, 90, 365].includes(daysParam) ? daysParam : 30;
   const filterParam = (await searchParams).filtr;
-  const [overview, unread] = await Promise.all([getSuperadminOverview(), contactUnreadCount(prisma)]);
+  const [overview, unread, operator] = await Promise.all([getSuperadminOverview(), contactUnreadCount(prisma), getOperatorProfile()]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -72,7 +79,7 @@ export default async function SuperadminPage({ searchParams }: PageProps<"/super
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" data-testid="superadmin-kpi">
         <KpiTile label="Registrované firmy" value={overview.panelCompanies + overview.plantCompanies} hint={`Panel Builder ${overview.panelCompanies} · Závody ${overview.plantCompanies}`} icon={Building2} />
         <KpiTile label="Vygenerované rozváděče" value={overview.projects} hint="projekty registrovaných firem" icon={CircuitBoard} />
-        <KpiTile label="Čekající objednávky" value={overview.pendingOrders} hint={`${formatCzk(overview.pendingCzk)} s DPH`} icon={Receipt} accent={overview.pendingOrders ? "text-amber-300" : undefined} />
+        <KpiTile label="Čekající objednávky" value={overview.pendingOrders} hint={`${formatCzk(overview.pendingCzk)}${operator.vatPayer ? " s DPH" : " (neplátce DPH)"}`} icon={Receipt} accent={overview.pendingOrders ? "text-amber-300" : undefined} />
         <KpiTile label="Otevřená hlášení AI" value={overview.openFeedback} hint="čekají na vyřešení" icon={Bug} accent={overview.openFeedback ? "text-red-300" : undefined} />
       </div>
       <nav className="flex flex-wrap gap-1 border-b border-border" aria-label="Záložky velínu">
@@ -87,7 +94,7 @@ export default async function SuperadminPage({ searchParams }: PageProps<"/super
           </Link>
         ))}
       </nav>
-      {tab === "companies" ? <CompaniesTab /> : tab === "zpravy" ? <ContactMessagesTab filter={typeof filterParam === "string" ? filterParam : "all"} /> : tab === "market" ? <MarketTab days={days} /> : tab === "qr" ? <QrLabelsTab /> : tab === "pool" ? <PoolTab /> : tab === "manufacturers" ? <ManufacturersTab /> : tab === "orders" ? <OrdersTab /> : tab === "provozovatel" ? <OperatorTab /> : tab === "newsletter" ? <NewsletterTab /> : tab === "backups" ? <BackupsTab /> : <FeedbackTab />}
+      {tab === "companies" ? <CompaniesTab /> : tab === "zpravy" ? <ContactMessagesTab filter={typeof filterParam === "string" ? filterParam : "all"} /> : tab === "market" ? <MarketTab days={days} /> : tab === "qr" ? <QrLabelsTab /> : tab === "pool" ? <PoolTab /> : tab === "manufacturers" ? <ManufacturersTab /> : tab === "orders" ? <OrdersTab /> : tab === "provozovatel" ? <OperatorTab /> : tab === "newsletter" ? <NewsletterTab /> : tab === "backups" ? <BackupsTab /> : tab === "nastaveni" ? <SettingsTab /> : <FeedbackTab />}
     </div>
   );
 }
@@ -168,6 +175,7 @@ async function CompaniesTab() {
                   {company.creditsRemaining}
                 </p>
                 <CreditControls companyId={company.id} companyName={company.companyName} credits={company.creditsRemaining} />
+                <UnlimitedAccessToggle companyId={company.id} companyName={company.companyName} unlimited={company.unlimitedAccess} />
               </td>
               <td className={td} data-testid="company-account">
                 {company.closedAt ? (
@@ -395,7 +403,8 @@ async function BackupsTab() {
       <div className="flex flex-col gap-4">
         <div className="grid gap-3 sm:grid-cols-3">
           <KpiTile label="Poslední záloha" value={lastOk ? formatDateTime(lastOk.startedAt) : "nikdy"} hint={lastOk?.summary ? `${mb(lastOk.summary.snapshot.archiveBytes)}${lastOk.summary.snapshot.encrypted ? " · šifrováno" : " · bez šifrování"}` : "zatím žádná úspěšná"} icon={DatabaseBackup} accent={overview.stale ? "text-red-300" : undefined} />
-          <KpiTile label="Mimo server" value={config.offsite ? `${overview.offsite.db.objects} snímků` : "nenastaveno"} hint={config.offsite ? `${overview.offsite.file.objects} souborů · ${mb(overview.offsite.db.bytes + overview.offsite.file.bytes)}` : "jen místní snímky na serveru"} icon={HardDrive} accent={config.offsite ? undefined : "text-amber-300"} />
+          {/* Fáze 113: bez úložiště mimo server klidná informace – místní záloha je aktivní, cloud je volitelný */}
+          <KpiTile label="Mimo server" value={config.offsite ? `${overview.offsite.db.objects} snímků` : "volitelné"} hint={config.offsite ? `${overview.offsite.file.objects} souborů · ${mb(overview.offsite.db.bytes + overview.offsite.file.bytes)}` : `💾 místní snímky ${config.keepLocal} dní`} icon={HardDrive} />
           <KpiTile label="Soubory v registru" value={overview.registry.total} hint={`${mb(overview.registry.bytes)} · ${overview.registry.companies} firem`} icon={FolderLock} />
         </div>
         {overview.stale ? (
@@ -408,6 +417,14 @@ async function BackupsTab() {
             {issue}
           </p>
         ))}
+        {!config.offsite ? (
+          <p className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-3 text-sm text-emerald-100" data-testid="backup-local-active">
+            {LOCAL_BACKUP_INFO} –{" "}
+            <Link href="/superadmin?tab=nastaveni" className="underline underline-offset-2">
+              ⚙️ nastavit Cloudflare R2 / S3
+            </Link>
+          </p>
+        ) : null}
         <BackupNowButton running={overview.running} />
         <div className="overflow-x-auto rounded-xl border border-border">
           <table className="w-full text-sm" data-testid="backup-runs">
@@ -527,5 +544,26 @@ async function BackupsTab() {
         </div>
       </div>
     </div>
+  );
+}
+
+/** Fáze 113: ⚙️ Nastavení SMTP & Cloud záloh (R2/S3) – údaje webem, hesla a klíče šifrovaně, proměnné prostředí mají přednost. */
+async function SettingsTab() {
+  const [cache, operator, overview] = await Promise.all([loadPlatformSettings(prisma), getOperatorProfile(), getBackupOverview()]);
+  const config = backupConfig();
+  const settings = publicPlatformSettings(cache, { smtpUrl: Boolean(brandEnv("SMTP_URL")), s3: Boolean(brandEnv("BACKUP_S3_ENDPOINT")) });
+  return (
+    <PlatformSettingsForm
+      settings={settings}
+      backup={{
+        offsite: config.s3 && config.secret ? { endpoint: config.s3.endpoint, bucket: config.s3.bucket, prefix: config.s3.prefix } : null,
+        keepLocal: config.keepLocal,
+        dir: config.dir,
+        time: `${String(config.time.hour).padStart(2, "0")}:${String(config.time.minute).padStart(2, "0")}`,
+        encrypted: Boolean(config.secret),
+      }}
+      defaultTestTo={operator.email}
+      backupButton={<BackupNowButton running={overview.running} />}
+    />
   );
 }

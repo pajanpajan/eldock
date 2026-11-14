@@ -10,6 +10,7 @@ import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import { PrismaClient } from "../src/generated/prisma/client";
 import { backupConfig } from "../src/server/backup/config";
 import { parseBackupSummary, runBackup } from "../src/server/services/backup";
+import { loadPlatformSettings } from "../src/server/services/platform-settings";
 import { runRetention } from "../src/server/services/retention";
 
 const kb = (bytes: number) => `${Math.round(bytes / 1024).toLocaleString("cs-CZ")} kB`;
@@ -17,9 +18,11 @@ const kb = (bytes: number) => `${Math.round(bytes / 1024).toLocaleString("cs-CZ"
 async function main() {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("Chybí DATABASE_URL (viz .env.example).");
+  const prisma = new PrismaClient({ adapter: new PrismaBetterSqlite3({ url }) });
+  // Fáze 113: úložiště záloh a heslo šifrování z velínu (⚙️ SMTP & Cloud zálohy), když je nedává prostředí
+  await loadPlatformSettings(prisma);
   const config = backupConfig();
   for (const issue of config.issues) console.warn(`Pozor: ${issue}`);
-  const prisma = new PrismaClient({ adapter: new PrismaBetterSqlite3({ url }) });
   try {
     const run = await runBackup({ prisma, config, storageRoot: path.join(process.cwd(), "storage", "uploads"), log: console.error }, "CLI");
     const summary = parseBackupSummary(run.summaryJson);

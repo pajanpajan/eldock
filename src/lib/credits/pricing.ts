@@ -73,6 +73,9 @@ export interface Subscription {
   selfService: boolean;
 }
 
+/** Fáze 113: zkušební limit zařízení Hlídače revizí bez tarifu (REVIZE & BUDOVY 500, PRŮMYSL & ENTERPRISE 5 000). */
+export const HLIDAC_TRIAL_DEVICES = 50;
+
 export const SUBSCRIPTIONS: readonly Subscription[] = [
   {
     plan: "PRO",

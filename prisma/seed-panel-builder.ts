@@ -468,6 +468,8 @@ export async function seedTesterCompany(prisma: PrismaClient) {
         authorizationNumber: "E-0815/2021",
         termsAcceptedAt: new Date("2026-11-03T08:00:00Z"),
         creditsRemaining: 50,
+        // Fáze 113: ⭐ neomezený přístup pro prezentace a testování (přepíná velín)
+        unlimitedAccess: true,
         plantId: plant?.id ?? null,
       },
     });

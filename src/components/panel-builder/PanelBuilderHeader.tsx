@@ -14,9 +14,10 @@ const link = "touch-target flex items-center gap-2 rounded-lg px-2.5 text-sm tex
  * Samostatná horní lišta produktu ELDOCK AI Panel Builder (fáze 41): logo, přihlášená firma s IČO,
  * zbývající testovací kredity, „Firemní údaje do razítka“ a odhlášení. Bez navigace správy závodů.
  */
-export function PanelBuilderHeader({ company, demo = false }: { company: (Pick<PanelCompany, "companyName" | "ico" | "creditsRemaining"> & Partial<Pick<PanelCompany, "trialFloorplanUsed" | "trialSwitchboardUsed">>) | null; demo?: boolean }) {
+export function PanelBuilderHeader({ company, demo = false }: { company: (Pick<PanelCompany, "companyName" | "ico" | "creditsRemaining"> & Partial<Pick<PanelCompany, "trialFloorplanUsed" | "trialSwitchboardUsed" | "unlimitedAccess">>) | null; demo?: boolean }) {
   // Fáze 111: zbývající testovací projekt (zkušební půdorys / rozváděč) vedle kreditů; ukázková firma má vše zkušební zdarma
-  const trial = demo ? "🎁 Ukázková firma: všechny projekty zkušební zdarma" : company && (company.trialFloorplanUsed === false || company.trialSwitchboardUsed === false) ? trialRemainingText({ trialFloorplanUsed: company.trialFloorplanUsed ?? true, trialSwitchboardUsed: company.trialSwitchboardUsed ?? true }) : null;
+  // Fáze 113: ⭐ neomezený přístup (provozovatel / ukázková firma) – plná verze bez kreditů
+  const trial = company?.unlimitedAccess ? (demo ? "⭐ Ukázková firma: neomezený přístup – plná verze bez kreditů" : "⭐ Neomezený přístup – plná verze bez kreditů") : demo ? "🎁 Ukázková firma: všechny projekty zkušební zdarma" : company && (company.trialFloorplanUsed === false || company.trialSwitchboardUsed === false) ? trialRemainingText({ trialFloorplanUsed: company.trialFloorplanUsed ?? true, trialSwitchboardUsed: company.trialSwitchboardUsed ?? true }) : null;
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur" data-testid="panel-builder-header">
       <div className="mx-auto flex w-full max-w-[1800px] flex-wrap items-center gap-x-4 gap-y-2 px-3 py-2 sm:px-6">
@@ -64,7 +65,7 @@ export function PanelBuilderHeader({ company, demo = false }: { company: (Pick<P
                 <span className="rounded-lg border border-emerald-500/50 bg-emerald-500/10 px-2.5 py-1.5 text-xs font-semibold text-emerald-200" title={trial} data-testid="panel-trial">
                   {/* Pod 1536 px jen 🎁 (celý text v bublině a pro čtečky) – lišta zůstane v jednom řádku */}
                   <span aria-hidden className="2xl:hidden">
-                    🎁
+                    {company?.unlimitedAccess ? "⭐" : "🎁"}
                   </span>
                   <span className="sr-only 2xl:not-sr-only">{trial}</span>
                 </span>

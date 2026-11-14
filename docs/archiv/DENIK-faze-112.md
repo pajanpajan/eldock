@@ -1,0 +1,5 @@
+# Deník fáze 112 (přesunuto z `docs/PLAN.md`, sekce C)
+
+| Fáze | Datum | Poznámky |
+|---|---|---|
+| 112 | 2026-11-13 | Zadání z chatu → `docs/archiv/ZADANI-faze-112.md` (i rozhodnutí a odchylky). **Migrace** `20261113210000_phase112_operator_offline` (`PlatformSetting`, `OfflineSubmission`). **Kód:** `lib/panel-builder/comb-busbars.ts` + `VectorPanel` / `VectorModuleSymbol` (hřebeny, fáze, volba lišty), `lib/panel-builder/hdo.ts` + `floorplan-bridge.ts` (stykač HDO, ovládací jistič, záslepky), drátovací list cívky (`cnc-manufacturing-engine.ts`), `lib/panel-builder/switch-links.ts`, `lib/panel-builder/title-block.ts` + `FloorplanExport.tsx`; `lib/revision-import.ts`, `lib/revision-board.ts`, `server/revision-files.ts`, `services/revision-import.ts`, `RevisionDataImporterModal.tsx`; `lib/offline-sync-queue.ts`, `services/snap.ts`, `/api/hlidac/snap`, `ScanSnapLoop.tsx`, `OfflineQueueHost.tsx`; `lib/operator.ts`, `server/operator.ts`, `services/operator.ts`, velín „🏢 Provozovatel & fakturace“, `LabelSetCards.tsx`, faktura a patička. **Testy:** `src/lib/phase112.test.ts` (19), `src/server/services/phase112.test.ts` (5), E2E `e2e/phase112.spec.ts` (5). |

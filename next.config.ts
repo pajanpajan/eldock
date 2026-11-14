@@ -8,7 +8,13 @@ const nextConfig: NextConfig = {
   // `.next-e2e/dev/logs/next-development.log`, watcher zápis bral jako změnu („✓ Compiled in 3ms“) a stránka se
   // znovu načetla, zapsala další log („Download the React DevTools…“) a tak dokola (padající E2E na navigaci).
   // Fáze 87: totéž pro server generátoru video-návodů (`.next-tutorials`) – obnovení stránky by zkazilo natáčení.
-  experimental: { mcpServer: process.env.NEXT_DIST_DIR !== ".next-e2e" && process.env.NEXT_DIST_DIR !== ".next-tutorials" },
+  // Fáze 113: tělo Server Action (průběžné ukládání půdorysu všech podlaží) i požadavku přes proxy (nahrání podkladu,
+  // projektu .eldock) až 50 MB – výchozí limity 1 MB / 10 MB velký vícepodlažní projekt neuložily.
+  experimental: {
+    mcpServer: process.env.NEXT_DIST_DIR !== ".next-e2e" && process.env.NEXT_DIST_DIR !== ".next-tutorials",
+    serverActions: { bodySizeLimit: "50mb" },
+    proxyClientMaxBodySize: "50mb",
+  },
   // Produkční Docker obraz (viz Dockerfile): `.next/standalone` obsahuje server.js a jen nutné node_modules.
   output: "standalone",
   // Fáze 100: komprese odpovědí serveru Next (gzip) – výchozí, uvedeno výslovně; na produkci komprimuje i Caddy (zstd / gzip).

@@ -22,12 +22,13 @@ afterEach(() => db.cleanup());
 const credits = async () => (await prisma.registeredCompany.findUniqueOrThrow({ where: { id: companyId } })).creditsRemaining;
 
 describe("objednávky kreditů", () => {
-  it("objednávka má VS roku, cenu s DPH a čeká na úhradu", async () => {
+  it("objednávka má VS roku, konečnou cenu neplátce DPH a čeká na úhradu", async () => {
     const now = new Date("2026-11-05T10:00:00Z");
     // Fáze 111: balíčky nového ceníku (START 30 / MONTÉR 125 / FIRMA 300); dřívější kódy už objednat nejde
     const first = await createCreditOrder(prisma, companyId, "MONTER_125", now);
     const second = await createCreditOrder(prisma, companyId, "START_30", now);
-    expect(first).toMatchObject({ variableSymbol: "20260001", creditsCount: 125, priceCzkExclVat: 2490, priceCzkInclVat: 3013, status: "PENDING" });
+    // Fáze 113: provozovatel je neplátce DPH – cena bez DPH je konečná
+    expect(first).toMatchObject({ variableSymbol: "20260001", creditsCount: 125, priceCzkExclVat: 2490, priceCzkInclVat: 2490, status: "PENDING" });
     await expect(createCreditOrder(prisma, companyId, "PROFI_30")).rejects.toThrow(/Neznámý balíček/);
     expect(second.variableSymbol).toBe("20260002");
     await expect(createCreditOrder(prisma, companyId, "ZDARMA_999")).rejects.toThrow(/Neznámý balíček/);

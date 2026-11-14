@@ -5,7 +5,7 @@ import { panelBuilderGuard } from "@/components/panel-builder/access";
 import { FloorplanEditorLoader } from "@/components/panel-builder/floorplan/FloorplanEditorLoader";
 import { getFloorplanEditorData, isFirstFloorplan } from "@/server/queries/floorplans";
 import { ChargeNotice } from "@/components/credits/ChargeNotice";
-import { floorplanCharge } from "@/lib/credits/entitlements";
+import { floorplanCharge, unlimitedPlan } from "@/lib/credits/entitlements";
 import { TESTER_COMPANY } from "@/lib/registered-company";
 import { requirePanelCompany } from "@/server/panel-session";
 
@@ -18,15 +18,19 @@ export default async function NewFloorplanPage() {
   const [data, first, company] = await Promise.all([getFloorplanEditorData(), isFirstFloorplan(), requirePanelCompany()]);
   // Fáze 111: cena nového půdorysu před začátkem kreslení (zkušební zdarma / 15 kreditů / bez kreditů prodejní modal)
   const demo = company.id === TESTER_COMPANY.id;
-  const plan = floorplanCharge(company);
-  const blocked = !demo && plan.cost > company.creditsRemaining;
+  // Fáze 113: ⭐ neomezený přístup – plná verze bez kreditů a bez zkušebního označení
+  const unlimited = company.unlimitedAccess;
+  const plan = unlimited ? unlimitedPlan("floorplan") : floorplanCharge(company);
+  const blocked = !demo && !unlimited && plan.cost > company.creditsRemaining;
   return (
     <PageTransition>
       <ChargeNotice
         testId="floorplan-charge-notice"
-        tone={demo ? "demo" : plan.license === "TRIAL" ? "trial" : blocked ? "blocked" : "paid"}
+        tone={unlimited ? "paid" : demo ? "demo" : plan.license === "TRIAL" ? "trial" : blocked ? "blocked" : "paid"}
         text={
-          demo
+          unlimited
+            ? `${plan.label}.`
+            : demo
             ? "Ukázková firma: zkušební půdorys se zkušebním označením výstupů, bez kreditů."
             : plan.license === "TRIAL"
               ? `${plan.label} – výstupy nesou označení „ZKUŠEBNÍ VÝSTUP – ELDOCK TRIAL“.`

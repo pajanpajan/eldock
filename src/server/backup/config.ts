@@ -2,6 +2,8 @@ import path from "node:path";
 
 import { brandEnv } from "@/lib/auth";
 
+import { platformCache } from "@/server/services/platform-settings";
+
 import { MIN_KEY_LENGTH, keyFingerprint } from "./crypto";
 import type { S3Config } from "./s3";
 
@@ -42,7 +44,9 @@ function parseTime(value: string | undefined) {
 
 export function backupConfig(env: { cwd?: string } = {}): BackupConfig {
   const issues: string[] = [];
-  const rawSecret = brandEnv("BACKUP_KEY") ?? null;
+  // Fáze 113: úložiště a heslo šifrování z velínu (⚙️ SMTP & Cloud zálohy), když je nedává prostředí
+  const stored = platformCache().storage;
+  const rawSecret = brandEnv("BACKUP_KEY") ?? stored?.backupKey ?? null;
   let secret: string | null = null;
   if (rawSecret && rawSecret.length < MIN_KEY_LENGTH) issues.push(`Heslo záloh ELDOCK_BACKUP_KEY je kratší než ${MIN_KEY_LENGTH} znaků – zálohy se nešifrují a mimo server se nic neposílá.`);
   else if (rawSecret) secret = rawSecret;
@@ -55,6 +59,9 @@ export function backupConfig(env: { cwd?: string } = {}): BackupConfig {
   };
   const filled = Object.values(s3Values).filter(Boolean).length;
   let s3: BackupConfig["s3"] = null;
+  if (!filled && stored?.secretAccessKey) {
+    s3 = { endpoint: stored.endpoint, region: stored.region || "auto", bucket: stored.bucket, accessKeyId: stored.accessKeyId, secretAccessKey: stored.secretAccessKey, pathStyle: stored.pathStyle, prefix: stored.prefix || "eldock" };
+  }
   if (filled === 4) {
     try {
       const endpoint = new URL(s3Values.endpoint!);
@@ -71,16 +78,17 @@ export function backupConfig(env: { cwd?: string } = {}): BackupConfig {
     } catch {
       issues.push("ELDOCK_BACKUP_S3_ENDPOINT není platná adresa (např. https://fsn1.your-objectstorage.com).");
     }
-  } else if (filled > 0) {
+  } else if (filled > 0 && filled < 4) {
     issues.push("Úložiště mimo server je nastavené jen zčásti – vyplňte ELDOCK_BACKUP_S3_ENDPOINT, _BUCKET, _ACCESS_KEY a _SECRET_KEY.");
   }
-  if (s3 && !secret) issues.push("Mimo server se zálohy posílají jen šifrované – nastavte ELDOCK_BACKUP_KEY.");
+  if (s3 && !secret) issues.push("Mimo server se zálohy posílají jen šifrované – nastavte ELDOCK_BACKUP_KEY nebo heslo šifrování záloh ve velínu.");
 
   return {
     scheduleEnabled: process.env.NODE_ENV === "production" && brandEnv("BACKUP") !== "0",
     time: parseTime(brandEnv("BACKUP_TIME")),
     dir: brandEnv("BACKUP_DIR") ?? path.join(env.cwd ?? process.cwd(), "data", "backups"),
-    keepLocal: intEnv("BACKUP_KEEP_LOCAL", 7, 1, 90),
+    // Fáze 113: místní denní snímky 14 dní (bez úložiště mimo server jediná záloha)
+    keepLocal: intEnv("BACKUP_KEEP_LOCAL", 14, 1, 90),
     secret,
     s3,
     keepDaily: intEnv("BACKUP_KEEP_DAILY", 14, 1, 365),

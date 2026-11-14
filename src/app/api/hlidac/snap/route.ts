@@ -3,7 +3,7 @@ import { validateUpload } from "@/lib/files";
 import { prisma } from "@/lib/prisma";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 import { plantFileOwner, storePlantFile, storeUpload } from "@/server/file-access";
-import { getHlidacMode } from "@/server/services/hlidac";
+import { DeviceLimitError, getHlidacMode } from "@/server/services/hlidac";
 import { processSnap } from "@/server/services/snap";
 import { getAuthState, getCurrentAccount, getCurrentUser } from "@/server/session";
 import { assertTenantAccess } from "@/server/tenant";
@@ -80,6 +80,8 @@ export async function POST(request: Request) {
     );
     return Response.json({ result, duplicate });
   } catch (caught) {
+    // Fáze 113: limit zařízení tarifu = 402 – záznam zůstane v offline frontě a odešle se po aktivaci tarifu
+    if (caught instanceof DeviceLimitError) return error(caught.message, 402);
     if (caught instanceof WorkflowError) return error(caught.message, caught.code === "NOT_FOUND" ? 404 : caught.code === "FORBIDDEN" ? 403 : 400);
     console.error(caught);
     return error("Záznam se nepodařilo uložit.", 500);

@@ -191,24 +191,28 @@ test.describe("provozovatel ve velínu, výzva k platbě za sadu QR štítků a 
     await settings.getByTestId("operator-registry").fill("Živnostenský rejstřík MěÚ Jablonec nad Nisou");
     await settings.getByTestId("operator-save").click();
     await expect(page.locator("[data-sonner-toast]").filter({ hasText: "ELDOCK.cz · Pavel Janoušek · Jablonec nad Nisou · info@eldock.cz" }).first()).toBeVisible({ timeout: 30_000 });
+    // Fáze 113: 5 výchozích sad je v prodeji hned – velín přidá šestou (50 štítků spotřebičů)
+    await expect(settings.getByTestId("label-set-row")).toHaveCount(5);
     await settings.getByTestId("label-set-add").click();
-    await settings.getByTestId("label-set-title-0").fill("Sada 50 stříbrných QR štítků ELDOCK 30 × 15 mm");
-    await settings.getByTestId("label-set-count-0").fill("50");
-    await settings.getByTestId("label-set-price-0").fill("690");
+    await settings.getByTestId("label-set-title-5").fill("Sada 50 stříbrných QR štítků ELDOCK 30 × 15 mm");
+    await settings.getByTestId("label-set-A-5").fill("50");
+    await settings.getByTestId("label-set-price-5").fill("690");
     await settings.getByTestId("label-sets-save").click();
-    await expect(page.locator("[data-sonner-toast]").filter({ hasText: "Uloženo 1 sad QR štítků" }).first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator("[data-sonner-toast]").filter({ hasText: "Uloženo 6 sad QR štítků" }).first()).toBeVisible({ timeout: 30_000 });
 
     // Firma objedná sadu štítků → výzva k platbě s QR (SPD) a dodavatelem z velínu
     await page.goto("/panel-builder/credits");
-    await page.getByTestId("label-sets").getByTestId("order-labels-50").click();
+    await page.getByTestId("label-sets").getByTestId("order-labels-LABELS_A50").click();
     await expect(page).toHaveURL(/\/panel-builder\/credits\/[^/]+$/, { timeout: 60_000 });
-    await expect(page.getByTestId("payment-qr")).toHaveAttribute("data-spd", /^SPD\*1\.0\*ACC:CZ\d{22}\+RZBCCZPP\*AM:835\.00\*CC:CZK\*X-VS:\d+\*MSG:ELDOCK QR stitky/);
+    await expect(page.getByTestId("payment-qr")).toHaveAttribute("data-spd", /^SPD\*1\.0\*ACC:CZ\d{22}\+RZBCCZPP\*AM:690\.00\*CC:CZK\*X-VS:\d+\*MSG:ELDOCK QR stitky/);
     await page.goto(`${page.url()}/invoice`);
     const invoice = page.getByTestId("invoice");
     await expect(invoice.getByTestId("invoice-supplier")).toContainText("Pavel Janoušek", { timeout: 60_000 });
     await expect(invoice.getByTestId("invoice-supplier")).toContainText("IČO 27082440");
-    await expect(invoice.getByTestId("invoice-item")).toContainText("Sada 50 ks stříbrných QR štítků ELDOCK");
-    await expect(invoice.getByTestId("invoice-total")).toHaveText("835 Kč");
+    // Fáze 113: neplátce DPH – cena sady je konečná
+    await expect(invoice.getByTestId("invoice-item")).toContainText("Sada 50 stříbrných QR štítků ELDOCK 30 × 15 mm");
+    await expect(invoice.getByTestId("invoice-supplier")).toContainText("Neplátce DPH");
+    await expect(invoice.getByTestId("invoice-total")).toHaveText("690 Kč");
     await invoice.screenshot({ path: "test-results/phase112-invoice.png" });
 
     // Patička veřejného webu: provozovatel a IČO z velínu (místo „Eldock s.r.o. (v založení)“)

@@ -48,7 +48,8 @@ import { productById } from "./smart-catalog";
 import { DEFAULT_SUPPLY, supplyById, type SupplySystem } from "./supply";
 import { isEnvironmentId, type EnvironmentId } from "./environments";
 import { DEFAULT_OCCUPANCY, halogenFreeBomItem, halogenFreeCable, isCommercial, isOccupancyId, type OccupancyId } from "./occupancy";
-import { CALIBRATION_TOLERANCE_PCT, emptyCalibration, isRotation, planExtent, rotatedSize, type CalibrationRecord, type FloorplanBackground, type Rotation } from "./floorplan-pdf";
+import { CALIBRATION_TOLERANCE_PCT, MAX_BACKGROUND_LABELS, emptyCalibration, isRotation, planExtent, rotatedSize, type CalibrationRecord, type FloorplanBackground, type Rotation } from "./floorplan-pdf";
+import type { PdfTextLabel } from "./pdf-room-detector";
 import { isBackgroundLook } from "./background-look";
 
 export type PaletteGroup = "panel" | "sockets" | "lights" | "controls" | "shading" | "appliances" | "fixtures" | "architecture" | "medical";
@@ -1117,6 +1118,17 @@ export const ANNOTATION_DEFAULTS: Record<AnnotationKind, Pick<Annotation, "color
   text: { color: "#111827", hatch: "none", thicknessMm: 50 },
 };
 
+/** Fáze 113: uložené popisky místností z PDF – nejvýš `MAX_BACKGROUND_LABELS`, text do 80 znaků. */
+function parseBackgroundLabels(value: unknown, num: Num): PdfTextLabel[] {
+  if (!Array.isArray(value)) return [];
+  const round = (input: number) => Math.round(input * 10) / 10;
+  return value
+    .filter((item): item is PdfTextLabel => Boolean(item) && typeof item === "object" && typeof (item as PdfTextLabel).text === "string")
+    .slice(0, MAX_BACKGROUND_LABELS)
+    .map((item) => ({ text: item.text.replace(/\s+/g, " ").trim().slice(0, 80), x: round(num(item.x, 0, 0, 20_000)), y: round(num(item.y, 0, 0, 20_000)), h: round(num(item.h, 10, 1, 2_000)) }))
+    .filter((item) => item.text);
+}
+
 function parseBackground(value: unknown, num: Num): FloorplanBackground | null {
   if (!value || typeof value !== "object") return null;
   const raw = value as Partial<FloorplanBackground>;
@@ -1131,6 +1143,9 @@ function parseBackground(value: unknown, num: Num): FloorplanBackground | null {
     // Fáze 100: vzhled podkladu na plátně (bez údaje = doporučených 60 %)
     ...(isBackgroundLook(raw.look) ? { look: raw.look } : {}),
   };
+  // Fáze 113: popisky místností z textové vrstvy PDF (🔍 automatické rozpoznání místností)
+  const labels = parseBackgroundLabels(raw.labels, num);
+  if (labels.length) background.labels = labels;
   if (background.pagePt && (!background.pagePt.width || !background.pagePt.height)) background.pagePt = null;
   const size = rotatedSize(background);
   if (raw.crop && typeof raw.crop === "object") {

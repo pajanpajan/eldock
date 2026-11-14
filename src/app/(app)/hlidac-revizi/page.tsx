@@ -10,7 +10,9 @@ import { Button } from "@/components/ui/button";
 import { HLIDAC_MODES, HLIDAC_PALETTE } from "@/lib/hlidac";
 import { prisma } from "@/lib/prisma";
 import { getPlants } from "@/server/queries/plant";
-import { getHlidacMode, hlidacOverview } from "@/server/services/hlidac";
+import { deviceEntitlementLabel } from "@/lib/credits";
+import { getHlidacMode, hlidacOverview, plantDeviceEntitlement } from "@/server/services/hlidac";
+import { getOperatorProfile } from "@/server/operator";
 import { getAuthSession, getCurrentAccount, getRememberedPlantId } from "@/server/session";
 
 export const metadata: Metadata = {
@@ -32,12 +34,14 @@ const FEATURES = [
 // průmyslová část). Bez přihlášení přehled a tarify, s přihlášením Správy závodů pracovní plocha.
 export default async function HlidacRevisionsPage({ searchParams }: PageProps<"/hlidac-revizi">) {
   const session = await getAuthSession();
-  if (!session) return <Intro />;
+  // Fáze 113: ceník podle plátcovství provozovatele
+  const { vatPayer } = await getOperatorProfile();
+  if (!session) return <Intro vatPayer={vatPayer} />;
   const [account, plants, remembered, query] = await Promise.all([getCurrentAccount(), getPlants(), getRememberedPlantId(), searchParams]);
   const wanted = typeof query.zavod === "string" ? query.zavod : null;
   const plant = plants.find((candidate) => candidate.id === wanted) ?? plants.find((candidate) => candidate.id === remembered) ?? plants[0] ?? null;
-  if (!plant) return <Intro signedIn />;
-  const [overview, mode] = await Promise.all([hlidacOverview(prisma, plant.id), getHlidacMode(prisma, plant.id)]);
+  if (!plant) return <Intro signedIn vatPayer={vatPayer} />;
+  const [overview, mode, entitlement] = await Promise.all([hlidacOverview(prisma, plant.id), getHlidacMode(prisma, plant.id), plantDeviceEntitlement(prisma, plant.id)]);
   const devices = overview.reduce((sum, building) => sum + building.floors.reduce((acc, floor) => acc + floor.rooms.reduce((count, room) => count + room.devices.length, 0) + floor.unassigned.length, 0), 0);
   return (
     <PageTransition>
@@ -45,6 +49,15 @@ export default async function HlidacRevisionsPage({ searchParams }: PageProps<"/
         title="🛡️ Hlídač revizí & Správa spotřebičů a zařízení"
         description={`${plant.name} · ${overview.length} ${overview.length === 1 ? "budova" : overview.length < 5 ? "budovy" : "budov"} · ${devices} zařízení. Revize spotřebičů podle ČSN 33 1600 ed. 2 a ČSN 33 1500 – 📷 AI čtečka výrobního štítku a identifikační štítky s QR kódem.`}
       />
+      {/* Fáze 113: limit zařízení podle tarifu závodu (zkušební limit, REVIZE & BUDOVY, PRŮMYSL & ENTERPRISE, ⭐ bez limitu) */}
+      <p
+        className={`mb-3 w-fit rounded-full border px-3 py-1 text-xs font-semibold ${!entitlement.unlimited && entitlement.limit !== null && entitlement.used >= entitlement.limit ? "border-amber-400/60 bg-amber-400/10 text-amber-200" : "border-border text-muted-foreground"}`}
+        data-testid="hlidac-entitlement"
+        data-reason={entitlement.reason}
+      >
+        {deviceEntitlementLabel(entitlement)}
+        {entitlement.reason === "TRIAL" ? " · neomezená správa s tarifem REVIZE & BUDOVY (500) nebo PRŮMYSL & ENTERPRISE (5 000)" : ""}
+      </p>
       <HlidacWorkspace
         plant={{ id: plant.id, name: plant.name }}
         plants={plants.map((candidate) => ({ id: candidate.id, name: candidate.name }))}
@@ -57,7 +70,7 @@ export default async function HlidacRevisionsPage({ searchParams }: PageProps<"/
   );
 }
 
-function Intro({ signedIn = false }: { signedIn?: boolean }) {
+function Intro({ signedIn = false, vatPayer }: { signedIn?: boolean; vatPayer: boolean }) {
   return (
     <PageTransition>
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-8" data-testid="hlidac-intro">
@@ -114,7 +127,7 @@ function Intro({ signedIn = false }: { signedIn?: boolean }) {
             ))}
           </div>
         </section>
-        <PricingOverview audience="buildings" />
+        <PricingOverview audience="buildings" vatPayer={vatPayer} />
       </div>
     </PageTransition>
   );

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { TESTER_COMPANY } from "@/lib/registered-company";
-import { switchboardCharge } from "@/lib/credits/entitlements";
+import { switchboardCharge, unlimitedPlan } from "@/lib/credits/entitlements";
 import Link from "next/link";
 import { Library } from "lucide-react";
 
@@ -52,7 +52,8 @@ export default async function PanelBuilderPage() {
   });
 
   // Fáze 111: cena nového rozváděče – ukázková firma zkušební bez kreditů, jinak zkušební rozváděč / 15 kreditů
-  const plan = company.id === TESTER_COMPANY.id ? { label: "Ukázková firma – zkušební rozváděč se zkušebním označením (bez kreditů)", cost: 0 } : switchboardCharge(company);
+  // Fáze 113: ⭐ neomezený přístup (provozovatel / ukázková firma) – plná verze bez kreditů
+  const plan = company.unlimitedAccess ? unlimitedPlan("switchboard") : company.id === TESTER_COMPANY.id ? { label: "Ukázková firma – zkušební rozváděč se zkušebním označením (bez kreditů)", cost: 0 } : switchboardCharge(company);
   const charge = { label: plan.label, cost: plan.cost, balance: company.creditsRemaining, allowed: plan.cost <= company.creditsRemaining };
   // Fáze 92: tréninkové zakázky – nová firma (bez vlastních projektů) je vidí rozbalené; už otevřené se jen znovu otevřou
   const own = projects.filter((project) => !project.trainerPreset).length;

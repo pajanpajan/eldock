@@ -17,14 +17,14 @@ test("🪙 objednávka kredity → QR platba + zálohová faktura, 🐛 hlášen
   // Kredity v liště = tlačítko na dobití
   await page.getByTestId("panel-credits").click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Dobít kredity / Tarify", { timeout: 60_000 });
-  // Fáze 111: nový ceník – Balíček START 30 kreditů za 750 Kč bez DPH (908 Kč s DPH)
+  // Fáze 111: nový ceník – Balíček START 30 kreditů za 750 Kč; fáze 113: provozovatel je neplátce DPH (cena je konečná)
   await page.locator('[data-package="START_30"]').getByRole("button", { name: /Objednat balíček/ }).click();
   await expect(page.getByRole("heading", { level: 1 })).toContainText(/Objednávka VS \d{8}/, { timeout: 60_000 });
   const vs = /VS (\d{8})/.exec((await page.getByRole("heading", { level: 1 }).textContent()) ?? "")?.[1] ?? "";
   // Fáze 84: QR platba na účet Eldock u Raiffeisenbank a.s. (SPD 1.0 – ACC:IBAN+BIC)
-  await expect(page.getByTestId("payment-qr")).toHaveAttribute("data-spd", new RegExp(`^SPD\\*1\\.0\\*ACC:CZ1755000000000918118002\\+RZBCCZPP\\*AM:908\\.00\\*CC:CZK\\*X-VS:${vs}\\*MSG:ELDOCK Kredity`));
+  await expect(page.getByTestId("payment-qr")).toHaveAttribute("data-spd", new RegExp(`^SPD\\*1\\.0\\*ACC:CZ1755000000000918118002\\+RZBCCZPP\\*AM:750\\.00\\*CC:CZK\\*X-VS:${vs}\\*MSG:ELDOCK Kredity`));
   const payment = page.getByTestId("payment-details");
-  await expect(payment).toContainText("908 Kč");
+  await expect(payment).toContainText("750 Kč");
   await expect(payment.getByTestId("bank-name")).toHaveText("Raiffeisenbank a.s.");
   await expect(payment.getByTestId("bank-account")).toHaveText("918118002/5500");
   await expect(payment.getByTestId("bank-iban")).toHaveText("CZ17 5500 0000 0009 1811 8002");
@@ -34,10 +34,10 @@ test("🪙 objednávka kredity → QR platba + zálohová faktura, 🐛 hlášen
   await page.goto(`${orderUrl}/invoice`);
   await expect(page.getByTestId("invoice")).toContainText(`č. ${vs}`, { timeout: 60_000 });
   await expect(page.getByTestId("invoice-customer")).toContainText("Elektro Tester s.r.o.");
-  await expect(page.getByTestId("invoice-total")).toHaveText("908 Kč");
+  await expect(page.getByTestId("invoice-total")).toHaveText("750 Kč");
   const invoicePayment = page.getByTestId("invoice-payment");
   for (const text of ["Raiffeisenbank a.s.", "918118002/5500", "CZ17 5500 0000 0009 1811 8002", "RZBCCZPP", vs]) await expect(invoicePayment).toContainText(text);
-  await expect(page.getByTestId("invoice").getByTestId("payment-qr")).toHaveAttribute("data-spd", /ACC:CZ1755000000000918118002\+RZBCCZPP\*AM:908\.00/);
+  await expect(page.getByTestId("invoice").getByTestId("payment-qr")).toHaveAttribute("data-spd", /ACC:CZ1755000000000918118002\+RZBCCZPP\*AM:750\.00/);
 
   // 🐛 Nahlásit chybu AI ve vzorovém projektu
   await page.goto("/panel-builder");

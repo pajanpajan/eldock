@@ -5,6 +5,8 @@
 import type { PrismaClient } from "@/generated/prisma/client";
 import type { EquipmentType } from "@/generated/prisma/enums";
 import { metersToPercent } from "@/lib/cad-grid";
+import { deviceCapacityLeft, deviceEntitlement, deviceLimitMessage, type DeviceEntitlement } from "@/lib/credits";
+import { TESTER_COMPANY } from "@/lib/registered-company";
 import { findFreeSpot, polygonBounds } from "@/lib/campus-layout";
 import { HLIDAC_MODES, HLIDAC_MODE_KEY, buildingGrid, devicePosition, isHlidacMode, nextBuildingCode, paletteDevice, roomZones, type HlidacMode } from "@/lib/hlidac";
 import { summarizeInspections } from "@/lib/inspection";
@@ -157,9 +159,33 @@ export interface RoomDeviceInput {
  * Spotřebič / zařízení v místnosti patra: evidenční číslo budovy, skupina používání podle režimu objektu, lhůta podle
  * ČSN 33 1600 ed. 2 / ČSN 33 1500 a pin v místnosti (paleta Hlídače revizí, import revizních dat, sekvenční sběr).
  */
+/** Fáze 113: překročený limit zařízení tarifu – snímek Scan & Snap zůstane ve frontě (HTTP 402), nic se nezahodí. */
+export class DeviceLimitError extends WorkflowError {
+  constructor(message: string) {
+    super("FORBIDDEN", message);
+  }
+}
+
+/** Fáze 113: limit zařízení závodu podle tarifu firmy závodu (⭐ neomezený přístup, tarif, zkušební limit). */
+export async function plantDeviceEntitlement(prisma: PrismaClient, plantId: string, now = new Date()): Promise<DeviceEntitlement> {
+  const [companies, used] = await Promise.all([
+    prisma.registeredCompany.findMany({ where: { plantId, closedAt: null }, select: { id: true, unlimitedAccess: true, subscriptionPlan: true, subscriptionUntil: true } }),
+    prisma.equipment.count({ where: { floor: { building: { plantId } } } }),
+  ]);
+  return deviceEntitlement(companies, used, now, [TESTER_COMPANY.id]);
+}
+
+/** Fáze 113: vejde se `adding` nových zařízení do limitu tarifu? Jinak `DeviceLimitError` s nabídkou tarifu. */
+export async function assertDeviceCapacity(prisma: PrismaClient, plantId: string, adding = 1) {
+  const entitlement = await plantDeviceEntitlement(prisma, plantId);
+  if (deviceCapacityLeft(entitlement) < adding) throw new DeviceLimitError(deviceLimitMessage(entitlement));
+}
+
 export async function createRoomDevice(prisma: PrismaClient, input: RoomDeviceInput) {
   const floor = await prisma.floor.findUnique({ where: { id: input.floorId }, select: { id: true, name: true, studioLayoutJson: true, floorplanSvg: true, building: { select: { id: true, code: true, plantId: true, type: true, name: true } } } });
   if (!floor) throw new WorkflowError("NOT_FOUND", "Patro nebylo nalezeno.");
+  // Fáze 113: nové zařízení jen do limitu tarifu závodu (zkušební limit / REVIZE & BUDOVY / PRŮMYSL & ENTERPRISE)
+  await assertDeviceCapacity(prisma, floor.building.plantId);
   const zone = layoutOfFloor(floor).zones.find((candidate) => candidate.key === input.room || candidate.name === input.room);
   if (!zone) throw new WorkflowError("NOT_FOUND", "Místnost nebyla nalezena.");
   const [inRoom, tags] = await Promise.all([

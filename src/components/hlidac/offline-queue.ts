@@ -31,7 +31,7 @@ export function offlineQueue(): OfflineSyncQueue {
   return queue;
 }
 
-/** Trvalé odmítnutí serverem (4xx kromě 401 / 408 / 429) – záznam se z fronty zahodí. */
+/** Trvalé odmítnutí serverem (4xx kromě 401 / 402 / 408 / 429) – záznam se z fronty zahodí. */
 export class SnapRejected extends Error {}
 
 /** Jeden cyklus sekvenčního sběru na server (stejné id = server ho přijme jednou). */
@@ -52,7 +52,8 @@ export async function postSnap(entry: Pick<QueueEntry<SnapPayload>, "id" | "payl
   const response = await fetch("/api/hlidac/snap", { method: "POST", body: form });
   const data = (await response.json().catch(() => ({}))) as Partial<SnapResponse> & { error?: string };
   if (response.ok && data.result) return data as SnapResponse;
-  if (response.status === 401 || response.status === 408 || response.status === 429 || response.status >= 500) throw new Error(`${data.error ?? "Server teď nepřijímá"} (bez připojení)`);
+  // Fáze 113: 402 = limit zařízení tarifu – záznam zůstane ve frontě a odešle se po aktivaci tarifu
+  if (response.status === 401 || response.status === 402 || response.status === 408 || response.status === 429 || response.status >= 500) throw new Error(`${data.error ?? "Server teď nepřijímá"} (bez připojení)`);
   throw new SnapRejected(data.error ?? "Záznam odmítnut.");
 }
 

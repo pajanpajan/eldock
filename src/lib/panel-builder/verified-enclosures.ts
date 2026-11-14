@@ -6,12 +6,15 @@
 // Rittal AX / KX (kompaktní skříně bez řad modulů – přístroje na DIN lištu jen přes samostatné moduly Ri4Power ISV).
 // Čistá data; seed `seedVerifiedEnclosures` (`server/services/catalog-sync.ts`).
 
+import { EATON_ENCLOSURES, OEZ_ENCLOSURES, SCHNEIDER_ENCLOSURES } from "./verified-enclosures-oez-se-eaton";
+
 /** `PanelEnclosure.dataSource` ověřených rozvodnic – import externí databáze ani orientační matice je nepřepíše. */
 export const VERIFIED_ENCLOSURE_SOURCE = "MANUFACTURER_CATALOG";
 export const VERIFIED_ON = "2026-11-10";
 
 export interface VerifiedEnclosure {
-  manufacturer: "ABB" | "Hager" | "Schrack";
+  /** Fáze 113: + OEZ, Schneider a Eaton (`verified-enclosures-oez-se-eaton.ts`). */
+  manufacturer: "ABB" | "Hager" | "Schrack" | "OEZ" | "Schneider" | "Eaton";
   series: string;
   /** Typové označení výrobce (u vícepolových skříní s počtem polí). */
   model: string;
@@ -25,10 +28,13 @@ export interface VerifiedEnclosure {
   heightMm: number;
   depthMm: number;
   ipRating: string;
-  installation: "SURFACE" | "FLUSH";
+  installation: "SURFACE" | "FLUSH" | "HOLLOW_WALL";
   material: "PLASTIC" | "PAINTED_STEEL";
   /** Max. ztrátový výkon skříně podle výrobce; null = výrobce ho neuvádí. */
   pMaxW: number | null;
+  /** Fáze 113: EAN / GTIN a ceníková cena bez DPH [Kč] – jen z oficiálních dat výrobce. */
+  ean?: string | null;
+  listPriceCzk?: number | null;
   dataSource: typeof VERIFIED_ENCLOSURE_SOURCE;
   /** Popis z údajů výrobce + „Zdroj: <adresa>“ (čte ho i náhled dvířek `doorOf`). */
   description: string;
@@ -426,7 +432,7 @@ const schrackTopo = (installation: "SURFACE" | "FLUSH", list: readonly SchrackRo
     });
   });
 
-/** Všechny ověřené rozvodnice (ABB 103 – z toho 72 od fáze 88, Hager 23, Schrack 37). */
+/** Všechny ověřené rozvodnice (ABB 103 – z toho 72 od fáze 88, Hager 23, Schrack 37; fáze 113: OEZ 71, Schneider 44, Eaton 92). */
 export const VERIFIED_ENCLOSURES: readonly VerifiedEnclosure[] = [
   ...abbComfortLine(125, ABB_CA_125),
   ...abbComfortLine(150, ABB_CA_150),
@@ -442,6 +448,9 @@ export const VERIFIED_ENCLOSURES: readonly VerifiedEnclosure[] = [
   ...hagerUnivers,
   ...schrackTopo("SURFACE", TOPO_SURFACE),
   ...schrackTopo("FLUSH", TOPO_FLUSH),
+  ...OEZ_ENCLOSURES,
+  ...SCHNEIDER_ENCLOSURES,
+  ...EATON_ENCLOSURES,
 ];
 
 /** Řádek pro `PanelEnclosure` (upsert podle objednacího čísla) – bez odkazu, ten je v popisu. */

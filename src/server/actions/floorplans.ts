@@ -9,6 +9,7 @@ import { assertPanelFiles } from "@/server/file-access";
 import { actionFailure, guardCompany } from "@/server/panel-guards";
 import {
   MAX_DRAFT_CHARS,
+  MAX_DRAFT_LABEL,
   createFloorplan,
   duplicateFloorplan,
   floorplanForProject,
@@ -36,7 +37,7 @@ const id = z.string().min(1).max(64);
 const text = z.string().trim().max(120);
 const metaSchema = z.object({ name: text.min(1, "Zadejte název půdorysu."), customerName: text.nullable().optional(), installationSite: text.nullable().optional() });
 /** Nákres jde do služby jako neznámá data – ověří ho `parseDraft`; tady jen pojistka velikosti. */
-const draftSchema = z.unknown().refine((value) => value !== undefined && JSON.stringify(value).length <= MAX_DRAFT_CHARS, "Půdorys je příliš velký (přes 900 kB) – rozdělte ho na víc půdorysů.");
+const draftSchema = z.unknown().refine((value) => value !== undefined && JSON.stringify(value).length <= MAX_DRAFT_CHARS, `Půdorys je příliš velký (přes ${MAX_DRAFT_LABEL}) – rozdělte ho na víc půdorysů.`);
 
 export interface FloorplanVersionDto {
   id: string;

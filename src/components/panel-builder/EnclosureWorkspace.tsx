@@ -6,7 +6,7 @@ import { AlertTriangle, Check, CheckCircle2, Loader2, Sparkles } from "lucide-re
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { ENCLOSURE_MANUFACTURERS, INSTALLATION_LABELS, fitsEnclosure, ipNumber, reservePercent, type EnclosureInstallation, type EnclosureLike, type EnclosureNeed } from "@/lib/panel-builder/enclosures";
+import { ENCLOSURE_BRANDS, INSTALLATION_LABELS, fitsEnclosure, ipNumber, reservePercent, type EnclosureInstallation, type EnclosureLike, type EnclosureNeed } from "@/lib/panel-builder/enclosures";
 import { cn } from "@/lib/utils";
 import { selectEnclosureAction } from "@/server/actions/panel-design";
 
@@ -74,7 +74,7 @@ export function EnclosureWorkspace({
   preferredManufacturer: string;
 }) {
   const router = useRouter();
-  const brands = useMemo(() => ENCLOSURE_MANUFACTURERS.filter((brand) => catalog.some((row) => row.manufacturer.toLowerCase() === brand.toLowerCase())), [catalog]);
+  const brands = useMemo(() => ENCLOSURE_BRANDS.filter((brand) => catalog.some((row) => row.manufacturer.toLowerCase() === brand.toLowerCase())), [catalog]);
   const [manufacturer, setManufacturer] = useState<string>(() => brands.find((brand) => brand.toLowerCase() === preferredManufacturer.toLowerCase()) ?? "ALL");
   const [mounting, setMounting] = useState<EnclosureInstallation | "ALL">("ALL");
   const [material, setMaterial] = useState<string>("ALL");

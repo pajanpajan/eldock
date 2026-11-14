@@ -62,17 +62,21 @@ export function renderPdfPage(url: string, pageNumber: number, width = 1600): Pr
 }
 
 /**
- * Fáze 57: stránka PDF ze souboru (podklad půdorysu) – pdf.js dostane přímo data souboru (bez blob URL a cache),
- * vrací PNG a velikost stránky v pt pro ověření měřítka podle razítka výkresu.
+ * Fáze 57: stránka PDF ze souboru (podklad půdorysu) – pdf.js dostane přímo data souboru (bez blob URL a cache).
+ * Fáze 113: vykreslí se do plátna s delší stranou `maxSide` px (kódování WebP / JPEG řeší `encodeBackground`)
+ * a z textové vrstvy se přečtou popisky místností (čísla 1.01, názvy, výměry m²) v px plátna.
  */
-export async function renderPdfFile(file: Blob, pageNumber = 1, width = 3200): Promise<{ blob: Blob; width: number; height: number; pageCount: number; pagePt: { width: number; height: number } }> {
+export async function renderPdfBackground(
+  file: Blob,
+  options: { pageNumber?: number; maxSide?: number; keepText?: (text: string) => boolean; maxLabels?: number } = {},
+): Promise<{ canvas: HTMLCanvasElement; pageCount: number; pagePt: { width: number; height: number }; labels: { text: string; x: number; y: number; h: number }[] }> {
   const pdf = await pdfjs();
   const task = pdf.getDocument({ data: new Uint8Array(await file.arrayBuffer()), verbosity: 0 });
   const doc = await task.promise;
   try {
-    const page = await doc.getPage(Math.min(Math.max(1, pageNumber), doc.numPages));
+    const page = await doc.getPage(Math.min(Math.max(1, options.pageNumber ?? 1), doc.numPages));
     const base = page.getViewport({ scale: 1 });
-    const viewport = page.getViewport({ scale: width / base.width });
+    const viewport = page.getViewport({ scale: (options.maxSide ?? 2400) / Math.max(base.width, base.height) });
     const canvas = document.createElement("canvas");
     canvas.width = Math.round(viewport.width);
     canvas.height = Math.round(viewport.height);
@@ -81,9 +85,26 @@ export async function renderPdfFile(file: Blob, pageNumber = 1, width = 3200): P
     ctx.fillStyle = "#fff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     await page.render({ canvas, canvasContext: ctx, viewport }).promise;
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.9));
-    if (!blob) throw new Error("Stránku PDF se nepodařilo vykreslit.");
-    return { blob, width: canvas.width, height: canvas.height, pageCount: doc.numPages, pagePt: { width: base.width, height: base.height } };
+    const labels: { text: string; x: number; y: number; h: number }[] = [];
+    try {
+      const content = await page.getTextContent();
+      for (const item of content.items) {
+        if (!("str" in item) || !item.str.trim()) continue;
+        const text = item.str.replace(/\s+/g, " ").trim();
+        if (options.keepText && !options.keepText(text)) continue;
+        const [a, b, c, d, e, f] = item.transform as number[];
+        // Jen vodorovný text (popisky místností); otočené kóty se přeskočí
+        if (Math.abs(b) > Math.abs(a) * 0.2 || Math.abs(c) > Math.abs(d) * 0.2) continue;
+        const height = Math.hypot(c, d) * viewport.scale;
+        const width = (item.width || text.length * Math.abs(a) * 0.5) * viewport.scale;
+        const [x, y] = viewport.convertToViewportPoint(e, f);
+        labels.push({ text: text.slice(0, 80), x: Math.round((x + width / 2) * 10) / 10, y: Math.round((y - height / 2) * 10) / 10, h: Math.round(height * 10) / 10 });
+        if (labels.length >= (options.maxLabels ?? 400)) break;
+      }
+    } catch {
+      // PDF bez textové vrstvy (sken) – místnosti se rozpoznají jen z rastru
+    }
+    return { canvas, pageCount: doc.numPages, pagePt: { width: base.width, height: base.height }, labels };
   } finally {
     void task.destroy();
   }

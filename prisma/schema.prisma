@@ -959,6 +959,8 @@ model RegisteredCompany {
   subscriptionCreditedAt DateTime?
   /// Fáze 111: bonus k prvnímu dobití – 20 ks stříbrných QR štítků ELDOCK (série v registru štítků)
   firstTopUpBonusAt      DateTime?
+  /// Fáze 113: ⭐ neomezený přístup (účet provozovatele, ukázková firma Tester) – bez kreditů, limitů tarifů a zkušebního označení; přepíná velín.
+  unlimitedAccess        Boolean      @default(false)
   plantId                String? // vlastní závod (PLANT_MANAGEMENT)
   /// Firemní logo (fáze 43) – titulní list, rohové razítko výkresů a výrobní štítek CE.
   logoUrl                String?
@@ -1303,6 +1305,9 @@ model PanelEnclosure {
   material      String   @default("PLASTIC")
   /// Max. ztrátový výkon skříně P_max [W] (výrobce, ΔT 35 K) – null = neuveden.
   pMaxW         Float?
+  /// Fáze 113: EAN / GTIN a ceníková cena výrobce bez DPH [Kč] – jen z oficiálních dat výrobce, jinak null.
+  ean           String?
+  listPriceCzk  Float?
   /// "STANDARD_MATRIX" (orientační matice Eldocku) | "EXTERNAL" (databáze ai-panel-builder) | "MANUFACTURER_CATALOG"
   /// (fáze 86: ověřeno v katalogu výrobce, zdroj v `description`; import externí databáze ho nepřepíše)
   dataSource    String   @default("STANDARD_MATRIX")

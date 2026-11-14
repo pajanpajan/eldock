@@ -13,8 +13,8 @@ import { ORDER_STATUS, creditPackage, formatCzk, spdPayload } from "@/lib/credit
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { getCreditOrder } from "@/server/queries/panel-builder";
-import { labelCountOf } from "@/lib/operator";
-import { paymentAccount } from "@/server/operator";
+import { labelCountOf, labelOrderTitle } from "@/lib/operator";
+import { getLabelSets, paymentAccount } from "@/server/operator";
 
 export const metadata: Metadata = { title: "Platba kreditů" };
 
@@ -40,7 +40,7 @@ export default async function CreditOrderPage({ params }: PageProps<"/panel-buil
         }
         title={`Objednávka VS ${order.variableSymbol}`}
         badges={<span className={cn("rounded-full border px-2 py-0.5 text-xs", status.badge)}>{status.label}</span>}
-        description={`${labels ? `Sada ${labels} ks QR štítků ELDOCK` : `${pkg?.title ?? order.packageCode} · ${order.creditsCount} kreditů`} · objednáno ${formatDate(order.createdAt)}`}
+        description={`${labels ? (labelOrderTitle(order.packageCode, await getLabelSets()) ?? `Sada ${labels} ks QR štítků ELDOCK`) : `${pkg?.title ?? order.packageCode} · ${order.creditsCount} kreditů`} · objednáno ${formatDate(order.createdAt)}`}
       />
       <div className="grid gap-6 lg:grid-cols-[auto_minmax(0,1fr)]">
         <div className="flex flex-col items-center gap-2">

@@ -38,6 +38,8 @@ export const getSuperadminCompanies = () =>
       authorizationNumber: true,
       createdAt: true,
       creditsRemaining: true,
+      // Fáze 113: ⭐ neomezený přístup (provozovatel / ukázková firma)
+      unlimitedAccess: true,
       closedAt: true,
       _count: { select: { panelProjects: true } },
       panelProjects: { orderBy: { updatedAt: "desc" }, take: 40, select: { id: true, code: true, name: true, status: true, photoUrl: true, railPhotosJson: true, updatedAt: true, _count: { select: { items: true } } } },

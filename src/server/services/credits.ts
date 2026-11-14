@@ -1,5 +1,5 @@
 import type { PrismaClient } from "@/generated/prisma/client";
-import { labelCountOf, priceWithVat } from "@/lib/operator";
+import { LABEL_KINDS, labelItemsOf, labelItemsText, labelSetCode, priceWithVat } from "@/lib/operator";
 import { labelSetsOf, operatorProfileOf } from "./operator";
 import { COMPANY_INFO } from "@/lib/company";
 import {
@@ -18,6 +18,7 @@ import {
   subscriptionOf,
   subscriptionUntilAfter,
   switchboardCharge,
+  unlimitedPlan,
   type BankAccount,
   type ChargePlan,
   type PaywallInfo,
@@ -49,9 +50,11 @@ export function bankAccount(env: Partial<Record<string, string | undefined>> = p
 
 /** Nová objednávka balíčku s variabilním symbolem roku (při souběhu se VS zkusí znovu). */
 export async function createCreditOrder(prisma: PrismaClient, companyId: string, packageCode: string, now = new Date()) {
-  // Fáze 112: sada QR štítků (cena a počet z velínu) – objednávka bez kreditů, po úhradě série štítků k odeslání
-  const labels = labelCountOf(packageCode);
-  const labelSet = labels ? (await labelSetsOf(prisma)).find((set) => set.code === packageCode) : null;
+  // Fáze 112: sada QR štítků (cena a složení z velínu, fáze 113 výchozí sady) – objednávka bez kreditů, po úhradě série
+  // štítků k odeslání
+  const labels = labelItemsOf(packageCode);
+  // Kód podle složení (fáze 112 „LABELS_50“ = „LABELS_A50“)
+  const labelSet = labels ? (await labelSetsOf(prisma)).find((set) => set.code === labelSetCode(labels)) : null;
   if (labels && !labelSet) throw new WorkflowError("VALIDATION", "Tato sada QR štítků se teď neprodává.");
   const pkg = labelSet ? { code: labelSet.code, credits: 0, priceExclVat: labelSet.priceExclVat, kind: "LABELS" as const, subscription: undefined } : orderProduct(packageCode);
   // Fáze 111: balíčky nového ceníku a předplatné PRO (QR platba); tarify budov a průmyslu aktivuje obchod
@@ -95,8 +98,8 @@ export async function confirmCreditOrder(prisma: PrismaClient, orderId: string, 
     if (!count) throw new WorkflowError("INVALID_STATE", `Objednávka VS ${order.variableSymbol} už není čekající (${order.status === "PAID" ? "uhrazena" : "stornována"}).`);
     const product = orderProduct(order.packageCode);
     const current = await tx.registeredCompany.findUniqueOrThrow({ where: { id: order.companyId }, select: { creditsValidUntil: true, subscriptionUntil: true, firstTopUpBonusAt: true } });
-    // Fáze 112: sada QR štítků – bez kreditů a bez bonusu k prvnímu dobití
-    const labels = labelCountOf(order.packageCode);
+    // Fáze 112: sada QR štítků – bez kreditů a bez bonusu k prvnímu dobití (fáze 113: složení spotřebič / rozváděč / stroj)
+    const labels = labelItemsOf(order.packageCode);
     const credits = labels ? 0 : product?.kind === "LEGACY" ? order.creditsCount * ACTION_PRICES.switchboard : order.creditsCount;
     const subscription = product?.kind === "SUBSCRIPTION" && product.subscription ? product.subscription : null;
     const bonus = !labels && !current.firstTopUpBonusAt && product?.kind !== "SUBSCRIPTION";
@@ -112,15 +115,26 @@ export async function confirmCreditOrder(prisma: PrismaClient, orderId: string, 
     const company = await tx.registeredCompany.findUniqueOrThrow({ where: { id: order.companyId }, select: { id: true, companyName: true, creditsRemaining: true, ico: true, email: true } });
     return { order: { ...order, status: "PAID" as const, paidAt: now }, company, bonus, labels };
   });
-  // Fáze 112: uhrazená sada QR štítků = série v registru štítků pro firmu (k vytištění a odeslání poštou)
+  // Fáze 112: uhrazená sada QR štítků = série v registru štítků pro firmu (k vytištění a odeslání poštou); fáze 113:
+  // série pro každý druh štítku sady (spotřebič 30 × 15 mm, rozváděč 50 × 25 mm, stroj 70 × 40 mm)
   if (result.labels) {
-    await createLabelBatch(prisma, { companyName: result.company.companyName, ico: result.company.ico, email: result.company.email, purpose: "APPLIANCE", count: result.labels, note: `Objednávka sady ${result.labels} ks QR štítků ELDOCK (VS ${result.order.variableSymbol}) – vytisknout a odeslat poštou` });
+    for (const item of result.labels) {
+      const kind = LABEL_KINDS[item.kind];
+      await createLabelBatch(prisma, {
+        companyName: result.company.companyName,
+        ico: result.company.ico,
+        email: result.company.email,
+        purpose: kind.purpose,
+        count: item.count,
+        note: `Objednávka sady QR štítků ELDOCK (VS ${result.order.variableSymbol}: ${labelItemsText(result.labels)}) – ${item.count}× ${kind.label} ${kind.size}, ${kind.material} – vytisknout a odeslat poštou`.slice(0, 500),
+      });
+    }
   }
   // Bonus k prvnímu dobití: série 20 stříbrných QR štítků pro firmu (vlastní transakce registru štítků)
   if (result.bonus) {
     await createLabelBatch(prisma, { companyName: result.company.companyName, ico: result.company.ico, email: result.company.email, purpose: "SWITCHBOARD", count: FIRST_TOP_UP_LABELS, note: `Bonus k prvnímu dobití kreditů (VS ${result.order.variableSymbol}) – ${FIRST_TOP_UP_LABELS} ks stříbrných QR štítků ELDOCK, odeslat poštou` }).catch((error: unknown) => console.error("Bonus QR štítků se nepodařilo založit", error));
   }
-  return { order: result.order, company: { id: result.company.id, companyName: result.company.companyName, creditsRemaining: result.company.creditsRemaining }, bonusLabels: result.bonus ? FIRST_TOP_UP_LABELS : 0, orderedLabels: result.labels ?? 0 };
+  return { order: result.order, company: { id: result.company.id, companyName: result.company.companyName, creditsRemaining: result.company.creditsRemaining }, bonusLabels: result.bonus ? FIRST_TOP_UP_LABELS : 0, orderedLabels: result.labels?.reduce((sum, item) => sum + item.count, 0) ?? 0 };
 }
 
 export async function cancelCreditOrder(prisma: PrismaClient, orderId: string) {
@@ -161,6 +175,13 @@ type Db = PrismaClient | Tx;
 
 /** Ukázková firma (trenažér, demo scénáře, okno kontaktu) – vše zkušební se zkušebním označením, bez kreditů. */
 export const isDemoCompany = (companyId: string | null | undefined) => companyId === TESTER_COMPANY.id;
+
+/** Fáze 113: ⭐ neomezený přístup firmy (účet provozovatele, ukázková firma – přepíná velín). */
+export async function hasUnlimitedAccess(db: Db, companyId: string | null | undefined): Promise<boolean> {
+  if (!companyId) return false;
+  const row = await db.registeredCompany.findUnique({ where: { id: companyId }, select: { unlimitedAccess: true } });
+  return Boolean(row?.unlimitedAccess);
+}
 
 export interface SpendInput {
   reason: string;
@@ -208,6 +229,8 @@ const demoPlan = (kind: "switchboard" | "floorplan"): ChargePlan => ({ license: 
  * `refundCharge`, povedené propojí `settleSwitchboardCharge`.
  */
 export async function chargeNewSwitchboard(prisma: PrismaClient, companyId: string, options: { floorplanId?: string | null } = {}): Promise<Charge> {
+  // Fáze 113: ⭐ neomezený přístup – plná verze bez kreditů; ukázková firma bez něj zůstává u zkušebního označení
+  if (await hasUnlimitedAccess(prisma, companyId)) return { kind: "switchboard", companyId, plan: unlimitedPlan("switchboard"), transactionId: null };
   if (isDemoCompany(companyId)) return { kind: "switchboard", companyId, plan: demoPlan("switchboard"), transactionId: null };
   return prisma.$transaction(async (tx) => {
     const company = await tx.registeredCompany.findUnique({ where: { id: companyId }, select: { trialFloorplanUsed: true, trialSwitchboardUsed: true } });
@@ -229,6 +252,7 @@ export async function chargeNewSwitchboard(prisma: PrismaClient, companyId: stri
 
 /** Nový 2D půdorys (první uložení na server): zkušební zdarma, jinak 15 kr. */
 export async function chargeNewFloorplan(prisma: PrismaClient, companyId: string): Promise<Charge> {
+  if (await hasUnlimitedAccess(prisma, companyId)) return { kind: "floorplan", companyId, plan: unlimitedPlan("floorplan"), transactionId: null };
   if (isDemoCompany(companyId)) return { kind: "floorplan", companyId, plan: demoPlan("floorplan"), transactionId: null };
   return prisma.$transaction(async (tx) => {
     const company = await tx.registeredCompany.findUnique({ where: { id: companyId }, select: { trialFloorplanUsed: true, trialSwitchboardUsed: true } });
@@ -254,7 +278,7 @@ export async function settleSwitchboardCharge(prisma: PrismaClient, charge: Char
 
 /** Nepovedené založení: vrátit kredity, případně zkušební rozváděč / půdorys. */
 export async function refundCharge(prisma: PrismaClient, charge: Charge) {
-  if (isDemoCompany(charge.companyId)) return;
+  if (isDemoCompany(charge.companyId) || charge.plan.reason === "UNLIMITED") return;
   if (charge.plan.reason === "TRIAL") {
     await prisma.registeredCompany.update({ where: { id: charge.companyId }, data: charge.kind === "switchboard" ? { trialSwitchboardUsed: false } : { trialFloorplanUsed: false } });
     return;
@@ -287,8 +311,14 @@ export type UnlockKind = "switchboard" | "floorplan" | "quote" | "cnc";
  */
 export async function unlockOutput(prisma: PrismaClient, companyId: string, kind: UnlockKind, id: string, now = new Date()): Promise<{ cost: number; license: string; balance: number }> {
   return prisma.$transaction(async (tx) => {
-    const company = await tx.registeredCompany.findUniqueOrThrow({ where: { id: companyId }, select: { creditsRemaining: true } });
+    const company = await tx.registeredCompany.findUniqueOrThrow({ where: { id: companyId }, select: { creditsRemaining: true, unlimitedAccess: true } });
     const done = (cost: number, license: string, balance = company.creditsRemaining) => ({ cost, license, balance });
+    // Fáze 113: ⭐ neomezený přístup – zkušební rozváděč / půdorys se převede na plnou verzi, nabídka a CNC zdarma
+    if (company.unlimitedAccess) {
+      if (kind === "floorplan") await tx.floorplan.updateMany({ where: { id, companyId, license: "TRIAL" }, data: { license: "UNLIMITED" } });
+      if (kind === "switchboard") await tx.panelBoardProject.updateMany({ where: { id, companyId, license: "TRIAL" }, data: { license: "UNLIMITED" } });
+      return done(0, "UNLIMITED");
+    }
     if (kind === "floorplan" || (kind === "quote" && (await tx.floorplan.count({ where: { id, companyId } })) > 0)) {
       const floorplan = await tx.floorplan.findFirst({ where: { id, companyId }, select: { id: true, license: true, quoteUnlockedAt: true } });
       if (!floorplan) throw new WorkflowError("NOT_FOUND", "Půdorys nebyl nalezen.");

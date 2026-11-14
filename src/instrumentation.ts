@@ -13,10 +13,13 @@ export async function register() {
     console.error("[eldock] Žurnál změn pro aplikace se nepodařilo připravit:", error);
   }
   if (process.env.NODE_ENV !== "production") return;
-  const [{ backupConfig }, { startMaintenanceScheduler }, { prisma }] = await Promise.all([import("./server/backup/config"), import("./server/jobs"), import("./lib/prisma")]);
+  const [{ backupConfig }, { startMaintenanceScheduler }, { prisma }, { loadPlatformSettings }] = await Promise.all([import("./server/backup/config"), import("./server/jobs"), import("./lib/prisma"), import("./server/services/platform-settings")]);
+  // Fáze 113: SMTP a úložiště záloh z velínu do paměti procesu (proměnné prostředí mají přednost)
+  await loadPlatformSettings(prisma).catch((error) => console.error("[eldock] Nastavení z velínu se nepodařilo načíst:", error));
   const config = backupConfig();
   for (const issue of config.issues) console.warn(`[eldock] Zálohy: ${issue}`);
-  startMaintenanceScheduler({ prisma, config, log: (message) => console.log(message) });
+  // Nastavení záloh se čte při každém běhu (změna ve velínu platí hned, bez restartu)
+  startMaintenanceScheduler({ prisma, log: (message) => console.log(message) });
   const time = `${String(config.time.hour).padStart(2, "0")}:${String(config.time.minute).padStart(2, "0")}`;
   console.log(
     config.scheduleEnabled

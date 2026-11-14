@@ -85,7 +85,10 @@ describe("fáze 86 – ověřené rozvodnice výrobců v katalogu skříní", ()
     expect(await labels("Hager")).toEqual(["Univers FWU", "Vector II", "Golf (orientační)", "Volta (orientační)"]);
     expect(await labels("Schrack")).toEqual(["TOPO nástěnná", "TOPO zapuštěná", "Amparo (orientační)", "Amparo UP (orientační)"]);
     expect(await labels("Rittal")).toEqual(["AX (orientační)"]);
-    expect(await labels("Eaton")).toEqual(["BF-O (orientační)", "KLV (orientační)"]);
+    // Fáze 113: ověřené řady Eaton, OEZ a Schneider z oficiálních stránek výrobců
+    expect(await labels("Eaton")).toEqual(["KLV", "KLV Multimedia", "xEnergy Basic BF", "BF-O (orientační)", "KLV (orientační)"]);
+    expect(await labels("OEZ")).toEqual(["RZA", "RZB", "RZG", "RZI", "RZA (orientační)", "RZB (orientační)"]);
+    expect(await labels("Schneider")).toEqual(["Mini Pragma", "Pragma"]);
   });
 
   it("projekt se zvolenou ověřenou rozvodnicí: lišty podle skříně, rozměry, krytí a P_max výrobce", async () => {

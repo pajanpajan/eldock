@@ -68,8 +68,8 @@ test("🏭 Výroba na klíč: výrobce z velínu, CNC & drátovací list v kroku
   await expect(wires).toContainText("H07V-K (CYA)");
   await expect(wires).toContainText(/Dutinka \d+(,\d)? mm²/);
   const [dxf] = await Promise.all([page.waitForEvent("download"), cnc.getByTestId("cnc-download-dxf").click()]);
-  // Fáze 111: ukázková firma má projekty zkušební – soubory CNC nesou příponu -ZKUSEBNI
-  expect(dxf.suggestedFilename()).toBe("1_CNC_Vrtaci_plan_1-1-ZKUSEBNI.dxf");
+  // Fáze 113: ukázková firma má ⭐ neomezený přístup – soubory CNC bez zkušební přípony
+  expect(dxf.suggestedFilename()).toBe("1_CNC_Vrtaci_plan_1-1.dxf");
   await page.screenshot({ path: "test-results/phase106-cnc.png" });
 
   // Objednávka výroby u vybraného výrobce → rezervace QR štítku EL-…

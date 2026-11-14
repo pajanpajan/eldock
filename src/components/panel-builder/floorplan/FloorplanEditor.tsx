@@ -13,6 +13,8 @@ import { INSTALL_LEVELS, INSTALL_METHODS, ROUTING_MODES, mountHeight, type Cable
 import {
   ANNOTATION_DEFAULTS,
   CONTROLS_LABEL,
+  DEFAULT_STOREY_MM,
+  MAX_FLOORS,
   PALETTE_GROUPS,
   SYMBOL_SCALE_MAX,
   SYMBOL_SCALE_MIN,
@@ -123,8 +125,8 @@ import {
 import { SWITCH_LINK_MODES, switchLinkPath } from "@/lib/panel-builder/switch-links";
 import type { CompanyStamp } from "@/lib/panel-builder/title-block";
 import { appearanceLabel, colorForSeries, designColor, frameColorForSeries, hasFrameChoice } from "@/lib/panel-builder/wiring-designs";
-import { renderPdfFile } from "@/lib/pdf-client";
-import { resizeImage, uploadPanelFile } from "@/lib/upload-client";
+import { renderPdfBackground } from "@/lib/pdf-client";
+import { uploadPanelFile } from "@/lib/upload-client";
 import { track } from "@/lib/telemetry-client";
 import { cn } from "@/lib/utils";
 import { boxSummary, resolveBox } from "@/lib/panel-builder/mounting-boxes-catalog";
@@ -144,6 +146,8 @@ import { AnnotationShape, HatchPatterns } from "./AnnotationLayer";
 import { AnnotationDetail, NoteStyleControls, type NoteStyle } from "./AnnotationPanel";
 import { CablePanel } from "./CablePanel";
 import { CalibrationDialog, type CalibrationResult } from "./CalibrationDialog";
+import { FloorBadge } from "./FloorBadge";
+import { detectFloorRooms, detectRoomAt, editorRoomOf } from "./room-detection-client";
 import { DeviceAppearance, SupplySelect } from "./DeviceAppearance";
 import { FloorBar } from "./FloorBar";
 import { FloorSymbol } from "./FloorSymbol";
@@ -217,7 +221,8 @@ import { snapOpening } from "@/lib/panel-builder/architecture";
 import { addRoomBySize, snapRoomRect, type SnapGuide } from "@/lib/panel-builder/room-builder";
 import { contentView, growPlane, meters, resizePlane } from "@/lib/panel-builder/floorplan-plane";
 import { assignLightingCircuit, assignSocketCircuit, isSocketElement, lightingSocketRows, moveSocketsToCircuit, nextSocketCircuit, optimizeSocketCircuits, socketCircuitRows, type SocketCircuitRow } from "@/lib/panel-builder/socket-circuits";
-import { BACKGROUND_PX, preloadImage, rasterizeSvg } from "@/lib/panel-builder/background-image";
+import { BACKGROUND_MAX_SIDE, encodeBackground, imageToCanvas, preloadImage, svgToCanvas } from "@/lib/panel-builder/background-image";
+import { isRoomText, rectFromCorners } from "@/lib/panel-builder/pdf-room-detector";
 import { TutorialVideoButton } from "@/components/tutorials/TutorialVideoButton";
 import { FloorplanSandboxTrainer } from "./FloorplanSandboxTrainer";
 import { FloorplanLiveChecklist, useLiveChecklistMode } from "./FloorplanLiveChecklist";
@@ -238,6 +243,9 @@ type Tool =
   | { kind: "room" }
   /** Fáze 63: polygonální místnost se šikmými stěnami – rohy po obvodu. */
   | { kind: "polygon" }
+  /** Fáze 113: 🪄 klik do místnosti na PDF (rozpozná stěny) a 📐 rychlá místnost 2 kliky (roh ➔ roh). */
+  | { kind: "wand" }
+  | { kind: "room2"; first: { x: number; y: number } | null }
   | { kind: "calibrate" }
   | { kind: "verify" }
   | { kind: "crop" }
@@ -1152,6 +1160,9 @@ export function FloorplanEditor({
       setNoteDraft({ mode: tool.mode, from: at, to: at });
       return;
     }
+    // Fáze 113: 🪄 klik do místnosti na PDF a 📐 rychlá místnost 2 kliky (roh ➔ roh)
+    if (tool.kind === "wand") return void wandAt(point);
+    if (tool.kind === "room2") return room2At(point);
     if (tool.kind === "polygon") {
       // Fáze 63: roh polygonální místnosti – první na rastr 5 cm, další s přichycením úhlu 0° / 45° / 90° (Shift = volně)
       const first = polyDraft[0];
@@ -1231,7 +1242,7 @@ export function FloorplanEditor({
       update((current) => toggleLink(current, element.id, tool.lightId));
       return;
     }
-    if (tool.kind === "room" || tool.kind === "polygon" || tool.kind === "crop" || tool.kind === "calibrate" || tool.kind === "verify" || tool.kind === "annotate") return onCanvasDown(event as unknown as ReactPointerEvent<SVGSVGElement>);
+    if (tool.kind === "room" || tool.kind === "room2" || tool.kind === "wand" || tool.kind === "polygon" || tool.kind === "crop" || tool.kind === "calibrate" || tool.kind === "verify" || tool.kind === "annotate") return onCanvasDown(event as unknown as ReactPointerEvent<SVGSVGElement>);
     // Fáze 100: klik na prvek na plátně otevře záložku 🎯 Detail
     showDetail();
     // Shift + klik = přidat / odebrat z výběru
@@ -1385,7 +1396,7 @@ export function FloorplanEditor({
       return;
     }
     const point = toPlan(event);
-    if (tool.kind === "place" || tool.kind === "place-set" || tool.kind === "polygon" || tool.kind === "room") setHover({ ...point, shift: event.shiftKey });
+    if (tool.kind === "place" || tool.kind === "place-set" || tool.kind === "polygon" || tool.kind === "room" || tool.kind === "room2") setHover({ ...point, shift: event.shiftKey });
     // Fáze 63: změna rozměru předmětu, posun úseku trasy, posun rohu polygonální místnosti
     if (fixtureDrag) {
       setDraft((current) => ({
@@ -1639,6 +1650,99 @@ export function FloorplanEditor({
     toast.success(`Místnost ${result.room.name} ${roomDimensions(result.room.w, result.room.h).label} – chyťte ji myší za plochu a přisuňte k ostatním (stěny a rohy se přichytí, Alt = bez přichytávání).`);
   }
 
+  /** Fáze 113: rozpoznané / nakliknuté místnosti do nákresu – jedinečné názvy, prvky uvnitř dostanou název místnosti. */
+  function addRooms(rooms: readonly EditorRoom[]) {
+    const named: EditorRoom[] = [];
+    for (const room of rooms) named.push({ ...room, name: uniqueRoomName([...draft.rooms, ...named], room.name) });
+    update((current) => ({
+      ...current,
+      rooms: [...current.rooms, ...named],
+      elements: current.elements.map((element) => {
+        if (current.rooms.some((room) => pointInRoom(room, element.x, element.y))) return element;
+        const hit = named.find((room) => pointInRoom(room, element.x, element.y));
+        return hit ? { ...element, room: hit.name } : element;
+      }),
+    }));
+    if (named.length) lastRoom.current = named[named.length - 1].name;
+    return named;
+  }
+
+  /**
+   * Fáze 113: 🔍 Automaticky rozpoznat místnosti z PDF – popisky z textové vrstvy + uzavřené oblasti zdiva na rastru.
+   * Nezkalibrovaný podklad s výměrami v popiscích (aspoň 2 shodné místnosti) dostane měřítko z výměr.
+   */
+  async function detectRoomsFromPdf() {
+    const background = draft.background;
+    if (!background) return void toast.error("Nejdřív nahrajte PDF nebo obrázek půdorysu tohoto podlaží.");
+    try {
+      setBusy("🔍 Rozpoznávám místnosti z PDF…");
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      let mmPerPx = draft.mmPerPx;
+      let detected = await detectFloorRooms(background, mmPerPx, draft.rooms);
+      let scaleNote = "";
+      const suggested = detected.result.suggestedMmPerPx;
+      if (draft.calibration.state === "none" && suggested) {
+        const ratio = suggested / detected.mmPerWorkPx;
+        if (Math.abs(ratio - 1) > 0.03) {
+          update((current) => ({ ...recalibrate(current, 1000, 1000 * ratio), calibration: { ...emptyCalibration(), state: "set", referenceMm: null, at: Date.now() } }));
+          mmPerPx *= ratio;
+          detected = await detectFloorRooms(background, mmPerPx, draft.rooms.map((room) => ({ ...room, x: room.x * ratio, y: room.y * ratio, w: room.w * ratio, h: room.h * ratio })));
+          scaleNote = " Měřítko podkladu odvozeno z výměr místností v PDF – ověřte ho kótou (📏).";
+        }
+      }
+      if (!detected.fresh.length) {
+        return void toast.info(
+          detected.result.rooms.length
+            ? "Všechny rozpoznané místnosti už v nákresu jsou."
+            : "V podkladu se nenašla žádná uzavřená místnost – zkuste 🪄 klik do místnosti nebo 📐 Rychlou místnost 2 kliky.",
+        );
+      }
+      const rooms = addRooms(detected.fresh.map((room, index) => editorRoomOf(room, detected.mmPerWorkPx, newId("m"), room.name ?? `Místnost ${draft.rooms.length + index + 1}`)));
+      const named = detected.fresh.filter((room) => room.name).length;
+      setTool({ kind: "select" });
+      setSelection([]);
+      setSelectedRoomId(null);
+      toast.success(`🔍 Rozpoznáno ${rooms.length} ${plural(rooms.length, "místnost", "místnosti", "místností")}${named ? ` (názvy z PDF: ${named})` : ""} – 3D náhled ukáže i vnitřní příčky. Polohu a rozměr upravíte tažením.${scaleNote}`, { duration: 8000 });
+    } catch (error) {
+      toast.error(error instanceof Error ? `Místnosti se nepodařilo rozpoznat: ${error.message}` : "Místnosti se nepodařilo rozpoznat.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /** Fáze 113: 🪄 klik do místnosti na PDF – oblast k okolnímu zdivu, název z PDF nebo dotazem. */
+  async function wandAt(point: { x: number; y: number }) {
+    const background = draft.background;
+    if (!background) return void toast.error("🪄 Klik do místnosti potřebuje nahraný PDF / obrázek podkladu.");
+    if (draft.rooms.some((room) => pointInRoom(room, point.x, point.y))) return void toast.info("Tady už místnost je – klikněte do jiné místnosti (Esc = konec).");
+    try {
+      setBusy("🪄 Hledám stěny místnosti…");
+      const found = await detectRoomAt(background, draft.mmPerPx, point);
+      if ("error" in found) return void toast.error(found.error, { duration: 7000 });
+      const suggestion = found.room.name ?? `Místnost ${draft.rooms.length + 1}`;
+      const name = found.room.name ?? window.prompt(`Název místnosti (${found.room.areaM2.toLocaleString("cs-CZ")} m²):`, suggestion)?.trim();
+      if (!name) return;
+      const [room] = addRooms([editorRoomOf(found.room, found.mmPerWorkPx, newId("m"), name)]);
+      toast.success(`🪄 Místnost ${room.name} (${found.room.areaM2.toLocaleString("cs-CZ")} m²) podle stěn v PDF – klikněte do další místnosti, Esc = konec.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Místnost se nepodařilo rozpoznat.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /** Fáze 113: 📐 rychlá místnost 2 kliky – druhý roh vytvoří obdélník, nástroj zůstává aktivní pro další místnost. */
+  function room2At(point: { x: number; y: number }) {
+    if (tool.kind !== "room2") return;
+    const at = snapPlan(point);
+    if (!tool.first) return void setTool({ kind: "room2", first: at });
+    const rect = rectFromCorners(tool.first, at);
+    if (rect.w < 500 || rect.h < 500) return void toast.error("Místnost musí mít aspoň 0,5 × 0,5 m – klikněte na protilehlý roh.");
+    const [room] = addRooms([{ id: newId("m"), name: `Místnost ${draft.rooms.length + 1}`, ...rect }]);
+    setTool({ kind: "room2", first: null });
+    toast.success(`📐 ${room.name} ${roomDimensions(rect.w, rect.h).label} – klikněte na roh další místnosti, Esc = konec.`);
+  }
+
   /** Fáze 89: ⚡ z lišty průvodce / kompaktní lišty – stejné generování jako v kartě „Založit rozváděč“ (její údaje). */
   function generateFromBar() {
     if (sandbox) return generateSandbox();
@@ -1727,7 +1831,13 @@ export function FloorplanEditor({
     update((current) => ({ ...current, calibration: { ...current.calibration, state: "verified", check, at: Date.now() } }));
     setCalibrationDialog(null);
     setTool({ kind: "select" });
-    toast.success("Měřítko ověřeno a potvrzeno.");
+    // Fáze 113: po kalibraci PDF podkladu nabídnout rozpoznání místností na 1 klik
+    if (draft.background && !draft.rooms.length)
+      toast.success("Měřítko ověřeno a potvrzeno. Rozpoznat teď místnosti a příčky z PDF?", {
+        duration: 15_000,
+        action: { label: "🔍 Rozpoznat místnosti", onClick: () => (clickTestId("pdf-rooms-auto") ? undefined : void detectRoomsFromPdf()) },
+      });
+    else toast.success("Měřítko ověřeno a potvrzeno.");
   }
 
   async function pickBackground(file: File) {
@@ -1737,41 +1847,42 @@ export function FloorplanEditor({
     // Fáze 95: BIM model IFC – podlaží, místnosti, okna, dveře a elektro prvky v měřítku 1 : 1
     if (/\.ifc$/i.test(file.name)) return void importIfc(file);
     try {
-      let blob: Blob;
-      let widthPx: number;
-      let heightPx: number;
+      let canvas: HTMLCanvasElement;
       let pagePt: FloorplanBackground["pagePt"] = null;
       let pages = 1;
+      let labels: NonNullable<FloorplanBackground["labels"]> = [];
       if (file.type === "application/pdf" || /\.pdf$/i.test(file.name)) {
-        // Fáze 57: pdf.js dostane přímo data souboru; výsledek je hotový JPEG v šířce 3200 px
+        // Fáze 57: pdf.js dostane přímo data souboru; fáze 113: delší strana 2400 px a popisky místností z textové vrstvy
         setBusy("Vykresluji PDF…");
-        const rendered = await renderPdfFile(file, 1, BACKGROUND_PX);
-        ({ blob, width: widthPx, height: heightPx, pagePt, pageCount: pages } = rendered);
+        const rendered = await renderPdfBackground(file, { maxSide: BACKGROUND_MAX_SIDE, keepText: isRoomText });
+        ({ canvas, pagePt, pageCount: pages, labels } = rendered);
       } else {
         setBusy("Připravuji obrázek…");
-        const resized = await resizeImage(file.type === "image/svg+xml" ? await rasterizeSvg(file) : file, BACKGROUND_PX, 0.9);
-        const bitmap = await createImageBitmap(resized);
-        widthPx = bitmap.width;
-        heightPx = bitmap.height;
-        bitmap.close();
-        blob = resized;
+        canvas = file.type === "image/svg+xml" || /\.svg$/i.test(file.name) ? await svgToCanvas(file) : await imageToCanvas(file);
       }
       // Fáze 55: nevykreslená / prázdná stránka PDF by dala nesmyslné měřítko (plocha 0 × 0 m)
-      if (!widthPx || !heightPx) throw new Error("Podklad se nepodařilo vykreslit (prázdná stránka). Zkuste jinou stránku nebo obrázek PNG / JPG.");
+      if (!canvas.width || !canvas.height) throw new Error("Podklad se nepodařilo vykreslit (prázdná stránka). Zkuste jinou stránku nebo obrázek PNG / JPG.");
+      // Fáze 113: WebP (jinak JPEG) v kvalitě 0,82 do ~600 kB – podklad podlaží místo jednotek MB
+      setBusy("Komprimuji podklad…");
+      const encoded = await encodeBackground(canvas);
+      const shrink = encoded.width / canvas.width;
+      const widthPx = encoded.width;
+      const heightPx = encoded.height;
+      if (shrink < 1) labels = labels.map((label) => ({ ...label, x: Math.round(label.x * shrink * 10) / 10, y: Math.round(label.y * shrink * 10) / 10, h: Math.round(label.h * shrink * 10) / 10 }));
       setBusy("Nahrávám podklad…");
-      const uploaded = await uploadPanelFile("photo", new File([blob], "pudorys.jpg", { type: "image/jpeg" }));
+      const uploaded = await uploadPanelFile("photo", encoded.file);
       // Obrázek se načte dřív, než se přepne nákres – plátno ho pak ukáže hned, bez obnovení stránky
       setBusy("Načítám podklad…");
       await preloadImage(uploaded.url);
       // Výchozí odhad měřítka: šířka podkladu ≈ 15 m – přesně ho nastaví kalibrace
       const mmPerPx = 15_000 / widthPx;
       // Fáze 100: po nahrání podklad na doporučených 60 % (jemně potlačený kontrast) – okruhy, trasy a značky vyniknou
-      const background: FloorplanBackground = { url: uploaded.url, widthPx, heightPx, rotation: 0, crop: null, pagePt, look: DEFAULT_BACKGROUND_LOOK };
+      const background: FloorplanBackground = { url: uploaded.url, widthPx, heightPx, rotation: 0, crop: null, pagePt, look: DEFAULT_BACKGROUND_LOOK, ...(labels.length ? { labels } : {}) };
       update((current) => ({ ...current, background, cad: null, mmPerPx, ...planExtent(background, mmPerPx), calibration: emptyCalibration() }));
       setView(FIT);
       setCalibration([]);
       setTool({ kind: "calibrate" });
-      toast.info(`${pages > 1 ? `PDF má ${pages} stran – použita 1. strana. ` : ""}Podklad podlaží ${draft.floorName} nahrán. Teď klikněte na začátek a konec známé stěny nebo kóty (📏 kalibrace).`);
+      toast.info(`${pages > 1 ? `PDF má ${pages} stran – použita 1. strana. ` : ""}Podklad podlaží ${draft.floorName} nahrán. Teď klikněte na začátek a konec známé stěny nebo kóty (📏 kalibrace)${labels.length ? " – pak 🔍 rozpozná místnosti podle popisků v PDF" : ""}.`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Podklad se nepodařilo nahrát.");
     } finally {
@@ -1868,6 +1979,19 @@ export function FloorplanEditor({
     if (tool.kind === "place" && !paletteFor(draft.installation, occupancy).some((item) => item.id === tool.item)) setTool({ kind: "select" });
     const mode = occupancyOf(occupancy);
     toast.success(`${mode.icon} ${mode.short}: ${mode.hint}${isMedical(occupancy) ? " Paleta má novou skupinu 🏥 Zdravotnictví." : ""}`);
+  }
+
+  /** Fáze 113: „+ Přidat podlaží“ v kartě Místnosti a podlaží – další NP o konstrukční výšku 3 m nad nejvyšším. */
+  function addNextFloor() {
+    const top = floors.reduce((max, floor) => (floor.levelMm > max.levelMm ? floor : max), floors[0]);
+    const levelMm = top.levelMm + DEFAULT_STOREY_MM;
+    const base = `${Math.max(1, Math.round(levelMm / DEFAULT_STOREY_MM) + 1)}. NP`;
+    let name = base;
+    for (let index = 2; floors.some((floor) => floor.name === name); index++) name = `${base} (${index})`;
+    update((current) => addFloor(current, { name, levelMm }));
+    clearSelection();
+    setView(FIT);
+    toast.success(`Podlaží ${name} ${levelLabel(levelMm)} přidáno – nahrajte jeho podklad (PDF) nebo kreslete do rastru.`);
   }
 
   function selectFloor(id: string) {
@@ -2103,6 +2227,12 @@ export function FloorplanEditor({
         ? `Klikněte do půdorysu – celá sestava se vloží přisazená v jednom rámečku ${setGangs}R; u stěny se přicvakne a natočí ke stěně (jinak natočení ${placeRotation}°, R = otočit). Esc / pravé tlačítko = konec.`
       : tool.kind === "room"
         ? "Tažením myší nakreslete obdélník místnosti – rozměry X × Y se zobrazují živě."
+      : tool.kind === "room2"
+        ? tool.first
+          ? "📐 Klikněte na protilehlý (pravý dolní) roh místnosti – místnost se hned vytvoří a nástroj zůstane aktivní. Esc = konec."
+          : "📐 Rychlá místnost: klikněte na levý horní roh místnosti na PDF, pak na pravý dolní. Esc = konec."
+      : tool.kind === "wand"
+        ? "🪄 Klikněte doprostřed místnosti na PDF – stěny kolem se rozpoznají samy (název z PDF, jinak se zeptám). Esc = konec."
         : tool.kind === "polygon"
           ? `📐 Klikejte rohy místnosti po obvodu (${polyDraft.length} ${plural(polyDraft.length, "roh", "rohy", "rohů")}) – úhel se přichytává na 0° / 45° / 90°, Shift = volný úhel podle podkladu. Uzavřete klikem na první roh nebo Enter, Backspace = zpět.`
         : tool.kind === "crop"
@@ -2190,6 +2320,10 @@ export function FloorplanEditor({
           ? { tone: "place", title: `▦ Vkládání sestavy: ${tool.label} (${setGangs}R)`, onDone: endStep, extra: rotateNext }
           : tool.kind === "room"
             ? { tone: "draw", title: "▭ Kreslení místností", onDone: endStep }
+            : tool.kind === "room2"
+              ? { tone: "draw", title: "📐 Rychlá místnost 2 kliky (roh ➔ roh)", onDone: endStep }
+            : tool.kind === "wand"
+              ? { tone: "draw", title: "🪄 Klik do místnosti na PDF", onDone: endStep }
             : tool.kind === "polygon"
               ? { tone: "draw", title: "📐 Polygonální místnost / šikmé stěny", onDone: () => (polyDraft.length >= 3 ? finishPolygon() : endStep()), doneLabel: polyDraft.length >= 3 ? "Uzavřít místnost" : "Hotovo" }
             : tool.kind === "crop"
@@ -2398,6 +2532,21 @@ export function FloorplanEditor({
     <>
         <ToolButton active={tool.kind === "polygon"} onClick={() => (setPolyDraft([]), setTool({ kind: "polygon" }))} icon={<span aria-hidden>📐</span>} label="Kreslit šikmou stěnu / polygonální místnost" />
     </>
+  );
+  // Fáze 113: místnosti z PDF výkresu – 🔍 automaticky (popisky + uzavřené oblasti zdiva), 🪄 klik do místnosti
+  // (flood fill k okolním stěnám) a 📐 rychlá místnost dvěma rohy (nástroj zůstává aktivní pro další místnosti)
+  const roomDetectTools = (
+    <div className="flex flex-col gap-1" role="group" aria-label="Místnosti z PDF výkresu" data-testid="pdf-room-tools">
+      <Button type="button" size="sm" className="h-auto justify-start gap-1.5 bg-yellow-400 py-1.5 text-left font-semibold whitespace-normal text-zinc-950 hover:bg-yellow-300" onClick={() => void detectRoomsFromPdf()} disabled={!draft.background || busy !== null} title={draft.background ? "Přečte popisky místností z PDF (čísla, názvy, výměry) a najde uzavřené oblasti mezi stěnami" : "Nejdřív nahrajte PDF nebo obrázek půdorysu"} data-testid="pdf-rooms-auto">
+        🔍 Automaticky rozpoznat místnosti z PDF
+      </Button>
+      <Button type="button" size="sm" variant="outline" className={cn("h-auto justify-start gap-1.5 border-yellow-400/70 py-1.5 text-left font-semibold whitespace-normal", tool.kind === "wand" && "bg-yellow-400/20 ring-2 ring-yellow-400")} aria-pressed={tool.kind === "wand"} onClick={() => setTool(tool.kind === "wand" ? { kind: "select" } : { kind: "wand" })} disabled={!draft.background || busy !== null} data-testid="pdf-rooms-wand">
+        🪄 Klikni do místnosti na PDF (rozpozná stěny)
+      </Button>
+      <Button type="button" size="sm" variant="outline" className={cn("h-auto justify-start gap-1.5 py-1.5 text-left whitespace-normal", tool.kind === "room2" && "bg-yellow-400/20 ring-2 ring-yellow-400")} aria-pressed={tool.kind === "room2"} onClick={() => setTool(tool.kind === "room2" ? { kind: "select" } : { kind: "room2", first: null })} data-testid="pdf-rooms-2click">
+        📐 Rychlá místnost 2 kliky (roh ➔ roh)
+      </Button>
+    </div>
   );
   const calibrateTool = (
     <>
@@ -3028,12 +3177,13 @@ export function FloorplanEditor({
           tools={
             <>
               {selectTool}
-              <ToolbarPopover label="+ Místnost (X×Y / Myší / Šikmá)" testId="compact-room">
+              <ToolbarPopover label="+ Místnost (X×Y / Myší / Šikmá / z PDF)" testId="compact-room">
                 <RoomBySizeForm onCreate={createRoomBySize} rooms={roomNames} />
                 <div className="flex flex-wrap items-center gap-1.5">
                   {roomTool}
                   {polygonTool}
                 </div>
+                {roomDetectTools}
               </ToolbarPopover>
               {calibrateTool}
               <ToolbarPopover label={`Podlaží (${draft.floorName})`} testId="compact-floors" wide>
@@ -3128,6 +3278,7 @@ export function FloorplanEditor({
                   {pdfMenu}
                   {cleanGridButton}
                 </span>
+                {roomDetectTools}
               </div>
               <div className="flex flex-col gap-1.5 rounded-lg border border-border/70 p-2" role="group" aria-label="Kreslím místnosti od nuly">
                 <span className="text-[11px] font-semibold text-muted-foreground">b) Kreslím od nuly:</span>
@@ -3289,6 +3440,24 @@ export function FloorplanEditor({
                 </g>
               ) : null}
               {/* Fáze 63: rozkreslená polygonální místnost – rohy a gumová čára ke kurzoru s délkou a úhlem */}
+              {/* Fáze 113: 📐 rychlá místnost 2 kliky – náhled obdélníku od prvního rohu ke kurzoru */}
+              {tool.kind === "room2" && tool.first
+                ? (() => {
+                    const first = tool.first;
+                    const rect = rectFromCorners(first, hover ? snapPlan(hover) : first);
+                    return (
+                      <g pointerEvents="none" data-testid="room2-draft">
+                        <rect x={rect.x} y={rect.y} width={rect.w} height={rect.h} fill="rgba(250,204,21,0.08)" stroke="#facc15" strokeWidth={stroke * 3} strokeDasharray={`${ui / 3} ${ui / 4}`} />
+                        <circle cx={first.x} cy={first.y} r={ui * 0.3} fill="#facc15" stroke="#09090b" strokeWidth={stroke} />
+                        {rect.w > 0 && rect.h > 0 ? (
+                          <text x={rect.x + rect.w / 2} y={rect.y + rect.h / 2} fontSize={ui * 0.7} fontWeight={700} textAnchor="middle" fill="#facc15" stroke="#09090b" strokeWidth={ui * 0.05} paintOrder="stroke">
+                            {roomDimensions(rect.w, rect.h).label}
+                          </text>
+                        ) : null}
+                      </g>
+                    );
+                  })()
+                : null}
               {tool.kind === "polygon" && polyDraft.length
                 ? (() => {
                     const last = polyDraft[polyDraft.length - 1];
@@ -3591,9 +3760,8 @@ export function FloorplanEditor({
                 lightingOn={Boolean(selected.onLighting)}
               />
             ) : null}
-            <span className="pointer-events-none absolute top-2 left-2 rounded-md border border-border bg-card/90 px-2 py-0.5 text-xs font-semibold" data-testid="active-floor">
-              {draft.floorName} <span className="font-mono text-muted-foreground">{levelLabel(draft.floorLevelMm)}</span>
-            </span>
+            {/* Fáze 113: štítek podlaží je přepínač (2 podlaží = výzva „⇄ Přepnout na …“, 3+ = plovoucí menu) */}
+            <FloorBadge floors={floors} activeId={draft.floorId} onSelect={selectFloor} />
             {busy ? (
               <div className="absolute inset-0 flex items-center justify-center bg-zinc-950/70" role="status" data-testid="floorplan-busy">
                 <p className="flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2 text-sm">
@@ -3620,10 +3788,29 @@ export function FloorplanEditor({
           {/* Fáze 98: fáze 1 – seznam místností a podlaží (klik vybere místnost a otevře její detail) */}
           {tab("rooms") ? (
             <PanelSection id="rooms" title="🏠 Místnosti a podlaží" testId="rooms-overview" badge={<span className="rounded bg-muted px-1.5 font-mono text-[10px]">{draft.rooms.length}</span>}>
-              <p className="text-xs text-muted-foreground">
-                Podlaží: <b className="text-foreground">{draft.floorName}</b>
-                {floors.length > 1 ? ` (celkem ${floors.length})` : ""} – další podlaží přidáte v levé paletě.
-              </p>
+              {/* Fáze 113: přepínání podlaží přímo v kartě (místo odkazu na levou paletu) a rychlé přidání dalšího */}
+              <div className="flex flex-wrap items-center gap-1.5 text-xs" role="tablist" aria-label="Podlaží domu" data-testid="rooms-floor-switch">
+                {[...floors]
+                  .sort((a, b) => a.levelMm - b.levelMm)
+                  .map((floor) => (
+                    <button
+                      key={floor.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={floor.id === draft.floorId}
+                      onClick={() => floor.id !== draft.floorId && selectFloor(floor.id)}
+                      className={cn("rounded-md border px-2 py-1 font-semibold", floor.id === draft.floorId ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:border-yellow-400 hover:text-foreground")}
+                      data-testid={`rooms-floor-${floor.name}`}
+                    >
+                      {floor.name} <span className="font-mono text-[10px] opacity-80">{levelLabel(floor.levelMm)}</span>
+                    </button>
+                  ))}
+                {floors.length < MAX_FLOORS ? (
+                  <button type="button" onClick={addNextFloor} className="rounded-md border border-dashed border-primary/60 px-2 py-1 font-semibold text-primary hover:bg-primary/10" data-testid="rooms-floor-add">
+                    + Přidat podlaží
+                  </button>
+                ) : null}
+              </div>
               {draft.rooms.length ? (
                 <ul className="flex flex-col gap-0.5 text-xs">
                   {draft.rooms.map((room) => {

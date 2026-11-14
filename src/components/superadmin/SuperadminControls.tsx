@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { superadminCancelClosureAction, superadminCloseCompanyAction } from "@/server/actions/data-requests";
-import { adjustCreditsAction, cancelCreditOrderAction, confirmCreditOrderAction, loginSuperadminAction, resolveAiFeedbackAction, runBackupNowAction } from "@/server/actions/superadmin";
+import { adjustCreditsAction, cancelCreditOrderAction, confirmCreditOrderAction, loginSuperadminAction, resolveAiFeedbackAction, runBackupNowAction, setUnlimitedAccessAction } from "@/server/actions/superadmin";
 
 // Klientské ovládací prvky velínu /superadmin (fáze 50).
 
@@ -34,6 +34,33 @@ export function SuperadminLoginForm() {
 }
 
 /** [ +5 / +10 / +50 kreditů ] a ruční nastavení počtu kreditů firmy. */
+/** Fáze 113: ⭐ neomezený přístup firmy – přepínač ve velínu. */
+export function UnlimitedAccessToggle({ companyId, companyName, unlimited }: { companyId: string; companyName: string; unlimited: boolean }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  return (
+    <label className="mt-2 flex items-center gap-1.5 text-xs" title="Nové rozváděče a půdorysy v plné verzi bez kreditů, Hlídač revizí bez limitu zařízení (účet provozovatele, ukázková firma)">
+      <input
+        type="checkbox"
+        className="size-4 accent-amber-400"
+        checked={unlimited}
+        disabled={pending}
+        onChange={(event) => {
+          const next = event.target.checked;
+          startTransition(async () => {
+            const result = await setUnlimitedAccessAction(companyId, next);
+            if (!result.ok) return void toast.error(result.error);
+            toast.success(next ? `⭐ ${companyName}: neomezený přístup zapnut.` : `${companyName}: neomezený přístup vypnut – platí kredity a tarify.`);
+            router.refresh();
+          });
+        }}
+        data-testid="company-unlimited"
+      />
+      ⭐ Neomezený přístup
+    </label>
+  );
+}
+
 export function CreditControls({ companyId, companyName, credits }: { companyId: string; companyName: string; credits: number }) {
   const router = useRouter();
   const [value, setValue] = useState(String(credits));

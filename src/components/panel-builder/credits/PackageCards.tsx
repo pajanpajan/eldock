@@ -14,7 +14,7 @@ import { createCreditOrderAction } from "@/server/actions/credits";
  * Fáze 111: balíčky kreditů nového ceníku (START 30 / MONTÉR 125 / PROJEKČNÍ & MONTÁŽNÍ FIRMA 300) a předplatné PRO;
  * [ Objednat ] založí objednávku a otevře QR platbu se zálohovou fakturou. `preselected` = balíček z odkazu ceníku.
  */
-export function PackageCards({ preselected = null, firstTopUp = true }: { preselected?: string | null; firstTopUp?: boolean }) {
+export function PackageCards({ preselected = null, firstTopUp = true, vatPayer = false }: { preselected?: string | null; firstTopUp?: boolean; /** Fáze 113: neplátce DPH = cena je konečná. */ vatPayer?: boolean }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   function order(code: string) {
@@ -39,10 +39,10 @@ export function PackageCards({ preselected = null, firstTopUp = true }: { presel
             <p className="font-mono text-xs text-primary">{pkg.name}</p>
             <h2 className="text-lg font-bold">{pkg.title}</h2>
             <p>
-              <span className="text-3xl font-black tabular-nums">{formatCzk(pkg.priceExclVat)}</span> <span className="text-sm text-muted-foreground">bez DPH</span>
+              <span className="text-3xl font-black tabular-nums">{formatCzk(pkg.priceExclVat)}</span> <span className="text-sm text-muted-foreground">{vatPayer ? "bez DPH" : "konečná cena"}</span>
             </p>
             <p className="text-xs text-muted-foreground">
-              {formatCzk(withVat(pkg.priceExclVat))} s DPH 21 % · {pkg.note}
+              {vatPayer ? `${formatCzk(withVat(pkg.priceExclVat))} s DPH 21 %` : "neplátce DPH"} · {pkg.note}
             </p>
             <ul className="flex flex-col gap-1 text-sm">
               <li className="flex items-center gap-1.5">
@@ -68,7 +68,7 @@ export function PackageCards({ preselected = null, firstTopUp = true }: { presel
           <p className="font-semibold">{pro.name}</p>
           <p className="text-sm text-muted-foreground">{pro.features.join(" · ")}</p>
           <p className="mt-1 text-sm">
-            <b>{formatCzk(pro.monthExclVat)}</b> / měsíc nebo <b>{formatCzk(pro.yearExclVat)}</b> / rok <span className="text-xs text-muted-foreground">(bez DPH)</span>
+            <b>{formatCzk(pro.monthExclVat)}</b> / měsíc nebo <b>{formatCzk(pro.yearExclVat)}</b> / rok <span className="text-xs text-muted-foreground">({vatPayer ? "bez DPH" : "neplátce DPH"})</span>
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

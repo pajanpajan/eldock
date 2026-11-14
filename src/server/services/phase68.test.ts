@@ -187,7 +187,8 @@ describe("zálohy", () => {
     const summary = parseBackupSummary(first.summaryJson)!;
     expect(summary.snapshot).toMatchObject({ name: "eldock-20261106T013000Z.db.gz", encrypted: false, counts: { plants: 2, equipment: 3 } });
     expect(summary.snapshot.tables).toBeGreaterThan(20);
-    expect(summary.offsiteSkipped).toMatch(/není nastavené/);
+    // Fáze 113: bez úložiště mimo server klidná informace o místní záloze
+    expect(summary.offsiteSkipped).toBe("💾 Lokální záloha na serveru je aktivní (S3/R2 cloud úložiště je volitelné)");
     await runBackup({ prisma, config, storageRoot: root, now: () => new Date("2026-11-07T01:30:00Z") }, "SCHEDULE");
     await runBackup({ prisma, config, storageRoot: root, now: () => new Date("2026-11-08T01:30:00Z") }, "MANUAL");
     expect((await listLocalSnapshots(config.dir)).map((item) => item.name)).toEqual(["eldock-20261108T013000Z.db.gz", "eldock-20261107T013000Z.db.gz"]);

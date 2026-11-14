@@ -367,7 +367,8 @@ describe("fáze 112 – QR platba SPD a údaje provozovatele", () => {
 
   it("patička, registrační údaje, VOP a ceny neplátce DPH", () => {
     expect(footerLine(DEFAULT_OPERATOR)).toBe("ELDOCK.cz · Pavel Janoušek · Jablonec nad Nisou · info@eldock.cz");
-    expect(registryLines(DEFAULT_OPERATOR)).toEqual([]);
+    // Fáze 113: výchozí provozovatel je neplátce DPH (IČO / DIČ zatím nevyplněné)
+    expect(registryLines(DEFAULT_OPERATOR)).toEqual(["Neplátce DPH"]);
     const profile = parseOperator(JSON.stringify({ ...DEFAULT_OPERATOR, ico: "27082440", dic: "cz27082440", registry: "C 12345 vedená u KS v Ústí nad Labem", vatPayer: false, iban: "neplatný" }));
     expect(registryLines(profile)).toEqual(["IČO 27082440", "DIČ CZ27082440", "C 12345 vedená u KS v Ústí nad Labem"]);
     expect(profile.iban).toBe(DEFAULT_OPERATOR.iban);
@@ -377,7 +378,8 @@ describe("fáze 112 – QR platba SPD a údaje provozovatele", () => {
     expect(operatorSchema.safeParse({ ...DEFAULT_OPERATOR, ico: "12345678" }).success).toBe(false);
     expect(operatorSchema.safeParse({ ...DEFAULT_OPERATOR, dic: "12345678" }).success).toBe(false);
     expect(operatorSchema.safeParse({ ...DEFAULT_OPERATOR, ico: "27082440", dic: "CZ27082440" }).success).toBe(true);
-    expect(parseLabelSets(JSON.stringify([{ title: "Sada 50", count: 50, priceExclVat: 690 }, { title: "chyba", count: 0, priceExclVat: 1 }]))).toEqual([{ title: "Sada 50", count: 50, priceExclVat: 690, code: "LABELS_50" }]);
+    // Fáze 113: sada ze starého zápisu (jen počet) = štítky spotřebičů, kód podle složení
+    expect(parseLabelSets(JSON.stringify([{ title: "Sada 50", count: 50, priceExclVat: 690 }, { title: "chyba", count: 0, priceExclVat: 1 }]))).toEqual([{ title: "Sada 50", description: "", items: [{ kind: "A", count: 50 }], count: 50, priceExclVat: 690, code: "LABELS_A50" }]);
     expect(labelCountOf("LABELS_50")).toBe(50);
     expect(labelCountOf("START_30")).toBeNull();
   });

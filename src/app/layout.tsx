@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
 import { BrokenImageGuard } from "@/components/common/BrokenImageGuard";
+import { StaleDeployGuard } from "@/components/common/StaleDeployGuard";
 import { CONSENT_MODE_DEFAULT, ConsentManager } from "@/components/consent/ConsentManager";
 import { GlobalContactWidget } from "@/components/contact/GlobalContactWidget";
 import { Toaster } from "@/components/ui/sonner";
@@ -66,6 +67,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <GlobalContactWidget />
         {/* Fáze 99: žádná ikona rozbitého obrázku (globální pojistka k vektorovým náhledům katalogu) */}
         <BrokenImageGuard />
+        {/* Fáze 113: po nasazení nové verze výzva k načtení stránky místo tiché chyby Server Action */}
+        <StaleDeployGuard />
         {/* Fáze 56 / 102: lišta souhlasu s cookies a měření (GA4, Clarity, Sklik, Ads, LinkedIn podle /api/consent) */}
         <ConsentManager />
       </body>

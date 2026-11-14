@@ -9,7 +9,7 @@ import { prisma } from "@/lib/prisma";
 import { companyManufacturer } from "@/lib/registered-company";
 import { actionFailure, guardCompany, guardEditableProject } from "@/server/panel-guards";
 import { chargeNewSwitchboard, refundCharge, settleSwitchboardCharge } from "@/server/services/credits";
-import { linkGeneratedProject } from "@/server/services/floorplans";
+import { MAX_DRAFT_CHARS, linkGeneratedProject } from "@/server/services/floorplans";
 import { createProjectFromFloorplan, createProjectFromSchedule, deletePanelProjects, previewFloorplanLayouts, updateProjectHeader, type DeleteResult } from "@/server/services/panel-projects";
 import type { LayoutPreviewDto } from "@/lib/panel-builder/layout-options";
 import { recordSwitchboard } from "@/server/services/telemetry";
@@ -134,8 +134,8 @@ export async function previewFloorplanLayoutsAction(input: { draft: unknown; man
 /** ⚡ Vygenerovat rozváděč z 2D půdorysu (fáze 49) – 1 kredit; nepovedený návrh kredit vrátí. Fáze 64: vazba na uložený půdorys. */
 export async function createFloorplanProjectAction(input: z.input<typeof floorplanSchema>): Promise<ActionResult<{ id: string; devices: number; circuits: number; enclosure: string | null; manufacturer: string | null; warnings: string[]; boards: { code: string; id: string }[]; license: string; cost: number }>> {
   const parsed = floorplanSchema.safeParse(input);
-  // Fáze 59: vícepodlažní nákres s poznámkami je větší – limit 900 kB (Server Action do 1 MB)
-  if (!parsed.success || JSON.stringify(parsed.data.draft ?? null).length > 900_000) return { ok: false, error: "Zadejte název rozváděče; půdorys je příliš velký nebo neplatný." };
+  // Fáze 59: vícepodlažní nákres s poznámkami je větší; fáze 113: stejný limit jako uložený půdorys (Server Action do 50 MB)
+  if (!parsed.success || JSON.stringify(parsed.data.draft ?? null).length > MAX_DRAFT_CHARS) return { ok: false, error: "Zadejte název rozváděče; půdorys je příliš velký nebo neplatný." };
   const { floorplanId, ...project } = parsed.data;
   try {
     const company = await guardCompany();

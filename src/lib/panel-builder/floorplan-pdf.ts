@@ -4,6 +4,7 @@
 
 import type { Annotation, EditorElement, EditorRoom, FloorplanDraft } from "./floorplan-editor";
 import type { BackgroundLook } from "./background-look";
+import type { PdfTextLabel } from "./pdf-room-detector";
 
 export type Rotation = 0 | 90 | 180 | 270;
 export const isRotation = (value: unknown): value is Rotation => value === 0 || value === 90 || value === 180 || value === 270;
@@ -29,7 +30,15 @@ export interface FloorplanBackground {
   pagePt: { width: number; height: number } | null;
   /** Fáze 100: vzhled na plátně (🌗 Podklad: 100 % / 60 % / 35 % / tmavý CAD); bez údaje doporučených 60 %. */
   look?: BackgroundLook;
+  /**
+   * Fáze 113: popisky místností z textové vrstvy PDF (čísla 1.01, názvy, výměry m²) – střed a výška písma v px
+   * nahraného obrázku před otočením; podklad pro 🔍 automatické rozpoznání místností.
+   */
+  labels?: PdfTextLabel[];
 }
+
+/** Nejvíc uložených popisků místností na podlaží. */
+export const MAX_BACKGROUND_LABELS = 400;
 
 /** Nejmenší ořez [px] – menší výřez je spíš omyl než záměr. */
 export const MIN_CROP_PX = 40;
@@ -43,6 +52,18 @@ export function rotatedSize(background: Pick<FloorplanBackground, "widthPx" | "h
 export function visibleRect(background: FloorplanBackground): CropRect {
   const size = rotatedSize(background);
   return background.crop ?? { x: 0, y: 0, w: size.w, h: size.h };
+}
+
+/**
+ * Fáze 113: bod obrázku podkladu (px před otočením) → mm půdorysu podle otočení, ořezu a měřítka (stejně jako
+ * `backgroundTransform`).
+ */
+export function imagePointToPlan(background: Pick<FloorplanBackground, "widthPx" | "heightPx" | "rotation" | "crop">, mmPerPx: number, point: { x: number; y: number }) {
+  const { widthPx: w, heightPx: h } = background;
+  const rotated =
+    background.rotation === 90 ? { x: h - point.y, y: point.x } : background.rotation === 180 ? { x: w - point.x, y: h - point.y } : background.rotation === 270 ? { x: point.y, y: w - point.x } : { x: point.x, y: point.y };
+  const rect = visibleRect(background as FloorplanBackground);
+  return { x: (rotated.x - rect.x) * mmPerPx, y: (rotated.y - rect.y) * mmPerPx };
 }
 
 /** Plocha výkresu [mm] z podkladu a měřítka. */

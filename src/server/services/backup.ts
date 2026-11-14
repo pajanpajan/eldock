@@ -6,6 +6,7 @@ import Database from "better-sqlite3";
 import type { PrismaClient } from "@/generated/prisma/client";
 import type { MaintenanceTrigger } from "@/generated/prisma/enums";
 import { UPLOAD_KINDS } from "@/lib/files";
+import { LOCAL_BACKUP_INFO } from "@/lib/platform-settings";
 import type { BackupConfig } from "@/server/backup/config";
 import { createSealer, packFile, unpackFile, type Sealer } from "@/server/backup/crypto";
 import { S3Client } from "@/server/backup/s3";
@@ -284,8 +285,9 @@ export async function runBackup(deps: BackupDeps, trigger: MaintenanceTrigger) {
     const s3 = deps.s3 === undefined ? s3ClientFor(config) : deps.s3;
     let offsite: OffsiteSummary | null = null;
     let offsiteSkipped: string | null = null;
-    if (!config.s3 && !deps.s3) offsiteSkipped = "Úložiště mimo server není nastavené (ELDOCK_BACKUP_S3_*).";
-    else if (!sealer) offsiteSkipped = "Mimo server se zálohy posílají jen šifrované – chybí ELDOCK_BACKUP_KEY.";
+    // Fáze 113: bez úložiště mimo server je místní záloha plnohodnotná – klidná informace, ne chyba
+    if (!config.s3 && !deps.s3) offsiteSkipped = LOCAL_BACKUP_INFO;
+    else if (!sealer) offsiteSkipped = "Mimo server se zálohy posílají jen šifrované – chybí ELDOCK_BACKUP_KEY (nebo heslo šifrování záloh ve velínu).";
     else if (s3) offsite = await syncOffsite(deps, s3, sealer, { name, archivePath, dbBytes, archiveBytes: packed.bytes, sha256: packed.sha256 }, tmpDir);
 
     const summary: BackupSummary = { snapshot, local: { dir: config.dir, kept: Math.min(local.length, config.keepLocal), removed }, offsite, offsiteSkipped, durationMs: Date.now() - started };

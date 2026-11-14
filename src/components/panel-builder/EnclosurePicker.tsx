@@ -7,7 +7,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { ENCLOSURE_MANUFACTURERS, INSTALLATION_LABELS, MOUNTING_FILTERS, fitEnclosures, ipNumber, reservePercent, type EnclosureInstallation, type EnclosureLike, type EnclosureNeed, type MountingFilter } from "@/lib/panel-builder/enclosures";
+import { ENCLOSURE_BRANDS, INSTALLATION_LABELS, MOUNTING_FILTERS, fitEnclosures, ipNumber, reservePercent, type EnclosureInstallation, type EnclosureLike, type EnclosureNeed, type MountingFilter } from "@/lib/panel-builder/enclosures";
 import { cn } from "@/lib/utils";
 import { listEnclosuresAction, selectEnclosureAction } from "@/server/actions/panel-design";
 
@@ -84,7 +84,7 @@ export function EnclosurePicker({
         </DialogHeader>
 
         <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4" role="group" aria-label="Výrobce skříně">
-          {ENCLOSURE_MANUFACTURERS.map((value) => (
+          {ENCLOSURE_BRANDS.map((value) => (
             <button
               key={value}
               type="button"

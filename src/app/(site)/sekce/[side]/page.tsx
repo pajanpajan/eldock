@@ -15,6 +15,7 @@ import { OG_IMAGE, SITE_URL, jsonLdScript } from "@/lib/seo";
 import { GATEWAY, GATEWAY_SIDES, type GatewaySide } from "@/lib/site-sections";
 import { breadcrumbJsonLd } from "@/lib/site-map";
 import { hasShowcaseProject } from "@/server/queries/panel-builder";
+import { getOperatorProfile } from "@/server/operator";
 import { getAuthSession } from "@/server/session";
 
 const isSide = (value: string): value is GatewaySide => (GATEWAY_SIDES as readonly string[]).includes(value);
@@ -126,7 +127,7 @@ export default async function GatewaySectionPage({ params }: PageProps<"/sekce/[
         ) : null}
 
         <section id="cenik" className="mx-auto w-full max-w-6xl scroll-mt-20 px-4 pb-16 sm:px-6" data-testid="section-pricing">
-          <PricingOverview audience={home ? "installer" : "buildings"} />
+          <PricingOverview audience={home ? "installer" : "buildings"} vatPayer={(await getOperatorProfile()).vatPayer} />
         </section>
 
         <section className="mx-auto w-full max-w-6xl px-4 pb-10 sm:px-6">

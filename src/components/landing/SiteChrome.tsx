@@ -6,7 +6,7 @@ import { LandingMobileNav } from "@/components/landing/LandingMobileNav";
 import { Logo } from "@/components/layout/Logo";
 import { Button } from "@/components/ui/button";
 import { BRAND } from "@/lib/brand";
-import { footerLine, registryLines } from "@/lib/operator";
+import { footerDetails, footerLine } from "@/lib/operator";
 import { getOperatorProfile } from "@/server/operator";
 import { footerSections, siteNav, type SiteLink } from "@/lib/site-map";
 import { cn } from "@/lib/utils";
@@ -55,7 +55,8 @@ export function SiteHeader({ clientZone, showcase, current }: { clientZone: Site
 export async function SiteFooter({ clientZone, showcase }: { clientZone: SiteLink; showcase: boolean }) {
   // Fáze 112: provozovatel z velínu (IČO, DIČ, spisová značka se ukážou, až je velín vyplní)
   const operator = await getOperatorProfile();
-  const registry = registryLines(operator);
+  // Fáze 113: adresa, IČO / DIČ jen když jsou vyplněné (jinak „Neplátce DPH“) a bankovní spojení
+  const registry = footerDetails(operator);
   return (
     <footer className="no-print border-t border-border bg-background/80" data-testid="site-footer">
       <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-10 text-sm text-muted-foreground sm:px-6 md:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1fr_1fr]">

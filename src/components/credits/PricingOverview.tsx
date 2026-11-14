@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Check } from "lucide-react";
 
 import { ACTION_PRICE_ROWS, CREDIT_PACKAGES, CREDIT_VALIDITY_MONTHS, FIRST_TOP_UP_LABELS, SUBSCRIPTIONS, formatCzk, withVat } from "@/lib/credits";
+import { DEFAULT_OPERATOR } from "@/lib/operator";
 import { cn } from "@/lib/utils";
 
 /**
@@ -9,7 +10,8 @@ import { cn } from "@/lib/utils";
  * k prvnímu dobití) a předplatné. `installer` = elektrikáři a projektanti (balíčky + PRO), `buildings` = budovy
  * a průmysl (tarify Hlídače revizí). Bez stavu – web, podsekce i stránka kreditů.
  */
-export function PricingOverview({ audience, orderHref = (code) => `/panel-builder/credits?balicek=${code}` }: { audience: "installer" | "buildings"; orderHref?: (code: string) => string }) {
+// Fáze 113: ceny podle plátcovství provozovatele (neplátce DPH = cena je konečná) – plátcovství předá stránka z velínu
+export function PricingOverview({ audience, orderHref = (code) => `/panel-builder/credits?balicek=${code}`, vatPayer = DEFAULT_OPERATOR.vatPayer }: { audience: "installer" | "buildings"; orderHref?: (code: string) => string; vatPayer?: boolean }) {
   const plans = audience === "installer" ? SUBSCRIPTIONS.filter((plan) => plan.plan === "PRO") : SUBSCRIPTIONS.filter((plan) => plan.plan !== "PRO");
   return (
     <div className="flex flex-col gap-6" data-testid={`pricing-${audience}`}>
@@ -42,10 +44,10 @@ export function PricingOverview({ audience, orderHref = (code) => `/panel-builde
                 {pkg.highlight ? <span className="absolute -top-3 left-5 rounded-full bg-primary px-2.5 py-0.5 text-xs font-bold text-primary-foreground">Nejoblíbenější</span> : null}
                 <p className="font-semibold">{pkg.title}</p>
                 <p>
-                  <span className="text-2xl font-black tabular-nums">{pkg.credits} kreditů</span> za <b>{formatCzk(pkg.priceExclVat)}</b> <span className="text-xs text-muted-foreground">bez DPH</span>
+                  <span className="text-2xl font-black tabular-nums">{pkg.credits} kreditů</span> za <b>{formatCzk(pkg.priceExclVat)}</b> <span className="text-xs text-muted-foreground">{vatPayer ? "bez DPH" : "konečná cena"}</span>
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {pkg.note} · {formatCzk(withVat(pkg.priceExclVat))} s DPH
+                  {pkg.note} · {vatPayer ? `${formatCzk(withVat(pkg.priceExclVat))} s DPH` : "neplátce DPH"}
                 </p>
                 <Link href={orderHref(pkg.code)} className="mt-auto inline-flex min-h-10 items-center justify-center rounded-lg border border-primary/60 px-3 text-sm font-semibold text-primary hover:bg-primary/10">
                   Objednat balíček
@@ -64,7 +66,7 @@ export function PricingOverview({ audience, orderHref = (code) => `/panel-builde
           <li key={plan.plan} className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-5" data-plan={plan.plan}>
             <p className="font-semibold">{plan.name}</p>
             <p>
-              <span className="text-2xl font-black tabular-nums">{formatCzk(plan.monthExclVat)}</span> / měsíc <span className="text-xs text-muted-foreground">(nebo {formatCzk(plan.yearExclVat)} / rok, bez DPH)</span>
+              <span className="text-2xl font-black tabular-nums">{formatCzk(plan.monthExclVat)}</span> / měsíc <span className="text-xs text-muted-foreground">(nebo {formatCzk(plan.yearExclVat)} / rok, {vatPayer ? "bez DPH" : "neplátce DPH"})</span>
             </p>
             <ul className="flex flex-col gap-1 text-sm">
               {plan.features.map((feature) => (

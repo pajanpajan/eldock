@@ -6,8 +6,8 @@ import { PrintButton } from "@/components/landing/PrintButton";
 import { BankDetails } from "@/components/panel-builder/credits/BankDetails";
 import { PaymentQr } from "@/components/panel-builder/credits/PaymentQr";
 import { panelBuilderGuard } from "@/components/panel-builder/access";
-import { labelCountOf, operatorAddress, registryLines } from "@/lib/operator";
-import { getOperatorProfile, paymentAccount } from "@/server/operator";
+import { labelCountOf, labelOrderTitle, operatorAddress, registryLines } from "@/lib/operator";
+import { getLabelSets, getOperatorProfile, paymentAccount } from "@/server/operator";
 import { VAT_RATE, creditPackage, formatCzk, spdPayload } from "@/lib/credits";
 import { formatDate } from "@/lib/format";
 import { getCreditOrder } from "@/server/queries/panel-builder";
@@ -43,7 +43,7 @@ export default async function InvoicePage({ params }: PageProps<"/panel-builder/
   // Fáze 112: sada QR štítků (bez kreditů) a faktura neplátce DPH (cena bez DPH je konečná)
   const labels = labelCountOf(order.packageCode);
   const withVat = vat > 0;
-  const itemTitle = labels ? `Sada ${labels} ks stříbrných QR štítků ELDOCK (EL-xxxxxx, odeslání poštou)` : `ELDOCK AI Panel Builder – ${pkg?.title ?? order.packageCode} (${pkg?.name ?? order.packageCode}), ${order.creditsCount} kreditů`;
+  const itemTitle = labels ? `${labelOrderTitle(order.packageCode, await getLabelSets())} – ${labels} ks QR štítků ELDOCK (EL-xxxxxx, odeslání poštou)` : `ELDOCK AI Panel Builder – ${pkg?.title ?? order.packageCode} (${pkg?.name ?? order.packageCode}), ${order.creditsCount} kreditů`;
   const payload = spdPayload({ iban: bank.iban, bic: bank.bic, amountCzk: order.priceCzkInclVat, variableSymbol: order.variableSymbol, message: `ELDOCK ${labels ? "QR stitky" : "Kredity"} ${customer.companyName}` });
 
   return (

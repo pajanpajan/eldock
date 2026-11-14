@@ -8,8 +8,12 @@ import { emptyLibrary, parseFloorplanLibrary, type FloorplanLibrary } from "@/li
 import { WorkflowError } from "@/lib/workflow/state-machine";
 import { chargeNewFloorplan, refundCharge } from "./credits";
 
-/** Největší nákres (JSON) – Server Action má limit 1 MB. */
-export const MAX_DRAFT_CHARS = 900_000;
+/**
+ * Největší nákres (JSON). Fáze 113: Server Action přijme 50 MB (`next.config.ts`), podklady podlaží jsou soubory
+ * v úložišti (v nákresu jen odkaz) – 20 MB stačí i na desítky podlaží; větší nákres by zbytečně nafukoval historii verzí.
+ */
+export const MAX_DRAFT_CHARS = 20_000_000;
+export const MAX_DRAFT_LABEL = "20 MB";
 /** Průběžné ukládání založí snímek v historii nejvýš jednou za 10 minut. */
 export const AUTO_SNAPSHOT_MS = 10 * 60_000;
 /** Počet snímků historie na půdorys (starší se mažou). */
@@ -64,7 +68,7 @@ export function serializeDraft(raw: unknown): { draft: FloorplanDraft; json: str
   const draft = parseDraft(raw);
   if (!draft) throw new WorkflowError("VALIDATION", "Půdorys se nepodařilo načíst.");
   const json = JSON.stringify(draft);
-  if (json.length > MAX_DRAFT_CHARS) throw new WorkflowError("VALIDATION", "Půdorys je příliš velký (přes 900 kB) – rozdělte ho na víc půdorysů.");
+  if (json.length > MAX_DRAFT_CHARS) throw new WorkflowError("VALIDATION", `Půdorys je příliš velký (přes ${MAX_DRAFT_LABEL}) – rozdělte ho na víc půdorysů.`);
   return { draft, json };
 }
 

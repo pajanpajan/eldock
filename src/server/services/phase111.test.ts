@@ -146,7 +146,8 @@ describe("fáze 111 – kredity: 1 testovací projekt zdarma, pak ceník a prode
     expect(await creditSubscriptions(prisma, new Date("2026-12-22T09:00:00Z"))).toEqual({ credited: 1 });
     await expect(createCreditOrder(prisma, company.id, "SUB_ENTERPRISE_MONTH")).rejects.toThrow(/aktivuje obchod/);
     const tester = (await prisma.panelBoardProject.findUniqueOrThrow({ where: { code: "PB-001" } })).companyId!;
-    expect((await chargeNewSwitchboard(prisma, tester)).plan).toMatchObject({ license: "TRIAL", cost: 0 });
+    // Fáze 113: ukázková firma má ⭐ neomezený přístup – plná verze bez kreditů
+    expect((await chargeNewSwitchboard(prisma, tester)).plan).toMatchObject({ license: "UNLIMITED", cost: 0 });
     expect((await prisma.panelBoardProject.findUniqueOrThrow({ where: { code: "PB-001" } })).license).toBe("PAID");
   });
 });

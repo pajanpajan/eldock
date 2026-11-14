@@ -4,7 +4,7 @@ import { measurementSummary, type RevisionRecord } from "@/lib/revision-import";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 
 import { geminiConfig, visionJson } from "./geminiPanelService";
-import { createRoomDevice } from "./hlidac";
+import { assertDeviceCapacity, createRoomDevice } from "./hlidac";
 import { recordInspection, renderInspectionReport } from "./inspection";
 
 // Fáze 112: import revizních dat do budovy (Hlídač revizí, Revize) – spotřebiče z tabulky staré zprávy nebo exportu
@@ -30,6 +30,9 @@ const tagFrom = (designation: string) => (/^[A-Za-z]{1,5}-?\d{1,6}$/.test(design
 
 export async function importRevisionAppliances(prisma: PrismaClient, input: ApplianceImportInput) {
   if (!input.records.length) throw new WorkflowError("VALIDATION", "V importu nejsou žádné spotřebiče.");
+  // Fáze 113: celý import se musí vejít do limitu zařízení tarifu (ne napůl)
+  const floor = await prisma.floor.findUnique({ where: { id: input.floorId }, select: { building: { select: { plantId: true } } } });
+  if (floor) await assertDeviceCapacity(prisma, floor.building.plantId, Math.min(input.records.length, MAX_IMPORT_ROWS));
   const now = input.now ?? new Date();
   const created: { id: string; tag: string; name: string }[] = [];
   const skipped: { line: number; reason: string }[] = [];

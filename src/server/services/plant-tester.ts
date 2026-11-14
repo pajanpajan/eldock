@@ -69,6 +69,8 @@ export async function ensurePlantTester(prisma: PrismaClient, now: Date = new Da
     },
     now,
   );
+  // Fáze 113: testovací firma má ⭐ neomezený přístup (Hlídač revizí bez limitu zařízení pro testy aplikací)
+  await prisma.registeredCompany.update({ where: { id: companyId }, data: { unlimitedAccess: true } });
   // Směnový údržbář jako podúčet firmy (jako ze správy podúčtů) s heslem rovnou nastaveným (místo pozvánky)
   const technician = await createSubAccount(prisma, {
     name: PLANT_TESTER.technician.name,

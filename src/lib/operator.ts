@@ -26,7 +26,7 @@ export interface OperatorProfile {
   dic: string;
   /** Spisová značka (OR) nebo zápis v živnostenském rejstříku. */
   registry: string;
-  /** Plátce DPH – faktura s DPH 21 %, jinak „Není plátce DPH“ a cena bez DPH je konečná. */
+  /** Plátce DPH – faktura s DPH 21 %, jinak „Neplátce DPH“ a cena bez DPH je konečná. */
   vatPayer: boolean;
   iban: string;
   bic: string;
@@ -44,7 +44,8 @@ export const DEFAULT_OPERATOR: OperatorProfile = {
   ico: "",
   dic: "",
   registry: "",
-  vatPayer: true,
+  // Fáze 113: režim před založením s.r.o. – neplátce DPH (cena bez DPH je konečná); plátcovství přepne velín
+  vatPayer: false,
   iban: COMPANY_INFO.bank.iban,
   bic: COMPANY_INFO.bank.bic,
   bankName: COMPANY_INFO.bank.name,
@@ -96,7 +97,7 @@ export const footerLine = (profile: OperatorProfile) => [profile.brand, profile.
 
 /** Vyplněné registrační údaje („IČO 12345678“, „DIČ CZ12345678“, „Spisová značka …“). */
 export function registryLines(profile: OperatorProfile): string[] {
-  return [profile.ico ? `IČO ${profile.ico}` : null, profile.dic ? `DIČ ${profile.dic.replace(/\s/g, "").toUpperCase()}` : profile.vatPayer ? null : "Není plátce DPH", profile.registry || null].filter((line): line is string => Boolean(line));
+  return [profile.ico ? `IČO ${profile.ico}` : null, profile.dic ? `DIČ ${profile.dic.replace(/\s/g, "").toUpperCase()}` : profile.vatPayer ? null : "Neplátce DPH", profile.registry || null].filter((line): line is string => Boolean(line));
 }
 
 /** Adresa jedním řádkem. */
@@ -104,7 +105,7 @@ export const operatorAddress = (profile: OperatorProfile) => [profile.street, [p
 
 /** Identita provozovatele do VOP a zásad („Pavel Janoušek, Jablonec nad Nisou, IČO …, provozovatel webu ELDOCK.cz“). */
 export function operatorIdentity(profile: OperatorProfile): string {
-  return [profile.name, operatorAddress(profile) || profile.city, ...registryLines(profile).filter((line) => line !== "Není plátce DPH"), `provozovatel webu ${profile.brand}`].filter(Boolean).join(", ");
+  return [profile.name, operatorAddress(profile) || profile.city, ...registryLines(profile).filter((line) => line !== "Neplátce DPH"), `provozovatel webu ${profile.brand}`].filter(Boolean).join(", ");
 }
 
 /** Cena s DPH podle plátcovství provozovatele (neplátce = cena bez DPH je konečná). */
@@ -114,35 +115,150 @@ export const priceWithVat = (priceExclVat: number, vatPayer: boolean, rate = 0.2
 export const withOperator = (text: string, profile: OperatorProfile) => text.replaceAll("{{PROVOZOVATEL}}", operatorIdentity(profile)).replaceAll("{{EMAIL}}", profile.email);
 
 // -----------------------------------------------------------------------------
-//  Sady QR štítků k objednání (cena a počet nastavuje velín)
+//  Sady QR štítků k objednání (ceník z velínu; fáze 113: výchozí sady jsou rovnou v prodeji)
 // -----------------------------------------------------------------------------
 
+/** Druh štítku v sadě: A = spotřebič (30 × 15 mm), S = rozváděč (50 × 25 mm), M = stroj (70 × 40 mm). */
+export type LabelKind = "A" | "S" | "M";
+export const LABEL_KINDS: Record<LabelKind, { purpose: "APPLIANCE" | "SWITCHBOARD" | "MACHINE"; label: string; size: string; material: string }> = {
+  A: { purpose: "APPLIANCE", label: "Spotřebič", size: "30 × 15 mm", material: "PET + resin, termotransfer 300 DPI" },
+  S: { purpose: "SWITCHBOARD", label: "Rozváděč", size: "50 × 25 mm", material: "stříbrný Datapol PET (−40 až +150 °C)" },
+  M: { purpose: "MACHINE", label: "Stroj", size: "70 × 40 mm", material: "stříbrný 3M / Datapol PET" },
+};
+const KIND_ORDER: readonly LabelKind[] = ["A", "S", "M"];
+
+export interface LabelSetItem {
+  kind: LabelKind;
+  count: number;
+}
+
 export interface LabelSet {
-  /** Kód objednávky „LABELS_50“. */
+  /** Kód objednávky podle složení sady („LABELS_A100“, „LABELS_A60S30M10“). */
   code: string;
   title: string;
+  description: string;
+  items: LabelSetItem[];
+  /** Kusů celkem. */
   count: number;
+  /** Cena sady bez DPH (neplátce DPH = konečná cena). */
   priceExclVat: number;
 }
 
-export const labelSetSchema = z.object({ title: text(120).min(1), count: z.number().int().min(1).max(5000), priceExclVat: z.number().int().min(1).max(500_000) });
+const itemSchema = z.object({ kind: z.enum(["A", "S", "M"]), count: z.number().int().min(1).max(5000) });
 
-export const labelSetCode = (count: number) => `LABELS_${count}`;
+/** Sada z velínu – fáze 112 ukládala jen `count` (= štítky spotřebičů). */
+export const labelSetSchema = z.preprocess(
+  (value) => (value && typeof value === "object" && !("items" in value) && "count" in value ? { ...value, items: [{ kind: "A", count: (value as { count: unknown }).count }] } : value),
+  z.object({
+    title: text(120).min(1, "Vyplňte název sady."),
+    description: text(400).default(""),
+    items: z.array(itemSchema).min(1).max(3),
+    priceExclVat: z.number().int().min(1, "Vyplňte cenu sady.").max(500_000),
+  }),
+);
 
+/** Složení sady (sečtené podle druhu, pořadí A → S → M). */
+export function normalizeItems(items: readonly LabelSetItem[]): LabelSetItem[] {
+  return KIND_ORDER.map((kind) => ({ kind, count: items.filter((item) => item.kind === kind).reduce((sum, item) => sum + item.count, 0) })).filter((item) => item.count > 0);
+}
+
+/** Kód objednávky sady podle složení. */
+export const labelSetCode = (items: readonly LabelSetItem[]) => `LABELS_${normalizeItems(items).map((item) => `${item.kind}${item.count}`).join("")}`;
+
+/** Kód objednávky → složení sady (fáze 112 „LABELS_50“ = 50 štítků spotřebičů); jiný kód = null. */
+export function labelItemsOf(code: string): LabelSetItem[] | null {
+  const legacy = /^LABELS_(\d{1,4})$/.exec(code);
+  if (legacy) return [{ kind: "A", count: Number(legacy[1]) }];
+  const match = /^LABELS_((?:[ASM]\d{1,4}){1,3})$/.exec(code);
+  if (!match) return null;
+  const items = [...match[1].matchAll(/([ASM])(\d{1,4})/g)].map((part) => ({ kind: part[1] as LabelKind, count: Number(part[2]) }));
+  return items.every((item) => item.count > 0) ? normalizeItems(items) : null;
+}
+
+/** Kód objednávky sady štítků → počet kusů celkem (null = není sada štítků). */
+export const labelCountOf = (code: string) => labelItemsOf(code)?.reduce((sum, item) => sum + item.count, 0) ?? null;
+
+/** Složení sady textem („60× Spotřebič 30 × 15 mm + 30× Rozváděč 50 × 25 mm …“). */
+export const labelItemsText = (items: readonly LabelSetItem[]) => normalizeItems(items).map((item) => `${item.count}× ${LABEL_KINDS[item.kind].label} ${LABEL_KINDS[item.kind].size}`).join(" + ");
+
+/** Cena za kus („4,90 Kč/ks“). */
+export const pricePerPiece = (set: Pick<LabelSet, "priceExclVat" | "count">, vatPayer: boolean) =>
+  `${(priceWithVat(set.priceExclVat, vatPayer) / Math.max(1, set.count)).toLocaleString("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Kč/ks`;
+
+function labelSet(input: { title: string; description: string; items: LabelSetItem[]; priceExclVat: number }): LabelSet {
+  const items = normalizeItems(input.items);
+  return { ...input, items, code: labelSetCode(items), count: items.reduce((sum, item) => sum + item.count, 0) };
+}
+
+/**
+ * Fáze 113: výchozí prodejní sady odolných QR štítků ELDOCK (300 DPI termotransfer PET + resin) – objednávka štítků je
+ * zapnutá hned po nasazení; ceny a složení upraví velín (uložené sady mají přednost, prázdný seznam = vypnuto).
+ */
+export const DEFAULT_LABEL_SETS: readonly LabelSet[] = [
+  labelSet({
+    title: "Sada SPOTŘEBIČ & KANCELÁŘ (100 ks · 30×15 mm)",
+    description: "Pro monitory, PC, prodlužovačky a nářadí dle ČSN 33 1600 ed. 2.",
+    items: [{ kind: "A", count: 100 }],
+    priceExclVat: 490,
+  }),
+  labelSet({
+    title: "Sada SPOTŘEBIČ & KANCELÁŘ – VELKÁ (500 ks · 30×15 mm)",
+    description: "Zvýhodněný kotouč pro revizní techniky a administrativní budovy.",
+    items: [{ kind: "A", count: 500 }],
+    priceExclVat: 1750,
+  }),
+  labelSet({
+    title: "Sada ROZVÁDĚČ PROFI (50 ks · 50×25 mm · Stříbrný Datapol PET)",
+    description: "Pro domovní a komerční rozváděče dle ČSN EN IEC 61439 (−40 až +150 °C).",
+    items: [{ kind: "S", count: 50 }],
+    priceExclVat: 745,
+  }),
+  labelSet({
+    title: "Sada PRŮMYSL & STROJE (50 ks · 70×40 mm · Stříbrný 3M/Datapol PET)",
+    description: "Pro výrobní stroje, linky a rozvodny dle Nařízení EU 2023/1230.",
+    items: [{ kind: "M", count: 50 }],
+    priceExclVat: 1450,
+  }),
+  labelSet({
+    title: "STARTOVACÍ MIX SADA ELDOCK (100 ks celkem: 60× Spotřebič + 30× Rozváděč + 10× Stroj)",
+    description: "Vyzkoušejte všechny druhy štítků – spotřebiče, rozváděče i stroje v jedné zásilce.",
+    items: [
+      { kind: "A", count: 60 },
+      { kind: "S", count: 30 },
+      { kind: "M", count: 10 },
+    ],
+    priceExclVat: 890,
+  }),
+];
+
+/** Uložené sady z velínu; bez záznamu výchozí sady (fáze 113), prázdný seznam = objednávka štítků vypnutá. */
 export function parseLabelSets(json: string | null | undefined): LabelSet[] {
-  if (!json) return [];
+  if (json == null) return DEFAULT_LABEL_SETS.map((set) => ({ ...set, items: set.items.map((item) => ({ ...item })) }));
   try {
     const raw = JSON.parse(json) as unknown;
     if (!Array.isArray(raw)) return [];
-    const sets = raw.map((row) => labelSetSchema.safeParse(row)).filter((row) => row.success).map((row) => ({ ...row.data, code: labelSetCode(row.data.count) }));
-    return [...new Map(sets.map((set) => [set.code, set])).values()].sort((a, b) => a.count - b.count);
+    const sets = raw.map((row) => labelSetSchema.safeParse(row)).filter((row) => row.success).map((row) => labelSet(row.data));
+    return [...new Map(sets.map((set) => [set.code, set])).values()];
   } catch {
     return [];
   }
 }
 
-/** Kód objednávky sady štítků → počet kusů (null = není sada štítků). */
-export const labelCountOf = (code: string) => {
-  const match = /^LABELS_(\d{1,4})$/.exec(code);
-  return match ? Number(match[1]) : null;
-};
+/** Název objednávky sady štítků (název sady z ceníku, jinak složení); jiný kód = null. */
+export function labelOrderTitle(code: string, sets: readonly LabelSet[] = DEFAULT_LABEL_SETS): string | null {
+  const items = labelItemsOf(code);
+  if (!items) return null;
+  return sets.find((set) => set.code === code)?.title ?? `Sada QR štítků ELDOCK (${labelItemsText(items)})`;
+}
+
+/** IBAN po čtveřicích („CZ17 5500 0000 …“). */
+export const formatIban = (iban: string) => iban.replace(/\s+/g, "").replace(/(.{4})/g, "$1 ").trim();
+
+/**
+ * Fáze 113: druhý řádek patičky – adresa (je-li ulice), IČO / DIČ / spisová značka jen když jsou vyplněné, jinak
+ * „Neplátce DPH“, a bankovní spojení (číslo účtu, jinak IBAN).
+ */
+export function footerDetails(profile: OperatorProfile): string[] {
+  const account = profile.accountNumber ? `Č. ú. ${profile.accountNumber}` : profile.iban ? `IBAN ${formatIban(profile.iban)}` : null;
+  return [profile.street ? operatorAddress(profile) : null, ...registryLines(profile), account].filter((line): line is string => Boolean(line));
+}
