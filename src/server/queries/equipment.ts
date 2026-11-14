@@ -26,7 +26,7 @@ async function loadEquipmentDetail(equipmentId: string) {
               // Fáze 66: účel objektu a více než 200 osob (lhůty revizí VTZ, NV 190/2022 Sb., příloha č. 4)
               type: true,
               crowdOver200: true,
-              plant: { select: { id: true, code: true, name: true, customerName: true, designerName: true, designerEmail: true } },
+              plant: { select: { id: true, code: true, name: true, customerName: true, city: true, designerName: true, designerEmail: true } },
               _count: { select: { floors: true } },
             },
           },
@@ -250,3 +250,33 @@ export const getEquipmentKnowledge = cache(async (equipmentId: string) => {
 });
 
 export type EquipmentKnowledge = Awaited<ReturnType<typeof getEquipmentKnowledge>>;
+
+/** Fáze 116: všechny Červenky (polní zákresy a požadavky na změnu) stroje / rozváděče pro záložku ✏️ Červenky. */
+export async function getEquipmentRedlines(equipmentId: string) {
+  return prisma.changeRequest.findMany({
+    where: { equipmentId },
+    orderBy: { submittedAt: "desc" },
+    select: {
+      id: true,
+      number: true,
+      status: true,
+      priority: true,
+      note: true,
+      voiceTranscript: true,
+      engineerSummary: true,
+      markupImageUrl: true,
+      markupSheet: true,
+      safetyImpact: true,
+      requiresSoftwareUpdate: true,
+      submittedAt: true,
+      closedAt: true,
+      baseRevision: { select: { version: true } },
+      reporter: { select: { name: true, company: true } },
+      assignee: { select: { name: true } },
+      redlineTask: { select: { mode: true, status: true, internalName: true, rewardCzk: true, dueAt: true, claimedBy: { select: { name: true } } } },
+      resolvingRevisions: { orderBy: [{ major: "desc" }, { minor: "desc" }], select: { version: true, status: true } },
+    },
+  });
+}
+
+export type EquipmentRedline = Awaited<ReturnType<typeof getEquipmentRedlines>>[number];

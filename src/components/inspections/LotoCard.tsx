@@ -5,12 +5,13 @@ import { EQUIPMENT_TYPE_ICONS } from "@/lib/equipment-icons";
 import { EQUIPMENT_TYPE_LABELS, formatCount } from "@/lib/format";
 import { downstreamTree, upstreamChain, type PowerNode } from "@/lib/power-tree";
 import { equipmentHref } from "@/lib/routes";
-import { LOTO_ROLES } from "@/lib/legislation-2027";
+import { parseLotoPersons } from "@/lib/loto-persons";
 
 import { LotoChecklist } from "./LotoChecklist";
+import { LotoResponsible } from "./LotoResponsible";
 
 /** „⚡ LOTO – Bezpečné odpojení a hierarchie napájení“: kde vypnout a co zůstane bez proudu. */
-export function LotoCard({ equipment, nodes }: { equipment: { id: string; tag: string }; nodes: PowerNode[] }) {
+export function LotoCard({ equipment, nodes, canEdit = false }: { equipment: { id: string; tag: string; lotoResponsibleJson?: string | null }; nodes: PowerNode[]; canEdit?: boolean }) {
   const chain = upstreamChain(equipment.id, nodes);
   const lockout = chain.at(-1) ?? null;
   const impact = downstreamTree(equipment.id, nodes);
@@ -89,19 +90,7 @@ export function LotoCard({ equipment, nodes }: { equipment: { id: string; tag: s
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2" data-testid="loto-50110">
-        <div className="space-y-2 rounded-xl border border-border bg-card p-4">
-          <h3 className="font-semibold">Odpovědné osoby (ČSN EN 50110-1 ed. 4)</h3>
-          <dl className="space-y-2 text-sm">
-            {LOTO_ROLES.map((role) => (
-              <div key={role.code}>
-                <dt className="font-medium">
-                  {role.label} <span className="font-mono text-yellow-300">({role.code})</span>
-                </dt>
-                <dd className="text-muted-foreground">{role.duty}</dd>
-              </div>
-            ))}
-          </dl>
-        </div>
+        <LotoResponsible equipmentId={equipment.id} persons={parseLotoPersons(equipment.lotoResponsibleJson)} canEdit={canEdit} />
         <div className="rounded-xl border border-border bg-card p-4">
           <LotoChecklist />
         </div>

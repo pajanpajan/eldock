@@ -360,6 +360,8 @@ model Plant {
   inspectorProfiles   InspectorProfile[]
   registeredCompanies RegisteredCompany[]
   homeUsers           User[]              @relation("UserHomePlant")
+  /// Fáze 116: sklad náhradních dílů podle MPN
+  spareParts          SparePartStock[]
 }
 
 /// Budova v areálu – klikací oblast v Campus View.
@@ -499,6 +501,12 @@ model Equipment {
   feederUpstreamBreakerA  Float? // In předřazeného jističe [A]
   nominalCurrentA         Float? // výpočtový odběr Ib [A]
   measuredCurrentA        Float? // proud naměřený klešťovým ampérmetrem [A]
+  /// Fáze 116: předstih upozornění na konec životnosti součástek stroje [dny] (30 / 60 / 90 / 180)
+  lifespanAlertDays       Int     @default(60)
+  /// Fáze 116: odpovědné osoby dle ČSN EN 50110-1 ed. 4 – JSON { ooez: { name, phone }, oprpc: { name, phone } }
+  lotoResponsibleJson     String?
+  /// Fáze 116: upřesnění místa v hale / kanceláři („Lisovací linka“, „Pracovní místo u okna“) – pochůzka revizního technika
+  locationNote            String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -536,6 +544,10 @@ model ComplianceDocument {
   issuedAt       DateTime
   issuer         String // výrobce rozváděče / projektant
   notes          String?
+  /// Fáze 116: UPLOAD (nahrané PDF) / GENERATED (vygenerováno v ELDOCKu) / LINKED (schéma ze záložky Schéma)
+  source         String             @default("UPLOAD")
+  /// Fáze 116: potvrzené parametry protokolu vygenerovaného v ELDOCKu (tisk / PDF z nich)
+  generatedJson  String?
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
 
@@ -576,6 +588,8 @@ model InspectionRecord {
   measuringInstrument           String? // "Metrel MI 3309 BT"
   protectiveConductorResistance Float? // R_PE [Ω]
   insulationResistance          Float? // R_iso [MΩ]
+  /// Fáze 116: impedance poruchové smyčky Z_s [Ω] (rychlý zápis pochůzky revizního technika)
+  loopImpedanceOhm              Float?
   leakageCurrent                Float? // unikající / rozdílový proud I_PE / I_Δ [mA]
   functionalTest                Boolean? // funkční zkouška vyhověla (null = neprováděla se)
   rcdTestJson                   String? // fáze 52: zkoušky RCD dle ČSN EN 61557-6 ed. 2 (0,5·IΔn, tΔ, IΔ, Zsm) – lib/rcd-test.ts
@@ -1623,7 +1637,11 @@ enum ComponentWearCategory {
   SWITCHING_CONTACTOR // silový stykač / relé / ventil – počet sepnutí
   SAFETY_ELEMENT // bezpečnostní prvek ČSN EN ISO 13849-1 – B10d a doba mise T_M
   POWER_ELECTRONICS // zdroj 24 V DC / měnič / kondenzátory – motohodiny + Arrhenius
-  COOLING_FAN_FILTER // ventilátor / filtrační vložka / baterie UPS a PLC
+  COOLING_FAN_FILTER // ventilátor (L10) / filtrační rohož (interval dle prašnosti)
+  /// Fáze 116: D – zálohovací baterie PLC / CNC, akumulátory UPS a nouzových svítidel (kalendář + teplota)
+  BATTERY
+  /// Fáze 116: E – přepěťové ochrany SPD (kalendář + impulzní opotřebení)
+  SURGE_PROTECTION
 }
 
 /// Sledovaná kritická součástka s omezenou životností (fáze 53, prediktivní údržba).
@@ -1641,14 +1659,41 @@ model MonitoredComponent {
   maxElectricalCycles   Int? // AC-3 / AC-4 nebo B10d
   maxOperatingHours     Int? // při referenční teplotě 40 °C
   maxCalendarMonths     Int? // T_M, filtr, baterie
-  replacementStockCount Int                   @default(0)
+  replacementStockCount Int                   @default(0) // díl bez MPN; s MPN platí sklad závodu (SparePartStock)
   notes                 String?
+  /// Fáze 116: předstih upozornění [dny] jen pro tuto součástku (null = nastavení stroje `lifespanAlertDays`)
+  alertLeadDays         Int?
+  /// Fáze 116: odečet počítadla motohodin (měnič, zdroj) a kdy byl odečten – další hodiny podle směnnosti
+  hoursReading          Int?
+  hoursReadingAt        DateTime?
+  /// Fáze 116: počet kusů na pozici (řádek kusovníku) – nákupní report
+  quantity              Int                   @default(1)
+  /// Fáze 116: MANUAL = přidaná v Diagnostice, BOM = převzatá z automatického napárování kusovníku
+  source                String                @default("MANUAL")
   createdAt             DateTime              @default(now())
   updatedAt             DateTime              @updatedAt
 
   equipment Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
 
   @@index([equipmentId])
+}
+
+/// Fáze 116: sklad náhradních dílů závodu podle objednacího čísla výrobce (MPN) – kusovník, diagnostika a souhrnný
+/// nákupní report („Aktuálně skladem“ / „Nutno doobjednat“). Jeden díl skladem slouží všem strojům závodu.
+model SparePartStock {
+  id           String   @id @default(cuid())
+  plantId      String
+  partKey      String // normalizované MPN (velká písmena, bez mezer)
+  partNumber   String
+  manufacturer String?
+  description  String?
+  quantity     Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  plant Plant @relation(fields: [plantId], references: [id], onDelete: Cascade)
+
+  @@unique([plantId, partKey])
 }
 
 /// Fáze 56: záznam souhlasu s volitelnými cookies (čl. 7 odst. 1 GDPR – prokázání souhlasu). Bez IP adresy

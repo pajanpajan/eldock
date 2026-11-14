@@ -2,14 +2,16 @@ import Link from "next/link";
 
 import { InspectionOverviewTable } from "@/components/inspections/InspectionOverviewTable";
 import { InspectionWatcher } from "@/components/inspections/InspectionWatcher";
+import { RevisionWalkRoute } from "@/components/inspections/RevisionWalkRoute";
 import { SmartRevisionTripOptimizer } from "@/components/inspections/SmartRevisionTripOptimizer";
+import { WALK_SORTS, withWalkSort, type WalkSort } from "@/lib/revision-walk";
 import { pragueToday } from "@/lib/inspection";
 import { PORTABLE_TYPES } from "@/lib/inspection-rules";
 import { REVISION_TABS, buildingSemaphore, revisionHref, type RevisionTab } from "@/lib/revision-hub";
 import { auditReportHref, inspectionAlertsHref, inspectionImportHref, plannerHref, rapidInspectionHref, ticrReportHref } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 import { getInspectionOverview, getInspectionWatch } from "@/server/queries/inspections";
-import { getTripItems } from "@/server/queries/revision-trip";
+import { getTripItems, getWalkItems } from "@/server/queries/revision-trip";
 
 const STATUS_CLASS = {
   red: "border-red-500/60 bg-red-500/10",
@@ -33,14 +35,35 @@ export interface RevisionHubAccess {
  * Fáze 115: „📋 Revize & Plánovač“ – přehled budov se semaforem revizí (klik = filtr budovy) a záložky revizní agendy.
  * Sdílí ji `/revize` a 4. agenda závodu (`?faze=4`); data se načítají jen pro otevřenou záložku.
  */
-export async function RevisionHub({ plant, base, tab, buildingId, access, now = new Date() }: { plant: { id: string; name: string; buildings: readonly { id: string; name: string }[] }; base: string; tab: RevisionTab; buildingId: string | null; access: RevisionHubAccess; now?: Date }) {
+export async function RevisionHub({ plant, base: rawBase, tab, buildingId, access, sort = "urgence", now = new Date() }: { plant: { id: string; name: string; buildings: readonly { id: string; name: string }[] }; base: string; tab: RevisionTab; buildingId: string | null; access: RevisionHubAccess; sort?: WalkSort; now?: Date }) {
   const today = pragueToday(now);
   const focus = buildingId && plant.buildings.some((building) => building.id === buildingId) ? buildingId : null;
-  const [tripItems, overview, watch] = await Promise.all([
+  // Fáze 116: 🚶 pochůzkový režim (Budova ➔ Patro ➔ Místnost) v Chytré revizi i Lhůtníku – volba v adrese
+  const walkTab = tab === "chytra" || tab === "lhutnik";
+  const walking = walkTab && sort === "trasa";
+  const base = withWalkSort(rawBase, sort);
+  const [tripItems, overview, watch, walkItems] = await Promise.all([
     getTripItems(plant.id, now, access.types),
     tab === "lhutnik" ? getInspectionOverview(plant.id, now, access.types) : Promise.resolve([]),
     tab === "lhutnik" ? getInspectionWatch(plant.id, now, access.types) : Promise.resolve(null),
+    walking ? getWalkItems(plant.id, now, access.types) : Promise.resolve([]),
   ]);
+  const sortSwitch = walkTab ? (
+    <nav aria-label="Řazení výjezdu" className="flex flex-wrap items-center gap-2 rounded-xl border border-sky-500/40 bg-sky-500/5 p-2 text-sm" data-testid="walk-sort">
+      <span className="font-semibold">Řazení výjezdu:</span>
+      {WALK_SORTS.map((option) => (
+        <Link
+          key={option.id}
+          href={revisionHref(withWalkSort(rawBase, option.id), tab, focus)}
+          aria-current={sort === option.id ? "true" : undefined}
+          className={cn("rounded-lg border px-3 py-1.5 font-semibold", sort === option.id ? "border-sky-400 bg-sky-500 text-white" : "border-border text-muted-foreground hover:bg-muted hover:text-foreground")}
+          data-testid={`walk-sort-${option.id}`}
+        >
+          {option.label}
+        </Link>
+      ))}
+    </nav>
+  ) : null;
   const semaphore = buildingSemaphore(tripItems, plant.buildings);
   const focusName = focus ? plant.buildings.find((building) => building.id === focus)?.name : null;
   const portable = tripItems.filter((item) => PORTABLE_TYPES.includes(item.type) && (!focus || item.buildingId === focus));
@@ -105,7 +128,8 @@ export async function RevisionHub({ plant, base, tab, buildingId, access, now = 
 
       {tab === "chytra" ? (
         <div className="flex flex-col gap-3" data-testid="revision-tab-panel-chytra">
-          <SmartRevisionTripOptimizer items={tripItems} today={today} focusBuildingId={focus} canRecord={access.canRecord} />
+          {sortSwitch}
+          {walking ? <RevisionWalkRoute items={walkItems} plantId={plant.id} canRecord={access.canRecord} focusBuildingId={focus} /> : <SmartRevisionTripOptimizer items={tripItems} today={today} focusBuildingId={focus} canRecord={access.canRecord} />}
           <div className="flex flex-wrap gap-2 text-sm">
             {access.canPlanner ? (
               <Link href={plannerHref} className="rounded-lg border border-border px-3 py-2 hover:bg-muted" data-testid="revision-planner-link">
@@ -123,7 +147,9 @@ export async function RevisionHub({ plant, base, tab, buildingId, access, now = 
 
       {tab === "lhutnik" && watch ? (
         <div className="flex flex-col gap-3" data-testid="revision-tab-panel-lhutnik">
+          {sortSwitch}
           <InspectionWatcher watch={focus ? { ...watch, items: watch.items.filter((item) => item.location.startsWith(`${focusName} ›`)) } : watch} />
+          {walking ? <RevisionWalkRoute items={walkItems} plantId={plant.id} canRecord={access.canRecord} focusBuildingId={focus} title="🚶‍♂️ Lhůtník – pochůzková trasa technika" /> : null}
           {access.canImport ? (
             <p className="text-sm">
               <Link href={inspectionImportHref} className="text-primary underline-offset-2 hover:underline">
@@ -131,7 +157,7 @@ export async function RevisionHub({ plant, base, tab, buildingId, access, now = 
               </Link>
             </p>
           ) : null}
-          <InspectionOverviewTable items={focus ? overview.filter((item) => item.buildingId === focus) : overview} today={today} showPlant={false} canBatchInspect={access.canRecord} showReports={access.showReports} showAudit={access.canAudit} />
+          {walking ? null : <InspectionOverviewTable items={focus ? overview.filter((item) => item.buildingId === focus) : overview} today={today} showPlant={false} canBatchInspect={access.canRecord} showReports={access.showReports} showAudit={access.canAudit} />}
         </div>
       ) : null}
 

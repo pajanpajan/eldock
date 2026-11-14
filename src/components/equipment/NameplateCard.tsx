@@ -67,6 +67,7 @@ export function NameplateCard({
   label,
   canEdit,
   onSaved,
+  compact = false,
 }: {
   equipmentId: string;
   tag: string;
@@ -78,6 +79,8 @@ export function NameplateCard({
   canEdit: boolean;
   /** Fáze 111: dialog detailu zařízení – po uložení fotky / údajů znovu načíst data. */
   onSaved?: () => void;
+  /** Fáze 116: kompaktní karta identifikačního pruhu (náhled 88 × 88 px, potvrzení údajů v dialogu). */
+  compact?: boolean;
 }) {
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
@@ -162,38 +165,7 @@ export function NameplateCard({
     </label>
   );
 
-  return (
-    <section aria-label="Výrobní štítek zařízení" className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3" onPaste={paste} data-testid="nameplate-card">
-      <h3 className="text-sm font-semibold">🏷️ Fotka výrobního štítku + AI čtení údajů</h3>
-      <div className="relative aspect-[16/10] w-full overflow-hidden rounded-lg bg-zinc-900">
-        {preview ? (
-          <button type="button" onClick={() => setZoom(true)} className="group absolute inset-0" aria-label={`Fotka výrobního štítku ${tag} v plném rozlišení`}>
-            {/* eslint-disable-next-line @next/next/no-img-element -- soubory z /api/files */}
-            <img src={preview} alt={`Výrobní štítek ${tag}`} className="size-full object-contain" data-testid="nameplate-photo" />
-            <span className="absolute right-2 bottom-2 flex items-center gap-1 rounded bg-zinc-950/80 px-2 py-1 text-xs text-zinc-100">
-              <Expand className="size-3.5" aria-hidden /> Plné rozlišení
-            </span>
-          </button>
-        ) : (
-          <div className="bg-blueprint absolute inset-0 flex items-center justify-center p-4 text-center text-sm text-muted-foreground">Fotka výrobního štítku zatím chybí – vyfoťte ho, AI přečte údaje.</div>
-        )}
-      </div>
-      {readAt ? <p className="text-xs text-muted-foreground">Štítek vyfocen {new Date(readAt).toLocaleString("cs-CZ")}{reading?.serialNumber ? ` · S/N ${reading.serialNumber}` : ""}</p> : null}
-      {canEdit ? (
-        <>
-          <input ref={input} type="file" accept="image/jpeg,image/png,image/webp" capture="environment" className="sr-only" tabIndex={-1} aria-hidden onChange={(event) => void read(event.target.files?.[0])} data-testid="nameplate-input" />
-          <Button type="button" className="touch-target h-auto min-h-11 gap-2 whitespace-normal" disabled={busy} onClick={() => input.current?.click()} data-testid="nameplate-capture">
-            {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Camera className="size-4" aria-hidden />} [ 📷 Vyfotit / Nahrát výrobní štítek (AI přečte údaje) ]
-          </Button>
-          <p className="text-xs text-muted-foreground">Fotoaparát mobilu, soubor nebo vložení obrázku přes Ctrl+V.</p>
-          <details className="text-xs">
-            <summary className="cursor-pointer text-muted-foreground">Text ze štítku (nepovinné – zkopírovaný z mobilu nebo přepsaný)</summary>
-            <textarea value={text} onChange={(event) => setText(event.target.value.slice(0, 4000))} rows={3} className="mt-1 w-full rounded-md border border-input bg-transparent p-2 font-mono text-xs" placeholder="např. Model: U2723QE · S/N: CN-0892K1-74210 · 100–240 V~ 1,5 A · Class I" data-testid="nameplate-text" />
-          </details>
-        </>
-      ) : null}
-
-      {form ? (
+  const formNode = form ? (
         <div className="flex flex-col gap-2 rounded-lg border border-primary/40 bg-primary/5 p-3" data-testid="nameplate-form">
           <p className="text-xs font-semibold">{mode === "GEMINI" ? "✨ AI přečetla ze štítku – zkontrolujte a potvrďte:" : "Údaje ze štítku – zkontrolujte a doplňte:"}</p>
           <div className="grid gap-2 sm:grid-cols-2">
@@ -236,7 +208,116 @@ export function NameplateCard({
             {saving ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Check className="size-4" aria-hidden />} Uložit údaje do karty zařízení
           </Button>
         </div>
+  ) : null;
+
+  const fileInput = <input ref={input} type="file" accept="image/jpeg,image/png,image/webp" capture="environment" className="sr-only" tabIndex={-1} aria-hidden onChange={(event) => void read(event.target.files?.[0])} data-testid="nameplate-input" />;
+  const zoomDialog = (
+    <Dialog open={zoom} onOpenChange={setZoom}>
+      <DialogContent className="sm:max-w-5xl">
+        <DialogHeader>
+          <DialogTitle>Výrobní štítek {tag}</DialogTitle>
+          <DialogDescription>Fotka v plném rozlišení pro revizního technika a inspektora.</DialogDescription>
+        </DialogHeader>
+        {preview ? (
+          // eslint-disable-next-line @next/next/no-img-element -- soubory z /api/files
+          <img src={preview} alt={`Výrobní štítek ${tag}`} className="max-h-[75dvh] w-full rounded-lg object-contain" />
+        ) : null}
+      </DialogContent>
+    </Dialog>
+  );
+
+  if (compact) {
+    const values = [
+      { label: "Výrobce", value: reading?.manufacturer ?? current.manufacturer },
+      { label: "Model", value: reading?.model ?? current.model },
+      { label: "S/N", value: reading?.serialNumber ?? current.serialNumber },
+    ];
+    return (
+      <section aria-label="Výrobní štítek zařízení" className="flex max-h-[145px] min-h-[120px] items-center gap-3 rounded-xl border border-border bg-card p-3" onPaste={paste} data-testid="nameplate-card">
+        <div className="relative size-[88px] shrink-0 overflow-hidden rounded-lg bg-zinc-900">
+          {preview ? (
+            <button type="button" onClick={() => setZoom(true)} className="absolute inset-0" aria-label={`Fotka výrobního štítku ${tag} v plném rozlišení`}>
+              {/* eslint-disable-next-line @next/next/no-img-element -- soubory z /api/files */}
+              <img src={preview} alt={`Výrobní štítek ${tag}`} className="size-full object-cover" data-testid="nameplate-photo" />
+            </button>
+          ) : (
+            <div className="bg-blueprint absolute inset-0 flex items-center justify-center text-2xl" aria-hidden>
+              🏷️
+            </div>
+          )}
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <p className="text-xs font-semibold text-muted-foreground">🏷️ Výrobní štítek + AI čtení údajů</p>
+          <dl className="grid grid-cols-[auto_1fr] gap-x-2 text-xs leading-snug" data-testid="nameplate-values">
+            {values.map((entry) => (
+              <div key={entry.label} className="contents">
+                <dt className="text-muted-foreground">{entry.label}</dt>
+                <dd className="truncate font-medium" title={entry.value ?? undefined}>
+                  {entry.value || "–"}
+                </dd>
+              </div>
+            ))}
+          </dl>
+          <div className="flex flex-wrap gap-1">
+            {canEdit ? (
+              <Button type="button" size="sm" className="h-8 gap-1.5 px-2 text-xs" disabled={busy} onClick={() => input.current?.click()} data-testid="nameplate-capture">
+                {busy ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <Camera className="size-3.5" aria-hidden />} 📷 Vyfotit štítek (AI)
+              </Button>
+            ) : null}
+            <Button asChild size="sm" variant="outline" className="h-8 gap-1.5 px-2 text-xs">
+              <Link href={`/equipment/${equipmentId}/stitek?rozmer=50x25`} target="_blank" data-testid="id-label-print-50x25">
+                <Printer className="size-3.5" aria-hidden /> Štítek EL
+              </Link>
+            </Button>
+          </div>
+        </div>
+        {canEdit ? fileInput : null}
+        <Dialog open={Boolean(form)} onOpenChange={(open) => (!open ? setForm(null) : undefined)}>
+          <DialogContent className="sm:max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Údaje z výrobního štítku {tag}</DialogTitle>
+              <DialogDescription>Zkontrolujte přečtené údaje a uložte je do karty zařízení.</DialogDescription>
+            </DialogHeader>
+            {formNode}
+          </DialogContent>
+        </Dialog>
+        {zoomDialog}
+      </section>
+    );
+  }
+
+  return (
+    <section aria-label="Výrobní štítek zařízení" className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3" onPaste={paste} data-testid="nameplate-card">
+      <h3 className="text-sm font-semibold">🏷️ Fotka výrobního štítku + AI čtení údajů</h3>
+      <div className="relative aspect-[16/10] w-full overflow-hidden rounded-lg bg-zinc-900">
+        {preview ? (
+          <button type="button" onClick={() => setZoom(true)} className="group absolute inset-0" aria-label={`Fotka výrobního štítku ${tag} v plném rozlišení`}>
+            {/* eslint-disable-next-line @next/next/no-img-element -- soubory z /api/files */}
+            <img src={preview} alt={`Výrobní štítek ${tag}`} className="size-full object-contain" data-testid="nameplate-photo" />
+            <span className="absolute right-2 bottom-2 flex items-center gap-1 rounded bg-zinc-950/80 px-2 py-1 text-xs text-zinc-100">
+              <Expand className="size-3.5" aria-hidden /> Plné rozlišení
+            </span>
+          </button>
+        ) : (
+          <div className="bg-blueprint absolute inset-0 flex items-center justify-center p-4 text-center text-sm text-muted-foreground">Fotka výrobního štítku zatím chybí – vyfoťte ho, AI přečte údaje.</div>
+        )}
+      </div>
+      {readAt ? <p className="text-xs text-muted-foreground">Štítek vyfocen {new Date(readAt).toLocaleString("cs-CZ")}{reading?.serialNumber ? ` · S/N ${reading.serialNumber}` : ""}</p> : null}
+      {canEdit ? (
+        <>
+          {fileInput}
+          <Button type="button" className="touch-target h-auto min-h-11 gap-2 whitespace-normal" disabled={busy} onClick={() => input.current?.click()} data-testid="nameplate-capture">
+            {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Camera className="size-4" aria-hidden />} [ 📷 Vyfotit / Nahrát výrobní štítek (AI přečte údaje) ]
+          </Button>
+          <p className="text-xs text-muted-foreground">Fotoaparát mobilu, soubor nebo vložení obrázku přes Ctrl+V.</p>
+          <details className="text-xs">
+            <summary className="cursor-pointer text-muted-foreground">Text ze štítku (nepovinné – zkopírovaný z mobilu nebo přepsaný)</summary>
+            <textarea value={text} onChange={(event) => setText(event.target.value.slice(0, 4000))} rows={3} className="mt-1 w-full rounded-md border border-input bg-transparent p-2 font-mono text-xs" placeholder="např. Model: U2723QE · S/N: CN-0892K1-74210 · 100–240 V~ 1,5 A · Class I" data-testid="nameplate-text" />
+          </details>
+        </>
       ) : null}
+
+      {form && !compact ? formNode : null}
 
       <div className="flex flex-col gap-2" aria-label="Identifikační štítek zařízení">
         <p className="text-xs font-semibold">Přehledný štítek zařízení (Zebra ZD421t)</p>
@@ -252,18 +333,7 @@ export function NameplateCard({
         </div>
       </div>
 
-      <Dialog open={zoom} onOpenChange={setZoom}>
-        <DialogContent className="sm:max-w-5xl">
-          <DialogHeader>
-            <DialogTitle>Výrobní štítek {tag}</DialogTitle>
-            <DialogDescription>Fotka v plném rozlišení pro revizního technika a inspektora.</DialogDescription>
-          </DialogHeader>
-          {preview ? (
-            // eslint-disable-next-line @next/next/no-img-element -- soubory z /api/files
-            <img src={preview} alt={`Výrobní štítek ${tag}`} className="max-h-[75dvh] w-full rounded-lg object-contain" />
-          ) : null}
-        </DialogContent>
-      </Dialog>
+      {zoomDialog}
     </section>
   );
 }

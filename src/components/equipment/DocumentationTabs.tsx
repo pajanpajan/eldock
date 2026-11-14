@@ -2,22 +2,23 @@
 
 import type { ReactNode } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Box, CalendarClock, FileBadge, FileText, History, ListTree, type LucideIcon } from "lucide-react";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-export type TabValue = "schema" | "bom" | "3d" | "history" | "docs" | "software" | "passport" | "inspections" | "diagnostics";
+export type TabValue = "schema" | "bom" | "redlines" | "3d" | "history" | "docs" | "software" | "passport" | "inspections" | "diagnostics";
 
-const TABS: readonly { value: TabValue; label: string; icon: LucideIcon | null }[] = [
-  { value: "schema", label: "Schéma", icon: FileText },
-  { value: "bom", label: "Kusovník", icon: ListTree },
-  { value: "3d", label: "3D rozváděč", icon: Box },
-  { value: "history", label: "Historie změn", icon: History },
-  { value: "passport", label: "Pasport & Shoda (61439)", icon: FileBadge },
-  { value: "inspections", label: "Revize & Lhůtník", icon: CalendarClock },
-  { value: "docs", label: "📚 Návody & Datasheety", icon: null },
-  { value: "software", label: "💾 Software & Zálohy PLC", icon: null },
-  { value: "diagnostics", label: "🔍 Diagnostika & Spoje (Údržba)", icon: null },
+// Fáze 116: lišta záložek je první věc pod hlavičkou stroje / rozváděče (identifikační pruh až pod ní).
+const TABS: readonly { value: TabValue; label: string }[] = [
+  { value: "schema", label: "📐 Schéma" },
+  { value: "bom", label: "📋 Kusovník & Životnost" },
+  { value: "redlines", label: "✏️ Červenky" },
+  { value: "3d", label: "🧊 3D rozváděč" },
+  { value: "history", label: "🕒 Historie změn" },
+  { value: "passport", label: "🛡️ Pasport & Shoda (61439)" },
+  { value: "inspections", label: "📅 Revize & Lhůtník" },
+  { value: "docs", label: "📚 Návody & Datasheety" },
+  { value: "software", label: "💾 Software & Zálohy PLC" },
+  { value: "diagnostics", label: "🔍 Diagnostika & Spoje (Údržba)" },
 ];
 
 interface Props {
@@ -25,10 +26,12 @@ interface Props {
   panels: Partial<Record<TabValue, ReactNode>>;
   defaultTab?: TabValue;
   labels?: Partial<Record<TabValue, string>>;
+  /** Fáze 116: mezi lištou záložek a obsahem (upozornění, kompaktní identifikační pruh). */
+  beforeContent?: ReactNode;
 }
 
 /** Záložky dokumentace; aktivní záložka je v URL (`?tab=`), aby přežila reload a šla sdílet. */
-export function DocumentationTabs({ panels, defaultTab = "schema", labels }: Props) {
+export function DocumentationTabs({ panels, defaultTab = "schema", labels, beforeContent }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -47,18 +50,18 @@ export function DocumentationTabs({ panels, defaultTab = "schema", labels }: Pro
   }
 
   return (
-    <Tabs value={current} onValueChange={onChange} className="gap-4">
+    <Tabs value={current} onValueChange={onChange} className="gap-3">
       {/* Jeden řádek i na noteboocích 1280–1440 px: vodorovný posun místo zalomení do dvou řádků (fáze 48) */}
       <div className="-mx-1 max-w-full overflow-x-auto px-1 pb-1 [scrollbar-width:thin]" data-testid="equipment-tabs">
         <TabsList className="h-auto! w-max flex-nowrap justify-start gap-1 bg-card p-1">
-          {tabs.map(({ value, label, icon: Icon }) => (
-            <TabsTrigger key={value} value={value} className="touch-target flex-none gap-1.5 px-3 whitespace-nowrap data-active:bg-primary data-active:text-primary-foreground">
-              {Icon ? <Icon className="size-4" aria-hidden /> : null}
+          {tabs.map(({ value, label }) => (
+            <TabsTrigger key={value} value={value} className="touch-target flex-none gap-1.5 px-3 whitespace-nowrap data-active:bg-primary data-active:text-primary-foreground" data-tab={value}>
               {labels?.[value] ?? label}
             </TabsTrigger>
           ))}
         </TabsList>
       </div>
+      {beforeContent}
       {tabs.map(({ value }) => (
         <TabsContent key={value} value={value}>
           {panels[value]}

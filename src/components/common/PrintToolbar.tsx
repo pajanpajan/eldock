@@ -7,12 +7,13 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 /** Lišta samostatné tiskové stránky (štítek, protokol): po načtení sama vyvolá tisk, v tisku se skryje. */
-export function PrintToolbar({ hint, className }: { hint: React.ReactNode; className?: string }) {
+export function PrintToolbar({ hint, className, autoPrint = true }: { hint: React.ReactNode; className?: string; autoPrint?: boolean }) {
   useEffect(() => {
+    if (!autoPrint) return;
     // Nechat dokreslit QR kód a písmo, pak otevřít dialog tisku.
     const timer = window.setTimeout(() => window.print(), 400);
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [autoPrint]);
 
   return (
     <div className={cn("no-print flex w-full flex-wrap items-center gap-2", className)}>

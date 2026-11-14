@@ -715,7 +715,7 @@ export function monthlyEmail(report: MonthlyReport, profile: { name: string }, o
 /** Kolik e-mailů uživatel ručně odeslal za poslední hodinu (ochrana proti zneužití odesílání). */
 export async function assertMailQuota(prisma: PrismaClient, userId: string | null, now: Date = new Date()) {
   if (!userId) return;
-  const sent = await prisma.notificationLog.count({ where: { triggeredBy: userId, kind: { in: [MONTHLY_KIND, TRIP_KIND] }, createdAt: { gte: new Date(now.getTime() - 3600_000) } } });
+  const sent = await prisma.notificationLog.count({ where: { triggeredBy: userId, kind: { in: [MONTHLY_KIND, TRIP_KIND, "LIFESPAN_PURCHASE"] }, createdAt: { gte: new Date(now.getTime() - 3600_000) } } });
   if (sent >= MAIL_LIMIT_PER_HOUR) fail("Za poslední hodinu jste odeslali příliš mnoho e-mailů. Zkuste to prosím později.", "FORBIDDEN");
 }
 

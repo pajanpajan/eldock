@@ -6,9 +6,13 @@ import { LinkAccountsButton, SsoBridgeButton } from "@/components/auth/SsoBridge
 import { PricingOverview } from "@/components/credits/PricingOverview";
 import { PageHeader } from "@/components/common/PageHeader";
 import { HlidacWorkspace } from "@/components/hlidac/HlidacWorkspace";
+import { RevisionWalkRoute } from "@/components/inspections/RevisionWalkRoute";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { Button } from "@/components/ui/button";
 import { HLIDAC_MODES, HLIDAC_PALETTE } from "@/lib/hlidac";
+import { WALK_SORTS, WALK_SORT_PARAM, walkSortOf } from "@/lib/revision-walk";
+import { cn } from "@/lib/utils";
+import { getWalkItems } from "@/server/queries/revision-trip";
 import { bankLine, operatorSummary } from "@/lib/operator";
 import { prisma } from "@/lib/prisma";
 import { getPlants } from "@/server/queries/plant";
@@ -67,7 +71,16 @@ export default async function HlidacRevisionsPage({ searchParams }: PageProps<"/
   const wanted = typeof query.zavod === "string" ? query.zavod : null;
   const plant = plants.find((candidate) => candidate.id === wanted) ?? plants.find((candidate) => candidate.id === remembered) ?? plants[0] ?? null;
   if (!plant) return <Intro signedIn vatPayer={vatPayer} supplier={supplier} panel={null} />;
-  const [overview, mode, entitlement] = await Promise.all([hlidacOverview(prisma, plant.id), getHlidacMode(prisma, plant.id), plantDeviceEntitlement(prisma, plant.id)]);
+  // Fáze 116: 🚶 pochůzkový režim revizního technika (Budova ➔ Patro ➔ Místnost) s minimapou a rychlým zápisem
+  const sort = walkSortOf(query[WALK_SORT_PARAM]);
+  const [overview, mode, entitlement, walkItems] = await Promise.all([hlidacOverview(prisma, plant.id), getHlidacMode(prisma, plant.id), plantDeviceEntitlement(prisma, plant.id), sort === "trasa" && account.can("inspections") ? getWalkItems(plant.id, new Date(), account.types) : Promise.resolve([])]);
+  const sortHref = (value: string) => {
+    const params = new URLSearchParams();
+    if (wanted) params.set("zavod", wanted);
+    if (value === "trasa") params.set(WALK_SORT_PARAM, "trasa");
+    const text = params.toString();
+    return text ? `/hlidac-revizi?${text}` : "/hlidac-revizi";
+  };
   const devices = overview.reduce((sum, building) => sum + building.floors.reduce((acc, floor) => acc + floor.rooms.reduce((count, room) => count + room.devices.length, 0) + floor.unassigned.length, 0), 0);
   return (
     <PageTransition>
@@ -85,6 +98,21 @@ export default async function HlidacRevisionsPage({ searchParams }: PageProps<"/
         {deviceEntitlementLabel(entitlement)}
         {entitlement.reason === "TRIAL" ? " · neomezená správa s tarifem REVIZE & BUDOVY (500) nebo PRŮMYSL & ENTERPRISE (5 000)" : ""}
       </p>
+      {account.can("inspections") ? (
+        <nav aria-label="Řazení výjezdu" className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-sky-500/40 bg-sky-500/5 p-2 text-sm" data-testid="walk-sort">
+          <span className="font-semibold">Řazení výjezdu:</span>
+          {WALK_SORTS.map((option) => (
+            <Link key={option.id} href={sortHref(option.id)} aria-current={sort === option.id ? "true" : undefined} className={cn("rounded-lg border px-3 py-1.5 font-semibold", sort === option.id ? "border-sky-400 bg-sky-500 text-white" : "border-border text-muted-foreground hover:bg-muted hover:text-foreground")} data-testid={`walk-sort-${option.id}`}>
+              {option.id === "urgence" ? "🏢 Budovy, patra a místnosti (správa spotřebičů)" : option.label}
+            </Link>
+          ))}
+        </nav>
+      ) : null}
+      {sort === "trasa" && account.can("inspections") ? (
+        <div className="mb-4">
+          <RevisionWalkRoute items={walkItems} plantId={plant.id} canRecord={account.can("recordInspection")} />
+        </div>
+      ) : null}
       <HlidacWorkspace
         plant={{ id: plant.id, name: plant.name }}
         plants={plants.map((candidate) => ({ id: candidate.id, name: candidate.name }))}

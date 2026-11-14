@@ -101,7 +101,7 @@ interface ComponentSeed {
   designation: string;
   name: string;
   manufacturer: string;
-  modelNumber: string;
+  modelNumber: string | null;
   wearCategory: ComponentWearCategory;
   cyclesPerHour?: number;
   maxElectricalCycles?: number;
@@ -157,9 +157,10 @@ const COMPONENTS: Record<string, ComponentSeed[]> = {
     },
     {
       designation: "-FAN1",
-      name: "Filtrační vložka ventilátoru rozváděče",
+      name: "Filtrační rohož ventilátoru rozváděče (TopTherm SK 3238.100)",
       manufacturer: "Rittal",
-      modelNumber: "SK 3238 + filtrační rohož 3238.200",
+      // Fáze 116: SK 3238.200 je výstupní filtr, ne rohož – objednací číslo náhradní rohože doplní údržba
+      modelNumber: null,
       wearCategory: "COOLING_FAN_FILTER",
       maxCalendarMonths: 6,
       replacementStockCount: 4,

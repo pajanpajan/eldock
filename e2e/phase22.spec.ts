@@ -55,8 +55,10 @@ test("CAE reference: přidání nové reference kliknutím do výkresu", async (
   await expect(schematic.getByRole("img", { name: /stránka 6/ })).toHaveAttribute("src", /^blob:/, { timeout: 30_000 });
   await schematic.getByRole("button", { name: "Upravit reference" }).click();
   const drawing = schematic.getByTestId("interactive-drawing");
+  // Fáze 116: výkres je pod lištou záložek a identifikačním pruhem – klik do viditelné části výkresu
+  await drawing.evaluate((element) => element.scrollIntoView({ block: "start" }));
   const box = (await drawing.boundingBox())!;
-  await page.mouse.click(box.x + box.width * 0.6, box.y + box.height * 0.3);
+  await page.mouse.click(box.x + box.width * 0.6, Math.max(box.y, 0) + Math.min(box.height * 0.3, 380));
 
   const dialog = page.getByRole("dialog", { name: "Nová reference ve výkresu" });
   await dialog.getByLabel("Označení").fill("k1");

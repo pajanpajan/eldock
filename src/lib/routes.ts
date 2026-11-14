@@ -8,7 +8,7 @@ export const APP_HOME = "/app";
  * neznámá adresa dostane 404. Nová trasa ve skupině `(app)` / `(print)` sem musí přibýt (hlídá `phase54.test.ts`).
  */
 // Fáze 115: „📋 Revize & Plánovač“ (/revize) jen po přihlášení
-export const PLANT_ROUTE_PREFIXES = ["/app", "/admin", "/cae", "/equipment", "/inspections", "/plant", "/studio", "/demo-docs", "/ucet", "/rychla-revize", "/revize"] as const;
+export const PLANT_ROUTE_PREFIXES = ["/app", "/admin", "/cae", "/equipment", "/inspections", "/plant", "/studio", "/demo-docs", "/ucet", "/rychla-revize", "/revize", "/nakupni-report"] as const;
 
 export const isPlantRoute = (pathname: string) => PLANT_ROUTE_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 

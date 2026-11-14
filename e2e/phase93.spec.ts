@@ -83,7 +83,7 @@ test("AI Panel Builder: projekt obchodního centra – linter BD4 a doplnění s
 test("areál: zálohování napájení na kartě rozváděče a filtr větví DA nad mapou se součtem výkonu a rezervou", async ({ page }) => {
   test.setTimeout(240_000);
   await page.setViewportSize({ width: 1440, height: 1100 });
-  await page.goto("/equipment/eq-r-lis-01");
+  await page.goto("/equipment/eq-r-lis-01?tab=passport");
   const card = page.getByTestId("power-backup-card");
   await expect(card).toBeVisible({ timeout: 60_000 });
   await card.getByTestId("power-tier-BACKUP_GENERATOR_DA").click();
@@ -107,7 +107,7 @@ test("areál: zálohování napájení na kartě rozváděče a filtr větví DA
   await expect(filter.getByTestId("backup-members").locator("li")).toHaveCount(1);
 
   // Úklid: rozváděč zpět na běžnou síť bez nájemní jednotky
-  await page.goto("/equipment/eq-r-lis-01");
+  await page.goto("/equipment/eq-r-lis-01?tab=passport");
   await card.getByTestId("power-tier-GRID_STANDARD").click();
   await card.getByTestId("tenant-unit").fill("");
   await card.getByTestId("power-backup-save").click();

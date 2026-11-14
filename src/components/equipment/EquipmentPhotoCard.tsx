@@ -29,6 +29,7 @@ export function EquipmentPhotoCard({
   documentStatus,
   canEdit,
   onChanged,
+  compact = false,
 }: {
   equipmentId: string;
   tag: string;
@@ -42,6 +43,8 @@ export function EquipmentPhotoCard({
   canEdit: boolean;
   /** Fáze 111: dialog detailu zařízení – po nahrání fotky znovu načíst data. */
   onChanged?: () => void;
+  /** Fáze 116: kompaktní karta identifikačního pruhu (náhled 88 × 88 px, výška do 145 px). */
+  compact?: boolean;
 }) {
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
@@ -75,6 +78,64 @@ export function EquipmentPhotoCard({
     }
   }
 
+  const dialog = (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent className="sm:max-w-5xl">
+        <DialogHeader>
+          <DialogTitle>{name}</DialogTitle>
+          <DialogDescription>Fotografie zařízení {tag}</DialogDescription>
+        </DialogHeader>
+        {photoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element -- soubory z /api/files
+          <img src={photoUrl} alt={`Fotografie ${name}`} className="max-h-[75dvh] w-full rounded-lg object-contain" />
+        ) : null}
+      </DialogContent>
+    </Dialog>
+  );
+  const fileInput = <input ref={input} type="file" accept="image/jpeg,image/png,image/webp" capture="environment" className="sr-only" tabIndex={-1} aria-hidden onChange={(event) => onFile(event.target.files?.[0])} />;
+
+  if (compact) {
+    return (
+      <section aria-label="Fotografie zařízení" className="flex max-h-[145px] min-h-[120px] items-center gap-3 rounded-xl border border-border bg-card p-3" data-testid="identity-photo">
+        <div className="relative size-[88px] shrink-0 overflow-hidden rounded-lg bg-zinc-900">
+          {photoUrl ? (
+            <button type="button" onClick={() => setOpen(true)} className="absolute inset-0 outline-none focus-visible:ring-3 focus-visible:ring-ring/50" aria-label={`Zobrazit fotografii ${tag} ve velkém`}>
+              {/* eslint-disable-next-line @next/next/no-img-element -- soubory z /api/files; SVG přes <img> nespouští skripty */}
+              <img src={photoUrl} alt={`Fotografie ${name}`} className="size-full object-cover" data-testid="equipment-photo" />
+            </button>
+          ) : (
+            <div className="bg-blueprint absolute inset-0 flex items-center justify-center text-muted-foreground">
+              <Icon className="size-9 opacity-60" aria-hidden />
+            </div>
+          )}
+          {progress !== null ? (
+            <div className="absolute inset-x-0 bottom-0 h-1 bg-zinc-800" role="progressbar" aria-valuenow={progress} aria-label="Nahrávání fotografie">
+              <div className="h-full bg-primary transition-[width]" style={{ width: `${progress}%` }} />
+            </div>
+          ) : null}
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <p className="text-xs font-semibold text-muted-foreground">📷 Fotka zařízení</p>
+          <p className="truncate text-sm font-medium" title={name}>
+            {photoUrl ? name : "Zařízení zatím nemá fotografii"}
+          </p>
+          <div className="flex flex-wrap gap-1">
+            {inspection ? <InspectionStatusBadge summary={inspection} className="text-[11px]" /> : null}
+            {documentStatus && documentStatus !== "ACTIVE" ? <StatusBadge kind="equipment" status={documentStatus} className="text-[11px]" /> : null}
+          </div>
+          {canEdit ? (
+            <Button size="sm" variant="outline" className="h-8 gap-1.5 self-start px-2 text-xs" disabled={busy} onClick={() => input.current?.click()}>
+              {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Camera className="size-3.5" />}
+              {photoUrl ? "Změnit fotografii" : "Nahrát fotografii"}
+            </Button>
+          ) : null}
+        </div>
+        {canEdit ? fileInput : null}
+        {dialog}
+      </section>
+    );
+  }
+
   return (
     <section aria-label="Fotografie zařízení" className="flex flex-col overflow-hidden rounded-xl border border-border bg-card">
       <div className="relative aspect-[16/10] w-full bg-zinc-900">
@@ -105,7 +166,7 @@ export function EquipmentPhotoCard({
 
       {canEdit ? (
         <div className="flex items-center gap-2 border-t border-border p-2">
-          <input ref={input} type="file" accept="image/jpeg,image/png,image/webp" capture="environment" className="sr-only" tabIndex={-1} aria-hidden onChange={(event) => onFile(event.target.files?.[0])} />
+          {fileInput}
           <Button variant="outline" className="touch-target w-full gap-2" disabled={busy} onClick={() => input.current?.click()}>
             {busy ? <Loader2 className="size-4 animate-spin" /> : <Camera className="size-4" />}
             {photoUrl ? "Změnit fotografii" : "Nahrát fotografii"}
@@ -113,18 +174,7 @@ export function EquipmentPhotoCard({
         </div>
       ) : null}
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-5xl">
-          <DialogHeader>
-            <DialogTitle>{name}</DialogTitle>
-            <DialogDescription>Fotografie zařízení {tag}</DialogDescription>
-          </DialogHeader>
-          {photoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element -- soubory z /api/files
-            <img src={photoUrl} alt={`Fotografie ${name}`} className="max-h-[75dvh] w-full rounded-lg object-contain" />
-          ) : null}
-        </DialogContent>
-      </Dialog>
+      {dialog}
     </section>
   );
 }

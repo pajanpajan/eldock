@@ -7,6 +7,7 @@ import { runBackup } from "@/server/services/backup";
 import { executeDueClosures } from "@/server/services/data-requests";
 import { runRetention } from "@/server/services/retention";
 import { sendDueMonthlyReports } from "@/server/services/revision-signing";
+import { sendDuePurchaseReports } from "@/server/services/lifespan-report";
 import { creditSubscriptions } from "@/server/services/credits";
 import { brandEnv } from "@/lib/auth";
 import { smtpTransportFromEnv } from "@/server/mailer";
@@ -76,6 +77,13 @@ export async function runDueMaintenance(context: JobContext, trigger: Maintenanc
       if (sent.length) context.log?.(`[eldock] Měsíční report TIČR: ${sent.length} profilů`);
     } catch (error) {
       context.log?.(`[eldock] Měsíční report TIČR selhal: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    // Fáze 116: nákupní report prediktivní údržby oddělení nákupu (při prvním varování / měsíčně / čtvrtletně)
+    try {
+      const purchase = await sendDuePurchaseReports(context.prisma, { now, origin: brandEnv("PUBLIC_URL") ?? "https://eldock.cz", transport: smtpTransportFromEnv() });
+      if (purchase.length) context.log?.(`[eldock] Nákupní report součástek: ${purchase.length} závodů`);
+    } catch (error) {
+      context.log?.(`[eldock] Nákupní report součástek selhal: ${error instanceof Error ? error.message : String(error)}`);
     }
     // Fáze 111: měsíční kredity předplatného ELDOCK PRO (100 kreditů každý měsíc, dokud předplatné běží)
     try {

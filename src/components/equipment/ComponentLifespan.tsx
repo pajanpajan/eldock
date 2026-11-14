@@ -1,342 +1,175 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
+import Link from "next/link";
 import { Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
-import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  LIFESPAN_STATUS,
-  SHIFT_REGIMES,
-  WEAR_CATEGORIES,
-  assessComponent,
-  type WearCategory,
-} from "@/lib/component-lifespan";
+import { LIFESPAN_STATUS, SHIFT_REGIMES, WEAR_CATEGORIES, daysWord, type WearCategory } from "@/lib/component-lifespan";
+import { isCriticalRow, type LifespanRowView } from "@/lib/lifespan-view";
 import { cn } from "@/lib/utils";
-import {
-  addMonitoredComponentAction,
-  deleteMonitoredComponentAction,
-  replaceMonitoredComponentAction,
-  updateOperatingProfileAction,
-} from "@/server/actions/lifespan";
+import { addMonitoredComponentAction, deleteMonitoredComponentAction, replaceBomComponentAction } from "@/server/actions/lifespan";
 
-export interface LifespanComponent {
-  id: string;
-  designation: string;
-  name: string;
-  manufacturer: string | null;
-  modelNumber: string | null;
-  wearCategory: WearCategory;
-  installedAt: string;
-  cyclesPerHour: number | null;
-  manualCyclesOffset: number;
-  maxElectricalCycles: number | null;
-  maxOperatingHours: number | null;
-  maxCalendarMonths: number | null;
-  replacementStockCount: number;
-  notes: string | null;
-}
+import { RemainingBar, endText, useLifespanCall } from "./BomLifespanTable";
+import { ComponentDatasheetDialog } from "./ComponentDatasheetDialog";
 
-const n = (value: number, digits = 0) =>
-  value.toLocaleString("cs-CZ", { maximumFractionDigits: digits });
-const select =
-  "h-10 rounded-md border border-input bg-transparent px-2 text-sm dark:bg-input/30";
+const n = (value: number, digits = 0) => value.toLocaleString("cs-CZ", { maximumFractionDigits: digits });
+const select = "h-10 rounded-md border border-input bg-transparent px-2 text-sm dark:bg-input/30";
 
 /**
- * Sekce 1 záložky Diagnostika (fáze 53): ⏳ životnost součástek a prediktivní údržba – směnnost,
- * teplota v rozváděči, karty součástek s vyčerpáním limitů, skladem a datem výměny.
+ * Sekce 1 záložky Diagnostika (fáze 53, fáze 116): ⏳ součástky po životnosti a kritické nahoře – přepínač „🔴 Jen po
+ * životnosti a kritické (X)“ / „Zobrazit všechny“, zbývající životnost 100 % → 0 %, konec životnosti, sklad, výměna
+ * (Reset 100 %) a datasheet. Provoz stroje (směnnost, teplota, předstih) se nastavuje v záložce Kusovník & Životnost.
  */
 export function ComponentLifespan({
   equipmentId,
+  revisionId,
+  rows,
   profile,
-  components,
+  alertDays,
   bom,
-  now,
   canEdit,
+  bomHref,
+  purchaseHref,
 }: {
   equipmentId: string;
+  revisionId: string | null;
+  rows: LifespanRowView[];
   profile: { shiftRegime: number; internalTempC: number | null };
-  components: LifespanComponent[];
-  bom: {
-    designation: string;
-    description: string;
-    manufacturer: string | null;
-    partNumber: string | null;
-  }[];
-  now: string;
+  alertDays: number;
+  bom: { designation: string; description: string; manufacturer: string | null; partNumber: string | null }[];
   canEdit: boolean;
+  bomHref: string;
+  purchaseHref: string | null;
 }) {
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
-  const [temp, setTemp] = useState(
-    profile.internalTempC === null
-      ? ""
-      : String(profile.internalTempC).replace(".", ","),
-  );
+  const [pending, call] = useLifespanCall();
+  const tracked = rows.filter((row) => row.assessment);
+  const critical = tracked.filter(isCriticalRow).sort((a, b) => (a.assessment!.remainingDays ?? Infinity) - (b.assessment!.remainingDays ?? Infinity));
+  const [onlyCritical, setOnlyCritical] = useState(true);
   const [adding, setAdding] = useState(false);
-  const today = new Date(now);
-  const rows = components.map((component) => ({
-    component,
-    assessment: assessComponent(
-      { ...component, installedAt: new Date(component.installedAt) },
-      profile,
-      today,
-    ),
-  }));
-
-  function call(
-    action: () => Promise<{ ok: true } | { ok: false; error: string }>,
-    success: string,
-  ) {
-    startTransition(async () => {
-      const result = await action();
-      if (!result.ok) return void toast.error(result.error);
-      toast.success(success);
-      router.refresh();
-    });
-  }
-  const saveProfile = (shiftRegime: number, internalTempC: number | null) =>
-    call(
-      () =>
-        updateOperatingProfileAction({
-          equipmentId,
-          shiftRegime,
-          internalTempC,
-        }),
-      "Provozní profil uložen – životnost přepočtena.",
-    );
+  const [sheet, setSheet] = useState<LifespanRowView | null>(null);
+  const shown = onlyCritical ? critical : [...tracked].sort((a, b) => a.assessment!.remainingPercent - b.assessment!.remainingPercent);
+  const regime = SHIFT_REGIMES.find((entry) => entry.id === profile.shiftRegime);
 
   return (
-    <section
-      className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4"
-      aria-label="Životnost součástek a prediktivní údržba"
-      data-testid="component-lifespan"
-    >
+    <section className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4" aria-label="Životnost součástek a prediktivní údržba" data-testid="component-lifespan">
       <header className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-base font-bold">
-          ⏳ Životnost součástek a prediktivní údržba (B10d / Motohodiny)
-        </h3>
-        {pending ? (
-          <Loader2
-            className="size-4 animate-spin text-muted-foreground"
-            aria-label="Ukládám"
-          />
-        ) : null}
+        <h3 className="text-base font-bold">⏳ Součástky po životnosti a k okamžité výměně</h3>
+        {pending ? <Loader2 className="size-4 animate-spin text-muted-foreground" aria-label="Ukládám" /> : null}
       </header>
-      <div className="flex flex-wrap items-center gap-3 text-sm">
-        <div
-          className="flex flex-wrap gap-1"
-          role="radiogroup"
-          aria-label="Směnnost stroje"
-        >
-          {SHIFT_REGIMES.map((regime) => (
-            <button
-              key={regime.id}
-              type="button"
-              role="radio"
-              aria-checked={profile.shiftRegime === regime.id}
-              disabled={!canEdit || pending}
-              onClick={() => saveProfile(regime.id, profile.internalTempC)}
-              className={cn(
-                "rounded-md border px-2.5 py-1.5 font-semibold",
-                profile.shiftRegime === regime.id
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-border text-muted-foreground hover:text-foreground",
-              )}
-              title={`${n(regime.hoursPerYear)} h/rok`}
-            >
-              {regime.label}
-            </button>
-          ))}
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <div className="flex rounded-lg border border-border p-0.5" role="radiogroup" aria-label="Filtr součástek">
+          <button type="button" role="radio" aria-checked={onlyCritical} onClick={() => setOnlyCritical(true)} className={cn("rounded-md px-3 py-1.5 text-xs font-semibold", onlyCritical ? "bg-red-500/80 text-white" : "text-muted-foreground hover:text-foreground")} data-testid="lifespan-filter-critical">
+            🔴 Jen po životnosti a kritické ({critical.length})
+          </button>
+          <button type="button" role="radio" aria-checked={!onlyCritical} onClick={() => setOnlyCritical(false)} className={cn("rounded-md px-3 py-1.5 text-xs font-semibold", !onlyCritical ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")} data-testid="lifespan-filter-all">
+            Zobrazit všechny ({tracked.length})
+          </button>
         </div>
-        <label className="flex items-center gap-1.5 text-muted-foreground">
-          T<sub>rozváděče</sub> [°C]
-          <Input
-            className="h-9 w-20 font-mono"
-            inputMode="decimal"
-            value={temp}
-            disabled={!canEdit}
-            placeholder="35"
-            aria-label="Vnitřní teplota rozváděče [°C]"
-            onChange={(event) => setTemp(event.target.value)}
-            onBlur={() => {
-              const value =
-                temp.trim() === "" ? null : Number(temp.replace(",", "."));
-              if (
-                value !== profile.internalTempC &&
-                (value === null || Number.isFinite(value))
-              )
-                saveProfile(profile.shiftRegime, value);
-            }}
-          />
-        </label>
+        <span className="text-xs text-muted-foreground">
+          {regime?.longLabel ?? "–"} · T<sub>rozváděče</sub> {profile.internalTempC === null ? "35 °C (výchozí)" : `${n(profile.internalTempC, 1)} °C`} · předstih {daysWord(alertDays)} ·{" "}
+          <Link href={bomHref} className="text-primary underline-offset-2 hover:underline">
+            nastavit v Kusovníku & Životnosti
+          </Link>
+        </span>
+        {purchaseHref ? (
+          <Link href={purchaseHref} className="ml-auto rounded-md border border-border px-2.5 py-1.5 text-xs font-semibold hover:bg-muted" data-testid="diagnostics-purchase-link">
+            📦 Nákupní report součástek
+          </Link>
+        ) : null}
       </div>
 
-      {rows.length ? (
+      {shown.length ? (
         <ul className="grid gap-2 lg:grid-cols-2" data-testid="lifespan-list">
-          {rows.map(({ component, assessment }) => {
+          {shown.map((row) => {
+            const assessment = row.assessment!;
             const style = LIFESPAN_STATUS[assessment.status];
             return (
-              <li
-                key={component.id}
-                className="flex flex-col gap-1.5 rounded-lg border border-border p-3"
-                data-component={component.designation}
-                data-status={assessment.status}
-              >
+              <li key={row.key} className={cn("flex flex-col gap-1.5 rounded-lg border p-3", assessment.expired ? "border-red-500/60 bg-red-500/5" : "border-border")} data-component={row.designation} data-status={assessment.status} data-expired={assessment.expired ? "true" : "false"}>
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="font-semibold">
-                      <span className="font-mono">{component.designation}</span>{" "}
-                      {component.name}
+                      <span className="font-mono">{row.designation}</span> {row.description}
                     </p>
-                    <p className="text-xs text-muted-foreground">
-                      {[component.manufacturer, component.modelNumber]
-                        .filter(Boolean)
-                        .join(" ") ||
-                        WEAR_CATEGORIES.find(
-                          (c) => c.id === component.wearCategory,
-                        )?.label}
-                    </p>
+                    <p className="text-xs text-muted-foreground">{[row.manufacturer, row.partNumber].filter(Boolean).join(" ") || WEAR_CATEGORIES.find((category) => category.id === row.category)?.label}</p>
                   </div>
-                  <span
-                    className={cn("shrink-0 text-sm font-bold", style.text)}
-                    data-testid="lifespan-percent"
-                  >
-                    {style.emoji} {n(assessment.wearPercent, 1)} %
+                  <span className={cn("shrink-0 text-xs font-semibold", style.text)}>
+                    {style.emoji} {style.label}
                   </span>
                 </div>
-                <div
-                  className="h-2.5 overflow-hidden rounded-full bg-muted"
-                  role="progressbar"
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-valuenow={Math.min(
-                    100,
-                    Math.round(assessment.wearPercent),
-                  )}
-                  aria-label={`Vyčerpání životnosti ${component.designation}`}
-                >
-                  <div
-                    className={cn("h-full", style.bar)}
-                    style={{
-                      width: `${Math.min(100, assessment.wearPercent)}%`,
-                    }}
-                  />
+                <div data-testid="lifespan-percent">
+                  <RemainingBar row={row} />
                 </div>
                 <ul className="flex flex-col gap-0.5 text-xs text-muted-foreground">
                   {assessment.limits.map((limit) => (
                     <li key={limit.kind} className="flex justify-between gap-2">
                       <span>{limit.label}</span>
                       <span className="font-mono">
-                        {limit.kind === "calendar"
-                          ? `${n(limit.used)} / ${n(limit.max)} dní`
-                          : limit.kind === "hours"
-                            ? `${n(limit.used)} / ${n(limit.max)} h`
-                            : `${n(limit.used)} / ${n(limit.max)}`}{" "}
-                        ({n(limit.percent, 1)} %)
+                        {limit.kind === "calendar" ? `${n(limit.used)} / ${n(limit.max)} dní` : limit.kind === "hours" ? `${n(limit.used)} / ${n(limit.max)} h` : `${n(limit.used)} / ${n(limit.max)}`} ({n(limit.percent, 1)} % vyčerpáno)
                       </span>
                     </li>
                   ))}
                 </ul>
                 {assessment.thermalDerating ? (
                   <p className="text-xs text-amber-200" data-testid="arrhenius">
-                    🌡️ Arrhenius: při {n(assessment.thermalDerating.tempC, 1)}{" "}
-                    °C v rozváděči klesla životnost z{" "}
-                    {n(assessment.thermalDerating.fromHours)} h na{" "}
-                    {n(assessment.thermalDerating.toHours)} h.
+                    🌡️ Arrhenius: při {n(assessment.thermalDerating.tempC, 1)} °C v rozváděči klesla životnost z {n(assessment.thermalDerating.fromHours)} h na {n(assessment.thermalDerating.toHours)} h.
                   </p>
                 ) : null}
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                  <span
-                    className={
-                      component.replacementStockCount > 0
-                        ? "text-emerald-300"
-                        : "font-semibold text-red-300"
-                    }
-                    data-testid="lifespan-stock"
-                  >
-                    {component.replacementStockCount > 0
-                      ? `Skladem: ${component.replacementStockCount} ks`
-                      : "⚠️ Chybí na skladě!"}
+                  <span className={row.stock > 0 ? "text-emerald-300" : "font-semibold text-red-300"} data-testid="lifespan-stock">
+                    {row.stock > 0 ? `🟢 Skladem: ${row.stock} ks` : "⚠️ 0 ks – Chybí!"}
                   </span>
-                  <span className={style.text}>
-                    {assessment.status === "CRITICAL_EXPIRED"
-                      ? "Vyměnit ihned"
-                      : assessment.predictedReplacementDate
-                        ? `Výměna do ${assessment.predictedReplacementDate.toLocaleDateString("cs-CZ")} (${n(assessment.remainingDays ?? 0)} dní)`
-                        : "Bez limitu"}
+                  <span className={assessment.expired ? "font-semibold text-red-300" : style.text} data-testid="lifespan-end">
+                    {endText(row)}
                   </span>
                 </div>
-                {component.notes ? (
-                  <p className="text-[11px] text-muted-foreground">
-                    {component.notes}
-                  </p>
-                ) : null}
-                {canEdit ? (
-                  <div className="flex flex-wrap gap-1.5">
+                {row.notes ? <p className="text-[11px] text-muted-foreground">{row.notes}</p> : null}
+                <div className="flex flex-wrap gap-1.5">
+                  {canEdit ? (
                     <Button
                       type="button"
                       size="sm"
-                      variant="outline"
+                      variant={assessment.expired ? "default" : "outline"}
                       className="gap-1.5"
                       disabled={pending}
                       onClick={() => {
-                        if (
-                          window.confirm(
-                            `Zapsat výměnu ${component.designation} za nový kus? Počítadlo se vynuluje k dnešnímu dni.`,
-                          )
-                        ) {
-                          call(
-                            () =>
-                              replaceMonitoredComponentAction({
-                                equipmentId,
-                                componentId: component.id,
-                              }),
-                            `${component.designation}: výměna zapsána, životnost 0 %.`,
-                          );
+                        if (window.confirm(`Zapsat výměnu ${row.designation} za nový kus? Životnost začne znovu na 100 % k dnešnímu dni.`)) {
+                          call(() => replaceBomComponentAction({ equipmentId, designation: row.designation, revisionId }), `${row.designation}: vyměněno – zbývá 100 %.`);
                         }
                       }}
                     >
-                      <RefreshCw className="size-3.5" aria-hidden /> 🔄 Zapsat
-                      výměnu kusu za nový (Reset 0 %)
+                      <RefreshCw className="size-3.5" aria-hidden /> 🔄 Vyměněno (Reset 100 %)
                     </Button>
+                  ) : null}
+                  {row.partNumber ? (
+                    <Button type="button" size="sm" variant="ghost" onClick={() => setSheet(row)}>
+                      📄 Datasheet
+                    </Button>
+                  ) : null}
+                  {canEdit && row.componentId && !row.inBom ? (
                     <Button
                       type="button"
                       size="icon-sm"
                       variant="ghost"
-                      aria-label={`Přestat sledovat ${component.designation}`}
+                      aria-label={`Přestat sledovat ${row.designation}`}
                       disabled={pending}
                       onClick={() => {
-                        if (
-                          window.confirm(
-                            `Přestat sledovat ${component.designation}?`,
-                          )
-                        )
-                          call(
-                            () =>
-                              deleteMonitoredComponentAction({
-                                equipmentId,
-                                componentId: component.id,
-                              }),
-                            "Součástka odebrána.",
-                          );
+                        if (window.confirm(`Přestat sledovat ${row.designation}?`)) call(() => deleteMonitoredComponentAction({ equipmentId, componentId: row.componentId! }), "Součástka odebrána.");
                       }}
                     >
                       <Trash2 className="size-3.5" aria-hidden />
                     </Button>
-                  </div>
-                ) : null}
+                  ) : null}
+                </div>
               </li>
             );
           })}
         </ul>
       ) : (
-        <p className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">
-          Zatím se nesleduje žádná součástka. Přidejte stykače, zdroje, měniče,
-          bezpečnostní relé nebo filtry z kusovníku.
+        <p className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground" data-testid="lifespan-empty">
+          {onlyCritical ? "✅ Žádná součástka není po životnosti ani v okně upozornění – dnes není co měnit." : "Zatím se nesleduje žádná součástka – doplňte kusovník nebo přidejte součástku."}
         </p>
       )}
 
@@ -348,26 +181,19 @@ export function ComponentLifespan({
             onCancel={() => setAdding(false)}
             onSubmit={(data) =>
               call(async () => {
-                const result = await addMonitoredComponentAction({
-                  equipmentId,
-                  ...data,
-                });
+                const result = await addMonitoredComponentAction({ equipmentId, ...data });
                 if (result.ok) setAdding(false);
                 return result;
               }, `${data.designation} se sleduje.`)
             }
           />
         ) : (
-          <Button
-            type="button"
-            variant="outline"
-            className="gap-1.5 self-start"
-            onClick={() => setAdding(true)}
-          >
-            <Plus className="size-4" aria-hidden /> Přidat sledovanou součástku
+          <Button type="button" variant="outline" className="gap-1.5 self-start" onClick={() => setAdding(true)}>
+            <Plus className="size-4" aria-hidden /> Přidat sledovanou součástku mimo kusovník
           </Button>
         )
       ) : null}
+      {sheet ? <ComponentDatasheetDialog row={sheet} open onOpenChange={(open) => (!open ? setSheet(null) : undefined)} /> : null}
     </section>
   );
 }
@@ -406,15 +232,29 @@ const PRESETS: Record<
     maxHours: "",
     maxMonths: "6",
   },
+  BATTERY: {
+    cyclesPerHour: "",
+    maxCycles: "",
+    maxHours: "",
+    maxMonths: "48",
+  },
+  SURGE_PROTECTION: {
+    cyclesPerHour: "0",
+    maxCycles: "15",
+    maxHours: "",
+    maxMonths: "120",
+  },
 };
 
 /** Odhad kategorie z popisu prvku kusovníku. */
 function guessCategory(description: string): WearCategory {
+  if (/přepěť|prepet|svodič|svodic|spd/i.test(description)) return "SURGE_PROTECTION";
+  if (/bateri|akumul|ups/i.test(description)) return "BATTERY";
   if (/safety|bezpečnost|pnoz|nouzov/i.test(description))
     return "SAFETY_ELEMENT";
   if (/zdroj|měnič|menic|psu|sinamics|frekven|kondenz/i.test(description))
     return "POWER_ELECTRONICS";
-  if (/ventil[aá]tor|filtr|baterie|fan/i.test(description))
+  if (/ventil[aá]tor|filtr|fan/i.test(description))
     return "COOLING_FAN_FILTER";
   return "SWITCHING_CONTACTOR";
 }

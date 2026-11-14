@@ -9,10 +9,17 @@ import { buildInterfaceRows } from "@/lib/switchboard-interface";
 import { cn } from "@/lib/utils";
 import type { EquipmentDetail } from "@/server/queries/equipment";
 
-import { DocumentPreviewButton } from "./DocumentPreviewButton";
+import { PASSPORT_DOC_TITLES } from "@/lib/passport-docs";
 
-/** Záložka „Pasport & Shoda (61439)“: výrobní dokumentace rozváděče, rozhraní a napájené vývody. */
-export function CompliancePassport({ equipment }: { equipment: EquipmentDetail }) {
+import { DocumentPreviewButton } from "./DocumentPreviewButton";
+import { PassportDocActions, type PassportGeneratorContext } from "./PassportDocActions";
+
+/**
+ * Záložka „Pasport & Shoda (61439)“: výrobní dokumentace rozváděče, rozhraní a napájené vývody. Fáze 116: chybějící
+ * dokument jde doplnit přímo na kartě (⚡ vygenerovat v ELDOCKu / 📤 nahrát vlastní PDF), dokument v pasportu má
+ * zelený stav „✅ V PASPORTU“ s náhledem a stažením PDF.
+ */
+export function CompliancePassport({ equipment, generator = null }: { equipment: EquipmentDetail; generator?: PassportGeneratorContext | null }) {
   const documents = equipment.complianceDocuments;
   const isSwitchboard = equipment.type === "SWITCHBOARD";
 
@@ -52,23 +59,28 @@ export function CompliancePassport({ equipment }: { equipment: EquipmentDetail }
           <h2 id="passport-docs" className="text-lg font-semibold">
             Výrobní dokumentace rozváděče
           </h2>
-          <p className={cn("text-sm", missing.length ? "text-amber-400" : "text-emerald-400")}>
-            {missing.length ? `Pasport neúplný – chybí ${missing.length} z ${COMPLIANCE_CATEGORY_ORDER.length} dokumentů` : "Pasport kompletní dle ČSN EN 61439-2"}
+          <p className={cn("text-sm font-medium", missing.length ? "text-amber-400" : "text-emerald-400")} data-testid="passport-status" data-present={COMPLIANCE_CATEGORY_ORDER.length - missing.length}>
+            {missing.length
+              ? `Pasport neúplný – chybí ${missing.length} z ${COMPLIANCE_CATEGORY_ORDER.length} dokumentů (${missing.map((category) => COMPLIANCE_CATEGORY_LABELS[category].label).join(", ")})`
+              : `✅ Pasport kompletní – ${COMPLIANCE_CATEGORY_ORDER.length} z ${COMPLIANCE_CATEGORY_ORDER.length} dokumentů dle ČSN EN IEC 61439-2`}
           </p>
         </div>
         <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {sorted.map((doc) => {
             const meta = COMPLIANCE_CATEGORY_LABELS[doc.category];
             return (
-              <li key={doc.id} className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
+              <li key={doc.id} className="flex flex-col gap-3 rounded-xl border border-emerald-500/40 bg-card p-4" data-testid="passport-doc" data-category={doc.category} data-state="present">
                 <div className="flex items-start gap-3">
                   <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-400">
                     <FileCheck2 className="size-5" aria-hidden />
                   </span>
                   <div className="min-w-0">
-                    <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{meta.label}</p>
+                    <p className="text-xs font-semibold tracking-wide text-emerald-400 uppercase">✅ V pasportu (platný dokument)</p>
                     <h3 className="font-semibold">{doc.title}</h3>
-                    <p className="text-xs text-muted-foreground">{meta.hint}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {meta.hint}
+                      {doc.source === "GENERATED" ? " · vygenerováno v ELDOCKu" : doc.source === "LINKED" ? " · propojeno se záložkou Schéma" : ""}
+                    </p>
                   </div>
                 </div>
                 <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
@@ -81,7 +93,7 @@ export function CompliancePassport({ equipment }: { equipment: EquipmentDetail }
                 </dl>
                 {doc.notes ? <p className="text-sm text-muted-foreground">{doc.notes}</p> : null}
                 <div className="mt-auto">
-                  <DocumentPreviewButton url={doc.fileUrl} title={doc.title} subtitle={`${meta.label} · ${doc.documentNumber}`} />
+                  <DocumentPreviewButton url={doc.fileUrl} title={doc.title} subtitle={`${meta.label} · ${doc.documentNumber}`} page={doc.source === "GENERATED"} labels={{ preview: "👁️ Náhled", download: doc.source === "GENERATED" || doc.fileUrl.toLowerCase().endsWith(".pdf") ? "📥 Stáhnout PDF" : "📥 Stáhnout" }} />
                 </div>
               </li>
             );
@@ -89,15 +101,18 @@ export function CompliancePassport({ equipment }: { equipment: EquipmentDetail }
           {missing.map((category) => {
             const meta = COMPLIANCE_CATEGORY_LABELS[category];
             return (
-              <li key={category} className="flex items-start gap-3 rounded-xl border border-dashed border-amber-500/40 bg-amber-500/5 p-4">
-                <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-amber-500/15 text-amber-400">
-                  <FileWarning className="size-5" aria-hidden />
-                </span>
-                <div>
-                  <p className="text-xs font-medium tracking-wide text-amber-400 uppercase">Chybí v pasportu</p>
-                  <h3 className="font-semibold">{meta.label}</h3>
-                  <p className="text-xs text-muted-foreground">{meta.hint}</p>
+              <li key={category} className="flex flex-col gap-3 rounded-xl border border-dashed border-amber-500/40 bg-amber-500/5 p-4" data-testid="passport-doc" data-category={category} data-state="missing">
+                <div className="flex items-start gap-3">
+                  <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-amber-500/15 text-amber-400">
+                    <FileWarning className="size-5" aria-hidden />
+                  </span>
+                  <div>
+                    <p className="text-xs font-medium tracking-wide text-amber-400 uppercase">Chybí v pasportu</p>
+                    <h3 className="font-semibold">{PASSPORT_DOC_TITLES[category]}</h3>
+                    <p className="text-xs text-muted-foreground">{meta.hint}</p>
+                  </div>
                 </div>
+                {generator ? <PassportDocActions category={category} context={generator} /> : null}
               </li>
             );
           })}

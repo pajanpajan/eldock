@@ -602,6 +602,79 @@ export async function recordQuickInspection(prisma: PrismaClient, input: QuickIn
 }
 
 // ---------------------------------------------------------------------------
+//  Fáze 116: ⚡ rychlý zápis z pochůzky revizního technika (hodnoty dle minulé revize)
+// ---------------------------------------------------------------------------
+
+export interface WalkInspectionInput {
+  equipmentId: string;
+  inspectorName: string;
+  inspectorLicense: string;
+  /** R_iso [MΩ] */
+  insulationResistance: number | null;
+  /** R_PE [Ω] */
+  protectiveConductorResistance: number | null;
+  /** Z_s [Ω] */
+  loopImpedanceOhm: number | null;
+  measuringInstrument?: string | null;
+  /** Rozsah a platnost osvědčení technika – u revizí VTZ povinné (zákon 250/2021 Sb., § 11). */
+  inspectorScope?: string | null;
+  inspectorValidUntil?: string | null;
+}
+
+/**
+ * Rychlý zápis řádku pochůzky: dnešní periodická revize s potvrzenými / přepsanými hodnotami minulé revize, posudek
+ * VYHOVUJE (nevyhovující výsledek se zapisuje plným formulářem se závadami). Jedna revize zařízení za den.
+ */
+async function prepareWalk(prisma: PrismaClient, input: WalkInspectionInput, now: Date) {
+  const equipment = await loadEquipment(prisma, input.equipmentId);
+  const today = pragueToday(now);
+  if (equipment.inspections.some((record) => pragueToday(record.inspectionDate) === today)) {
+    throw new WorkflowError("VALIDATION", `${equipment.tag}: revize je dnes už zapsaná.`);
+  }
+  if (input.loopImpedanceOhm !== null && !(input.loopImpedanceOhm >= 0 && input.loopImpedanceOhm <= 100)) throw new WorkflowError("VALIDATION", "Impedance smyčky Z_s musí být 0–100 Ω.");
+  const record: RecordInspectionInput = {
+    equipmentId: equipment.id,
+    type: "PERIODIC",
+    inspectionDate: today,
+    reportNumber: `RP-${today.replace(/-/g, "")}-${equipment.tag}`,
+    result: "CAPABLE",
+    inspectorName: input.inspectorName,
+    inspectorLicense: input.inspectorLicense,
+    insulationResistance: input.insulationResistance,
+    protectiveConductorResistance: input.protectiveConductorResistance,
+    measuringInstrument: input.measuringInstrument ?? null,
+    inspectorScope: input.inspectorScope ?? null,
+    inspectorValidUntil: input.inspectorValidUntil ?? null,
+  };
+  const data = prepare(record, equipment, now);
+  if (data.protectiveConductorResistance !== null || data.insulationResistance !== null) {
+    const check = evaluateMeasurements(equipment.protectionClass, { rpe: data.protectiveConductorResistance, riso: data.insulationResistance });
+    if (!check.ok) throw new WorkflowError("VALIDATION", `Měření nevyhovuje: ${check.failures.join(" ")} Nevyhovující výsledek zapište plným formulářem revize se závadami.`);
+  }
+  return { equipment, record, data };
+}
+
+export async function renderWalkReport(prisma: PrismaClient, input: WalkInspectionInput, now: Date = new Date()) {
+  const { equipment, record, data } = await prepareWalk(prisma, input, now);
+  return reportSvg(equipment, record, data);
+}
+
+/** Zapíše revizi z pochůzky (VYHOVUJE, nová platnost podle lhůty zařízení) včetně Z_s. */
+export async function recordWalkInspection(prisma: PrismaClient, input: WalkInspectionInput & { reportUrl: string }, now: Date = new Date()) {
+  const { equipment, record, data } = await prepareWalk(prisma, input, now);
+  return prisma.inspectionRecord.create({
+    data: {
+      equipmentId: equipment.id,
+      type: record.type,
+      result: record.result,
+      reportUrl: input.reportUrl,
+      loopImpedanceOhm: input.loopImpedanceOhm,
+      ...recordColumns(data),
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
 //  Revizní závady
 // ---------------------------------------------------------------------------
 

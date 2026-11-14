@@ -12,7 +12,8 @@ const PDF = Buffer.from("%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\ntrailer<</Roo
 test("návody a datasheety: filtr, náhled, nahrání dokumentu ke komponentě", async ({ page }) => {
   await page.goto("/equipment/eq-r-cnc-04?tab=docs");
   const library = page.getByTestId("doc-library");
-  await expect(page.getByRole("tab", { name: /Návody & Datasheety \(3\)/ })).toBeVisible();
+  await expect(page.getByRole("tab", { name: /Návody & Datasheety \(5\)/ })).toBeVisible();
+  await expect(page.getByTestId("bom-datasheets").locator('[data-part="LC1D25BD"]')).toHaveAttribute("data-verified", "true");
   await expect(library.getByTestId("doc-card")).toHaveCount(3);
   await library.getByRole("button", { name: "Datasheety komponent (1)" }).click();
   await expect(library.getByTestId("doc-card")).toHaveCount(1);

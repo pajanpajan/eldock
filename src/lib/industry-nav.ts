@@ -60,10 +60,12 @@ export function industryNav(plantId: string | null): IndustryNavSection[] {
       emoji: "⚡",
       label: "Rozváděče & Stroje",
       srLabel: "Rozváděče & Stroje – katalog zařízení, QR pasporty, napájení a prediktivní údržba",
-      match: ["/equipment"],
+      match: ["/equipment", "/nakupni-report"],
       links: [
         ...withText(plant(2), "Rozváděče, stroje & QR pasporty", "Rozváděče, stroje a QR pasporty závodu", "Katalog zařízení v závodě, stav dokumentace a tisk QR štítků"),
         ...withText(plant(4), "Prediktivní údržba & simulátor napájení", "Prediktivní údržba a What-If simulátor napájení", "Napájení Síť / DA / UPS, What-If simulátor zátěže a legislativa strojů"),
+        // Fáze 116: konsolidovaná objednávka náhradních dílů před koncem životnosti
+        { href: "/nakupni-report", label: "📦 Nákupní report součástek", srLabel: "Nákupní report prediktivní údržby – konsolidovaná objednávka náhradních dílů", hint: "Součástky celého závodu před koncem životnosti podle objednacího čísla", permission: "submitChange", hideInFieldView: true },
       ],
     },
     {

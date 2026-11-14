@@ -7,9 +7,17 @@ test("karta zařízení: fotografie, QR štítek, tisk a přegenerování kódu"
   await page.goto("/equipment/eq-rh1");
   await expect(page.getByTestId("equipment-photo")).toHaveAttribute("src", "/api/files/photos/seed/equipment-RH1.svg");
 
-  const label = page.getByTestId("qr-label");
+  // Fáze 116: kompaktní identifikační pruh – tvář štítku 62 × 29 mm v náhledu po kliku na QR kód (karta se načítá
+  // líně – klik před hydratací se opakuje)
+  const label = page.getByRole("dialog").getByTestId("qr-label");
+  await expect(async () => {
+    await page.getByRole("button", { name: "Náhled QR štítku RH1" }).click();
+    await expect(label).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 30_000 });
   await expect(label).toContainText("RH1");
   await expect(label).toContainText("ID eq-rh1");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   const urlText = page.getByTestId("qr-label-url");
   await expect(urlText).toHaveText(/\/equipment\/eq-rh1\?qr=[0-9A-F]{10}$/);
   const oldUrl = (await urlText.textContent())!;

@@ -421,6 +421,7 @@ test("krok 5: 6 listů dokumentace, tiskový režim a propuštění pasportu ke 
   await expect(page.getByTestId("released")).toContainText("RH1 - Hlavní areálový rozváděč");
   await expect(page.getByText("Propuštěno do provozu").first()).toBeVisible();
   await page.getByTestId("released").getByRole("link").click();
+  await page.getByRole("tab", { name: /Pasport & Shoda/ }).click();
   await expect(page.getByTestId("panel-passport")).toContainText("Pasport rozváděče PB-001");
   await page.getByTestId("panel-passport").getByRole("link", { name: "Otevřít dokumentaci" }).click();
   await expect(page.getByTestId("doc-sheet-1")).toBeVisible();

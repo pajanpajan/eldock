@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/common/PageHeader";
 import { RevisionHub } from "@/components/inspections/RevisionHub";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { REVISION_BUILDING_PARAM, REVISION_TAB_PARAM, revisionHubHref, revisionTabOf } from "@/lib/revision-hub";
+import { WALK_SORT_PARAM, walkSortOf } from "@/lib/revision-walk";
 import { cn } from "@/lib/utils";
 import { getFeatures } from "@/server/modules";
 import { getPlantOverview, getPlants } from "@/server/queries/plant";
@@ -46,6 +47,7 @@ export default async function RevisionHubPage({ searchParams }: PageProps<"/revi
           base={base}
           tab={tab}
           buildingId={building ?? null}
+          sort={walkSortOf(query[WALK_SORT_PARAM])}
           access={{
             canRecord: account.can("recordInspection"),
             canAudit: account.can("audit") && modules.on("inspections.audit"),

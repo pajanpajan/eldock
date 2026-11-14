@@ -10,9 +10,11 @@ import {
   recordBatchInspection,
   recordInspection,
   recordQuickInspection,
+  recordWalkInspection,
   renderBatchProtocol,
   renderInspectionReport,
   renderQuickReport,
+  renderWalkReport,
 } from "@/server/services/inspection";
 import { updateInspectionSettings } from "@/server/services/inspection-intervals";
 import { assertFeature } from "@/server/modules";
@@ -204,5 +206,33 @@ export async function recordQuickInspectionAction(input: z.input<typeof quickSch
       return { id: record.id, validUntil: record.validUntil, result: record.result };
     },
     "Revizi se nepodařilo uložit. Zkuste to prosím znovu.",
+  );
+}
+
+// Fáze 116: ⚡ rychlý zápis z pochůzky revizního technika (R_iso, R_PE, Z_s podle minulé revize) – posudek VYHOVUJE
+const walkSchema = z.object({
+  equipmentId: id,
+  inspectorName: inspector.inspectorName,
+  inspectorLicense: inspector.inspectorLicense,
+  insulationResistance: z.number().min(0).max(100_000).nullable(),
+  protectiveConductorResistance: z.number().min(0).max(100).nullable(),
+  loopImpedanceOhm: z.number().min(0).max(100).nullable(),
+  measuringInstrument: z.string().max(500).optional().nullable(),
+  inspectorScope: inspector.inspectorScope,
+  inspectorValidUntil: inspector.inspectorValidUntil,
+});
+
+export async function recordWalkInspectionAction(input: z.input<typeof walkSchema>) {
+  return run(
+    walkSchema,
+    input,
+    async (data) => {
+      await assertPermission("recordInspection");
+      await assertEquipment([data.equipmentId]);
+      const reportUrl = await saveReport(await renderWalkReport(prisma, data));
+      const record = await recordWalkInspection(prisma, { ...data, reportUrl });
+      return { id: record.id, validUntil: record.validUntil };
+    },
+    "Revizi se nepodařilo zapsat. Zkuste to prosím znovu.",
   );
 }

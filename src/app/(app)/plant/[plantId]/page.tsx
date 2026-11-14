@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { formatCount } from "@/lib/format";
 import { PLANT_PHASE_PARAM, plantPhaseHref, plantPhaseOf, type PlantPhaseCounts } from "@/lib/plant-phases";
 import { REVISION_BUILDING_PARAM, REVISION_TAB_PARAM, revisionTabOf } from "@/lib/revision-hub";
+import { WALK_SORT_PARAM, walkSortOf } from "@/lib/revision-walk";
 import { getPlantCableNodes } from "@/server/queries/health";
 import { getInspectionWatch } from "@/server/queries/inspections";
 import { getPlantOverview, getPlantPower } from "@/server/queries/plant";
@@ -143,6 +144,7 @@ export default async function PlantPage({ params, searchParams }: PageProps<"/pl
               base={plantPhaseHref(plant.id, 4)}
               tab={revisionTab}
               buildingId={revisionBuilding ?? null}
+              sort={walkSortOf(query[WALK_SORT_PARAM])}
               now={now}
               access={{
                 canRecord: account.can("recordInspection"),

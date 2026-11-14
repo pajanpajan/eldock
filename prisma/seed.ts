@@ -34,6 +34,7 @@ import { demoFloorSvg, demoLayoutJson, demoLayoutOf, seedDemoPlant } from "./see
 import { seedPanelBuilder } from "./seed-panel-builder";
 import { seedLegislation2027 } from "./seed-legislation-2027";
 import { seedLifespanCables } from "./seed-lifespan-cables";
+import { seedPhase116 } from "./seed-phase116";
 import { LIGHT_EQUIPMENT } from "./seed-appliances";
 import { TEMPORARY_MODS } from "./seed-temporary-mods";
 import { FEEDS, INSPECTORS, type DefectSeed, buildingTypeOf, complianceFor, externalInfluencesFor, inspectionsFor, intervalFor } from "./seed-compliance";
@@ -447,6 +448,7 @@ async function main() {
   if (panelBuilder.failures.length) throw new Error(`Seed AI Panel Builderu selhal: ${panelBuilder.failures.join("; ")}`);
   await seedLegislation2027(prisma);
   await seedLifespanCables(prisma, { force: true });
+  await seedPhase116(prisma, { force: true });
   // Kódy QR štítků (stejně jako migrace 20261030190000)
   await prisma.$executeRaw`UPDATE "Equipment" SET "qrToken" = upper(hex(randomblob(5))) WHERE "qrToken" IS NULL`;
 

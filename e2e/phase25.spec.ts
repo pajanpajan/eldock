@@ -84,7 +84,7 @@ test("tarif START (čisté pracoviště): jednoduchá aplikace na schémata a QR
   await page.goto("/equipment/eq-pv-m1");
   await expect(page.getByRole("button", { name: /Porovnat s/ })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /Interaktivní prvky/ })).toHaveCount(0);
-  await expect(page.getByTestId("qr-label")).toBeVisible();
+  await expect(page.getByTestId("identity-qr")).toBeVisible();
 
   await page.goto("/inspections/planner");
   await expect(page.getByTestId("feature-locked")).toContainText("Plánovač revizí a rychlé revize není ve vašem tarifu aktivní");

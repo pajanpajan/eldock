@@ -25,13 +25,17 @@ test("⏳ R-CNC-04: zdroj -T1 po Arrheniovi 🔴, nejištěný přívod, simulá
   );
 
   const lifespan = page.getByTestId("component-lifespan");
+  // Kritické nahoře (výchozí filtr), pak všechny součástky
+  await expect(lifespan.getByTestId("lifespan-filter-critical")).toHaveAttribute("aria-checked", "true");
+  await expect(lifespan.locator('[data-component="-T1"]')).toBeVisible();
+  await lifespan.getByTestId("lifespan-filter-all").click();
   const psu = lifespan.locator('[data-component="-T1"]');
   await expect(psu).toHaveAttribute("data-status", "CRITICAL_EXPIRED");
   await expect(psu.getByTestId("arrhenius")).toContainText(
     "z 50 000 h na 28 717 h",
   );
   await expect(psu.getByTestId("lifespan-stock")).toHaveText(
-    "⚠️ Chybí na skladě!",
+    "⚠️ 0 ks – Chybí!",
   );
   await expect(lifespan.locator('[data-component="-U1"]')).toHaveAttribute(
     "data-status",
@@ -64,7 +68,7 @@ test("⏳ R-CNC-04: zdroj -T1 po Arrheniovi 🔴, nejištěný přívod, simulá
   const filter = lifespan.locator('[data-component="-FAN1"]');
   await expect(filter).toHaveAttribute("data-status", "CRITICAL_EXPIRED");
   await filter
-    .getByRole("button", { name: /Zapsat výměnu kusu za nový/ })
+    .getByRole("button", { name: /Vyměněno \(Reset 100 %\)/ })
     .click();
   await expect(lifespan.locator('[data-component="-FAN1"]')).toHaveAttribute(
     "data-status",
@@ -75,10 +79,10 @@ test("⏳ R-CNC-04: zdroj -T1 po Arrheniovi 🔴, nejištěný přívod, simulá
     lifespan
       .locator('[data-component="-FAN1"]')
       .getByTestId("lifespan-percent"),
-  ).toContainText("0 %");
+  ).toContainText("100 %");
   await expect(
     lifespan.locator('[data-component="-FAN1"]').getByTestId("lifespan-stock"),
-  ).toHaveText("Skladem: 3 ks");
+  ).toHaveText("🟢 Skladem: 3 ks");
   await page.screenshot({
     path: "test-results/phase53-cnc.png",
     fullPage: true,
@@ -99,9 +103,11 @@ test("🟡 R-LIS-01: stykač -K1 před výměnou, přívod s nízkou rezervou, h
     "data-status",
     "PLAN_REPLACEMENT",
   );
+  // Bezpečnostní modul je v pořádku – vidět až v přehledu všech součástek (58 % zbývá = 42 % vyčerpáno)
+  await page.getByTestId("lifespan-filter-all").click();
   await expect(
     page.locator('[data-component="-K_SAF1"]').getByTestId("lifespan-percent"),
-  ).toContainText("42");
+  ).toContainText("58");
   await expect(page.getByTestId("cable-load")).toContainText("🟡 Vytížení");
 
   await page.goto("/inspections/alerts");

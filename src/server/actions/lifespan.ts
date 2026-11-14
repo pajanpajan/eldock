@@ -10,7 +10,10 @@ import { WorkflowError } from "@/lib/workflow/state-machine";
 import {
   addMonitoredComponent,
   deleteMonitoredComponent,
+  replaceBomComponent,
   replaceMonitoredComponent,
+  setComponentStock,
+  updateBomComponent,
   updateFeederCable,
   updateOperatingProfile,
 } from "@/server/services/lifespan";
@@ -29,7 +32,19 @@ const profileSchema = z.object({
   equipmentId: id,
   shiftRegime: z.number().int().min(1).max(4),
   internalTempC: num(-20, 90),
+  lifespanAlertDays: z.number().int().min(1).max(365).optional(),
 });
+// Fáze 116: řádek kusovníku (pozice ve schématu) s automatickým modelem životnosti
+const bomRef = { equipmentId: id, designation: z.string().trim().min(1).max(30), revisionId: id.nullable().optional() };
+const bomPatchSchema = z.object({
+  ...bomRef,
+  cyclesPerHour: num(0, 3600).optional(),
+  hoursReading: z.number().int().min(0).max(1_000_000).nullable().optional(),
+  alertLeadDays: z.number().int().min(1).max(365).nullable().optional(),
+  manualCyclesOffset: z.number().int().min(0).max(1_000_000_000).optional(),
+});
+const bomStockSchema = z.object({ ...bomRef, quantity: z.number().int().min(0).max(100_000) });
+const bomReplaceSchema = z.object(bomRef);
 const componentSchema = z.object({
   equipmentId: id,
   designation: z.string().trim().min(1).max(30),
@@ -41,6 +56,8 @@ const componentSchema = z.object({
     "SAFETY_ELEMENT",
     "POWER_ELECTRONICS",
     "COOLING_FAN_FILTER",
+    "BATTERY",
+    "SURGE_PROTECTION",
   ]),
   cyclesPerHour: num(0, 100_000),
   manualCyclesOffset: z.number().int().min(0).max(1_000_000_000).default(0),
@@ -146,4 +163,23 @@ export async function updateFeederCableAction(
     input,
     async (data) => void (await updateFeederCable(prisma, data)),
   );
+}
+
+/** Fáze 116: četnost spínání, odečet motohodin a předstih upozornění řádku kusovníku (okamžitý přepočet). */
+export async function updateBomComponentAction(input: z.input<typeof bomPatchSchema>) {
+  return run(bomPatchSchema, input, async (data) => void (await updateBomComponent(prisma, data)));
+}
+
+/** Fáze 116: počet kusů skladem (díl s MPN = sklad závodu pro všechny stroje). */
+export async function setComponentStockAction(input: z.input<typeof bomStockSchema>) {
+  return run(bomStockSchema, input, async (data) => {
+    const result = await setComponentStock(prisma, data);
+    revalidatePath("/nakupni-report");
+    return result;
+  });
+}
+
+/** Fáze 116: „🔄 Vyměněno (Reset 100 %)“ u řádku kusovníku. */
+export async function replaceBomComponentAction(input: z.input<typeof bomReplaceSchema>) {
+  return run(bomReplaceSchema, input, async (data) => void (await replaceBomComponent(prisma, data)));
 }

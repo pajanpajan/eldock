@@ -11,7 +11,7 @@ import {
   toCableNode,
   type PowerCableNode,
 } from "@/lib/cable-sizing";
-import { assessComponent } from "@/lib/component-lifespan";
+import { plantLifespanRows } from "@/server/services/lifespan-report";
 
 // Fáze 53: prediktivní údržba – sledované součástky a přívodní kabely (ČSN 33 2000-5-52 ed. 2).
 
@@ -109,29 +109,15 @@ export type EquipmentHealth = NonNullable<
 >;
 
 /**
- * Souhrn pro hlídač lhůt a přehled areálu: součástky před koncem životnosti (plánovat / kritické)
- * a přetížené nebo nejištěné kabely. Jen zařízení ve výřezu účtu.
+ * Souhrn pro hlídač lhůt a přehled areálu: součástky před koncem životnosti (plánovat / kritické – fáze 116 včetně
+ * dílů kusovníku s automatickým modelem) a přetížené nebo nejištěné kabely. Jen zařízení ve výřezu účtu.
  */
 export const getPredictiveSummary = cache(
   async (plantId: string, types?: readonly EquipmentType[] | null) => {
     const now = new Date();
     const typeFilter = types ? { type: { in: [...types] } } : {};
-    const [components, checks] = await Promise.all([
-      prisma.monitoredComponent.findMany({
-        where: {
-          equipment: { floor: { building: { plantId } }, ...typeFilter },
-        },
-        include: {
-          equipment: {
-            select: {
-              id: true,
-              tag: true,
-              shiftRegime: true,
-              internalTempC: true,
-            },
-          },
-        },
-      }),
+    const [{ rows }, checks] = await Promise.all([
+      plantLifespanRows(prisma, plantId, now, types ?? null),
       getPlantCableChecks(plantId),
     ]);
     const visible = types
@@ -144,29 +130,18 @@ export const getPredictiveSummary = cache(
           ).map((row) => row.id),
         )
       : null;
-    const wearing = components
-      .map((component) => ({
-        component,
-        assessment: assessComponent(
-          component,
-          {
-            shiftRegime: component.equipment.shiftRegime,
-            internalTempC: component.equipment.internalTempC,
-          },
-          now,
-        ),
-      }))
-      .filter(({ assessment }) => assessment.status !== "OK")
-      .sort((a, b) => b.assessment.wearPercent - a.assessment.wearPercent)
-      .map(({ component, assessment }) => ({
-        id: component.id,
-        equipmentId: component.equipment.id,
-        tag: component.equipment.tag,
-        designation: component.designation,
-        name: component.name,
-        status: assessment.status,
-        wearPercent: assessment.wearPercent,
-        missingStock: assessment.missingStock,
+    const wearing = rows
+      .filter((row) => row.status !== "OK")
+      .sort((a, b) => b.wearPercent - a.wearPercent)
+      .map((row) => ({
+        id: `${row.equipmentId}|${row.designation}`,
+        equipmentId: row.equipmentId,
+        tag: row.tag,
+        designation: row.designation,
+        name: row.description,
+        status: row.status,
+        wearPercent: row.wearPercent,
+        missingStock: row.missingStock,
       }));
     const cables = [...checks.entries()]
       .filter(

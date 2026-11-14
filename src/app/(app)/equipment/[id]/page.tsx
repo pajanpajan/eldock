@@ -31,7 +31,7 @@ import { TemporaryModArchive } from "@/components/temporary-mods/TemporaryModArc
 import { TemporaryModBanner } from "@/components/temporary-mods/TemporaryModBanner";
 import { TemporaryModDialog } from "@/components/temporary-mods/TemporaryModDialog";
 import { PageTransition } from "@/components/layout/PageTransition";
-import { LazyBomTable, LazyCabinet3D, LazyInteractiveSchematic, LazyPanelDiagnostics, LazyQrLabelCard } from "@/components/lazy";
+import { LazyCabinet3D, LazyInteractiveSchematic, LazyPanelDiagnostics, LazyQrLabelCard } from "@/components/lazy";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { EQUIPMENT_TYPE_LABELS, formatDate } from "@/lib/format";
@@ -57,8 +57,21 @@ import { PowerBackupCard } from "@/components/equipment/PowerBackupCard";
 import { BimBoardButton } from "@/components/bim/BimBoardButton";
 import { hasBackupTier, isPowerBackupTier, tierOf } from "@/lib/power-backup";
 import { CABLE_STATUS } from "@/lib/cable-sizing";
-import { LIFESPAN_STATUS, assessComponent } from "@/lib/component-lifespan";
-import { getCurrentAccount } from "@/server/session";
+import { LIFESPAN_STATUS } from "@/lib/component-lifespan";
+import { classifyComponent } from "@/lib/bom-lifespan";
+import { partKeyOf } from "@/lib/component-datasheets";
+import { lossOf } from "@/lib/datasheet-view";
+import { isCriticalRow, toRowView, verifiedDatasheetCount } from "@/lib/lifespan-view";
+import { layoutCabinet } from "@/lib/mock-graphics/cabinet";
+import { influenceCodesFrom, suggestEnclosure } from "@/lib/passport-docs";
+import { BomDatasheets } from "@/components/equipment/BomDatasheets";
+import { BomLifespanTable } from "@/components/equipment/BomLifespanTable";
+import { EquipmentIdentityStrip } from "@/components/equipment/EquipmentIdentityStrip";
+import { EquipmentRedlines, RedlinesSummary } from "@/components/equipment/EquipmentRedlines";
+import type { PassportGeneratorContext } from "@/components/inspections/PassportDocActions";
+import { getEquipmentRedlines } from "@/server/queries/equipment";
+import { getCatalogParts, getEquipmentLifespan } from "@/server/queries/lifespan";
+import { getCurrentAccount, getCurrentUser } from "@/server/session";
 
 type Props = PageProps<"/equipment/[id]">;
 
@@ -106,7 +119,7 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
   const canEditReferences = account.can("caeOffice") || account.can("studio");
   const withReferences = !!selected && !isLightCard(equipment.type) && modules.on("cae.hotspots");
   // Nezávislé dotazy po ověření přístupu najednou: napájení (LOTO), štítek, kusovník vybrané revize, reference.
-  const [powerNodes, label, bom, references, linkable, passports, knowledge, health, labelSerial] = await Promise.all([
+  const [powerNodes, label, bom, references, linkable, passports, knowledge, health, labelSerial, lifespan, redlines, user] = await Promise.all([
     getPowerNodes(plantId),
     buildLabelData(equipment, inspection),
     selected ? getRevisionBom(selected.id) : Promise.resolve([]),
@@ -117,7 +130,14 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
     isLightCard(equipment.type) ? Promise.resolve(null) : getEquipmentHealth(equipment.id, plantId),
     // Fáze 111: identifikační štítek z registru (EL-xxxxxx), bez přidělení
     equipmentLabelSerial(prisma, equipment.id),
+    // Fáze 116: životnost součástek napárovaná na kusovník zobrazené revize a Červenky stroje
+    isLightCard(equipment.type) ? Promise.resolve(null) : getEquipmentLifespan(equipment.id, selected?.id ?? null),
+    isLightCard(equipment.type) ? Promise.resolve([]) : getEquipmentRedlines(equipment.id),
+    getCurrentUser(),
   ]);
+  const catalog = lifespan ? await getCatalogParts(lifespan.rows.map(({ row }) => row.partNumber)) : new Map();
+  const lifespanRows = lifespan ? lifespan.rows.map((entry) => toRowView(entry, catalog)) : [];
+  const purchaseHref = account.can("submitChange") ? `/nakupni-report?zavod=${plantId}` : null;
   // Fáze 46: knihovna návodů / datasheetů a verzované zálohy řídicího SW
   const libraryDocuments = knowledge.documents.map((document) => ({
     id: document.id,
@@ -135,13 +155,18 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
     uploadedBy: document.uploadedBy?.name ?? null,
   }));
   const docsPanel = (
-    <DocumentLibrary
-      equipmentId={equipment.id}
-      documents={libraryDocuments}
-      canUpload={account.can("submitChange") || account.can("recordInspection") || account.can("caeOffice")}
-      canDelete={account.can("submitChange") || account.can("caeOffice")}
-    />
+    <div className="space-y-6">
+      {/* Fáze 116: oficiální technické listy součástek z kusovníku */}
+      <BomDatasheets rows={lifespanRows} />
+      <DocumentLibrary
+        equipmentId={equipment.id}
+        documents={libraryDocuments}
+        canUpload={account.can("submitChange") || account.can("recordInspection") || account.can("caeOffice")}
+        canDelete={account.can("submitChange") || account.can("caeOffice")}
+      />
+    </div>
   );
+  const docsCount = libraryDocuments.length + verifiedDatasheetCount(lifespanRows);
   const softwarePanel = hasSoftwareTab(equipment.type) ? (
     <SoftwareBackups
       equipmentId={equipment.id}
@@ -209,18 +234,22 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
   const book = panelModel ? { sheets: panelModel.sheets.map((sheet) => ({ ...sheet, svg: renderPanelSheetSvg(panelModel, sheet.number) })) } : undefined;
   // Fáze 53: prediktivní údržba – životnost součástek a přívodní kabel (záložka Diagnostika + indikátor v hlavičce)
   const canEditHealth = account.can("submitChange") || account.can("recordInspection");
-  const wornComponents = health ? health.components.map((component) => assessComponent(component, health.profile, now)).filter((assessment) => assessment.status !== "OK") : [];
-  const worstWear = wornComponents.some((assessment) => assessment.status === "CRITICAL_EXPIRED") ? "CRITICAL_EXPIRED" : wornComponents.length ? "PLAN_REPLACEMENT" : null;
+  // Fáze 116: součástky po životnosti / v okně upozornění včetně dílů kusovníku s automatickým modelem
+  const wornComponents = lifespanRows.filter(isCriticalRow);
+  const worstWear = wornComponents.some((row) => row.assessment?.expired || row.assessment?.status === "CRITICAL_EXPIRED") ? "CRITICAL_EXPIRED" : wornComponents.length ? "PLAN_REPLACEMENT" : null;
   const cableStatus = health?.feeder.check?.status ?? null;
   const healthPanel = health ? (
     <div className="space-y-6">
       <ComponentLifespan
         equipmentId={equipment.id}
+        revisionId={lifespan?.revisionId ?? null}
+        rows={lifespanRows}
         profile={health.profile}
-        components={health.components.map((component) => ({ ...component, installedAt: component.installedAt.toISOString() }))}
+        alertDays={lifespan?.alertDays ?? equipment.lifespanAlertDays}
         bom={bom.map((item) => ({ designation: item.designation, description: item.description, manufacturer: item.manufacturer, partNumber: item.partNumber }))}
-        now={now.toISOString()}
         canEdit={canEditHealth}
+        bomHref={`${basePath}?tab=bom`}
+        purchaseHref={purchaseHref}
       />
       <FeederCableCard
         equipmentId={equipment.id}
@@ -268,10 +297,11 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
     />
   );
 
-  // Fotka a QR štítek: v terénním pohledu až pod dokumentací (údržbář jde primárně ke schématu).
-  const cardGrid = (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+  // Fáze 116: kompaktní identifikační pruh (fotka, výrobní štítek + AI, QR štítek) pod lištou záložek
+  const identityStrip = (
+    <EquipmentIdentityStrip tag={equipment.tag}>
       <EquipmentPhotoCard
+        compact
         equipmentId={equipment.id}
         tag={equipment.tag}
         name={equipment.name}
@@ -281,30 +311,34 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
         documentStatus={light ? null : equipment.status}
         canEdit={canEditCard}
       />
-      <LazyQrLabelCard label={label} printHref={`${basePath}/label`} canEdit={canEditCard} />
-      {/* Fáze 111: druhá fotka – výrobní štítek s AI čtením údajů a identifikační štítek EL-xxxxxx */}
-      <div className="lg:col-span-2">
-        <NameplateCard
-          equipmentId={equipment.id}
-          tag={equipment.tag}
-          photoUrl={equipment.nameplatePhotoUrl}
-          readAt={equipment.nameplateReadAt?.toISOString() ?? null}
-          reading={parseReading(equipment.nameplateDataJson)}
-          current={{
-            title: titleWithoutTag(equipment.name, equipment.tag),
-            manufacturer: equipment.manufacturer,
-            model: equipment.model,
-            serialNumber: equipment.serialNumber,
-            ratedVoltage: equipment.ratedVoltage,
-            ipRating: equipment.ipRating,
-            protectionClass: equipment.protectionClass,
-            usageGroup: equipment.usageGroup,
-            handHeld: equipment.handHeld,
-          }}
-          label={idLabelData(equipment, { serial: labelSerial, building: building.name, floor: floor.name, validUntil: inspection.validUntil })}
-          canEdit={canEditCard}
-        />
-      </div>
+      <NameplateCard
+        compact
+        equipmentId={equipment.id}
+        tag={equipment.tag}
+        photoUrl={equipment.nameplatePhotoUrl}
+        readAt={equipment.nameplateReadAt?.toISOString() ?? null}
+        reading={parseReading(equipment.nameplateDataJson)}
+        current={{
+          title: titleWithoutTag(equipment.name, equipment.tag),
+          manufacturer: equipment.manufacturer,
+          model: equipment.model,
+          serialNumber: equipment.serialNumber,
+          ratedVoltage: equipment.ratedVoltage,
+          ipRating: equipment.ipRating,
+          protectionClass: equipment.protectionClass,
+          usageGroup: equipment.usageGroup,
+          handHeld: equipment.handHeld,
+        }}
+        label={idLabelData(equipment, { serial: labelSerial, building: building.name, floor: floor.name, validUntil: inspection.validUntil })}
+        canEdit={canEditCard}
+      />
+      <LazyQrLabelCard compact label={label} printHref={`${basePath}/label`} canEdit={canEditCard} />
+    </EquipmentIdentityStrip>
+  );
+
+  // Zálohování napájení, rozváděč z BIMu a pasport AI Panel Builderu – v záložce Pasport & Shoda
+  const passportExtras = (
+    <div className="grid gap-4 lg:grid-cols-2">
       {/* Fáze 93: zálohování napájení rozváděče / zdroje a nájemní jednotka / zdravotnické oddělení */}
       {hasBackupTier(equipment.type) ? (
         <PowerBackupCard
@@ -319,7 +353,7 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
       ) : null}
       {/* Fáze 95: rozváděč z BIMu → návrh vnitřního osazení v AI Panel Builderu (vývody k napájeným zařízením) */}
       {equipment.type === "SWITCHBOARD" && equipment.bimGuid && account.can("panelBuilder") && modules.on("enterprise.ai_panel_builder") ? (
-        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-primary/40 bg-primary/5 p-4 lg:col-span-2" data-testid="bim-board-card">
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-primary/40 bg-primary/5 p-4" data-testid="bim-board-card">
           <div className="min-w-0 flex-1">
             <p className="font-medium">Rozváděč z BIM modelu</p>
             <p className="text-xs text-muted-foreground">
@@ -332,7 +366,7 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
       ) : null}
       {/* Pasport z AI Panel Builderu (propuštěná dokumentace rozváděče) */}
       {passports.map((passport) => (
-        <div key={passport.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-4 lg:col-span-2" data-testid="panel-passport">
+        <div key={passport.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-4" data-testid="panel-passport">
           <CircuitBoard className="size-5 text-primary" aria-hidden />
           <div className="min-w-0 flex-1">
             <p className="font-medium">
@@ -347,6 +381,83 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
           ) : null}
         </div>
       ))}
+    </div>
+  );
+
+  // Fáze 116: předvyplnění dokumentů pasportu (prohlášení, kusová zkouška, liniové schéma, oteplení, vnější vlivy)
+  const canEditPassport = account.can("submitChange") || account.can("caeOffice") || account.can("studio");
+  const activeRevision = equipment.revisions.find((revision) => revision.status === "ACTIVE") ?? null;
+  const amps = Number(/\d+/.exec(equipment.ratedCurrent ?? "")?.[0] ?? 0) || null;
+  const rails = layoutCabinet(bom).length;
+  const passportGenerator: PassportGeneratorContext | null =
+    equipment.type === "SWITCHBOARD" && canEditPassport
+      ? {
+          equipmentId: equipment.id,
+          tag: equipment.tag,
+          today,
+          author: user.name,
+          conformity: {
+            manufacturer: equipment.manufacturer ?? "",
+            manufacturerAddress: "",
+            product: `Rozváděč ${equipment.tag} – ${titleWithoutTag(equipment.name, equipment.tag)}`,
+            typeDesignation: equipment.model ?? equipment.tag,
+            serialNumber: equipment.serialNumber ?? "",
+            place: building.plant.city ?? "",
+          },
+          revision: activeRevision ? { id: activeRevision.id, version: activeRevision.version, schematicUrl: activeRevision.schematicUrl, sheetCount: activeRevision.sheetCount } : null,
+          thermal: {
+            enclosure: suggestEnclosure(rails, amps),
+            enclosureNote: `Rozměr skříně je odhadnutý z kusovníku (${rails} ${rails === 1 ? "lišta" : rails <= 4 ? "lišty" : "lišt"}) – přepište ho podle skutečné skříně. Ztrátový výkon: technický list / katalog výrobce, ostatní doplňte (W při jmenovitém proudu).`,
+            ambientTempC: 35,
+            maxRiseK: 30,
+            losses: bom
+              .filter((item) => {
+                const kind = classifyComponent({ designation: item.designation, description: item.description });
+                return kind !== "TERMINAL" && kind !== "OTHER";
+              })
+              .map((item) => {
+                const loss = lossOf(item.partNumber, item.partNumber ? (catalog.get(partKeyOf(item.partNumber)) ?? null) : null);
+                return { designation: item.designation, description: [item.description, item.manufacturer, item.partNumber].filter(Boolean).join(" · "), quantity: Math.max(1, Math.round(item.quantity)), lossW: loss?.lossW ?? null, source: loss?.source ?? "doplňte údaj výrobce" };
+              }),
+          },
+          influences: { codes: influenceCodesFrom(equipment.externalInfluences), space: `${building.name} › ${floor.name}${equipment.assignedZone ? ` › ${equipment.assignedZone}` : ""}`, chair: user.name },
+        }
+      : null;
+
+  // Upozornění nad obsahem záložek (neplatný QR, zneplatněná revize, otevřená změna, dočasné úpravy) + identifikační pruh
+  const beforeContent = (
+    <div className="flex flex-col gap-3">
+      {labelCheck === "replaced" ? (
+        <Alert variant="destructive" data-testid="qr-label-replaced">
+          <ShieldX />
+          <AlertTitle>Neplatný QR štítek</AlertTitle>
+          <AlertDescription>
+            Naskenovaný štítek u {equipment.tag} byl nahrazen novým kódem a už neplatí. Ověřte, že jste u správného zařízení, a nahlaste výměnu štítku – platný štítek vytisknete v identifikačním pruhu níže.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+      {/* Fáze 108: revize zneplatněná technikem (podezření ze zneužití osvědčení TIČR) – červené varování */}
+      {equipment.inspections
+        .filter((record) => record.misuseFlaggedAt)
+        .slice(0, 3)
+        .map((record) => (
+          <Alert key={`misuse-${record.id}`} variant="destructive" data-testid="revision-misuse-banner">
+            <ShieldX />
+            <AlertTitle>{MISUSE_BANNER}</AlertTitle>
+            <AlertDescription>
+              Záznam {record.reportNumber} ze dne {record.inspectionDate.toLocaleDateString("cs-CZ")} (technik {record.inspectorName}, osvědčení {record.inspectorLicense}) je zablokovaný a do platnosti revize se nepočítá.
+              {record.misuseNote ? ` Poznámka technika: ${record.misuseNote}` : ""}
+            </AlertDescription>
+          </Alert>
+        ))}
+      {/* Fáze 108: formulář revizního technika z karty rozváděče / stroje a po naskenování QR štítku */}
+      {account.can("recordInspection") ? <SignedRevisionEntry equipment={{ id: equipment.id, tag: equipment.tag, name: equipment.name }} today={pragueToday(now)} scanned={labelCheck === "valid"} /> : null}
+      {fieldView ? <FieldQuickActions basePath={basePath} changeHref={`${basePath}/change-request`} openNumber={openChange?.number ?? null} canSubmit={account.can("submitChange")} /> : null}
+      {openChange ? <SafetyBanner change={openChange} pendingRevision={pending} reviewHref={`${basePath}/approve`} canReview={account.can("approveRevision")} now={now} /> : null}
+      {activeMods.map((mod) => (
+        <TemporaryModBanner key={mod.id} mod={mod} version={active?.version ? active.version : null} now={now} canResolve={account.can("temporaryMods")} />
+      ))}
+      {identityStrip}
     </div>
   );
 
@@ -459,68 +570,22 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
           }
         />
 
-        {labelCheck === "replaced" ? (
-          <Alert variant="destructive" data-testid="qr-label-replaced">
-            <ShieldX />
-            <AlertTitle>Neplatný QR štítek</AlertTitle>
-            <AlertDescription>
-              Naskenovaný štítek u {equipment.tag} byl nahrazen novým kódem a už neplatí. Ověřte, že jste u správného zařízení, a nahlaste výměnu štítku – platný štítek vytisknete níže.
-            </AlertDescription>
-          </Alert>
-        ) : null}
-
-        {/* Fáze 108: revize zneplatněná technikem (podezření ze zneužití osvědčení TIČR) – červené varování pod QR */}
-        {equipment.inspections
-          .filter((record) => record.misuseFlaggedAt)
-          .slice(0, 3)
-          .map((record) => (
-            <Alert key={`misuse-${record.id}`} variant="destructive" data-testid="revision-misuse-banner">
-              <ShieldX />
-              <AlertTitle>{MISUSE_BANNER}</AlertTitle>
-              <AlertDescription>
-                Záznam {record.reportNumber} ze dne {record.inspectionDate.toLocaleDateString("cs-CZ")} (technik {record.inspectorName}, osvědčení {record.inspectorLicense}) je zablokovaný a do platnosti revize se nepočítá.
-                {record.misuseNote ? ` Poznámka technika: ${record.misuseNote}` : ""}
-              </AlertDescription>
-            </Alert>
-          ))}
-
-        {/* Fáze 108: formulář revizního technika z karty rozváděče / stroje a po naskenování QR štítku */}
-        {account.can("recordInspection") ? (
-          <SignedRevisionEntry equipment={{ id: equipment.id, tag: equipment.tag, name: equipment.name }} today={pragueToday(now)} scanned={labelCheck === "valid"} />
-        ) : null}
-
-        {fieldView ? (
-          <FieldQuickActions basePath={basePath} changeHref={`${basePath}/change-request`} openNumber={openChange?.number ?? null} canSubmit={account.can("submitChange")} />
-        ) : null}
-
-        {fieldView ? null : cardGrid}
-
-        {openChange ? (
-          <SafetyBanner
-            change={openChange}
-            pendingRevision={pending}
-            reviewHref={`${basePath}/approve`}
-            canReview={account.can("approveRevision")}
-            now={now}
-          />
-        ) : null}
-
-        {activeMods.map((mod) => (
-          <TemporaryModBanner key={mod.id} mod={mod} version={active?.version ?? null} now={now} canResolve={account.can("temporaryMods")} />
-        ))}
-
         {light ? (
           <DocumentationTabs
             panels={{ inspections: inspectionsPanel, docs: docsPanel }}
             defaultTab="inspections"
-            labels={{ inspections: `Revize & Měření (${rule.standard})`, docs: `📚 Návody & Datasheety (${libraryDocuments.length})` }}
+            labels={{ inspections: `Revize & Měření (${rule.standard})`, docs: `📚 Návody & Datasheety (${docsCount})` }}
+            beforeContent={beforeContent}
           />
         ) : (
           <div id="dokumentace" className="scroll-mt-24">
           <DocumentationTabs
-            labels={{ ...(fieldView ? { passport: "LOTO – bezpečné odpojení" } : {}), docs: `📚 Návody & Datasheety (${libraryDocuments.length})` }}
+            labels={{ ...(fieldView ? { passport: "LOTO – bezpečné odpojení" } : {}), redlines: `✏️ Červenky (${redlines.length})`, docs: `📚 Návody & Datasheety (${docsCount})` }}
+            beforeContent={beforeContent}
             panels={{
               schema: (
+                <div className="space-y-3">
+                {redlines.length ? <RedlinesSummary redlines={redlines} basePath={basePath} /> : null}
                 <SchematicViewer
                   compare={modules.on("cae.visual_diff") ? "on" : modules.upsell ? "locked" : "off"}
                   interactiveLocked={!modules.on("cae.hotspots") && modules.upsell && !isLightCard(equipment.type)}
@@ -556,15 +621,32 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
                     createdAt,
                   }))}
                 />
-              ),
-              bom: selected ? (
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">
-                    Kusovník revize <span className="font-mono text-foreground">{selected.version}</span>
-                  </p>
-                  <LazyBomTable rows={bom} fileName={`kusovnik-${equipment.tag}-${selected.version}.csv`} />
                 </div>
+              ),
+              // Fáze 116: kusovník s prediktivní životností součástek a oficiálními datasheety
+              bom: lifespan ? (
+                <BomLifespanTable
+                  equipmentId={equipment.id}
+                  revisionId={lifespan.revisionId}
+                  version={selected?.version ?? null}
+                  rows={lifespanRows}
+                  profile={lifespan.profile}
+                  alertDays={lifespan.alertDays}
+                  canEdit={canEditHealth}
+                  purchaseHref={purchaseHref}
+                  fileName={`kusovnik-${equipment.tag}-${selected?.version ?? "bez-revize"}.csv`}
+                />
               ) : null,
+              redlines: (
+                <EquipmentRedlines
+                  redlines={redlines}
+                  changeHref={`${basePath}/change-request`}
+                  canSubmit={account.can("submitChange")}
+                  designer={building.plant.designerEmail || building.plant.designerName ? { name: building.plant.designerName, email: building.plant.designerEmail } : null}
+                  ticketBase={role === "CAE_ENGINEER" && modules.on("cae.ticketing") ? "/cae/tickets/" : null}
+                  approveHref={account.can("approveRevision") ? `${basePath}/approve` : null}
+                />
+              ),
               "3d": selected ? <LazyCabinet3D bom={bom} tag={equipment.tag} /> : null,
               docs: docsPanel,
               ...(softwarePanel ? { software: softwarePanel } : {}),
@@ -578,9 +660,10 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
                 <LotoCard equipment={equipment} nodes={powerNodes} />
               ) : (
                 <div className="space-y-8">
-                  <LotoCard equipment={equipment} nodes={powerNodes} />
+                  {passportExtras}
+                  <LotoCard equipment={equipment} nodes={powerNodes} canEdit={canEditPassport} />
                   <BatteryPassportCard json={equipment.batteryPassportJson} />
-                  <CompliancePassport equipment={equipment} />
+                  <CompliancePassport equipment={equipment} generator={passportGenerator} />
                 </div>
               ),
               // CAE projektant lhůtník revizí nevidí, terénní pohled ho nemá jako záložku (stav je v hlavičce).
@@ -591,7 +674,6 @@ export default async function EquipmentPage({ params, searchParams }: Props) {
           </div>
         )}
 
-        {fieldView ? cardGrid : null}
       </div>
     </PageTransition>
   );
