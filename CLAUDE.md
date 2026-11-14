@@ -5,7 +5,7 @@ revize VTZ, změny skutečného provedení mezi údržbou v hale a externími CA
 rozváděčů. Pracovní název byl Digitry, od fáze 20 je to **ELDOCK**. Produkce běží na https://eldock.cz.
 Původní zadání MVP je v `docs/archiv/SPECIFIKACE-MVP.md`, celá historie fází 0–35 v `docs/archiv/PLAN-faze-00-35.md`, celý archiv v jednom souboru `docs/archiv/ARCHIV-KOMPLET.md`.
 
-## 1. Milníky (fáze 0–115 nasazené; 116 čeká na nasazení)
+## 1. Milníky (fáze 0–116 nasazené)
 
 | Fáze | Milník |
 |---|---|
@@ -348,7 +348,7 @@ Když uživatel řekne **„nasaď to na produkci“** nebo **„deploy“**:
 
 **free@home, hřebeny, CNC a Revize & Plánovač (fáze 115):** bez migrace. Při startu kontejneru `db:panel-builder` aktualizuje kusy ABB-free@home v katalogu prvků (Pv a EAN od ABB, BI-M-10, SA-M-8.8.1). Po nasazení zkontrolovat `/revize` (přihlášení) a veřejné stránky. Nasazeno 2026-11-14 (commit `ff2a226`, bez migrace, katalog 864 prvků), verify:demo 12 / 12.
 
-**Životnost součástek, nákupní report, pasport a pochůzka (fáze 116):** migrace `20261114160000_phase116_lifespan_passport_walk` (nové sloupce a tabulka `SparePartStock` – před nasazením záloha). Start kontejneru doplní jednorázově ukázková data (`db:demo-lifespan`: sklad dílů, upřesnění míst, LOTO RM1, oprava filtrační rohože). Denní údržba posílá nákupní report podle nastavení závodu (bez e-mailu nákupu nic). Po nasazení zkontrolovat `/nakupni-report` a `/revize?razeni=trasa` (přihlášení).
+**Životnost součástek, nákupní report, pasport a pochůzka (fáze 116):** migrace `20261114160000_phase116_lifespan_passport_walk` (nové sloupce a tabulka `SparePartStock` – před nasazením záloha). Start kontejneru doplní jednorázově ukázková data (`db:demo-lifespan`: sklad dílů, upřesnění míst, LOTO RM1, oprava filtrační rohože). Denní údržba posílá nákupní report podle nastavení závodu (bez e-mailu nákupu nic). Po nasazení zkontrolovat `/nakupni-report` a `/revize?razeni=trasa` (přihlášení). Nasazeno 2026-11-14 (commit `430296c`, migrace po záloze databáze, verify:demo 12 / 12).
 
 **Katalog ABB pro ČR (fáze 88):** bez migrace. Rozvodnice Mistral / ComfortLine CU, přístroje a příslušenství ABB i vazby příslušenství zapíše přírůstkový seed `db:panel-builder` při startu kontejneru (upsert, orientační řádek téhož typu dostane objednací číslo, nic se nemaže); ověřené rozvodnice převezmou řádky exportu se stejným objednacím číslem (MISTRAL65, CU24R / CU25R). Na serveru nic dalšího. Nasazeno 2026-11-10 (commit `1aacfdb`; seed „katalog 838 prvků aktualizován“, 163 ověřených skříní, kontejner `healthy`).
 
