@@ -80,7 +80,7 @@ export async function getInspectionOverview(plantId?: string, now: Date = new Da
       ...RULE_FIELDS,
       ratedVoltage: true,
       assignedZone: true,
-      floor: { select: { name: true, building: { select: { name: true, ...BUILDING_RULE_FIELDS, plant: { select: { name: true } } } } } },
+      floor: { select: { name: true, building: { select: { id: true, name: true, ...BUILDING_RULE_FIELDS, plant: { select: { name: true } } } } } },
       inspections: {
         where: { type: { in: [...DEADLINE_TYPES] }, misuseFlaggedAt: null },
         select: { id: true, type: true, inspectionDate: true, validUntil: true, result: true },
@@ -91,6 +91,8 @@ export async function getInspectionOverview(plantId?: string, now: Date = new Da
     .map(({ floor, inspections, ...item }) => ({
       ...ruleInputFrom(item, floor.building),
       location: `${floor.building.name} › ${floor.name}`,
+      /** Fáze 115: filtr budovy v centru revizí (`/revize?budova=`). */
+      buildingId: floor.building.id,
       plantName: floor.building.plant.name,
       summary: summarizeInspections(inspections, now),
       /** Rozhodující revize → revizní protokol k tisku. */

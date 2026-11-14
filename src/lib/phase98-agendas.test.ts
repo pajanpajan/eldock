@@ -37,7 +37,7 @@ describe("AI Panel Builder – 4 fáze projektu rozváděče", () => {
 
 describe("ELDOCK Průmysl – 4 agendy závodu", () => {
   it("názvy agend podle zadání, fáze v adrese", () => {
-    expect(PLANT_PHASES.map((phase) => phase.label)).toEqual(["1. Mapa závodu & BIM (.ifc)", "2. Rozváděče, Stroje & QR štítky", "3. Schémata, Červenka & Zálohy PLC", "4. Kniha revizí, Legislativa & Simulátor"]);
+    expect(PLANT_PHASES.map((phase) => phase.label)).toEqual(["1. Mapa závodu & BIM (.ifc)", "2. Rozváděče, Stroje & QR štítky", "3. Schémata, Červenka & Zálohy PLC", "4. Revize & Plánovač"]);
     expect([plantPhaseOf("3"), plantPhaseOf(["4"]), plantPhaseOf("9"), plantPhaseOf(undefined), plantPhaseOf("abc")]).toEqual([3, 4, 1, 1, 1]);
     expect(plantPhaseHref("plant-jbc", 1)).toBe("/plant/plant-jbc");
     expect(plantPhaseHref("plant-jbc", 2)).toBe("/plant/plant-jbc?faze=2");

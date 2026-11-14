@@ -2,6 +2,15 @@
 // kabelové žlaby, PE / N sběrnice, výřezy ve dveřích), CNC vrtací a frézovací plán 1 : 1 (DXF + CSV pro Perforex /
 // Steinhauer), nářezový a drátovací list vnitřních vodičů (Odkud → Kam, průřez, barva, délka po žlabech, dutinky, TWIN
 // u smyček, propojovací hřebeny) a nářezový list lišt, žlabů a hřebenů. Deterministické čisté funkce (prohlížeč i server).
+//
+// Fáze 115: montážní deska podle polí skříně (2 pole vedle sebe = 2 sloupce lišt, Pole A vlevo, Pole B vpravo, svislý
+// žlab mezi nimi), lišta = moduly × 17,5 mm + koncové zarážky, nic nepřesáhne pravý ani dolní okraj desky (jinak se deska
+// zvětší a plán upozorní na malou skříň); vývodky v čele ve 2 šachovnicových řadách (rozteč středů ≥ průměr matice
+// + 8 mm), přebytek slaboproudu do druhého čela; hřebeny drátovacího a nářezového listu ze stejných úseků jako výkres
+// (`combRuns` – ABB PS a koncové krytky PS-END).
+
+import { combCuts, combFedIds, combRuns, conductorsOf as combConductors, type CombDevice, type CombSetting } from "./comb-busbars";
+import { enclosureFields } from "./enclosures";
 
 export const MODULE_MM = 17.5;
 /** Rezerva vodiče na ohyb do svorky (na vodič). */
@@ -35,6 +44,9 @@ export interface CncDevice {
   cable?: string | null;
   /** Fáze 112: stykač HDO – značení ovládacího jističe cívky (L přes kontakt přijímače HDO na A1, A2 na N). */
   coilFrom?: string | null;
+  /** Fáze 115: výrobce (hřeben ABB PS jen pod přístroji ABB) a přiřazená fáze. */
+  manufacturer?: string | null;
+  phaseAssignment?: string | null;
 }
 
 export interface CncEnclosure {
@@ -68,6 +80,11 @@ export interface CncInput {
   entry: EntryDirection;
   mounting: MountingType;
   door: DoorOptions;
+  /** Fáze 115: dvě pole vedle sebe (lišty 1…aRails = Pole A vlevo, zbytek Pole B vpravo). */
+  fields?: { count: 1 | 2; aRails: number } | null;
+  /** Fáze 115: volba hřebenu lišt (uspořádání projektu) a soustava přívodu. */
+  combs?: Record<number, CombSetting>;
+  supplyPhases?: 1 | 3;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -119,6 +136,11 @@ export function glandFor(cable: string): GlandSize {
   return "M40";
 }
 
+/** Fáze 115: průměr převlečné / pojistné matice vývodky [mm] (rozteč středů ≥ průměr matice + 8 mm). */
+export const GLAND_NUT_MM: Record<GlandSize, number> = { M16: 22, M20: 26, M25: 32, M32: 40, M40: 50 };
+/** Mezera mezi maticemi sousedních vývodek [mm]. */
+export const GLAND_CLEARANCE_MM = 8;
+
 export interface Gland {
   id: string;
   size: GlandSize;
@@ -128,6 +150,9 @@ export interface Gland {
   side: "top" | "bottom";
   /** Střed otvoru od levého okraje čela [mm]. */
   x: number;
+  /** Fáze 115: střed otvoru od horní hrany čela [mm] a řada (0 = horní, 1 = dolní – šachovnicově posunutá). */
+  y: number;
+  row: number;
   role: "supply" | "power" | "final" | "bus";
 }
 
@@ -151,6 +176,10 @@ export interface Rail {
   x2: number;
   lengthMm: number;
   holes: Hole[];
+  /** Fáze 115: pole (0 = A vlevo, 1 = B vpravo), řada v poli a šířka lišty v modulech. */
+  field: 0 | 1;
+  row: number;
+  modules: number;
 }
 
 export interface Duct {
@@ -205,27 +234,157 @@ export interface CncLayout {
   devices: PlacedDevice[];
   /** Membránová příruba místo vývodek (zapuštěná rozvodnice). */
   membrane: boolean;
+  /** Fáze 115: počet polí desky (2 = dvoupolová deska / 2 rošty vedle sebe) a svislé sloupce lišt. */
+  fields: 1 | 2;
+  columns: { x1: number; x2: number; label: string }[];
+  /** Fáze 115: upozornění výroby (malá skříň – deska zvětšena, vývodky se nevešly do 2 řad …). */
+  warnings: string[];
 }
 
 const r1 = (value: number) => Math.round(value * 10) / 10;
 
-/** Montážní deska / rám, lišty, žlaby, sběrnice, vývodky a výřezy dveří. */
+/** Vývodky v čelech (fáze 115): řady se šachovnicovým posunem, rozteč středů ≥ průměr matice + 8 mm. */
+function placeGlands(entries: readonly { size: GlandSize; side: Gland["side"]; cable: string; label: string; role: Gland["role"] }[], faceW: number, depth: number, warnings: string[]): Gland[] {
+  type Entry = (typeof entries)[number];
+  const margin = 20;
+  const result: Gland[] = [];
+  // Druhá řada je posunutá o půl rozteče (šachovnice)
+  const startX = (rowIndex: number, nut: number) => margin + nut / 2 + (rowIndex % 2 === 1 ? (nut + GLAND_CLEARANCE_MM) / 2 : 0);
+  const xsOf = (row: readonly Entry[], rowIndex: number) => {
+    const xs: number[] = [];
+    row.forEach((entry, index) => xs.push(index === 0 ? startX(rowIndex, GLAND_NUT_MM[entry.size]) : xs[index - 1] + (GLAND_NUT_MM[row[index - 1].size] + GLAND_NUT_MM[entry.size]) / 2 + GLAND_CLEARANCE_MM));
+    return xs;
+  };
+  const split = (list: readonly Entry[]) => {
+    const rows: Entry[][] = [];
+    let current: Entry[] = [];
+    for (const entry of list) {
+      const candidate = [...current, entry];
+      const xs = xsOf(candidate, rows.length);
+      if (current.length && xs[xs.length - 1] + GLAND_NUT_MM[entry.size] / 2 > faceW - margin) {
+        rows.push(current);
+        current = [entry];
+      } else current = candidate;
+    }
+    if (current.length) rows.push(current);
+    return rows;
+  };
+  const top = entries.filter((entry) => entry.side === "top");
+  const bottom = entries.filter((entry) => entry.side === "bottom");
+  let topRows = split(top);
+  let bottomRows = split(bottom);
+  // Víc než 2 řady v jednom čele: slaboproud a koncové okruhy do druhého čela (přívod a silové vývody zůstávají)
+  const rebalance = (fromTop: boolean) => {
+    const source = fromTop ? top : bottom;
+    const target = fromTop ? bottom : top;
+    while ((fromTop ? topRows : bottomRows).length > 2) {
+      let index = -1;
+      for (let i = source.length - 1; i >= 0; i--) {
+        if (source[i].role === "bus" || source[i].role === "final") {
+          index = i;
+          break;
+        }
+      }
+      if (index < 0) break;
+      const [moved] = source.splice(index, 1);
+      target.push({ ...moved, side: fromTop ? "bottom" : "top" });
+      if (split(target).length > 2) {
+        target.pop();
+        source.splice(index, 0, moved);
+        break;
+      }
+      topRows = split(top);
+      bottomRows = split(bottom);
+    }
+  };
+  if (topRows.length > 2) rebalance(true);
+  if (bottomRows.length > 2) rebalance(false);
+  for (const [side, rows] of [["top", topRows], ["bottom", bottomRows]] as const) {
+    if (rows.length > 2) warnings.push(`${side === "top" ? "Horní" : "Dolní"} čelo: ${rows.flat().length} vývodek se nevejde do 2 řad – zvolte širší skříň nebo membránovou přírubu.`);
+    const maxNut = Math.max(16, ...rows.flat().map((entry) => GLAND_NUT_MM[entry.size]));
+    const pitch = maxNut + GLAND_CLEARANCE_MM;
+    const top0 = depth / 2 - (pitch * (rows.length - 1)) / 2;
+    if (rows.length && top0 - maxNut / 2 < 2) warnings.push(`${side === "top" ? "Horní" : "Dolní"} čelo (hloubka ${depth} mm) je na ${rows.length} řady vývodek příliš mělké.`);
+    rows.forEach((row, rowIndex) => {
+      const xs = xsOf(row, rowIndex);
+      row.forEach((entry, index) => result.push({ id: "", size: entry.size, holeMm: GLAND_HOLE_MM[entry.size], cable: entry.cable, label: entry.label, side, x: r1(xs[index]), y: r1(top0 + rowIndex * pitch), row: rowIndex, role: entry.role }));
+    });
+  }
+  const order: Record<Gland["role"], number> = { supply: 0, power: 1, final: 2, bus: 3 };
+  return result
+    .sort((a, b) => order[a.role] - order[b.role] || (a.side === b.side ? 0 : a.side === "top" ? -1 : 1) || a.row - b.row || a.x - b.x)
+    .map((gland, index) => ({ ...gland, id: `G${String(index + 1).padStart(2, "0")}` }));
+}
+
+/** Rezerva desky u přístrojů na liště (koncové zarážky) a šířka postranního a středového žlabu [mm]. */
+const RAIL_END_MM = 10;
+const SIDE_DUCT_MM = 25;
+/** Minimální vůle mezi lištou a svislým žlabem [mm]. */
+const COLUMN_GAP_MM = 2;
+
+/**
+ * Montážní deska / rám, lišty, žlaby, sběrnice, vývodky a výřezy dveří. Fáze 115: 2 pole vedle sebe = 2 sloupce lišt
+ * (Pole A vlevo, Pole B vpravo) se svislým žlabem mezi nimi; lišta = šířka pole v modulech × 17,5 mm + zarážky; nic
+ * nepřesáhne pravý ani dolní okraj desky (deska se zvětší a `warnings` upozorní na malou skříň).
+ */
 export function cncLayout(input: CncInput): CncLayout {
   const { enclosure } = input;
-  const plateW = Math.max(200, enclosure.widthMm - 50);
-  const plateH = Math.max(200, enclosure.heightMm - 80);
-  const sideDuct = 25;
-  const rows = Math.max(1, enclosure.rows);
+  const warnings: string[] = [];
   const usedRails = Math.max(1, ...input.devices.map((device) => device.rail));
-  const pitch = (plateH - 70) / (rows + 0.6);
-  const railLength = Math.min(plateW - 2 * sideDuct - 10, enclosure.modulesPerRow * MODULE_MM + 20);
-  const railX = (plateW - railLength) / 2;
-  const rails: Rail[] = Array.from({ length: Math.max(rows, usedRails) }, (_, index) => {
-    const y = r1(40 + pitch * (index + 0.75));
+  const split = input.fields?.count === 2 && input.fields.aRails >= 1 && input.fields.aRails < usedRails ? input.fields.aRails : null;
+  const fields: 1 | 2 = split ? 2 : 1;
+  const encFields = enclosureFields(enclosure);
+  const fieldModules = fields === 2 ? (encFields.fields === 2 ? encFields.fieldWidth : Math.max(4, Math.floor(enclosure.modulesPerRow / 2))) : enclosure.modulesPerRow;
+  // Obsazení lišt (moduly) – pole musí pojmout nejširší lištu
+  const usedOn = (rail: number) => input.devices.filter((device) => device.rail === rail).reduce((sum, device) => sum + Math.max(0.5, device.modules), 0);
+  const columnOf = (rail: number): 0 | 1 => (split !== null && rail > split ? 1 : 0);
+  const columnRails = (column: 0 | 1) => Array.from({ length: usedRails }, (_, index) => index + 1).filter((rail) => columnOf(rail) === column);
+  const columns = (fields === 2 ? [0, 1] : [0]) as (0 | 1)[];
+  const columnModules = columns.map((column) => Math.max(fieldModules, ...columnRails(column).map((rail) => Math.ceil(usedOn(rail) - 1e-9))));
+  // Řady: skříň má `rows` řad v každém poli; použité lišty sloupce mají přednost, prázdné řady skříně se doplní
+  const rowsPerColumn = Math.max(1, enclosure.rows, ...columns.map((column) => columnRails(column).length));
+  const railLengthOf = (modules: number) => Math.round(modules * MODULE_MM + 2 * RAIL_END_MM);
+  const lengths = columnModules.map(railLengthOf);
+  const railsW = lengths.reduce((sum, value) => sum + value, 0) + fields * 2 * COLUMN_GAP_MM;
+  const enclosurePlateW = Math.max(200, enclosure.widthMm - 50);
+  // Svislé žlaby 25 mm po stranách (a mezi poli), když se vejdou; malá bytová rozvodnice má užší nebo žádné
+  const ductRoom = (enclosurePlateW - railsW) / (fields + 1);
+  const sideDuct = ductRoom >= SIDE_DUCT_MM ? SIDE_DUCT_MM : ductRoom >= 15 ? Math.floor(ductRoom) : 0;
+  const requiredW = Math.round(railsW + (fields + 1) * sideDuct);
+  const plateW = Math.max(enclosurePlateW, requiredW);
+  if (requiredW > enclosurePlateW + 0.5) warnings.push(`Lišty (${columnModules.map((modules) => `${modules} M`).join(" + ")}) se nevejdou na montážní desku skříně ${enclosure.model} (${Math.round(enclosurePlateW)} mm) – deska v plánu zvětšena na ${plateW} mm, zvolte širší skříň.`);
+  // Svislá rozteč řad: přístroj 90 mm + žlab mezi řadami; pod 100 mm by se přístroje sousedních řad překrývaly
+  const minPitch = 100;
+  const enclosurePlateH = Math.max(200, enclosure.heightMm - 80);
+  const requiredH = Math.round(70 + minPitch * (rowsPerColumn + 0.6));
+  const plateH = Math.max(enclosurePlateH, requiredH);
+  if (requiredH > enclosurePlateH + 0.5) warnings.push(`${rowsPerColumn} řad lišt se nevejde na výšku desky skříně (${Math.round(enclosurePlateH)} mm) – deska v plánu zvětšena na ${plateH} mm.`);
+  const pitch = (plateH - 70) / (rowsPerColumn + 0.6);
+  // Sloupce: postranní žlab, lišta, (středový žlab, lišta), postranní žlab – volné místo rovnoměrně
+  const free = plateW - requiredW;
+  const gapX = free / (fields * 2);
+  const columnX: { x1: number; x2: number; label: string }[] = [];
+  let cursorX = sideDuct;
+  columns.forEach((column, index) => {
+    const x1 = cursorX + COLUMN_GAP_MM + gapX;
+    const x2 = x1 + lengths[index];
+    columnX.push({ x1: r1(x1), x2: r1(x2), label: fields === 2 ? (column === 0 ? "Pole A – Silnoproud" : "Pole B – Slaboproud / pokračování") : "Montážní deska" });
+    cursorX = x2 + COLUMN_GAP_MM + gapX + sideDuct;
+  });
+  // Lišty: použité (číslo z projektu) + prázdné řady skříně (čísla za poslední použitou lištou)
+  const railSpecs: { index: number; column: 0 | 1; row: number }[] = [];
+  for (const column of columns) columnRails(column).forEach((rail, row) => railSpecs.push({ index: rail, column, row: row + 1 }));
+  let spare = usedRails;
+  for (const column of columns) for (let row = columnRails(column).length + 1; row <= rowsPerColumn; row++) railSpecs.push({ index: ++spare, column, row });
+  railSpecs.sort((a, b) => a.index - b.index);
+  const rails: Rail[] = railSpecs.map(({ index, column, row }) => {
+    const y = r1(40 + pitch * (row - 1 + 0.75));
+    const { x1, x2 } = columnX[columns.indexOf(column)];
+    const length = x2 - x1;
     const holes: Hole[] = [];
-    for (let x = railX + 15; x <= railX + railLength - 15 + 0.01; x += 250) holes.push({ x: r1(x), y, diameterMm: 4.2, thread: "M5", part: "rail" });
-    if (Math.abs(holes[holes.length - 1].x - (railX + railLength - 15)) > 1) holes.push({ x: r1(railX + railLength - 15), y, diameterMm: 4.2, thread: "M5", part: "rail" });
-    return { index: index + 1, y, x1: r1(railX), x2: r1(railX + railLength), lengthMm: Math.round(railLength), holes };
+    for (let x = x1 + 15; x <= x2 - 15 + 0.01; x += 250) holes.push({ x: r1(x), y, diameterMm: 4.2, thread: "M5", part: "rail" });
+    if (Math.abs(holes[holes.length - 1].x - (x2 - 15)) > 1) holes.push({ x: r1(x2 - 15), y, diameterMm: 4.2, thread: "M5", part: "rail" });
+    return { index, y, x1: r1(x1), x2: r1(x2), lengthMm: Math.round(length), holes, field: column, row, modules: columnModules[columns.indexOf(column)] };
   });
   const ducts: Duct[] = [];
   const ductHoles = (x1: number, x2: number, y1: number, y2: number): Hole[] => {
@@ -236,26 +395,42 @@ export function cncLayout(input: CncInput): CncLayout {
     points.push({ x: r1(horizontal ? x2 - 30 : (x1 + x2) / 2), y: r1(horizontal ? (y1 + y2) / 2 : y2 - 30), diameterMm: 4.2, thread: "M5", part: "duct" });
     return points;
   };
-  // Svislé postranní žlaby 25 × 60 po celé výšce desky
-  for (const x of [0, plateW - sideDuct]) ducts.push({ kind: "vertical", x: r1(x), y: 20, w: sideDuct, h: r1(plateH - 40), size: "25×60", lengthMm: Math.round(plateH - 40), holes: ductHoles(x, x + sideDuct, 20, plateH - 20) });
-  // Vodorovné žlaby 40 × 60 nad první lištou, mezi řadami a pod poslední
-  const ductYs = [rails[0].y - pitch / 2, ...rails.map((rail) => rail.y + pitch / 2)];
-  for (const yCenter of ductYs) {
-    const y = r1(Math.max(5, yCenter - 20));
-    ducts.push({ kind: "horizontal", x: sideDuct, y, w: r1(plateW - 2 * sideDuct), h: 40, size: "40×60", lengthMm: Math.round(plateW - 2 * sideDuct), holes: ductHoles(sideDuct, plateW - sideDuct, y, y + 40) });
+  // Svislé žlaby 25 × 60 po celé výšce desky: po stranách a u 2 polí mezi poli
+  const middleX = fields === 2 ? r1((columnX[0].x2 + columnX[1].x1) / 2 - sideDuct / 2) : null;
+  const verticalXs = sideDuct ? [0, ...(middleX !== null ? [middleX] : []), plateW - sideDuct] : [];
+  for (const x of verticalXs) ducts.push({ kind: "vertical", x: r1(x), y: 20, w: sideDuct, h: r1(plateH - 40), size: "25×60", lengthMm: Math.round(plateH - 40), holes: ductHoles(x, x + sideDuct, 20, plateH - 20) });
+  // Vodorovné žlaby 40 × 60 nad první řadou, mezi řadami a pod poslední (u 2 polí v každém sloupci zvlášť)
+  // Vodorovné žlaby mezi řadami: 40 × 60 při rozteči ≥ 130 mm, 25 × 60 při menší, pod 115 mm bez žlabů (bytová rozvodnice)
+  const ductH = Math.min(40, pitch - DEVICE_HEIGHT_MM);
+  const ductSize: Duct["size"] | null = ductH >= 40 ? "40×60" : ductH >= 25 ? "25×60" : null;
+  const ductHeight = ductSize === "40×60" ? 40 : 25;
+  const ductYs = Array.from({ length: rowsPerColumn + 1 }, (_, index) => 40 + pitch * (index + 0.25));
+  if (ductSize) {
+    for (const yCenter of ductYs) {
+      const y = r1(Math.max(5, yCenter - ductHeight / 2));
+      const spans = middleX !== null && sideDuct ? [[sideDuct, middleX], [middleX + sideDuct, plateW - sideDuct]] : [[sideDuct, plateW - sideDuct]];
+      for (const [from, to] of spans) ducts.push({ kind: "horizontal", x: r1(from), y, w: r1(to - from), h: ductHeight, size: ductSize, lengthMm: Math.round(to - from), holes: ductHoles(from, to, y, y + ductHeight) });
+    }
   }
-  // PE / N sběrnice dole: PE, N hlavní a N1… za každým chráničem
+  // PE / N sběrnice dole: PE, N hlavní a N1… za každým chráničem – zalomení do další řady, nic za pravý okraj
   const rcds = input.devices.filter((device) => device.category === "RCD");
   const barNames = ["PE", "N", ...rcds.map((_, index) => `N${index + 1}`)];
-  const barY = r1(Math.min(plateH - 15, ductYs[ductYs.length - 1] + 45));
   const barLength = 90;
+  const barStep = barLength + 12;
+  const perRow = Math.max(1, Math.floor((plateW - 2 * sideDuct - 30 + 12) / barStep));
+  const barRows = Math.ceil(barNames.length / perRow);
+  // Pod poslední řadou (žlabem) a vždy uvnitř desky
+  const lastDuctBottom = ductYs[ductYs.length - 1] + (ductSize ? ductHeight / 2 : 0);
+  const barTop = Math.min(plateH - 15 - (barRows - 1) * 30, lastDuctBottom + 25);
   const bars: Bar[] = barNames.map((name, index) => {
-    const x = r1(sideDuct + 15 + index * (barLength + 12));
-    return { name, x, y: barY, lengthMm: barLength, terminals: name === "PE" || name === "N" ? 12 : 7, holes: [{ x: r1(x + 8), y: barY, diameterMm: 5, thread: "M6", part: "bar" }, { x: r1(x + barLength - 8), y: barY, diameterMm: 5, thread: "M6", part: "bar" }] };
+    const x = r1(sideDuct + 15 + (index % perRow) * barStep);
+    const y = r1(barTop + Math.floor(index / perRow) * 30);
+    return { name, x, y, lengthMm: barLength, terminals: name === "PE" || name === "N" ? 12 : 7, holes: [{ x: r1(x + 8), y, diameterMm: 5, thread: "M6", part: "bar" }, { x: r1(x + barLength - 8), y, diameterMm: 5, thread: "M6", part: "bar" }] };
   });
+  const railByIndex = new Map(rails.map((rail) => [rail.index, rail]));
   const devices: PlacedDevice[] = input.devices.map((device) => {
-    const rail = rails[Math.max(0, Math.min(rails.length - 1, device.rail - 1))];
-    const x = r1(rail.x1 + 10 + device.position * MODULE_MM);
+    const rail = railByIndex.get(device.rail) ?? rails[rails.length - 1];
+    const x = r1(rail.x1 + RAIL_END_MM + device.position * MODULE_MM);
     return { id: device.id, designation: device.designation, rail: rail.index, x, y: r1(rail.y - DEVICE_HEIGHT_MM / 2), w: r1(Math.max(0.5, device.modules) * MODULE_MM), h: DEVICE_HEIGHT_MM };
   });
   // Vývodky podle kabelů: přívod, silové 3f vývody, koncové 1f okruhy a sběrnice
@@ -268,25 +443,22 @@ export function cncLayout(input: CncInput): CncLayout {
   }
   for (let index = 0; index < (input.busCables ?? 0); index += 1) cables.push({ cable: "J-Y(St)Y 2×2×0,8", label: `Sběrnice ${index + 1}`, role: "bus" });
   const order: Record<Gland["role"], number> = { supply: 0, power: 1, final: 2, bus: 3 };
-  const sorted = [...cables].sort((a, b) => order[a.role] - order[b.role]);
-  const faceW = enclosure.widthMm;
-  const cursor = { top: 30, bottom: 30 };
-  const glands: Gland[] = sorted.map((entry, index) => {
-    const size = entry.role === "supply" ? (cableDiameterMm(entry.cable) > 21 ? "M40" : "M32") : glandFor(entry.cable);
-    const side: Gland["side"] = input.entry === "both" ? (entry.role === "supply" ? "top" : "bottom") : input.entry === "top" ? "top" : "bottom";
-    const hole = GLAND_HOLE_MM[size];
-    let x = cursor[side] + hole / 2;
-    // Další řada otvorů, když dojde čelo (rozteč = otvor + 12 mm)
-    if (x + hole / 2 > faceW - 20) {
-      cursor[side] = 30;
-      x = cursor[side] + hole / 2;
-    }
-    cursor[side] = x + hole / 2 + 12;
-    return { id: `G${String(index + 1).padStart(2, "0")}`, size, holeMm: hole, cable: entry.cable, label: entry.label, side, x: r1(x), role: entry.role };
-  });
+  const faceW = Math.max(enclosure.widthMm, plateW + 50);
+  const glands = placeGlands(
+    [...cables]
+      .sort((a, b) => order[a.role] - order[b.role])
+      .map((entry) => {
+        const size: GlandSize = entry.role === "supply" ? (cableDiameterMm(entry.cable) > 21 ? "M40" : "M32") : glandFor(entry.cable);
+        const side: Gland["side"] = input.entry === "both" ? (entry.role === "supply" ? "top" : "bottom") : input.entry === "top" ? "top" : "bottom";
+        return { ...entry, size, side };
+      }),
+    faceW,
+    enclosure.depthMm,
+    membrane ? [] : warnings,
+  );
   // Výřezy dveří: návěstidla a tlačítko Ø 22,5 nahoře, měřidlo 92 × 92, ventilační mřížka 120 × 120 dole
-  const doorW = enclosure.widthMm - 10;
-  const doorH = enclosure.heightMm - 10;
+  const doorW = Math.max(enclosure.widthMm, plateW + 50) - 10;
+  const doorH = Math.max(enclosure.heightMm, plateH + 80) - 10;
   const doorCutouts: DoorCutout[] = [];
   let cx = doorW / 2 - (input.door.phaseLamps ? 45 : 0) - (input.door.centralStop ? 22 : 0);
   if (input.door.phaseLamps) {
@@ -298,7 +470,53 @@ export function cncLayout(input: CncInput): CncLayout {
   if (input.door.centralStop) doorCutouts.push({ kind: "stop", label: "CENTRAL STOP", x: r1(cx + (input.door.phaseLamps ? 10 : 0)), y: 60, diameterMm: 22.5 });
   if (input.door.meter) doorCutouts.push({ kind: "meter", label: "Multimetr 92 × 92", x: r1(doorW / 2), y: 150, w: 92, h: 92 });
   if (input.door.ventilation) doorCutouts.push({ kind: "vent", label: "Ventilátor s filtrem 120 × 120", x: r1(doorW / 2), y: r1(doorH - 110), w: 120, h: 120 });
-  return { plate: { widthMm: r1(plateW), heightMm: r1(plateH) }, door: { widthMm: r1(doorW), heightMm: r1(doorH) }, face: { widthMm: faceW, depthMm: enclosure.depthMm }, rails, ducts, bars, glands, doorCutouts, devices, membrane };
+  return {
+    plate: { widthMm: r1(plateW), heightMm: r1(plateH) },
+    door: { widthMm: r1(doorW), heightMm: r1(doorH) },
+    face: { widthMm: faceW, depthMm: enclosure.depthMm },
+    rails,
+    ducts,
+    bars,
+    glands,
+    doorCutouts,
+    devices,
+    membrane,
+    fields,
+    columns: columnX,
+    warnings,
+  };
+}
+
+/**
+ * Fáze 115: kontrola přetečení – přístroje, lišty, žlaby a sběrnice mimo montážní desku a překryv vývodek v čele
+ * (rozteč středů < (matice + matice) / 2 + 8 mm). Prázdný seznam = plán je v pořádku.
+ */
+export function cncFitIssues(layout: CncLayout): string[] {
+  const issues: string[] = [];
+  const W = layout.plate.widthMm + 0.05;
+  const H = layout.plate.heightMm + 0.05;
+  for (const device of layout.devices) if (device.x < -0.05 || device.y < -0.05 || device.x + device.w > W || device.y + device.h > H) issues.push(`Přístroj ${device.designation} přesahuje montážní desku.`);
+  for (const rail of layout.rails) if (rail.x1 < -0.05 || rail.x2 > W || rail.y + 17.5 > H) issues.push(`Lišta L${rail.index} přesahuje montážní desku.`);
+  for (const rail of layout.rails) {
+    const onRail = layout.devices.filter((device) => device.rail === rail.index);
+    for (const device of onRail) if (device.x + device.w > rail.x2 + 0.05) issues.push(`Přístroj ${device.designation} přesahuje lištu L${rail.index}.`);
+  }
+  for (const duct of layout.ducts) if (duct.x < -0.05 || duct.x + duct.w > W || duct.y + duct.h > H) issues.push(`Žlab ${duct.size} přesahuje montážní desku.`);
+  for (const bar of layout.bars) if (bar.x + bar.lengthMm > W || bar.y + 6 > H) issues.push(`Sběrnice ${bar.name} přesahuje montážní desku.`);
+  for (const side of ["top", "bottom"] as const) {
+    const list = layout.glands.filter((gland) => gland.side === side);
+    for (const gland of list) {
+      const nut = GLAND_NUT_MM[gland.size] / 2;
+      if (gland.x - nut < -0.05 || gland.x + nut > layout.face.widthMm + 0.05 || gland.y - nut < -0.05 || gland.y + nut > layout.face.depthMm + 0.05) issues.push(`Vývodka ${gland.id} přesahuje čelo.`);
+    }
+    for (let a = 0; a < list.length; a++) {
+      for (let b = a + 1; b < list.length; b++) {
+        const need = (GLAND_NUT_MM[list[a].size] + GLAND_NUT_MM[list[b].size]) / 2 + GLAND_CLEARANCE_MM - 0.05;
+        if (Math.hypot(list[a].x - list[b].x, list[a].y - list[b].y) < need) issues.push(`Vývodky ${list[a].id} a ${list[b].id} se překrývají.`);
+      }
+    }
+  }
+  return issues;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -321,6 +539,8 @@ export interface WireRow {
   kind: "wire" | "comb";
   /** Propojovací hřeben místo vodičů (vyřazený z drátování). */
   comb?: string;
+  /** Fáze 115: koncová krytka hřebenu (2 kusy na úsek) do nářezového listu. */
+  endCap?: string;
 }
 
 /** Fáze 112: přijímač HDO distributora v elektroměrovém rozváděči (kontakt spíná cívky stykačů HDO). */
@@ -357,10 +577,10 @@ interface Terminal {
   edge: "top" | "bottom" | "bar";
 }
 
-/** Svorky přístroje: vstupy nahoře (1, 3, 5, N), výstupy dole (2, 4, 6, N). */
+/** Svorky přístroje: vstupy nahoře (1, 3, 5, N), výstupy dole (2, 4, 6, N); jednopólový přístroj má vždy 1 / 2. */
 function terminalName(poles: string, conductor: Conductor, output: boolean): string {
   if (conductor === "N") return output ? "N-out" : "N";
-  const phase = conductor === "L" || conductor === "L1" ? 0 : conductor === "L2" ? 1 : 2;
+  const phase = !isThreePole(poles) || conductor === "L" || conductor === "L1" ? 0 : conductor === "L2" ? 1 : 2;
   const number = output ? 2 + phase * 2 : 1 + phase * 2;
   return `${number} (${conductor})`;
 }
@@ -389,9 +609,10 @@ function routeLength(layout: CncLayout, a: Terminal, b: Terminal): number {
 }
 
 /**
- * Drátovací list: napájecí přístroj → přístroje pod ním podle stromu zapojení. Přístroje jedné větve na stejné liště
- * vedle sebe (jističe za chráničem) propojí hřeben (vyřazeno z drátování), jinak smyčka od svorky ke svorce – svorka se
- * dvěma vodiči má dvojitou dutinku TWIN. N chráničů na sběrnice N1…, přepěťová ochrana na PE.
+ * Drátovací list: napájecí přístroj → přístroje pod ním podle stromu zapojení. Fáze 115: hřebeny ze stejných úseků
+ * jako výkres (`combRuns` – chránič s jističi hned za ním na téže liště, řada jističochráničů na vstupu); přístroj
+ * napájený hřebenem nemá vodič (hřeben ABB PS se zkrácením a koncové krytky), ostatní vodiči – smyčka do dalšího
+ * chrániče / hlavního vypínače se dvojitou dutinkou TWIN. N chráničů na sběrnice N1…, přepěťová ochrana na PE.
  */
 export function wireHarnessList(input: CncInput, layout: CncLayout = cncLayout(input)): WireRow[] {
   const byId = new Map(input.devices.map((device) => [device.id, device]));
@@ -420,6 +641,26 @@ export function wireHarnessList(input: CncInput, layout: CncLayout = cncLayout(i
     return rows.length - 1;
   };
   const conductorsOf = (device: CncDevice, phase: Conductor): Conductor[] => (isThreePole(device.poles) ? ["L1", "L2", "L3", ...(hasNeutral(device.poles) ? (["N"] as Conductor[]) : [])] : [phase, ...(hasNeutral(device.poles) || device.category === "RCD" ? (["N"] as Conductor[]) : [])]);
+  // Fáze 115: úseky hřebenů jako na výkrese (volba lišty, soustava přívodu)
+  const combDevices: CombDevice[] = input.devices.map((device) => ({ id: device.id, designation: device.designation, dinRailIndex: device.rail, positionOnRail: device.position, modulesWidth: device.modules, category: device.category, poles: device.poles, phaseAssignment: device.phaseAssignment ?? null, manufacturer: device.manufacturer ?? null }));
+  const runs = combRuns(combDevices, input.devices.map((device) => ({ id: device.id, parentItemId: device.parentId })), input.combs ?? {}, input.supplyPhases ?? 3);
+  const combFed = combFedIds(runs);
+  const cuts = new Map(combCuts(runs, combDevices).map((cut, index) => [runs[index].ids[0], { cut, run: runs[index] }]));
+  const endCapOf = (kind: string, cut: { item: string }) => (cut.item.startsWith("Hřeben ABB") ? (kind === "1P" ? "Koncová krytka ABB PS-END 0 (2CDL200001R0004)" : "Koncová krytka ABB PS-END (2CDL200001R0001)") : "Koncová krytka hřebenu dle výrobce jističů");
+  const combRow = (headId: string) => {
+    const entry = cuts.get(headId);
+    if (!entry) return;
+    const { cut, run } = entry;
+    const conductor = (run.kind === "1P" || run.kind === "1PN" ? combConductors(run.kind, "L1")[0] : "L1") as Conductor;
+    rows.push({ from: `${cut.from} … ${cut.to}`, to: `propojovací hřeben (${run.conductors.join(" ")})`, conductor, type: cut.item, crossSectionMm2: 10, color: "–", lengthMm: cut.lengthMm, endA: "–", endB: "–", kind: "comb", comb: cut.item, endCap: endCapOf(run.kind, cut) });
+    // Fáze přístrojů na 3f hřebenu: L1, L2, L3, L1 … (shodně s odznaky fází na výkresu)
+    let cursor = 0;
+    for (const id of run.ids) {
+      const member = byId.get(id);
+      if (!member || isThreePole(member.poles) || member.category === "RCD") continue;
+      phaseOf.set(id, run.kind === "3P" || run.kind === "3PN" ? (["L1", "L2", "L3"] as const)[cursor++ % 3] : "L1");
+    }
+  };
 
   // Kořen: hlavní vypínač (nebo přístroje bez napájecího přístroje)
   const roots = input.devices.filter((device) => !device.parentId || !byId.has(device.parentId));
@@ -431,21 +672,17 @@ export function wireHarnessList(input: CncInput, layout: CncLayout = cncLayout(i
   const feed = (parent: CncDevice) => {
     const children = childrenOf(parent.id).filter((child) => child.category !== "SPD");
     const parentPhase = phaseOf.get(parent.id) ?? "L1";
-    // Hřeben: souvislá skupina 1P / 3P přístrojů na stejné liště (jističe za chráničem)
-    const groups: CncDevice[][] = [];
-    for (const child of children) {
-      const last = groups[groups.length - 1];
-      const previous = last?.[last.length - 1];
-      const contiguous = previous && previous.rail === child.rail && Math.abs(previous.position + previous.modules - child.position) < 0.01 && isThreePole(previous.poles) === isThreePole(child.poles) && (child.category === "MCB" || child.category === "RCBO") && (previous.category === "MCB" || previous.category === "RCBO");
-      if (contiguous) last.push(child);
-      else groups.push([child]);
-    }
+    // Fáze 115: hřeben pod výstupy chrániče napájí jeho jističe na téže liště (bez vodičů)
+    combRow(parent.id);
     let loopFrom: { terminals: Map<Conductor, Terminal>; rows: Map<Conductor, number> } | null = null;
-    for (const group of groups) {
-      const head = group[0];
+    for (const head of children) {
+      if (combFed.has(head.id)) {
+        if (childrenOf(head.id).length) feed(head);
+        continue;
+      }
       if (!isThreePole(head.poles) && !phaseOf.has(head.id)) phaseOf.set(head.id, isThreePole(parent.poles) ? nextPhase() : parentPhase === "L" ? "L1" : parentPhase);
       const conductors = conductorsOf(head, phaseOf.get(head.id) ?? "L1").filter((conductor) => conductor !== "N" || hasNeutral(parent.poles) || parent.category === "RCD");
-      const section = wireSection(Math.max(...group.map((device) => device.ratedCurrentA)) * (group.length > 1 ? 1.25 : 1));
+      const section = wireSection(head.ratedCurrentA * (cuts.has(head.id) ? 1.25 : 1));
       const terminals = new Map<Conductor, Terminal>();
       const created = new Map<Conductor, number>();
       for (const conductor of conductors) {
@@ -461,16 +698,12 @@ export function wireHarnessList(input: CncInput, layout: CncLayout = cncLayout(i
         terminals.set(conductor, target);
         created.set(conductor, index);
       }
-      loopFrom = group.length === 1 && (head.category === "RCD" || head.category === "RCBO" || head.category === "MAIN_SWITCH") ? { terminals, rows: created } : null;
-      if (group.length > 1) {
-        for (const member of group.slice(1)) phaseOf.set(member.id, phaseOf.get(head.id) ?? "L1");
-        const modules = group.reduce((sum, member) => sum + member.modules, 0);
-        const poles = isThreePole(head.poles) ? "3P" : "1P";
-        rows.push({ from: `${head.designation} … ${group[group.length - 1].designation}`, to: "propojovací hřeben", conductor: isThreePole(head.poles) ? "L1" : (phaseOf.get(head.id) ?? "L1"), type: `Hřebenová přípojnice ${poles} 10 mm²`, crossSectionMm2: 10, color: "–", lengthMm: Math.round(modules * MODULE_MM), endA: "–", endB: "–", kind: "comb", comb: `Hřebenová přípojnice ${poles} 10 mm² (${modules} modulů / ${Math.round(modules * MODULE_MM)} mm)` });
-      }
+      loopFrom = head.category === "RCD" || head.category === "RCBO" || head.category === "MAIN_SWITCH" ? { terminals, rows: created } : null;
+      // Řada jističochráničů: hřeben na vstupu napájí další jističochrániče řady
+      if (head.category !== "RCD") combRow(head.id);
       // N výstup chrániče na vlastní sběrnici N1…
       if (head.category === "RCD") wire(terminal(head, "N", true), nextBar(`N${input.devices.filter((device) => device.category === "RCD").indexOf(head) + 1}`), "N", wireSection(head.ratedCurrentA));
-      for (const member of group) if (childrenOf(member.id).length) feed(member);
+      if (childrenOf(head.id).length) feed(head);
     }
     // Přepěťová ochrana: fáze z výstupu hlavního vypínače, PE na sběrnici PE
     for (const spd of childrenOf(parent.id).filter((child) => child.category === "SPD")) {
@@ -520,6 +753,14 @@ export function cutList(layout: CncLayout, wires: readonly WireRow[]): CutItem[]
   for (const rail of layout.rails) add("DIN lišta TS 35 × 7,5 mm (perforovaná)", rail.lengthMm);
   for (const duct of layout.ducts) add(`Kabelový žlab perforovaný ${duct.size} mm`, duct.lengthMm);
   for (const bar of layout.bars) add(`Sběrnice ${bar.name === "PE" ? "PE (zelenožlutý držák)" : `${bar.name} (modrý držák)`} ${bar.terminals} svorek`, bar.lengthMm);
-  for (const row of wires) if (row.kind === "comb" && row.comb) add(row.comb.replace(/ \(.*\)$/, ""), row.lengthMm);
+  // Fáze 115: hřebeny se zkrácením na počet pinů a 2 koncové krytky na úsek
+  for (const row of wires) {
+    if (row.kind !== "comb" || !row.comb) continue;
+    add(row.comb, row.lengthMm);
+    if (row.endCap) {
+      add(row.endCap, 0);
+      add(row.endCap, 0);
+    }
+  }
   return [...map.values()].sort((a, b) => a.item.localeCompare(b.item) || b.lengthMm - a.lengthMm);
 }

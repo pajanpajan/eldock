@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@/generated/prisma/client";
 import { HIDDEN_MANUFACTURER_NAMES, isHiddenManufacturer } from "@/lib/panel-builder/brands";
-import { catalogCategory, matchConfig, parseConfig, synthesizeComponent, type ItemConfig } from "@/lib/panel-builder/configurator";
+import { catalogCategory, isCombAccessory, matchConfig, parseConfig, synthesizeComponent, type ItemConfig } from "@/lib/panel-builder/configurator";
 import { parseChipSet, type ChipSet } from "@/lib/panel-builder/circuit-chips";
 import { parseApplianceLibrary, parseApplianceList, type ApplianceLibrary } from "@/lib/panel-builder/appliances";
 import { brandLabel, railLimits } from "@/lib/panel-builder/enclosure-choice";
@@ -108,6 +108,8 @@ export interface PlaceInput {
 export async function placeComponents(prisma: PrismaClient, projectId: string, input: PlaceInput) {
   const project = await railProject(prisma, projectId);
   if (input.rail < 1 || input.rail > project.capacities.length) throw new WorkflowError("VALIDATION", "Neplatná DIN lišta.");
+  // Fáze 115: hřeben a koncovka hřebenu se na lištu nevkládají (zasouvají se do svorek, volba v záhlaví lišty)
+  if (isCombAccessory(input.config)) throw new WorkflowError("VALIDATION", "Propojovací hřeben se nevkládá na DIN lištu jako modul – zvolte ho v záhlaví lišty tlačítkem „Hřeben: …“ (započítá se do kusovníku).");
   const requested = Math.min(24, Math.max(1, Math.round(input.count)));
   const free = freeOnRail(project.capacities, project.items, input.rail);
   // Fáze 81: kus chytré domácnosti má šířku podle katalogu (Miniserver 9 M, SysAP s adaptérem 7 M …)

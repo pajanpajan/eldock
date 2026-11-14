@@ -25,82 +25,263 @@ function download(name: string, data: BlobPart, type: string) {
 
 const n1 = (value: number) => value.toLocaleString("cs-CZ", { maximumFractionDigits: 1 });
 
-/** Náhled CNC vrtacího a frézovacího plánu 1 : 1 – montážní deska s lištami, žlaby, sběrnicemi, otvory a vývodkami. */
-function CncDrawing({ pkg }: { pkg: ReturnType<typeof generateManufacturingPackage> }) {
-  const { layout } = pkg;
+type CncSheet = "all" | "plate" | "faces" | "door";
+
+/** Fáze 115: listy CNC výkresu. */
+const CNC_SHEETS: [CncSheet, string][] = [
+  ["all", "📐 Kompletní sestava"],
+  ["plate", "🔩 Montážní deska (Vrtání & Lišty)"],
+  ["faces", "🕳️ Kabelová čela (Vývodky M16–M40)"],
+  ["door", "🚪 Dveře skříně"],
+];
+const ZOOM_STEP = 1.25;
+
+type CncLayoutView = ReturnType<typeof generateManufacturingPackage>["layout"];
+
+/** Kóta: vodorovná / svislá čára s šipkami a textem v mm. */
+function Dimension({ x1, y1, x2, y2, text, side = 1, t }: { x1: number; y1: number; x2: number; y2: number; text: string; side?: 1 | -1; t: number }) {
+  const horizontal = Math.abs(y2 - y1) < 0.01;
+  const mx = (x1 + x2) / 2;
+  const my = (y1 + y2) / 2;
+  return (
+    <g data-testid="cnc-dimension" stroke="#0369a1" fill="#0369a1">
+      <line x1={x1} y1={y1} x2={x2} y2={y2} strokeWidth={1} markerStart="url(#cnc-arrow)" markerEnd="url(#cnc-arrow)" />
+      <text x={horizontal ? mx : mx - side * 8 * t} y={horizontal ? my - side * 5 * t : my} fontSize={12 * t} textAnchor="middle" stroke="none" transform={horizontal ? undefined : `rotate(-90 ${mx - side * 8 * t} ${my})`}>
+        {text}
+      </text>
+    </g>
+  );
+}
+
+/** Montážní deska v souřadnicích (0, 0) = levý horní roh desky [mm]. */
+function PlateSheet({ layout, t }: { layout: CncLayoutView; t: number }) {
   const W = layout.plate.widthMm;
   const H = layout.plate.heightMm;
-  const faceGap = 60;
-  const faceH = Math.min(layout.face.depthMm, 160);
-  const totalH = faceH + faceGap + H + faceGap + faceH;
-  const top = faceH + faceGap;
+  const holes = [...layout.rails.flatMap((rail) => rail.holes), ...layout.ducts.flatMap((duct) => duct.holes), ...layout.bars.flatMap((bar) => bar.holes)];
   return (
-    <svg viewBox={`-40 -30 ${W + 80} ${totalH + 60}`} className="h-[60vh] w-full rounded-xl bg-white" role="img" aria-label="CNC vrtací a frézovací plán 1:1" data-testid="cnc-drawing">
-      {/* Horní a dolní čelo s otvory vývodek */}
-      {(["top", "bottom"] as const).map((side) => {
-        const y0 = side === "top" ? 0 : top + H + faceGap;
+    <g data-testid="cnc-plate">
+      <rect x={0} y={0} width={W} height={H} fill="#f1f5f9" stroke="#0f172a" strokeWidth={2} />
+      <text x={4} y={-34 * t} fontSize={16 * t} fontWeight={700} fill="#0f172a">
+        Montážní deska {n1(W)} × {n1(H)} mm (1 : 1){layout.fields === 2 ? " – 2 pole vedle sebe" : ""}
+      </text>
+      <Dimension x1={0} y1={-14 * t} x2={W} y2={-14 * t} text={`${n1(W)} mm`} t={t} />
+      <Dimension x1={-16 * t} y1={0} x2={-16 * t} y2={H} text={`${n1(H)} mm`} side={1} t={t} />
+      {layout.ducts.map((duct, index) => (
+        <rect key={`d${index}`} x={duct.x} y={duct.y} width={duct.w} height={duct.h} fill="#e2e8f0" stroke="#64748b" strokeDasharray="6 3" />
+      ))}
+      {layout.fields === 2
+        ? layout.columns.map((column) => (
+            <text key={column.label} x={column.x1} y={14 * t} fontSize={12 * t} fontWeight={700} fill="#7c2d12" data-testid="cnc-column">
+              {column.label}
+            </text>
+          ))
+        : null}
+      {layout.rails.map((rail) => (
+        <g key={rail.index} data-testid="cnc-rail" data-rail={rail.index} data-field={rail.field}>
+          <rect x={rail.x1} y={rail.y - 17.5} width={rail.lengthMm} height={35} fill="#cbd5e1" stroke="#475569" />
+        </g>
+      ))}
+      {layout.devices.map((device) => (
+        <g key={device.id} data-testid="cnc-device" data-x2={n1(device.x + device.w)}>
+          <rect x={device.x} y={device.y} width={device.w} height={device.h} fill="#ffffff" stroke="#0f172a" strokeWidth={0.8} />
+          <text x={device.x + device.w / 2} y={device.y + device.h / 2} fontSize={Math.min(11 * t, device.w / 2.4)} fontWeight={700} textAnchor="middle" fill="#0f172a" transform={device.w < 30 ? `rotate(-90 ${device.x + device.w / 2} ${device.y + device.h / 2})` : undefined} dominantBaseline="middle">
+            {device.designation}
+          </text>
+        </g>
+      ))}
+      {/* Popisky lišt nad přístroji (v mezeře u žlabu), aby je přístroje nezakryly */}
+      {layout.rails.map((rail) => (
+        <text key={`label-${rail.index}`} x={rail.x1 + 2} y={rail.y - 45 - 3} fontSize={Math.min(9 * t, 12)} fontWeight={600} fill="#334155" data-testid="cnc-rail-label">
+          TS 35 – L{rail.index}: {rail.lengthMm} mm ({rail.modules} M) · osa Y = {n1(H - rail.y)} mm
+        </text>
+      ))}
+      {layout.bars.map((bar) => (
+        <g key={bar.name}>
+          <rect x={bar.x} y={bar.y - 6} width={bar.lengthMm} height={12} fill={bar.name === "PE" ? "#bbf7d0" : "#bfdbfe"} stroke="#334155" />
+          <text x={bar.x + bar.lengthMm / 2} y={bar.y + 3} fontSize={Math.min(9 * t, 10)} fontWeight={700} textAnchor="middle">
+            {bar.name}
+          </text>
+        </g>
+      ))}
+      {holes.map((hole, index) => (
+        <g key={`h${index}`} data-testid="cnc-hole" data-thread={hole.thread}>
+          <circle cx={hole.x} cy={hole.y} r={hole.diameterMm / 2 + 0.6} fill="#fee2e2" stroke="#dc2626" strokeWidth={1} />
+          <line x1={hole.x - 5} y1={hole.y} x2={hole.x + 5} y2={hole.y} stroke="#dc2626" strokeWidth={1} />
+          <line x1={hole.x} y1={hole.y - 5} x2={hole.x} y2={hole.y + 5} stroke="#dc2626" strokeWidth={1} />
+          <title>{`${hole.thread} Ø ${n1(hole.diameterMm)} mm · X ${n1(hole.x)} / Y ${n1(H - hole.y)}`}</title>
+        </g>
+      ))}
+      <text x={4} y={H + 22 * t} fontSize={10 * t} fill="#7f1d1d" data-testid="cnc-hole-legend">
+        ⊕ Ø 4,2 mm – závit M5 (DIN lišty, žlaby) · ⊕ Ø 5,0 mm – závit M6 (sběrnice PE / N) · souřadnice od levého dolního rohu desky
+      </text>
+    </g>
+  );
+}
+
+/** Horní a dolní čelo s vývodkami ve 2 šachovnicových řadách (popisky horní řady nad otvorem, dolní pod ním). */
+function FacesSheet({ layout, t, sides = ["top", "bottom"] }: { layout: CncLayoutView; t: number; sides?: readonly ("top" | "bottom")[] }) {
+  const W = layout.face.widthMm;
+  const D = layout.face.depthMm;
+  const gap = 90;
+  return (
+    <g data-testid="cnc-faces">
+      {sides.map((side, index) => {
+        const y0 = index * (D + gap);
+        const glands = layout.glands.filter((gland) => gland.side === side);
+        const twoRows = glands.some((gland) => gland.row === 1);
         return (
           <g key={side} data-testid={`cnc-face-${side}`}>
-            <rect x={0} y={y0} width={W} height={faceH} fill="#f8fafc" stroke="#334155" strokeWidth={1.5} />
-            <text x={4} y={y0 - 6} fontSize={14} fill="#334155">
-              {side === "top" ? "Horní čelo" : "Dolní čelo"}
-              {layout.membrane ? " – membránová příruba (zapuštěná rozvodnice)" : ""}
+            <rect x={0} y={y0} width={W} height={D} fill="#f8fafc" stroke="#334155" strokeWidth={1.5} />
+            <text x={4} y={y0 - 10 * t} fontSize={13 * t} fontWeight={700} fill="#334155">
+              {side === "top" ? "Horní čelo" : "Dolní čelo"} {n1(W)} × {n1(D)} mm{layout.membrane ? " – membránová příruba (zapuštěná rozvodnice)" : ` – ${glands.length} vývodek${twoRows ? " ve 2 řadách" : ""}`}
             </text>
             {layout.membrane
               ? null
-              : layout.glands
-                  .filter((gland) => gland.side === side)
-                  .map((gland) => (
-                    <g key={gland.id} data-testid="cnc-gland" data-size={gland.size}>
-                      <circle cx={Math.min(W - 10, gland.x)} cy={y0 + faceH / 2} r={gland.holeMm / 2} fill="#dbeafe" stroke="#1d4ed8" strokeWidth={1.2} />
-                      <text x={Math.min(W - 10, gland.x)} y={y0 + faceH / 2 + gland.holeMm / 2 + 12} fontSize={9} textAnchor="middle" fill="#1e3a8a">
-                        {gland.size}
-                      </text>
-                    </g>
-                  ))}
+              : glands.map((gland) => (
+                  <g key={gland.id} data-testid="cnc-gland" data-size={gland.size} data-row={gland.row} data-x={gland.x} data-y={gland.y}>
+                    <circle cx={gland.x} cy={y0 + gland.y} r={gland.holeMm / 2} fill="#dbeafe" stroke="#1d4ed8" strokeWidth={1.2} />
+                    <text x={gland.x} y={twoRows && gland.row === 0 ? y0 + gland.y - gland.holeMm / 2 - 4 : y0 + gland.y + gland.holeMm / 2 + 12} fontSize={Math.min(9 * t, 11)} fontWeight={700} textAnchor="middle" fill="#1e3a8a">
+                      {gland.size}
+                    </text>
+                    <title>{`${gland.id} ${gland.size} Ø ${n1(gland.holeMm)} mm – ${gland.label} (${gland.cable}) · X ${n1(gland.x)} / Y ${n1(gland.y)}`}</title>
+                  </g>
+                ))}
           </g>
         );
       })}
-      <g transform={`translate(0 ${top})`}>
-        <rect x={0} y={0} width={W} height={H} fill="#f1f5f9" stroke="#0f172a" strokeWidth={2} />
-        <text x={4} y={-8} fontSize={14} fill="#0f172a">
-          Montážní deska {n1(W)} × {n1(H)} mm (1 : 1)
+    </g>
+  );
+}
+
+/** Dveře s výřezy (návěstidla, CENTRAL STOP, měřidlo, ventilace). */
+function DoorSheet({ layout, t }: { layout: CncLayoutView; t: number }) {
+  const W = layout.door.widthMm;
+  const H = layout.door.heightMm;
+  return (
+    <g data-testid="cnc-door">
+      <rect x={0} y={0} width={W} height={H} fill="#f8fafc" stroke="#0f172a" strokeWidth={2} />
+      <text x={4} y={-34 * t} fontSize={16 * t} fontWeight={700}>
+        Dveře {n1(W)} × {n1(H)} mm
+      </text>
+      <Dimension x1={0} y1={-14 * t} x2={W} y2={-14 * t} text={`${n1(W)} mm`} t={t} />
+      {layout.doorCutouts.map((cut) => (
+        <g key={cut.label}>
+          {cut.diameterMm ? <circle cx={cut.x} cy={cut.y} r={cut.diameterMm / 2} fill="#fef3c7" stroke="#b45309" strokeWidth={1.2} /> : <rect x={cut.x - (cut.w ?? 0) / 2} y={cut.y - (cut.h ?? 0) / 2} width={cut.w} height={cut.h} fill="#fef3c7" stroke="#b45309" strokeWidth={1.2} />}
+          <text x={cut.x} y={cut.y + (cut.diameterMm ?? cut.h ?? 0) / 2 + 14} fontSize={10 * t} textAnchor="middle" fill="#78350f">
+            {cut.label}
+          </text>
+        </g>
+      ))}
+      {layout.doorCutouts.length ? null : (
+        <text x={W / 2} y={H / 2} fontSize={13 * t} textAnchor="middle" fill="#64748b">
+          Bez výřezů ve dveřích
         </text>
-        {layout.ducts.map((duct, index) => (
-          <rect key={`d${index}`} x={duct.x} y={duct.y} width={duct.w} height={duct.h} fill="#e2e8f0" stroke="#64748b" strokeDasharray="6 3" />
-        ))}
-        {layout.rails.map((rail) => (
-          <g key={rail.index}>
-            <rect x={rail.x1} y={rail.y - 17.5} width={rail.lengthMm} height={35} fill="#cbd5e1" stroke="#475569" />
-            <text x={rail.x1 + 4} y={rail.y - 21} fontSize={10} fill="#334155">
-              TS 35 – L{rail.index}: {rail.lengthMm} mm
-            </text>
-          </g>
-        ))}
-        {layout.devices.map((device) => (
-          <g key={device.id}>
-            <rect x={device.x} y={device.y} width={device.w} height={device.h} fill="#ffffff" stroke="#0f172a" strokeWidth={0.8} />
-            <text x={device.x + device.w / 2} y={device.y + device.h / 2 + 4} fontSize={9} textAnchor="middle" fill="#0f172a">
-              {device.designation}
-            </text>
-          </g>
-        ))}
-        {layout.bars.map((bar) => (
-          <g key={bar.name}>
-            <rect x={bar.x} y={bar.y - 6} width={bar.lengthMm} height={12} fill={bar.name === "PE" ? "#bbf7d0" : "#bfdbfe"} stroke="#334155" />
-            <text x={bar.x + bar.lengthMm / 2} y={bar.y + 4} fontSize={9} textAnchor="middle">
-              {bar.name}
-            </text>
-          </g>
-        ))}
-        {[...layout.rails.flatMap((rail) => rail.holes), ...layout.ducts.flatMap((duct) => duct.holes), ...layout.bars.flatMap((bar) => bar.holes)].map((hole, index) => (
-          <g key={`h${index}`} data-testid="cnc-hole" data-thread={hole.thread}>
-            <circle cx={hole.x} cy={hole.y} r={hole.diameterMm / 2 + 0.6} fill="#fee2e2" stroke="#dc2626" strokeWidth={1} />
-            <title>{`${hole.thread} Ø ${n1(hole.diameterMm)} mm · X ${n1(hole.x)} / Y ${n1(H - hole.y)}`}</title>
-          </g>
-        ))}
-      </g>
-    </svg>
+      )}
+    </g>
+  );
+}
+
+/**
+ * Náhled CNC vrtacího a frézovacího plánu 1 : 1. Fáze 115: listy (kompletní sestava, montážní deska, kabelová čela,
+ * dveře), přiblížení / oddálení a přizpůsobení šířce – výchozí měřítko vyplní šířku okna, kóty v mm a značení přístrojů
+ * jsou čitelné.
+ */
+function CncDrawing({ pkg }: { pkg: ReturnType<typeof generateManufacturingPackage> }) {
+  const { layout } = pkg;
+  const [sheet, setSheet] = useState<CncSheet>("all");
+  const [zoom, setZoom] = useState(1);
+  const pad = 60;
+  const plateBox = { w: layout.plate.widthMm, h: layout.plate.heightMm };
+  const facesH = layout.face.depthMm * 2 + 90;
+  // Čelo bývá širší než deska – v sestavě je vystředěné nad / pod deskou
+  const faceShift = Math.max(0, (layout.face.widthMm - plateBox.w) / 2);
+  // Písmo a okraje listu v jednotkách „t“ (šířka listu / 900) – na obrazovce stejně velké na všech listech
+  const sheetWidth = sheet === "plate" ? plateBox.w : sheet === "faces" ? layout.face.widthMm : sheet === "door" ? layout.door.widthMm : Math.max(plateBox.w, layout.face.widthMm) + 120 + layout.door.widthMm;
+  const t = Math.max(0.3, sheetWidth / 900);
+  const box =
+    sheet === "plate"
+      ? { x: -40 * t, y: -60 * t, w: plateBox.w + 60 * t, h: plateBox.h + 90 * t }
+      : sheet === "faces"
+        ? { x: -20 * t, y: -40 * t, w: layout.face.widthMm + 40 * t, h: facesH + 60 * t }
+        : sheet === "door"
+          ? { x: -30 * t, y: -60 * t, w: layout.door.widthMm + 60 * t, h: layout.door.heightMm + 90 * t }
+          : { x: -50 - faceShift, y: -layout.face.depthMm - 130, w: Math.max(plateBox.w, layout.face.widthMm) + 170 + layout.door.widthMm + pad, h: layout.face.depthMm * 2 + 200 + plateBox.h + 60 };
+  return (
+    <div className="flex flex-col gap-2" data-testid="cnc-viewer">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flex flex-wrap gap-1" role="tablist" aria-label="List CNC výkresu">
+          {CNC_SHEETS.map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={sheet === id}
+              onClick={() => setSheet(id)}
+              className={cn("rounded-md border px-2 py-1 text-xs font-semibold", sheet === id ? "border-sky-500 bg-sky-500/15 text-sky-200" : "border-border text-muted-foreground hover:bg-muted")}
+              data-testid={`cnc-sheet-${id}`}
+            >
+              [ {label} ]
+            </button>
+          ))}
+        </div>
+        <div className="ml-auto flex items-center gap-1 text-xs">
+          <button type="button" onClick={() => setZoom((value) => Math.min(6, value * ZOOM_STEP))} className="rounded-md border border-border px-2 py-1 hover:bg-muted" data-testid="cnc-zoom-in">
+            🔍+ Přiblížit
+          </button>
+          <button type="button" onClick={() => setZoom((value) => Math.max(0.4, value / ZOOM_STEP))} className="rounded-md border border-border px-2 py-1 hover:bg-muted" data-testid="cnc-zoom-out">
+            🔍- Oddálit
+          </button>
+          <button type="button" onClick={() => setZoom(1)} className="rounded-md border border-border px-2 py-1 hover:bg-muted" data-testid="cnc-zoom-fit">
+            ⛶ Přizpůsobit šířce
+          </button>
+          <span className="w-12 text-right font-mono text-muted-foreground" data-testid="cnc-zoom-level">
+            {Math.round(zoom * 100)} %
+          </span>
+        </div>
+      </div>
+      {layout.warnings.length ? (
+        <ul className="rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-200" data-testid="cnc-warnings">
+          {layout.warnings.map((warning) => (
+            <li key={warning}>⚠️ {warning}</li>
+          ))}
+        </ul>
+      ) : null}
+      <div className="max-h-[78vh] overflow-auto rounded-xl border border-border bg-white" data-testid="cnc-canvas">
+        <svg
+          viewBox={`${box.x} ${box.y} ${box.w} ${box.h}`}
+          style={{ width: `${zoom * 100}%` }}
+          className="block h-auto [&_*]:[vector-effect:non-scaling-stroke]"
+          role="img"
+          aria-label="CNC vrtací a frézovací plán 1:1"
+          data-testid="cnc-drawing"
+          data-sheet={sheet}
+          data-zoom={zoom}
+        >
+          <defs>
+            <marker id="cnc-arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#0369a1" />
+            </marker>
+          </defs>
+          {sheet === "plate" ? <PlateSheet layout={layout} t={t} /> : null}
+          {sheet === "faces" ? <FacesSheet layout={layout} t={t} /> : null}
+          {sheet === "door" ? <DoorSheet layout={layout} t={t} /> : null}
+          {sheet === "all" ? (
+            <>
+              <g transform={`translate(${-faceShift} ${-layout.face.depthMm - 70})`}>
+                <FacesSheet layout={layout} t={t} sides={["top"]} />
+              </g>
+              <PlateSheet layout={layout} t={t} />
+              <g transform={`translate(${-faceShift} ${plateBox.h + 70})`}>
+                <FacesSheet layout={layout} t={t} sides={["bottom"]} />
+              </g>
+              <g transform={`translate(${Math.max(plateBox.w, layout.face.widthMm - faceShift) + 120} 0)`}>
+                <DoorSheet layout={layout} t={t} />
+              </g>
+            </>
+          ) : null}
+        </svg>
+      </div>
+    </div>
   );
 }
 
@@ -240,7 +421,7 @@ export function CncManufacturingPanel({ base, initial, onConfig, children, proje
             {pkg.cuts.map((item) => (
               <tr key={`${item.item}-${item.lengthMm}`} className="border-t border-border">
                 <td className="py-0.5">{item.item}</td>
-                <td className="text-right font-mono">{item.lengthMm}</td>
+                <td className="text-right font-mono">{item.lengthMm > 0 ? item.lengthMm : "–"}</td>
                 <td className="text-right font-mono">{item.pieces}</td>
               </tr>
             ))}

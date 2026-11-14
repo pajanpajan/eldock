@@ -114,6 +114,13 @@ export const ACCESSORY_SUBTYPES = {
 
 export const isAccessorySubtype = (value: string | null | undefined): value is keyof typeof ACCESSORY_SUBTYPES => !!value && value in ACCESSORY_SUBTYPES;
 
+/**
+ * Fáze 115: propojovací hřeben a jeho koncovka nikdy nesedí na DIN liště jako modul vedle jističů – zasouvají se do
+ * svorek přístrojů. V kaskádě vkládání nejsou; volí se v záhlaví lišty („Hřeben: …“) a počítají se do kusovníku.
+ */
+export const COMB_ACCESSORY_SUBTYPES: ReadonlySet<string> = new Set(["BUSBAR", "BUSBAR_END_CAP"]);
+export const isCombAccessory = (config: Pick<ItemConfig, "category" | "moduleSubtype">) => config.category === "ACCESSORY" && COMB_ACCESSORY_SUBTYPES.has(config.moduleSubtype ?? "");
+
 const RCD_TYPES: Record<string, string> = { AC: "AC (střídavý)", A: "A (pulzní DC)", B: "B (hladký DC)", F: "F (frekvenční)", G: "G (krátkodobě zpožděný)", S: "S (selektivní)" };
 
 const poleWidth = (poles: string, modules: number): ConfigOption => ({ value: `${poles}|${modules}`, label: `${poles} (${modules}M)`, patch: { poles, modules } });
@@ -221,7 +228,8 @@ export const CONFIG_FIELDS: Record<ConfigCategory, ConfigField[]> = {
     { key: "channels", label: "Počet kanálů / šířka", options: [{ value: "all", label: "Libovolný", patch: { channels: null } }, ...[2, 4, 6, 8, 12, 14, 16, 20].map((count) => ({ value: String(count), label: `${count}×`, patch: { channels: count } }))] },
   ],
   ACCESSORY: [
-    { key: "moduleSubtype", label: "Druh příslušenství", options: Object.entries(ACCESSORY_SUBTYPES).map(([value, label]) => ({ value, label, patch: { moduleSubtype: value } })) },
+    // Fáze 115: bez hřebenu a koncovky hřebenu (volba v záhlaví lišty)
+    { key: "moduleSubtype", label: "Druh příslušenství", options: Object.entries(ACCESSORY_SUBTYPES).filter(([value]) => !COMB_ACCESSORY_SUBTYPES.has(value)).map(([value, label]) => ({ value, label, patch: { moduleSubtype: value } })) },
     { key: "poles", label: "Póly", options: ["1P", "2P", "3P", "4P"].map((poles) => ({ value: poles, label: poles, patch: { poles } })) },
     { key: "modules", label: "Šířka v modulech", options: modulesOnly([0.5, 1, 2, 3, 4]) },
   ],
@@ -235,7 +243,8 @@ export function configFields(config: Pick<ItemConfig, "category" | "manufacturer
   if (!config) return [];
   const base = CONFIG_FIELDS[config.category];
   if (config.category !== "SMART_HOME") return base;
-  // Fáze 114: C3 – žaluzie a topení přepínají skutečné kusy systému se šířkou na DIN liště (4× · 4M / 8× · 8M, 6× · 4M / 12× · 8M)
+  // Fáze 114 / 115: C3 – jen skutečné kusy systému se šířkou na DIN liště (spínací 4× (4M) / 8× (8M) / 12× (12M), stmívací
+  // 4× (6M) / 6× (8M), žaluzie 4× (4M) / 8× (8M), topení 6× (4M) / 12× (8M), binární vstupy 4× (2M) / 10× (4M))
   const fields = base.map((field) => (field.key === "channels" ? smartChannelField(config, field) : field));
   const systems = smartSystemsOf(config.manufacturer);
   if (systems.length < 2) return fields;
@@ -247,25 +256,31 @@ export function configFields(config: Pick<ItemConfig, "category" | "manufacturer
   return [series, ...fields];
 }
 
+/** Fáze 115: funkce s volbou počtu kanálů ze skutečných kusů systému (ostatní – DALI, PWM, zdroje – obecně). */
+const CHANNEL_PICK_ROLES = new Set<string>(["switch", "dim", "blind", "heating", "input"]);
+
 /**
- * Fáze 114: „C3. Počet kanálů / šířka“ – u žaluziových a topných akčních členů kusy zvoleného systému (bez systému všech
- * systémů výrobce) s počtem kanálů a skutečnou šířkou na DIN liště; jeden klik přepne 4M ↔ 8M. Ostatní funkce obecně.
+ * Fáze 114 / 115: „C3. Počet kanálů / šířka“ – kusy zvoleného systému (bez systému všech systémů výrobce) s počtem kanálů
+ * a skutečnou šířkou na DIN liště, jen výchozí typy výpočtu (alternativy pro ruční volbu mají stejné kanály / šířku jako
+ * některý z nich nebo se vyberou v panelu chytré domácnosti). Funkce bez kusů systému nabídne jen „Libovolný“.
  */
 function smartChannelField(config: Pick<ItemConfig, "manufacturer"> & Partial<Pick<ItemConfig, "smartRole" | "smartSystem">>, field: ConfigField): ConfigField {
   const role = config.smartRole;
-  if (role !== "blind" && role !== "heating") return field;
+  if (!role || !CHANNEL_PICK_ROLES.has(role)) return field;
   const system = config.smartSystem ? smartSystemFor({ manufacturer: config.manufacturer ?? null, smartSystem: config.smartSystem }) : null;
   const scope = system ? SMART_SYSTEMS.filter((candidate) => candidate.id === system) : smartSystemsOf(config.manufacturer);
-  const seen = new Set<number>();
+  const seen = new Set<string>();
   const units = scope
-    .flatMap((candidate) => candidate.modules.filter((unit) => unit.role === role && !unit.manualOnly && unit.modules > 0 && unit.channels > 0))
-    .filter((unit) => !seen.has(unit.channels) && Boolean(seen.add(unit.channels)))
-    .sort((a, b) => a.channels - b.channels);
-  if (!units.length) return field;
+    .flatMap((candidate) => candidate.modules.filter((unit) => unit.role === role && !unit.manualOnly && unit.modules > 0 && unit.channels > 0 && !unit.source.startsWith("obecný modul")))
+    .filter((unit) => {
+      const key = `${unit.channels}|${unit.modules}`;
+      return !seen.has(key) && Boolean(seen.add(key));
+    })
+    .sort((a, b) => a.channels - b.channels || a.modules - b.modules);
   const width = (modules: number) => String(modules).replace(".", ",");
   return {
     ...field,
-    options: [field.options[0], ...units.map((unit) => ({ value: `${unit.channels}|${unit.modules}`, label: `${unit.channels}× · ${width(unit.modules)}M`, patch: { channels: unit.channels, modules: unit.modules } }))],
+    options: [field.options[0], ...units.map((unit) => ({ value: `${unit.channels}|${unit.modules}`, label: `${unit.channels}× (${width(unit.modules)}M)`, patch: { channels: unit.channels, modules: unit.modules } }))],
   };
 }
 

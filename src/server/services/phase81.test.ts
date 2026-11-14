@@ -91,9 +91,10 @@ describe("fáze 81 – akční členy z půdorysu na DIN liště rozváděče (k
     expect(missing.some((warning) => warning.includes("pro topení"))).toBe(true);
   });
 
-  it("katalog prvků: SysAP s adaptérem 7 M a přesný kus kaskády Kroku 1 se šířkou podle katalogu", async () => {
+  it("katalog prvků: SysAP s adaptérem 6 M a přesný kus kaskády Kroku 1 se šířkou podle katalogu", async () => {
     const sysap = await prisma.catalogComponent.findUniqueOrThrow({ where: { articleNumber: "2CKA006200A0871" } });
-    expect(sysap).toMatchObject({ modulesCount: 7, category: "PLC", externalSource: null });
+    // Fáze 115: šířka SAP.3 podle ABB 107,2 mm = 6 M (dřív odhad 7 M)
+    expect(sysap).toMatchObject({ modulesCount: 6, category: "PLC", externalSource: null });
     const tap = await prisma.catalogComponent.findUniqueOrThrow({ where: { articleNumber: "TAPHOME:6DO" } });
     expect(tap).toMatchObject({ manufacturer: "TapHome", modulesCount: 6, powerLossWatts: 4.5, dataSource: "IEC_ESTIMATE" });
     // Kaskáda: Loxone → Chytrá domácnost → systémový modul = Miniserver 9 M (náhled vrací šířku kusu)

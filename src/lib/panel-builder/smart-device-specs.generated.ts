@@ -364,6 +364,84 @@ export const SMART_DEVICE_SPECS: Record<string, DeviceSpec> = {
     ],
     "text": "24 V DC Stupeň krytí: IP 20 Pracovní teplota: –5 °C až +45 °C Rozměry (v × š × h): 90 × 36 × 64 mm Šířka: 2 M"
   },
+  "ABB|2CDG510015R0011": {
+    "typeCode": "BI-M-10.20.1.1",
+    "name": "Automatizační modul BI-M-10.20.1.1",
+    "dimensions": {
+      "w": 36,
+      "h": 90,
+      "d": 64
+    },
+    "ip": "IP20",
+    "tempC": {
+      "min": -5,
+      "max": 45
+    },
+    "supply": "24 V DC",
+    "current": null,
+    "outputs": null,
+    "mountingDepthMm": null,
+    "mounting": "DIN lišta TH35",
+    "modules": 4,
+    "powerLossW": null,
+    "powerW": null,
+    "protocol": [
+      "ABB-free@home bus"
+    ],
+    "text": "24 V DC Stupeň krytí: IP 20 Pracovní teplota: –5 °C až +45 °C Rozměry (v × š × h): 90 × 36 × 64 mm Šířka: 4 M"
+  },
+  "ABB|2CDG510016R0011": {
+    "typeCode": "BI-M-4.230.1.1",
+    "name": "Automatizační modul BI-M-4.230.1.1",
+    "dimensions": {
+      "w": 36,
+      "h": 90,
+      "d": 64
+    },
+    "ip": "IP20",
+    "tempC": {
+      "min": -5,
+      "max": 45
+    },
+    "supply": "24 V DC",
+    "current": null,
+    "outputs": null,
+    "mountingDepthMm": null,
+    "mounting": "DIN lišta TH35",
+    "modules": 2,
+    "powerLossW": null,
+    "powerW": null,
+    "protocol": [
+      "ABB-free@home bus"
+    ],
+    "text": "24 V DC Počet vstupů: 4 Dotazovací napětí: 10 - 230 V AC/DC (externí) log. 0 .. 0-2 V AC/DC log. 1 .. 7-265 V AC/DC (doporučujeme zdroj externího napětí např. 24 V nebo 230 V) Délka propojovacích vodičů (pro binární vstupy): max. 100 m (při průřezu vodiče 1,5 mm2) Stupeň krytí: IP 20. Pracovní teplota: –5 °C až +45 °C Rozměry: (v × š × h): 90 × 36 × 64 mm. Šířka: 2 M"
+  },
+  "ABB|2CDG510017R0011": {
+    "typeCode": "BI-M-10.230.1.1",
+    "name": "Automatizační modul BI-M-10.230.1.1",
+    "dimensions": {
+      "w": 70,
+      "h": 90,
+      "d": 64
+    },
+    "ip": "IP20",
+    "tempC": {
+      "min": -5,
+      "max": 45
+    },
+    "supply": "24 V DC",
+    "current": null,
+    "outputs": null,
+    "mountingDepthMm": null,
+    "mounting": "DIN lišta TH35",
+    "modules": 4,
+    "powerLossW": null,
+    "powerW": null,
+    "protocol": [
+      "ABB-free@home bus"
+    ],
+    "text": "24 V DC Počet vstupů: 10 Dotazovací napětí: 10 - 230 V AC/DC (externí) log. 0 .. 0-2 V AC/DC log. 1 .. 7-265 V AC/DC (doporučujeme zdroj externího napětí např. 24 V nebo 230 V) Délka propojovacích vodičů (pro binární vstupy): max. 100 m (při průřezu vodiče 1,5 mm2) Stupeň krytí: IP 20. Pracovní teplota: –5 °C až +45 °C Rozměry: (v × š × h): 90 × 70 × 64 mm. Šířka: 4 M"
+  },
   "ABB|2CDG510025R0011": {
     "typeCode": "SA-M-4.16.2.2",
     "name": "Automatizační modul SA-M-4.16.2.2",

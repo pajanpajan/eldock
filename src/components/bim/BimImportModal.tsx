@@ -122,11 +122,12 @@ export function BimImportButtons({ plantId, canPanelBuilder, compact = false, au
           if (file) pickFile(file);
         }}
       />
-      <Button type="button" size={compact ? "sm" : "lg"} variant="outline" className="touch-target gap-2" onClick={() => input.current?.click()} disabled={reading} data-testid="bim-import-open">
-        {reading ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Building2 className="size-4" aria-hidden />} 🏢 Importovat BIM model závodu (.ifc)
+      {/* Fáze 115: v kompaktním pruhu závodu krátké popisky (plný text v aria-label / title) */}
+      <Button type="button" size={compact ? "sm" : "lg"} variant="outline" className="touch-target gap-2" onClick={() => input.current?.click()} disabled={reading} data-testid="bim-import-open" aria-label={compact ? "Importovat BIM model závodu (.ifc)" : undefined} title={compact ? "Importovat BIM model závodu (.ifc)" : undefined}>
+        {reading ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Building2 className="size-4" aria-hidden />} {compact ? "Import BIM (.ifc)" : "🏢 Importovat BIM model závodu (.ifc)"}
       </Button>
-      <Button type="button" size={compact ? "sm" : "lg"} variant="outline" className="touch-target gap-2" onClick={sample} disabled={reading} data-testid="bim-import-sample">
-        <Sparkles className="size-4" aria-hidden /> ✨ Vyzkoušet na vzorovém BIM souboru haly (.ifc)
+      <Button type="button" size={compact ? "sm" : "lg"} variant="outline" className="touch-target gap-2" onClick={sample} disabled={reading} data-testid="bim-import-sample" aria-label={compact ? "Vyzkoušet na vzorovém BIM souboru haly (.ifc)" : undefined} title={compact ? "Vyzkoušet na vzorovém BIM souboru haly (.ifc)" : undefined}>
+        <Sparkles className="size-4" aria-hidden /> {compact ? "Vzorový BIM" : "✨ Vyzkoušet na vzorovém BIM souboru haly (.ifc)"}
       </Button>
       <Dialog open={loaded !== null} onOpenChange={(open) => !open && !saving && setLoaded(null)}>
         <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-5xl" data-testid="bim-import-modal">

@@ -3,8 +3,8 @@
 //   1 Mapa závodu & BIM (.ifc) – 2D mapa areálu s vrstvami napájení Síť / DA / UPS, souhrn, import modelu BIM;
 //   2 Rozváděče, Stroje & QR štítky – seznam a karty rozváděčů a strojů se stavem dokumentace, tisk QR štítků;
 //   3 Schémata, Červenka & Zálohy PLC – platná schémata, otevřené červené zákresy změn, verzované zálohy řídicího SW;
-//   4 Kniha revizí, Legislativa & Simulátor – lhůty revizí, podstatné změny dle Nařízení (EU) 2023/1230 a What-If
-//     simulátor zátěže napájení.
+//   4 Revize & Plánovač (fáze 115) – semafor revizí po budovách, Chytrá revize, lhůtník, Hlídač spotřebičů, TIČR report;
+//     podstatné změny dle Nařízení (EU) 2023/1230 a What-If simulátor zátěže napájení.
 // Fáze je v adrese (`?faze=2`) – jde sdílet, Zpět v prohlížeči vrací předchozí agendu. Čisté funkce.
 
 import type { EquipmentType } from "@/generated/prisma/enums";
@@ -23,7 +23,8 @@ export const PLANT_PHASES: readonly PlantPhaseInfo[] = [
   { id: 1, label: "1. Mapa závodu & BIM (.ifc)", hint: "2D mapa areálu s vrstvami napájení Síť / DA / UPS, budovy a patra, souhrn stavů a import modelu BIM (.ifc)." },
   { id: 2, label: "2. Rozváděče, Stroje & QR štítky", hint: "Seznam a karty rozváděčů a strojů závodu se stavem dokumentace a tisk QR štítků na dveře rozváděčů a stroje." },
   { id: 3, label: "3. Schémata, Červenka & Zálohy PLC", hint: "Platná schémata (prohlížeč výkresů), otevřené červené zákresy změn z haly a verzované zálohy řídicího SW (PLC, měniče)." },
-  { id: 4, label: "4. Kniha revizí, Legislativa & Simulátor", hint: "Lhůty elektrorevizí, podstatné změny strojů dle Nařízení (EU) 2023/1230 a What-If simulátor zátěže napájení." },
+  // Fáze 115: agenda 4 = „📋 Revize & Plánovač“ – jediné centrální místo pro revize (shodně s `/revize`)
+  { id: 4, label: "4. Revize & Plánovač", hint: "Semafor revizí po budovách, Chytrá revize a plánovač výjezdů, lhůtník VTZ / rozváděčů / strojů, Hlídač spotřebičů a TIČR report; legislativa (EU) 2023/1230 a What-If simulátor." },
 ];
 
 /** Parametr adresy s agendou závodu. */

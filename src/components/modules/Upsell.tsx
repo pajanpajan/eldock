@@ -89,7 +89,7 @@ export function LockedButton({
 }
 
 /** Zamčená položka hlavní navigace (stejný vzhled jako odkaz, místo přechodu okno s přínosem). */
-export function LockedNavItem({ feature, canManage, label, srLabel, icon }: { feature: FeatureKey; canManage: boolean; label: string; srLabel: string; icon: ReactNode }) {
+export function LockedNavItem({ feature, canManage, label, srLabel, icon, showLabel = false }: { feature: FeatureKey; canManage: boolean; label: string; srLabel: string; icon: ReactNode; showLabel?: boolean }) {
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -101,7 +101,8 @@ export function LockedNavItem({ feature, canManage, label, srLabel, icon }: { fe
         data-locked-feature={feature}
       >
         {icon}
-        <span className="hidden xl:inline">{label}</span>
+        {/* Fáze 115: v rozbalené sekci horní navigace vždy s popiskem */}
+        <span className={showLabel ? undefined : "hidden xl:inline"}>{label}</span>
         <Lock className="size-3.5 text-primary" aria-hidden />
       </button>
       <UpsellDialog feature={feature} canManage={canManage} open={open} onOpenChange={setOpen} />

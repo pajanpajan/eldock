@@ -51,7 +51,7 @@ export function cncOperations(layout: CncLayout): CncOperation[] {
     else ops.push({ part: "dvere", x: cut.x, y: doorY(cut.y), operation: "VYREZ_OBDELNIK", size: `${cut.w} × ${cut.h}`, layer: "2_CNC_VYREZY_DVERE" });
   }
   if (!layout.membrane) {
-    for (const gland of layout.glands) ops.push({ part: gland.side === "top" ? "celo-horni" : "celo-dolni", x: gland.x, y: Math.round((layout.face.depthMm / 2) * 10) / 10, operation: `VYVODKA_${gland.size}`, size: `Ø ${n1(gland.holeMm)}`, layer: "3_CNC_VYVODKY_CELA" });
+    for (const gland of layout.glands) ops.push({ part: gland.side === "top" ? "celo-horni" : "celo-dolni", x: gland.x, y: Math.round((layout.face.depthMm - gland.y) * 10) / 10, operation: `VYVODKA_${gland.size}`, size: `Ø ${n1(gland.holeMm)}`, layer: "3_CNC_VYVODKY_CELA" });
   }
   return ops;
 }
@@ -86,6 +86,8 @@ export function cncDxf(layout: CncLayout, input: Pick<CncInput, "name" | "enclos
   // Deska
   rect("0_OBRYS_SKRINE_A_DESKY", at.plate.x, at.plate.y, layout.plate.widthMm, layout.plate.heightMm);
   dxf.text("0_OBRYS_SKRINE_A_DESKY", { x: at.plate.x, y: at.plate.y - 25 }, 12, `MONTAZNI DESKA ${input.enclosure.manufacturer} ${input.enclosure.model} – ${n1(layout.plate.widthMm)} x ${n1(layout.plate.heightMm)} mm – ${input.name}`);
+  // Fáze 115: dvoupolová deska – popisky sloupců lišt (Pole A / Pole B)
+  if (layout.fields === 2) for (const column of layout.columns) dxf.text("4_OSAZENI_PRISTROJU_KOTY", { x: column.x1, y: 12 }, 8, column.label);
   for (const rail of layout.rails) {
     rect("4_OSAZENI_PRISTROJU_KOTY", rail.x1, rail.y - 17.5, rail.lengthMm, 35);
     dxf.text("4_OSAZENI_PRISTROJU_KOTY", { x: rail.x1, y: rail.y - 22 }, 6, `TS35 L${rail.index}: ${rail.lengthMm} mm, osa Y=${n1(layout.plate.heightMm - rail.y)}`);
@@ -118,9 +120,11 @@ export function cncDxf(layout: CncLayout, input: Pick<CncInput, "name" | "enclos
     rect("0_OBRYS_SKRINE_A_DESKY", origin.x, origin.y, layout.face.widthMm, layout.face.depthMm);
     dxf.text("0_OBRYS_SKRINE_A_DESKY", { x: origin.x, y: origin.y - 12 }, 10, `${side === "top" ? "HORNI" : "DOLNI"} CELO – ${layout.face.widthMm} x ${layout.face.depthMm} mm${layout.membrane ? " (membranova priruba)" : ""}`);
     if (layout.membrane) continue;
+    // Fáze 115: vývodky ve 2 šachovnicových řadách – popisek horní řady nad otvorem, dolní pod ním
     for (const gland of layout.glands.filter((entry) => entry.side === side)) {
-      hole("3_CNC_VYVODKY_CELA", origin.x + gland.x, origin.y + layout.face.depthMm / 2, gland.holeMm);
-      dxf.text("4_OSAZENI_PRISTROJU_KOTY", { x: origin.x + gland.x, y: origin.y + layout.face.depthMm / 2 + gland.holeMm / 2 + 8 }, 4, `${gland.size} ${gland.cable}`, 0, "center");
+      hole("3_CNC_VYVODKY_CELA", origin.x + gland.x, origin.y + gland.y, gland.holeMm);
+      const labelY = gland.row === 0 && layout.glands.some((entry) => entry.side === side && entry.row === 1) ? origin.y + gland.y - gland.holeMm / 2 - 6 : origin.y + gland.y + gland.holeMm / 2 + 8;
+      dxf.text("4_OSAZENI_PRISTROJU_KOTY", { x: origin.x + gland.x, y: labelY }, 4, gland.size, 0, "center");
     }
   }
   return dxf.toString();
@@ -131,7 +135,8 @@ export function wireTable(wires: readonly WireRow[]): (string | number)[][] {
   return [["Číslo vodiče", "Odkud (Přístroj : Svorka)", "Kam (Přístroj : Svorka)", "Typ a průřez vodiče", "Barva vodiče", "Délka [mm]", "Zakončení konce A", "Zakončení konce B"], ...wires.map((row) => [row.no, row.from, row.to, row.comb ?? row.type, row.color, row.lengthMm, row.endA, row.endB])];
 }
 
-export const cutTable = (items: readonly CutItem[]): (string | number)[][] => [["Položka", "Délka [mm]", "Počet kusů"], ...items.map((item) => [item.item, item.lengthMm, item.pieces])];
+/** Fáze 115: koncové krytky hřebenů se neřežou – délka „–“. */
+export const cutTable = (items: readonly CutItem[]): (string | number)[][] => [["Položka", "Délka [mm]", "Počet kusů"], ...items.map((item) => [item.item, item.lengthMm > 0 ? item.lengthMm : "–", item.pieces])];
 
 const csvOf = (rows: readonly (readonly (string | number)[])[]) => `﻿${rows.map((row) => row.map((cell) => (typeof cell === "number" ? String(cell).replace(".", ",") : /[";\n]/.test(cell) ? `"${cell.replace(/"/g, '""')}"` : cell)).join(";")).join("\r\n")}\r\n`;
 

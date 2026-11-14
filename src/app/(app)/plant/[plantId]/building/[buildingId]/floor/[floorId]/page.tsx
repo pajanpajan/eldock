@@ -8,9 +8,6 @@ import { StatusBadge } from "@/components/common/StatusBadge";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { BuildingHeaderActions } from "@/components/map/campus/BuildingDialogs";
 import { FloorExplorer } from "@/components/map/floorplan/FloorExplorer";
-import { SmartRevisionTripOptimizer } from "@/components/inspections/SmartRevisionTripOptimizer";
-import { pragueToday } from "@/lib/inspection";
-import { getTripItems } from "@/server/queries/revision-trip";
 import { buildingHref, floorHref, plantHref } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 import { getFeatures } from "@/server/modules";
@@ -26,15 +23,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 // Level 3 – půdorys patra s piny zařízení.
+// Fáze 115: pod hlavičkou budovy hned lišta filtrů vrstev a velký půdorys haly – Chytrá revize je jen v „📋 Revize &
+// Plánovač“ (`/revize`, agenda 4 závodu).
 export default async function FloorPage({ params }: Props) {
   const [{ plantId, buildingId, floorId }, account, modules] = await Promise.all([params, getCurrentAccount(), getFeatures()]);
   const floor = await getFloorView(plantId, buildingId, floorId, account.types);
   if (!floor) notFound();
   // Fáze 108: budova a zařízení patra jdou upravit / smazat s právem Studia výstavby
   const canEdit = account.can("studio") && modules.on("enterprise.studio");
-  const now = new Date();
-  const showTrip = account.definition.showInspections && !account.definition.fieldView;
-  const tripItems = showTrip ? await getTripItems(plantId, now, account.types) : [];
 
   const { building } = floor;
   const multiFloor = building.floors.length > 1;
@@ -91,7 +87,6 @@ export default async function FloorPage({ params }: Props) {
           </div>
         }
       />
-      {showTrip ? <SmartRevisionTripOptimizer items={tripItems} today={pragueToday(now)} focusBuildingId={buildingId} canRecord={account.can("recordInspection")} className="mb-4" /> : null}
       <FloorExplorer
         floor={floor}
         showInspections={account.definition.showInspections}

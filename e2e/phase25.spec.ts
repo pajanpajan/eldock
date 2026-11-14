@@ -51,7 +51,10 @@ test("správa modulů: vedoucí údržby, presety, režim, podfunkce, AI Panel B
   // Výchozí účet E2E je vedoucí údržby → položka „Moduly“ v navigaci
   await page.goto("/app");
   await expect(async () => {
-    await page.getByRole("navigation", { name: "Hlavní navigace" }).getByRole("link", { name: /Moduly|Správa modulů/ }).click();
+    // Fáze 115: Moduly jsou v sekci „⚙️ Správa & Účty“ horní navigace
+    const nav = page.getByRole("navigation", { name: "Hlavní navigace" });
+    if (!(await nav.getByTestId("nav-panel-sprava").count())) await nav.getByTestId("nav-section-sprava").getByRole("button").click();
+    await nav.getByRole("link", { name: /Moduly|Správa modulů/ }).click();
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Správa modulů a tarifů", { timeout: 3_000 });
   }).toPass({ timeout: 30_000 });
 
@@ -95,6 +98,8 @@ test("obchodní demo: vypnuté funkce se zámkem a oknem s aktivací", async ({ 
   await mode(page, /Obchodní demo/);
 
   await page.goto("/app");
+  // Fáze 115: zamčený Plánovač je v sekci „📋 Revize & Hlídač“ horní navigace
+  await page.getByRole("navigation", { name: "Hlavní navigace" }).getByTestId("nav-section-revize").getByRole("button").click();
   const locked = page.getByRole("button", { name: "Plánovač revizí – zamčeno, Modul Pro" });
   await expect(locked).toBeVisible();
   await locked.click();

@@ -121,7 +121,8 @@ test("⚡ Kaskáda Kroku 1: Chytrá domácnost – filtr řady ABB, KNX spínac�
   await expect(series.getByRole("button")).toHaveText(["Vše", "ABB-free@home® (SA-M, BA-M, DA/M, HA-M, SysAP)", "ABB i-bus® KNX (SA/S, JRA/S, UD/S, SV/S)"]);
   await series.getByRole("button", { name: /ABB i-bus® KNX/ }).click();
   await menu.getByRole("button", { name: "Spínací aktor", exact: true }).click();
-  await menu.getByRole("button", { name: "8×", exact: true }).click();
+  // Fáze 115: C3 nabízí jen existující kusy systému s šířkou („8× (8M)“)
+  await menu.getByRole("button", { name: /^8× \(\d+M\)$/ }).click();
   const card = page.getByTestId("placement-card");
   await expect(card).toContainText("ABB SA/S 8.16.2.2");
   await expect(page.getByTestId("placement-mpn")).toContainText("2CDG110263R0011");

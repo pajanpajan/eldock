@@ -1,11 +1,10 @@
 import Link from "next/link";
-import { Blocks, CalendarCheck, CalendarRange, FileCheck2, Globe2, Inbox, PencilRuler, Plug, ScanLine, ShieldCheck, UserRoundCog, UsersRound, type LucideIcon } from "lucide-react";
+import { CalendarCheck, Map as MapIcon, PencilRuler, Settings, UserRoundCog, Zap, type LucideIcon } from "lucide-react";
 
 import { isAccountSwitcherLocked } from "@/lib/auth";
-import type { Permission } from "@/lib/accounts";
 import { LockedNavItem } from "@/components/modules/Upsell";
-import type { FeatureKey } from "@/lib/modules";
-import { auditReportHref, inspectionsHref, plannerHref, plantHref, rapidInspectionHref, ticrReportHref } from "@/lib/routes";
+import { industryNav, type NavSectionId } from "@/lib/industry-nav";
+import { plantHref } from "@/lib/routes";
 import { getFeatures } from "@/server/modules";
 import { getAccountUsers } from "@/server/queries/accounts";
 import { getPlants } from "@/server/queries/plant";
@@ -18,23 +17,10 @@ import { AccountSwitcher } from "./AccountSwitcher";
 import { LogoutButton } from "./LogoutButton";
 import { Logo } from "./Logo";
 import { PlantSwitcher } from "./PlantSwitcher";
+import { SectionNav, type SectionNavSection } from "./SectionNav";
 
-const NAV: { href: string; label: string; srLabel: string; icon: LucideIcon; permission: Permission; feature?: FeatureKey; hideInFieldView?: boolean }[] = [
-  { href: "/cae", label: "Back-Office", srLabel: "CAE Back-Office", icon: Inbox, permission: "caeOffice", feature: "cae.ticketing" },
-  // Fáze 103: portál externích projektantů ELDOCK Poolu (fronta Červenek k překreslení)
-  { href: "/portal-projektantu", label: "Pool projektantů", srLabel: "Portál projektantů ELDOCK Pool", icon: Globe2, permission: "submitChange", hideInFieldView: true },
-  { href: inspectionsHref, label: "Revize", srLabel: "Přehled revizí", icon: CalendarCheck, permission: "inspections", hideInFieldView: true },
-  // Fáze 111: 🛡️ Hlídač revizí & Správa spotřebičů a zařízení (budovy, místnosti, AI čtečka výrobního štítku)
-  { href: "/hlidac-revizi", label: "Hlídač revizí", srLabel: "Hlídač revizí a správa spotřebičů a zařízení", icon: Plug, permission: "inspections", hideInFieldView: true },
-  { href: plannerHref, label: "Plánovač", srLabel: "Plánovač revizí", icon: CalendarRange, permission: "planner", feature: "inspections.planner" },
-  { href: rapidInspectionHref, label: "Rychlá revize", srLabel: "Rychlá revize", icon: ScanLine, permission: "rapid", feature: "inspections.planner" },
-  { href: auditReportHref, label: "Audit", srLabel: "Auditní report", icon: FileCheck2, permission: "audit", feature: "inspections.audit" },
-  // Fáze 108: 🛡️ Měsíční report & Ochrana TIČR (pro revizní techniky)
-  { href: ticrReportHref, label: "TIČR report", srLabel: "Měsíční report a ochrana TIČR pro revizní techniky", icon: ShieldCheck, permission: "recordInspection", hideInFieldView: true },
-  { href: "/studio", label: "Studio", srLabel: "Studio výstavby závodu", icon: PencilRuler, permission: "studio", feature: "enterprise.studio" },
-  { href: "/admin/modules", label: "Moduly", srLabel: "Správa modulů a tarifů", icon: Blocks, permission: "manageModules" },
-  { href: "/admin/users", label: "Účty", srLabel: "Správa podúčtů", icon: UsersRound, permission: "manageUsers" },
-];
+/** Fáze 115: ikony 5 sekcí horní navigace. */
+const SECTION_ICONS: Record<NavSectionId, LucideIcon> = { areal: MapIcon, stroje: Zap, schemata: PencilRuler, revize: CalendarCheck, sprava: Settings };
 
 /** Horní lišta: logo, přepínač závodu (údržba), navigace podle oprávnění účtu a přepínač účtu. */
 export async function AppHeader() {
@@ -51,13 +37,22 @@ export async function AppHeader() {
     );
   }
   const [account, accounts, plants, rememberedPlantId, features] = await Promise.all([getCurrentAccount(), getAccountUsers(), getPlants(), getRememberedPlantId(), getFeatures()]);
-  // Vypnuté funkce: v režimu Čisté pracoviště zmizí, v Obchodním demu zůstanou se zámkem.
-  const links = NAV.filter(
-    (item) => account.can(item.permission) && (!item.feature || features.show(item.feature)) && !(item.hideInFieldView && account.definition.fieldView),
-  );
   const canManageModules = account.can("manageModules");
   // Fáze 92: 🧭 Průvodce závodem (založení haly a stroje / mise noční poruchy) v naposledy otevřeném závodě
   const guidePlant = plants.find((plant) => plant.id === rememberedPlantId)?.id ?? plants[0]?.id ?? null;
+  // Fáze 115: 5 sekcí místo 11 položek. Vypnuté funkce: v režimu Čisté pracoviště zmizí, v Obchodním demu zůstanou se
+  // zámkem; sekce bez dostupné stránky se nezobrazí (terénní pohled směnového údržbáře lištu nemá).
+  const sections: SectionNavSection[] = industryNav(guidePlant).flatMap((section) => {
+    const Icon = SECTION_ICONS[section.id];
+    const items = section.links
+      .filter((link) => (link.permission === null || account.can(link.permission)) && (!link.feature || features.show(link.feature)) && !(link.hideInFieldView && account.definition.fieldView) && (!link.company || Boolean(account.user.companyId)))
+      .map((link) =>
+        link.feature && !features.on(link.feature)
+          ? { kind: "locked" as const, key: link.href, node: <LockedNavItem feature={link.feature} canManage={canManageModules} label={link.label} srLabel={link.srLabel} icon={null} showLabel /> }
+          : { kind: "link" as const, href: link.href, label: link.label, hint: link.hint },
+      );
+    return items.length ? [{ id: section.id, label: `${section.emoji} ${section.label}`, srLabel: section.srLabel, icon: <Icon className="size-4" aria-hidden />, match: section.match, items }] : [];
+  });
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur">
@@ -73,25 +68,7 @@ export async function AppHeader() {
           <span className="hidden text-sm text-muted-foreground md:inline">Všechny závody</span>
         )}
 
-        {links.length ? (
-          <nav aria-label="Hlavní navigace" className="flex flex-wrap items-center gap-1">
-            {links.map(({ href, label, srLabel, icon: Icon, feature }) =>
-              feature && !features.on(feature) ? (
-                <LockedNavItem key={href} feature={feature} canManage={canManageModules} label={label} srLabel={srLabel} icon={<Icon className="size-4" aria-hidden />} />
-              ) : (
-              <Link
-                key={href}
-                href={href}
-                className="touch-target flex items-center gap-2 rounded-md px-2.5 text-sm text-muted-foreground transition-colors outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
-              >
-                <Icon className="size-4" aria-hidden />
-                <span className="hidden xl:inline">{label}</span>
-                <span className="sr-only xl:hidden">{srLabel}</span>
-              </Link>
-              ),
-            )}
-          </nav>
-        ) : null}
+        {sections.length ? <SectionNav sections={sections} /> : null}
 
         <div className="ml-auto flex items-center gap-3">
           {/* Fáze 99: živá ukázka průmyslového závodu na 1 klik (agendy naposledy otevřeného závodu) */}

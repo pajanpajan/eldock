@@ -1,0 +1,5 @@
+# Deník fáze 114 (přesunuto z `docs/PLAN.md`, sekce C)
+
+| Fáze | Datum | Poznámky |
+|---|---|---|
+| 114 | 2026-11-14 | Zadání z chatu → `docs/archiv/ZADANI-faze-114.md` (i rozhodnutí a odchylky – typy a EAN aktorů BA-M / HA-M ze zadání výrobce nevede, platí oficiální data ABB). **Migrace** `20261114120000_phase114_sso_provisional` (e-mail firmy jedinečný v rámci produktu, `linkedCompanyId`, `CreditOrder.provisionalAt` …). **Kód:** `room-geometry.ts` (`unionRooms`, `roomRelation`) + `room-builder.ts` (`mergeRooms`, `mergeRectInto`), `pdf-room-detector.ts` (vrstvy `hatch` / `outline`, kolo pod 3,5 m²), `accessory-symbols.ts` + `AccessorySymbol.tsx`, `prisma/seed-accessories-2026.ts`, `rail-layout.ts` (`sizeTiers`, `fillRailsToEnclosure`), `smart-home.ts`, `configurator.ts` (C3, `withOption`), `services/sso-bridge.ts` + `actions/sso.ts`, `services/credits.ts` (`grantProvisionalCredits`, `revokeProvisionalCredits`), `services/order-notify.ts`, `lib/operator.ts` (`operatorSummary`). **Testy:** `src/lib/panel-builder/phase114.test.ts` (11), `phase114-symbols.test.ts` (8), `src/server/services/phase114.test.ts` (9), E2E `e2e/phase114.spec.ts` (4). |

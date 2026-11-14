@@ -20,6 +20,8 @@ import { companyManufacturer } from "@/lib/registered-company";
 import { isConnected, proposeTree, readingOrder, treeNodeFrom } from "@/lib/panel-builder/tree";
 import { supplyOf } from "@/lib/panel-builder/supply";
 import { busbarPartsRows, planBusbars } from "@/lib/panel-builder/pe-n-busbars";
+import { combParts, combRuns } from "@/lib/panel-builder/comb-busbars";
+import { parseRailLayout } from "@/lib/panel-builder/rail-layout";
 import { equipmentHref } from "@/lib/routes";
 import { parseRoutineTest, standardEditionOf } from "@/lib/legislation-2027";
 import { getBlankCovers, getEnclosureComponent, getLinkedBoards, getProjectEnclosure, type PanelProjectDetail } from "@/server/queries/panel-builder";
@@ -93,6 +95,8 @@ export async function buildDocumentationData(project: PanelProjectDetail, origin
   const supply = supplyOf(project);
   const incomer = supply.conductors;
   const busbars = planBusbars(drawingItems, supply);
+  // Fáze 115: propojovací hřebeny (úseky po skupinách chráničů, volba lišty) a koncové krytky do kusovníku
+  const combs = combParts(combRuns(drawingItems, drawingItems, parseRailLayout(project.railLayoutJson, capacities.length).combs ?? {}, supply.phases), drawingItems);
 
   // Fáze 55: kusovník domovní instalace z uloženého nákresu 2D půdorysu (projekt z půdorysu)
   const cableReport = parseCableReport(project.cableReportJson);
@@ -137,7 +141,8 @@ export async function buildDocumentationData(project: PanelProjectDetail, origin
     functions: readingOrder(project.items).map((item) => ({ designation: item.designation, label: item.circuitLabel })),
     // Fáze 55: sběrnice PE / N0 / N-FIx a propojka PEN v kusovníku (List 4)
     // Fáze 112: krycí záslepky neobsazených modulů všech lišt (objednací číslo jen z katalogu výrobce skříně)
-    parts: [...partsList(docItems, enclosure), ...busbarPartsRows(busbars), ...(blanking ? [blanking] : [])],
+    // Fáze 115: hřebenové přípojnice ABB PS a koncové krytky PS-END podle úseků hřebenů na lištách
+    parts: [...partsList(docItems, enclosure), ...busbarPartsRows(busbars), ...combs.map((part) => ({ articleNumber: part.articleNumber, typeCode: part.typeCode, manufacturer: part.manufacturer, description: part.description, quantity: part.quantity })), ...(blanking ? [blanking] : [])],
     components: componentsList(docItems, enclosure),
     homeBom,
     wiring: project.items.flatMap((item) =>

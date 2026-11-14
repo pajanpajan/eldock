@@ -181,7 +181,8 @@ describe("kaskádové menu: výrobci a příslušenství", () => {
 
   it("kategorie Svorky / Hřebeny / Příslušenství s podtypy a šířkou 0,5M", () => {
     expect(CONFIG_CATEGORIES.at(-1)).toEqual({ value: "ACCESSORY", label: "Svorky / Hřebeny / Příslušenství" });
-    expect(CONFIG_FIELDS.ACCESSORY[0].options.map((option) => option.value)).toEqual(Object.keys(ACCESSORY_SUBTYPES));
+    // Fáze 115: hřeben a koncovka hřebenu nejsou v kaskádě vkládání (volba v záhlaví lišty)
+    expect(CONFIG_FIELDS.ACCESSORY[0].options.map((option) => option.value)).toEqual(Object.keys(ACCESSORY_SUBTYPES).filter((value) => value !== "BUSBAR" && value !== "BUSBAR_END_CAP"));
     const config = defaultConfig("ACCESSORY", { manufacturer: "Eaton", modules: 1 });
     expect(config).toMatchObject({ moduleSubtype: "AUX_CONTACT", modules: 0.5 });
     expect(catalogCategory(config)).toBe("OTHER");

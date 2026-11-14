@@ -33,23 +33,22 @@ test("⚡ AI Panel Builder: stykač HDO k tepelnému čerpadlu, měděné hřebe
   await expect(panel.getByRole("button", { name: /Ovládání HDO/ })).toBeVisible();
   // Hřebeny pod chrániči a odznaky fází na jističích
   await expect(panel.getByTestId("comb-busbar").first()).toBeAttached();
-  await expect(panel.getByTestId("comb-busbar").first()).toHaveAttribute("data-kind", "3F");
+  // Fáze 115: pod 4P chráničem s 1P jističi hřeben 3P (L1 L2 L3) bez vidličky na N
+  await expect(panel.getByTestId("comb-busbar").first()).toHaveAttribute("data-kind", "3P");
   await expect(panel.locator('[data-testid="phase-badge"][data-phase="L1"]').first()).toBeAttached();
   await expect(panel.locator('[data-testid="phase-badge"][data-phase="L2"]').first()).toBeAttached();
   await expect(page.getByTestId("blanking-summary")).toContainText(/Celkem \d+ (volných modulů|volné moduly|volný modul) → \d+ × záslepka 12M/);
   await panel.screenshot({ path: "test-results/phase112-combs.png" });
 
-  // Volba hřebenu lišty u přípojnice: Auto → 3f → 1f → Vyp
-  const comb = panel.locator('[data-testid^="rail-comb-"]').first();
+  // Volba hřebenu lišty v záhlaví lišty (fáze 115: nabídka Auto / 3P / 3P+N / 1P / Bez hřebenu)
+  const rail = (await panel.getByTestId("comb-busbar").first().getAttribute("data-comb-rail"))!;
+  const comb = page.getByTestId(`rail-comb-${rail}`);
   await expect(comb).toHaveAttribute("data-comb", "AUTO");
-  await comb.click();
-  await expect(comb).toHaveAttribute("data-comb", "3F", { timeout: 60_000 });
-  await comb.click();
-  await expect(comb).toHaveAttribute("data-comb", "1F", { timeout: 60_000 });
-  await comb.click();
-  await expect(comb).toHaveAttribute("data-comb", "OFF", { timeout: 60_000 });
-  await comb.click();
-  await expect(comb).toHaveAttribute("data-comb", "AUTO", { timeout: 60_000 });
+  for (const setting of ["3P", "1P", "OFF", "AUTO"]) {
+    await comb.click();
+    await page.getByTestId(`rail-comb-${rail}-${setting}`).click();
+    await expect(comb).toHaveAttribute("data-comb", setting, { timeout: 60_000 });
+  }
 
   // Kusovník (List 4): krycí záslepky neobsazených modulů
   await page.goto(`${page.url()}/documentation`);

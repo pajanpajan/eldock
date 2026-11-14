@@ -106,10 +106,12 @@ describe("fáze 106 – nářezový a drátovací list vodičů", () => {
     expect(wires.find((row) => row.to === "-FA1 : 1 (L1)")!.endB).toBe(twinFerrule(10));
   });
 
-  it("jističe vedle sebe za chráničem propojí hřeben (vyřazeno z drátování), přepěťová ochrana na PE", () => {
-    const comb = wires.find((row) => row.kind === "comb")!;
-    expect(comb.comb).toBe("Hřebenová přípojnice 1P 10 mm² (3 modulů / 53 mm)");
-    expect(wires.filter((row) => row.kind === "wire" && (row.to.startsWith("-F2") || row.to.startsWith("-F3")))).toHaveLength(0);
+  it("jističe na jiné liště než jejich chránič = přenos vodiči (fáze 115: hřeben jen pod chráničem na téže liště), přepěťová ochrana na PE", () => {
+    expect(wires.filter((row) => row.kind === "comb")).toHaveLength(0);
+    // 3f chránič rozdělí 1P jističe na fáze L1, L2, L3
+    expect(wires.find((row) => row.to === "-F1 : 1 (L1)")).toMatchObject({ from: "-FA1 : 2 (L1)" });
+    expect(wires.find((row) => row.to === "-F2 : 1 (L2)")).toMatchObject({ from: "-FA1 : 4 (L2)" });
+    expect(wires.find((row) => row.to === "-F3 : 1 (L3)")).toMatchObject({ from: "-FA1 : 6 (L3)" });
     expect(wires.find((row) => row.from.startsWith("-FV1") && row.to.startsWith("Sběrnice PE"))).toMatchObject({ color: "Zelenožlutá (PE)", crossSectionMm2: 16 });
   });
 });

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { buildSwitchboardFromCircuits } from "@/engine/floorplan-bridge";
-import { combLabel, combRuns, nextCombSetting, parseCombSettings, phaseBadges, type CombDevice } from "@/lib/panel-builder/comb-busbars";
+import { COMB_SETTINGS, combLabel, combRuns, parseCombSettings, phaseBadges, type CombDevice } from "@/lib/panel-builder/comb-busbars";
 import { wireHarnessList, type CncInput } from "@/lib/panel-builder/cnc-manufacturing-engine";
 import { DEFAULT_TURNKEY_CONFIG } from "@/lib/panel-builder/turnkey-manufacturing";
 import { analyzeDraft, emptyDraft, type EditorElement, type FloorplanDraft } from "@/lib/panel-builder/floorplan-editor";
@@ -118,32 +118,34 @@ describe("fáze 112 – hřebeny a fáze L1 / L2 / L3", () => {
 
   it("3f hřeben pod 4P chráničem: jističe L1, L2, L3, L1 podle pozice, 3P jistič L1+L2+L3, přiřazená fáze má přednost", () => {
     const runs = combRuns(devices, nodes);
-    expect(runs).toEqual([{ rail: 1, ids: ["fi1", "f1", "f2", "f3", "f4", "f5"], kind: "3F", conductors: ["L1", "L2", "L3", "N"], input: false }]);
-    expect(combLabel(runs[0])).toBe("Hřeben 3f · L1 L2 L3 N");
+    // Fáze 115: pod 4P chráničem s 1P / 3P jističi hřeben 3P bez vidličky na N (N chrániče na můstek N-FIx)
+    expect(runs).toEqual([{ rail: 1, ids: ["fi1", "f1", "f2", "f3", "f4", "f5"], kind: "3P", conductors: ["L1", "L2", "L3"], input: false, modules: 11 }]);
+    expect(combLabel(runs[0])).toBe("Hřeben 3f · L1 L2 L3");
     const badges = phaseBadges(devices, runs);
     expect(Object.fromEntries(badges)).toMatchObject({ f1: "L1", f2: "L2", f3: "L3", f4: "L1", f5: "L1+L2+L3" });
     const assigned = phaseBadges(devices.map((row) => (row.id === "f1" ? { ...row, phaseAssignment: "L3" } : row)), runs);
     expect(assigned.get("f1")).toBe("L3");
   });
 
-  it("volba lišty: Vyp skryje hřeben, 1f / 3f přebije druh; 1f soustava = L1; nastavení se ukládá v uspořádání lišt", () => {
+  it("volba lišty: Bez hřebenu hřeben zruší, 1P / 3P přebije druh; 1f soustava = L1; nastavení se ukládá v uspořádání lišt", () => {
     expect(combRuns(devices, nodes, { 1: "OFF" })).toEqual([]);
-    expect(combRuns(devices, nodes, { 1: "1F" })[0]).toMatchObject({ kind: "1F", conductors: ["L", "N"] });
+    expect(combRuns(devices, nodes, { 1: "1P" })[0]).toMatchObject({ kind: "1P", conductors: ["L1"] });
     expect(phaseBadges(devices, combRuns(devices, nodes, {}, 1), 1).get("f2")).toBe("L1");
-    expect(nextCombSetting("AUTO")).toBe("3F");
-    expect(nextCombSetting("OFF")).toBe("AUTO");
-    expect(parseCombSettings({ 1: "OFF", 2: "AUTO", 99: "3F", x: "1F" })).toEqual({ 1: "OFF" });
-    const layout = withComb(SINGLE_LAYOUT, 2, "1F", 3);
-    expect(parseRailLayout(serializeRailLayout(layout), 3).combs).toEqual({ 2: "1F" });
-    expect(layoutAfterRailSwap(layout, 2, 3, 3).combs).toEqual({ 3: "1F" });
-    expect(layoutAfterRailRemoved(layout, 1, 3).combs).toEqual({ 1: "1F" });
+    // Fáze 115: volba v nabídce záhlaví lišty (Auto / 3P / 3P+N / 1P / Bez hřebenu), uložené „3F“ / „1F“ platí jako 3P / 1P
+    expect(COMB_SETTINGS).toEqual(["AUTO", "3P", "3PN", "1P", "OFF"]);
+    expect(parseCombSettings({ 1: "OFF", 2: "AUTO", 99: "3P", x: "1P", 3: "3F", 4: "1F" })).toEqual({ 1: "OFF", 3: "3P", 4: "1P" });
+    const layout = withComb(SINGLE_LAYOUT, 2, "1P", 3);
+    expect(parseRailLayout(serializeRailLayout(layout), 3).combs).toEqual({ 2: "1P" });
+    expect(layoutAfterRailSwap(layout, 2, 3, 3).combs).toEqual({ 3: "1P" });
+    expect(layoutAfterRailRemoved(layout, 1, 3).combs).toEqual({ 1: "1P" });
     expect(withComb(layout, 2, "AUTO", 3).combs).toBeUndefined();
   });
 
   it("řada jističochráničů se společným napájením = hřeben na vstupu", () => {
     const rcbo = [device("a", 1, { category: "RCBO", poles: "1P+N", modulesWidth: 2 }), device("b", 2, { category: "RCBO", poles: "1P+N", modulesWidth: 2 })];
     const runs = combRuns(rcbo, rcbo.map((row) => ({ id: row.id, parentItemId: "q1" })));
-    expect(runs[0]).toMatchObject({ kind: "3F", input: true, conductors: ["L1", "L2", "L3"] });
+    // Fáze 115: řada jističochráničů 1P+N = hřeben 3P+N na vstupu
+    expect(runs[0]).toMatchObject({ kind: "3PN", input: true, conductors: ["L1", "L2", "L3", "N"] });
   });
 });
 

@@ -8,6 +8,9 @@ import { prisma } from "@/lib/prisma";
 import { inspectionBlock, nextVersion, snapshotStringify } from "@/lib/switchboard-versions";
 import { ENVIRONMENT_BLOCKER } from "@/lib/panel-builder/environments";
 import { hdoControlDesignation, hdoControlOf } from "@/lib/panel-builder/hdo";
+import { parseRailLayout } from "@/lib/panel-builder/rail-layout";
+import { railCapacities } from "@/lib/panel-builder/rails";
+import { supplyOf } from "@/lib/panel-builder/supply";
 import { smtpTransportFromEnv } from "@/server/mailer";
 import { buildDocumentationData } from "@/server/panel-documentation";
 import { getPanelProject, getPanelProjectById, type PanelProjectDetail } from "@/server/queries/panel-builder";
@@ -45,13 +48,16 @@ export function cncBaseOf(project: PanelProjectDetail): Omit<CncInput, "entry" |
       const outgoing = (category === "MCB" || category === "RCBO") && !project.items.some((child) => child.parentItemId === item.id);
       // Fáze 112: stykač HDO – ovládací jistič cívky z konfigurace prvku
       const coilFrom = category === "CONTACTOR" ? hdoControlDesignation(hdoControlOf(item.configJson), project.items) : null;
-      return { id: item.id, designation: item.designation, category, poles, modules: item.modulesWidth || component?.modulesCount || 1, ratedCurrentA: ratedA, rail: item.dinRailIndex, position, parentId: item.parentItemId, label: item.circuitLabel || null, cable: outgoing ? outgoingCable(poles, ratedA) : null, ...(coilFrom ? { coilFrom } : {}) };
+      // Fáze 115: výrobce (hřeben ABB PS jen pod přístroji ABB) a přiřazená fáze
+      return { id: item.id, designation: item.designation, category, poles, modules: item.modulesWidth || component?.modulesCount || 1, ratedCurrentA: ratedA, rail: item.dinRailIndex, position, parentId: item.parentItemId, label: item.circuitLabel || null, cable: outgoing ? outgoingCable(poles, ratedA) : null, manufacturer: component?.manufacturer ?? null, phaseAssignment: item.phaseAssignment ?? null, ...(coilFrom ? { coilFrom } : {}) };
     });
   const enclosure = project.enclosure;
   const rails = Math.max(1, ...devices.map((device) => device.rail));
   const widest = Math.max(12, ...[...offsets.values()].map((value) => Math.ceil(value)));
   const main = devices.find((device) => device.category === "MAIN_SWITCH") ?? devices[0];
   const busCables = devices.filter((device) => device.category === "PLC").length;
+  // Fáze 115: dvě pole vedle sebe (dvoupolová deska), volba hřebenů lišt a soustava přívodu
+  const railLayout = parseRailLayout(project.railLayoutJson, railCapacities(project).length);
   return {
     name: `${project.code}${project.name ? ` ${project.name}` : ""}`,
     enclosure: enclosure
@@ -60,6 +66,9 @@ export function cncBaseOf(project: PanelProjectDetail): Omit<CncInput, "entry" |
     devices,
     supplyCable: supplyCable(main?.ratedCurrentA ?? 40),
     busCables,
+    fields: railLayout.fields === 2 ? { count: 2, aRails: railLayout.fieldARails } : null,
+    combs: railLayout.combs ?? {},
+    supplyPhases: supplyOf(project).phases,
   };
 }
 

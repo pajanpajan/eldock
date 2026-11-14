@@ -66,7 +66,8 @@ export function smartDinComponent(system: SmartSystemId, unit: SmartModule): Sma
     moduleSubtype: psu ? "PSU_DC" : "PLC",
     modulesCount: unit.modules,
     powerLossWatts: unit.lossW ?? null,
-    lossEstimated: unit.lossFrom !== "katalog",
+    // Fáze 115: Pv z katalogu nebo z produktové stránky / datasheetu výrobce není odhad dle IEC
+    lossEstimated: unit.lossFrom !== "katalog" && unit.lossFrom !== "manufacturer",
     description: `${unit.label} – ${setup.label.replace(/\s*\(.*\)$/, "")}, šířka ${unit.modules} M${note ? ` (${note})` : ""}`.slice(0, 300),
     datasheetUrl: unit.datasheetUrl ?? null,
     source: unit.source,

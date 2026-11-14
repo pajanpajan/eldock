@@ -258,7 +258,7 @@ test("🏭 ELDOCK Průmysl: přepínač 4 agend závodu – vždy jen jedna agen
   await expect(switcher).toHaveAttribute("data-phase", "1");
   const cards = switcher.getByTestId("plant-phase-cards").getByRole("link");
   await expect(cards).toHaveCount(4);
-  const labels = ["1. Mapa závodu & BIM (.ifc)", "2. Rozváděče, Stroje & QR štítky", "3. Schémata, Červenka & Zálohy PLC", "4. Kniha revizí, Legislativa & Simulátor"];
+  const labels = ["1. Mapa závodu & BIM (.ifc)", "2. Rozváděče, Stroje & QR štítky", "3. Schémata, Červenka & Zálohy PLC", "4. Revize & Plánovač"];
   for (const [index, label] of labels.entries()) await expect(cards.nth(index)).toContainText(label);
   await expect(switcher.getByTestId("plant-phase-1")).toHaveAttribute("aria-current", "step");
   await expect(switcher.getByTestId("plant-phase-1")).toHaveClass(/border-yellow-400/);
@@ -295,6 +295,10 @@ test("🏭 ELDOCK Průmysl: přepínač 4 agend závodu – vždy jen jedna agen
   await page.getByTestId("plant-phase-next").click();
   await expect(page).toHaveURL(/\?faze=4$/, { timeout: 60_000 });
   await expect(page.getByTestId("plant-docs")).toHaveCount(0);
+  // Fáze 115: agenda 4 = „📋 Revize & Plánovač“ – lhůtník je záložka centra revizí
+  await expect(page.getByTestId("revision-hub")).toBeVisible();
+  await page.getByTestId("revision-tab-lhutnik").click();
+  await expect(page).toHaveURL(/\?faze=4&tab=lhutnik$/, { timeout: 60_000 });
   await expect(page.getByText("Hlídač elektrorevizí (Lhůtník)")).toBeVisible();
   await expect(page.getByTestId("plant-legislation")).toContainText("Nařízení (EU) 2023/1230");
   const simulator = page.getByTestId("plant-simulator");

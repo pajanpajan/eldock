@@ -97,9 +97,11 @@ describe("fáze 81 – akční členy na DIN lištu jako kusy katalogu prvků", 
     expect(seed.get("LOXONE:100335")).toMatchObject({ typeCode: "Miniserver", modulesCount: 9, powerLossWatts: 6.7, lossEstimated: false });
     expect(seed.get("LOXONE:100512")).toMatchObject({ typeCode: "Miniserver Compact", modulesCount: 6 });
     expect(seed.get("TAPHOME:6DO")).toMatchObject({ manufacturer: "TapHome", modulesCount: 6, powerLossWatts: 4.5, lossEstimated: true });
-    expect(seed.get("2CKA006200A0871")).toMatchObject({ modulesCount: 7, category: "PLC" });
+    expect(seed.get("2CKA006200A0871")).toMatchObject({ modulesCount: 6, category: "PLC" });
     // Ruční řádky Katalogu ABB 2026 zůstávají (popis, zdroj), Pv a datasheet z rešerše výrobce
-    expect(seed.get("2CDG510025R0011")).toMatchObject({ powerLossWatts: 4, lossEstimated: false, datasheetUrl: expect.stringContaining("FICHE_STO611130") });
+    // Fáze 115: Pv a datasheet z produktové stránky ABB (new.abb.com)
+    expect(seed.get("2CDG510025R0011")).toMatchObject({ powerLossWatts: 4, lossEstimated: false, datasheetUrl: "https://new.abb.com/products/2CDG510025R0011" });
+    expect(seed.get("2CDG510026R0011")).toMatchObject({ powerLossWatts: 8, lossEstimated: false });
     expect(seed.get("2CDG510028R0011")!.powerLossWatts).toBe(1.5);
   });
 
@@ -183,7 +185,7 @@ describe("fáze 81 – akční členy na DIN lištu jako kusy katalogu prvků", 
     const knx = planSmartHome({ system: "abb_knx", loads, busDevices: 4 });
     expect(knx.modules.map((unit) => unit.typeCode)).not.toContain("JRA/S 4.230.2.1");
     const sysap = planSmartHome({ system: "abb_freeathome", loads, busDevices: 4, extras: { "fah-sap-din": 1 } });
-    expect(sysap.modules.filter((unit) => unit.role === "system").map((unit) => [unit.id, unit.modules, unit.manual])).toEqual([["fah-sap-din", 7, true]]);
+    expect(sysap.modules.filter((unit) => unit.role === "system").map((unit) => [unit.id, unit.modules, unit.manual])).toEqual([["fah-sap-din", 6, true]]);
     const tap = planSmartHome({ system: "taphome", loads: [...loads, { id: "d1", room: "Obývák", role: "dim", powerW: 40, label: "Stmívané světlo" }], busDevices: 3 });
     expect(tap.warnings.filter((warning) => warning.includes("nemá v databázi"))).toEqual([]);
     expect(tap.modules.map((unit) => unit.typeCode)).toEqual(expect.arrayContaining(["Core", "6DO", "4DO", "Dimmer 4CH", "PSU 24 V DC / 60 W"]));

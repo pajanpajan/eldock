@@ -64,8 +64,11 @@ export interface SmartModule {
   source: string;
   /** Fáze 81: ztrátový výkon Pv [W] pro oteplení rozváděče; null = výrobce neuvádí (odhad dle IEC). */
   lossW?: number | null;
-  /** Původ Pv: katalog výrobců, orientačně ze zadání fáze 81, nebo odvozeno ze shodné platformy (sourozenec free@home). */
-  lossFrom?: "katalog" | "zadání" | "odvozeno";
+  /**
+   * Původ Pv: katalog výrobců, `manufacturer` = ověřeno na produktové stránce / v datasheetu výrobce (fáze 115, bez
+   * „odhad dle IEC“), orientačně ze zadání fáze 81, nebo odvozeno ze shodné platformy (sourozenec free@home).
+   */
+  lossFrom?: "katalog" | "manufacturer" | "zadání" | "odvozeno";
   /** Fáze 81: alternativní typ jen pro ruční volbu v katalogu – výpočet ho sám nevybere. */
   manualOnly?: boolean;
   /** Fáze 81: ručně přidaný kus nahradí výchozí modul s tímto id (SysAP na DIN liště místo nástěnného). */
@@ -99,6 +102,9 @@ export interface SmartSystem {
 const FAH = "Katalog ABB 2026 (Domovní elektroinstalační materiál), ABB-free@home";
 /** Fáze 114: ověření na produktové stránce ABB (šířka v modulech, Pv, EAN). */
 const ABB_PAGE_SRC = "ABB new.abb.com – šířka, Pv a EAN ověřeny 2026-11-14";
+/** Fáze 115: celá řada free@home na DIN lištu – typ a EAN z ABB ETIM 9.0, šířka a Pv („Power Loss“) z new.abb.com. */
+const ABB_PAGE_115 = "ABB ETIM 9.0 (typ, EAN) a new.abb.com (šířka, Power Loss) – ověřeno 2026-11-14";
+const abbPage = (id: string) => `https://new.abb.com/products/${id}`;
 const KNX = "ABB i-bus KNX – databáze prvků Eldocku";
 const TAP = "TapHome – zadání fáze 81 (objednací číslo, šířku a Pv ověřte u výrobce)";
 
@@ -114,24 +120,34 @@ export const SMART_SYSTEMS: SmartSystem[] = [
     maxLineM: 1000,
     reserve: 0.2,
     modules: [
-      { id: "fah-sap", role: "system", label: "Systémový modul SysAP 3.0 (sběrnicový + bezdrátový, nástěnný)", typeCode: "SAP.3", articleNumber: "2CKA006200A0871", verified: true, channels: 150, modules: 0, lossW: 3.5, lossFrom: "zadání", source: `${FAH}, str. 271` },
-      // Fáze 81: SysAP s adaptérem SAP-A1.1 na DIN lištu místo nástěnné montáže (119 × 107 mm → 7 M)
-      { id: "fah-sap-din", role: "system", label: "Systémový modul SysAP 3.0 s adaptérem na DIN lištu", typeCode: "SAP.3 + SAP-A1.1", articleNumber: "2CKA006200A0871", verified: true, channels: 150, modules: 7, lossW: 3.5, lossFrom: "zadání", manualOnly: true, replaces: "fah-sap", accessory: { typeCode: "SAP-A1.1", articleNumber: "2CKA006200A0158", label: "Adaptér na DIN lištu pro systémový modul" }, source: "katalog výrobců (SAP.3 119 × 107 × 30 mm, adaptér SAP-A1.1) – šířka 7 M podle rozměru, ověřte" },
-      { id: "fah-psu", role: "psu", label: "Zdroj napájecí sběrnicový s tlumivkou 640 mA", typeCode: "PS-M-64.1.1", articleNumber: "2CDG510001R0011", verified: true, channels: 0, modules: 4, busMa: 640, lossW: 4.5, lossFrom: "zadání", source: `${FAH}, str. 273` },
-      { id: "fah-sa4", role: "switch", label: "Člen akční spínací 4násobný, 16 A", typeCode: "SA-M-4.16.2.2", articleNumber: "2CDG510025R0011", verified: true, channels: 4, modules: 4, ratedA: 16, lossW: 4, lossFrom: "katalog", source: `${FAH}, str. 274; Pv z datasheetu ABB`, datasheetUrl: "https://res.cloudinary.com/sonepar-fr/raw/upload/s---76rZ0LQ--/v1/documents/26/FICHE_STO611130_1.pdf" },
-      { id: "fah-sa8", role: "switch", label: "Člen akční spínací 8násobný, 16 A", typeCode: "SA-M-8.16.2.2", articleNumber: "2CDG510026R0011", verified: true, channels: 8, modules: 8, ratedA: 16, lossW: 7.5, lossFrom: "zadání", source: `${FAH}, str. 274`, datasheetUrl: "https://nizke-napeti.cz.abb.com/clen-akcni-spinaci-radovy-17702/clen-akcni-spinaci-8nasobny-radovy-2cdg510026r0011?mime=pdf" },
-      { id: "fah-sa12", role: "switch", label: "Člen akční spínací 12násobný, 16 A", typeCode: "SA-M-12.16.2.2", articleNumber: "2CDG510027R0011", verified: true, channels: 12, modules: 12, ratedA: 16, lossW: 12, lossFrom: "katalog", source: `${FAH}, str. 274; Pv z datasheetu ABB (zadání uvádí 11 W)`, datasheetUrl: "https://res.cloudinary.com/sonepar-fr/raw/upload/s--80igkr4Q--/v1/documents/26/FICHE_STO611133_1.pdf" },
-      { id: "fah-da4", role: "dim", label: "Člen akční stmívací 4násobný, 4× 210 W (LED na sestupné hraně)", typeCode: "DA/M.4.210.2.1", articleNumber: "2CKA006220A0729", verified: true, channels: 4, modules: 6, maxW: 210, lossW: 6.5, lossFrom: "zadání", source: `${FAH}, str. 275` },
-      { id: "fah-da6", role: "dim", label: "Člen akční stmívací 6násobný, 6× 210 W (LED na sestupné hraně)", typeCode: "DA/M.6.210.2.1", articleNumber: "2CKA006220A0731", verified: true, channels: 6, modules: 8, maxW: 210, lossW: 12, lossFrom: "zadání", source: `${FAH}, str. 275 (zadání fáze 81 ho vede jako 8násobný – katalog: 6násobný)` },
-      { id: "fah-dali", role: "dali", label: "Rozhraní DALI / free@home, max. 16 účastníků", typeCode: "DG-M-1.16.1", articleNumber: "2CDG510012R0011", verified: true, channels: 16, modules: 4, lossW: 2.5, lossFrom: "zadání", source: `${FAH}, str. 275` },
+      // Fáze 115: celá řada ABB-free@home na DIN lištu s Pv z produktových stránek ABB (`lossFrom: "manufacturer"`). Typy
+      // a EAN ze zadání fáze 115, které ABB nevede (DA/M.6.315.2.1, BI-M-2/4/8.24.1, SU-M-4.2.1 / 4.4.1, SAP/S.3 + MDRC-A,
+      // EAN SA-M-12 …323, DA/M …2024 / …2048, PS-M …0166), nahrazují skutečné kusy ABB; 2CDG510006R0011 (SA-M-0.4.1)
+      // a 2CDG510004R0011 (BI-M-4.0.1) ABB nahradil SA-M-4.16.2.2 a BI-M-4.230.1.1.
+      { id: "fah-sap", role: "system", label: "Systémový modul SysAP 3.0 (sběrnicový + bezdrátový, nástěnný)", typeCode: "SAP.3", articleNumber: "2CKA006200A0871", ean: "4011395346075", verified: true, channels: 150, modules: 0, lossW: 3.5, lossFrom: "zadání", source: `${FAH}, str. 271 (Pv výrobce neuvádí)`, datasheetUrl: abbPage("2CKA006200A0871") },
+      // Fáze 81 / 115: SysAP s adaptérem SAP-A1.1 na DIN lištu místo nástěnné montáže – šířka SAP.3 107,2 mm = 6 M
+      { id: "fah-sap-din", role: "system", label: "Systémový modul SysAP 3.0 s adaptérem SAP-A1.1 na DIN lištu (6 M)", typeCode: "SAP.3 + SAP-A1.1", articleNumber: "2CKA006200A0871", ean: "4011395346075", verified: true, channels: 150, modules: 6, lossW: 3.5, lossFrom: "zadání", manualOnly: true, replaces: "fah-sap", accessory: { typeCode: "SAP-A1.1", articleNumber: "2CKA006200A0158", label: "Adaptér na DIN lištu pro systémový modul" }, source: `${ABB_PAGE_115}: SAP.3 šířka 107,2 mm (6 M), adaptér SAP-A1.1 80,6 × 88,7 mm; Pv výrobce neuvádí`, datasheetUrl: abbPage("2CKA006200A0158") },
+      { id: "fah-psu", role: "psu", label: "Zdroj napájecí sběrnicový s tlumivkou 640 mA (4 M)", typeCode: "PS-M-64.1.1", articleNumber: "2CDG510001R0011", ean: "4016779941839", verified: true, channels: 0, modules: 4, busMa: 640, lossW: 9, lossFrom: "manufacturer", source: `${FAH}, str. 273; ${ABB_PAGE_115}`, datasheetUrl: abbPage("2CDG510001R0011") },
+      { id: "fah-sa4", role: "switch", label: "Člen akční spínací 4násobný, 16 A (4 M)", typeCode: "SA-M-4.16.2.2", articleNumber: "2CDG510025R0011", ean: "4053546111309", verified: true, channels: 4, modules: 4, ratedA: 16, lossW: 4, lossFrom: "manufacturer", source: `${FAH}, str. 274; ${ABB_PAGE_115}`, datasheetUrl: abbPage("2CDG510025R0011") },
+      { id: "fah-sa8", role: "switch", label: "Člen akční spínací 8násobný, 16 A (8 M)", typeCode: "SA-M-8.16.2.2", articleNumber: "2CDG510026R0011", ean: "4053546111316", verified: true, channels: 8, modules: 8, ratedA: 16, lossW: 8, lossFrom: "manufacturer", source: `${FAH}, str. 274; ${ABB_PAGE_115}`, datasheetUrl: abbPage("2CDG510026R0011") },
+      { id: "fah-sa12", role: "switch", label: "Člen akční spínací 12násobný, 16 A (12 M)", typeCode: "SA-M-12.16.2.2", articleNumber: "2CDG510027R0011", ean: "4053546111330", verified: true, channels: 12, modules: 12, ratedA: 16, lossW: 12, lossFrom: "manufacturer", source: `${FAH}, str. 274; ${ABB_PAGE_115}`, datasheetUrl: abbPage("2CDG510027R0011") },
+      // Fáze 115: spínací člen s binárními vstupy (8 vstupů + 8 relé 6 A) – alternativa jen pro ruční volbu
+      { id: "fah-sa8io", role: "switch", label: "Člen akční spínací 8násobný 6 A s 8 binárními vstupy (8 M)", typeCode: "SA-M-8.8.1", articleNumber: "2CDG510007R0011", ean: "4016779945561", verified: true, channels: 8, modules: 8, ratedA: 6, lossW: 2, lossFrom: "manufacturer", manualOnly: true, source: `${FAH}, str. 277; ${ABB_PAGE_115}`, datasheetUrl: abbPage("2CDG510007R0011") },
+      { id: "fah-da4", role: "dim", label: "Člen akční stmívací 4násobný, 4× 210 W (LED na sestupné hraně, 6 M)", typeCode: "DA/M.4.210.2.1", articleNumber: "2CKA006220A0729", ean: "4011395251799", verified: true, channels: 4, modules: 6, maxW: 210, lossW: 2.3, lossFrom: "manufacturer", source: `${FAH}, str. 275; ${ABB_PAGE_115}`, datasheetUrl: abbPage("2CKA006220A0729") },
+      { id: "fah-da6", role: "dim", label: "Člen akční stmívací 6násobný, 6× 210 W (LED na sestupné hraně, 8 M)", typeCode: "DA/M.6.210.2.1", articleNumber: "2CKA006220A0731", ean: "4011395252031", verified: true, channels: 6, modules: 8, maxW: 210, lossW: 3.3, lossFrom: "manufacturer", source: `${FAH}, str. 275; ${ABB_PAGE_115}`, datasheetUrl: abbPage("2CKA006220A0731") },
+      { id: "fah-dali", role: "dali", label: "Rozhraní DALI / free@home, max. 16 účastníků (4 M)", typeCode: "DG-M-1.16.1", articleNumber: "2CDG510012R0011", ean: "4016779067409", verified: true, channels: 16, modules: 4, lossW: 2, lossFrom: "manufacturer", source: `${FAH}, str. 275; ${ABB_PAGE_115}`, datasheetUrl: abbPage("2CDG510012R0011") },
       // Fáze 114: žaluzie i topení ve 4M i 8M – typ, šířka, Pv a EAN z produktových stránek ABB a ABB ETIM 9.0 (zadání fáze 114
-      // uvádí typy „BA-M-x.230.2.1“ a jiné EAN – výrobce je nevede; Pv 8M / 12× podle ABB 3 W / 4 W, ne 2,5 W / 3,5 W)
-      { id: "fah-ba4", role: "blind", label: "Člen akční žaluziový 4násobný, 6 A (4 M)", typeCode: "BA-M-4.230.1.1", articleNumber: "2CDG510028R0011", ean: "4053546111347", verified: true, channels: 4, modules: 4, lossW: 1.5, lossFrom: "katalog", source: `${FAH}, str. 276; ${ABB_PAGE_SRC}`, datasheetUrl: "https://new.abb.com/products/2CDG510028R0011" },
-      { id: "fah-ba8", role: "blind", label: "Člen akční žaluziový 8násobný, 6 A (8 M)", typeCode: "BA-M-8.230.1.1", articleNumber: "2CDG510029R0011", ean: "4053546111354", verified: true, channels: 8, modules: 8, lossW: 3, lossFrom: "katalog", source: `${FAH}, str. 276; ${ABB_PAGE_SRC}`, datasheetUrl: "https://new.abb.com/products/2CDG510029R0011" },
-      { id: "fah-ha6", role: "heating", label: "Člen akční topení 6násobný, termoelektrické hlavice (4 M)", typeCode: "HA-M-0.6.1", articleNumber: "2CDG510008R0011", ean: "4016779941815", verified: true, channels: 6, modules: 4, lossW: 2, lossFrom: "katalog", source: `${FAH}, str. 276; ${ABB_PAGE_SRC}`, datasheetUrl: "https://new.abb.com/products/2CDG510008R0011" },
-      { id: "fah-ha12", role: "heating", label: "Člen akční topení 12násobný, termoelektrické hlavice (8 M)", typeCode: "HA-M-0.12.1", articleNumber: "2CDG510009R0011", ean: "4016779941808", verified: true, channels: 12, modules: 8, lossW: 4, lossFrom: "katalog", source: `${FAH}, str. 276; ${ABB_PAGE_SRC}`, datasheetUrl: "https://new.abb.com/products/2CDG510009R0011" },
-      // Fáze 81: binární vstupy čidel – modul free@home BI-M-4.20.1.1 (bezpotenciálové kontakty) místo obecného modulu
-      { id: "fah-bi4", role: "input", label: "Modul binárních vstupů 4násobný s testovacím napětím (bezpotenciálové kontakty)", typeCode: "BI-M-4.20.1.1", articleNumber: "2CDG510014R0011", verified: true, channels: 4, modules: 2, lossW: 1.5, lossFrom: "zadání", source: `${FAH}, str. 277` },
+      // i 115 uvádí typy „BA-M-x.230.2.1“ a jiné EAN – výrobce je nevede; Pv 8M / 12× podle ABB 3 W / 4 W, ne 2,5 W / 3,5 W)
+      { id: "fah-ba4", role: "blind", label: "Člen akční žaluziový 4násobný, 6 A (4 M)", typeCode: "BA-M-4.230.1.1", articleNumber: "2CDG510028R0011", ean: "4053546111347", verified: true, channels: 4, modules: 4, lossW: 1.5, lossFrom: "manufacturer", source: `${FAH}, str. 276; ${ABB_PAGE_SRC}`, datasheetUrl: abbPage("2CDG510028R0011") },
+      { id: "fah-ba8", role: "blind", label: "Člen akční žaluziový 8násobný, 6 A (8 M)", typeCode: "BA-M-8.230.1.1", articleNumber: "2CDG510029R0011", ean: "4053546111354", verified: true, channels: 8, modules: 8, lossW: 3, lossFrom: "manufacturer", source: `${FAH}, str. 276; ${ABB_PAGE_SRC}`, datasheetUrl: abbPage("2CDG510029R0011") },
+      { id: "fah-ha6", role: "heating", label: "Člen akční topení 6násobný, termoelektrické hlavice (4 M)", typeCode: "HA-M-0.6.1", articleNumber: "2CDG510008R0011", ean: "4016779941815", verified: true, channels: 6, modules: 4, lossW: 2, lossFrom: "manufacturer", source: `${FAH}, str. 276; ${ABB_PAGE_SRC}`, datasheetUrl: abbPage("2CDG510008R0011") },
+      { id: "fah-ha12", role: "heating", label: "Člen akční topení 12násobný, termoelektrické hlavice (8 M)", typeCode: "HA-M-0.12.1", articleNumber: "2CDG510009R0011", ean: "4016779941808", verified: true, channels: 12, modules: 8, lossW: 4, lossFrom: "manufacturer", source: `${FAH}, str. 276; ${ABB_PAGE_SRC}`, datasheetUrl: abbPage("2CDG510009R0011") },
+      // Fáze 81 / 115: binární vstupy čidel – BI-M-4.20.1.1 (2 M) a BI-M-10.20.1.1 (4 M) pro bezpotenciálové kontakty,
+      // varianty 10–230 V jen pro ruční volbu
+      { id: "fah-bi4", role: "input", label: "Modul binárních vstupů 4násobný s testovacím napětím (bezpotenciálové kontakty, 2 M)", typeCode: "BI-M-4.20.1.1", articleNumber: "2CDG510014R0011", ean: "4053546111132", verified: true, channels: 4, modules: 2, lossW: 0.25, lossFrom: "manufacturer", source: `${FAH}, str. 277; ${ABB_PAGE_115}`, datasheetUrl: abbPage("2CDG510014R0011") },
+      { id: "fah-bi10", role: "input", label: "Modul binárních vstupů 10násobný s testovacím napětím (bezpotenciálové kontakty, 4 M)", typeCode: "BI-M-10.20.1.1", articleNumber: "2CDG510015R0011", ean: "4053546111156", verified: true, channels: 10, modules: 4, lossW: 0.25, lossFrom: "manufacturer", source: ABB_PAGE_115, datasheetUrl: abbPage("2CDG510015R0011") },
+      { id: "fah-bi4v", role: "input", label: "Modul binárních vstupů 4násobný 10–230 V AC/DC s ručním ovládáním (2 M)", typeCode: "BI-M-4.230.1.1", articleNumber: "2CDG510016R0011", ean: "4053546111170", verified: true, channels: 4, modules: 2, lossW: 0.25, lossFrom: "manufacturer", manualOnly: true, source: `${FAH}, str. 277; ${ABB_PAGE_115}`, datasheetUrl: abbPage("2CDG510016R0011") },
+      { id: "fah-bi10v", role: "input", label: "Modul binárních vstupů 10násobný 10–230 V AC/DC s ručním ovládáním (4 M)", typeCode: "BI-M-10.230.1.1", articleNumber: "2CDG510017R0011", ean: "4053546111194", verified: true, channels: 10, modules: 4, lossW: 0.25, lossFrom: "manufacturer", manualOnly: true, source: ABB_PAGE_115, datasheetUrl: abbPage("2CDG510017R0011") },
       // Fáze 77: LED 24 V PWM – v katalogu free@home na DIN liště není, obecný modul
       genericPwm("fah"),
     ],

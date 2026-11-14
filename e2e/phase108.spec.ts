@@ -78,7 +78,7 @@ test("🏭 nová hala z průvodce se nepřekryje, jde upravit ze seznamu a smaza
   await expect(page.getByTestId("building-card").filter({ hasText: HALL })).toHaveCount(0, { timeout: 30_000 });
 });
 
-test("🧠 Chytrá revize na mapě závodu, v podlaží, /inspections i v plánovači – horizont 30 / 60 / 90 / 180 dnů", async ({ page }) => {
+test("🧠 Chytrá revize v /revize, v agendě 4 závodu, /inspections i v plánovači (fáze 115: ne na mapě ani v podlaží) – horizont 30 / 60 / 90 / 180 dnů", async ({ page }) => {
   test.setTimeout(300_000);
   await startAsAccount(page, "acc-novotny");
   const trip = page.getByTestId("trip-optimizer");
@@ -111,8 +111,13 @@ test("🧠 Chytrá revize na mapě závodu, v podlaží, /inspections i v pláno
   await page.keyboard.press("Escape");
 
   await open(page, "/inspections/planner", trip);
-  await open(page, `${PLANT}`, trip);
-  await open(page, HALL_A_1NP, trip);
+  // Fáze 115: Chytrá revize je v centru „📋 Revize & Plánovač“ (/revize, agenda 4 závodu), ne na mapě areálu ani v podlaží
+  await open(page, "/revize", trip);
+  await open(page, `${PLANT}?faze=4`, trip);
+  await open(page, PLANT, page.getByTestId("plant-strip"));
+  await expect(trip).toHaveCount(0);
+  await open(page, HALL_A_1NP, page.getByRole("group", { name: "Filtr stavu" }));
+  await expect(trip).toHaveCount(0);
 });
 
 test("🖊️ formulář technika: profil TIČR, měření na 1 klik, podpis a PIN → uzamčený protokol s pečetí SHA-256; TIČR report a zneplatnění", async ({ page }) => {

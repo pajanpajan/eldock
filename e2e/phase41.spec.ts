@@ -120,6 +120,8 @@ test("registrace výrobního závodu: firma z ARES, nový závod a Technický ř
   await expect(page).toHaveURL(/\/plant\//, { timeout: 30_000 });
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Závod Liberec – Strojírna");
   const nav = page.getByRole("navigation", { name: "Hlavní navigace" });
+  // Fáze 115: Studio je v sekci „🗺️ Areál & Budovy“
+  await nav.getByTestId("nav-section-areal").getByRole("button").click();
   await expect(nav.getByRole("link", { name: /Studio/ })).toBeVisible();
   await expect(nav.getByRole("link", { name: /Panel Builder/ })).toHaveCount(0);
   // Jen vlastní závod – demo závody Jablonec / Liberec nejsou vidět ani přes přímou adresu

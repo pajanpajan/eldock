@@ -185,8 +185,8 @@ describe("fáze 114 – žaluziové BA-M a topné HA-M aktory ABB-free@home ve 4
     const abb = { ...defaultConfig("SMART_HOME", { manufacturer: "ABB", modules: 4 }), smartSystem: "abb_freeathome", smartRole: "blind" };
     const field = (config: ItemConfig) => configFields(config).find((entry) => entry.key === "channels")!;
     expect(field(abb).label).toBe("Počet kanálů / šířka");
-    expect(field(abb).options.map((option) => option.label)).toEqual(["Libovolný", "4× · 4M", "8× · 8M"]);
-    expect(field({ ...abb, smartRole: "heating" }).options.map((option) => option.label)).toEqual(["Libovolný", "6× · 4M", "12× · 8M"]);
+    expect(field(abb).options.map((option) => option.label)).toEqual(["Libovolný", "4× (4M)", "8× (8M)"]);
+    expect(field({ ...abb, smartRole: "heating" }).options.map((option) => option.label)).toEqual(["Libovolný", "6× (4M)", "12× (8M)"]);
     const catalog: CatalogLike[] = CATALOG.filter((row) => row.manufacturer === "ABB").map((row, index) => ({
       id: `a${index}`,
       manufacturer: row.manufacturer,
@@ -211,10 +211,10 @@ describe("fáze 114 – žaluziové BA-M a topné HA-M aktory ABB-free@home ve 4
       const option = field(config).options.find((entry) => entry.label === label)!;
       return matchConfig(catalog, withOption(config, option.patch));
     };
-    expect(pick(abb, "4× · 4M")).toMatchObject({ typeCode: "BA-M-4.230.1.1", modulesCount: 4 });
-    expect(pick(abb, "8× · 8M")).toMatchObject({ typeCode: "BA-M-8.230.1.1", modulesCount: 8 });
-    expect(pick({ ...abb, smartRole: "heating" }, "6× · 4M")).toMatchObject({ typeCode: "HA-M-0.6.1", modulesCount: 4 });
-    expect(pick({ ...abb, smartRole: "heating" }, "12× · 8M")).toMatchObject({ typeCode: "HA-M-0.12.1", modulesCount: 8 });
+    expect(pick(abb, "4× (4M)")).toMatchObject({ typeCode: "BA-M-4.230.1.1", modulesCount: 4 });
+    expect(pick(abb, "8× (8M)")).toMatchObject({ typeCode: "BA-M-8.230.1.1", modulesCount: 8 });
+    expect(pick({ ...abb, smartRole: "heating" }, "6× (4M)")).toMatchObject({ typeCode: "HA-M-0.6.1", modulesCount: 4 });
+    expect(pick({ ...abb, smartRole: "heating" }, "12× (8M)")).toMatchObject({ typeCode: "HA-M-0.12.1", modulesCount: 8 });
     // EAN z oficiálních dat ABB (zadání uvádělo neexistující typy „.2.1“ a jiné EAN)
     const ean = (article: string) => CATALOG.find((row) => row.articleNumber === article)?.ean;
     expect([ean("2CDG510028R0011"), ean("2CDG510029R0011"), ean("2CDG510008R0011"), ean("2CDG510009R0011")]).toEqual(["4053546111347", "4053546111354", "4016779941815", "4016779941808"]);

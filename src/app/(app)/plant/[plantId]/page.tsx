@@ -1,17 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Building2, Cpu, Factory, Plus, Hourglass, MousePointerClick, TriangleAlert, ScanLine } from "lucide-react";
+import { Building2, Factory, Plus, MousePointerClick, ScanLine } from "lucide-react";
 
 import { EmptyState } from "@/components/common/EmptyState";
-import { KpiTile } from "@/components/common/KpiTile";
-import { LocationBreadcrumb } from "@/components/common/LocationBreadcrumb";
-import { PageHeader } from "@/components/common/PageHeader";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { StatusLegend } from "@/components/common/StatusLegend";
-import { InspectionWatcher } from "@/components/inspections/InspectionWatcher";
 import { PredictiveWatch } from "@/components/inspections/PredictiveWatch";
-import { SmartRevisionTripOptimizer } from "@/components/inspections/SmartRevisionTripOptimizer";
+import { RevisionHub } from "@/components/inspections/RevisionHub";
 import { getPredictiveSummary } from "@/server/queries/health";
 import { CampusExplorer } from "@/components/map/campus/CampusExplorer";
 import { PlantOnboardingLoader } from "@/components/plant/PlantOnboardingLoader";
@@ -22,12 +18,11 @@ import { PlantLoadSimulator } from "@/components/plant/PlantLoadSimulator";
 import { PlantMachineryRegulation } from "@/components/plant/PlantMachineryRegulation";
 import { PlantPhaseSwitcher } from "@/components/plant/PlantPhaseSwitcher";
 import { Button } from "@/components/ui/button";
-import { PLANT_PHASE_PARAM, plantPhaseOf, type PlantPhaseCounts } from "@/lib/plant-phases";
-import { EQUIPMENT_STATUS } from "@/lib/status";
+import { formatCount } from "@/lib/format";
+import { PLANT_PHASE_PARAM, plantPhaseHref, plantPhaseOf, type PlantPhaseCounts } from "@/lib/plant-phases";
+import { REVISION_BUILDING_PARAM, REVISION_TAB_PARAM, revisionTabOf } from "@/lib/revision-hub";
 import { getPlantCableNodes } from "@/server/queries/health";
-import { pragueToday } from "@/lib/inspection";
 import { getInspectionWatch } from "@/server/queries/inspections";
-import { getTripItems } from "@/server/queries/revision-trip";
 import { getPlantOverview, getPlantPower } from "@/server/queries/plant";
 import { getPlantAgenda } from "@/server/queries/plant-agenda";
 import { getFeatures } from "@/server/modules";
@@ -42,6 +37,8 @@ export async function generateMetadata({ params }: PageProps<"/plant/[plantId]">
 // Level 1 – Půdorys areálu.
 // Fáze 98: správa závodu ve 4 agendách (`?faze=`) – nad plochou přepínač fází, stránka ukazuje vždy jen jednu agendu
 // a načítá jen její data (mapa a napájení ve fázi 1, prediktivní údržba a kabelový strom simulátoru ve fázi 4).
+// Fáze 115: horní část závodu je jeden kompaktní pruh (název, KPI pilulky, Import BIM a + Přidat budovu) a hned pod ním
+// začíná mapa areálu; Chytrá revize a celá revizní agenda jsou jen v „📋 Revize & Plánovač“ (agenda 4 a `/revize`).
 export default async function PlantPage({ params, searchParams }: PageProps<"/plant/[plantId]">) {
   const [{ plantId }, query, account, modules] = await Promise.all([params, searchParams, getCurrentAccount(), getFeatures()]);
   const { pruvodce } = query;
@@ -54,16 +51,11 @@ export default async function PlantPage({ params, searchParams }: PageProps<"/pl
   const [plant, watch, agenda] = await Promise.all([getPlantOverview(plantId, account.types), getInspectionWatch(plantId, now, account.types), getPlantAgenda(plantId, account.types)]);
   if (!plant) notFound();
   const showInspections = account.definition.showInspections && !account.definition.fieldView;
-  const [power, predictive, cableNodes, tripItems] = await Promise.all([
+  const [power, predictive, cableNodes] = await Promise.all([
     phase === 1 ? getPlantPower(plantId, account.types) : Promise.resolve([]),
     phase === 4 ? getPredictiveSummary(plantId, account.types) : Promise.resolve(null),
     phase === 4 ? getPlantCableNodes(plantId) : Promise.resolve([]),
-    // Fáze 108: Chytrá revize (optimalizace výjezdu technika) na mapě závodu i v agendě revizí
-    showInspections && (phase === 1 || phase === 4) ? getTripItems(plantId, now, account.types) : Promise.resolve([]),
   ]);
-  const trip = showInspections ? (
-    <SmartRevisionTripOptimizer items={tripItems} today={pragueToday(now)} canRecord={account.can("recordInspection")} className="mb-6" />
-  ) : null;
   const counts: PlantPhaseCounts = {
     buildings: plant.buildings.length,
     boards: agenda.filter((row) => row.group === "boards").length,
@@ -79,34 +71,61 @@ export default async function PlantPage({ params, searchParams }: PageProps<"/pl
   const canBuild = account.can("studio") && modules.on("enterprise.studio");
   const canAudit = account.can("audit") && modules.on("inspections.audit");
   const guide = pruvodce === "zavod" ? "build" : pruvodce === "mise" ? "mission" : pruvodce ? "choose" : null;
+  const pill = "rounded-full border border-border bg-background/60 px-2 py-0.5 text-xs font-semibold whitespace-nowrap";
+  const revisionTab = revisionTabOf(query[REVISION_TAB_PARAM]);
+  const revisionBuilding = Array.isArray(query[REVISION_BUILDING_PARAM]) ? query[REVISION_BUILDING_PARAM][0] : query[REVISION_BUILDING_PARAM];
 
   return (
     <PageTransition>
-      <PageHeader
-        breadcrumb={<LocationBreadcrumb items={[{ label: plant.name }]} />}
-        title={plant.name}
-        description={[plant.customerName, plant.address, plant.city].filter(Boolean).join(" · ")}
-        actions={
-          // Fáze 98: založení závodu, budovy a import BIM patří do agendy 1 (mapa závodu)
-          phase === 1 && account.can("studio") && modules.on("enterprise.studio") ? (
-            <div className="flex flex-wrap gap-2">
-              {/* Fáze 95: import BIM (IFC) – budova, místnosti, zdroje, rozváděče, trasy a stroje z modelu */}
-              <BimImportButtons plantId={plant.id} canPanelBuilder={account.can("panelBuilder") && modules.on("enterprise.ai_panel_builder")} autoSample={autoSample} />
-              <Button asChild size="lg" variant="outline" className="touch-target gap-2">
-                <Link href={`/studio?plant=${plant.id}&new=plant`}>
-                  <Factory className="size-4" aria-hidden />+ Nový závod od nuly
-                </Link>
-              </Button>
-              <Button asChild size="lg" className="touch-target gap-2">
-                <Link href={`/studio?plant=${plant.id}`}>
-                  <Plus className="size-4" aria-hidden />
-                  Přidat budovu do areálu
-                </Link>
-              </Button>
-            </div>
-          ) : null
-        }
-      />
+      {/* Fáze 115: jeden kompaktní pruh – název závodu, KPI pilulky a akce mapy (Import BIM, + Přidat budovu) */}
+      <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border border-border bg-card px-3 py-1.5" data-testid="plant-strip">
+        <div className="flex max-w-[16rem] min-w-0 flex-col">
+          <h1 className="truncate text-lg leading-tight font-bold">{plant.name}</h1>
+          <span className="truncate text-xs text-muted-foreground" title={[plant.customerName, plant.address, plant.city].filter(Boolean).join(" · ")}>
+            {[plant.customerName, plant.address, plant.city].filter(Boolean).join(" · ")}
+          </span>
+        </div>
+        {account.definition.fieldView ? null : (
+          <section aria-label="Souhrn závodu" className="flex flex-wrap items-center gap-1.5" data-testid="plant-kpis">
+            <span className={pill} data-testid="plant-kpi-buildings">
+              🏢 {formatCount(plant.buildings.length, ["budova", "budovy", "budov"])}
+            </span>
+            <span className={pill} data-testid="plant-kpi-equipment">
+              ⚙️ {formatCount(plant.counts.total, ["zařízení", "zařízení", "zařízení"])}
+            </span>
+            <span className={pill} data-testid="plant-kpi-redlines">
+              🖍️ {formatCount(counts.redlines, ["změna Červenky", "změny Červenky", "změn Červenky"])}
+            </span>
+            {plant.counts.pending ? (
+              <span className={`${pill} border-amber-400/60 text-amber-300`} title="Nahlášená změna, výkres zatím neodpovídá">
+                ⚠️ {plant.counts.pending} k aktualizaci
+              </span>
+            ) : null}
+            {plant.counts.waiting ? (
+              <span className={`${pill} border-sky-400/60 text-sky-300`} title="Nová revize čeká na potvrzení údržbou">
+                ⏳ {plant.counts.waiting} ke schválení
+              </span>
+            ) : null}
+          </section>
+        )}
+        {/* Fáze 98: založení budovy a import BIM patří do agendy 1 (mapa závodu) */}
+        {phase === 1 && canBuild ? (
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            {/* Fáze 95: import BIM (IFC) – budova, místnosti, zdroje, rozváděče, trasy a stroje z modelu */}
+            <BimImportButtons plantId={plant.id} canPanelBuilder={account.can("panelBuilder") && modules.on("enterprise.ai_panel_builder")} autoSample={autoSample} compact />
+            <Button asChild size="sm" className="touch-target gap-2">
+              <Link href={`/studio?plant=${plant.id}`} aria-label="Přidat budovu do areálu">
+                <Plus className="size-4" aria-hidden />
+                Přidat budovu
+              </Link>
+            </Button>
+            <Link href={`/studio?plant=${plant.id}&new=plant`} className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="+ Nový závod od nuly" title="+ Nový závod od nuly">
+              <Factory className="size-3.5" aria-hidden />
+              <span className="hidden 2xl:inline">+ Nový závod</span>
+            </Link>
+          </div>
+        ) : null}
+      </div>
 
       {/* Fáze 92: nový závod – průvodce založením a mise noční poruchy (dialog i z horní lišty „🧭 Průvodce závodem“) */}
       <PlantOnboardingLoader plantId={plant.id} plantName={plant.name} canBuild={canBuild} canAudit={canAudit} empty={plant.buildings.length === 0} open={guide} />
@@ -117,86 +136,64 @@ export default async function PlantPage({ params, searchParams }: PageProps<"/pl
       {phase === 3 ? <PlantDocsBoard rows={agenda} /> : null}
       {phase === 4 ? (
         <div className="flex flex-col gap-4" data-testid="plant-compliance">
-          {trip}
+          {/* Fáze 115: 📋 Revize & Plánovač – semafor budov, Chytrá revize, lhůtník, Hlídač spotřebičů a TIČR report */}
           {showInspections ? (
-            <div>
-              <InspectionWatcher watch={watch} />
-              <p className="mt-2 flex flex-wrap gap-3 text-sm">
-                <Link href="/inspections" className="text-primary underline-offset-2 hover:underline" data-testid="plant-inspections-link">
-                  📅 Všechny revize a lhůtník →
-                </Link>
-                {canAudit ? (
-                  <Link href="/inspections/audit-report" className="text-primary underline-offset-2 hover:underline" data-testid="plant-audit-link">
-                    📖 Kniha revizí (auditní report pro TIČR / SÚIP) →
-                  </Link>
-                ) : null}
-              </p>
-              {predictive && (predictive.components.length || predictive.cables.length) ? (
-                <div className="mt-3">
-                  <PredictiveWatch summary={predictive} />
-                </div>
-              ) : null}
-            </div>
+            <RevisionHub
+              plant={{ id: plant.id, name: plant.name, buildings: plant.buildings.map(({ id, name }) => ({ id, name })) }}
+              base={plantPhaseHref(plant.id, 4)}
+              tab={revisionTab}
+              buildingId={revisionBuilding ?? null}
+              now={now}
+              access={{
+                canRecord: account.can("recordInspection"),
+                canAudit,
+                canPlanner: account.can("planner") && modules.on("inspections.planner"),
+                canRapid: account.can("rapid") && modules.on("inspections.planner"),
+                canImport: (account.can("recordInspection") || account.can("studio")) && modules.on("enterprise.csv_import"),
+                showReports: modules.on("inspections.pdf_reports"),
+                alerts: modules.on("inspections.alerts"),
+                types: account.types,
+              }}
+            />
           ) : null}
+          {showInspections && predictive && (predictive.components.length || predictive.cables.length) ? <PredictiveWatch summary={predictive} /> : null}
           <PlantMachineryRegulation rows={agenda} now={now} />
           <PlantLoadSimulator nodes={cableNodes} boards={agenda.filter((row) => row.type === "SWITCHBOARD").map(({ id, tag, name }) => ({ id, tag, name }))} initialKw={initialKw} />
         </div>
       ) : null}
 
-      {/* Fáze 98: agenda 1 – mapa závodu (souhrn, vrstvy napájení Síť / DA / UPS, budovy a patra) */}
+      {/* Fáze 98: agenda 1 – mapa závodu (vrstvy napájení Síť / DA / UPS, budovy a patra) hned pod pruhem */}
       {phase === 1 ? (
         <>
           {plant.buildings.length === 0 ? (
-        <EmptyState
-          className="mb-6"
-          icon={Building2}
-          title="Areál zatím nemá žádné budovy"
-          description={account.can("studio") ? "Navrhněte první budovu ve Studiu výstavby – umístíte ji tažením na mapě areálu." : "Budovy přidává technický ředitel nebo vedoucí údržby ve Studiu výstavby."}
-        />
-      ) : null}
-
-      {account.definition.fieldView ? (
-        <p className="mb-6 flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-3 text-sm text-muted-foreground" data-testid="field-hint">
-          <ScanLine className="size-5 shrink-0 text-primary" aria-hidden />
-          Naskenujte QR štítek na rozváděči nebo stroji – otevře se rovnou jeho schéma. Případně vyberte budovu v areálu níže.
-        </p>
-      ) : (
-      <section aria-label="Souhrn závodu" className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiTile label="Budovy" value={plant.buildings.length} icon={Building2} />
-        <KpiTile label="Zařízení celkem" value={plant.counts.total} icon={Cpu} />
-        <KpiTile
-          label={EQUIPMENT_STATUS.PENDING_UPDATE.label}
-          value={plant.counts.pending}
-          hint="Nahlášená změna, výkres zatím neodpovídá"
-          icon={TriangleAlert}
-          accent={EQUIPMENT_STATUS.PENDING_UPDATE.text}
-        />
-        <KpiTile
-          label={EQUIPMENT_STATUS.WAITING_APPROVAL.label}
-          value={plant.counts.waiting}
-          hint="Nová revize čeká na potvrzení údržbou"
-          icon={Hourglass}
-          accent={EQUIPMENT_STATUS.WAITING_APPROVAL.text}
-        />
-      </section>
-      )}
-
-          {plant.buildings.length ? trip : null}
+            <EmptyState
+              className="mb-6"
+              icon={Building2}
+              title="Areál zatím nemá žádné budovy"
+              description={account.can("studio") ? "Navrhněte první budovu ve Studiu výstavby – umístíte ji tažením na mapě areálu." : "Budovy přidává technický ředitel nebo vedoucí údržby ve Studiu výstavby."}
+            />
+          ) : null}
+          {account.definition.fieldView ? (
+            <p className="mb-4 flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-3 text-sm text-muted-foreground" data-testid="field-hint">
+              <ScanLine className="size-5 shrink-0 text-primary" aria-hidden />
+              Naskenujte QR štítek na rozváděči nebo stroji – otevře se rovnou jeho schéma. Případně vyberte budovu v areálu níže.
+            </p>
+          ) : null}
           <CampusExplorer
-        plant={plant}
-        power={power}
-        canEdit={canBuild}
-        legend={
-          <StatusLegend
-            extra={
-              <span className="flex items-center gap-2">
-                <MousePointerClick className="size-3.5" aria-hidden />
-                Klikněte na budovu: vícepodlažní → výběr patra, jednopodlažní → půdorys
-              </span>
+            plant={plant}
+            power={power}
+            canEdit={canBuild}
+            legend={
+              <StatusLegend
+                extra={
+                  <span className="flex items-center gap-2">
+                    <MousePointerClick className="size-3.5" aria-hidden />
+                    Klikněte na budovu: vícepodlažní → výběr patra, jednopodlažní → půdorys
+                  </span>
+                }
+              />
             }
           />
-        }
-      />
         </>
       ) : null}
     </PageTransition>

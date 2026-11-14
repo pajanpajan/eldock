@@ -45,6 +45,8 @@ export interface Rect {
 export interface Wire {
   /** Nadřazený prvek (nebo „incomer“ pro hlavní přívod). */
   from: string;
+  /** Fáze 115: napájený přístroj u odbočky (`drop`). */
+  to?: string;
   kind: "incomer" | "feed" | "bus" | "drop";
   points: [number, number][];
 }
@@ -167,7 +169,7 @@ export const rootsOf = <T extends WiringNode>(nodes: readonly T[]) => nodes.filt
  * Modré spojnice: přívod do kořene, pro každý nadřazený prvek propojka z jeho výstupu (spodní svorky
  * při přívodu shora) do mezery u vstupů potomků a hřebenová sběrnice s odbočkami ke každému potomkovi.
  */
-export function wiringPaths(layout: VectorLayout, items: readonly LayoutItem[], nodes: readonly WiringNode[], incomer: IncomerFrom): Wire[] {
+export function wiringPaths(layout: VectorLayout, items: readonly LayoutItem[], nodes: readonly WiringNode[], incomer: IncomerFrom, combFed: ReadonlySet<string> = new Set()): Wire[] {
   const wires: Wire[] = [];
   const down = incomer === "TOP";
   const railOf = new Map(items.map((item) => [item.id, item.dinRailIndex]));
@@ -217,7 +219,8 @@ export function wiringPaths(layout: VectorLayout, items: readonly LayoutItem[], 
   parents.forEach((parent, lane) => {
     const from = rectOf(parent.id);
     if (!from) return;
-    const children = items.filter((item) => nodes.find((node) => node.id === item.id)?.parentItemId === parent.id && rectOf(item.id));
+    // Fáze 115: přístroj napájený hřebenem (jistič za chráničem na téže liště, další jističochránič řady) bez spojnice
+    const children = items.filter((item) => nodes.find((node) => node.id === item.id)?.parentItemId === parent.id && rectOf(item.id) && !combFed.has(item.id));
     const byRail = new Map<number, LayoutItem[]>();
     for (const child of children) byRail.set(child.dinRailIndex, [...(byRail.get(child.dinRailIndex) ?? []), child]);
     const px = cx(from);
@@ -254,7 +257,7 @@ export function wiringPaths(layout: VectorLayout, items: readonly LayoutItem[], 
       wires.push({ from: parent.id, kind: "bus", points: [[busFrom, y], [busTo, y]] });
       for (const child of group) {
         const rect = rectOf(child.id)!;
-        wires.push({ from: parent.id, kind: "drop", points: [[cx(rect), y], [cx(rect), inEdge(rect)]] });
+        wires.push({ from: parent.id, to: child.id, kind: "drop", points: [[cx(rect), y], [cx(rect), inEdge(rect)]] });
       }
     }
   });

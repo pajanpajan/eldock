@@ -30,6 +30,7 @@ import {
 import { planBusbars } from "@/lib/panel-builder/pe-n-busbars";
 import { supplyOf } from "@/lib/panel-builder/supply";
 import type { IncomerFrom } from "@/lib/panel-builder/vector-layout";
+import type { CombSetting } from "@/lib/panel-builder/comb-busbars";
 import type { VectorDevice } from "@/lib/panel-builder/vector-symbols";
 import { cn } from "@/lib/utils";
 import { saveTreeAction, setIncomerAction } from "@/server/actions/panel-builder";
@@ -63,6 +64,7 @@ export function TreeEditor({
   networkSystem,
   supplyPhases = 3,
   incomerFrom,
+  combs,
 }: {
   projectId: string;
   initial: TreeNode[];
@@ -74,6 +76,8 @@ export function TreeEditor({
   /** Fáze 55: počet fází přívodu (1 / 3) – sběrnice PE / N a soustava. */
   supplyPhases?: number;
   incomerFrom: IncomerFrom;
+  /** Fáze 115: volba hřebenu lišt (Bez hřebenu = jističe s vodiči i ve stromu zapojení). */
+  combs?: Record<number, CombSetting>;
 }) {
   const router = useRouter();
   const [nodes, setNodes] = useState(initial);
@@ -372,6 +376,8 @@ export function TreeEditor({
             nodes={nodes}
             incomer={incomer}
             busbars={busbars}
+            combs={combs}
+            supplyPhases={supplyPhases === 1 ? 1 : 3}
             selectedIds={selected}
             pickHint={picking ? "🎯 Klikněte na přístroj, do kterého vede hlavní přívod (odpínač, 3P jistič nebo hlavní chránič). Esc = zrušit." : null}
             outlineFor={(device) => (device.id === root?.id ? { color: "#38bdf8" } : connected.has(device.id) ? null : { color: "#ef4444", dashed: true })}

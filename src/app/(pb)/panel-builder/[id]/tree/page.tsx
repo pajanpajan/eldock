@@ -13,6 +13,7 @@ import { treeNodeFrom } from "@/lib/panel-builder/tree";
 import { isIncomerFrom } from "@/lib/panel-builder/vector-layout";
 import { vectorDeviceFrom } from "@/lib/panel-builder/vector-symbols";
 import { railCapacities } from "@/lib/panel-builder/rails";
+import { parseRailLayout } from "@/lib/panel-builder/rail-layout";
 import { getPanelProject } from "@/server/queries/panel-builder";
 
 export async function generateMetadata({ params }: PageProps<"/panel-builder/[id]/tree">): Promise<Metadata> {
@@ -43,6 +44,8 @@ export default async function PanelTreePage({ params }: PageProps<"/panel-builde
         simultaneity={project.simultaneityFactor}
         networkSystem={project.networkSystem}
         supplyPhases={project.supplyPhases}
+        // Fáze 115: volba hřebenu lišt i ve stromu zapojení (bez hřebenu = jističe s vodiči)
+        combs={parseRailLayout(project.railLayoutJson, railCapacities(project).length).combs}
       />
       {/* Fáze 75: výrazný další krok dole na stránce */}
       <NextStepBar project={project} current="tree" />

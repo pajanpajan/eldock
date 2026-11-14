@@ -172,6 +172,12 @@ export function CascadePicker({
                 ))}
               </div>
               {fieldExtra?.(field)}
+              {/* Fáze 115: hřeben se nevkládá jako modul – volba v záhlaví lišty */}
+              {config?.category === "ACCESSORY" && field.key === "moduleSubtype" ? (
+                <p className="text-[11px] text-muted-foreground" data-testid="cascade-comb-hint">
+                  ⫼ Propojovací hřeben a koncovky PS-END se na lištu nevkládají – zasouvají se do svorek přístrojů. Režim hřebenu zvolíte v záhlaví lišty tlačítkem „Hřeben: …“ a díly se započítají do kusovníku i nářezového listu.
+                </p>
+              ) : null}
             </section>
           ))}
         </>

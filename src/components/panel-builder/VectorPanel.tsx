@@ -7,11 +7,12 @@ import { cn } from "@/lib/utils";
 import { MAX_RAIL_MODULES, MIN_RAIL_MODULES, RAIL_PRESETS } from "@/lib/panel-builder/rails";
 import { FIELD_GAP, pathOf, vectorLayout, wiringPaths, VECTOR, type IncomerFrom, type Rect, type WiringNode } from "@/lib/panel-builder/vector-layout";
 import { symbolTexts, type VectorDevice } from "@/lib/panel-builder/vector-symbols";
-import { combLabel, combRuns, nextCombSetting, phaseBadges, type CombNode, type CombSetting } from "@/lib/panel-builder/comb-busbars";
+import { combFedIds, combForks, combLabel, combRuns, combShortLabel, phaseBadges, poleCount, type CombNode, type CombSetting } from "@/lib/panel-builder/comb-busbars";
 
 import type { BusbarPlan } from "@/lib/panel-builder/pe-n-busbars";
 
 import { BusbarStrip } from "./BusbarStrip";
+import { RailCombMenu } from "./RailCombMenu";
 import { VECTOR_THEMES, VectorModuleSymbol, type VectorTheme } from "./VectorModuleSymbol";
 
 export interface SymbolOutline {
@@ -123,16 +124,15 @@ export function VectorPanel({
   const [theme, setTheme] = useState<VectorTheme>("dark");
   const colors = VECTOR_THEMES[theme];
   const layout = useMemo(() => vectorLayout(devices, rails, modulesPerRail, { fields, partition }), [devices, rails, modulesPerRail, fields, partition]);
-  const wires = useMemo(() => (nodes ? wiringPaths(layout, devices, nodes, incomer) : []), [layout, devices, nodes, incomer]);
-  // Fáze 112: propojovací hřebeny (bez „Vyp“ kvůli poloze tlačítka) a odznaky fází jističů
+  // Fáze 112 / 115: propojovací hřebeny (volba lišty „Bez hřebenu“ je zruší) a odznaky fází jističů
   const combPlan = useMemo(() => {
     const treeNodes = nodes ?? combNodes ?? devices.map((device) => ({ id: device.id, parentItemId: null }));
     const settings = combs ?? {};
-    const shown = Object.fromEntries(Object.entries(settings).filter(([, setting]) => setting !== "OFF")) as Record<number, CombSetting>;
-    const runs = combRuns(devices, treeNodes, shown, supplyPhases);
-    const active = runs.filter((run) => settings[run.rail] !== "OFF");
-    return { runs, active, badges: phaseBadges(devices, active, supplyPhases), settings };
+    const runs = combRuns(devices, treeNodes, settings, supplyPhases);
+    return { runs, active: runs, badges: phaseBadges(devices, runs, supplyPhases), settings };
   }, [devices, nodes, combNodes, combs, supplyPhases]);
+  // Fáze 115: přístroj napájený hřebenem nedostane navíc modrou spojnici od napájecího přístroje (duplicitní propojení)
+  const wires = useMemo(() => (nodes ? wiringPaths(layout, devices, nodes, incomer, combFedIds(combPlan.active)) : []), [layout, devices, nodes, incomer, combPlan]);
   const svg = useRef<SVGSVGElement>(null);
   const [drag, setDrag] = useState<{ ids: string[]; startX: number; startY: number; x: number; y: number; active: boolean; pointerId: number; origin: VectorDevice; additive: boolean } | null>(null);
   const [editing, setEditing] = useState<{ id: string; value: string } | null>(null);
@@ -380,6 +380,7 @@ export function VectorPanel({
                   markerEnd={wire.kind === "incomer" ? `url(#arrow-${uid})` : undefined}
                   opacity={selectedIds?.size && wire.from !== "incomer" && !selectedIds.has(wire.from) ? 0.55 : 1}
                   data-wire={wire.kind}
+                  data-to={wire.to}
                   data-from={wire.from}
                 />
               ))}
@@ -427,30 +428,50 @@ export function VectorPanel({
               );
             })}
 
-            {/* Fáze 112: měděné hřebenové přípojnice s vidličkami do svorek (pod výstupy chrániče, u RCBO na vstupu) */}
+            {/* Fáze 112 / 115: měděné hřebenové přípojnice – vidličky jen do svorek vodičů hřebenu (4P chránič s 1P / 3P
+                jističi bez N), úsek končí za vidličkou posledního přístroje skupiny (jasná mezera před dalším přístrojem),
+                N chrániče vede modrý vodič na nulový můstek N-FIx */}
             <g data-testid="vector-combs" pointerEvents="none">
               {combPlan.active.map((run) => {
-                const rects = run.ids.map((id) => layout.rects.get(id)).filter((rect): rect is Rect => Boolean(rect));
-                if (rects.length < 2) return null;
-                const x0 = Math.min(...rects.map((rect) => rect.x)) + 3;
-                const x1 = Math.max(...rects.map((rect) => rect.x + rect.w)) - 3;
-                const edge = run.input ? Math.min(...rects.map((rect) => rect.y)) : Math.max(...rects.map((rect) => rect.y + rect.h));
-                const barY = run.input ? edge - 9 : edge + 3;
                 const byId = new Map(devices.map((device) => [device.id, device]));
+                const members = run.ids.flatMap((id) => {
+                  const rect = layout.rects.get(id);
+                  const device = byId.get(id);
+                  return rect && device ? [{ rect, device }] : [];
+                });
+                if (members.length < 2) return null;
+                const edge = run.input ? Math.min(...members.map((member) => member.rect.y)) : Math.max(...members.map((member) => member.rect.y + member.rect.h));
+                const forks = members.flatMap(({ rect, device }) => combForks(device, run).map((pole) => rect.x + ((pole + 0.5) * rect.w) / poleCount(device.poles)));
+                const x0 = Math.min(...forks) - 5;
+                const x1 = Math.max(...forks) + 5;
+                const barY = run.input ? edge - 9 : edge + 3;
+                const head = members[0];
+                const headPoles = poleCount(head.device.poles);
+                const neutralStub = !run.input && head.device.category === "RCD" && !run.conductors.includes("N") && /\+N|^2P$|^4P$/.test(head.device.poles ?? "");
+                const neutralX = head.rect.x + ((headPoles - 0.5) * head.rect.w) / headPoles;
+                const labelX = neutralStub ? members[1].rect.x + 3 : x0 + 4;
+                const room = x1 - labelX;
+                const full = combLabel(run);
+                const medium = combShortLabel(run, "medium");
+                const label = room >= full.length * 4.7 ? full : room >= medium.length * 4.7 ? medium : combShortLabel(run, "short");
                 return (
-                  <g key={`${run.rail}-${run.ids[0]}`} data-testid="comb-busbar" data-comb-rail={run.rail} data-kind={run.kind} data-count={run.ids.length}>
-                    {rects.map((rect, index) => {
-                      const device = byId.get(run.ids[index]);
-                      const poles = Math.max(1, Math.min(4, Number((device?.poles ?? "1").match(/\d/)?.[0] ?? 1) + (/\+N/.test(device?.poles ?? "") ? 1 : 0)));
-                      return Array.from({ length: poles }, (_, pole) => {
-                        const cx = rect.x + ((pole + 0.5) * rect.w) / poles;
-                        return <rect key={`${index}-${pole}`} x={cx - 2} y={run.input ? edge - 3 : edge - 6} width={4} height={run.input ? 9 : 9} fill="#c27c3a" stroke="#7c4a1e" strokeWidth={0.6} />;
-                      });
-                    })}
+                  <g key={`${run.rail}-${run.ids[0]}`} data-testid="comb-busbar" data-comb-rail={run.rail} data-kind={run.kind} data-count={run.ids.length} data-ids={run.ids.join(" ")} data-x0={Math.round(x0)} data-x1={Math.round(x1)} data-conductors={run.conductors.join(" ")}>
+                    {run.note ? <title>{run.note}</title> : null}
+                    {forks.map((x, index) => (
+                      <rect key={index} x={x - 2} y={run.input ? edge - 3 : edge - 6} width={4} height={9} fill="#c27c3a" stroke="#7c4a1e" strokeWidth={0.6} data-testid="comb-fork" />
+                    ))}
                     <rect x={x0} y={barY} width={x1 - x0} height={6} rx={1.5} fill={`url(#copper-${uid})`} stroke="#7c4a1e" strokeWidth={0.8} />
-                    <text x={x0 + 4} y={barY + (run.input ? -3 : 15)} fontSize={8.5} fontWeight={700} fill="#d6a77a" fontFamily="ui-sans-serif, system-ui, sans-serif">
-                      {combLabel(run)}
+                    <text x={labelX} y={barY + (run.input ? -3 : 15)} fontSize={8.5} fontWeight={700} fill="#d6a77a" fontFamily="ui-sans-serif, system-ui, sans-serif">
+                      {label}
                     </text>
+                    {neutralStub ? (
+                      <g data-testid="comb-neutral" data-to={`N-${head.device.designation.replace(/^-/, "")}`}>
+                        <line x1={neutralX} y1={edge - 4} x2={neutralX} y2={edge + 24} stroke="#3b82f6" strokeWidth={2} strokeLinecap="round" />
+                        <text x={neutralX + 3} y={edge + 31} fontSize={7} fontWeight={700} fill="#60a5fa" fontFamily="ui-sans-serif, system-ui, sans-serif">
+                          N → N-{head.device.designation.replace(/^-/, "")}
+                        </text>
+                      </g>
+                    ) : null}
                   </g>
                 );
               })}
@@ -511,7 +532,7 @@ export function VectorPanel({
               ) : null}
               {onRailCapacity ? (
                 <div
-                  className="absolute z-10 flex items-center gap-0.5 rounded-md border border-border/80 bg-background/85 px-1 py-0.5 text-[10px] whitespace-nowrap shadow backdrop-blur"
+                  className="absolute z-10 flex items-center gap-0.5 rounded-md border border-border/80 bg-background/85 px-1 py-0.5 text-[10px] whitespace-nowrap shadow backdrop-blur has-[[aria-expanded=true]]:z-40"
                   style={{ left: pct(rail.left - 8, layout.width), top: `calc(${pct(rail.top, layout.height)} - 34px)` }}
                   role="group"
                   aria-label={`Ovládání lišty ${rail.index}`}
@@ -563,6 +584,12 @@ export function VectorPanel({
                       <Camera className="size-3" aria-hidden />
                     </button>
                   ) : null}
+                  {onRailComb ? (
+                    <>
+                      <span className="mx-0.5 h-4 w-px bg-border" aria-hidden />
+                      <RailCombMenu rail={rail.index} setting={combPlan.settings[rail.index] ?? "AUTO"} kinds={combPlan.runs.filter((run) => run.rail === rail.index).map((run) => run.kind)} busy={busy} onChange={(setting) => onRailComb(rail.index, setting)} />
+                    </>
+                  ) : null}
                   {onDeleteRail ? (
                     <button type="button" disabled={busy} aria-label={`Smazat celou lištu ${rail.index}`} title="Smazat celou lištu" onClick={() => onDeleteRail(rail.index)} className="rounded p-0.5 text-red-300 hover:bg-red-500/15 disabled:opacity-40">
                       <Trash2 className="size-3" aria-hidden />
@@ -570,33 +597,15 @@ export function VectorPanel({
                   ) : null}
                 </div>
               ) : null}
-              {/* Fáze 112: volba propojovacího hřebenu lišty u přípojnice (Auto → 3f → 1f → Vyp) */}
-              {onRailComb
-                ? (() => {
-                    const run = combPlan.runs.find((candidate) => candidate.rail === rail.index);
-                    const rects = run ? run.ids.map((id) => layout.rects.get(id)).filter((rect): rect is Rect => Boolean(rect)) : [];
-                    if (!run || rects.length < 2) return null;
-                    const right = Math.max(...rects.map((rect) => rect.x + rect.w));
-                    const edge = run.input ? Math.min(...rects.map((rect) => rect.y)) : Math.max(...rects.map((rect) => rect.y + rect.h));
-                    const setting = combPlan.settings[rail.index] ?? "AUTO";
-                    const text = setting === "AUTO" ? `Auto (${run.kind === "3F" ? "3f" : "1f"})` : setting === "OFF" ? "Vyp" : setting === "3F" ? "3f" : "1f";
-                    return (
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => onRailComb(rail.index, nextCombSetting(setting))}
-                        title="Propojovací hřeben lišty: Auto (podle chrániče) → 3f → 1f → Vyp"
-                        aria-label={`Hřeben lišty ${rail.index}: ${text}`}
-                        className="absolute z-10 rounded border border-amber-600/60 bg-background/90 px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap text-amber-300 shadow hover:bg-amber-500/15 disabled:opacity-50"
-                        style={{ left: `calc(${pct(right, layout.width)} - 104px)`, top: `calc(${pct(edge, layout.height)} + ${run.input ? -34 : 10}px)` }}
-                        data-testid={`rail-comb-${rail.index}`}
-                        data-comb={setting}
-                      >
-                        ⫼ Hřeben: {text}
-                      </button>
-                    );
-                  })()
-                : null}
+              {/* Fáze 115: bez ovládání šířky lišty (náhled) je volba hřebenu samostatně u levého okraje lišty */}
+              {onRailComb && !onRailCapacity ? (
+                <div
+                  className="absolute z-10 rounded-md border border-amber-600/60 bg-background/90 px-1 text-[10px] whitespace-nowrap shadow has-[[aria-expanded=true]]:z-40"
+                  style={{ left: pct(rail.left - 8, layout.width), top: `calc(${pct(rail.top, layout.height)} - 30px)` }}
+                >
+                  <RailCombMenu rail={rail.index} setting={combPlan.settings[rail.index] ?? "AUTO"} kinds={combPlan.runs.filter((run) => run.rail === rail.index).map((run) => run.kind)} busy={busy} onChange={(setting) => onRailComb(rail.index, setting)} />
+                </div>
+              ) : null}
               {onDeleteRail && !onRailCapacity ? (
                 <button
                   type="button"

@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import type { ComponentCategory, RecognitionStatus } from "@/generated/prisma/enums";
 import { blankingPlan, blankingSummary, freeModules, usedModules } from "@/lib/panel-builder/hdo";
+import { COMB_SETTING_LABEL } from "@/lib/panel-builder/comb-busbars";
 import { defaultConfig, withManufacturer, withOption, type ConfigCategory, type ItemConfig } from "@/lib/panel-builder/configurator";
 import { enclosureNeed } from "@/lib/panel-builder/enclosures";
 import { formatRailSummary, freeOnRail, railSummary } from "@/lib/panel-builder/rails";
@@ -659,7 +660,7 @@ export function RecognitionWorkspace({
           combs={railLayout.combs}
           combNodes={combNodes}
           supplyPhases={supplyPhases}
-          onRailComb={(rail, setting) => railAction(() => setRailCombAction(projectId, rail, setting), `Hřeben lišty ${rail}: ${setting === "AUTO" ? "automaticky podle chrániče" : setting === "OFF" ? "vypnutý" : setting === "3F" ? "3f (L1 / L2 / L3 / N)" : "1f (L / N)"}.`)}
+          onRailComb={(rail, setting) => railAction(() => setRailCombAction(projectId, rail, setting), `Hřeben lišty ${rail}: ${COMB_SETTING_LABEL[setting].replace(/^Hřeben: /, "")}${setting === "AUTO" ? " (podle skupin chráničů)" : ""}.`)}
           toolbar={<RailLayoutToolbar projectId={projectId} layout={railLayout} capacities={capacities} disabled={editing || placing} />}
         />
       </section>
