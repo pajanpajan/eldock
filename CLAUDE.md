@@ -5,7 +5,7 @@ revize VTZ, změny skutečného provedení mezi údržbou v hale a externími CA
 rozváděčů. Pracovní název byl Digitry, od fáze 20 je to **ELDOCK**. Produkce běží na https://eldock.cz.
 Původní zadání MVP je v `docs/archiv/SPECIFIKACE-MVP.md`, celá historie fází 0–35 v `docs/archiv/PLAN-faze-00-35.md`, celý archiv v jednom souboru `docs/archiv/ARCHIV-KOMPLET.md`.
 
-## 1. Milníky (fáze 0–113 nasazené; 114 čeká na nasazení)
+## 1. Milníky (fáze 0–114 nasazené)
 
 | Fáze | Milník |
 |---|---|
@@ -333,7 +333,7 @@ Když uživatel řekne **„nasaď to na produkci“** nebo **„deploy“**:
 
 **Ukládání půdorysu, místnosti z PDF, limity, SMTP a zálohy ve velínu (fáze 113):** migrace `20261114090000_phase113_limits_enclosures` → před nasazením záloha databáze (výše). Po nasazení ve velínu zkontrolovat ⭐ neomezený přístup u účtu majitele (ukázková firma ho má z migrace), případně SMTP a Cloudflare R2 v ⚙️ Nastavení SMTP & Cloud záloh; nové rozvodnice doplní `db:panel-builder` při startu kontejneru. Nasazeno 2026-11-14 (commit `ef476d8`, migrace použita po záloze databáze), verify:demo 12 / 12.
 
-**Místnosti L / T / U, příslušenství, SSO a předběžné kredity (fáze 114):** migrace `20261114120000_phase114_sso_provisional` → před nasazením záloha databáze (výše). Při startu kontejneru `db:panel-builder` doplní ověřené příslušenství a prázdné sady QR štítků, `db:plant-tester` propojí ukázkovou firmu Tester s testovací firmou závodu. Notifikace nových objednávek majiteli: SMTP ve velínu nebo `ELDOCK_CONTACT_WEBHOOK_URL` (příjemce `ELDOCK_CONTACT_NOTIFY_EMAIL`, jinak e-mail provozovatele).
+**Místnosti L / T / U, příslušenství, SSO a předběžné kredity (fáze 114):** migrace `20261114120000_phase114_sso_provisional` → před nasazením záloha databáze (výše). Při startu kontejneru `db:panel-builder` doplní ověřené příslušenství a prázdné sady QR štítků, `db:plant-tester` propojí ukázkovou firmu Tester s testovací firmou závodu. Notifikace nových objednávek majiteli: SMTP ve velínu nebo `ELDOCK_CONTACT_WEBHOOK_URL` (příjemce `ELDOCK_CONTACT_NOTIFY_EMAIL`, jinak e-mail provozovatele). Nasazeno 2026-11-14 (commit `435b462`, migrace použita po záloze databáze), verify:demo 12 / 12.
 
 **Katalog ABB pro ČR (fáze 88):** bez migrace. Rozvodnice Mistral / ComfortLine CU, přístroje a příslušenství ABB i vazby příslušenství zapíše přírůstkový seed `db:panel-builder` při startu kontejneru (upsert, orientační řádek téhož typu dostane objednací číslo, nic se nemaže); ověřené rozvodnice převezmou řádky exportu se stejným objednacím číslem (MISTRAL65, CU24R / CU25R). Na serveru nic dalšího. Nasazeno 2026-11-10 (commit `1aacfdb`; seed „katalog 838 prvků aktualizován“, 163 ověřených skříní, kontejner `healthy`).
 
