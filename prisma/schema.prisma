@@ -940,7 +940,8 @@ model RegisteredCompany {
   city                   String
   zip                    String
   contactName            String // odpovědná osoba / projektant
-  email                  String       @unique // přihlašovací e-mail
+  /// Přihlašovací e-mail – fáze 114: jedinečný v rámci produktu (spárovaný účet Panel Builderu a Správy závodů má stejný e-mail).
+  email                  String
   phone                  String
   passwordHash           String // scrypt (node:crypto), viz src/server/password.ts
   authorizationNumber    String? // ev. č. oprávnění firmy (zákon 250/2021 Sb., § 8) nebo osvědčení revizního technika (§ 11)
@@ -961,6 +962,8 @@ model RegisteredCompany {
   firstTopUpBonusAt      DateTime?
   /// Fáze 113: ⭐ neomezený přístup (účet provozovatele, ukázková firma Tester) – bez kreditů, limitů tarifů a zkušebního označení; přepíná velín.
   unlimitedAccess        Boolean      @default(false)
+  /// Fáze 114: SSO přemostění – spárovaný účet druhého produktu (AI Panel Builder ↔ Hlídač revizí / Správa závodů), uložený na obou stranách.
+  linkedCompanyId        String?      @unique
   plantId                String? // vlastní závod (PLANT_MANAGEMENT)
   /// Firemní logo (fáze 43) – titulní list, rohové razítko výkresů a výrobní štítek CE.
   logoUrl                String?
@@ -992,6 +995,7 @@ model RegisteredCompany {
   /// Fáze 106: zakázky výroby rozváděčů na klíč
   manufacturingOrders ManufacturingOrder[]
 
+  @@unique([email, productScope])
   @@index([productScope])
   @@index([ico])
   @@index([plantId])
@@ -1557,6 +1561,13 @@ model CreditOrder {
   priceCzkInclVat Int
   status          CreditOrderStatus @default(PENDING)
   paidAt          DateTime?
+  /// Fáze 114: „Zaplatil jsem QR kódem“ – kredity předběžně připsané (PROVISIONAL_GRANT) do kontroly výpisu z banky (48 h).
+  provisionalAt   DateTime?
+  /// Fáze 114: předběžné kredity odečtené ve velínu (platba nedorazila) – další předběžné připsání už firma nedostane.
+  provisionalRevokedAt DateTime?
+  /// Fáze 114: okamžitá notifikace majiteli o nové objednávce (SMTP / webhook) – výsledek pro velín.
+  ownerNotifiedAt DateTime?
+  ownerNotifyError String?
   createdAt       DateTime          @default(now())
 
   company RegisteredCompany @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -1572,7 +1583,7 @@ model CreditTransaction {
   /// + připsání, − odečet
   amount       Int
   balanceAfter Int
-  /// SWITCHBOARD | FLOORPLAN | BUNDLE_SWITCHBOARD | QUOTE | CNC | UNLOCK | TOP_UP | SUBSCRIPTION | REFUND | ADJUST | CONVERSION
+  /// SWITCHBOARD | FLOORPLAN | BUNDLE_SWITCHBOARD | QUOTE | CNC | UNLOCK | TOP_UP | SUBSCRIPTION | REFUND | ADJUST | CONVERSION | PROVISIONAL_GRANT | PROVISIONAL_REVOKE (fáze 114)
   reason       String
   /// PANEL_PROJECT | FLOORPLAN | CREDIT_ORDER
   refType      String?

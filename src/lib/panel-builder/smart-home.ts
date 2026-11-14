@@ -74,6 +74,8 @@ export interface SmartModule {
   accessory?: { typeCode: string; articleNumber: string; label: string };
   /** Fáze 81: odkaz na datasheet / produktovou stránku výrobce. */
   datasheetUrl?: string;
+  /** Fáze 114: EAN (GTIN) z oficiálních dat výrobce. */
+  ean?: string;
 }
 
 export interface SmartSystem {
@@ -95,6 +97,8 @@ export interface SmartSystem {
 }
 
 const FAH = "Katalog ABB 2026 (Domovní elektroinstalační materiál), ABB-free@home";
+/** Fáze 114: ověření na produktové stránce ABB (šířka v modulech, Pv, EAN). */
+const ABB_PAGE_SRC = "ABB new.abb.com – šířka, Pv a EAN ověřeny 2026-11-14";
 const KNX = "ABB i-bus KNX – databáze prvků Eldocku";
 const TAP = "TapHome – zadání fáze 81 (objednací číslo, šířku a Pv ověřte u výrobce)";
 
@@ -120,10 +124,12 @@ export const SMART_SYSTEMS: SmartSystem[] = [
       { id: "fah-da4", role: "dim", label: "Člen akční stmívací 4násobný, 4× 210 W (LED na sestupné hraně)", typeCode: "DA/M.4.210.2.1", articleNumber: "2CKA006220A0729", verified: true, channels: 4, modules: 6, maxW: 210, lossW: 6.5, lossFrom: "zadání", source: `${FAH}, str. 275` },
       { id: "fah-da6", role: "dim", label: "Člen akční stmívací 6násobný, 6× 210 W (LED na sestupné hraně)", typeCode: "DA/M.6.210.2.1", articleNumber: "2CKA006220A0731", verified: true, channels: 6, modules: 8, maxW: 210, lossW: 12, lossFrom: "zadání", source: `${FAH}, str. 275 (zadání fáze 81 ho vede jako 8násobný – katalog: 6násobný)` },
       { id: "fah-dali", role: "dali", label: "Rozhraní DALI / free@home, max. 16 účastníků", typeCode: "DG-M-1.16.1", articleNumber: "2CDG510012R0011", verified: true, channels: 16, modules: 4, lossW: 2.5, lossFrom: "zadání", source: `${FAH}, str. 275` },
-      { id: "fah-ba4", role: "blind", label: "Člen akční žaluziový 4násobný, 6 A", typeCode: "BA-M-4.230.1.1", articleNumber: "2CDG510028R0011", verified: true, channels: 4, modules: 4, lossW: 1.5, lossFrom: "katalog", source: `${FAH}, str. 276; Pv z datasheetu ABB (zadání uvádí 3,5 W)`, datasheetUrl: "https://res.cloudinary.com/sonepar-fr/raw/upload/s--HHcDtDm9--/v1/documents/26/FICHE_STO611134_1.pdf" },
-      { id: "fah-ba8", role: "blind", label: "Člen akční žaluziový 8násobný, 6 A", typeCode: "BA-M-8.230.1.1", articleNumber: "2CDG510029R0011", verified: true, channels: 8, modules: 8, lossW: 6, lossFrom: "zadání", source: `${FAH}, str. 276` },
-      { id: "fah-ha6", role: "heating", label: "Člen akční topení 6násobný (termoelektrické hlavice)", typeCode: "HA-M-0.6.1", articleNumber: "2CDG510008R0011", verified: true, channels: 6, modules: 4, lossW: 2, lossFrom: "zadání", source: `${FAH}, str. 276 (v roce 2026 produktová obměna)` },
-      { id: "fah-ha12", role: "heating", label: "Člen akční topení 12násobný (termoelektrické hlavice)", typeCode: "HA-M-0.12.1", articleNumber: "2CDG510009R0011", verified: true, channels: 12, modules: 8, lossW: 3.5, lossFrom: "zadání", source: `${FAH}, str. 276 (v roce 2026 produktová obměna)` },
+      // Fáze 114: žaluzie i topení ve 4M i 8M – typ, šířka, Pv a EAN z produktových stránek ABB a ABB ETIM 9.0 (zadání fáze 114
+      // uvádí typy „BA-M-x.230.2.1“ a jiné EAN – výrobce je nevede; Pv 8M / 12× podle ABB 3 W / 4 W, ne 2,5 W / 3,5 W)
+      { id: "fah-ba4", role: "blind", label: "Člen akční žaluziový 4násobný, 6 A (4 M)", typeCode: "BA-M-4.230.1.1", articleNumber: "2CDG510028R0011", ean: "4053546111347", verified: true, channels: 4, modules: 4, lossW: 1.5, lossFrom: "katalog", source: `${FAH}, str. 276; ${ABB_PAGE_SRC}`, datasheetUrl: "https://new.abb.com/products/2CDG510028R0011" },
+      { id: "fah-ba8", role: "blind", label: "Člen akční žaluziový 8násobný, 6 A (8 M)", typeCode: "BA-M-8.230.1.1", articleNumber: "2CDG510029R0011", ean: "4053546111354", verified: true, channels: 8, modules: 8, lossW: 3, lossFrom: "katalog", source: `${FAH}, str. 276; ${ABB_PAGE_SRC}`, datasheetUrl: "https://new.abb.com/products/2CDG510029R0011" },
+      { id: "fah-ha6", role: "heating", label: "Člen akční topení 6násobný, termoelektrické hlavice (4 M)", typeCode: "HA-M-0.6.1", articleNumber: "2CDG510008R0011", ean: "4016779941815", verified: true, channels: 6, modules: 4, lossW: 2, lossFrom: "katalog", source: `${FAH}, str. 276; ${ABB_PAGE_SRC}`, datasheetUrl: "https://new.abb.com/products/2CDG510008R0011" },
+      { id: "fah-ha12", role: "heating", label: "Člen akční topení 12násobný, termoelektrické hlavice (8 M)", typeCode: "HA-M-0.12.1", articleNumber: "2CDG510009R0011", ean: "4016779941808", verified: true, channels: 12, modules: 8, lossW: 4, lossFrom: "katalog", source: `${FAH}, str. 276; ${ABB_PAGE_SRC}`, datasheetUrl: "https://new.abb.com/products/2CDG510009R0011" },
       // Fáze 81: binární vstupy čidel – modul free@home BI-M-4.20.1.1 (bezpotenciálové kontakty) místo obecného modulu
       { id: "fah-bi4", role: "input", label: "Modul binárních vstupů 4násobný s testovacím napětím (bezpotenciálové kontakty)", typeCode: "BI-M-4.20.1.1", articleNumber: "2CDG510014R0011", verified: true, channels: 4, modules: 2, lossW: 1.5, lossFrom: "zadání", source: `${FAH}, str. 277` },
       // Fáze 77: LED 24 V PWM – v katalogu free@home na DIN liště není, obecný modul
@@ -336,7 +342,11 @@ export function planSmartHome(input: { system: SmartSystemId; loads: readonly Sm
       return Array.from({ length: parallel }, () => load);
     });
     const used = role === "dali" ? loads.length : slots.length;
-    const needed = role === "dali" ? used : Math.max(used + 1, Math.ceil(used * (1 + system.reserve)));
+    // Fáze 114: ABB-free@home – žaluzie a topné okruhy mají kanál na motor / zónu, bez rezervy navíc: 1–4 žaluzie = BA-M 4M (4×),
+    // 5–8 = 8M (8×), 1–6 topných okruhů = HA-M 4M (6×), 7–12 = 8M (12×). Ostatní kanály a systémy (Loxone, KNX, TapHome)
+    // dál s rezervou systému podle fáze 77 (min. 1 volný kanál).
+    const exact = role === "dali" || (system.id === "abb_freeathome" && (role === "blind" || role === "heating"));
+    const needed = exact ? used : Math.max(used + 1, Math.ceil(used * (1 + system.reserve)));
     channels[role].needed = needed;
     if (!options.length) {
       warnings.push(`${system.label} nemá v databázi akční člen pro ${ROLE_LABEL[role]} – doplňte ručně.`);

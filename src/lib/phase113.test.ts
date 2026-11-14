@@ -96,7 +96,8 @@ describe("fáze 113 – provozovatel neplátce DPH a sady QR štítků", () => {
     expect(pricePerPiece(DEFAULT_LABEL_SETS[2], false)).toBe("14,90 Kč/ks");
     expect(pricePerPiece(DEFAULT_LABEL_SETS[3], false)).toBe("29,00 Kč/ks");
     expect(parseLabelSets(null)).toEqual(DEFAULT_LABEL_SETS);
-    expect(parseLabelSets("[]")).toEqual([]);
+    // Fáze 114: prázdný seznam = výchozí sady
+    expect(parseLabelSets("[]")).toEqual(DEFAULT_LABEL_SETS);
     expect(labelItemsOf("LABELS_A60S30M10")).toEqual([
       { kind: "A", count: 60 },
       { kind: "S", count: 30 },

@@ -72,6 +72,7 @@ export const SMART_DIN_ROWS: ResearchComponent[] = smartDinComponents().map((row
   description: row.description,
   datasheetUrl: row.datasheetUrl,
   source: row.source,
+  ...(row.ean ? { ean: row.ean } : {}),
   ownCatalog: true,
 }));
 
@@ -92,6 +93,7 @@ export function mergeSmartRows(hand: readonly ResearchComponent[], smart: readon
       powerLossWatts: own.powerLossWatts ?? row.powerLossWatts,
       lossEstimated: own.lossEstimated,
       datasheetUrl: own.datasheetUrl ?? row.datasheetUrl,
+      ...(own.ean ?? row.ean ? { ean: own.ean ?? row.ean } : {}),
       ownCatalog: true,
     };
   });

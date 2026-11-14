@@ -5,10 +5,11 @@ import { LogoMark } from "@/components/layout/Logo";
 import { PrintButton } from "@/components/landing/PrintButton";
 import { BankDetails } from "@/components/panel-builder/credits/BankDetails";
 import { PaymentQr } from "@/components/panel-builder/credits/PaymentQr";
+import { ProvisionalPayButton } from "@/components/panel-builder/credits/ProvisionalPayButton";
 import { panelBuilderGuard } from "@/components/panel-builder/access";
 import { labelCountOf, labelOrderTitle, operatorAddress, registryLines } from "@/lib/operator";
 import { getLabelSets, getOperatorProfile, paymentAccount } from "@/server/operator";
-import { VAT_RATE, creditPackage, formatCzk, spdPayload } from "@/lib/credits";
+import { VAT_RATE, creditPackage, formatCzk, orderProduct, spdPayload } from "@/lib/credits";
 import { formatDate } from "@/lib/format";
 import { getCreditOrder } from "@/server/queries/panel-builder";
 import { IP_NOTICE } from "@/lib/legal";
@@ -49,8 +50,15 @@ export default async function InvoicePage({ params }: PageProps<"/panel-builder/
   return (
     <div className="flex flex-col items-center gap-4 py-4">
       <style>{PRINT_CSS}</style>
-      <div className="no-print">
+      <div className="no-print flex flex-wrap items-center justify-center gap-3">
         <PrintButton />
+        {/* Fáze 114: po QR platbě kredity hned (předběžně do kontroly výpisu z banky) – na tisku není */}
+        {order.status === "PENDING" && !order.provisionalAt && !labels && orderProduct(order.packageCode)?.kind === "PACKAGE" ? <ProvisionalPayButton orderId={order.id} credits={order.creditsCount} /> : null}
+        {order.status === "PENDING" && order.provisionalAt ? (
+          <span className="rounded-lg border border-amber-400/60 bg-amber-400/10 px-3 py-2 text-sm text-amber-100" data-testid="provisional-active">
+            ⏳ Kredity jsou aktivní předběžně – čekáme na připsání platby
+          </span>
+        ) : null}
       </div>
       <article className="invoice w-full max-w-[210mm] bg-white p-[14mm] text-[10pt] leading-snug text-black shadow-2xl shadow-black/50" data-testid="invoice">
         <header className="flex items-start justify-between gap-6 border-b-2 border-black pb-3">

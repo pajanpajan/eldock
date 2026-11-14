@@ -9,7 +9,7 @@ import { SUPERADMIN_COOKIE, SUPERADMIN_TTL_SECONDS, brandEnv, checkAccessPasswor
 import { prisma } from "@/lib/prisma";
 import { actionFailure } from "@/server/panel-guards";
 import { startManualBackup } from "@/server/jobs";
-import { adjustCredits, cancelCreditOrder, confirmCreditOrder, resolveAiFeedback } from "@/server/services/credits";
+import { adjustCredits, cancelCreditOrder, confirmCreditOrder, resolveAiFeedback, revokeProvisionalCredits } from "@/server/services/credits";
 import { requireSuperadmin } from "@/server/superadmin-session";
 import { saveLabelSets, saveOperatorProfile } from "@/server/services/operator";
 import { clearBackupStorage, clearSmtpSettings, loadPlatformSettings, saveBackupStorage, saveSmtpSettings } from "@/server/services/platform-settings";
@@ -84,6 +84,20 @@ export async function confirmCreditOrderAction(orderId: string): Promise<ActionR
     return { ok: true, data: { creditsRemaining: company.creditsRemaining, companyName: company.companyName } };
   } catch (error) {
     return actionFailure(error, "Úhradu se nepodařilo potvrdit.");
+  }
+}
+
+/** Fáze 114: [ ↩️ Odečíst předběžné kredity ] – platba za předběžně připsané kredity nedorazila (storno + odečet). */
+export async function revokeProvisionalCreditsAction(orderId: string): Promise<ActionResult<{ balance: number; credits: number }>> {
+  if (!id.safeParse(orderId).success) return { ok: false, error: "Neplatná objednávka." };
+  try {
+    await requireSuperadmin();
+    const result = await revokeProvisionalCredits(prisma, orderId);
+    revalidatePath("/superadmin");
+    revalidatePath("/panel-builder", "layout");
+    return { ok: true, data: result };
+  } catch (error) {
+    return actionFailure(error, "Předběžné kredity se nepodařilo odečíst.");
   }
 }
 

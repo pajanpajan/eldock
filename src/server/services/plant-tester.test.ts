@@ -24,7 +24,7 @@ describe("testovací firma Správy závodů", () => {
     const result = await ensurePlantTester(prisma, new Date("2026-11-10T08:00:00Z"));
     expect(result).toMatchObject({ created: true, users: 2, equipment: 5 });
 
-    const company = await prisma.registeredCompany.findUniqueOrThrow({ where: { email: PLANT_TESTER.email } });
+    const company = await prisma.registeredCompany.findUniqueOrThrow({ where: { email_productScope: { email: PLANT_TESTER.email, productScope: "PLANT_MANAGEMENT" } } });
     expect(company).toMatchObject({ productScope: "PLANT_MANAGEMENT", companyName: PLANT_TESTER.companyName });
     const users = await prisma.user.findMany({ where: { companyId: company.id }, orderBy: { email: "asc" } });
     // Řazení podle e-mailu (binárně: „-“ je před „@“)

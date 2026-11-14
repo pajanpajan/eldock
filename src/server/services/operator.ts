@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@/generated/prisma/client";
 import { czAccountFromIban, isValidIban, normalizeBic, normalizeIban, type BankAccount } from "@/lib/credits";
-import { LABEL_SETS_KEY, OPERATOR_KEY, labelSetSchema, operatorSchema, parseLabelSets, parseOperator, type LabelSet, type OperatorProfile } from "@/lib/operator";
+import { DEFAULT_LABEL_SETS, LABEL_SETS_KEY, OPERATOR_KEY, labelSetSchema, operatorSchema, parseLabelSets, parseOperator, type LabelSet, type OperatorProfile } from "@/lib/operator";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 import { bankAccount } from "./credits";
 
@@ -39,13 +39,33 @@ export async function saveOperatorProfile(db: PrismaClient, input: unknown): Pro
   return profile;
 }
 
-/** Sady QR štítků k objednání (počet kusů a cena bez DPH); prázdný seznam = objednávka štítků vypnutá. */
+/** Sady QR štítků k objednání (počet kusů a cena bez DPH); fáze 114: aspoň 1 sada (prázdný seznam = výchozí sady). */
 export async function saveLabelSets(db: PrismaClient, input: unknown): Promise<LabelSet[]> {
   const parsed = labelSetSchema.array().max(8).safeParse(input);
   if (!parsed.success) throw new WorkflowError("VALIDATION", "Zkontrolujte sady štítků (název, počet kusů 1–5000, cena v Kč bez DPH).");
+  if (!parsed.data.length) throw new WorkflowError("VALIDATION", "Ponechte aspoň jednu sadu QR štítků – bez sad by se po restartu obnovilo 5 výchozích.");
   const json = JSON.stringify(parsed.data);
   await db.platformSetting.upsert({ where: { key: LABEL_SETS_KEY }, create: { key: LABEL_SETS_KEY, valueJson: json }, update: { valueJson: json } });
   return parseLabelSets(json);
+}
+
+/**
+ * Fáze 114: při startu serveru – chybí-li sady QR štítků, nebo je seznam prázdný (či poškozený), uloží se 5 výchozích
+ * prodejních sad (objednávání štítků je aktivní hned po nasazení). Uložené sady z velínu se nepřepíšou.
+ */
+export async function ensureDefaultLabelSets(db: PrismaClient): Promise<boolean> {
+  const stored = await readSetting(db, LABEL_SETS_KEY);
+  let valid = 0;
+  try {
+    const raw = stored ? (JSON.parse(stored) as unknown) : null;
+    valid = Array.isArray(raw) ? raw.filter((row) => labelSetSchema.safeParse(row).success).length : 0;
+  } catch {
+    valid = 0;
+  }
+  if (valid > 0) return false;
+  const json = JSON.stringify(DEFAULT_LABEL_SETS);
+  await db.platformSetting.upsert({ where: { key: LABEL_SETS_KEY }, create: { key: LABEL_SETS_KEY, valueJson: json }, update: { valueJson: json } });
+  return true;
 }
 
 /**

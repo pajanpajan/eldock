@@ -11,7 +11,18 @@ import { cn } from "@/lib/utils";
  * a průmysl (tarify Hlídače revizí). Bez stavu – web, podsekce i stránka kreditů.
  */
 // Fáze 113: ceny podle plátcovství provozovatele (neplátce DPH = cena je konečná) – plátcovství předá stránka z velínu
-export function PricingOverview({ audience, orderHref = (code) => `/panel-builder/credits?balicek=${code}`, vatPayer = DEFAULT_OPERATOR.vatPayer }: { audience: "installer" | "buildings"; orderHref?: (code: string) => string; vatPayer?: boolean }) {
+export function PricingOverview({
+  audience,
+  orderHref = (code) => `/panel-builder/credits?balicek=${code}`,
+  vatPayer = DEFAULT_OPERATOR.vatPayer,
+  supplier = null,
+}: {
+  audience: "installer" | "buildings";
+  orderHref?: (code: string) => string;
+  vatPayer?: boolean;
+  /** Fáze 114: „Pavel Janoušek · ELDOCK.cz · Jablonec nad Nisou · Neplátce DPH“ a bankovní spojení (údaje z velínu). */
+  supplier?: string | null;
+}) {
   const plans = audience === "installer" ? SUBSCRIPTIONS.filter((plan) => plan.plan === "PRO") : SUBSCRIPTIONS.filter((plan) => plan.plan !== "PRO");
   return (
     <div className="flex flex-col gap-6" data-testid={`pricing-${audience}`}>
@@ -85,6 +96,11 @@ export function PricingOverview({ audience, orderHref = (code) => `/panel-builde
           </li>
         ))}
       </ul>
+      {supplier ? (
+        <p className="text-xs text-muted-foreground" data-testid="pricing-supplier">
+          Dodavatel: {supplier}
+        </p>
+      ) : null}
     </div>
   );
 }

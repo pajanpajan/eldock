@@ -4,6 +4,7 @@
 
 import type { ComponentCategory, RecognitionStatus } from "@/generated/prisma/enums";
 
+import { accessoryKindOf, isAccessoryKind, type AccessoryKind } from "./accessory-symbols";
 import { catalogCategory, parseConfig, type ItemConfig } from "./configurator";
 import { ROLE_COLOR, profileLabel, smartDinProfile, type SmartDinProfile } from "./smart-din-catalog";
 import type { SmartRole, SmartSystemId } from "./smart-home";
@@ -35,6 +36,21 @@ export interface VectorDevice {
   smart?: SmartDinProfile | null;
   /** Fáze 112: přiřazená fáze („L1“, „L1,L2,L3,N“) – odznak fáze na plátně. */
   phaseAssignment?: string | null;
+  /** Fáze 114: podtyp příslušenství z konfigurace (svorkovnice HLAK, hřeben, spoušť …) – vlastní kresba na liště. */
+  accessory?: AccessoryKind | null;
+  /** Fáze 114: podtyp modulu z katalogu (`MAIN_TERMINAL`, `FUSE_DISCONNECTOR`, podtyp příslušenství). */
+  moduleSubtype?: string | null;
+}
+
+/** Fáze 114: podtyp příslušenství přístroje (kresba svorkovnice, hřebene, spouště …), jinak null. */
+export const deviceAccessory = (device: Pick<VectorDevice, "accessory" | "moduleSubtype" | "category" | "typeCode" | "label" | "power">) => accessoryKindOf(device);
+
+/** Fáze 114: podtyp příslušenství z konfigurace (Svorky / Hřebeny / Příslušenství; HLAK a pojistkový odpínač z „Jiné“). */
+export function configAccessory(config: Pick<ItemConfig, "category" | "moduleSubtype"> | null | undefined): AccessoryKind | null {
+  if (!config) return null;
+  if (config.category === "ACCESSORY") return isAccessoryKind(config.moduleSubtype) ? config.moduleSubtype : "AUX_CONTACT";
+  if (config.category === "OTHER") return config.moduleSubtype === "MAIN_TERMINAL" ? "TERMINAL_BLOCK" : config.moduleSubtype === "FUSE_DISCONNECTOR" ? "FUSE_LINK" : null;
+  return null;
 }
 
 /** Fáze 81: profil aktoru chytré domácnosti na DIN liště (z konfigurace, jinak z výrobce a typu kusu). */
@@ -126,6 +142,7 @@ export function vectorDeviceFrom(item: {
     spdType: string | null;
     contactConfig: string | null;
     powerLossWatts: number;
+    moduleSubtype?: string | null;
   } | null;
 }): VectorDevice {
   const component = item.catalogComponent;
@@ -152,6 +169,8 @@ export function vectorDeviceFrom(item: {
     label: item.circuitLabel,
     status: item.recognitionStatus,
     phaseAssignment: item.phaseAssignment ?? null,
+    accessory: configAccessory(config),
+    moduleSubtype: component?.moduleSubtype ?? null,
   };
   return base;
 }
@@ -179,6 +198,9 @@ export function deviceWithConfig(device: VectorDevice, config: ItemConfig): Vect
     status: "VERIFIED",
     // Fáze 81: aktor chytré domácnosti z konfigurace (funkce a kanály) ještě před uloženým kusem
     smart: config.category === "SMART_HOME" && config.smartRole ? configProfile(config) : null,
+    // Fáze 114: příslušenství – kresba podle podtypu hned po kliknutí v kaskádě
+    accessory: configAccessory(config),
+    moduleSubtype: config.moduleSubtype ?? null,
   };
 }
 

@@ -2,18 +2,21 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { CheckCircle2 } from "lucide-react";
 
+import { LinkAccountsButton, SsoBridgeButton } from "@/components/auth/SsoBridgeButton";
 import { PricingOverview } from "@/components/credits/PricingOverview";
 import { PageHeader } from "@/components/common/PageHeader";
 import { HlidacWorkspace } from "@/components/hlidac/HlidacWorkspace";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { Button } from "@/components/ui/button";
 import { HLIDAC_MODES, HLIDAC_PALETTE } from "@/lib/hlidac";
+import { bankLine, operatorSummary } from "@/lib/operator";
 import { prisma } from "@/lib/prisma";
 import { getPlants } from "@/server/queries/plant";
 import { deviceEntitlementLabel } from "@/lib/credits";
 import { getHlidacMode, hlidacOverview, plantDeviceEntitlement } from "@/server/services/hlidac";
 import { getOperatorProfile } from "@/server/operator";
-import { getAuthSession, getCurrentAccount, getRememberedPlantId } from "@/server/session";
+import { getPanelCompany } from "@/server/panel-session";
+import { getAuthSession, getAuthState, getCurrentAccount, getRememberedPlantId } from "@/server/session";
 
 export const metadata: Metadata = {
   title: "Hlídač revizí & Správa spotřebičů a zařízení",
@@ -35,16 +38,40 @@ const FEATURES = [
 export default async function HlidacRevisionsPage({ searchParams }: PageProps<"/hlidac-revizi">) {
   const session = await getAuthSession();
   // Fáze 113: ceník podle plátcovství provozovatele
-  const { vatPayer } = await getOperatorProfile();
-  if (!session) return <Intro vatPayer={vatPayer} />;
-  const [account, plants, remembered, query] = await Promise.all([getCurrentAccount(), getPlants(), getRememberedPlantId(), searchParams]);
+  const operator = await getOperatorProfile();
+  const { vatPayer } = operator;
+  // Fáze 114: dodavatel a bankovní spojení v ceníku (jen vyplněné údaje)
+  const supplier = `${operatorSummary(operator)} · ${bankLine(operator)}`;
+  // Fáze 114: přihlášená firma AI Panel Builderu → „🔄 Pokračovat pod mým účtem z Panel Builderu“ (SSO přemostění)
+  const panel = await getPanelCompany();
+  if (!session) return <Intro vatPayer={vatPayer} supplier={supplier} panel={panel ? { name: panel.companyName, email: panel.email } : null} />;
+  const [account, plants, remembered, query, state] = await Promise.all([getCurrentAccount(), getPlants(), getRememberedPlantId(), searchParams, getAuthState()]);
+  // Fáze 114: po přemostění nový spárovaný účet (?sso=novy); přihlášený v obou produktech bez propojení → 🔗 Propojit účty
+  const user = state.user;
+  const linkable = panel && user?.companyId && user.accountType === "PLANT_ADMIN" ? (await prisma.registeredCompany.findUnique({ where: { id: user.companyId }, select: { linkedCompanyId: true } }))?.linkedCompanyId !== panel.id : false;
+  const ssoNotice = (
+    <>
+      {query.sso === "novy" ? (
+        <p role="status" className="mb-3 rounded-lg border border-emerald-500/50 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-100" data-testid="sso-created">
+          ✅ Účet Hlídače revizí a Správy budov je založený a spárovaný s AI Panel Builderem{user?.email ? ` (${user.email}, stejné heslo)` : ""} – příště stačí jedno přihlášení.
+        </p>
+      ) : null}
+      {linkable && panel ? (
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm" data-testid="sso-link-card">
+          <span className="text-muted-foreground">Jste přihlášeni i v AI Panel Builderu jako {panel.companyName}.</span>
+          <LinkAccountsButton panelName={panel.companyName} />
+        </div>
+      ) : null}
+    </>
+  );
   const wanted = typeof query.zavod === "string" ? query.zavod : null;
   const plant = plants.find((candidate) => candidate.id === wanted) ?? plants.find((candidate) => candidate.id === remembered) ?? plants[0] ?? null;
-  if (!plant) return <Intro signedIn vatPayer={vatPayer} />;
+  if (!plant) return <Intro signedIn vatPayer={vatPayer} supplier={supplier} panel={null} />;
   const [overview, mode, entitlement] = await Promise.all([hlidacOverview(prisma, plant.id), getHlidacMode(prisma, plant.id), plantDeviceEntitlement(prisma, plant.id)]);
   const devices = overview.reduce((sum, building) => sum + building.floors.reduce((acc, floor) => acc + floor.rooms.reduce((count, room) => count + room.devices.length, 0) + floor.unassigned.length, 0), 0);
   return (
     <PageTransition>
+      {ssoNotice}
       <PageHeader
         title="🛡️ Hlídač revizí & Správa spotřebičů a zařízení"
         description={`${plant.name} · ${overview.length} ${overview.length === 1 ? "budova" : overview.length < 5 ? "budovy" : "budov"} · ${devices} zařízení. Revize spotřebičů podle ČSN 33 1600 ed. 2 a ČSN 33 1500 – 📷 AI čtečka výrobního štítku a identifikační štítky s QR kódem.`}
@@ -70,7 +97,7 @@ export default async function HlidacRevisionsPage({ searchParams }: PageProps<"/
   );
 }
 
-function Intro({ signedIn = false, vatPayer }: { signedIn?: boolean; vatPayer: boolean }) {
+function Intro({ signedIn = false, vatPayer, supplier, panel }: { signedIn?: boolean; vatPayer: boolean; supplier: string; panel: { name: string; email: string } | null }) {
   return (
     <PageTransition>
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-8" data-testid="hlidac-intro">
@@ -79,6 +106,10 @@ function Intro({ signedIn = false, vatPayer }: { signedIn?: boolean; vatPayer: b
           <p className="text-lg text-muted-foreground">
             Pro administrativní a kancelářské budovy, školy, úřady, kliniky i výrobní závody – monitory, počítače, prodlužovačky, rychlovarné konvice, mikrovlnky, kávovary, ruční nářadí i rozváděče pravidelně podle <b className="text-foreground">ČSN 33 1600 ed. 2</b> a <b className="text-foreground">ČSN 33 1500</b>.
           </p>
+          {/* Fáze 114: SSO – bez druhé registrace pod účtem firmy z AI Panel Builderu */}
+          {panel && !signedIn ? (
+            <SsoBridgeButton direction="to-plant" next="/hlidac-revizi" label={`🔄 Pokračovat pod mým účtem z Panel Builderu (${panel.name} / ${panel.email})`} className="w-fit max-w-full" />
+          ) : null}
           <div className="flex flex-wrap gap-3">
             {signedIn ? (
               <Button asChild className="touch-target">
@@ -127,7 +158,7 @@ function Intro({ signedIn = false, vatPayer }: { signedIn?: boolean; vatPayer: b
             ))}
           </div>
         </section>
-        <PricingOverview audience="buildings" vatPayer={vatPayer} />
+        <PricingOverview audience="buildings" vatPayer={vatPayer} supplier={supplier} />
       </div>
     </PageTransition>
   );

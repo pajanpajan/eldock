@@ -8,13 +8,16 @@ import { PageTransition } from "@/components/layout/PageTransition";
 import { panelBuilderGuard } from "@/components/panel-builder/access";
 import { BankDetails } from "@/components/panel-builder/credits/BankDetails";
 import { PaymentQr } from "@/components/panel-builder/credits/PaymentQr";
+import { ProvisionalPayButton } from "@/components/panel-builder/credits/ProvisionalPayButton";
 import { Button } from "@/components/ui/button";
-import { ORDER_STATUS, creditPackage, formatCzk, spdPayload } from "@/lib/credits";
+import { ORDER_STATUS, creditPackage, formatCzk, orderProduct, spdPayload } from "@/lib/credits";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { getCreditOrder } from "@/server/queries/panel-builder";
 import { labelCountOf, labelOrderTitle } from "@/lib/operator";
-import { getLabelSets, paymentAccount } from "@/server/operator";
+import { getLabelSets, getOperatorProfile, paymentAccount } from "@/server/operator";
+import { operatorSummary } from "@/lib/operator";
+import { provisionalDeadline } from "@/server/services/credits";
 
 export const metadata: Metadata = { title: "Platba kreditů" };
 
@@ -48,6 +51,10 @@ export default async function CreditOrderPage({ params }: PageProps<"/panel-buil
           <p className="max-w-56 text-center text-xs text-muted-foreground">Naskenujte v mobilním bankovnictví – částka, účet i variabilní symbol se vyplní samy.</p>
         </div>
         <section className="flex flex-col gap-4 rounded-xl border border-border bg-card p-5" aria-label="Platební údaje">
+          {/* Fáze 114: dodavatel jedním řádkem (IČO / DIČ jen vyplněné ve velínu, bez upozornění na chybějící údaje) */}
+          <p className="text-sm text-muted-foreground" data-testid="payment-supplier">
+            Dodavatel: <span className="font-semibold text-foreground">{operatorSummary(await getOperatorProfile())}</span>
+          </p>
           <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm" data-testid="payment-details">
             <dt className="text-muted-foreground">Částka k úhradě</dt>
             <dd className="text-xl font-black tabular-nums">{formatCzk(order.priceCzkInclVat)}</dd>
@@ -63,6 +70,14 @@ export default async function CreditOrderPage({ params }: PageProps<"/panel-buil
           <p className="text-xs text-muted-foreground">
             {order.status === "PAID" ? `Uhrazeno ${order.paidAt ? formatDate(order.paidAt) : ""} – kredity jsou připsané.` : "Kredity připíšeme po připsání platby na náš účet (obvykle do 1 pracovního dne)."}
           </p>
+          {/* Fáze 114: okamžité odemčení po QR platbě (předběžně do kontroly výpisu z banky, nejvýš 48 h) */}
+          {order.status === "PENDING" && order.provisionalAt ? (
+            <p className="rounded-lg border border-amber-400/60 bg-amber-400/10 px-3 py-2 text-sm text-amber-100" data-testid="provisional-active">
+              ⏳ Kredity (+{order.creditsCount}) jsou aktivní předběžně od {formatDate(order.provisionalAt)} – čekáme na připsání platby (kontrola výpisu z banky do {formatDate(provisionalDeadline(order.provisionalAt))}).
+            </p>
+          ) : order.status === "PENDING" && !labels && orderProduct(order.packageCode)?.kind === "PACKAGE" ? (
+            <ProvisionalPayButton orderId={order.id} credits={order.creditsCount} />
+          ) : null}
           <Button asChild className="touch-target w-fit gap-2">
             <Link href={`/panel-builder/credits/${order.id}/invoice`} target="_blank" data-testid="invoice-link">
               <Printer className="size-4" aria-hidden /> [ 🖨️ Vytisknout / Stáhnout zálohovou fakturu (PDF) ]

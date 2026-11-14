@@ -457,7 +457,7 @@ export function toRailDetections(devices: readonly GeminiRailDevice[], rail: num
 }
 
 /** Výřez pásu z fotky (sharp) jako JPEG. */
-/** Kolik výřezů DIN lišt se posílá do Gemini současně (kvóty API, paměť serveru 2 GB). */
+/** Kolik výřezů DIN lišt se posílá do Gemini současně (kvóty API a paměť serveru – Hetzner CPX22 se 4 GB RAM, dřív 2 GB). */
 export const RAIL_CONCURRENCY = 3;
 
 /** `Promise.all` s omezeným počtem souběžných úloh; výsledky ve stejném pořadí jako vstup. */

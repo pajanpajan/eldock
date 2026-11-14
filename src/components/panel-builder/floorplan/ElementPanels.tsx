@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { CheckCircle2, LayoutGrid, Link2, RotateCw, Sparkles, Trash2, Zap } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -30,6 +30,7 @@ import { ROOMS_LOCKED_TEXT } from "@/lib/panel-builder/floorplan-phases";
 import { BOX_CHOICES, WALL_TYPES, type BoxChoice, type WallType } from "@/lib/panel-builder/box-options";
 import { formatMm, type ResolvedBox } from "@/lib/panel-builder/mounting-boxes-catalog";
 import { DESIGN_BRANDS, appearanceLabel, colorForSeries, designSeriesOf, hasFrameChoice, seriesColors, seriesFrameColors } from "@/lib/panel-builder/wiring-designs";
+import { roomArea, roomShapeLabel } from "@/lib/panel-builder/room-geometry";
 import { cn } from "@/lib/utils";
 
 import { AddToFrameControl, SaveTemplateControl } from "./FrameAssemblyPalette";
@@ -48,10 +49,10 @@ const SCALE_OPTIONS = [0.5, 0.75, 1, 1.5, 2, 3];
 // Fáze 64: podkomponenty editoru 2D půdorysu oddělené z FloorplanEditor.tsx – tlačítko nástroje, plovoucí lišta
 // vybrané značky, detail prvku (úroveň, výška, svítidlo, ovládání, vzhled, spotřebič, předmět), živé kóty a detail místnosti.
 
-export function ToolButton({ active, onClick, icon, label, tour }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string; tour?: string }) {
+export function ToolButton({ active, onClick, icon, label, tour, className }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string; tour?: string; /** Fáze 114: levý sloupec – tlačítko na celou šířku se zalomením. */ className?: string }) {
   return (
     // Fáze 87: `data-tour` = cíl zvýraznění Interactive Tour u video-návodu
-    <Button type="button" size="sm" variant={active ? "default" : "outline"} aria-pressed={active} className="gap-1.5" onClick={onClick} data-tour={tour}>
+    <Button type="button" size="sm" variant={active ? "default" : "outline"} aria-pressed={active} className={cn("gap-1.5", className)} onClick={onClick} data-tour={tour}>
       {icon} {label}
     </Button>
   );
@@ -547,7 +548,25 @@ export function Dimensions({ x, y, w, h, symbol }: { x: number; y: number; w: nu
 }
 
 /** Detail vybrané místnosti: název s rychlými štítky, rozměr X × Y v metrech a smazání. */
-export function RoomDetail({ room, onChange, onDelete, defaultWall, onUnlock }: { room: EditorRoom; onChange: (patch: Partial<Pick<EditorRoom, "name" | "w" | "h" | "wallType">>) => void; onDelete: () => void; defaultWall?: WallType; /** Fáze 103: kroky 2–5 – místnost zamčená, tlačítko vrátí průvodce do kroku 1. */ onUnlock?: () => void }) {
+export function RoomDetail({
+  room,
+  onChange,
+  onDelete,
+  defaultWall,
+  onUnlock,
+  mergeOptions = [],
+  onMerge,
+}: {
+  room: EditorRoom;
+  onChange: (patch: Partial<Pick<EditorRoom, "name" | "w" | "h" | "wallType">>) => void;
+  onDelete: () => void;
+  defaultWall?: WallType;
+  /** Fáze 103: kroky 2–5 – místnost zamčená, tlačítko vrátí průvodce do kroku 1. */
+  onUnlock?: () => void;
+  /** Fáze 114: překrývající se / sousední místnosti, se kterými jde místnost spojit do jednoho celku (L / T / U). */
+  mergeOptions?: readonly { id: string; name: string; relation: "overlap" | "touch" }[];
+  onMerge?: (otherId: string) => void;
+}) {
   const toM = (mm: number) => Math.round(mm) / 1000;
   const locked = Boolean(onUnlock);
   return (
@@ -583,8 +602,10 @@ export function RoomDetail({ room, onChange, onDelete, defaultWall, onUnlock }: 
         </label>
       </fieldset>
       <p className="text-xs text-muted-foreground" data-testid="room-area">
-        {roomDimensions(room.w, room.h).label}
+        {/* Fáze 114: místnost tvaru L / T / U – skutečná plocha obrysu, rozměr je obálka */}
+        {room.points?.length ? `${roomShapeLabel(room.points) ?? "Polygon"} · obálka ${roomDimensions(room.w, room.h).x} × ${roomDimensions(room.w, room.h).y} · plocha ${(roomArea(room) / 1e6).toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} m²` : roomDimensions(room.w, room.h).label}
       </p>
+      {!locked && onMerge && mergeOptions.length ? <RoomMerge options={mergeOptions} onMerge={onMerge} /> : null}
       {/* Fáze 91: konstrukce stěn místnosti (instalační krabice v kusovníku a hlídač hloubky) */}
       <label className="flex flex-col gap-1 text-xs text-muted-foreground">
         📦 Konstrukce stěn / prostředí místnosti
@@ -609,5 +630,31 @@ export function RoomDetail({ room, onChange, onDelete, defaultWall, onUnlock }: 
         </Button>
       )}
     </section>
+  );
+}
+
+/** Fáze 114: 🔗 Spojit s překrývající se / sousední místností do jednoho celku (L-tvar) – víc kandidátů = výběr. */
+function RoomMerge({ options, onMerge }: { options: readonly { id: string; name: string; relation: "overlap" | "touch" }[]; onMerge: (otherId: string) => void }) {
+  const [target, setTarget] = useState(options[0].id);
+  const chosen = options.find((option) => option.id === target) ?? options[0];
+  return (
+    <div className="flex flex-col gap-1.5 rounded-lg border border-yellow-400/50 bg-yellow-400/10 p-2 text-xs" data-testid="room-merge">
+      {options.length > 1 ? (
+        <select value={chosen.id} onChange={(event) => setTarget(event.target.value)} className="h-8 rounded-md border border-input bg-transparent px-1 text-xs text-foreground dark:bg-input/30" aria-label="Místnost ke spojení" data-testid="room-merge-target">
+          {options.map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.name} ({option.relation === "overlap" ? "překrývá se" : "společná stěna"})
+            </option>
+          ))}
+        </select>
+      ) : (
+        <span className="text-yellow-50">
+          {chosen.relation === "overlap" ? "Překrývá se s místností" : "Sdílí stěnu s místností"} <b>{chosen.name}</b>
+        </span>
+      )}
+      <Button type="button" size="sm" className="h-auto min-h-8 w-full min-w-0 justify-start bg-yellow-400 py-1.5 text-left leading-snug font-semibold whitespace-normal text-zinc-950 hover:bg-yellow-300" onClick={() => onMerge(chosen.id)} data-testid="room-merge-button">
+        🔗 Spojit s překrývající se / sousední místností do jednoho celku (L-tvar)
+      </Button>
+    </div>
   );
 }

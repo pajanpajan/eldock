@@ -290,19 +290,37 @@ export const open = (mask: Uint8Array, w: number, h: number, r: number) => dilat
 //  Bariéry stěn a oblasti
 // ---------------------------------------------------------------------------
 
-/** Vrstva bariér od nejhrubší: jen zdivo → zdivo + tenké čáry u zdí (okna) → všechny čáry. */
-export type BarrierLayer = "thick" | "hybrid" | "all";
-export const BARRIER_LAYERS: readonly BarrierLayer[] = ["thick", "hybrid", "all"];
+/**
+ * Vrstva bariér (fáze 114 – od nejvěrnějšího zdiva k tenkým čarám):
+ * - `thick`: zdivo (šrafy po ~8 cm zacelené, čáry tenčí než ~6 cm pryč), dveře do 95 cm zacelené,
+ * - `hatch`: husté šrafování zdiva a příček zacelené do plného pásu (mezery do ~16 cm), čáry do ~8 cm pryč,
+ * - `hatchWide`: totéž s otvory do 1,6 m (dvoukřídlé dveře, průchody),
+ * - `outline`: jen obrysové čáry od 3 px (tenké 1–2px kóty, vynášecí čáry, osy řezů, oblouky dveří, texty a nábytek pryč),
+ * - `outlineStrong`: jen čáry od 5 px (silnější filtr tenkých čar – druhé kolo pro výkres s tučnými kótami),
+ * - `hybrid`: zdivo + tenké čáry do 0,4 m od zdiva (okna, zárubně),
+ * - `all`: všechny čáry (výkres kreslený jen tenkými obrysy bez výplně zdiva).
+ */
+export type BarrierLayer = "thick" | "hatch" | "hatchWide" | "outline" | "outlineStrong" | "hybrid" | "all";
+export const BARRIER_LAYERS: readonly BarrierLayer[] = ["thick", "hatch", "hatchWide", "outline", "outlineStrong", "hybrid", "all"];
+/** Fáze 114: dvě vrstvy zdiva (běžné a husté šrafy) – z nich se bere menší oblast. */
+const WALL_LAYERS: readonly BarrierLayer[] = ["thick", "hatch"];
+/** Fáze 114: vrstvy pro hledání všech místností bez popisků (okna musí zůstat zavřená). */
+export const SCAN_LAYERS: readonly BarrierLayer[] = ["hybrid", "outline", "all"];
+/** Fáze 114: menší oblast po kliku do místnosti = nejspíš ohraničená kótou / nábytkem → další kolo s jinou vrstvou. */
+export const MIN_CLICK_ROOM_M2 = 3.5;
 
 export interface Barrier {
   w: number;
   h: number;
   mmPerPx: number;
-  layers: Record<BarrierLayer, Uint8Array>;
-  /** Tlusté zdivo bez uzavření dveří (podíl stěn kolem oblasti). */
-  walls: Uint8Array;
+  /** Maska vrstvy (počítá se až při prvním použití a drží se v mezipaměti). */
+  layer: (name: BarrierLayer) => Uint8Array;
+  /** Zdivo bez uzavření dveří (podíl stěn kolem oblasti). */
+  readonly walls: Uint8Array;
   minAreaPx: number;
   maxAreaPx: number;
+  /** Fáze 114: plocha 3,5 m² v px (kratší oblast po kliku = další kolo). */
+  clickMinPx: number;
   /** Sdílené razítko oblastí (kontrola, který popisek leží v oblasti). */
   stamp: Int32Array;
   stampId: number;
@@ -325,11 +343,14 @@ const union = (a: Uint8Array, b: Uint8Array) => {
   return out;
 };
 
+/** Fáze 114: otvory do 1,6 m (dvoukřídlé dveře, průchody) – vrstva `hatchWide`. */
+export const WIDE_GAP_MM = 1600;
+
 /**
- * Masky stěn pro hledání místností (popisky místností se z masky vymažou – nejsou to stěny):
- * - `thick`: šrafy zacelené, čáry tenčí než ~6 cm (text, kóty, nábytek, dveře) pryč, mezery dveří do 95 cm zacelené,
- * - `hybrid`: navíc tenké čáry do 0,8 m od zdiva (okna, zárubně) – okno místnost neotevře, kóta přes místnost ji nerozdělí,
- * - `all`: všechny čáry (výkres kreslený jen obrysy bez výplně zdiva).
+ * Masky stěn pro hledání místností (popisky místností se z masky vymažou – nejsou to stěny). Fáze 114: morfologická
+ * filtrace tloušťky čar před flood fill – tenké 1–2px čáry (kóty, vynášecí čáry, osy řezů, oblouky dveří, text,
+ * nábytek) se odstraní, bariérou jsou tlusté obrysy zdiva a šrafované pásy stěn (husté šrafy zacelené do plného pásu).
+ * Vrstvy (`BARRIER_LAYERS`) se počítají líně – klik do místnosti obvykle potřebuje jen první z nich.
  */
 export function buildBarrier(raster: Raster, tags: readonly RoomTag[], options: DetectOptions): Barrier {
   const { width: w, height: h } = raster;
@@ -337,22 +358,49 @@ export function buildBarrier(raster: Raster, tags: readonly RoomTag[], options: 
   const dark = darkMask(raster, options.threshold ?? 160);
   for (const tag of tags) clearBox(dark, w, h, tag.box, tag.h * 0.25);
   const gap = px((options.doorGapMm ?? DOOR_GAP_MM) / 2, mmPerPx);
+  const wideGap = Math.max(gap, px(WIDE_GAP_MM / 2, mmPerPx));
+  const cache = new Map<string, Uint8Array>();
+  const memo = (key: string, make: () => Uint8Array) => {
+    let value = cache.get(key);
+    if (!value) cache.set(key, (value = make()));
+    return value;
+  };
   // Antialiasing nechává v čarách 1px mezery – utěsnit
-  const sealed = dilate(dark, w, h, 1);
-  // Šrafované zdivo (šrafy po ~8 cm) zacelit, pak odstranit čáry tenčí než ~6 cm
-  const walls = open(close(dark, w, h, px(40, mmPerPx)), w, h, px(30, mmPerPx));
-  const near = dilate(walls, w, h, px(800, mmPerPx));
-  const nearLines = new Uint8Array(w * h);
-  for (let i = 0; i < nearLines.length; i++) nearLines[i] = sealed[i] & near[i];
+  const sealed = () => memo("sealed", () => dilate(dark, w, h, 1));
+  // Zdivo: šrafy po ~8 cm zacelit, pak odstranit čáry tenčí než ~6 cm
+  const walls1 = () => memo("walls1", () => open(close(dark, w, h, px(40, mmPerPx)), w, h, px(30, mmPerPx)));
+  // Fáze 114: husté šrafování zdiva a příček (rozteč šraf do ~16 cm) do plného pásu, silnější filtr tenkých čar (aspoň 2 px)
+  const walls2 = () => memo("walls2", () => open(close(dark, w, h, Math.min(12, Math.max(3, px(80, mmPerPx)))), w, h, Math.max(2, px(40, mmPerPx))));
+  const walls = () => memo("walls", () => union(walls1(), walls2()));
+  const layers: Record<BarrierLayer, () => Uint8Array> = {
+    thick: () => close(walls1(), w, h, gap),
+    hatch: () => close(walls2(), w, h, gap),
+    hatchWide: () => close(walls2(), w, h, wideGap),
+    // Obrysy: čáry užší než 3 px (1–2px kóty, oblouky dveří, text, nábytek) pryč, zbytek utěsnit
+    outline: () => close(dilate(open(dark, w, h, 1), w, h, 1), w, h, gap),
+    outlineStrong: () => close(dilate(open(dark, w, h, 2), w, h, 1), w, h, gap),
+    hybrid: () => {
+      // Okna a zárubně = tenké čáry do 0,4 m od zdiva (kóta uprostřed místnosti ji nerozdělí)
+      const near = dilate(walls(), w, h, px(400, mmPerPx));
+      const lines = sealed();
+      const nearLines = new Uint8Array(w * h);
+      for (let i = 0; i < nearLines.length; i++) nearLines[i] = lines[i] & near[i];
+      return close(union(walls(), nearLines), w, h, gap);
+    },
+    all: () => close(sealed(), w, h, gap),
+  };
   const areaPx = (m2: number) => (m2 * 1_000_000) / (mmPerPx * mmPerPx);
   return {
     w,
     h,
     mmPerPx,
-    layers: { thick: close(walls, w, h, gap), hybrid: close(union(walls, nearLines), w, h, gap), all: close(sealed, w, h, gap) },
-    walls,
+    layer: (name) => memo(`layer:${name}`, layers[name]),
+    get walls() {
+      return walls();
+    },
     minAreaPx: areaPx(options.minAreaM2 ?? MIN_ROOM_M2),
     maxAreaPx: areaPx(options.maxAreaM2 ?? MAX_ROOM_M2),
+    clickMinPx: areaPx(MIN_CLICK_ROOM_M2),
     stamp: new Int32Array(w * h),
     stampId: 0,
   };
@@ -448,24 +496,45 @@ function stampRegion(barrier: Barrier, region: Region) {
 }
 
 /**
- * Oblast kolem bodu – nejdřív jen zdivo (tenké čáry uvnitř místnost nerozdělí), pak zdivo s okny, nakonec všechny
- * čáry. Oblast s cizím popiskem (dveře širší než 95 cm spojily dvě místnosti) se zkusí v jemnější vrstvě.
+ * Oblast kolem bodu – vrstvy od zdiva k tenkým čarám (`BARRIER_LAYERS`): tenké čáry uvnitř místnost nerozdělí, okno ji
+ * neotevře. Oblast s cizím popiskem (široké dveře spojily dvě místnosti) se zkusí v další vrstvě. Fáze 114: oblast
+ * menší než 3,5 m² (kóta, oblouk dveří nebo nábytek ji uzavřely) = další kolo se silnějším filtrem tenkých čar; když
+ * žádná vrstva větší oblast nenajde, platí první nalezená (malá místnost – WC, spíž).
  */
-function regionAt(barrier: Barrier, seed: Pt, radius: number, others: readonly Pt[] = []): Region | null {
-  for (const layer of BARRIER_LAYERS) {
-    const mask = barrier.layers[layer];
+function regionAt(barrier: Barrier, seed: Pt, radius: number, reject: (region: Region, layer: BarrierLayer) => boolean = () => false): Region | null {
+  let first: Region | null = null;
+  const at = (layer: BarrierLayer): Region | null => {
+    const mask = barrier.layer(layer);
     const start = freeNear(mask, barrier.w, barrier.h, seed, radius);
-    if (!start) continue;
+    if (!start) return null;
     const region = floodRegion(mask, barrier.w, barrier.h, start, Math.ceil(barrier.maxAreaPx) + 1);
-    if (!plausible(region, barrier)) continue;
-    if (layer !== "all" && others.length) {
-      const has = stampRegion(barrier, region);
-      if (others.some(has)) continue;
-    }
-    return region;
+    return plausible(region, barrier) && !reject(region, layer) ? region : null;
+  };
+  // Zdivo dvakrát (šrafy po ~8 cm / husté šrafy do plného pásu): z obou platí menší oblast – větší nejspíš unikla přes
+  // příčku, kterou první vrstva neudržela
+  const walls = WALL_LAYERS.map(at)
+    .filter((region): region is Region => region !== null)
+    .sort((a, b) => a.count - b.count);
+  const roomy = walls.find((region) => region.count >= barrier.clickMinPx);
+  if (roomy) return roomy;
+  // Malá místnost (WC, spíž): menší oblast ze zdiva, jinak první z dalších vrstev
+  first = walls[0] ?? null;
+  for (const layer of BARRIER_LAYERS) {
+    if (WALL_LAYERS.includes(layer)) continue;
+    const region = at(layer);
+    if (!region) continue;
+    if (region.count >= barrier.clickMinPx) return region;
+    first ??= region;
   }
-  return null;
+  return first;
 }
+
+/** Oblast obsahuje cizí popisek (v jemnější vrstvě než „všechny čáry“ = široké dveře spojily dvě místnosti). */
+const containsOther = (barrier: Barrier, others: readonly Pt[]) => (region: Region, layer: BarrierLayer) => {
+  if (layer === "all" || !others.length) return false;
+  const has = stampRegion(barrier, region);
+  return others.some(has);
+};
 
 // ---------------------------------------------------------------------------
 //  Oblast → obdélník / polygon (hrubá mřížka, obrys po hranách buněk, zjednodušení)
@@ -747,7 +816,7 @@ export function detectWithBarrier(barrier: Barrier, tags: readonly RoomTag[]): D
         continue;
       }
       const others = labelled.filter((other) => other !== tag && !groups.some((group) => group.tags.includes(other)));
-      const region = regionAt(barrier, tag, Math.ceil(tag.h * 2), others);
+      const region = regionAt(barrier, tag, Math.ceil(tag.h * 2), containsOther(barrier, others));
       if (!region) {
         unmatched++;
         continue;
@@ -765,11 +834,14 @@ export function detectWithBarrier(barrier: Barrier, tags: readonly RoomTag[]): D
     }
     for (const group of groups) rooms.push(toRoom(group.region, barrier, group.seed, "label", group.tags));
   } else {
-    // Bez popisků: souvislé oblasti zdiva s okny, pak všech čar (výkres bez výplně zdiva)
-    for (const layer of ["hybrid", "all"] as const) {
-      if (rooms.length) break;
-      const mask = barrier.layers[layer];
+    // Bez popisků: souvislé oblasti zdiva s okny, obrysových čar (bez tenkých kót) nebo všech čar – fáze 114: platí
+    // vrstva s největší celkovou plochou místností (šrafovaný CAD výkres s kótami se nerozpadne na útržky)
+    let best: { rooms: DetectedRoom[]; area: number } | null = null;
+    for (const layer of SCAN_LAYERS) {
+      const mask = barrier.layer(layer);
       const used = new Int32Array(w * h);
+      const found: DetectedRoom[] = [];
+      let area = 0;
       let mark = 0;
       for (let y = 1; y < h - 1; y += 2) {
         for (let x = 1; x < w - 1; x += 2) {
@@ -778,17 +850,26 @@ export function detectWithBarrier(barrier: Barrier, tags: readonly RoomTag[]): D
           const region = floodRegion(mask, w, h, { x, y }, w * h, used, ++mark);
           if (!plausible(region, barrier)) continue;
           if (wallShare(region, barrier, mask) < 0.45) continue;
-          rooms.push(toRoom(region, barrier, { x: (region.x0 + region.x1) / 2, y: (region.y0 + region.y1) / 2 }, "region", []));
+          found.push(toRoom(region, barrier, { x: (region.x0 + region.x1) / 2, y: (region.y0 + region.y1) / 2 }, "region", []));
+          area += region.count;
         }
       }
+      if (found.length && (!best || area > best.area * 1.05)) best = { rooms: found, area };
     }
+    rooms.push(...(best?.rooms ?? []));
   }
   return { rooms, suggestedMmPerPx: scaleFromAreas(rooms), unmatchedTags: unmatched, tags: labelled.length };
 }
 
 /** Stupeň 2 – 🪄 klik do místnosti: oblast kolem bodu, název z popisku uvnitř; neuzavřená oblast = chyba. */
 export function roomAt(barrier: Barrier, point: Pt, tags: readonly RoomTag[]): DetectedRoom | { error: string } {
-  const region = regionAt(barrier, point, 6);
+  // Fáze 114: oblast se 2 a více popisky místností (široké dveře spojily místnosti) se zkusí v další vrstvě
+  const labelled = tags.filter((tag) => tag.name || tag.number);
+  const region = regionAt(barrier, point, 6, (candidate, layer) => {
+    if (layer === "all" || labelled.length < 2) return false;
+    const has = stampRegion(barrier, candidate);
+    return labelled.filter(has).length >= 2;
+  });
   if (!region) return { error: "Kolem bodu se nenašla uzavřená místnost (stěny jsou přerušené nebo je to venku) – zkuste 📐 Rychlou místnost 2 kliky." };
   const has = stampRegion(barrier, region);
   return toRoom(region, barrier, point, "click", tags.filter((tag) => (tag.name || tag.number || tag.areaM2) && has(tag)));

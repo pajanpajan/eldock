@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CATEGORY_LABELS, formatWatts, isMix } from "@/lib/panel-builder/catalog";
-import { catalogCategory, defaultConfig, toConfigCategory, withManufacturer, type ConfigCategory, type ItemConfig } from "@/lib/panel-builder/configurator";
+import { catalogCategory, defaultConfig, toConfigCategory, withManufacturer, withOption, type ConfigCategory, type ItemConfig } from "@/lib/panel-builder/configurator";
 import { RECOGNITION } from "@/lib/panel-builder/project";
 import { cn } from "@/lib/utils";
 import { assignComponentAction, configureItemAction, deleteItemAction, lookupComponentAction, mergeItemsAction, searchCatalogAction, splitItemAction, updateItemTextAction } from "@/server/actions/panel-builder";
@@ -503,7 +503,7 @@ export function ItemConfigurator({
         brandCounts={brandCounts}
         onManufacturer={pickManufacturer}
         onCategory={pickCategory}
-        onOption={(patch) => config && apply({ ...config, ...patch })}
+        onOption={(patch) => config && apply(withOption(config, patch))}
         fieldExtra={(field) =>
           field.key === "poles" || field.key === "contacts" ? (
             <label className="flex items-center gap-2 text-xs text-muted-foreground">

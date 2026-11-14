@@ -52,7 +52,8 @@ describe("fáze 92 – tréninkové zakázky AI Panel Builderu", () => {
       else expect(issues).toEqual([]);
     }
     expect(await credits()).toBe(before);
-    expect(sizes).toEqual({ "byt-3kk": 48, "rd-fve": 96, "chytry-dum": 120 });
+    // Fáze 114: žaluzie a topné okruhy bez rezervy kanálů navíc (4M / 8M aktory) – chytrý dům se vejde do 96 M
+    expect(sizes).toEqual({ "byt-3kk": 48, "rd-fve": 96, "chytry-dum": 96 });
   });
 
   it("RD + FVE: Elektro-linter najde chránič wallboxu typu A a oprava jedním klikem ho vrátí na typ B", async () => {

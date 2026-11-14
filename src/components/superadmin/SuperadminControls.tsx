@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { superadminCancelClosureAction, superadminCloseCompanyAction } from "@/server/actions/data-requests";
-import { adjustCreditsAction, cancelCreditOrderAction, confirmCreditOrderAction, loginSuperadminAction, resolveAiFeedbackAction, runBackupNowAction, setUnlimitedAccessAction } from "@/server/actions/superadmin";
+import { adjustCreditsAction, cancelCreditOrderAction, confirmCreditOrderAction, loginSuperadminAction, resolveAiFeedbackAction, revokeProvisionalCreditsAction, runBackupNowAction, setUnlimitedAccessAction } from "@/server/actions/superadmin";
 
 // Klientské ovládací prvky velínu /superadmin (fáze 50).
 
@@ -89,7 +89,7 @@ export function CreditControls({ companyId, companyName, credits }: { companyId:
 }
 
 /** [ ✅ Potvrdit úhradu a připsat kredity ] / Storno čekající objednávky. */
-export function OrderActions({ orderId, variableSymbol }: { orderId: string; variableSymbol: string }) {
+export function OrderActions({ orderId, variableSymbol, provisional = false }: { orderId: string; variableSymbol: string; /** Fáze 114: kredity předběžně připsané po QR platbě. */ provisional?: boolean }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const confirm = () =>
@@ -99,6 +99,16 @@ export function OrderActions({ orderId, variableSymbol }: { orderId: string; var
       toast.success(`VS ${variableSymbol} uhrazeno – ${result.data.companyName} má ${result.data.creditsRemaining} kreditů.`);
       router.refresh();
     });
+  // Fáze 114: platba za předběžně připsané kredity nedorazila – storno a odečtení kreditů
+  const revoke = () => {
+    if (!window.confirm(`Platba VS ${variableSymbol} nedorazila? Objednávka se stornuje a předběžně připsané kredity se firmě odečtou.`)) return;
+    startTransition(async () => {
+      const result = await revokeProvisionalCreditsAction(orderId);
+      if (!result.ok) return void toast.error(result.error);
+      toast.success(`VS ${variableSymbol}: předběžné kredity (−${result.data.credits}) odečteny, zůstatek ${result.data.balance}.`);
+      router.refresh();
+    });
+  };
   const cancel = () => {
     if (!window.confirm(`Stornovat objednávku VS ${variableSymbol}?`)) return;
     startTransition(async () => {
@@ -111,11 +121,17 @@ export function OrderActions({ orderId, variableSymbol }: { orderId: string; var
   return (
     <div className="flex flex-wrap gap-1">
       <Button type="button" size="sm" className="gap-1" disabled={pending} onClick={confirm} data-testid={`confirm-${variableSymbol}`}>
-        {pending ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <CheckCircle2 className="size-3.5" aria-hidden />} [ ✅ Potvrdit úhradu a připsat kredity ]
+        {pending ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <CheckCircle2 className="size-3.5" aria-hidden />} {provisional ? "[ ✅ Potvrdit platbu v bance ]" : "[ ✅ Potvrdit úhradu a připsat kredity ]"}
       </Button>
-      <Button type="button" size="sm" variant="ghost" className="gap-1 text-muted-foreground" disabled={pending} onClick={cancel}>
-        <XCircle className="size-3.5" aria-hidden /> Storno
-      </Button>
+      {provisional ? (
+        <Button type="button" size="sm" variant="ghost" className="gap-1 text-red-300" disabled={pending} onClick={revoke} data-testid={`revoke-${variableSymbol}`}>
+          <XCircle className="size-3.5" aria-hidden /> ↩️ Odečíst předběžné kredity
+        </Button>
+      ) : (
+        <Button type="button" size="sm" variant="ghost" className="gap-1 text-muted-foreground" disabled={pending} onClick={cancel}>
+          <XCircle className="size-3.5" aria-hidden /> Storno
+        </Button>
+      )}
     </div>
   );
 }

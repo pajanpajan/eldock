@@ -17,7 +17,7 @@ import { matchDetection, type Detection } from "@/lib/panel-builder/matching";
 import { planRailMerge, signatureFromItem, signatureOf } from "@/lib/panel-builder/rail-merge";
 import { layoutPreviewDto, type LayoutChoice, type LayoutPreviewDto } from "@/lib/panel-builder/layout-options";
 import { isCombSetting, type CombSetting } from "@/lib/panel-builder/comb-busbars";
-import { SINGLE_LAYOUT, layoutAfterRailSwap, layoutNeed, layoutOptions, lowStartRail, matchLayoutEnclosures, normalizeLayout, packRails, parseRailLayout, planLayout, planTwoBoards, projectGroups, serializeRailLayout, withComb, withFields, type EnclosureMatch, type PlannedRail, type RailLayout } from "@/lib/panel-builder/rail-layout";
+import { SINGLE_LAYOUT, fillRailsToEnclosure, layoutAfterRailSwap, layoutNeed, layoutOptions, lowStartRail, matchLayoutEnclosures, normalizeLayout, packRails, parseRailLayout, planLayout, planTwoBoards, projectGroups, serializeRailLayout, withComb, withFields, type EnclosureMatch, type PlannedRail, type RailLayout } from "@/lib/panel-builder/rail-layout";
 import type { FeederInfo } from "./panel-projects";
 
 // Návrh rozváděče od nuly (fáze 43): kapacita a pořadí DIN lišt, osazení přístrojů z kaskádového
@@ -555,17 +555,23 @@ export async function applyProjectLayout(prisma: PrismaClient, projectId: string
   if (choice.concept === "two_boards") {
     if (project.parentBoardId) throw new WorkflowError("VALIDATION", "Podružný rozváděč nejde rozdělit na další dva – zvolte jinou koncepci.");
     const boards = planTwoBoards(groups, enclosures, manufacturer);
-    mainRails = boards.main.rails;
     layout = { ...SINGLE_LAYOUT, concept: "two_boards" };
     enclosure = pickMatch(boards.main.matches, choice.enclosureId)?.enclosure ?? null;
-    if (boards.second) second = { rails: boards.second.rails, enclosure: pickMatch(boards.second.matches, choice.secondEnclosureId)?.enclosure ?? null };
+    // Fáze 114: větší rozvodnice z průvodce – tolik DIN lišt, kolik má skříň řad
+    mainRails = choice.fillRows && enclosure ? fillRailsToEnclosure(boards.main.rails, layout, enclosure).rails : boards.main.rails;
+    if (boards.second) {
+      const secondEnclosure = pickMatch(boards.second.matches, choice.secondEnclosureId)?.enclosure ?? null;
+      second = { rails: choice.fillRows && secondEnclosure ? fillRailsToEnclosure(boards.second.rails, SINGLE_LAYOUT, secondEnclosure).rails : boards.second.rails, enclosure: secondEnclosure };
+    }
   } else {
     const plan = planLayout(groups, choice.concept);
     const need = layoutNeed(plan.rails, plan.layout.fields, lossW);
-    const matches = matchLayoutEnclosures(enclosures, need, { manufacturer, exactWidth: choice.concept !== "two_field" });
-    mainRails = plan.rails;
-    layout = plan.layout;
+    const matches = matchLayoutEnclosures(enclosures, need, { manufacturer, exactWidth: choice.concept !== "two_field", limit: 400 });
     enclosure = pickMatch(matches, choice.enclosureId)?.enclosure ?? null;
+    // Fáze 114: větší rozvodnice s rezervou – prázdné DIN lišty do řad zvolené skříně
+    const filled = choice.fillRows && enclosure ? fillRailsToEnclosure(plan.rails, plan.layout, enclosure) : { rails: plan.rails, layout: plan.layout };
+    mainRails = filled.rails;
+    layout = filled.layout;
   }
   const mainSlots = slotsOf(mainRails);
   await prisma.$transaction([

@@ -117,7 +117,7 @@ export async function createScheduleProjectAction(input: z.input<typeof schedule
 }
 
 // Fáze 111: koncepce uspořádání skříně a lišt z průvodce (a zvolené skříně z databáze)
-const layoutSchema = z.object({ concept: z.enum(["two_field", "wide24", "compact18", "two_boards"]), enclosureId: id.nullable().optional(), secondEnclosureId: id.nullable().optional() });
+const layoutSchema = z.object({ concept: z.enum(["two_field", "wide24", "compact18", "two_boards"]), enclosureId: id.nullable().optional(), secondEnclosureId: id.nullable().optional(), fillRows: z.boolean().optional() });
 const floorplanSchema = z.object({ name: text.min(1), customerName: text.nullable(), installationSite: text.nullable(), draft: z.unknown(), manufacturer: z.string().trim().max(60).nullable().optional(), floorplanId: id.optional(), layout: layoutSchema.nullable().optional() });
 
 /** Fáze 111: náhled průvodce „📐 Uspořádání skříně a lišt“ před generováním z půdorysu (bez kreditu). */

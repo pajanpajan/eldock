@@ -17,7 +17,7 @@ const field = "h-8 rounded-md border border-input bg-transparent px-2 text-sm te
  * Fáze 90: po vytvoření se rovnou předvyplní další typ místnosti (po obývacím pokoji kuchyň, ložnice, koupelna …),
  * průvodce zůstává v kroku 1 – dům se skládá místnost po místnosti na jedno kliknutí.
  */
-export function RoomBySizeForm({ onCreate, rooms = [], className }: { onCreate: (room: { name: string; w: number; h: number }) => void; rooms?: readonly string[]; className?: string }) {
+export function RoomBySizeForm({ onCreate, rooms = [], className, stacked = false }: { onCreate: (room: { name: string; w: number; h: number }) => void; rooms?: readonly string[]; className?: string; /** Fáze 114: úzký levý sloupec – pole pod sebou v mřížce, nic nepřeteče. */ stacked?: boolean }) {
   const listId = useId();
   const [first] = useState(() => nextRoomPreset(rooms));
   const [name, setName] = useState<string>(first.name);
@@ -59,55 +59,96 @@ export function RoomBySizeForm({ onCreate, rooms = [], className }: { onCreate: 
     setY(formatRoomSize(next.h, unit));
   }
 
+  const nameField = (
+    <>
+      <input list={listId} value={name} onChange={(event) => changeName(event.target.value)} maxLength={40} className={cn(field, stacked ? "w-full min-w-0" : "w-40")} aria-label="Název / typ místnosti" placeholder="Název místnosti" data-testid="room-size-name" />
+      <datalist id={listId}>
+        {ROOM_PRESETS.map((preset) => (
+          <option key={preset.name} value={preset.name} />
+        ))}
+      </datalist>
+    </>
+  );
+  const sizeField = (axis: "x" | "y") => (
+    <label className={cn("flex items-center gap-1", stacked && "min-w-0")}>
+      {axis === "x" ? "X" : "Y"}
+      <input
+        value={axis === "x" ? x : y}
+        onChange={(event) => (axis === "x" ? setX : setY)(event.target.value)}
+        inputMode="decimal"
+        className={cn(field, stacked ? "w-full min-w-0" : "w-16", "text-right font-mono tabular-nums")}
+        aria-label={axis === "x" ? `Šířka nové místnosti X [${unit}]` : `Hloubka nové místnosti Y [${unit}]`}
+        data-testid={`room-size-${axis}`}
+      />
+    </label>
+  );
+  const unitToggle = (
+    <span className="flex overflow-hidden rounded-md border border-border" role="radiogroup" aria-label="Jednotka rozměrů">
+      {(["m", "mm"] as const).map((option) => (
+        <button key={option} type="button" role="radio" aria-checked={unit === option} onClick={() => changeUnit(option)} className={cn("px-1.5 py-1 font-mono", stacked && "flex-1", unit === option ? "bg-primary/20 text-foreground" : "hover:text-foreground")} data-testid={`room-size-unit-${option}`}>
+          {option}
+        </button>
+      ))}
+    </span>
+  );
+  const swapButton = (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      className={cn("h-8 gap-1 px-2", stacked && "w-full min-w-0 justify-center whitespace-normal leading-snug")}
+      onClick={() => {
+        setX(y);
+        setY(x);
+      }}
+      title="Prohodit šířku a hloubku"
+      data-testid="room-size-swap"
+    >
+      <ArrowLeftRight className="size-3.5" aria-hidden /> ↻ Prohodit X ↔ Y
+    </Button>
+  );
+  const createButton = (
+    <Button type="submit" size="sm" className={cn("h-8 gap-1", stacked && "w-full min-w-0")} data-testid="room-size-create">
+      <Plus className="size-4" aria-hidden /> Vytvořit místnost
+    </Button>
+  );
+
   return (
     <form
       onSubmit={(event) => {
         event.preventDefault();
         submit();
       }}
-      className={cn("flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground", className)}
+      className={cn(stacked ? "flex min-w-0 flex-col gap-2" : "flex flex-wrap items-center gap-1.5", "text-xs text-muted-foreground", className)}
       aria-label="Místnost podle rozměrů X × Y"
       data-testid="room-by-size"
     >
-      <input list={listId} value={name} onChange={(event) => changeName(event.target.value)} maxLength={40} className={cn(field, "w-40")} aria-label="Název / typ místnosti" placeholder="Název místnosti" data-testid="room-size-name" />
-      <datalist id={listId}>
-        {ROOM_PRESETS.map((preset) => (
-          <option key={preset.name} value={preset.name} />
-        ))}
-      </datalist>
-      <label className="flex items-center gap-1">
-        X
-        <input value={x} onChange={(event) => setX(event.target.value)} inputMode="decimal" className={cn(field, "w-16 text-right font-mono tabular-nums")} aria-label={`Šířka nové místnosti X [${unit}]`} data-testid="room-size-x" />
-      </label>
-      <span aria-hidden>×</span>
-      <label className="flex items-center gap-1">
-        Y
-        <input value={y} onChange={(event) => setY(event.target.value)} inputMode="decimal" className={cn(field, "w-16 text-right font-mono tabular-nums")} aria-label={`Hloubka nové místnosti Y [${unit}]`} data-testid="room-size-y" />
-      </label>
-      <span className="flex overflow-hidden rounded-md border border-border" role="radiogroup" aria-label="Jednotka rozměrů">
-        {(["m", "mm"] as const).map((option) => (
-          <button key={option} type="button" role="radio" aria-checked={unit === option} onClick={() => changeUnit(option)} className={cn("px-1.5 py-1 font-mono", unit === option ? "bg-primary/20 text-foreground" : "hover:text-foreground")} data-testid={`room-size-unit-${option}`}>
-            {option}
-          </button>
-        ))}
-      </span>
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        className="h-8 gap-1 px-2"
-        onClick={() => {
-          setX(y);
-          setY(x);
-        }}
-        title="Prohodit šířku a hloubku"
-        data-testid="room-size-swap"
-      >
-        <ArrowLeftRight className="size-3.5" aria-hidden /> ↻ Prohodit X ↔ Y
-      </Button>
-      <Button type="submit" size="sm" className="h-8 gap-1" data-testid="room-size-create">
-        <Plus className="size-4" aria-hidden /> Vytvořit místnost
-      </Button>
+      {stacked ? (
+        <>
+          {nameField}
+          {/* Fáze 114: rozměry X × Y v čisté mřížce – vstupy stejně široké, nic nepřeteče šířku sloupce */}
+          <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1.5">
+            {sizeField("x")}
+            <span aria-hidden>×</span>
+            {sizeField("y")}
+          </div>
+          <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-1.5">
+            {unitToggle}
+            {swapButton}
+          </div>
+          {createButton}
+        </>
+      ) : (
+        <>
+          {nameField}
+          {sizeField("x")}
+          <span aria-hidden>×</span>
+          {sizeField("y")}
+          {unitToggle}
+          {swapButton}
+          {createButton}
+        </>
+      )}
     </form>
   );
 }

@@ -44,6 +44,8 @@ export interface SmartDinComponent {
   source: string;
   system: SmartSystemId;
   moduleId: string;
+  /** Fáze 114: EAN z oficiálních dat výrobce. */
+  ean: string | null;
 }
 
 const isPsu = (role: SmartRole) => role === "psu" || role === "psu_led";
@@ -70,6 +72,7 @@ export function smartDinComponent(system: SmartSystemId, unit: SmartModule): Sma
     source: unit.source,
     system,
     moduleId: unit.id,
+    ean: unit.ean ?? null,
   };
 }
 

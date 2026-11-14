@@ -412,6 +412,7 @@ const layoutChoiceSchema = z.object({
   concept: z.enum(LAYOUT_CONCEPTS as unknown as [string, ...string[]]),
   enclosureId: id.nullable().optional(),
   secondEnclosureId: id.nullable().optional(),
+  fillRows: z.boolean().optional(),
 });
 
 /** Náhled čtyř koncepcí uspořádání osazeného rozváděče se skutečnými skříněmi z databáze. */

@@ -19,6 +19,7 @@ export function FloorBar({
   onAdd,
   onUpdate,
   onRemove,
+  stacked = false,
 }: {
   floors: FloorSheet[];
   activeId: string;
@@ -28,6 +29,8 @@ export function FloorBar({
   onAdd: (input: { name: string; levelMm: number }) => void;
   onUpdate: (id: string, patch: { name?: string; levelMm?: number }) => void;
   onRemove: (id: string) => void;
+  /** Fáze 114: úzký levý sloupec – podlaží v mřížce 2 sloupců, pole pod sebou (nic nepřeteče šířku). */
+  stacked?: boolean;
 }) {
   const active = floors.find((floor) => floor.id === activeId) ?? floors[0];
   const [adding, setAdding] = useState(false);
@@ -38,8 +41,8 @@ export function FloorBar({
 
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-border bg-card p-2 text-xs" role="group" aria-label="Podlaží domu" data-testid="floor-bar">
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className="mr-1 flex items-center gap-1 font-semibold text-muted-foreground">
+      <div className={stacked ? "grid grid-cols-2 gap-1.5" : "flex flex-wrap items-center gap-1.5"}>
+        <span className={cn("mr-1 flex items-center gap-1 font-semibold text-muted-foreground", stacked && "col-span-2")}>
           <Layers className="size-4" aria-hidden /> Podlaží:
         </span>
         {[...floors].reverse().map((floor) => (
@@ -49,7 +52,7 @@ export function FloorBar({
             role="tab"
             aria-selected={floor.id === activeId}
             onClick={() => onSelect(floor.id)}
-            className={cn("flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 font-semibold", floor.id === activeId ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:text-foreground")}
+            className={cn("flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 font-semibold", stacked && "min-w-0 flex-wrap justify-center gap-x-1 gap-y-0.5 px-1.5 leading-snug", floor.id === activeId ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:text-foreground")}
             data-testid={`floor-tab-${floor.name}`}
           >
             {floor.id === panelFloorId ? <span title="Hlavní rozváděč">⚡</span> : null}
@@ -59,7 +62,7 @@ export function FloorBar({
           </button>
         ))}
         {floors.length < MAX_FLOORS ? (
-          <Button type="button" size="sm" variant="outline" className="gap-1" onClick={() => {
+          <Button type="button" size="sm" variant="outline" className={cn("gap-1", stacked && "col-span-2 h-auto min-h-8 w-full min-w-0 whitespace-normal")} onClick={() => {
               setAdding((value) => !value);
               setDraftLevel(String((top.levelMm + DEFAULT_STOREY_MM) / 1000).replace(".", ","));
             }}
@@ -69,11 +72,11 @@ export function FloorBar({
             <Plus className="size-3.5" aria-hidden /> Přidat podlaží
           </Button>
         ) : null}
-        <span className="ml-auto text-muted-foreground">Trasy mezi podlažími vedou stoupacím vedením ↕ (paleta Rozváděč).</span>
+        <span className={cn("text-muted-foreground", stacked ? "col-span-2 leading-snug" : "ml-auto")}>Trasy mezi podlažími vedou stoupacím vedením ↕ (paleta Rozváděč).</span>
       </div>
       {adding ? (
         <form
-          className="flex flex-wrap items-end gap-2 rounded-lg border border-dashed border-primary/50 p-2"
+          className={cn("rounded-lg border border-dashed border-primary/50 p-2", stacked ? "flex flex-col gap-2" : "flex flex-wrap items-end gap-2")}
           onSubmit={(event) => {
             event.preventDefault();
             const levelMm = Math.round(Number(draftLevel.replace(",", ".")) * 1000);
@@ -85,7 +88,7 @@ export function FloorBar({
         >
           <label className="flex flex-col gap-1 text-muted-foreground">
             Název podlaží
-            <input value={draftName} onChange={(event) => setDraftName(event.target.value)} placeholder="2. NP" maxLength={30} className="h-8 w-32 rounded-md border border-input bg-transparent px-2 text-sm text-foreground dark:bg-input/30" aria-label="Název nového podlaží" />
+            <input value={draftName} onChange={(event) => setDraftName(event.target.value)} placeholder="2. NP" maxLength={30} className={cn("h-8 rounded-md border border-input bg-transparent px-2 text-sm text-foreground dark:bg-input/30", stacked ? "w-full min-w-0" : "w-32")} aria-label="Název nového podlaží" />
           </label>
           <div className="flex flex-wrap gap-1">
             {FLOOR_NAME_CHIPS.filter((name) => !floors.some((floor) => floor.name === name)).map((name) => (
@@ -104,19 +107,19 @@ export function FloorBar({
           </div>
           <label className="flex flex-col gap-1 text-muted-foreground">
             Výška podlahy [m]
-            <input value={draftLevel} onChange={(event) => setDraftLevel(event.target.value)} inputMode="decimal" className="h-8 w-24 rounded-md border border-input bg-transparent px-2 text-right text-sm text-foreground tabular-nums dark:bg-input/30" aria-label="Výška podlahy nového podlaží [m]" />
+            <input value={draftLevel} onChange={(event) => setDraftLevel(event.target.value)} inputMode="decimal" className={cn("h-8 rounded-md border border-input bg-transparent px-2 text-right text-sm text-foreground tabular-nums dark:bg-input/30", stacked ? "w-full min-w-0" : "w-24")} aria-label="Výška podlahy nového podlaží [m]" />
           </label>
           <Button type="submit" size="sm" data-testid="floor-add-confirm">
             Vytvořit podlaží
           </Button>
         </form>
       ) : null}
-      <div className="flex flex-wrap items-center gap-2">
-        <label className="flex items-center gap-1 text-muted-foreground">
+      <div className={stacked ? "grid grid-cols-1 gap-1.5" : "flex flex-wrap items-center gap-2"}>
+        <label className={cn("flex items-center gap-1 text-muted-foreground", stacked && "min-w-0")}>
           Název:
-          <input key={`n-${active.id}-${active.name}`} defaultValue={active.name} maxLength={30} onBlur={(event) => event.target.value.trim() && event.target.value !== active.name && onUpdate(active.id, { name: event.target.value })} onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()} className="h-7 w-28 rounded-md border border-input bg-transparent px-1.5 text-foreground dark:bg-input/30" aria-label="Název aktivního podlaží" />
+          <input key={`n-${active.id}-${active.name}`} defaultValue={active.name} maxLength={30} onBlur={(event) => event.target.value.trim() && event.target.value !== active.name && onUpdate(active.id, { name: event.target.value })} onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()} className={cn("h-7 rounded-md border border-input bg-transparent px-1.5 text-foreground dark:bg-input/30", stacked ? "w-full min-w-0" : "w-28")} aria-label="Název aktivního podlaží" />
         </label>
-        <label className="flex items-center gap-1 text-muted-foreground" title="Výška čisté podlahy nad podlažím rozváděče (konstrukční výška podlaží se počítá do stoupacího vedení)">
+        <label className={cn("flex items-center gap-1 text-muted-foreground", stacked && "min-w-0")} title="Výška čisté podlahy nad podlažím rozváděče (konstrukční výška podlaží se počítá do stoupacího vedení)">
           Výška podlahy:
           <input
             key={`l-${active.id}-${active.levelMm}`}
@@ -127,7 +130,7 @@ export function FloorBar({
               if (Number.isFinite(value) && value !== active.levelMm) onUpdate(active.id, { levelMm: value });
             }}
             onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
-            className="h-7 w-20 rounded-md border border-input bg-transparent px-1.5 text-right text-foreground tabular-nums dark:bg-input/30"
+            className={cn("h-7 rounded-md border border-input bg-transparent px-1.5 text-right text-foreground tabular-nums dark:bg-input/30", stacked ? "w-full min-w-0" : "w-20")}
             aria-label="Výška podlahy aktivního podlaží [m]"
           />
           m
@@ -137,7 +140,7 @@ export function FloorBar({
             type="button"
             size="sm"
             variant="ghost"
-            className="gap-1 text-red-300 hover:bg-red-500/15"
+            className={cn("gap-1 text-red-300 hover:bg-red-500/15", stacked && "w-full justify-start")}
             onClick={() => {
               if (window.confirm(`Smazat podlaží ${active.name} i se všemi prvky, místnostmi a podkladem?`)) onRemove(active.id);
             }}

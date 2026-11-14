@@ -25,6 +25,8 @@ export interface ResearchComponent {
   /** Fáze 88: podtyp relé (IMPULSE / AUXILIARY / TIMER / STAIRCASE …). */
   relaySubtype?: string;
   modulesCount: number;
+  /** Fáze 114: EAN (GTIN) z oficiálních dat výrobce. */
+  ean?: string;
   /** null = výrobce neuvádí (dopočte se odhad dle IEC a prvek se označí). */
   powerLossWatts: number | null;
   /** Fáze 81: Pv je orientační (zadání / odvozeno), ne z podkladů výrobce → v katalogu „odhad“. */

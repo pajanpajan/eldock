@@ -22,8 +22,12 @@ const details = (input: CompanyDetails) => ({
   authorizationNumber: input.authorizationNumber || null,
 });
 
-async function assertEmailFree(prisma: PrismaClient | Tx, email: string, checkUsers = false) {
-  if (await prisma.registeredCompany.findUnique({ where: { email }, select: { id: true } })) {
+/**
+ * E-mail je volný v daném produktu. Fáze 114: firma AI Panel Builderu a Správy závodů smí mít stejný e-mail (SSO
+ * přemostění zakládá spárovaný účet druhého produktu se stejným e-mailem).
+ */
+async function assertEmailFree(prisma: PrismaClient | Tx, email: string, scope: ProductScope, checkUsers = false) {
+  if (await prisma.registeredCompany.findUnique({ where: { email_productScope: { email, productScope: scope } }, select: { id: true } })) {
     throw new WorkflowError("CONFLICT", "Firma s tímto e-mailem už je registrovaná – přihlaste se.");
   }
   if (checkUsers && (await prisma.user.findUnique({ where: { email }, select: { id: true } }))) {
@@ -34,7 +38,7 @@ async function assertEmailFree(prisma: PrismaClient | Tx, email: string, checkUs
 /** Registrace firmy (Tester) do AI Panel Builderu: souhlas s VOP a přenesením odpovědnosti je povinný. */
 export async function registerPanelCompany(prisma: PrismaClient, input: PanelRegistration, now = new Date()) {
   if (input.termsAccepted !== true) throw new WorkflowError("VALIDATION", "Bez souhlasu s podmínkami nelze registraci odeslat.");
-  await assertEmailFree(prisma, input.email);
+  await assertEmailFree(prisma, input.email, "PANEL_BUILDER");
   return prisma.registeredCompany.create({
     data: { ...details(input), productScope: "PANEL_BUILDER", email: input.email, passwordHash: await hashPassword(input.password), termsAcceptedAt: now, termsVersion: TERMS_VERSION },
     select: { id: true, companyName: true, creditsRemaining: true },
@@ -43,7 +47,7 @@ export async function registerPanelCompany(prisma: PrismaClient, input: PanelReg
 
 /** Přihlášení firmy e-mailem a heslem v daném produktu; špatné údaje → `null` (bez rozlišení důvodu). */
 export async function authenticateCompany(prisma: PrismaClient, email: string, password: string, scope: ProductScope) {
-  const company = await prisma.registeredCompany.findUnique({ where: { email: email.trim().toLowerCase() }, select: { id: true, productScope: true, passwordHash: true, plantId: true, closedAt: true } });
+  const company = await prisma.registeredCompany.findUnique({ where: { email_productScope: { email: email.trim().toLowerCase(), productScope: scope } }, select: { id: true, productScope: true, passwordHash: true, plantId: true, closedAt: true } });
   const ok = company ? await verifyPassword(password, company.passwordHash) : false;
   // Fáze 69: zrušená firma (zůstaly jen fakturační údaje) se nepřihlásí
   return company && ok && !company.closedAt && company.productScope === scope ? { id: company.id, plantId: company.plantId } : null;
@@ -64,7 +68,7 @@ export async function registerPlantCompany(prisma: PrismaClient, input: PlantReg
   if (input.termsAccepted !== true) throw new WorkflowError("VALIDATION", "Bez souhlasu s podmínkami nelze registraci odeslat.");
   const passwordHash = await hashPassword(input.password);
   return prisma.$transaction(async (tx) => {
-    await assertEmailFree(tx, input.email, true);
+    await assertEmailFree(tx, input.email, "PLANT_MANAGEMENT", true);
     const codes = (await tx.plant.findMany({ select: { code: true } })).map((plant) => plant.code);
     const plantData = await preparePlant(tx, { name: input.plantName, code: plantCodeFor(input.companyName, codes), location: `${input.street}, ${input.city}`, customerName: input.companyName });
     const plant = await tx.plant.create({ data: plantData, select: { id: true, code: true, name: true } });

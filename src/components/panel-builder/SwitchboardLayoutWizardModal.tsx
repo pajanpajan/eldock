@@ -5,7 +5,7 @@ import { Check, Loader2, TriangleAlert } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import type { EnclosureOptionDto, LayoutBoardDto, LayoutChoice, LayoutOptionDto, LayoutPreviewDto, LayoutRailDto } from "@/lib/panel-builder/layout-options";
+import type { EnclosureOptionDto, LayoutBoardDto, LayoutChoice, LayoutOptionDto, LayoutPreviewDto, LayoutRailDto, SizeTierDto } from "@/lib/panel-builder/layout-options";
 import type { LayoutConcept } from "@/lib/panel-builder/rail-layout";
 import { cn } from "@/lib/utils";
 
@@ -46,11 +46,19 @@ export function SwitchboardLayoutWizardModal({
 function WizardBody({ preview, onClose, onConfirm, confirmLabel, busy, context }: { preview: LayoutPreviewDto; onClose: () => void; onConfirm: (choice: LayoutChoice) => void; confirmLabel: string; busy: boolean; context: "floorplan" | "project" }) {
   const initial = preview.options.find((option) => option.recommended) ?? preview.options.find((option) => option.available) ?? preview.options[0];
   const [concept, setConcept] = useState<LayoutConcept>(initial.concept);
-  const [picked, setPicked] = useState<Partial<Record<LayoutConcept, { main?: string; second?: string }>>>({});
+  // Fáze 114: volba velikosti rozvodnice (karta s rezervou v %) a konkrétního modelu pro každý rozváděč koncepce
+  const [picked, setPicked] = useState<Partial<Record<LayoutConcept, { main?: string; second?: string; mainTier?: string; secondTier?: string }>>>({});
   const option = preview.options.find((candidate) => candidate.concept === concept) ?? initial;
-  const mainId = picked[concept]?.main ?? option.main.enclosures[0]?.id ?? null;
-  const secondId = picked[concept]?.second ?? option.second?.enclosures[0]?.id ?? null;
+  const tierOf = (board: LayoutBoardDto | null, key: string | undefined) => (board ? (board.tiers.find((tier) => tier.key === key) ?? board.tiers[0] ?? null) : null);
+  const mainTier = tierOf(option.main, picked[concept]?.mainTier);
+  const secondTier = tierOf(option.second, picked[concept]?.secondTier);
+  const mainId = picked[concept]?.main ?? mainTier?.enclosures[0]?.id ?? option.main.enclosures[0]?.id ?? null;
+  const secondId = picked[concept]?.second ?? secondTier?.enclosures[0]?.id ?? option.second?.enclosures[0]?.id ?? null;
+  // Vlastní volba velikosti / modelu = rozváděč s tolika DIN lištami, kolik má zvolená skříň řad
+  const explicit = Boolean(picked[concept]?.mainTier || picked[concept]?.main || picked[concept]?.secondTier || picked[concept]?.second);
   const pick = (part: "main" | "second", id: string) => setPicked((current) => ({ ...current, [concept]: { ...current[concept], [part]: id } }));
+  const pickTier = (part: "main" | "second", tier: SizeTierDto) =>
+    setPicked((current) => ({ ...current, [concept]: { ...current[concept], [part === "main" ? "mainTier" : "secondTier"]: tier.key, [part]: tier.enclosures[0]?.id } }));
   return (
     <>
       <DialogHeader>
@@ -73,8 +81,14 @@ function WizardBody({ preview, onClose, onConfirm, confirmLabel, busy, context }
         </h3>
         {option.available ? (
           <>
-            <EnclosureList title={option.concept === "two_boards" ? "RH1 – Silnoproud 230/400 V" : null} board={option.main} selected={mainId} onPick={(id) => pick("main", id)} testId="layout-enclosure" />
-            {option.second ? <EnclosureList title="RH2 – Slaboproud / Smart Home" board={option.second} selected={secondId} onPick={(id) => pick("second", id)} testId="layout-enclosure-second" /> : null}
+            <SizePicker title={option.concept === "two_boards" ? "RH1 – Silnoproud 230/400 V" : null} board={option.main} tier={mainTier} onTier={(tier) => pickTier("main", tier)} testId="layout-tier" />
+            <EnclosureList title={option.concept === "two_boards" ? "RH1 – Silnoproud 230/400 V" : null} board={option.main} enclosures={mainTier?.enclosures ?? option.main.enclosures} selected={mainId} onPick={(id) => pick("main", id)} testId="layout-enclosure" />
+            {option.second ? (
+              <>
+                <SizePicker title="RH2 – Slaboproud / Smart Home" board={option.second} tier={secondTier} onTier={(tier) => pickTier("second", tier)} testId="layout-tier-second" />
+                <EnclosureList title="RH2 – Slaboproud / Smart Home" board={option.second} enclosures={secondTier?.enclosures ?? option.second.enclosures} selected={secondId} onPick={(id) => pick("second", id)} testId="layout-enclosure-second" />
+              </>
+            ) : null}
           </>
         ) : (
           <p className="flex items-start gap-2 text-sm text-amber-200" role="alert">
@@ -91,7 +105,7 @@ function WizardBody({ preview, onClose, onConfirm, confirmLabel, busy, context }
           type="button"
           className="touch-target gap-2"
           disabled={busy || !option.available}
-          onClick={() => onConfirm({ concept, enclosureId: mainId, secondEnclosureId: option.second ? secondId : null })}
+          onClick={() => onConfirm({ concept, enclosureId: mainId, secondEnclosureId: option.second ? secondId : null, ...(explicit ? { fillRows: true } : {}) })}
           data-testid="layout-wizard-confirm"
         >
           {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null} {confirmLabel} – {option.short}
@@ -176,7 +190,53 @@ function RailsPreview({ option }: { option: LayoutOptionDto }) {
   );
 }
 
-function EnclosureList({ title, board, selected, onPick, testId }: { title: string | null; board: LayoutBoardDto; selected: string | null; onPick: (id: string) => void; testId: string }) {
+/** Krátký název modelu bez závorky s poli („ComfortLine CA27V“). */
+const modelName = (enclosure: Pick<EnclosureOptionDto, "manufacturer" | "model">) => `${enclosure.manufacturer} ${enclosure.model.replace(/\s*\(.*\)$/, "")}`;
+
+/**
+ * Fáze 114: „📦 Zvolte velikost rozvodnice a požadovanou rezervu“ – karty od nejmenší vyhovující po větší skříně
+ * (kapacita, rezerva v % a ve volných modulech, skutečné modely z databáze); zvolená velikost = počet DIN lišt rozváděče.
+ */
+function SizePicker({ title, board, tier, onTier, testId }: { title: string | null; board: LayoutBoardDto; tier: SizeTierDto | null; onTier: (tier: SizeTierDto) => void; testId: string }) {
+  if (!board.tiers.length) return null;
+  return (
+    <div className="flex flex-col gap-2" data-testid={`${testId}s`}>
+      <p className="text-sm font-semibold">
+        📦 Zvolte velikost rozvodnice a požadovanou rezervu (dle ČSN EN IEC 61439 min. 20 %){title ? ` – ${title}` : ""}:
+      </p>
+      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3" role="radiogroup" aria-label={`Velikost rozvodnice${title ? ` ${title}` : ""}`}>
+        {board.tiers.map((candidate) => {
+          const selected = candidate.key === tier?.key;
+          const makers = [...new Set(candidate.enclosures.map(modelName))].slice(0, 4);
+          return (
+            <button
+              key={candidate.key}
+              type="button"
+              role="radio"
+              aria-checked={selected}
+              onClick={() => onTier(candidate)}
+              className={cn("flex min-w-0 flex-col gap-1 rounded-xl border-2 bg-card p-2.5 text-left text-xs transition-colors", selected ? "border-primary shadow-lg shadow-primary/10" : "border-border hover:border-primary/50")}
+              data-testid={`${testId}-${candidate.key}`}
+              data-reserve={candidate.reservePercent}
+            >
+              <span className="flex items-start gap-1.5">
+                <b className="min-w-0 flex-1 text-sm leading-snug">{candidate.label}</b>
+                {candidate.recommended ? <span className="shrink-0 rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-200">Doporučeno</span> : null}
+                {selected ? <Check className="size-4 shrink-0 text-primary" aria-hidden /> : null}
+              </span>
+              <b className={cn("leading-snug", candidate.reservePercent >= 20 ? "text-emerald-300" : "text-amber-200")} data-testid={`${testId}-reserve`}>
+                {candidate.reserve}
+              </b>
+              <span className="leading-snug text-muted-foreground">{makers.join(" · ")}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function EnclosureList({ title, board, enclosures, selected, onPick, testId }: { title: string | null; board: LayoutBoardDto; enclosures: readonly EnclosureOptionDto[]; selected: string | null; onPick: (id: string) => void; testId: string }) {
   return (
     <div className="flex flex-col gap-1.5">
       {title ? <p className="text-xs font-semibold text-muted-foreground">{title}</p> : null}
@@ -184,7 +244,7 @@ function EnclosureList({ title, board, selected, onPick, testId }: { title: stri
         Potřeba: {board.need.fields === 2 ? `2 pole × ${board.need.rows} řad po ${board.need.fieldWidth} M` : `${board.need.rows} × ${board.need.fieldWidth} M`} · obsazeno {n(board.need.usedModules)} M, se zálohou 25 % {board.need.requiredModules} M · ztráty {n(board.need.lossW)} W
       </p>
       <ul className="flex flex-col gap-1.5" role="radiogroup" aria-label={title ?? "Rozvodnice"}>
-        {board.enclosures.map((enclosure) => (
+        {enclosures.map((enclosure) => (
           <li key={enclosure.id}>
             <EnclosureRow enclosure={enclosure} selected={enclosure.id === selected} onPick={() => onPick(enclosure.id)} testId={`${testId}-${enclosure.id}`} />
           </li>

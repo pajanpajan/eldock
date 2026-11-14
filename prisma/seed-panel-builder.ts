@@ -16,6 +16,7 @@ import { GENERATED_CATALOG, type SeedComponent } from "./seed-catalog-generated"
 import { buildSearchText, estimatePowerLoss, iecSymbolFor } from "../src/lib/panel-builder/catalog";
 import { ENCLOSURE_FANS, RESEARCH_COMPONENTS } from "./seed-catalog-research";
 import { ABB_2026_COMPONENTS } from "./seed-abb-2026";
+import { ACCESSORY_COMPONENTS } from "./seed-accessories-2026";
 import { ABB_CZ_COMPONENTS, ABB_CZ_RELATIONS } from "./seed-abb-cz";
 import { isHiddenManufacturer } from "../src/lib/panel-builder/brands";
 import { demoDetections } from "../src/lib/panel-builder/matching";
@@ -23,6 +24,7 @@ import { REFERENCE_DEVICES, REFERENCE_DIMS, withPositions } from "../src/lib/pan
 import { applyDetections, applyProposedTree } from "../src/server/services/panel-builder";
 import { ROUTINE_TEST_POINTS } from "../src/lib/legislation-2027";
 import { applyEnclosureFixes, applyEtimComponents, importExternalCatalog, importWiringDevices, seedStandardEnclosures, seedVerifiedEnclosures } from "../src/server/services/catalog-sync";
+import { ensureDefaultLabelSets } from "../src/server/services/operator";
 import { readSnapshot, readWiringSnapshot } from "./external-catalog-source";
 import { BRAND_ETIM_COMPONENTS } from "../src/lib/panel-builder/brand-etim-components.generated";
 import { UNIVERSAL_COMPONENTS } from "../src/lib/panel-builder/etim-universal.generated";
@@ -232,7 +234,8 @@ export const CATALOG: SeedComponent[] = (() => {
   const key = (component: Pick<SeedComponent, "manufacturer" | "typeCode">) => `${component.manufacturer.toLowerCase()}|${component.typeCode.toLowerCase().replace(/\s+/g, "")}`;
   // Rešerše výrobců (fáze 47): Siemens SENTRON a ABB z reálného 144M rozváděče; chybějící Pv = odhad IEC
   // Fáze 61: chytrá domácnost z Katalogu ABB 2026 (free@home), KNX stmívač / DALI / IP rozhraní, Loxone Dimmer Extension
-  const research: SeedComponent[] = [...ABB_2026_COMPONENTS, ...RESEARCH_COMPONENTS].map((entry) => {
+  // Fáze 114: příslušenství s ověřeným objednacím číslem (ABB, OEZ, Hager, Schneider) – kaskáda bez odhadu IEC
+  const research: SeedComponent[] = [...ABB_2026_COMPONENTS, ...ACCESSORY_COMPONENTS, ...RESEARCH_COMPONENTS].map((entry) => {
     const { powerLossWatts, source, lossEstimated, ...component } = entry;
     void source; // zdroj rešerše zůstává jen v souboru s daty
     return {
@@ -369,6 +372,8 @@ export async function seedCatalog(prisma: PrismaClient) {
       iecSymbol: iecSymbolFor(component.category, component.poles),
       description: component.description,
       datasheetUrl: component.datasheetUrl ?? null,
+      // Fáze 114: EAN z oficiálních dat výrobce (bez údaje se nepřepíše EAN doplněný z ETIM)
+      ...(component.ean ? { ean: component.ean } : {}),
       dataSource: component.lossEstimated ? ("IEC_ESTIMATE" as const) : ("SEED_CATALOG" as const),
       searchText: buildSearchText(component),
       // Fáze 81: kusy chytré domácnosti z `smart-home.ts` – import katalogu výrobců je nepřepíše
@@ -517,7 +522,9 @@ export async function seedPanelBuilder(prisma: PrismaClient, options: { external
   const universalEtim = await step("balíčky ETIM data (OEZ ETIM 8, Hager ETIM 10)", () => applyEtimComponents(prisma, UNIVERSAL_COMPONENTS), 0);
   // Fáze 97: řady × moduly rozvodnic podle dat výrobce (ETIM potvrzený popisem) – po importu externí databáze
   const enclosureFixes = await step("rozvodnice podle dat výrobce", () => applyEnclosureFixes(prisma), 0);
-  return { components, project, tester, enclosures, verifiedEnclosures, external, fans, etim, brandEtim, universalEtim, enclosureFixes, failures };
+  // Fáze 114: prázdný seznam sad QR štítků → 5 výchozích prodejních sad (objednávání hned po nasazení)
+  const labelSets = await step("sady QR štítků", () => ensureDefaultLabelSets(prisma), false);
+  return { components, project, tester, enclosures, verifiedEnclosures, external, fans, etim, brandEtim, universalEtim, enclosureFixes, labelSets, failures };
 }
 
 /** Filtrační ventilátory rozváděčů – upsert podle objednacího čísla. Vrací počet ventilátorů. */

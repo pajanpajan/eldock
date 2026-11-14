@@ -30,7 +30,7 @@ import { getBackupOverview } from "@/server/queries/backups";
 import { getSuperadminCompanies, getSuperadminFeedback, getSuperadminOrders, getSuperadminOverview } from "@/server/queries/superadmin";
 import { prisma } from "@/lib/prisma";
 import { audienceLabel } from "@/lib/newsletter";
-import { parseFeedbackSnapshot } from "@/server/services/credits";
+import { parseFeedbackSnapshot, provisionalDeadline } from "@/server/services/credits";
 import { contactUnreadCount } from "@/server/services/contact";
 import { newsletterOverview } from "@/server/services/newsletter";
 import { isSuperadmin } from "@/server/superadmin-session";
@@ -71,7 +71,7 @@ export default async function SuperadminPage({ searchParams }: PageProps<"/super
   const daysParam = Number((await searchParams).dni);
   const days = [7, 30, 90, 365].includes(daysParam) ? daysParam : 30;
   const filterParam = (await searchParams).filtr;
-  const [overview, unread, operator] = await Promise.all([getSuperadminOverview(), contactUnreadCount(prisma), getOperatorProfile()]);
+  const [overview, unread, operator, orderBadges] = await Promise.all([getSuperadminOverview(), contactUnreadCount(prisma), getOperatorProfile(), orderBadgeCounts()]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -89,6 +89,17 @@ export default async function SuperadminPage({ searchParams }: PageProps<"/super
             {item.id === "zpravy" && unread ? (
               <span className="ml-1.5 rounded-full bg-red-600 px-1.5 py-0.5 text-[11px] font-bold text-white" aria-label={`${unread} nepřečtených zpráv`} data-testid="contact-unread-badge">
                 {unread}
+              </span>
+            ) : null}
+            {/* Fáze 114: nové (čekající) objednávky kreditů a štítků a ⏳ předběžně připsané kredity ke kontrole výpisu */}
+            {item.id === "orders" && orderBadges.pending ? (
+              <span className="ml-1.5 rounded-full bg-red-600 px-1.5 py-0.5 text-[11px] font-bold text-white" aria-label={`${orderBadges.pending} čekajících objednávek`} data-testid="order-pending-badge">
+                {orderBadges.pending}
+              </span>
+            ) : null}
+            {item.id === "orders" && orderBadges.provisional ? (
+              <span className="ml-1 rounded-full bg-amber-400 px-1.5 py-0.5 text-[11px] font-bold text-zinc-950" aria-label={`${orderBadges.provisional} objednávek čeká na kontrolu výpisu z banky`} data-testid="order-provisional-badge">
+                ⏳ {orderBadges.provisional}
               </span>
             ) : null}
           </Link>
@@ -203,6 +214,12 @@ async function OperatorTab() {
   return <OperatorSettingsForm profile={profile} labelSets={labelSets} />;
 }
 
+/** Fáze 114: odznaky záložky objednávek – čekající na úhradu a předběžně připsané kredity ke kontrole výpisu. */
+async function orderBadgeCounts() {
+  const [pending, provisional] = await Promise.all([prisma.creditOrder.count({ where: { status: "PENDING" } }), prisma.creditOrder.count({ where: { status: "PENDING", provisionalAt: { not: null } } })]);
+  return { pending, provisional };
+}
+
 async function OrdersTab() {
   const rank = { PENDING: 0, PAID: 1, CANCELLED: 2 } as const;
   const orders = (await getSuperadminOrders()).sort((a, b) => rank[a.status] - rank[b.status] || b.createdAt.getTime() - a.createdAt.getTime());
@@ -241,7 +258,7 @@ async function OrdersTab() {
           </thead>
           <tbody>
             {orders.map((order) => (
-              <tr key={order.id} className="border-t border-border" data-testid={`order-${order.variableSymbol}`}>
+              <tr key={order.id} id={`VS${order.variableSymbol}`} className="border-t border-border" data-testid={`order-${order.variableSymbol}`}>
                 <td className={cn(td, "font-mono font-bold")}>{order.variableSymbol}</td>
                 <td className={td}>
                   {order.company.companyName}
@@ -256,12 +273,29 @@ async function OrdersTab() {
                   <br />
                   <span className="text-muted-foreground">{formatCzk(order.priceCzkExclVat)} bez DPH</span>
                 </td>
-                <td className={td}>{formatDate(order.createdAt)}</td>
                 <td className={td}>
-                  <span className={cn("rounded-full border px-2 py-0.5", ORDER_STATUS[order.status].badge)}>{ORDER_STATUS[order.status].label}</span>
+                  {formatDate(order.createdAt)}
+                  {/* Fáze 114: okamžitá notifikace majiteli (SMTP / webhook) */}
+                  {order.ownerNotifiedAt ? <p className="mt-1 text-emerald-300" title="Majitel upozorněn e-mailem / webhookem">📧 upozorněno</p> : null}
+                  {order.ownerNotifyError ? <p className="mt-1 max-w-48 text-amber-200" title={order.ownerNotifyError}>⚠️ {order.ownerNotifyError}</p> : null}
+                </td>
+                <td className={td}>
+                  {order.status === "PENDING" && order.provisionalAt ? (
+                    <span className="rounded-full border border-amber-400/70 bg-amber-400/20 px-2 py-0.5 font-semibold text-amber-100" data-testid={`provisional-${order.variableSymbol}`}>
+                      ⏳ Čeká na kontrolu výpisu z banky
+                    </span>
+                  ) : (
+                    <span className={cn("rounded-full border px-2 py-0.5", ORDER_STATUS[order.status].badge)}>{ORDER_STATUS[order.status].label}</span>
+                  )}
+                  {order.status === "PENDING" && order.provisionalAt ? (
+                    <p className={cn("mt-1", provisionalDeadline(order.provisionalAt) < new Date() ? "font-semibold text-red-300" : "text-muted-foreground")}>
+                      +{order.creditsCount} kr. předběžně od {formatDate(order.provisionalAt)} · {provisionalDeadline(order.provisionalAt) < new Date() ? "48 h uplynulo – potvrďte, nebo odečtěte" : `lhůta do ${formatDate(provisionalDeadline(order.provisionalAt))}`}
+                    </p>
+                  ) : null}
+                  {order.provisionalRevokedAt ? <p className="mt-1 text-red-300">↩️ předběžné kredity odečteny {formatDate(order.provisionalRevokedAt)}</p> : null}
                   {order.paidAt ? <p className="mt-1 text-muted-foreground">{formatDate(order.paidAt)}</p> : null}
                 </td>
-                <td className={td}>{order.status === "PENDING" ? <OrderActions orderId={order.id} variableSymbol={order.variableSymbol} /> : null}</td>
+                <td className={td}>{order.status === "PENDING" ? <OrderActions orderId={order.id} variableSymbol={order.variableSymbol} provisional={Boolean(order.provisionalAt)} /> : null}</td>
               </tr>
             ))}
           </tbody>

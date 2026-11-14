@@ -5,6 +5,7 @@
 
 import { PLANE_EDGE_MM, PLANE_MAX_MM, resizePlane } from "./floorplan-plane";
 import type { EditorRoom, FloorplanDraft } from "./floorplan-editor";
+import { pointInRoom, polygonBounds, roomPolygon, roomRelation, unionRooms, type Pt, type RoomRelation, type RoomShape } from "./room-geometry";
 
 /** Předvolby názvu / typu místnosti s typickým rozměrem k předvyplnění (rozměr jde vždy přepsat). */
 export const ROOM_PRESETS = [
@@ -177,3 +178,77 @@ export function snapRoomRect(rect: Rect, others: readonly Rect[], tolerance = RO
 
 /** Plocha překryvu dvou obdélníků [mm²] – test „bez překryvů“ po přichycení. */
 export const overlapArea = (a: Rect, b: Rect) => Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)) * Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+
+// ---------------------------------------------------------------------------
+//  Fáze 114: místnost tvaru L / T / U ze dvou obdélníků (nástroj „roh ➔ roh“ i „Kreslit místnost“)
+// ---------------------------------------------------------------------------
+
+export interface MergeCandidate {
+  room: EditorRoom;
+  relation: Exclude<RoomRelation, "apart">;
+  overlapMm2: number;
+  sharedMm: number;
+}
+
+/**
+ * Místnosti, se kterými jde `shape` spojit: nejdřív překrývající se (největší překryv), pak sousední se společnou
+ * stěnou (nejdelší stěna). Šikmé místnosti a místnosti jen přes roh se nenabízí.
+ */
+export function mergeCandidates(rooms: readonly EditorRoom[], shape: RoomShape, exceptId?: string | null): MergeCandidate[] {
+  return rooms
+    .filter((room) => room.id !== exceptId)
+    .map((room) => ({ room, ...roomRelation(room, shape) }))
+    .filter((entry): entry is MergeCandidate => entry.relation !== "apart")
+    .sort((a, b) => Number(b.relation === "overlap") - Number(a.relation === "overlap") || b.overlapMm2 - a.overlapMm2 || b.sharedMm - a.sharedMm);
+}
+
+/** Místnost ze spojeného obrysu: obdélník zůstane obdélníkem, jinak polygon s obálkou. */
+function roomFromOutline(base: EditorRoom, points: readonly Pt[]): EditorRoom {
+  const bounds = polygonBounds(points);
+  const rest: EditorRoom = { id: base.id, name: base.name, ...bounds, ...(base.wallType ? { wallType: base.wallType } : {}) };
+  return points.length === 4 ? rest : { ...rest, points: points.map((point) => ({ x: Math.round(point.x), y: Math.round(point.y) })) };
+}
+
+/**
+ * 🔗 Spojit dvě místnosti do jednoho celku (L / T / U): zůstane název, id a konstrukce stěn místnosti `keepId`, druhá
+ * místnost zmizí a její prvky přejdou do spojené místnosti. Ve 2D i ve 3D náhledu je to jeden prostor bez vnitřních stěn.
+ */
+export function mergeRooms(draft: FloorplanDraft, keepId: string, otherId: string): { draft: FloorplanDraft; room: EditorRoom } | { error: string } {
+  const keep = draft.rooms.find((room) => room.id === keepId);
+  const other = draft.rooms.find((room) => room.id === otherId);
+  if (!keep || !other || keep.id === other.id) return { error: "Vyberte dvě různé místnosti." };
+  const union = unionRooms(roomPolygon(keep), roomPolygon(other));
+  if (!union.ok) return { error: union.message };
+  const room = roomFromOutline(keep, union.points);
+  return {
+    room,
+    draft: {
+      ...draft,
+      rooms: draft.rooms.filter((candidate) => candidate.id !== other.id).map((candidate) => (candidate.id === keep.id ? room : candidate)),
+      elements: draft.elements.map((element) => (element.room === other.name ? { ...element, room: keep.name } : element)),
+    },
+  };
+}
+
+/**
+ * Nový obdélník z nástroje (2 kliky / tažení) připojený k existující místnosti `keepId` – prvky v ploše obdélníku bez
+ * jiné místnosti dostanou její název.
+ */
+export function mergeRectInto(draft: FloorplanDraft, keepId: string, rect: Rect): { draft: FloorplanDraft; room: EditorRoom } | { error: string } {
+  const keep = draft.rooms.find((room) => room.id === keepId);
+  if (!keep) return { error: "Místnost neexistuje." };
+  const union = unionRooms(roomPolygon(keep), roomPolygon(rect));
+  if (!union.ok) return { error: union.message };
+  const room = roomFromOutline(keep, union.points);
+  const others = draft.rooms.filter((candidate) => candidate.id !== keep.id);
+  return {
+    room,
+    draft: {
+      ...draft,
+      rooms: draft.rooms.map((candidate) => (candidate.id === keep.id ? room : candidate)),
+      elements: draft.elements.map((element) =>
+        element.room !== keep.name && pointInRoom(room, element.x, element.y) && !others.some((candidate) => pointInRoom(candidate, element.x, element.y)) ? { ...element, room: keep.name } : element,
+      ),
+    },
+  };
+}

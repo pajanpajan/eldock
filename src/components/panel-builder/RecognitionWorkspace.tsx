@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import type { ComponentCategory, RecognitionStatus } from "@/generated/prisma/enums";
 import { blankingPlan, blankingSummary, freeModules, usedModules } from "@/lib/panel-builder/hdo";
-import { defaultConfig, withManufacturer, type ConfigCategory, type ItemConfig } from "@/lib/panel-builder/configurator";
+import { defaultConfig, withManufacturer, withOption, type ConfigCategory, type ItemConfig } from "@/lib/panel-builder/configurator";
 import { enclosureNeed } from "@/lib/panel-builder/enclosures";
 import { formatRailSummary, freeOnRail, railSummary } from "@/lib/panel-builder/rails";
 import { FIELD_A_LABEL, FIELD_B_LOW_LABEL, FIELD_B_POWER_LABEL, PARTITION_LABEL, SINGLE_LAYOUT, layoutSummaryText, type RailLayout } from "@/lib/panel-builder/rail-layout";
@@ -781,7 +781,7 @@ export function RecognitionWorkspace({
               brandCounts={brandCounts}
               onManufacturer={(value) => setPalette((current) => ({ manufacturer: value, chosen: true, config: current.config ? withManufacturer(current.config, value) : null }))}
               onCategory={paletteCategory}
-              onOption={(patch) => setPalette((current) => (current.config ? { ...current, config: { ...current.config, ...patch } } : current))}
+              onOption={(patch) => setPalette((current) => (current.config ? { ...current, config: withOption(current.config, patch) } : current))}
             />
           </>
         )}

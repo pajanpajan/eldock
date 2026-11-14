@@ -150,6 +150,7 @@ import { FloorBadge } from "./FloorBadge";
 import { detectFloorRooms, detectRoomAt, editorRoomOf } from "./room-detection-client";
 import { DeviceAppearance, SupplySelect } from "./DeviceAppearance";
 import { FloorBar } from "./FloorBar";
+import { useMergeRects } from "./useMergeRects";
 import { FloorSymbol } from "./FloorSymbol";
 import { FrameAssemblyPalette } from "./FrameAssemblyPalette";
 import { MountingBoxSettings } from "./MountingBoxSettings";
@@ -180,7 +181,7 @@ import { PanelSection, RightPanels, RightTabBar, type TabBadge } from "./RightPa
 import { CUSTOM_APPLIANCE_ITEM, applianceCatalog, applianceSpecFor, protectionLabel, storedSpecs, type ApplianceSpec } from "@/lib/panel-builder/appliances";
 import { FIXTURES, fixtureSpecOf, resizeFixture, turnBy, type FixtureHandle } from "@/lib/panel-builder/fixtures";
 import { setHeights } from "@/lib/panel-builder/pseudo3d";
-import { polygonArea, polygonBounds, pointInRoom, roomPolygon, snapAngle, validPolygon, wallLabel } from "@/lib/panel-builder/room-geometry";
+import { polygonArea, polygonBounds, pointInRoom, roomArea, roomPolygon, roomShapeLabel, snapAngle, validPolygon, wallLabel } from "@/lib/panel-builder/room-geometry";
 import { circuitEntries, displayRoutes, editedKeysOf, layerVisible, type CircuitLayer, type DisplayCircuit, type DisplayLeg } from "@/lib/panel-builder/route-display";
 import { MAIN_BOARD, SUBPANEL_ITEM, assignBoard, autoBoard, boardLabel, boardsOf, hasBoard, nextBoardCode, releaseBoard } from "@/lib/panel-builder/boards";
 import { cleanPolyline, dragSegment, insertJog, segmentShift } from "@/lib/panel-builder/route-edit";
@@ -218,7 +219,7 @@ import { openContactModal, useContactPageContext } from "@/components/contact/co
 import { COUNTER_RAISED_TEXT, ELEMENT_RAISED_TEXT, applyCounterHeights } from "@/lib/panel-builder/counter-heights";
 import { LAYER_FILTERS, assembliesVisible, roomsLocked, elementLook, filterLook, paletteGroupVisible, phaseOfGroup, routeVisible, defaultRightTab, tabSectionVisible, type FloorplanPhase, type LayerFilter, type PanelSectionId, type RightTab } from "@/lib/panel-builder/floorplan-phases";
 import { snapOpening } from "@/lib/panel-builder/architecture";
-import { addRoomBySize, snapRoomRect, type SnapGuide } from "@/lib/panel-builder/room-builder";
+import { addRoomBySize, mergeCandidates, mergeRectInto, mergeRooms, snapRoomRect, type SnapGuide } from "@/lib/panel-builder/room-builder";
 import { contentView, growPlane, meters, resizePlane } from "@/lib/panel-builder/floorplan-plane";
 import { assignLightingCircuit, assignSocketCircuit, isSocketElement, lightingSocketRows, moveSocketsToCircuit, nextSocketCircuit, optimizeSocketCircuits, socketCircuitRows, type SocketCircuitRow } from "@/lib/panel-builder/socket-circuits";
 import { BACKGROUND_MAX_SIDE, encodeBackground, imageToCanvas, preloadImage, svgToCanvas } from "@/lib/panel-builder/background-image";
@@ -306,6 +307,10 @@ const turn = (rotation: number) => turnBy(rotation, 90);
 const plural = (count: number, one: string, few: string, many: string) => (count === 1 ? one : count >= 2 && count <= 4 ? few : many);
 /** Fáze 100: rozměr v metrech na dlaždici palety („1,7“, „0,75“). */
 const metersLabel = (mm: number) => (mm / 1000).toLocaleString("cs-CZ", { maximumFractionDigits: 2 });
+/** Fáze 114: plocha místnosti v m² („16,5“). */
+const formatM2 = (mm2: number) => (mm2 / 1e6).toLocaleString("cs-CZ", { maximumFractionDigits: 1 });
+/** Fáze 114: tlačítko levého sloupce na celou šířku – text se zalomí, nikdy se neořízne za okrajem. */
+const LEFT_BLOCK = "h-auto min-h-8 w-full min-w-0 justify-start py-1.5 text-left leading-snug whitespace-normal";
 
 export interface SeriesOption {
   count?: number;
@@ -445,6 +450,8 @@ export function FloorplanEditor({
   const [roomDrag, setRoomDrag] = useState<{ id: string; handle: RoomHandle | "move"; start: { x: number; y: number }; origin: Pick<EditorRoom, "x" | "y" | "w" | "h"> } | null>(null);
   /** Tažený obdélník – nová místnost nebo ořez podkladu. */
   const [roomDraft, setRoomDraft] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  // Fáze 114: [✓] Spojovat překrývající se obdélníky do jedné L-místnosti (nástroj roh ➔ roh i Kreslit místnost)
+  const [mergeRects, toggleMergeRects] = useMergeRects();
   // Fáze 103: `sx` / `sy` = místo stisku na obrazovce, `moved` = ukazatel se opravdu pohnul (víc než 4 px) – jen pak je to
   // výběr obdélníkem. Plátno se po výběru místnosti posune (lišta kroku), čekající poloha by z kliknutí udělala tah.
   const [marquee, setMarquee] = useState<{ x: number; y: number; w: number; h: number; additive: boolean; sx: number; sy: number; moved: boolean } | null>(null);
@@ -518,6 +525,11 @@ export function FloorplanEditor({
       const next = change(current);
       return next === current ? current : { ...next, updatedAt: Date.now() };
     });
+  // Fáze 114: aktuální nákres pro akce z oznámení (🔗 Spojit do L) – closure oznámení by držela starší stav
+  const draftNow = useRef(draft);
+  useLayoutEffect(() => {
+    draftNow.current = draft;
+  });
 
   // Fáze 100: stabilní obsluha memoizovaných vrstev plátna – volá vždy aktuální funkce editoru (`live` po každém vykreslení)
   const live = useRef<
@@ -1621,19 +1633,23 @@ export function FloorplanEditor({
       setRoomDraft(null);
       if (tool.kind === "crop") return applyCrop(rect);
       if (rect.w < 500 || rect.h < 500) return;
+      setSelection([]);
+      setTool({ kind: "select" });
+      // Fáze 114: obdélník přes existující místnost → jedna místnost tvaru L / T / U (vybraná k úpravě)
+      const merged = mergeRects ? mergeOverlapping(rect) : null;
+      if (merged) return void setSelectedRoomId(merged.id);
       // Název se upraví v detailu místnosti (rychlé štítky), místnost zůstane vybraná
       const name = uniqueRoomName(draft.rooms, `Místnost ${draft.rooms.length + 1}`);
       lastRoom.current = name;
       const id = newId("m");
       setSelectedRoomId(id);
-      setSelection([]);
-      setTool({ kind: "select" });
       apply((current) => ({
         ...current,
         rooms: [...current.rooms, { id, name: name.slice(0, 40), ...rect }],
         // prvky uvnitř nové místnosti do ní patří
         elements: current.elements.map((element) => (element.x >= rect.x && element.x <= rect.x + rect.w && element.y >= rect.y && element.y <= rect.y + rect.h ? { ...element, room: name.slice(0, 40) } : element)),
       }));
+      offerMerge({ id, name: name.slice(0, 40), ...rect }, rect);
     }
   }
 
@@ -1738,9 +1754,56 @@ export function FloorplanEditor({
     if (!tool.first) return void setTool({ kind: "room2", first: at });
     const rect = rectFromCorners(tool.first, at);
     if (rect.w < 500 || rect.h < 500) return void toast.error("Místnost musí mít aspoň 0,5 × 0,5 m – klikněte na protilehlý roh.");
-    const [room] = addRooms([{ id: newId("m"), name: `Místnost ${draft.rooms.length + 1}`, ...rect }]);
     setTool({ kind: "room2", first: null });
-    toast.success(`📐 ${room.name} ${roomDimensions(rect.w, rect.h).label} – klikněte na roh další místnosti, Esc = konec.`);
+    // Fáze 114: obdélník přes existující místnost (koupelna 2.06, chodba 2.01 do L) → jedna místnost bez vnitřních stěn
+    if (mergeRects && mergeOverlapping(rect)) return;
+    const [room] = addRooms([{ id: newId("m"), name: `Místnost ${draft.rooms.length + 1}`, ...rect }]);
+    if (!offerMerge(room, rect)) toast.success(`📐 ${room.name} ${roomDimensions(rect.w, rect.h).label} – klikněte na roh další místnosti, Esc = konec.`);
+  }
+
+  /**
+   * Fáze 114: obdélník z nástroje „roh ➔ roh“ / „Kreslit místnost“, který se překrývá s existující místností, se do ní
+   * připojí (sjednocení do L / T / U, sečtená plocha, prvky převezme) – vrací spojenou místnost, jinak null.
+   */
+  function mergeOverlapping(rect: { x: number; y: number; w: number; h: number }): EditorRoom | null {
+    const target = mergeCandidates(draft.rooms, rect).find((candidate) => candidate.relation === "overlap");
+    if (!target) return null;
+    const result = mergeRectInto(draft, target.room.id, rect);
+    if ("error" in result) {
+      toast.error(`${target.room.name}: ${result.error} Obdélník zůstane samostatnou místností.`);
+      return null;
+    }
+    update((current) => {
+      const next = mergeRectInto(current, target.room.id, rect);
+      return "error" in next ? current : next.draft;
+    });
+    lastRoom.current = result.room.name;
+    toast.success(`🔗 Spojeno s místností ${result.room.name} do jednoho celku (${roomShapeLabel(result.room.points) ?? "obdélník"}, ${formatM2(roomArea(result.room))} m²) – bez vnitřních stěn ve 2D i 3D. Ctrl+Z vrátí.`, { duration: 7000 });
+    return result.room;
+  }
+
+  /** Fáze 114: nová místnost sousedí (nebo se při vypnutém spojování překrývá) s jinou – nabídka 🔗 spojit jedním klikem. */
+  function offerMerge(room: EditorRoom, rect: { x: number; y: number; w: number; h: number }): boolean {
+    const neighbour = mergeCandidates(draft.rooms, rect)[0];
+    if (!neighbour) return false;
+    toast.info(`${room.name} ${neighbour.relation === "overlap" ? "se překrývá s" : "sdílí stěnu s"} místností ${neighbour.room.name} – je to jedna místnost tvaru L?`, {
+      duration: 10_000,
+      action: { label: "🔗 Spojit do L", onClick: () => mergeRoomPair(neighbour.room.id, room.id) },
+    });
+    return true;
+  }
+
+  /** Fáze 114: 🔗 Spojit dvě místnosti (zůstane název a id místnosti `keepId`). */
+  function mergeRoomPair(keepId: string, otherId: string) {
+    const result = mergeRooms(draftNow.current, keepId, otherId);
+    if ("error" in result) return void toast.error(result.error);
+    update((current) => {
+      const next = mergeRooms(current, keepId, otherId);
+      return "error" in next ? current : next.draft;
+    });
+    setSelectedRoomId(keepId);
+    setSelection([]);
+    toast.success(`🔗 Místnost ${result.room.name}: ${roomShapeLabel(result.room.points) ?? "obdélník"}, ${formatM2(roomArea(result.room))} m² – jeden prostor bez vnitřních stěn ve 2D i 3D. Ctrl+Z vrátí.`, { duration: 7000 });
   }
 
   /** Fáze 89: ⚡ z lišty průvodce / kompaktní lišty – stejné generování jako v kartě „Založit rozváděč“ (její údaje). */
@@ -2286,6 +2349,13 @@ export function FloorplanEditor({
     </Button>
   );
   const pairCount = tool.kind === "pair" ? (pairWith?.controls.length ?? 0) : tool.kind === "pair-light" ? controllersOf(draft, tool.lightId) : 0;
+  // Fáze 114: přepínač v liště nástrojů Kreslit místnost / roh ➔ roh – obdélník přes jinou místnost ji rozšíří do L / T / U
+  const mergeToggle = (
+    <label className="flex items-center gap-1.5 rounded-md border border-yellow-400/50 bg-yellow-400/10 px-2 py-1 text-xs font-semibold text-yellow-50" title="Druhý obdélník, který se překrývá s místností, ji rozšíří do tvaru L, T nebo U (jedna místnost bez vnitřních stěn ve 2D i 3D). Sousední místnost spojíte tlačítkem 🔗 v oznámení nebo v detailu místnosti.">
+      <input type="checkbox" className="size-4 accent-yellow-400" checked={mergeRects} onChange={(event) => toggleMergeRects(event.target.checked)} data-testid="merge-rects-toggle" />
+      Spojovat překrývající se obdélníky do jedné L-místnosti
+    </label>
+  );
   const step: { tone: ModeTone; title: string; onDone?: () => void; doneLabel?: string; extra?: ReactNode } = pairing
     ? {
         tone: "pair",
@@ -2319,9 +2389,9 @@ export function FloorplanEditor({
         : tool.kind === "place-set"
           ? { tone: "place", title: `▦ Vkládání sestavy: ${tool.label} (${setGangs}R)`, onDone: endStep, extra: rotateNext }
           : tool.kind === "room"
-            ? { tone: "draw", title: "▭ Kreslení místností", onDone: endStep }
+            ? { tone: "draw", title: "▭ Kreslení místností", onDone: endStep, extra: mergeToggle }
             : tool.kind === "room2"
-              ? { tone: "draw", title: "📐 Rychlá místnost 2 kliky (roh ➔ roh)", onDone: endStep }
+              ? { tone: "draw", title: "📐 Rychlá místnost 2 kliky (roh ➔ roh)", onDone: endStep, extra: mergeToggle }
             : tool.kind === "wand"
               ? { tone: "draw", title: "🪄 Klik do místnosti na PDF", onDone: endStep }
             : tool.kind === "polygon"
@@ -2536,14 +2606,14 @@ export function FloorplanEditor({
   // Fáze 113: místnosti z PDF výkresu – 🔍 automaticky (popisky + uzavřené oblasti zdiva), 🪄 klik do místnosti
   // (flood fill k okolním stěnám) a 📐 rychlá místnost dvěma rohy (nástroj zůstává aktivní pro další místnosti)
   const roomDetectTools = (
-    <div className="flex flex-col gap-1" role="group" aria-label="Místnosti z PDF výkresu" data-testid="pdf-room-tools">
-      <Button type="button" size="sm" className="h-auto justify-start gap-1.5 bg-yellow-400 py-1.5 text-left font-semibold whitespace-normal text-zinc-950 hover:bg-yellow-300" onClick={() => void detectRoomsFromPdf()} disabled={!draft.background || busy !== null} title={draft.background ? "Přečte popisky místností z PDF (čísla, názvy, výměry) a najde uzavřené oblasti mezi stěnami" : "Nejdřív nahrajte PDF nebo obrázek půdorysu"} data-testid="pdf-rooms-auto">
+    <div className="flex min-w-0 flex-col gap-1.5" role="group" aria-label="Místnosti z PDF výkresu" data-testid="pdf-room-tools">
+      <Button type="button" size="sm" className="h-auto w-full min-w-0 justify-start gap-1.5 bg-yellow-400 py-1.5 text-left leading-snug font-semibold whitespace-normal text-zinc-950 hover:bg-yellow-300" onClick={() => void detectRoomsFromPdf()} disabled={!draft.background || busy !== null} title={draft.background ? "Přečte popisky místností z PDF (čísla, názvy, výměry) a najde uzavřené oblasti mezi stěnami" : "Nejdřív nahrajte PDF nebo obrázek půdorysu"} data-testid="pdf-rooms-auto">
         🔍 Automaticky rozpoznat místnosti z PDF
       </Button>
-      <Button type="button" size="sm" variant="outline" className={cn("h-auto justify-start gap-1.5 border-yellow-400/70 py-1.5 text-left font-semibold whitespace-normal", tool.kind === "wand" && "bg-yellow-400/20 ring-2 ring-yellow-400")} aria-pressed={tool.kind === "wand"} onClick={() => setTool(tool.kind === "wand" ? { kind: "select" } : { kind: "wand" })} disabled={!draft.background || busy !== null} data-testid="pdf-rooms-wand">
+      <Button type="button" size="sm" variant="outline" className={cn("h-auto w-full min-w-0 justify-start gap-1.5 border-yellow-400/70 py-1.5 text-left leading-snug font-semibold whitespace-normal", tool.kind === "wand" && "bg-yellow-400/20 ring-2 ring-yellow-400")} aria-pressed={tool.kind === "wand"} onClick={() => setTool(tool.kind === "wand" ? { kind: "select" } : { kind: "wand" })} disabled={!draft.background || busy !== null} data-testid="pdf-rooms-wand">
         🪄 Klikni do místnosti na PDF (rozpozná stěny)
       </Button>
-      <Button type="button" size="sm" variant="outline" className={cn("h-auto justify-start gap-1.5 py-1.5 text-left whitespace-normal", tool.kind === "room2" && "bg-yellow-400/20 ring-2 ring-yellow-400")} aria-pressed={tool.kind === "room2"} onClick={() => setTool(tool.kind === "room2" ? { kind: "select" } : { kind: "room2", first: null })} data-testid="pdf-rooms-2click">
+      <Button type="button" size="sm" variant="outline" className={cn("h-auto w-full min-w-0 justify-start gap-1.5 py-1.5 text-left leading-snug whitespace-normal", tool.kind === "room2" && "bg-yellow-400/20 ring-2 ring-yellow-400")} aria-pressed={tool.kind === "room2"} onClick={() => setTool(tool.kind === "room2" ? { kind: "select" } : { kind: "room2", first: null })} data-testid="pdf-rooms-2click">
         📐 Rychlá místnost 2 kliky (roh ➔ roh)
       </Button>
     </div>
@@ -3268,31 +3338,75 @@ export function FloorplanEditor({
         <div className="flex min-h-0 flex-col gap-3 xl:overflow-y-auto xl:pr-1" data-testid="floorplan-left" data-phase={phase ?? "all"}>
           {/* Fáze 98: fáze 1 – v levé paletě jen podklad, kalibrace, místnosti X × Y a podlaží */}
           {uiMode === "wizard" && phase === 1 ? (
-            <section className="flex flex-col gap-2 rounded-xl border border-primary/40 bg-card p-2 text-xs" aria-label="Podklad a místnosti" data-testid="phase-tools-1">
-              <h2 className="text-sm font-semibold">🏗️ Půdorys a místnosti</h2>
-              <div className="flex flex-col gap-1.5 rounded-lg border border-border/70 p-2" role="group" aria-label="Mám výkres od stavaře">
-                <span className="text-[11px] font-semibold text-muted-foreground">a) Mám výkres od stavaře (PDF / DXF / DWG / IFC / obrázek):</span>
-                <span className="flex flex-wrap items-center gap-1.5">
-                  {uploadButton}
-                  {calibrateTool}
-                  {pdfMenu}
-                  {cleanGridButton}
-                </span>
+            /* Fáze 114: levý sloupec bez ořezů – tlačítka a karty na celou šířku se zalomením (w-full min-w-0
+               whitespace-normal text-left leading-snug), jednotné odsazení p-2.5 gap-2, rozměry X × Y a podlaží v mřížce */
+            <section className="flex min-w-0 flex-col gap-2 rounded-xl border border-primary/40 bg-card p-2.5 text-xs" aria-label="Podklad a místnosti" data-testid="phase-tools-1">
+              <h2 className="text-sm leading-snug font-semibold">🏗️ Půdorys a místnosti</h2>
+              <div className="flex min-w-0 flex-col gap-2 rounded-lg border border-border/70 p-2.5" role="group" aria-label="Mám výkres od stavaře" data-testid="left-drawing">
+                <span className="text-[11px] leading-snug font-semibold text-muted-foreground">a) Mám výkres od stavaře (PDF / DXF / DWG / IFC / obrázek):</span>
+                <div className="flex min-w-0 flex-col gap-1.5">
+                  <Button type="button" variant="outline" size="sm" className={cn("gap-1.5", LEFT_BLOCK)} onClick={() => fileInput.current?.click()} disabled={busy !== null} data-tour="floorplan-upload" data-testid="left-upload">
+                    {busy ? <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden /> : <FileUp className="size-4 shrink-0" aria-hidden />}
+                    <span className="min-w-0">
+                      <span className="block font-semibold">Nahrát půdorys</span>{" "}
+                      <span className="block text-[11px] font-normal text-muted-foreground">(PDF / DXF / BIM .ifc / Obrázek)</span>
+                    </span>
+                  </Button>
+                  <FloorplanBimImport disabled={busy !== null} onFile={(file) => void importIfc(file)} className={LEFT_BLOCK} />
+                  <div className="grid min-w-0 grid-cols-2 gap-1.5">
+                    <ToolButton active={tool.kind === "calibrate"} onClick={() => (setCalibration([]), setTool({ kind: "calibrate" }))} icon={<Ruler className="size-4 shrink-0" aria-hidden />} label="📏 Kalibrovat měřítko" tour="floorplan-calibrate" className={LEFT_BLOCK} />
+                    <PdfEditMenu hasBackground={Boolean(draft.background)} cropped={Boolean(draft.background?.crop)} zoomPercent={Math.round(zoom * 100)} calibration={draft.calibration.state} onAction={pdfAction} className={LEFT_BLOCK} />
+                  </div>
+                  <Button type="button" variant="outline" size="sm" className={cn("gap-1.5", LEFT_BLOCK)} onClick={() => update((current) => ({ ...current, background: null, cad: null, calibration: emptyCalibration() }))} disabled={!draft.background && !draft.cad}>
+                    <Grid3x3 className="size-4 shrink-0" aria-hidden /> Čistý rastr
+                  </Button>
+                </div>
                 {roomDetectTools}
               </div>
-              <div className="flex flex-col gap-1.5 rounded-lg border border-border/70 p-2" role="group" aria-label="Kreslím místnosti od nuly">
-                <span className="text-[11px] font-semibold text-muted-foreground">b) Kreslím od nuly:</span>
-                <RoomBySizeForm onCreate={createRoomBySize} rooms={roomNames} />
-                <span className="flex flex-wrap items-center gap-1.5">
-                  {roomTool}
-                  {polygonTool}
-                </span>
+              <div className="flex min-w-0 flex-col gap-2 rounded-lg border border-border/70 p-2.5" role="group" aria-label="Kreslím místnosti od nuly">
+                <span className="text-[11px] leading-snug font-semibold text-muted-foreground">b) Kreslím od nuly:</span>
+                <RoomBySizeForm onCreate={createRoomBySize} rooms={roomNames} stacked />
+                <div className="flex min-w-0 flex-col gap-1.5">
+                  <ToolButton active={tool.kind === "room"} onClick={() => setTool({ kind: "room" })} icon={<Square className="size-4 shrink-0" aria-hidden />} label="Kreslit místnost (obdélník)" className={LEFT_BLOCK} />
+                  <ToolButton active={tool.kind === "polygon"} onClick={() => (setPolyDraft([]), setTool({ kind: "polygon" }))} icon={<span aria-hidden>📐</span>} label="Kreslit šikmou stěnu / polygonální místnost" className={LEFT_BLOCK} />
+                </div>
               </div>
-              <div className="flex flex-col gap-1.5 rounded-lg border border-border/70 p-2" data-testid="wizard-floors">
-                <span className="text-[11px] font-semibold text-muted-foreground">🏢 Podlaží ({draft.floorName}):</span>
-                {floorBar}
+              <div className="flex min-w-0 flex-col gap-2 rounded-lg border border-border/70 p-2.5" data-testid="wizard-floors">
+                <span className="text-[11px] leading-snug font-semibold text-muted-foreground">🏢 Podlaží ({draft.floorName}):</span>
+                <FloorBar
+                  stacked
+                  floors={floors}
+                  activeId={draft.floorId}
+                  panelFloorId={panelFloorId}
+                  onSelect={selectFloor}
+                  onAdd={(input) => {
+                    update((current) => addFloor(current, input));
+                    clearSelection();
+                    setView(FIT);
+                    toast.success(`Podlaží ${input.name} přidáno – nahrajte jeho podklad nebo kreslete do rastru. Stoupací vedení ↕ najdete v paletě Rozváděč.`);
+                  }}
+                  onUpdate={(id, patch) => update((current) => updateFloor(current, id, patch))}
+                  onRemove={(id) => {
+                    update((current) => removeFloor(current, id));
+                    clearSelection();
+                    setView(FIT);
+                  }}
+                />
               </div>
-              {clearButton}
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className={cn("gap-1.5 text-muted-foreground", LEFT_BLOCK)}
+                onClick={() => {
+                  if (!window.confirm("Vymazat celý nákres (všechna podlaží, prvky, místnosti i podklady)?")) return;
+                  setDraft({ ...emptyDraft(), updatedAt: Date.now() });
+                  clearSelection();
+                  setView(FIT);
+                }}
+              >
+                <Trash2 className="size-4 shrink-0" aria-hidden /> Vymazat nákres
+              </Button>
             </section>
           ) : null}
           {/* Fáze 98: fáze 5 – rychlý filtr vrstev, směrování a uložení kabelů, exporty */}
@@ -3869,6 +3983,9 @@ export function FloorplanEditor({
               defaultWall={draft.wallType}
               // Fáze 103: v krocích 2–5 zamčeno – návrat do kroku 1 jedním klikem
               {...(locked ? { onUnlock: () => setWizard(1) } : {})}
+              // Fáze 114: 🔗 spojení s překrývající se / sousední místností do jednoho celku (L / T / U)
+              mergeOptions={mergeCandidates(draft.rooms, selectedRoom, selectedRoom.id).map((candidate) => ({ id: candidate.room.id, name: candidate.room.name, relation: candidate.relation }))}
+              onMerge={(otherId) => mergeRoomPair(selectedRoom.id, otherId)}
             />
           ) : null}
           {selectedNote ? (

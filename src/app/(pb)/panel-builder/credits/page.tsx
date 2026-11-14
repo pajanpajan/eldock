@@ -31,6 +31,9 @@ const REASONS: Record<string, string> = {
   REFUND: "Vrácení",
   ADJUST: "Úprava ve velínu",
   CONVERSION: "Převod na nový ceník",
+  // Fáze 114: okamžité odemčení po QR platbě a odečtení, když platba nedorazila
+  PROVISIONAL_GRANT: "⏳ Předběžně po QR platbě (kontrola výpisu do 48 h)",
+  PROVISIONAL_REVOKE: "↩️ Předběžné kredity odečteny (platba nedorazila)",
 };
 
 // Fáze 50 / 111: samoobslužné dobíjení kreditů a předplatné – ceník akcí, 1 testovací projekt, balíčky (platnost 12 měsíců),

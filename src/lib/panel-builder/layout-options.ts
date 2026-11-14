@@ -3,7 +3,7 @@
 
 import { enclosureMpn } from "./enclosure-choice";
 import type { EnclosureLike } from "./enclosures";
-import { CONCEPT_INFO, type ConceptOption, type EnclosureMatch, type LayoutConcept, type LayoutNeed, type PackDevice } from "./rail-layout";
+import { CONCEPT_INFO, reserveText, tierLabel, type ConceptOption, type EnclosureMatch, type LayoutConcept, type LayoutNeed, type PackDevice, type SizeTier } from "./rail-layout";
 
 export interface LayoutDeviceDto {
   designation: string;
@@ -44,10 +44,45 @@ export interface EnclosureOptionDto {
   reservePercent: number;
 }
 
+/** Fáze 114: velikost rozvodnice s rezervou v % a skutečnými modely z databáze. */
+export interface SizeTierDto {
+  key: string;
+  /** „168 M (2 pole × 7 řad)“. */
+  label: string;
+  /** „🟢 Rezerva 34 % (57 volných M – Doporučeno pro budoucí rozšíření)“. */
+  reserve: string;
+  fields: number;
+  rows: number;
+  rowWidth: number;
+  totalModules: number;
+  freeModules: number;
+  reservePercent: number;
+  recommended: boolean;
+  enclosures: EnclosureOptionDto[];
+}
+
 export interface LayoutBoardDto {
   rails: LayoutRailDto[];
   need: LayoutNeed;
   enclosures: EnclosureOptionDto[];
+  /** Fáze 114: velikosti od nejmenší vyhovující po větší (rezerva v % a v modulech). */
+  tiers: SizeTierDto[];
+}
+
+export function sizeTierDto<E extends EnclosureLike>(tier: SizeTier<E>): SizeTierDto {
+  return {
+    key: tier.key,
+    label: tierLabel(tier),
+    reserve: reserveText(tier),
+    fields: tier.fields,
+    rows: tier.rows,
+    rowWidth: tier.rowWidth,
+    totalModules: tier.totalModules,
+    freeModules: tier.freeModules,
+    reservePercent: tier.reservePercent,
+    recommended: tier.recommended,
+    enclosures: tier.matches.map(enclosureOptionDto),
+  };
 }
 
 export interface LayoutOptionDto {
@@ -133,8 +168,8 @@ export function layoutPreviewDto<T extends Describable, E extends EnclosureLike>
         fields: option.plan.layout.fields,
         partitionAfterRail: option.plan.layout.partitionAfterRail,
         fieldBLow: option.plan.layout.fieldBLow,
-        main: { rails: option.main.rails.map(railDto), need: option.main.need, enclosures: option.main.matches.map(enclosureOptionDto) },
-        second: option.second ? { rails: option.second.rails.map(railDto), need: option.second.need, enclosures: option.second.matches.map(enclosureOptionDto) } : null,
+        main: { rails: option.main.rails.map(railDto), need: option.main.need, enclosures: option.main.matches.map(enclosureOptionDto), tiers: (option.main.tiers ?? []).map(sizeTierDto) },
+        second: option.second ? { rails: option.second.rails.map(railDto), need: option.second.need, enclosures: option.second.matches.map(enclosureOptionDto), tiers: (option.second.tiers ?? []).map(sizeTierDto) } : null,
       };
     }),
   };
@@ -145,4 +180,6 @@ export interface LayoutChoice {
   concept: LayoutConcept;
   enclosureId?: string | null;
   secondEnclosureId?: string | null;
+  /** Fáze 114: rozváděč s tolika DIN lištami, kolik má zvolená skříň řad (rezerva pro rozšíření). */
+  fillRows?: boolean;
 }

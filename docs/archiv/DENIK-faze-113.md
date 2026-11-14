@@ -1,0 +1,5 @@
+# Deník fáze 113 (přesunuto z `docs/PLAN.md`, sekce C)
+
+| Fáze | Datum | Poznámky |
+|---|---|---|
+| 113 | 2026-11-14 | Zadání z chatu → `docs/archiv/ZADANI-faze-113.md` (i rozhodnutí a odchylky). **Migrace** `20261114090000_phase113_limits_enclosures` (`RegisteredCompany.unlimitedAccess`, `PanelEnclosure.ean` / `listPriceCzk`, neplátce DPH, výchozí sady štítků). **Kód:** `lib/stale-deploy.ts` + `useFloorplanSync` + `StaleDeployGuard`, `next.config.ts` (50 MB), `background-image.ts` + `pdf-client.ts` (WebP, popisky PDF), `FloorBadge.tsx`, `lib/panel-builder/pdf-room-detector.ts` + `room-detection-client.ts` (🔍 / 🪄 / 📐), `lib/operator.ts` (neplátce, `DEFAULT_LABEL_SETS`), `verified-enclosures-oez-se-eaton.ts`, `lib/credits/entitlements.ts` (`UNLIMITED`, `deviceEntitlement`), `services/hlidac.ts` (limit zařízení), `services/platform-settings.ts` + `platform-secrets.ts` + `PlatformSettingsForm.tsx`, `backup/config.ts`. **Testy:** `pdf-room-detector.test.ts` (9), `src/lib/phase113.test.ts` (9), `src/server/services/phase113.test.ts` (5), E2E `e2e/phase113.spec.ts` (3). |

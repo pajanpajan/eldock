@@ -33,7 +33,8 @@ RUN npm ci --no-audit --no-fund
 # ---------------------------------------------------------------------------
 FROM deps AS build
 COPY . .
-# Kontrola typů proběhla v `npm run verify` před nasazením; na serveru s 2 GB RAM by build zabil OOM.
+# Kontrola typů proběhla v `npm run verify` před nasazením; build na serveru (Hetzner CPX22 se 4 GB RAM – na dřívějších
+# 2 GB ho kontrola typů zabila OOM) ji vynechává kvůli paměti i času buildu.
 RUN npx prisma generate && ELDOCK_SKIP_BUILD_TYPECHECK=1 npm run build
 
 # ---------------------------------------------------------------------------

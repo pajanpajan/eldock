@@ -7,8 +7,10 @@
 import type { ComponentCategory } from "@/generated/prisma/enums";
 
 import { estimatePowerLoss, iecSymbolFor, normalizeSearch } from "./catalog";
+import { ACCESSORY_DEFAULT_MODULES, isAccessoryKind } from "./accessory-symbols";
 import { sameManufacturer } from "./matching";
 import { SMART_SYSTEM_FILTER_LABEL, smartDinProfile, smartRank, smartSystemsOf } from "./smart-din-catalog";
+import { SMART_SYSTEMS } from "./smart-home";
 
 export type ConfigCategory = "MCB" | "RCD" | "RCBO" | "MAIN_SWITCH" | "SPD" | "CONTACTOR" | "RELAY" | "SMART_HOME" | "OTHER" | "ACCESSORY";
 
@@ -216,7 +218,7 @@ export const CONFIG_FIELDS: Record<ConfigCategory, ConfigField[]> = {
   // Fáze 81: řada / systém se doplní podle výrobce (`configFields`), šířka se bere z přiřazeného kusu
   SMART_HOME: [
     { key: "smartRole", label: "Funkce", options: Object.entries(SMART_ROLES).map(([value, label]) => ({ value, label, patch: { smartRole: value, channels: null } })) },
-    { key: "channels", label: "Počet kanálů", options: [{ value: "all", label: "Libovolný", patch: { channels: null } }, ...[2, 4, 6, 8, 12, 14, 16, 20].map((count) => ({ value: String(count), label: `${count}×`, patch: { channels: count } }))] },
+    { key: "channels", label: "Počet kanálů / šířka", options: [{ value: "all", label: "Libovolný", patch: { channels: null } }, ...[2, 4, 6, 8, 12, 14, 16, 20].map((count) => ({ value: String(count), label: `${count}×`, patch: { channels: count } }))] },
   ],
   ACCESSORY: [
     { key: "moduleSubtype", label: "Druh příslušenství", options: Object.entries(ACCESSORY_SUBTYPES).map(([value, label]) => ({ value, label, patch: { moduleSubtype: value } })) },
@@ -229,10 +231,12 @@ export const CONFIG_FIELDS: Record<ConfigCategory, ConfigField[]> = {
  * Řádky dlaždic konfigurace: u chytré domácnosti navíc filtr řady / systému výrobce, který má víc systémů (ABB:
  * ABB-free@home® · ABB i-bus® KNX); Loxone a TapHome nabízí všechny své moduly.
  */
-export function configFields(config: Pick<ItemConfig, "category" | "manufacturer"> | null): ConfigField[] {
+export function configFields(config: Pick<ItemConfig, "category" | "manufacturer"> & Partial<Pick<ItemConfig, "smartRole" | "smartSystem">> | null): ConfigField[] {
   if (!config) return [];
-  const fields = CONFIG_FIELDS[config.category];
-  if (config.category !== "SMART_HOME") return fields;
+  const base = CONFIG_FIELDS[config.category];
+  if (config.category !== "SMART_HOME") return base;
+  // Fáze 114: C3 – žaluzie a topení přepínají skutečné kusy systému se šířkou na DIN liště (4× · 4M / 8× · 8M, 6× · 4M / 12× · 8M)
+  const fields = base.map((field) => (field.key === "channels" ? smartChannelField(config, field) : field));
   const systems = smartSystemsOf(config.manufacturer);
   if (systems.length < 2) return fields;
   const series: ConfigField = {
@@ -243,6 +247,28 @@ export function configFields(config: Pick<ItemConfig, "category" | "manufacturer
   return [series, ...fields];
 }
 
+/**
+ * Fáze 114: „C3. Počet kanálů / šířka“ – u žaluziových a topných akčních členů kusy zvoleného systému (bez systému všech
+ * systémů výrobce) s počtem kanálů a skutečnou šířkou na DIN liště; jeden klik přepne 4M ↔ 8M. Ostatní funkce obecně.
+ */
+function smartChannelField(config: Pick<ItemConfig, "manufacturer"> & Partial<Pick<ItemConfig, "smartRole" | "smartSystem">>, field: ConfigField): ConfigField {
+  const role = config.smartRole;
+  if (role !== "blind" && role !== "heating") return field;
+  const system = config.smartSystem ? smartSystemFor({ manufacturer: config.manufacturer ?? null, smartSystem: config.smartSystem }) : null;
+  const scope = system ? SMART_SYSTEMS.filter((candidate) => candidate.id === system) : smartSystemsOf(config.manufacturer);
+  const seen = new Set<number>();
+  const units = scope
+    .flatMap((candidate) => candidate.modules.filter((unit) => unit.role === role && !unit.manualOnly && unit.modules > 0 && unit.channels > 0))
+    .filter((unit) => !seen.has(unit.channels) && Boolean(seen.add(unit.channels)))
+    .sort((a, b) => a.channels - b.channels);
+  if (!units.length) return field;
+  const width = (modules: number) => String(modules).replace(".", ",");
+  return {
+    ...field,
+    options: [field.options[0], ...units.map((unit) => ({ value: `${unit.channels}|${unit.modules}`, label: `${unit.channels}× · ${width(unit.modules)}M`, patch: { channels: unit.channels, modules: unit.modules } }))],
+  };
+}
+
 /** Fáze 81: systém chytré domácnosti platí jen u výrobce, který ho nabízí (po změně výrobce se zahodí). */
 export const smartSystemFor = (config: Pick<ItemConfig, "manufacturer" | "smartSystem">): string | null =>
   config.smartSystem && smartSystemsOf(config.manufacturer).some((system) => system.id === config.smartSystem) ? config.smartSystem : null;
@@ -251,6 +277,17 @@ export const smartSystemFor = (config: Pick<ItemConfig, "manufacturer" | "smartS
 export function withManufacturer<T extends ItemConfig>(config: T, manufacturer: string | null): T {
   const next = { ...config, manufacturer };
   return config.smartSystem ? { ...next, smartSystem: smartSystemFor(next) } : next;
+}
+
+/**
+ * Fáze 114: klik na dlaždici kaskády – u příslušenství přinese nový podtyp typickou šířku (svorkovnice HLAK 4M, pomocný
+ * kontakt 0,5M, zásuvka na DIN 3M …); ručně zvolená šířka v témže kliknutí má přednost.
+ */
+export function withOption<T extends ItemConfig>(config: T, patch: Partial<ItemConfig>): T {
+  const next = { ...config, ...patch } as T;
+  const subtype = patch.moduleSubtype;
+  if (config.category === "ACCESSORY" && subtype && subtype !== config.moduleSubtype && patch.modules === undefined && isAccessoryKind(subtype)) return { ...next, modules: ACCESSORY_DEFAULT_MODULES[subtype] };
+  return next;
 }
 
 /** Je dlaždice aktivní pro danou konfiguraci? */
@@ -421,11 +458,19 @@ export function matchConfig<T extends CatalogLike>(catalog: readonly T[], config
         return Boolean(profile && eq(config.smartRole, role) && eq(smartSystemFor(config), profile.system) && eq(config.channels, profile.channels));
       }
       case "OTHER":
-      case "ACCESSORY":
         return eq(config.moduleSubtype, component.moduleSubtype);
+      case "ACCESSORY":
+        // Fáze 114: pojistková vložka i pojistkový odpínač (ABB E 91, OEZ OPV), svorkovnice i hlavní svorkovnice HLAK
+        return (
+          eq(config.moduleSubtype, component.moduleSubtype) ||
+          (config.moduleSubtype === "FUSE_LINK" && component.moduleSubtype === "FUSE_DISCONNECTOR") ||
+          (config.moduleSubtype === "TERMINAL_BLOCK" && component.moduleSubtype === "MAIN_TERMINAL")
+        );
     }
   });
   const score = (component: T) =>
+    // Fáze 114: skutečný kus výrobce vždy před syntetickým odhadem z konfigurátoru (`CFG-…` uložený dřívějším vložením)
+    Number(!component.articleNumber.startsWith("CFG-")) * 40 +
     Number(component.modulesCount === config.modules) * 8 +
     Number((config.breakingCapacityKa ?? null) === component.breakingCapacityKa) * 2 +
     Number((config.surgeCurrentKa ?? null) === component.surgeCurrentKa) * 2 +

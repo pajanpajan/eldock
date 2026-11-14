@@ -69,7 +69,8 @@ export const TRAINER_JOBS: readonly TrainerJob[] = [
   {
     id: "chytry-dum",
     icon: "🏡",
-    title: "Chytrý dům ABB-free@home® 120M",
+    // Fáze 114: aktory BA-M / HA-M ve 4M i 8M bez rezervy kanálů navíc – skříň 96 M (dřív 120 M)
+    title: "Chytrý dům ABB-free@home® 96M",
     projectName: "Trenažér – Chytrý dům ABB-free@home",
     customerName: "Cvičná zakázka – chytrý dům",
     installationSite: "Bungalov 4+kk, technická místnost",

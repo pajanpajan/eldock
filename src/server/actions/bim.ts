@@ -6,7 +6,7 @@ import { z } from "zod";
 import { PERMISSION_LABELS } from "@/lib/accounts";
 import { bimPlantPayloadSchema } from "@/lib/bim/bim-payload";
 import { prisma } from "@/lib/prisma";
-import { companyManufacturer } from "@/lib/registered-company";
+import { companyManufacturer, type CompanyProfile } from "@/lib/registered-company";
 import { WorkflowError } from "@/lib/workflow/state-machine";
 import { assertFeature } from "@/server/modules";
 import { getPanelCompany } from "@/server/panel-session";
@@ -14,7 +14,9 @@ import { importBimToPlant, type BimImportResult } from "@/server/services/bim-im
 import { PaywallError, chargeNewSwitchboard, refundCharge, settleSwitchboardCharge } from "@/server/services/credits";
 import type { PaywallInfo } from "@/lib/credits/entitlements";
 import { createProjectFromBimBoard } from "@/server/services/panel-projects";
-import { getCurrentAccount } from "@/server/session";
+import { getAuthState, getCurrentAccount } from "@/server/session";
+import { startPanelSession } from "@/server/sso-session";
+import { bridgePlantToPanel } from "@/server/services/sso-bridge";
 import { assertTenantAccess } from "@/server/tenant";
 
 import type { ActionResult } from "./workflow";
@@ -54,6 +56,22 @@ export async function importBimAction(input: z.input<typeof importSchema>): Prom
 const boardSchema = z.object({ equipmentId: z.string().min(1).max(64) });
 
 /**
+ * Fáze 114: bez přihlášení do AI Panel Builderu přemostění pod účtem Správy závodů – spárovaná (jinak nová) firma
+ * AI Panel Builderu se stejným e-mailem a heslem; cizí nespárovaný účet se stejným e-mailem vyžaduje přihlášení.
+ */
+async function bridgedPanelCompany(): Promise<{ id: string } & CompanyProfile> {
+  const user = (await getAuthState()).user;
+  const bridged = user?.companyId ? await bridgePlantToPanel(prisma, user.id) : null;
+  if (!bridged) throw new WorkflowError("FORBIDDEN", "Přihlaste se do AI Panel Builderu (účet firmy) – návrh rozváděče se uloží do projektů vaší firmy.");
+  if (bridged.kind === "login") throw new WorkflowError("FORBIDDEN", bridged.message);
+  await startPanelSession(bridged.companyId);
+  return prisma.registeredCompany.findUniqueOrThrow({
+    where: { id: bridged.companyId },
+    select: { id: true, companyName: true, ico: true, dic: true, street: true, city: true, zip: true, contactName: true, phone: true, email: true, authorizationNumber: true },
+  });
+}
+
+/**
  * ⚡ Rozváděč z BIMu do AI Panel Builderu: vývody k napájeným zařízením a hlavní vypínač → nový návrh v projektech
  * přihlášené firmy AI Panel Builderu (1 kredit, nepovedený návrh kredit vrátí).
  */
@@ -64,8 +82,7 @@ export async function createBimBoardProjectAction(input: z.input<typeof boardSch
     const account = await getCurrentAccount();
     if (!account.can("panelBuilder")) throw new WorkflowError("FORBIDDEN", `Účet ${account.definition.label} nemá oprávnění: ${PERMISSION_LABELS.panelBuilder}.`);
     await assertTenantAccess(parsed.data);
-    const company = await getPanelCompany();
-    if (!company) throw new WorkflowError("FORBIDDEN", "Přihlaste se do AI Panel Builderu (účet firmy) – návrh rozváděče se uloží do projektů vaší firmy.");
+    const company = (await getPanelCompany()) ?? (await bridgedPanelCompany());
     await assertFeature("enterprise.ai_panel_builder");
     const charge = await chargeNewSwitchboard(prisma, company.id);
     try {

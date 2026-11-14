@@ -176,7 +176,8 @@ export function PlacementCard({
           <dt className="text-muted-foreground">MPN</dt>
           <dd className="font-mono" data-testid="placement-mpn">
             {shown ? (shown.articleNumber ?? "—") : "…"}
-            {shown?.estimated ? (
+            {/* Fáze 114: bez objednacího čísla = syntetický kus (odhad IEC); skutečný kus s odhadnutým Pv má štítek u Pv */}
+            {shown?.estimated && !shown.articleNumber ? (
               <Badge variant="outline" className="ml-1.5">
                 odhad IEC
               </Badge>
@@ -185,7 +186,10 @@ export function PlacementCard({
           <dt className="text-muted-foreground">Šířka</dt>
           <dd className="font-mono">{n(modules)} M</dd>
           <dt className="text-muted-foreground">Ztrátový výkon</dt>
-          <dd className="font-mono">{shown ? formatWatts(shown.powerLossWatts) : "…"}</dd>
+          <dd className="font-mono" data-testid="placement-loss">
+            {shown ? formatWatts(shown.powerLossWatts) : "…"}
+            {shown?.estimated && shown.articleNumber ? <span className="ml-1 font-sans text-[10px] text-muted-foreground">(odhad dle IEC – výrobce neuvádí)</span> : null}
+          </dd>
         </dl>
       </div>
       {shown?.accessories.length ? (

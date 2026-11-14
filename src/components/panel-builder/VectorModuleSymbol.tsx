@@ -7,8 +7,10 @@ import type { ReactNode } from "react";
 
 import { PHASE_STYLE, type PhaseBadge } from "@/lib/panel-builder/comb-busbars";
 import type { SmartDinProfile } from "@/lib/panel-builder/smart-din-catalog";
-import { leverCount, screwCount, smartProfileOf, smartTerminalCount, symbolTexts, type VectorDevice } from "@/lib/panel-builder/vector-symbols";
+import { deviceAccessory, leverCount, screwCount, smartProfileOf, smartTerminalCount, symbolTexts, type VectorDevice } from "@/lib/panel-builder/vector-symbols";
 import type { Rect } from "@/lib/panel-builder/vector-layout";
+
+import { AccessoryBody } from "./AccessorySymbol";
 
 export type VectorTheme = "dark" | "print";
 
@@ -326,6 +328,35 @@ export function VectorModuleSymbol({
   const smart = smartProfileOf(device);
   // DALI: kanály = účastníci linky, svorky podle šířky
   const screws = smart && smart.role !== "dali" ? smartTerminalCount(device.modulesWidth, smart.channels, w) : screwCount(device.modulesWidth);
+  // Fáze 114: příslušenství (svorkovnice HLAK, řadová svorka, hřeben, koncovka, spouště, pojistka, zásuvka, signálka,
+  // záslepka) má vlastní věrnou kresbu – spodní štítek funkce obvodu a rámeček výběru zůstávají stejné
+  const accessory = smart ? null : deviceAccessory(device);
+  if (accessory) {
+    return (
+      <g data-symbol={device.category ?? "UNKNOWN"} data-designation={device.designation} data-accessory={accessory} opacity={dimmed ? 0.45 : 1}>
+        <AccessoryBody kind={accessory} device={device} rect={rect} colors={colors} />
+        {phase ? <PhaseTag x={x + w - phaseTagWidth(phase) - 3} y={y + 20} phase={phase} /> : null}
+        <rect x={x + 3} y={y + 103} width={w - 6} height={16} rx={1.5} fill={colors.strip} stroke={colors.stroke} strokeWidth={0.6} data-label-strip="" />
+        <FitText x={x + w / 2} y={y + 114} text={device.label} size={7.5} max={w - 10} weight={600} fill={colors.stripText} testId="symbol-label" />
+        {outline ? (
+          <rect
+            x={x - 1}
+            y={y - 2}
+            width={w + 2}
+            height={h + 4}
+            rx={4}
+            fill="none"
+            stroke={outline}
+            strokeWidth={glow ? 3.5 : 2.5}
+            strokeDasharray={dashed ? "6 4" : undefined}
+            style={glow ? { filter: `drop-shadow(0 0 6px ${outline})` } : undefined}
+            pointerEvents="none"
+          />
+        ) : null}
+        {children}
+      </g>
+    );
+  }
   return (
     <g data-symbol={device.category ?? "UNKNOWN"} data-designation={device.designation} data-smart={smart?.role} opacity={dimmed ? 0.45 : 1}>
       <rect x={x + 1} y={y} width={w - 2} height={h} rx={3} fill={colors.body} stroke={colors.stroke} strokeWidth={1.2} />

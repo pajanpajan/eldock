@@ -3,6 +3,7 @@
 import { BrickWall, CheckCircle2, ChevronDown, Crop, FileCog, Hammer, Maximize2, Ruler, RotateCcw, RotateCw, SquareDashed, Type, Undo2, ZoomIn, ZoomOut } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuShortcut, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 export type PdfEditAction = "rotate-cw" | "rotate-ccw" | "zoom-in" | "zoom-out" | "zoom-fit" | "crop" | "crop-reset" | "calibrate" | "verify" | "draw-wall" | "draw-demolish" | "draw-zone" | "draw-text";
@@ -11,11 +12,11 @@ export type PdfEditAction = "rotate-cw" | "rotate-ccw" | "zoom-in" | "zoom-out" 
  * Fáze 57: menu „Úprava PDF“ nad půdorysem – otočení podkladu o 90°, zoom, ořez a kalibrace měřítka s ověřením.
  * Bez podkladu (čistý rastr) zůstává jen zoom. Fáze 59: zakreslení změn (příčka, bourání, šrafa, text) i nad rastrem.
  */
-export function PdfEditMenu({ hasBackground, cropped, zoomPercent, calibration, onAction }: { hasBackground: boolean; cropped: boolean; zoomPercent: number; calibration: "none" | "set" | "verified"; onAction: (action: PdfEditAction) => void }) {
+export function PdfEditMenu({ hasBackground, cropped, zoomPercent, calibration, onAction, className }: { hasBackground: boolean; cropped: boolean; zoomPercent: number; calibration: "none" | "set" | "verified"; onAction: (action: PdfEditAction) => void; /** Fáze 114: levý sloupec – na celou šířku. */ className?: string }) {
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
-        <Button type="button" variant="outline" size="sm" className="gap-1.5" data-testid="pdf-edit-menu">
+        <Button type="button" variant="outline" size="sm" className={cn("gap-1.5", className)} data-testid="pdf-edit-menu">
           <FileCog className="size-4" aria-hidden /> Úprava PDF
           {hasBackground && calibration !== "verified" ? <span className="size-2 rounded-full bg-amber-400" aria-label="měřítko neověřeno" /> : null}
           <ChevronDown className="size-3.5 opacity-70" aria-hidden />

@@ -43,8 +43,8 @@ describe("AI Panel Builder – katalog a seed", () => {
   it("seed: ≥ 40 prvků, PB-001 s 13 přístroji (-Q1, -FV1 až -F10) na 3 lištách (1 žlutý, 1 červený), opakovaně bez duplicit", async () => {
     expect(CATALOG.length).toBeGreaterThanOrEqual(40);
     // Fáze 41: demo firma Tester vznikne jednou a převezme PB-001 (projekt bez firmy)
-    expect(await seedPanelBuilder(prisma, { external: false })).toEqual({ components: CATALOG.length, project: true, tester: { created: true, attached: 1 }, enclosures: STANDARD_COUNT, verifiedEnclosures: VERIFIED_COUNT, external: null, etim: ETIM_COUNT, brandEtim: 0, universalEtim: UNIVERSAL_COUNT, enclosureFixes: 0, fans: ENCLOSURE_FANS.length, failures: [] });
-    expect(await seedPanelBuilder(prisma, { external: false })).toEqual({ components: CATALOG.length, project: false, tester: { created: false, attached: 0 }, enclosures: STANDARD_COUNT, verifiedEnclosures: VERIFIED_COUNT, external: null, etim: ETIM_COUNT, brandEtim: 0, universalEtim: UNIVERSAL_COUNT, enclosureFixes: 0, fans: ENCLOSURE_FANS.length, failures: [] });
+    expect(await seedPanelBuilder(prisma, { external: false })).toEqual({ components: CATALOG.length, project: true, tester: { created: true, attached: 1 }, enclosures: STANDARD_COUNT, verifiedEnclosures: VERIFIED_COUNT, external: null, etim: ETIM_COUNT, brandEtim: 0, universalEtim: UNIVERSAL_COUNT, enclosureFixes: 0, fans: ENCLOSURE_FANS.length, labelSets: false, failures: [] });
+    expect(await seedPanelBuilder(prisma, { external: false })).toEqual({ components: CATALOG.length, project: false, tester: { created: false, attached: 0 }, enclosures: STANDARD_COUNT, verifiedEnclosures: VERIFIED_COUNT, external: null, etim: ETIM_COUNT, brandEtim: 0, universalEtim: UNIVERSAL_COUNT, enclosureFixes: 0, fans: ENCLOSURE_FANS.length, labelSets: false, failures: [] });
     expect(await prisma.catalogComponent.count()).toBe(CATALOG.length);
     const project = await prisma.panelBoardProject.findUniqueOrThrow({ where: { code: "PB-001" }, include: { items: true } });
     expect(project.items).toHaveLength(13);

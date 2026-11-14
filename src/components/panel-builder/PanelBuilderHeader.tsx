@@ -41,6 +41,10 @@ export function PanelBuilderHeader({ company, demo = false }: { company: (Pick<P
               <Link href="/panel-builder/floorplan" className={link}>
                 📐 2D Půdorys & Kabeláž
               </Link>
+              {/* Fáze 114: Hlídač revizí / Správa budov pod účtem firmy (SSO přemostění – bez druhé registrace) */}
+              <Link href="/hlidac-revizi" className={link} title="Otevřít Hlídač revizí / Správu budov pod účtem firmy – bez druhé registrace" data-testid="panel-open-hlidac">
+                <span aria-hidden>🛡️</span> <span className="sr-only 2xl:not-sr-only">Hlídač revizí</span>
+              </Link>
             </nav>
             <div className="ml-auto flex flex-wrap items-center gap-2">
               {/* Fáze 99: živá ukázka na 1 klik pro prezentaci */}

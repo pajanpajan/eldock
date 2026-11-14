@@ -417,6 +417,120 @@ export function matchLayoutEnclosures<E extends EnclosureLike>(list: readonly E[
     .slice(0, options.limit ?? 50);
 }
 
+// ---------------------------------------------------------------------------
+//  Fáze 114: velikost rozvodnice a rezerva v procentech (ČSN EN IEC 61439 – min. 20 %)
+// ---------------------------------------------------------------------------
+
+/** Nejmenší rezerva skříně podle ČSN EN IEC 61439 (doporučení pro rozšíření rozváděče). */
+export const MIN_RESERVE_PERCENT = 20;
+/** Rezerva doporučená pro budoucí rozšíření (karta „Doporučeno“). */
+export const RECOMMENDED_RESERVE_PERCENT = 30;
+
+export interface SizeTier<E extends EnclosureLike = EnclosureLike> {
+  /** „2x7x12“ – pole × řady × šířka řady. */
+  key: string;
+  fields: number;
+  rows: number;
+  /** Šířka řady (u více polí šířka jednoho pole). */
+  rowWidth: number;
+  totalModules: number;
+  freeModules: number;
+  reservePercent: number;
+  /** První velikost s rezervou aspoň 30 % – doporučeno pro budoucí rozšíření. */
+  recommended: boolean;
+  /** Skutečné modely skříní této velikosti z databáze (různí výrobci napřed). */
+  matches: EnclosureMatch<E>[];
+}
+
+/** „144 M (2 pole × 6 řad)“, „72 M (4 × 18 M)“. */
+export const tierLabel = (tier: Pick<SizeTier, "totalModules" | "fields" | "rows" | "rowWidth">) =>
+  tier.fields >= 2 ? `${tier.totalModules} M (${tier.fields} pole × ${tier.rows} ${plural(tier.rows, "řada", "řady", "řad")})` : `${tier.totalModules} M (${tier.rows} × ${tier.rowWidth} M)`;
+
+/** „🟢 Rezerva 34 % (57 volných M – Doporučeno pro budoucí rozšíření)“. */
+export function reserveText(tier: Pick<SizeTier, "reservePercent" | "freeModules" | "recommended">): string {
+  const mark = tier.reservePercent >= MIN_RESERVE_PERCENT ? "🟢" : "🟠";
+  return `${mark} Rezerva ${tier.reservePercent} % (${tier.freeModules} ${plural(tier.freeModules, "volný", "volné", "volných")} M${tier.recommended ? " – Doporučeno pro budoucí rozšíření" : ""})`;
+}
+
+/**
+ * Velikosti rozvodnic od nejmenší vyhovující po větší (pole × řady × šířka řady) s rezervou v % a v modulech a skutečnými
+ * modely z databáze – v každé velikosti nejdřív výrobce přístrojů, pak po jednom kusu od dalších výrobců (ABB, OEZ, Hager,
+ * Eaton, Schneider …). Doporučená velikost = první s rezervou aspoň 30 %, jinak největší nabízená.
+ */
+export function sizeTiers<E extends EnclosureLike>(matches: readonly EnclosureMatch<E>[], usedModules: number, options: { limit?: number; perTier?: number } = {}): SizeTier<E>[] {
+  const groups = new Map<string, EnclosureMatch<E>[]>();
+  for (const match of matches) {
+    const fields = match.fields.fields >= 2 ? match.fields.fields : 1;
+    const rowWidth = fields >= 2 ? match.fields.fieldWidth : match.enclosure.modulesPerRow;
+    const key = `${fields}x${match.enclosure.rows}x${rowWidth}`;
+    groups.set(key, [...(groups.get(key) ?? []), match]);
+  }
+  const tiers = [...groups.entries()]
+    .map(([key, list]): SizeTier<E> => {
+      const [fields, rows, rowWidth] = key.split("x").map(Number);
+      const totalModules = Math.max(...list.map((match) => match.enclosure.totalModules));
+      const freeModules = Math.max(0, Math.floor(totalModules - usedModules + EPS));
+      // Pestrost výrobců: výrobce přístrojů napřed, pak první kus každého dalšího výrobce, pak zbytek
+      const seen = new Set<string>();
+      const first: EnclosureMatch<E>[] = [];
+      const rest: EnclosureMatch<E>[] = [];
+      for (const match of list) {
+        const maker = match.enclosure.manufacturer.toLowerCase();
+        if (seen.has(maker)) rest.push(match);
+        else {
+          seen.add(maker);
+          first.push(match);
+        }
+      }
+      return {
+        key,
+        fields,
+        rows,
+        rowWidth,
+        totalModules,
+        freeModules,
+        reservePercent: totalModules > 0 ? Math.max(0, Math.round((freeModules / totalModules) * 100)) : 0,
+        recommended: false,
+        matches: [...first, ...rest].slice(0, options.perTier ?? 6),
+      };
+    })
+    .sort((a, b) => a.totalModules - b.totalModules || a.rows - b.rows || a.rowWidth - b.rowWidth)
+    .slice(0, options.limit ?? 5);
+  const recommended = tiers.find((tier) => tier.reservePercent >= RECOMMENDED_RESERVE_PERCENT) ?? tiers[tiers.length - 1];
+  return tiers.map((tier) => ({ ...tier, recommended: tier === recommended }));
+}
+
+/**
+ * Lišty doplněné prázdnými lištami do řad zvolené skříně (rozváděč se vygeneruje s tolika DIN lištami, kolik má skříň
+ * řad – rezerva pro budoucí rozšíření). Dvě pole: obě pole na počet řad; jedno pole: prázdné lišty pod silnoproud nad
+ * přepážku (slaboproud zůstává dole), bez přepážky na konec.
+ */
+export function fillRailsToEnclosure<T>(rails: readonly PlannedRail<T>[], layout: RailLayout, enclosure: Pick<EnclosureLike, "rows" | "modulesPerRow" | "model">): { rails: PlannedRail<T>[]; layout: RailLayout } {
+  const rows = Math.max(1, Math.round(enclosure.rows));
+  const width = (field: 0 | 1) => rails.find((rail) => rail.field === field)?.capacity ?? rails[0]?.capacity ?? enclosureFields(enclosure).fieldWidth;
+  const empty = (field: 0 | 1, low: boolean): PlannedRail<T> => ({ capacity: width(field), devices: [], used: 0, field, low });
+  if (layout.fields === 2) {
+    const a = rails.filter((rail) => rail.field !== 1);
+    const b = rails.filter((rail) => rail.field === 1);
+    const lowB = b.some((rail) => rail.low) || layout.fieldBLow;
+    const left = [...a, ...Array.from({ length: Math.max(0, rows - a.length) }, () => empty(0, false))];
+    const right = [...b, ...Array.from({ length: Math.max(0, rows - b.length) }, () => empty(1, lowB))];
+    const all = [...left, ...right];
+    return { rails: all, layout: normalizeLayout({ ...layout, fieldARails: left.length }, all.length) };
+  }
+  const missing = Math.max(0, rows - rails.length);
+  if (!missing) return { rails: [...rails], layout };
+  const partition = layout.partitionAfterRail;
+  if (partition !== null && partition >= 1 && partition < rails.length) {
+    const power = rails.slice(0, partition);
+    const low = rails.slice(partition);
+    const all = [...power, ...Array.from({ length: missing }, () => empty(0, false)), ...low];
+    return { rails: all, layout: normalizeLayout({ ...layout, partitionAfterRail: partition + missing }, all.length) };
+  }
+  const all = [...rails, ...Array.from({ length: missing }, () => empty(0, false))];
+  return { rails: all, layout: normalizeLayout(layout, all.length) };
+}
+
 /** Přesná šířka řady podle koncepce (široké / kompaktní lišty a dva rozváděče – ne skříň s širší řadou). */
 const exactFor = (concept: LayoutConcept) => concept !== "two_field";
 
@@ -424,7 +538,12 @@ export interface ConceptBoard<T, E extends EnclosureLike> {
   rails: PlannedRail<T>[];
   need: LayoutNeed;
   matches: EnclosureMatch<E>[];
+  /** Fáze 114: velikosti rozvodnic s rezervou v % (od nejmenší vyhovující po větší). */
+  tiers?: SizeTier<E>[];
 }
+
+/** Fáze 114: všechny vyhovující skříně pro velikosti s rezervou (průvodce pak ukáže jen pár prvních). */
+const ALL_MATCHES = 400;
 
 export interface ConceptOption<T, E extends EnclosureLike> {
   concept: LayoutConcept;
@@ -453,7 +572,7 @@ function boardFor<T extends PackDevice & { powerLossW?: number }, E extends Encl
   const variants = widths.map((width) => {
     const rails = planned(packRails(groups, width), 0, groups.some((group) => group.low));
     const need = layoutNeed(rails, 1, lossOf(rails));
-    return { rails, need, matches: matchLayoutEnclosures(enclosures, need, { manufacturer, exactWidth: true, limit: 6 }) };
+    return { rails, need, matches: matchLayoutEnclosures(enclosures, need, { manufacturer, exactWidth: true, limit: ALL_MATCHES }) };
   });
   const best = (variant: (typeof variants)[number]) => variant.matches[0] ?? null;
   return (
@@ -497,8 +616,8 @@ export function layoutOptions<T extends PackDevice & { powerLossW?: number }, E 
       return {
         concept,
         plan,
-        main: { ...main, matches: main.matches.slice(0, limit) },
-        second: second ? { ...second, matches: second.matches.slice(0, limit) } : null,
+        main: { ...main, matches: main.matches.slice(0, limit), tiers: sizeTiers(main.matches, main.need.usedModules) },
+        second: second ? { ...second, matches: second.matches.slice(0, limit), tiers: sizeTiers(second.matches, second.need.usedModules) } : null,
         available,
         recommended: false,
         summary: `RH1 Silnoproud: ${railsText(main.rails.length, width(main))}${second ? ` · RH2 Slaboproud / Smart Home: ${railsText(second.rails.length, width(second))}` : " · bez slaboproudu (RH2 nevznikne)"}`,
@@ -508,7 +627,8 @@ export function layoutOptions<T extends PackDevice & { powerLossW?: number }, E 
     const plan = planLayout(groups, concept);
     const fields = plan.layout.fields;
     const need = layoutNeed(plan.rails, fields, lossOf(plan.rails));
-    const matches = matchLayoutEnclosures(enclosures, need, { manufacturer, exactWidth: exactFor(concept), limit });
+    const all = matchLayoutEnclosures(enclosures, need, { manufacturer, exactWidth: exactFor(concept), limit: ALL_MATCHES });
+    const matches = all.slice(0, limit);
     const width = CONCEPT_INFO[concept].railModules;
     const a = plan.rails.filter((rail) => rail.field === 0).length;
     const b = plan.rails.length - a;
@@ -519,7 +639,7 @@ export function layoutOptions<T extends PackDevice & { powerLossW?: number }, E 
     return {
       concept,
       plan,
-      main: { rails: plan.rails, need, matches },
+      main: { rails: plan.rails, need, matches, tiers: sizeTiers(all, need.usedModules) },
       second: null,
       available: matches.length > 0,
       recommended: false,

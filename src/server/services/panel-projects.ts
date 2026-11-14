@@ -424,7 +424,7 @@ async function floorplanBoardContext(prisma: PrismaClient, input: { draft: unkno
   const switchboard = (plan: Parameters<typeof buildSwitchboardFromCircuits>[0], withSmart: boolean, choice: LayoutChoice | null = null) => {
     const extra = withSmart ? { smart, ...(field?.modules.length ? { devices: field.modules } : {}) } : {};
     // Fáze 111: koncepce z průvodce – všechny skříně z databáze, přednost výrobci přístrojů
-    if (choice) return buildSwitchboardFromCircuits(plan, { mode: draft.installation, enclosures, supplyPhases: supply.phases, occupancy: draft.occupancy, ...extra, layout: choice.concept, enclosureId: choice.enclosureId ?? null, secondEnclosureId: choice.secondEnclosureId ?? null, manufacturer });
+    if (choice) return buildSwitchboardFromCircuits(plan, { mode: draft.installation, enclosures, supplyPhases: supply.phases, occupancy: draft.occupancy, ...extra, layout: choice.concept, enclosureId: choice.enclosureId ?? null, secondEnclosureId: choice.secondEnclosureId ?? null, fillRows: choice.fillRows === true, manufacturer });
     // Fáze 93: BD4 – vypínací spoušť CENTRAL STOP a podružný elektroměr MID v každém rozváděči nájemní jednotky
     const preferred = own.length ? buildSwitchboardFromCircuits(plan, { mode: draft.installation, enclosures: own, supplyPhases: supply.phases, occupancy: draft.occupancy, manufacturer, ...extra }) : null;
     return preferred?.enclosure ? preferred : buildSwitchboardFromCircuits(plan, { mode: draft.installation, enclosures, supplyPhases: supply.phases, occupancy: draft.occupancy, manufacturer, ...extra });

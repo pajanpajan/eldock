@@ -1,11 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
 import { actionFailure, guardCompany } from "@/server/panel-guards";
-import { createCreditOrder, unlockOutput } from "@/server/services/credits";
+import { createCreditOrder, grantProvisionalCredits, unlockOutput } from "@/server/services/credits";
+import { notifyOrderOwner, type OrderEvent } from "@/server/services/order-notify";
 
 import type { ActionResult } from "./workflow";
 
@@ -17,10 +19,34 @@ export async function createCreditOrderAction(packageCode: string): Promise<Acti
   try {
     const company = await guardCompany();
     const order = await createCreditOrder(prisma, company.id, packageCode);
+    // Fáze 114: okamžitá notifikace majiteli (SMTP / webhook) po odpovědi – objednávku nikdy nezdrží
+    notifyLater(order.id, "created");
     revalidatePath("/panel-builder/credits");
     return { ok: true, data: { id: order.id, variableSymbol: order.variableSymbol } };
   } catch (error) {
     return actionFailure(error, "Objednávku se nepodařilo založit.");
+  }
+}
+
+/** Notifikace majiteli až po odeslání odpovědi (Next.js `after`); chyba se jen zapíše k objednávce. */
+function notifyLater(orderId: string, event: OrderEvent) {
+  after(() => notifyOrderOwner(prisma, orderId, event).then(() => undefined, (error: unknown) => console.error("Notifikace objednávky se nepodařila", error)));
+}
+
+/**
+ * Fáze 114: [ ✅ Zaplatil jsem QR kódem – aktivovat kredity ihned ] – kredity balíčku předběžně (PROVISIONAL_GRANT) do kontroly
+ * výpisu z banky ve velínu (48 h); nejvýš 1 předběžná objednávka firmy současně.
+ */
+export async function grantProvisionalCreditsAction(orderId: string): Promise<ActionResult<{ credits: number; already: boolean }>> {
+  if (!z.string().min(1).max(64).safeParse(orderId).success) return { ok: false, error: "Neplatná objednávka." };
+  try {
+    const company = await guardCompany();
+    const result = await grantProvisionalCredits(prisma, company.id, orderId);
+    if (!result.already) notifyLater(orderId, "provisional");
+    revalidatePath("/panel-builder", "layout");
+    return { ok: true, data: { credits: result.credits, already: result.already } };
+  } catch (error) {
+    return actionFailure(error, "Kredity se nepodařilo aktivovat.");
   }
 }
 

@@ -240,8 +240,9 @@ describe("fáze 77 – moduly do rozváděče", () => {
       // Zakreslené motory: 2 kanály (ne podle žaluziových tlačítek)
       expect(plan.channels.blind.needed).toBeGreaterThanOrEqual(2);
       expect(plan.channels.blind.needed).toBeLessThanOrEqual(3);
-      // Bezdrátová hlavice nezabírá kanál akčního členu
-      expect(plan.channels.heating.needed).toBe(2);
+      // Bezdrátová hlavice nezabírá kanál akčního členu; fáze 114: ABB-free@home bez rezervy navíc (1 hlavice = 1 kanál HA-M),
+      // ostatní systémy s rezervou (1 + 1 volný)
+      expect(plan.channels.heating.needed).toBe(plan.system.id === "abb_freeathome" ? 1 : 2);
       // MAG + VOD = 2 binární vstupy (s rezervou)
       expect(plan.channels.input.needed).toBeGreaterThanOrEqual(3);
       expect(plan.ledSupplyW).toBe(60);

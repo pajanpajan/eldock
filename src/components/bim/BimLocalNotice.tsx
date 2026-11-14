@@ -24,13 +24,13 @@ export function BimLocalNotice({ result, className }: { result: string; classNam
 }
 
 /** Fáze 101: 2D půdorys – „🏢 Importovat BIM model (.ifc)“ s oknem a zárukou lokálního zpracování před výběrem souboru. */
-export function FloorplanBimImport({ disabled, onFile }: { disabled?: boolean; onFile: (file: File) => void }) {
+export function FloorplanBimImport({ disabled, onFile, className }: { disabled?: boolean; onFile: (file: File) => void; /** Fáze 114: levý sloupec – na celou šířku. */ className?: string }) {
   const [open, setOpen] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button type="button" variant="outline" size="sm" className="gap-1.5" disabled={disabled} data-testid="floorplan-bim-open">
+        <Button type="button" variant="outline" size="sm" className={cn("gap-1.5", className)} disabled={disabled} data-testid="floorplan-bim-open">
           <Building2 className="size-4" aria-hidden /> 🏢 Importovat BIM model (.ifc)
         </Button>
       </DialogTrigger>

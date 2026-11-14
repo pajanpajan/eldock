@@ -29,6 +29,8 @@ export interface SeedComponent {
   relaySubtype?: string;
   moduleSubtype?: string;
   modulesCount: number;
+  /** Fáze 114: EAN (GTIN) z oficiálních dat výrobce (jinak doplní `applyEtimComponents`). */
+  ean?: string;
   powerLossWatts: number;
   description: string;
   dims?: [number, number, number];

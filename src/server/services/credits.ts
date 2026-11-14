@@ -111,7 +111,8 @@ export async function confirmCreditOrder(prisma: PrismaClient, orderId: string, 
         ...(bonus ? { firstTopUpBonusAt: now } : {}),
       },
     });
-    if (credits) await grantCredits(tx, order.companyId, credits, { reason: subscription ? "SUBSCRIPTION" : "TOP_UP", refType: "CREDIT_ORDER", refId: order.id, note: `${product?.title ?? order.packageCode} – VS ${order.variableSymbol}` });
+    // Fáze 114: předběžně připsané kredity (PROVISIONAL_GRANT) už firma má – potvrzení platby je jen převede na uhrazené
+    if (credits && !order.provisionalAt) await grantCredits(tx, order.companyId, credits, { reason: subscription ? "SUBSCRIPTION" : "TOP_UP", refType: "CREDIT_ORDER", refId: order.id, note: `${product?.title ?? order.packageCode} – VS ${order.variableSymbol}` });
     const company = await tx.registeredCompany.findUniqueOrThrow({ where: { id: order.companyId }, select: { id: true, companyName: true, creditsRemaining: true, ico: true, email: true } });
     return { order: { ...order, status: "PAID" as const, paidAt: now }, company, bonus, labels };
   });
@@ -138,8 +139,65 @@ export async function confirmCreditOrder(prisma: PrismaClient, orderId: string, 
 }
 
 export async function cancelCreditOrder(prisma: PrismaClient, orderId: string) {
-  const { count } = await prisma.creditOrder.updateMany({ where: { id: orderId, status: "PENDING" }, data: { status: "CANCELLED" } });
-  if (!count) throw new WorkflowError("INVALID_STATE", "Stornovat lze jen čekající objednávku.");
+  // Fáze 114: předběžně připsané kredity se nesmí jen stornovat (zůstaly by firmě) – „Odečíst předběžné kredity“
+  const { count } = await prisma.creditOrder.updateMany({ where: { id: orderId, status: "PENDING", provisionalAt: null }, data: { status: "CANCELLED" } });
+  if (!count) throw new WorkflowError("INVALID_STATE", "Stornovat lze jen čekající objednávku bez předběžně připsaných kreditů.");
+}
+
+// ---------------------------------------------------------------------------
+//  Fáze 114: okamžité odemčení kreditů po QR platbě (PROVISIONAL_GRANT)
+// ---------------------------------------------------------------------------
+
+/** Předběžně připsané kredity čekají na kontrolu výpisu z banky nejdéle 48 hodin. */
+export const PROVISIONAL_HOURS = 48;
+
+/** Konec lhůty kontroly výpisu (připsání + 48 h). */
+export const provisionalDeadline = (provisionalAt: Date) => new Date(provisionalAt.getTime() + PROVISIONAL_HOURS * 3_600_000);
+
+/**
+ * „✅ Zaplatil jsem QR kódem – aktivovat kredity ihned“: objednávka balíčku kreditů zůstává čekající na úhradu, ale kredity
+ * se připíšou hned (pohyb PROVISIONAL_GRANT) a velín ji označí ⏳ Čeká na kontrolu výpisu z banky. Nejvýš 1 předběžná
+ * objednávka firmy současně; firmě, které velín předběžné kredity odečetl (platba nedorazila), už předběžně ne. Sady QR
+ * štítků a předplatné se aktivují až po připsání platby.
+ */
+export async function grantProvisionalCredits(prisma: PrismaClient, companyId: string, orderId: string, now = new Date()) {
+  return prisma.$transaction(async (tx) => {
+    const order = await tx.creditOrder.findFirst({ where: { id: orderId, companyId } });
+    if (!order) throw new WorkflowError("NOT_FOUND", "Objednávka neexistuje.");
+    if (order.status !== "PENDING") throw new WorkflowError("INVALID_STATE", `Objednávka VS ${order.variableSymbol} už není čekající na úhradu.`);
+    if (order.provisionalAt) return { order, credits: 0, already: true };
+    const product = orderProduct(order.packageCode);
+    if (labelItemsOf(order.packageCode) || product?.kind !== "PACKAGE" || order.creditsCount <= 0) {
+      throw new WorkflowError("VALIDATION", "Předběžně lze aktivovat jen balíček kreditů – předplatné a sady QR štítků aktivujeme po připsání platby.");
+    }
+    const other = await tx.creditOrder.findFirst({ where: { companyId, status: "PENDING", provisionalAt: { not: null }, NOT: { id: order.id } }, select: { variableSymbol: true } });
+    if (other) throw new WorkflowError("CONFLICT", `Předběžně lze aktivovat jen 1 neuhrazenou objednávku – nejdřív počkejte na potvrzení platby VS ${other.variableSymbol}.`);
+    if (await tx.creditOrder.count({ where: { companyId, provisionalRevokedAt: { not: null } } })) {
+      throw new WorkflowError("FORBIDDEN", "Předběžné připsání už u vaší firmy není k dispozici – kredity připíšeme po přijetí platby (obvykle do 1 pracovního dne).");
+    }
+    const { count } = await tx.creditOrder.updateMany({ where: { id: order.id, status: "PENDING", provisionalAt: null }, data: { provisionalAt: now } });
+    if (!count) return { order, credits: 0, already: true };
+    const current = await tx.registeredCompany.findUniqueOrThrow({ where: { id: companyId }, select: { creditsValidUntil: true } });
+    await tx.registeredCompany.update({ where: { id: companyId }, data: { creditsValidUntil: creditsValidAfterTopUp(current.creditsValidUntil, now) } });
+    const balance = await grantCredits(tx, companyId, order.creditsCount, { reason: "PROVISIONAL_GRANT", refType: "CREDIT_ORDER", refId: order.id, note: `Předběžně po QR platbě – VS ${order.variableSymbol} (kontrola výpisu do ${PROVISIONAL_HOURS} h)` });
+    return { order: { ...order, provisionalAt: now }, credits: order.creditsCount, balance, already: false };
+  });
+}
+
+/**
+ * Velín: platba za předběžně připsané kredity nedorazila – objednávka se stornuje a kredity se odečtou (zůstatek může
+ * klesnout pod nulu, další akce pak chtějí dobití); firma už předběžné připsání nedostane.
+ */
+export async function revokeProvisionalCredits(prisma: PrismaClient, orderId: string, now = new Date()) {
+  return prisma.$transaction(async (tx) => {
+    const order = await tx.creditOrder.findUnique({ where: { id: orderId } });
+    if (!order) throw new WorkflowError("NOT_FOUND", "Objednávka neexistuje.");
+    const { count } = await tx.creditOrder.updateMany({ where: { id: orderId, status: "PENDING", provisionalAt: { not: null }, provisionalRevokedAt: null }, data: { status: "CANCELLED", provisionalRevokedAt: now } });
+    if (!count) throw new WorkflowError("INVALID_STATE", `Objednávka VS ${order.variableSymbol} nemá předběžně připsané kredity k odečtení.`);
+    const company = await tx.registeredCompany.update({ where: { id: order.companyId }, data: { creditsRemaining: { decrement: order.creditsCount } }, select: { creditsRemaining: true } });
+    await tx.creditTransaction.create({ data: { companyId: order.companyId, amount: -order.creditsCount, balanceAfter: company.creditsRemaining, reason: "PROVISIONAL_REVOKE", refType: "CREDIT_ORDER", refId: order.id, note: `Platba VS ${order.variableSymbol} nedorazila – předběžné kredity odečteny` } });
+    return { balance: company.creditsRemaining, credits: order.creditsCount };
+  });
 }
 
 export const MAX_CREDITS = 100_000;

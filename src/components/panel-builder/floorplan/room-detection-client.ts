@@ -8,8 +8,11 @@ import { pointInRoom, polygonBounds } from "@/lib/panel-builder/room-geometry";
 // Fáze 113: podklad podlaží (otočení + ořez) → rastr pro rozpoznání místností v prohlížeči. Masky stěn se počítají
 // jednou pro podklad a měřítko (🔍 automaticky i každý 🪄 klik je pak okamžitý); výsledek je v mm půdorysu.
 
-/** Delší strana pracovního rastru [px] – výkres 15 m ≈ 8 mm / px, výpočet do ~0,5 s. */
-const WORK_MAX_SIDE = 1800;
+/**
+ * Delší strana pracovního rastru [px] – fáze 114: v plném rozlišení podkladu (2400 px), tenké 1–2px kóty se tak nerozmažou
+ * do šedé a filtr tloušťky čar je spolehlivě odliší od zdiva; vrstvy masek se počítají líně (klik ~0,4 s).
+ */
+const WORK_MAX_SIDE = 2400;
 
 export interface RoomRaster {
   barrier: Barrier;

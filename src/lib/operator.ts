@@ -233,15 +233,31 @@ export const DEFAULT_LABEL_SETS: readonly LabelSet[] = [
 
 /** Uložené sady z velínu; bez záznamu výchozí sady (fáze 113), prázdný seznam = objednávka štítků vypnutá. */
 export function parseLabelSets(json: string | null | undefined): LabelSet[] {
-  if (json == null) return DEFAULT_LABEL_SETS.map((set) => ({ ...set, items: set.items.map((item) => ({ ...item })) }));
+  const defaults = () => DEFAULT_LABEL_SETS.map((set) => ({ ...set, items: set.items.map((item) => ({ ...item })) }));
+  if (json == null) return defaults();
   try {
     const raw = JSON.parse(json) as unknown;
-    if (!Array.isArray(raw)) return [];
+    if (!Array.isArray(raw)) return defaults();
     const sets = raw.map((row) => labelSetSchema.safeParse(row)).filter((row) => row.success).map((row) => labelSet(row.data));
-    return [...new Map(sets.map((set) => [set.code, set])).values()];
+    // Fáze 114: prázdný seznam = výchozích 5 sad (objednávání štítků je aktivní hned po nasazení)
+    return sets.length ? [...new Map(sets.map((set) => [set.code, set])).values()] : defaults();
   } catch {
-    return [];
+    return defaults();
   }
+}
+
+/**
+ * Fáze 114: dodavatel jedním řádkem na výzvách k platbě a v ceníku – „Pavel Janoušek · ELDOCK.cz · Jablonec nad Nisou ·
+ * Neplátce DPH“ (IČO, DIČ a spisová značka jen když jsou ve velínu vyplněné, bez upozornění na chybějící údaje).
+ */
+export function operatorSummary(profile: OperatorProfile): string {
+  const vat = profile.vatPayer ? (profile.dic ? `DIČ ${profile.dic.replace(/\s/g, "").toUpperCase()}` : "Plátce DPH") : "Neplátce DPH";
+  return [profile.name, profile.brand, profile.city, profile.ico ? `IČO ${profile.ico}` : null, vat].filter(Boolean).join(" · ");
+}
+
+/** Fáze 114: bankovní spojení jedním řádkem („Raiffeisenbank a.s. · č. ú. 918118002/5500 · IBAN CZ…“). */
+export function bankLine(profile: Pick<OperatorProfile, "bankName" | "accountNumber" | "iban">): string {
+  return [profile.bankName || null, profile.accountNumber ? `č. ú. ${profile.accountNumber}` : null, profile.iban ? `IBAN ${formatIban(profile.iban)}` : null].filter(Boolean).join(" · ");
 }
 
 /** Název objednávky sady štítků (název sady z ceníku, jinak složení); jiný kód = null. */

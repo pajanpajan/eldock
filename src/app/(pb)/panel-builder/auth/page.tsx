@@ -2,12 +2,14 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Flame, ShieldCheck, Zap } from "lucide-react";
 
+import { SsoBridgeButton } from "@/components/auth/SsoBridgeButton";
 import { PanelAuthForms } from "@/components/companies/PanelAuthForms";
 import { safeNextPath } from "@/lib/auth";
 import { LEAD_BONUS_TEXT } from "@/lib/leads";
 import { prisma } from "@/lib/prisma";
 import { TESTER_COMPANY } from "@/lib/registered-company";
 import { getPanelCompany } from "@/server/panel-session";
+import { getAuthState, getCurrentAccount } from "@/server/session";
 import { leadPrefill } from "@/server/services/leads";
 
 export const metadata: Metadata = { title: "AI Panel Builder – přihlášení a registrace" };
@@ -22,6 +24,9 @@ export default async function PanelAuthPage({ searchParams }: PageProps<"/panel-
   const current = await getPanelCompany();
   const registering = params.tab === "register" || Boolean(lead);
   if (current && !(current.id === TESTER_COMPANY.id && registering)) redirect(next?.startsWith("/panel-builder") || (next && /^\/q\/EL-\d{6,9}$/.test(next)) ? next : "/panel-builder");
+  // Fáze 114: uživatel Správy závodů / Hlídače revizí s oprávněním Panel Builderu – pokračování pod účtem firmy (SSO)
+  const plantUser = (await getAuthState()).user;
+  const plantCompany = plantUser?.companyId && (await getCurrentAccount()).can("panelBuilder") ? await prisma.registeredCompany.findFirst({ where: { id: plantUser.companyId, productScope: "PLANT_MANAGEMENT", closedAt: null }, select: { companyName: true, email: true } }) : null;
 
   return (
     <div className="mx-auto grid w-full max-w-6xl gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
@@ -43,6 +48,12 @@ export default async function PanelAuthPage({ searchParams }: PageProps<"/panel-
           {lead ? `Registrace z odkazu dokumentace: ${LEAD_BONUS_TEXT} (zkušební 2D půdorys + zkušební rozváděč). E-mail a IČO máte předvyplněné, sídlo doplní registr ARES.` : "Registrace firmy je zdarma s 1 testovacím projektem (zkušební 2D půdorys + zkušební rozváděč, výstupy se zkušebním označením). Údaje firmy doplníme z registru ARES podle IČO."}
         </p>
       </section>
+      {plantCompany ? (
+        <div className="flex flex-col gap-2 rounded-xl border border-primary/40 bg-card p-4 lg:col-span-2" data-testid="panel-auth-sso">
+          <p className="text-sm text-muted-foreground">Jste přihlášeni v Hlídači revizí / Správě závodů – AI Panel Builder otevřete bez druhé registrace:</p>
+          <SsoBridgeButton direction="to-panel" next={next ?? "/panel-builder"} label={`🔄 Pokračovat pod účtem Správy závodů (${plantCompany.companyName} / ${plantCompany.email})`} className="w-fit max-w-full" />
+        </div>
+      ) : null}
       <PanelAuthForms next={next} initialTab={registering ? "register" : "login"} lead={lead && token ? { token, email: lead.email, ico: lead.ico, companyName: lead.companyName, dic: lead.dic } : null} />
     </div>
   );

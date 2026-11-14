@@ -7,7 +7,7 @@ import type { ComponentCategory } from "@/generated/prisma/enums";
 import { estimatePowerLoss } from "@/lib/panel-builder/catalog";
 import type { ItemConfig } from "@/lib/panel-builder/configurator";
 import type { EnclosureLike } from "@/lib/panel-builder/enclosures";
-import { CONCEPT_INFO, SINGLE_LAYOUT, fitsLayout, layoutNeed, layoutOptions, matchLayoutEnclosures, packRails, planLayout, planTwoBoards, type LayoutConcept, type PackGroup, type PlannedRail, type RailLayout } from "@/lib/panel-builder/rail-layout";
+import { CONCEPT_INFO, SINGLE_LAYOUT, fillRailsToEnclosure, fitsLayout, layoutNeed, layoutOptions, matchLayoutEnclosures, packRails, planLayout, planTwoBoards, type LayoutConcept, type PackGroup, type PlannedRail, type RailLayout } from "@/lib/panel-builder/rail-layout";
 import { constructionDetails } from "@/lib/panel-builder/environments";
 import { HDO_CONTROL, hdoContactorFor, hdoContactorLabel, hdoEnabled, isHdoTag } from "@/lib/panel-builder/hdo";
 import { CENTRAL_STOP_LABEL, MEDICAL_CIRCUIT, MID_METER_LABEL, isCommercial, isMedical, isMedicalRoom, midMeterConfig, shuntTripConfig, type MedicalCircuit, type OccupancyId } from "@/lib/panel-builder/occupancy";
@@ -1451,6 +1451,8 @@ export function buildSwitchboardFromCircuits(
     layout?: LayoutConcept;
     enclosureId?: string | null;
     secondEnclosureId?: string | null;
+    /** Fáze 114: DIN lišty doplnit do řad zvolené skříně (větší rozvodnice s rezervou z průvodce). */
+    fillRows?: boolean;
     /** Fáze 111: výrobce přístrojů – v koncepcích přednost skříním stejného výrobce. */
     manufacturer?: string | null;
   },
@@ -1709,13 +1711,14 @@ export function buildSwitchboardFromCircuits(
     const boards = planTwoBoards(packGroups, options.enclosures, options.manufacturer ?? null);
     const main = (options.enclosureId ? boards.main.matches.find((match) => match.enclosure.id === options.enclosureId) : null) ?? boards.main.matches[0] ?? null;
     enclosure = main?.enclosure ?? null;
-    rails = toRails(boards.main.rails);
+    // Fáze 114: zvolená větší rozvodnice z průvodce – tolik DIN lišt, kolik má řad
+    rails = toRails(options.fillRows && enclosure ? fillRailsToEnclosure(boards.main.rails, SINGLE_LAYOUT, enclosure).rails : boards.main.rails);
     boardDevices = rails.flatMap((rail) => rail.devices);
     layout = { ...SINGLE_LAYOUT, concept };
     if (!enclosure) warnings.push(`RH1: žádná skříň z databáze nepojme ${boards.main.rails.length} × ${boards.main.rails[0]?.capacity ?? 12} M – vyberte skříň ručně.`);
     if (boards.second) {
       const pick = (options.secondEnclosureId ? boards.second.matches.find((match) => match.enclosure.id === options.secondEnclosureId) : null) ?? boards.second.matches[0] ?? null;
-      const secondRails = toRails(boards.second.rails);
+      const secondRails = toRails(options.fillRows && pick ? fillRailsToEnclosure(boards.second.rails, SINGLE_LAYOUT, pick.enclosure).rails : boards.second.rails);
       const secondDevices = secondRails.flatMap((rail) => rail.devices);
       second = { rails: secondRails, devices: secondDevices, enclosure: pick?.enclosure ?? null, totalPowerLossW: lossOf(secondDevices) };
       if (!pick) warnings.push(`RH2: žádná skříň z databáze nepojme ${boards.second.rails.length} × ${boards.second.rails[0]?.capacity ?? 12} M – vyberte skříň ručně.`);
@@ -1726,8 +1729,10 @@ export function buildSwitchboardFromCircuits(
     const exactWidth = concept !== "two_field";
     const chosen = options.enclosureId ? (options.enclosures.find((row) => row.id === options.enclosureId && fitsLayout(row, need, { exactWidth })) ?? null) : null;
     enclosure = chosen ?? matchLayoutEnclosures(options.enclosures, need, { manufacturer: options.manufacturer, exactWidth, limit: 1 })[0]?.enclosure ?? null;
-    rails = toRails(plan.rails);
-    layout = plan.layout;
+    // Fáze 114: větší rozvodnice s rezervou z průvodce – prázdné DIN lišty do řad skříně
+    const filled = options.fillRows && enclosure ? fillRailsToEnclosure(plan.rails as PlannedRail<PanelDevice>[], plan.layout, enclosure) : { rails: plan.rails as PlannedRail<PanelDevice>[], layout: plan.layout };
+    rails = toRails(filled.rails);
+    layout = filled.layout;
     if (!enclosure) warnings.push(`Žádná skříň z databáze nepojme uspořádání „${CONCEPT_INFO[concept].short}“ (${need.fields === 2 ? `2 pole × ${need.rows} řad` : `${need.rows} řad`} po ${need.fieldWidth} M, ${need.requiredModules} M s rezervou 25 %) – zvolte jinou koncepci nebo skříň ručně.`);
   } else {
     enclosure = [...options.enclosures].filter(fits).sort((a, b) => a.totalModules - b.totalModules || (a.pMaxW ?? 0) - (b.pMaxW ?? 0) || a.model.localeCompare(b.model))[0] ?? null;

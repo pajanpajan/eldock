@@ -6,12 +6,13 @@
 
 import type { PrismaClient } from "@/generated/prisma/client";
 import { DEFAULT_GRID } from "@/lib/cad-grid";
-import { PLANT_TESTER } from "@/lib/registered-company";
+import { PLANT_TESTER, TESTER_COMPANY } from "@/lib/registered-company";
 import type { StudioDraft } from "@/lib/studio-draft";
 
 import { hashPassword } from "../password";
 import { createSubAccount } from "./accounts";
 import { registerPlantCompany } from "./companies";
+import { linkCompanies } from "./sso-bridge";
 import { saveStudioBuilding } from "./studio";
 
 /** Ukázková hala 54 × 30 m: hlavní rozváděč → rozváděč linky → lisovací linka, kompresor a kuchyňka s konvicí. */
@@ -47,7 +48,10 @@ export type PlantTesterResult = { created: false } | { created: true; companyId:
 
 /** Založí testovací firmu, pokud ještě neexistuje (podle přihlašovacího e-mailu firmy). */
 export async function ensurePlantTester(prisma: PrismaClient, now: Date = new Date()): Promise<PlantTesterResult> {
-  if (await prisma.registeredCompany.findUnique({ where: { email: PLANT_TESTER.email }, select: { id: true } })) return { created: false };
+  if (await prisma.registeredCompany.findUnique({ where: { email_productScope: { email: PLANT_TESTER.email, productScope: "PLANT_MANAGEMENT" } }, select: { id: true } })) {
+    await linkDemoCompanies(prisma);
+    return { created: false };
+  }
   // Registrace firmy: firma, závod a technický ředitel v jedné transakci (stejně jako /register-plant)
   const { companyId, plant } = await registerPlantCompany(
     prisma,
@@ -81,5 +85,19 @@ export async function ensurePlantTester(prisma: PrismaClient, now: Date = new Da
   });
   await prisma.user.update({ where: { id: technician.id }, data: { passwordHash: await hashPassword(PLANT_TESTER.password), passwordChangedAt: now } });
   const hall = await saveStudioBuilding(prisma, plantTesterHall(plant.id));
+  await linkDemoCompanies(prisma);
   return { created: true, companyId, plantCode: plant.code, users: 2, equipment: hall.equipment };
+}
+
+/**
+ * Fáze 114: ukázková firma AI Panel Builderu (Tester, veřejné heslo) ↔ testovací firma Správy závodů (veřejné heslo) –
+ * SSO z ukázky vede do veřejného testovacího závodu, nezakládá další sdílený účet. Jen když ani jedna není spárovaná.
+ */
+export async function linkDemoCompanies(prisma: PrismaClient): Promise<boolean> {
+  const [panel, plant] = await Promise.all([
+    prisma.registeredCompany.findFirst({ where: { id: TESTER_COMPANY.id, productScope: "PANEL_BUILDER", closedAt: null }, select: { id: true, linkedCompanyId: true } }),
+    prisma.registeredCompany.findFirst({ where: { email: PLANT_TESTER.email, productScope: "PLANT_MANAGEMENT", closedAt: null }, select: { id: true, linkedCompanyId: true } }),
+  ]);
+  if (!panel || !plant || panel.linkedCompanyId || plant.linkedCompanyId) return false;
+  return (await linkCompanies(prisma, panel.id, plant.id)).linked;
 }

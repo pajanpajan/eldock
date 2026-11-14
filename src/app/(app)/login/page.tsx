@@ -3,9 +3,11 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { LoginForm } from "@/components/auth/LoginForm";
+import { SsoBridgeButton } from "@/components/auth/SsoBridgeButton";
 import { Logo } from "@/components/layout/Logo";
 import { safeNextPath } from "@/lib/auth";
 import { APP_HOME } from "@/lib/routes";
+import { getPanelCompany } from "@/server/panel-session";
 import { getAccountUsers } from "@/server/queries/accounts";
 import { getAuthSession } from "@/server/session";
 
@@ -16,6 +18,8 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   const next = safeNextPath(typeof params.next === "string" ? params.next : undefined);
   if (await getAuthSession()) redirect(next ?? APP_HOME);
   const accounts = (await getAccountUsers({ demoOnly: true })).flatMap(({ id, name, email, title, accountType }) => (accountType ? [{ id, name, email, title, accountType }] : []));
+  // Fáze 114: přihlášená firma AI Panel Builderu se do Správy závodů / Hlídače revizí přemostí jedním klikem
+  const panel = await getPanelCompany();
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center gap-6 py-6">
@@ -33,6 +37,12 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
         <p role="status" className="rounded-md border border-emerald-500/50 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">
           Heslo je nastavené. Přihlaste se e-mailem, novým heslem a kódem z aplikace Authenticator.
         </p>
+      ) : null}
+      {panel ? (
+        <div className="flex flex-col items-center gap-2 rounded-xl border border-primary/40 bg-card p-4 text-center" data-testid="login-sso">
+          <p className="text-sm text-muted-foreground">Jste přihlášeni v AI Panel Builderu – druhá registrace ani heslo nejsou potřeba:</p>
+          <SsoBridgeButton direction="to-plant" next={next ?? "/hlidac-revizi"} label={`🔄 Pokračovat pod mým účtem z Panel Builderu (${panel.companyName} / ${panel.email})`} />
+        </div>
       ) : null}
       <LoginForm accounts={accounts} next={next} />
     </div>
